@@ -1,11 +1,17 @@
 # Reveal Roadmap
-> **Last updated**: 2026-04-30 (gapomiki-0430 — git:// GIT-5/6 + test audit)
+> **Last updated**: 2026-05-01 (ancient-quasar-0501 — v0.90.1 claude:// UX patch)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.90.1
+- ✅ **`claude://` truncation bug #3 — `_format_tool_params`** — Bash/Agent params in `tool_use` blocks now respect `--verbose` and `--max-snippet-chars`; `max_chars=None` = no truncation. (BACK-263, ancient-quasar-0501)
+- ✅ **`claude://` thinking block truncation** — `_render_raw_block` thinking branch now respects `max_chars` instead of hardcoded 200. (BACK-268, ancient-quasar-0501)
+- ✅ **`claude://SESSION/sub-path` works without `session/` prefix** — `_parse_session_name` detects adjective-noun-MMDD pattern and extracts only the session name; sub-path routing is preserved. (BACK-265, ancient-quasar-0501)
+- ✅ **`?last=N` returns N turns** — bare `?last` still returns 1; `?last=3` now correctly returns 3. (BACK-266, ancient-quasar-0501)
 
 ### v0.90.0
 - ✅ **`git://` blame % fix** — `clipped_lines` stored per filtered hunk in `_apply_element_blame_filter`; renderer uses clipped count for contributor %, eliminating >100% outputs on large hunks. (BACK-GIT-1, mighty-earth-0430)

@@ -41,8 +41,11 @@ def _parse_assistant_blocks(blocks: list):
     return '\n'.join(text_parts).strip(), tool_names, tool_summaries, has_thinking
 
 
-def _format_tool_params(name: str, inp: dict) -> list:
-    """Return a list of key=value strings for the most useful tool params."""
+def _format_tool_params(name: str, inp: dict, max_chars: Optional[int] = 120) -> list:
+    """Return a list of key=value strings for the most useful tool params.
+
+    max_chars: None = no truncation; int = truncate Bash/Agent preview at that length.
+    """
     lines = []
     if name in ('Write', 'Edit', 'Read', 'NotebookEdit'):
         fp = inp.get('file_path') or inp.get('notebook_path', '')
@@ -60,13 +63,17 @@ def _format_tool_params(name: str, inp: dict) -> list:
     elif name == 'Bash':
         cmd = inp.get('command', '')
         if cmd:
-            suffix = '...' if len(cmd) > 120 else ''
-            lines.append(f"  command: {cmd[:120]}{suffix}")
+            if max_chars is not None and len(cmd) > max_chars:
+                lines.append(f"  command: {cmd[:max_chars]}...")
+            else:
+                lines.append(f"  command: {cmd}")
     elif name == 'Agent':
         prompt = inp.get('prompt') or inp.get('description', '')
         if prompt:
-            suffix = '...' if len(prompt) > 100 else ''
-            lines.append(f"  prompt: {prompt[:100]}{suffix}")
+            if max_chars is not None and len(prompt) > max_chars:
+                lines.append(f"  prompt: {prompt[:max_chars]}...")
+            else:
+                lines.append(f"  prompt: {prompt}")
     elif name in ('Glob', 'Grep'):
         pat = inp.get('pattern', '')
         if pat:
@@ -80,7 +87,7 @@ def _format_tool_params(name: str, inp: dict) -> list:
 def _render_raw_block(block: dict, max_chars: Optional[int] = 500) -> None:
     """Print one content block from a raw message (text, tool_use, thinking, etc.).
 
-    max_chars: None = no truncation; int = truncate tool_result at that many chars.
+    max_chars: None = no truncation; int = truncate previews at that many chars.
     """
     btype = block.get('type', '?')
     if btype == 'text':
@@ -89,7 +96,7 @@ def _render_raw_block(block: dict, max_chars: Optional[int] = 500) -> None:
         name = block.get('name', '?')
         inp = block.get('input', {})
         print(f"[tool_use: {name}]")
-        for line in _format_tool_params(name, inp):
+        for line in _format_tool_params(name, inp, max_chars=max_chars):
             print(line)
     elif btype == 'tool_result':
         content = block.get('content', '')
@@ -107,8 +114,11 @@ def _render_raw_block(block: dict, max_chars: Optional[int] = 500) -> None:
         else:
             print("[tool_result: (empty)]")
     elif btype == 'thinking':
-        preview = block.get('thinking', '')[:200]
-        print(f"[thinking: {preview}...]")
+        thinking = block.get('thinking', '')
+        if max_chars is not None and len(thinking) > max_chars:
+            print(f"[thinking: {thinking[:max_chars]}...]")
+        else:
+            print(f"[thinking: {thinking}]")
     else:
         print(f"[{btype}]")
 

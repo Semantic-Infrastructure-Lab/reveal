@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from reveal.adapters.claude.adapter import ClaudeAdapter
+from reveal.adapters.claude.render_messages import _format_tool_params, _render_raw_block
 
 
 # Test fixtures directory
@@ -31,6 +32,60 @@ class TestClaudeAdapterInit:
         """Test query parameter is stored."""
         adapter = ClaudeAdapter('session/test', query='summary')
         assert adapter.query == 'summary'
+
+    # BACK-265: bare session-name pattern (no 'session/' prefix) with sub-paths
+    def test_parse_session_name_bare_adjective_noun_mmdd(self):
+        """Bare adjective-noun-MMDD is recognised as a session name."""
+        a = ClaudeAdapter('ancient-quasar-0501')
+        assert a.session_name == 'ancient-quasar-0501'
+
+    def test_parse_session_name_bare_with_message_subpath(self):
+        """Bare session-name/message/N extracts only the session name (BACK-265)."""
+        a = ClaudeAdapter('burning-antimatter-0501/message/5')
+        assert a.session_name == 'burning-antimatter-0501'
+
+    def test_parse_session_name_bare_with_tools_subpath(self):
+        """Bare session-name/tools extracts only the session name (BACK-265)."""
+        a = ClaudeAdapter('citrine-glow-0430/tools')
+        assert a.session_name == 'citrine-glow-0430'
+
+    def test_parse_session_name_non_session_resource_unchanged(self):
+        """Non-session resources like 'settings' pass through unchanged."""
+        a = ClaudeAdapter('settings')
+        assert a.session_name == 'settings'
+
+    def test_parse_session_name_with_session_prefix_and_subpath(self):
+        """'session/NAME/sub' still extracts NAME correctly."""
+        a = ClaudeAdapter('session/ancient-quasar-0501/message/3')
+        assert a.session_name == 'ancient-quasar-0501'
+
+
+class TestLastQueryParam:
+    """Tests for ?last=N aliasing to ?tail=N (BACK-266)."""
+
+    @patch.object(ClaudeAdapter, '_find_conversation')
+    def test_last_equals_n_returns_n_turns(self, mock_find):
+        """?last=3 should return the last 3 assistant turns."""
+        mock_find.return_value = TEST_CONVERSATION
+        adapter = ClaudeAdapter('session/test', query='last=3')
+        result = adapter.get_structure()
+        assert len(result.get('messages', [])) <= 3
+
+    @patch.object(ClaudeAdapter, '_find_conversation')
+    def test_bare_last_returns_one_turn(self, mock_find):
+        """Bare ?last (no value) should still return 1 turn."""
+        mock_find.return_value = TEST_CONVERSATION
+        adapter = ClaudeAdapter('session/test', query='last')
+        result = adapter.get_structure()
+        assert len(result.get('messages', [])) <= 1
+
+    @patch.object(ClaudeAdapter, '_find_conversation')
+    def test_tail_equals_n_unchanged(self, mock_find):
+        """?tail=N should still work as before."""
+        mock_find.return_value = TEST_CONVERSATION
+        adapter = ClaudeAdapter('session/test', query='tail=2')
+        result = adapter.get_structure()
+        assert len(result.get('messages', [])) <= 2
 
 
 class TestContractCompliance:
@@ -2079,6 +2134,98 @@ class TestClaudeHooks:
             assert 'error' in result
         finally:
             ClaudeAdapter.HOOKS_DIR = original
+
+
+class TestFormatToolParams:
+    """Tests for _format_tool_params truncation behaviour (BACK-263)."""
+
+    def test_bash_default_truncates_at_120(self):
+        cmd = 'x' * 200
+        lines = _format_tool_params('Bash', {'command': cmd})
+        assert lines[0] == f"  command: {'x' * 120}..."
+
+    def test_bash_no_truncation_when_short(self):
+        cmd = 'echo hello'
+        lines = _format_tool_params('Bash', {'command': cmd})
+        assert lines[0] == '  command: echo hello'
+
+    def test_bash_verbose_no_truncation(self):
+        cmd = 'x' * 300
+        lines = _format_tool_params('Bash', {'command': cmd}, max_chars=None)
+        assert lines[0] == f"  command: {'x' * 300}"
+
+    def test_bash_custom_max_chars(self):
+        cmd = 'x' * 50
+        lines = _format_tool_params('Bash', {'command': cmd}, max_chars=20)
+        assert lines[0] == f"  command: {'x' * 20}..."
+
+    def test_agent_default_truncates_at_120(self):
+        prompt = 'p' * 200
+        lines = _format_tool_params('Agent', {'prompt': prompt})
+        assert lines[0] == f"  prompt: {'p' * 120}..."
+
+    def test_agent_verbose_no_truncation(self):
+        prompt = 'p' * 300
+        lines = _format_tool_params('Agent', {'prompt': prompt}, max_chars=None)
+        assert lines[0] == f"  prompt: {'p' * 300}"
+
+    def test_agent_uses_description_fallback(self):
+        desc = 'Search for bugs'
+        lines = _format_tool_params('Agent', {'description': desc})
+        assert lines[0] == f'  prompt: {desc}'
+
+    def test_write_edit_read_unaffected_by_max_chars(self):
+        lines = _format_tool_params('Read', {'file_path': '/foo/bar.py'}, max_chars=10)
+        assert lines[0] == '  file_path: /foo/bar.py'
+
+
+class TestRenderRawBlock:
+    """Tests for _render_raw_block truncation propagation (BACK-263, BACK-268)."""
+
+    def test_tool_use_bash_respects_max_chars(self, capsys):
+        block = {'type': 'tool_use', 'name': 'Bash', 'input': {'command': 'x' * 300}}
+        _render_raw_block(block, max_chars=50)
+        out = capsys.readouterr().out
+        assert f"{'x' * 50}..." in out
+        assert 'x' * 51 not in out
+
+    def test_tool_use_bash_verbose_no_truncation(self, capsys):
+        cmd = 'x' * 300
+        block = {'type': 'tool_use', 'name': 'Bash', 'input': {'command': cmd}}
+        _render_raw_block(block, max_chars=None)
+        out = capsys.readouterr().out
+        assert cmd in out
+        assert '...' not in out
+
+    def test_thinking_respects_max_chars(self, capsys):
+        thinking = 't' * 600
+        block = {'type': 'thinking', 'thinking': thinking}
+        _render_raw_block(block, max_chars=100)
+        out = capsys.readouterr().out
+        assert f"{'t' * 100}..." in out
+        assert 't' * 101 not in out
+
+    def test_thinking_verbose_no_truncation(self, capsys):
+        thinking = 't' * 600
+        block = {'type': 'thinking', 'thinking': thinking}
+        _render_raw_block(block, max_chars=None)
+        out = capsys.readouterr().out
+        assert thinking in out
+        assert '...' not in out
+
+    def test_thinking_default_500_chars(self, capsys):
+        thinking = 't' * 600
+        block = {'type': 'thinking', 'thinking': thinking}
+        _render_raw_block(block)  # default max_chars=500
+        out = capsys.readouterr().out
+        assert f"{'t' * 500}..." in out
+
+    def test_tool_result_truncation_unchanged(self, capsys):
+        block = {'type': 'tool_result', 'content': 'r' * 1000}
+        _render_raw_block(block, max_chars=200)
+        out = capsys.readouterr().out
+        assert '[tool_result]' in out
+        assert '800 more chars' in out
 
 
 # Run tests with pytest

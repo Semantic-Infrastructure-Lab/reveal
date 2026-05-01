@@ -2,8 +2,12 @@
 
 import logging
 import os
+import re
 import sys
 from pathlib import Path
+
+# Matches the adjective-noun-MMDD pattern used for named TIA/Claude sessions.
+_SESSION_NAME_RE = re.compile(r'^([a-z]+-[a-z]+-\d{4})(?:/|$)')
 
 logger = logging.getLogger(__name__)
 from typing import Dict, List, Any, Optional
@@ -420,6 +424,9 @@ class ClaudeAdapter(ResourceAdapter):
     def _parse_session_name(self, resource: str) -> str:
         """Extract session name from URI.
 
+        Handles both 'session/NAME[/sub-path]' and bare 'NAME[/sub-path]' forms
+        when NAME matches the adjective-noun-MMDD session pattern.
+
         Args:
             resource: Resource string (e.g., 'session/infernal-earth-0118')
 
@@ -429,6 +436,9 @@ class ClaudeAdapter(ResourceAdapter):
         if resource.startswith('session/'):
             parts = resource.split('/')
             return parts[1] if len(parts) > 1 else ""
+        m = _SESSION_NAME_RE.match(resource)
+        if m:
+            return m.group(1)
         return resource
 
     def _find_conversation(self) -> Optional[Path]:
@@ -514,10 +524,14 @@ class ClaudeAdapter(ResourceAdapter):
             return get_tool_calls(messages, self.query.split('=')[1], self.session_name, contract_base)
         if self.query and self.query.startswith('search='):
             return search_messages(messages, self.query.split('=', 1)[1], self.session_name, contract_base)
-        # ?tail=N — last N assistant turns; ?last — shorthand for ?tail=1
+        # ?tail=N or ?last=N — last N assistant turns; bare ?last — shorthand for ?tail=1
         tail_str = self.query_params.get('tail')
-        if tail_str is not None or 'last' in self.query_params:
-            tail = 1 if 'last' in self.query_params else int(tail_str)
+        last_val = self.query_params.get('last')
+        if tail_str is not None or last_val is not None:
+            if last_val is not None:
+                tail = int(last_val) if last_val else 1
+            else:
+                tail = int(tail_str)
             result = get_messages(messages, self.session_name, contract_base)
             turns = result.get('messages', [])
             total = len(turns)
