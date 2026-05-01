@@ -210,7 +210,7 @@ class GitAdapter(ResourceAdapter):
             if k in ['sort', 'limit', 'offset']:
                 result_control_parts.append(f"{k}={v}")
             # Operational parameters (exclude from both)
-            elif k in ['type', 'detail', 'element']:
+            elif k in ['type', 'detail', 'element', 'ignore', 'raw', 'context']:
                 continue
             # ?ref= overrides the starting ref (alias for @ref in the URI)
             elif k == 'ref':

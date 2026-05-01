@@ -966,6 +966,67 @@ class TestApplyElementBlameFilter(unittest.TestCase):
         assert filtered == []
 
 
+class TestFilterIgnoredHunks(unittest.TestCase):
+    """Tests for GIT-6: ?ignore= noise-commit blame suppression."""
+
+    def _make_hunk(self, h_hash, lines_count, message='msg'):
+        return {
+            'lines': {'start': 1, 'count': lines_count},
+            'commit': {'hash': h_hash, 'author': 'A', 'email': 'a@b', 'date': '2026-01-01', 'message': message},
+        }
+
+    def test_no_ignore_returns_all_hunks(self):
+        from reveal.adapters.git.files import _filter_ignored_hunks
+        hunks = [self._make_hunk('abc1234', 10), self._make_hunk('def5678', 5)]
+        kept, ignored = _filter_ignored_hunks(hunks, [])
+        assert kept == hunks
+        assert ignored == []
+
+    def test_exact_hash_match_removes_hunk(self):
+        from reveal.adapters.git.files import _filter_ignored_hunks
+        hunks = [self._make_hunk('abc1234', 10), self._make_hunk('def5678', 5)]
+        kept, ignored = _filter_ignored_hunks(hunks, ['abc1234'])
+        assert len(kept) == 1
+        assert kept[0]['commit']['hash'] == 'def5678'
+        assert len(ignored) == 1
+        assert ignored[0]['hash'] == 'abc1234'
+        assert ignored[0]['lines'] == 10
+
+    def test_prefix_match_removes_hunk(self):
+        from reveal.adapters.git.files import _filter_ignored_hunks
+        hunks = [self._make_hunk('abc1234', 7)]
+        kept, ignored = _filter_ignored_hunks(hunks, ['abc'])
+        assert kept == []
+        assert ignored[0]['hash'] == 'abc1234'
+
+    def test_multiple_hunks_same_commit_collapsed_in_summary(self):
+        from reveal.adapters.git.files import _filter_ignored_hunks
+        hunks = [self._make_hunk('abc1234', 10), self._make_hunk('abc1234', 15)]
+        kept, ignored = _filter_ignored_hunks(hunks, ['abc1234'])
+        assert kept == []
+        assert len(ignored) == 1
+        assert ignored[0]['lines'] == 25
+
+    def test_clipped_lines_used_when_present(self):
+        from reveal.adapters.git.files import _filter_ignored_hunks
+        hunk = {**self._make_hunk('abc1234', 100), 'clipped_lines': 12}
+        _, ignored = _filter_ignored_hunks([hunk], ['abc1234'])
+        assert ignored[0]['lines'] == 12
+
+    def test_unmatched_sha_not_removed(self):
+        from reveal.adapters.git.files import _filter_ignored_hunks
+        hunks = [self._make_hunk('abc1234', 10), self._make_hunk('xyz9999', 5)]
+        kept, ignored = _filter_ignored_hunks(hunks, ['zzz0000'])
+        assert len(kept) == 2
+        assert ignored == []
+
+    def test_ignore_summary_includes_message(self):
+        from reveal.adapters.git.files import _filter_ignored_hunks
+        hunks = [self._make_hunk('abc1234', 10, 'Normalize line endings')]
+        _, ignored = _filter_ignored_hunks(hunks, ['abc1234'])
+        assert ignored[0]['message'] == 'Normalize line endings'
+
+
 class TestGitAdapterSchema(unittest.TestCase):
     """Test schema generation for AI agent integration."""
 

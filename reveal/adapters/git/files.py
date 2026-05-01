@@ -264,6 +264,34 @@ def get_file_history(
         raise ValueError(f"Failed to get file history: {subpath}") from e
 
 
+def _filter_ignored_hunks(hunks: List[Dict[str, Any]], ignore_shas: List[str]):
+    """Remove hunks whose commit hash starts with any of the given sha prefixes.
+
+    Returns (kept_hunks, ignored_summary) where ignored_summary is a list of
+    {hash, message, lines} dicts for suppressed commits.
+    """
+    if not ignore_shas:
+        return hunks, []
+
+    ignored_by_sha: Dict[str, Dict[str, Any]] = {}
+    kept = []
+    for h in hunks:
+        h_hash = h['commit']['hash']
+        matched = next((s for s in ignore_shas if h_hash.startswith(s) or s.startswith(h_hash)), None)
+        if matched:
+            if h_hash not in ignored_by_sha:
+                ignored_by_sha[h_hash] = {
+                    'hash': h_hash,
+                    'message': h['commit']['message'],
+                    'lines': 0,
+                }
+            ignored_by_sha[h_hash]['lines'] += h.get('clipped_lines', h['lines']['count'])
+        else:
+            kept.append(h)
+
+    return kept, list(ignored_by_sha.values())
+
+
 def _apply_element_blame_filter(element_name, hunks, path, subpath, get_range_func):
     """Filter blame hunks to the line range of a named element.
 
@@ -349,6 +377,14 @@ def get_file_blame(
                 element_name, hunks, path, subpath, get_element_line_range_func
             )
 
+        # Apply ignore filter (?ignore=sha1,sha2) after element filtering so
+        # clipped_lines are already set before we count suppressed lines.
+        ignore_raw = query.get('ignore', '')
+        ignore_shas = [s.strip() for s in ignore_raw.split(',') if s.strip()] if ignore_raw else []
+        ignored_summary: List[Dict[str, Any]] = []
+        if ignore_shas:
+            hunks, ignored_summary = _filter_ignored_hunks(hunks, ignore_shas)
+
         # Check if detail mode is requested
         detail_mode = query.get('detail') == 'full'
 
@@ -368,6 +404,8 @@ def get_file_blame(
 
         if element_info:
             result['element'] = element_info
+        if ignored_summary:
+            result['ignored'] = ignored_summary
 
         return result
 

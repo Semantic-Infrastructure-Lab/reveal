@@ -175,6 +175,15 @@ class GitRenderer:
             print(f"  ... and {len(sorted_contributors) - 5} more contributors")
         print()
 
+        # Show suppressed noise commits if any
+        ignored = result.get('ignored')
+        if ignored:
+            total_ignored_lines = sum(e['lines'] for e in ignored)
+            print(f"Suppressed ({len(ignored)} noise commit(s), {total_ignored_lines} lines excluded):")
+            for entry in ignored:
+                print(f"  {entry['hash']}  {entry['lines']:4} lines  {entry['message'][:60]}")
+            print()
+
         # Find key hunks (largest continuous blocks)
         key_hunks = sorted(result['hunks'], key=lambda h: h['lines']['count'], reverse=True)[:5]
 
