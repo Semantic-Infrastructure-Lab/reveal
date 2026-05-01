@@ -113,6 +113,58 @@ def git_repo(tmp_path):
     shutil.rmtree(repo_path, ignore_errors=True)
 
 
+@pytest.fixture
+def git_repo_py_history(tmp_path):
+    """Git repo with a Python file whose elements have distinct commit histories.
+
+    Commit 1 – "Add calc.py with add()": creates add() only.
+    Commit 2 – "Add subtract() to calc.py": appends subtract(); add() body unchanged.
+    Commit 3 – "Improve add() with comment": inserts a comment inside add();
+                subtract() body unchanged.
+
+    This lets integration tests verify that ?element=add returns 2 commits (1, 3)
+    and ?element=subtract returns 1 commit (2).
+    """
+    if not PYGIT2_AVAILABLE:
+        pytest.skip("pygit2 not available")
+
+    repo_path = tmp_path / "py_hist_repo"
+    repo_path.mkdir()
+    repo = pygit2.init_repository(str(repo_path))
+    sig = pygit2.Signature("Test User", "test@example.com")
+    calc = repo_path / "calc.py"
+    idx = repo.index
+
+    # Commit 1: add() only (2 lines)
+    calc.write_text("def add(a, b):\n    return a + b\n")
+    idx.add("calc.py")
+    idx.write()
+    tree = idx.write_tree()
+    repo.create_commit("refs/heads/master", sig, sig, "Add calc.py with add()", tree, [])
+    repo.set_head("refs/heads/master")
+
+    # Commit 2: append subtract() — add() body is identical
+    calc.write_text(
+        "def add(a, b):\n    return a + b\n\n\ndef subtract(a, b):\n    return a - b\n"
+    )
+    idx.add("calc.py")
+    idx.write()
+    tree = idx.write_tree()
+    repo.create_commit("HEAD", sig, sig, "Add subtract() to calc.py", tree, [repo.head.target])
+
+    # Commit 3: insert a comment inside add() — subtract() body unchanged
+    calc.write_text(
+        "def add(a, b):\n    # improved\n    return a + b\n\n\ndef subtract(a, b):\n    return a - b\n"
+    )
+    idx.add("calc.py")
+    idx.write()
+    tree = idx.write_tree()
+    repo.create_commit("HEAD", sig, sig, "Improve add() with comment", tree, [repo.head.target])
+
+    yield repo_path
+    shutil.rmtree(repo_path, ignore_errors=True)
+
+
 class TestGitAdapterBasics:
     """Test basic git adapter functionality."""
 
@@ -1329,3 +1381,284 @@ class TestGitRenderer(unittest.TestCase):
 
         self.assertIn('(no commits)', output)
         self.assertNotIn('~=', output)
+
+
+# ---------------------------------------------------------------------------
+# GIT-5: _get_element_content_at_commit — blob I/O + analyzer extraction
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+class TestGetElementContentAtCommit:
+    """Tests for _get_element_content_at_commit: the blob→tempfile→analyzer pipeline."""
+
+    def test_returns_function_text_from_head_commit(self, git_repo_py_history):
+        from reveal.adapters.git.files import _get_element_content_at_commit
+        repo = pygit2.Repository(str(git_repo_py_history))
+        head = repo.head.peel(pygit2.Commit)
+        content = _get_element_content_at_commit(repo, head, 'calc.py', 'add')
+        assert content is not None
+        assert 'def add' in content
+        assert 'return a + b' in content
+
+    def test_returns_none_for_element_not_in_file(self, git_repo_py_history):
+        from reveal.adapters.git.files import _get_element_content_at_commit
+        repo = pygit2.Repository(str(git_repo_py_history))
+        head = repo.head.peel(pygit2.Commit)
+        assert _get_element_content_at_commit(repo, head, 'calc.py', 'nonexistent_func') is None
+
+    def test_returns_none_for_file_not_in_tree(self, git_repo_py_history):
+        from reveal.adapters.git.files import _get_element_content_at_commit
+        repo = pygit2.Repository(str(git_repo_py_history))
+        head = repo.head.peel(pygit2.Commit)
+        assert _get_element_content_at_commit(repo, head, 'no_such.py', 'add') is None
+
+    def test_element_content_differs_between_commits_that_changed_it(self, git_repo_py_history):
+        """add() at commit3 has extra comment line; commit1 does not — must differ."""
+        from reveal.adapters.git.files import _get_element_content_at_commit
+        repo = pygit2.Repository(str(git_repo_py_history))
+        # Walk newest-first: [commit3, commit2, commit1]
+        commits = list(repo.walk(repo.head.target, pygit2.GIT_SORT_TIME))
+        commit3 = commits[0]   # "Improve add() with comment"
+        commit1 = commits[2]   # "Add calc.py with add()"
+        at_head = _get_element_content_at_commit(repo, commit3, 'calc.py', 'add')
+        at_first = _get_element_content_at_commit(repo, commit1, 'calc.py', 'add')
+        assert at_head is not None and at_first is not None
+        assert at_head != at_first
+
+    def test_element_content_identical_when_commit_did_not_touch_it(self, git_repo_py_history):
+        """add() at commit2 and commit1 should have identical content."""
+        from reveal.adapters.git.files import _get_element_content_at_commit
+        repo = pygit2.Repository(str(git_repo_py_history))
+        commits = list(repo.walk(repo.head.target, pygit2.GIT_SORT_TIME))
+        commit2 = commits[1]   # "Add subtract()"
+        commit1 = commits[2]   # "Add calc.py with add()"
+        at_commit2 = _get_element_content_at_commit(repo, commit2, 'calc.py', 'add')
+        at_commit1 = _get_element_content_at_commit(repo, commit1, 'calc.py', 'add')
+        assert at_commit2 is not None and at_commit1 is not None
+        assert at_commit2 == at_commit1
+
+
+# ---------------------------------------------------------------------------
+# GIT-5 integration: ?type=history&element= through full GitAdapter stack
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+class TestElementHistoryIntegration:
+    """Integration tests for GIT-5: element-scoped history via GitAdapter."""
+
+    def test_add_history_returns_only_commits_that_changed_add(self, git_repo_py_history):
+        """add() was touched in commits 1 and 3 (not 2). Expect count=2."""
+        adapter = GitAdapter(
+            path=str(git_repo_py_history),
+            subpath='calc.py',
+            query={'type': 'history', 'element': 'add', 'limit': '10'},
+        )
+        result = adapter.get_structure()
+        assert result['type'] == 'git_file_history'
+        assert result['count'] == 2
+        messages = [c['message'] for c in result['commits']]
+        assert any('Improve add()' in m for m in messages)
+        assert any('Add calc.py' in m for m in messages)
+        assert not any('subtract' in m for m in messages)
+
+    def test_subtract_history_returns_only_commit_that_added_it(self, git_repo_py_history):
+        """subtract() was introduced in commit 2 and untouched in commit 3. Expect count=1."""
+        adapter = GitAdapter(
+            path=str(git_repo_py_history),
+            subpath='calc.py',
+            query={'type': 'history', 'element': 'subtract', 'limit': '10'},
+        )
+        result = adapter.get_structure()
+        assert result['count'] == 1
+        assert 'subtract' in result['commits'][0]['message']
+
+    def test_element_key_present_in_result(self, git_repo_py_history):
+        adapter = GitAdapter(
+            path=str(git_repo_py_history),
+            subpath='calc.py',
+            query={'type': 'history', 'element': 'add'},
+        )
+        result = adapter.get_structure()
+        assert result.get('element') == 'add'
+
+    def test_no_element_key_returns_all_file_commits(self, git_repo_py_history):
+        """Without ?element=, all 3 commits touching calc.py should be returned."""
+        adapter = GitAdapter(
+            path=str(git_repo_py_history),
+            subpath='calc.py',
+            query={'type': 'history', 'limit': '10'},
+        )
+        result = adapter.get_structure()
+        assert result['count'] == 3
+        assert 'element' not in result
+
+
+# ---------------------------------------------------------------------------
+# GIT-6 integration: ?type=blame&ignore= through full GitAdapter stack
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+class TestIgnoreBlameIntegration:
+    """Integration tests for GIT-6: blame ?ignore= through full GitAdapter stack."""
+
+    def _blame_hashes(self, git_repo, subpath='README.md'):
+        """Return the set of commit hashes that appear in the blame for a file."""
+        adapter = GitAdapter(path=str(git_repo), subpath=subpath, query={'type': 'blame'})
+        result = adapter.get_structure()
+        return {h['commit']['hash'] for h in result['hunks']}
+
+    def test_ignore_suppresses_matching_hunks_and_populates_ignored_key(self, git_repo):
+        """Ignoring a commit that owns some lines removes those hunks and adds 'ignored'."""
+        # README.md has at least two hunks (initial content + updated line).
+        # Pick the first hunk's hash as our target — it's a real commit in this blame.
+        adapter_base = GitAdapter(path=str(git_repo), subpath='README.md', query={'type': 'blame'})
+        base = adapter_base.get_structure()
+        target_hash = base['hunks'][0]['commit']['hash']
+
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'blame', 'ignore': target_hash},
+        )
+        result = adapter.get_structure()
+
+        assert result['type'] == 'git_file_blame'
+        assert 'ignored' in result
+        assert any(e['hash'] == target_hash for e in result['ignored'])
+        # Target commit must not appear in remaining hunks
+        hunk_hashes = {h['commit']['hash'] for h in result['hunks']}
+        assert target_hash not in hunk_hashes
+
+    def test_ignore_with_no_match_leaves_hunks_intact(self, git_repo):
+        all_hashes = self._blame_hashes(git_repo)
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'blame', 'ignore': 'fffffff'},
+        )
+        result = adapter.get_structure()
+        assert 'ignored' not in result
+        assert {h['commit']['hash'] for h in result['hunks']} == all_hashes
+
+    def test_ignore_prefix_shorter_than_7_chars_still_matches(self, git_repo):
+        """A 4-char prefix is enough to match a 7-char hunk hash."""
+        adapter_base = GitAdapter(path=str(git_repo), subpath='README.md', query={'type': 'blame'})
+        target_hash = adapter_base.get_structure()['hunks'][0]['commit']['hash']
+        short_prefix = target_hash[:4]
+
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'blame', 'ignore': short_prefix},
+        )
+        result = adapter.get_structure()
+        assert 'ignored' in result
+        assert any(e['hash'].startswith(short_prefix) for e in result['ignored'])
+
+    def test_ignore_does_not_affect_history_queries(self, git_repo):
+        """?ignore= is an operational param — must not filter commits in ?type=history."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'history', 'ignore': 'abc1234', 'limit': '10'},
+        )
+        result = adapter.get_structure()
+        # ignore= has no effect on history; both README commits returned
+        assert result['count'] >= 2
+
+
+# ---------------------------------------------------------------------------
+# Renderer tests for GIT-5 (Element History header) and GIT-6 (Suppressed block)
+# ---------------------------------------------------------------------------
+
+class TestRendererNewFeatures(unittest.TestCase):
+    """Renderer output tests for GIT-5 and GIT-6 display logic."""
+
+    def _render(self, result):
+        from io import StringIO
+        from reveal.adapters.git.renderer import GitRenderer
+        old = sys.stdout
+        sys.stdout = buf = StringIO()
+        GitRenderer.render_structure(result, format='text')
+        sys.stdout = old
+        return buf.getvalue()
+
+    def _history_result(self, element=None, count=1):
+        r = {
+            'type': 'git_file_history',
+            'path': 'src/app.py',
+            'ref': 'HEAD',
+            'count': count,
+            'commits': [
+                {'hash': 'abc1234', 'date': '2026-01-01 00:00:00',
+                 'author': 'Alice', 'message': 'Initial work'},
+            ],
+        }
+        if element is not None:
+            r['element'] = element
+        return r
+
+    def _blame_result(self, hunks, ignored=None):
+        r = {
+            'type': 'git_file_blame',
+            'path': 'src/app.py',
+            'ref': 'HEAD',
+            'commit': 'abc1234',
+            'lines': 10,
+            'hunks': hunks,
+            'file_content': ['line'] * 10,
+            'detail': False,
+            'contract_version': '1.0',
+            'source_type': 'file',
+            'source': 'src/app.py@HEAD',
+        }
+        if ignored is not None:
+            r['ignored'] = ignored
+        return r
+
+    # -- GIT-5 renderer --
+
+    def test_element_history_shows_element_header(self):
+        output = self._render(self._history_result(element='load_config'))
+        self.assertIn('Element History', output)
+        self.assertIn('load_config', output)
+        self.assertNotIn('File History', output)
+
+    def test_file_history_shows_file_header_without_element(self):
+        output = self._render(self._history_result())
+        self.assertIn('File History', output)
+        self.assertNotIn('Element History', output)
+
+    # -- GIT-6 renderer --
+
+    def test_blame_suppressed_block_appears_when_ignored_present(self):
+        hunks = [{
+            'lines': {'start': 5, 'count': 3},
+            'commit': {'hash': 'def5678', 'author': 'Alice', 'email': 'a@b',
+                       'date': '2026-01-01 00:00:00', 'message': 'Real work'},
+        }]
+        ignored = [{'hash': 'abc1234', 'message': 'Normalize line endings', 'lines': 7}]
+        output = self._render(self._blame_result(hunks, ignored=ignored))
+        self.assertIn('Suppressed', output)
+        self.assertIn('abc1234', output)
+        self.assertIn('Normalize line endings', output)
+        self.assertIn('7', output)          # line count
+
+    def test_blame_no_suppressed_block_when_no_ignored_key(self):
+        hunks = [{
+            'lines': {'start': 1, 'count': 5},
+            'commit': {'hash': 'abc1234', 'author': 'Alice', 'email': 'a@b',
+                       'date': '2026-01-01 00:00:00', 'message': 'Init'},
+        }]
+        output = self._render(self._blame_result(hunks))
+        self.assertNotIn('Suppressed', output)
+
+    def test_blame_suppressed_shows_commit_count(self):
+        hunks = []
+        ignored = [
+            {'hash': 'aaa1111', 'message': 'Format run A', 'lines': 30},
+            {'hash': 'bbb2222', 'message': 'Format run B', 'lines': 20},
+        ]
+        output = self._render(self._blame_result(hunks, ignored=ignored))
+        self.assertIn('2', output)          # 2 noise commits
+        self.assertIn('50', output)         # 30+20 total lines suppressed
