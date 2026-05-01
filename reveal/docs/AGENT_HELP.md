@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.88.0
+**Version:** 0.90.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -915,6 +915,54 @@ reveal review main..feature --format json
 # Check security on new files only
 git diff --name-only --diff-filter=A | reveal --stdin --check --select S
 ```
+
+---
+
+### Task: "Investigate git history, blame, and commit diffs (git://)" (v0.90.0+)
+
+**git:// adapter — structured git archaeology without leaving reveal-land.**
+
+```bash
+# See what a commit actually changed (diff view — most common investigation entry)
+reveal 'git://src/auth.py@abc1234?type=diff'
+reveal 'git://src/auth.py@abc1234?type=diff&context=5'           # more context lines
+reveal 'git://src/auth.py@abc1234?type=diff&element=login'       # only hunks touching login()
+
+# See file structure at a historical ref (not raw dump — analyzer runs on blob)
+reveal git://src/auth.py@abc1234                                  # structure at that commit
+reveal 'git://src/auth.py@abc1234?raw=1'                         # previous raw behavior
+
+# File history — commits that touched a file
+reveal 'git://src/auth.py?type=history&limit=20'
+reveal 'git://src/auth.py?type=history&author=Alice&limit=10'
+
+# Element-scoped history — commits that actually changed a specific function (v0.90.0+)
+# Runs analyzer per commit — use ?limit=N to keep it fast
+reveal 'git://src/auth.py?type=history&element=process_payment'
+reveal 'git://src/auth.py?type=history&element=process_payment&limit=10'
+
+# Date filtering (already worked pre-v0.90.0; now documented)
+reveal 'git://src/auth.py?type=history&date>2026-04-01'
+reveal 'git://src/auth.py?type=history&since=2026-01-01&author=Jaydeep'
+
+# Blame — who owns which lines
+reveal 'git://src/auth.py?type=blame'                            # summary by contributor
+reveal 'git://src/auth.py?type=blame&element=process_payment'   # blame scoped to function
+
+# Noise-commit suppression — strip mass-formatting commits from blame (v0.90.0+)
+reveal 'git://src/auth.py?type=blame&ignore=69b0093'
+reveal 'git://src/auth.py?type=blame&ignore=69b0093,f5fcac0'    # multiple commits
+
+# The motivating combined pattern: who really changed this function, ignoring formatting?
+reveal 'git://src/auth.py?type=blame&element=process_payment&ignore=69b0093'
+```
+
+**When to use each mode:**
+- `?type=diff` — "what exactly did this commit change?" (replaces `git show`)
+- `?type=history&element=func` — "when was this function changed and by whom?" (replaces file history + manual grep)
+- `?type=blame&ignore=sha` — "who really owns these lines?" (when mass-formatting commit dominates)
+
+**Performance note:** `?type=history&element=func` runs the analyzer once per commit per file. Use `?limit=10` or `?limit=20` for large file histories.
 
 ---
 

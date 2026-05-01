@@ -12,12 +12,20 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions savage-hunter-0426, fated-sword-0426, strong-scepter-0426)
+## [Unreleased] - (sessions savage-hunter-0426, fated-sword-0426, strong-scepter-0426, mighty-earth-0430, gapomiki-0430)
 
 ### Added
 - **Adapter plugin discovery** — `discover_adapter_plugins(cwd=None)` in `adapters/base.py` scans `<cwd>/.reveal/adapters/` and `~/.reveal/adapters/` for package directories and imports them lazily on first `get_adapter_class()` call. Mirrors the analyzer plugin system (BACK-247) for the URI adapter side. Plugin adapters use `from reveal.adapters.base import register_adapter` (absolute import) rather than relative imports. `_reset_adapter_plugin_discovery()` exported for test isolation. 9 tests. (BACK-256)
 - **`trades://` adapter** — structured view of a Peyton-style trading SQLite database. Trade listing, outcome heatmap by signal × session, gate fire frequency from `gates_fired` JSON column, P&L percentiles, TP policy matrix, winning/losing cohort A/B pairs. (savage-hunter-0426 / heroic-hydra-0426)
 - **`signals://` adapter** — static AST analysis of Peyton signal gate architecture. Discovers all signal classes, extracts gate map (25 gates across 9 signals), default on/off per signal, param keys, function attribution. Modes: inventory, cross-gate map (`?gates`), per-signal detail, cross-signal filter (`?gate=X`). (savage-hunter-0426)
+- **`git://` `?type=diff` — commit diff view** — `reveal 'git://file.py@abc1234?type=diff'` shows the unified diff of that commit vs its parent, with a structural summary (functions added/removed/modified) before the raw diff. `?context=N` controls diff context lines (default 3). `?element=func_name` scopes the diff to hunks that touch the named element. (BACK-GIT-3, mighty-earth-0430)
+- **`git://file@ref` — structured view instead of raw dump** — `reveal git://file.py@abc1234` now runs the reveal analyzer on the blob content and returns the structural view (functions, classes, size). Pass `?raw=1` to get the previous raw content dump. (BACK-GIT-4, mighty-earth-0430)
+- **`git://` `?type=history&element=func_name` — element-scoped history** — `reveal 'git://file.py?type=history&element=process_payment'` shows only commits that actually changed the named element, not all commits that touched the file. `commit_touches_element()` gates each commit by diffing element content at that commit vs its parent via temp-file + analyzer. Default limit 20; use `?limit=N`. (BACK-GIT-5, gapomiki-0430)
+- **`git://` `?ignore=sha1,sha2` — noise-commit blame suppression** — `reveal 'git://file.py?type=blame&ignore=69b0093,f5fcac0'` strips mass-formatting commits from blame output. Suppressed hunks aggregate into a "Suppressed (N commits)" block above the key hunks; `result['ignored']` reports hash/message/lines per suppressed commit. Prefix matching (≥4 chars) supported. (BACK-GIT-6, gapomiki-0430)
+- **`git://` date filtering documented in help** — `?date>2026-04-01`, `?date>2026-01-01&author=Name`, and `?since=YYYY-MM-DD` alias all documented in `help://git`. Date filtering already worked via `queries.py` `compare_values`; it was simply undocumented. (BACK-GIT-2, mighty-earth-0430)
+
+### Fixed
+- **`git://` blame percentage >100% on element blame** — `_apply_element_blame_filter` now stores `clipped_lines` (the intersection of each hunk with the element's line range) on each filtered hunk. Renderer uses `clipped_lines` instead of `hunk['lines']['count']` for contributor percentage. Eliminates "1274.1%" outputs when a large hunk spans the element. (BACK-GIT-1, mighty-earth-0430)
 
 ### Changed
 - **`trades://` and `signals://` moved to Peyton** — both adapters removed from reveal core and relocated to `arbiter/.reveal/adapters/` in the Peyton project, where they belong. Reveal adapter count: 25 → 23. These are the first real-world use of the new plugin system.

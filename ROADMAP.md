@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-04-26 (divine-shrine-0426 — v0.87.0)
+> **Last updated**: 2026-04-30 (gapomiki-0430 — git:// GIT-5/6 + test audit)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,12 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 ### Unreleased (working tree)
+- ✅ **`git://` blame % fix** — `clipped_lines` stored per filtered hunk in `_apply_element_blame_filter`; renderer uses clipped count for contributor %, eliminating >100% outputs on large hunks. (BACK-GIT-1, mighty-earth-0430)
+- ✅ **`git://` date filtering help** — `?date>YYYY-MM-DD`, `?since=YYYY-MM-DD` alias documented in `help://git`. Feature already worked; was undocumented. (BACK-GIT-2, mighty-earth-0430)
+- ✅ **`git://` `?type=diff`** — commit diff view with structural summary (added/removed/modified elements) + unified diff scoped to that commit vs parent. `?context=N`, `?element=func` hunk filtering. (BACK-GIT-3, mighty-earth-0430)
+- ✅ **`git://file@ref` → structured view** — analyzer runs on blob content; returns function/class structure instead of raw dump. `?raw=1` to get previous behavior. (BACK-GIT-4, mighty-earth-0430)
+- ✅ **`git://` `?type=history&element=func_name`** — element-scoped history; `commit_touches_element()` diffs element content at commit vs parent via temp-file + analyzer; default limit 20. (BACK-GIT-5, gapomiki-0430)
+- ✅ **`git://` `?ignore=sha1,sha2` blame suppression** — strips noise commits from blame; suppressed hunks aggregated into "Suppressed (N commits)" block; `result['ignored']` reports per-commit; 4-char prefix match. (BACK-GIT-6, gapomiki-0430)
 - ✅ **Adapter plugin discovery** — `discover_adapter_plugins()` in `adapters/base.py`; scans `<cwd>/.reveal/adapters/` and `~/.reveal/adapters/` for package dirs; called lazily at top of `get_adapter_class()`. Mirrors the analyzer plugin system for the URI adapter side. Plugin adapters use absolute imports from `reveal.adapters.base`. (BACK-256)
 - ✅ **`trades://` and `signals://` moved to Peyton** — first real-world use of the plugin system; both adapters now live in `arbiter/.reveal/adapters/`, not reveal core. Adapter count: 25 → 23.
 - ✅ **Subcommand adapter discipline** — `surface`, `contracts`, `trace`, `hotspots`, `deps` all replaced raw `ast.parse` / `StatsResult` calls with `AstAdapter`/`StatsAdapter`; subcommands now go through the adapter layer consistently. (BACK-257)
