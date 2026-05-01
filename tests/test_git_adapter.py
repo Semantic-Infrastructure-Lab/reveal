@@ -1027,6 +1027,86 @@ class TestFilterIgnoredHunks(unittest.TestCase):
         assert ignored[0]['message'] == 'Normalize line endings'
 
 
+class TestCommitTouchesElement(unittest.TestCase):
+    """Unit tests for GIT-5: commit_touches_element using a real git_repo fixture."""
+
+    def test_touches_element_returns_false_when_file_unchanged(self, git_repo=None):
+        """If commit_touches_file is False, commit_touches_element must also be False."""
+        from unittest.mock import MagicMock, patch
+        from reveal.adapters.git.files import commit_touches_element
+
+        repo = MagicMock()
+        commit = MagicMock()
+        commit.parents = [MagicMock()]
+
+        with patch('reveal.adapters.git.files.commit_touches_file', return_value=False):
+            result = commit_touches_element(repo, commit, 'foo.py', 'my_func')
+
+        assert result is False
+
+    def test_touches_element_true_when_content_differs(self):
+        from unittest.mock import MagicMock, patch
+        from reveal.adapters.git.files import commit_touches_element
+
+        repo = MagicMock()
+        commit = MagicMock()
+        parent = MagicMock()
+        commit.parents = [parent]
+
+        with patch('reveal.adapters.git.files.commit_touches_file', return_value=True), \
+             patch('reveal.adapters.git.files._get_element_content_at_commit',
+                   side_effect=lambda repo, c, path, name: 'v1' if c is commit else 'v0'):
+            result = commit_touches_element(repo, commit, 'foo.py', 'my_func')
+
+        assert result is True
+
+    def test_touches_element_false_when_content_same(self):
+        from unittest.mock import MagicMock, patch
+        from reveal.adapters.git.files import commit_touches_element
+
+        repo = MagicMock()
+        commit = MagicMock()
+        parent = MagicMock()
+        commit.parents = [parent]
+
+        with patch('reveal.adapters.git.files.commit_touches_file', return_value=True), \
+             patch('reveal.adapters.git.files._get_element_content_at_commit',
+                   return_value='same content'):
+            result = commit_touches_element(repo, commit, 'foo.py', 'my_func')
+
+        assert result is False
+
+    def test_touches_element_true_for_initial_commit(self):
+        from unittest.mock import MagicMock, patch
+        from reveal.adapters.git.files import commit_touches_element
+
+        repo = MagicMock()
+        commit = MagicMock()
+        commit.parents = []
+
+        with patch('reveal.adapters.git.files.commit_touches_file', return_value=True), \
+             patch('reveal.adapters.git.files._get_element_content_at_commit',
+                   return_value='def my_func(): pass'):
+            result = commit_touches_element(repo, commit, 'foo.py', 'my_func')
+
+        assert result is True
+
+    def test_touches_element_false_when_element_missing_at_commit(self):
+        from unittest.mock import MagicMock, patch
+        from reveal.adapters.git.files import commit_touches_element
+
+        repo = MagicMock()
+        commit = MagicMock()
+        commit.parents = [MagicMock()]
+
+        with patch('reveal.adapters.git.files.commit_touches_file', return_value=True), \
+             patch('reveal.adapters.git.files._get_element_content_at_commit',
+                   return_value=None):
+            result = commit_touches_element(repo, commit, 'foo.py', 'my_func')
+
+        assert result is False
+
+
 class TestGitAdapterSchema(unittest.TestCase):
     """Test schema generation for AI agent integration."""
 

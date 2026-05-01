@@ -103,7 +103,11 @@ class GitRenderer:
     @staticmethod
     def _render_file_history(result: dict) -> None:
         """Render file history."""
-        print(f"File History: {result['path']} @ {result['ref']}")
+        element = result.get('element')
+        if element:
+            print(f"Element History: {result['path']} → {element} @ {result['ref']}")
+        else:
+            print(f"File History: {result['path']} @ {result['ref']}")
         print(f"Commits: {result['count']}")
         print()
 

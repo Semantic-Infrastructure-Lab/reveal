@@ -490,3 +490,82 @@ def _parent_has_different_file(parent, filepath: str, current_oid) -> bool:
         return current_oid != parent_entry.id
     except KeyError:
         return True
+
+
+def _get_element_content_at_commit(
+    repo: 'pygit2.Repository',
+    commit: 'pygit2.Commit',
+    filepath: str,
+    element_name: str,
+) -> Optional[str]:
+    """Extract the text of a named element from a file at a specific commit.
+
+    Returns None if the file or element doesn't exist at that commit.
+    """
+    import tempfile
+    from pathlib import Path
+
+    try:
+        tree = commit.tree
+        entry = tree[filepath]
+        blob = cast('pygit2.Blob', repo[entry.id])
+        content = blob.data.decode('utf-8', errors='replace')
+        file_lines = content.splitlines()
+
+        suffix = Path(filepath).suffix or '.txt'
+        with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False) as f:
+            f.write(content)
+            tmp_path = f.name
+
+        try:
+            from reveal.registry import get_analyzer
+            analyzer_class = get_analyzer(tmp_path)
+            if not analyzer_class:
+                return None
+            structure = analyzer_class(tmp_path).get_structure()
+
+            element_range = None
+            for item in structure.get('functions', []) + structure.get('classes', []):
+                if item.get('name') == element_name:
+                    element_range = (item['line'], item.get('line_end', item['line']))
+                    break
+
+            if element_range is None:
+                return None
+
+            start, end = element_range
+            return '\n'.join(file_lines[start - 1:end])
+        finally:
+            os.unlink(tmp_path)
+
+    except (KeyError, Exception):
+        return None
+
+
+def commit_touches_element(
+    repo: 'pygit2.Repository',
+    commit: 'pygit2.Commit',
+    filepath: str,
+    element_name: str,
+) -> bool:
+    """Check if a commit changed a specific named element within a file.
+
+    Uses commit_touches_file as a fast gate, then compares the element's text
+    at this commit vs each parent to detect actual content changes.
+    """
+    if not commit_touches_file(repo, commit, filepath):
+        return False
+
+    current = _get_element_content_at_commit(repo, commit, filepath, element_name)
+    if current is None:
+        return False
+
+    if not commit.parents:
+        return True
+
+    for parent in commit.parents:
+        parent_content = _get_element_content_at_commit(repo, parent, filepath, element_name)
+        if parent_content != current:
+            return True
+
+    return False

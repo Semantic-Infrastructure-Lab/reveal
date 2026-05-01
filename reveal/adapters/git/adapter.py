@@ -405,13 +405,22 @@ class GitAdapter(ResourceAdapter):
                 git_subpath = os.path.relpath(abs_file, repo_root).replace(os.sep, '/')
 
             if query_type == 'history':
-                return files.get_file_history(
+                element_name = self.query.get('element')
+                if element_name:
+                    touch_func = lambda repo, commit, subpath, _en=element_name: \
+                        files.commit_touches_element(repo, commit, subpath, _en)
+                else:
+                    touch_func = files.commit_touches_file
+                result = files.get_file_history(
                     repo, self.ref, git_subpath, self.query,
                     self.result_control, self.query_filters,
                     commits.format_commit,
                     lambda cd: queries.matches_all_filters(cd, self.query_filters),
-                    files.commit_touches_file
+                    touch_func
                 )
+                if element_name:
+                    result['element'] = element_name
+                return result
             elif query_type == 'blame':
                 return files.get_file_blame(
                     repo, self.ref, git_subpath, self.query, self.path,
@@ -519,9 +528,11 @@ class GitAdapter(ResourceAdapter):
                 {'uri': 'git://src/app.py@abc1234?type=diff&element=load_config', 'description': 'Diff scoped to hunks touching a named element'},
                 {'uri': 'git://src/app.py@abc1234?type=diff&context=10', 'description': 'Diff with more context lines'},
                 {'uri': 'git://src/app.py?type=history', 'description': 'File commit history (50 commits)'},
+                {'uri': 'git://src/app.py?type=history&element=load_config', 'description': 'Element-scoped history (only commits that changed this function)'},
                 {'uri': 'git://src/app.py?type=blame', 'description': 'File blame summary (contributors + key hunks)'},
                 {'uri': 'git://src/app.py?type=blame&detail=full', 'description': 'File blame detailed (line-by-line)'},
                 {'uri': 'git://src/app.py?type=blame&element=load_config', 'description': 'Semantic blame (who wrote this function)'},
+                {'uri': 'git://src/app.py?type=blame&ignore=69b0093,f5fcac0', 'description': 'Blame suppressing noise commits (e.g. mass-formatting)'},
                 {'uri': 'git://.?author=John', 'description': 'Filter commits by author name'},
                 {'uri': 'git://.?message~=bug', 'description': 'Filter commits with "bug" in message (regex)'},
                 {'uri': 'git://.?author=John&message~=fix', 'description': 'Filter by author AND message'},
@@ -533,7 +544,8 @@ class GitAdapter(ResourceAdapter):
                 'type': 'Operation type: history, blame, or diff. Default (no type): structural view of file at ref.',
                 'raw': 'For file-at-ref: "1" returns raw file contents instead of structural view',
                 'detail': 'For blame: "full" shows line-by-line (default is summary)',
-                'element': 'For blame/diff: function/class name to scope output to that element',
+                'element': 'For blame/diff/history: function/class name to scope output to that element',
+                'ignore': 'For blame: comma-separated commit hash prefixes to suppress (e.g. ignore=69b0093,f5fcac0)',
                 'context': 'For diff: number of context lines (default 3)',
                 'limit': 'Limit number of results (default: 50 for history, 20 for refs)',
                 'author': 'Filter commits by author name (case-insensitive, use ~= for regex)',
