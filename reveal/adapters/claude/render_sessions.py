@@ -294,10 +294,12 @@ def _render_claude_cross_session_search(result: dict) -> None:
         project = match.get('project', '')
         role = match.get('role', '')
         excerpt = (match.get('excerpt') or '').replace('\n', ' ').strip()
+        message_index = match.get('message_index')
 
         project_tag = f'  [{project}]' if project else ''
         role_tag = f'  {role}' if role else ''
-        print(f'{session}{project_tag}  {modified}{role_tag}')
+        jump = f'  → claude://session/{session}/message/{message_index}' if message_index is not None else ''
+        print(f'{session}{project_tag}  {modified}{role_tag}{jump}')
         if excerpt:
             if len(excerpt) > 200:
                 excerpt = excerpt[:200] + '...'

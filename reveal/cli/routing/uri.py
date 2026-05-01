@@ -88,7 +88,11 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
     path_override = getattr(args, 'base_path', None)
     if path_override and hasattr(adapter, 'reconfigure_base_path'):
         from pathlib import Path as _Path
-        adapter.reconfigure_base_path(_Path(path_override))
+        try:
+            adapter.reconfigure_base_path(_Path(path_override))
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
 
     # Handle --check mode if requested
     if getattr(args, 'check', False) and hasattr(adapter, 'check'):

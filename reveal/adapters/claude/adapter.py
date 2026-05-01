@@ -395,7 +395,16 @@ class ClaudeAdapter(ResourceAdapter):
             PLANS_DIR         = path.parent / 'plans'
             AGENTS_DIR        = path.parent / 'agents'
             HOOKS_DIR         = path.parent / 'hooks'
+
+        Raises:
+            ValueError: If path looks like a session directory (contains .jsonl files
+                directly) rather than the projects directory.
         """
+        if path.exists() and next(path.glob('*.jsonl'), None) is not None:
+            raise ValueError(
+                f"--base-path looks like a session directory (contains .jsonl files directly).\n"
+                f"Try the parent directory instead: --base-path {path.parent}"
+            )
         self.CONVERSATION_BASE = path
         self.CLAUDE_HOME = path.parent
         self.CLAUDE_JSON = path.parent.parent / '.claude.json'

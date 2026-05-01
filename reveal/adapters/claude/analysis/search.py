@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from ....utils.parallel import grep_files
 from .messages import _content_to_blocks, _collect_block_matches
 
 
-def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = False) -> Dict[str, str]:
+def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = False) -> Dict[str, Any]:
     """Scan a JSONL file line-by-line and return the first matching excerpt.
 
-    Parses only lines that contain the term bytes — skips all others.  Returns
-    a dict with ``excerpt``, ``role``, and ``timestamp``.  Falls back to empty
-    strings on any error so a missing snippet never breaks the search result.
+    Parses every valid JSON line to maintain an accurate ``message_index`` that
+    matches what ``reveal claude://session/NAME/message/N`` expects.  Returns a
+    dict with ``excerpt``, ``role``, ``timestamp``, and ``message_index``.
+    Falls back to empty strings / ``None`` on any error so a missing snippet
+    never breaks the search result.
 
     Args:
         jsonl_path: Path to the session ``.jsonl`` file.
@@ -23,35 +25,38 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
         whole_word: If True, only match whole words (word-boundary semantics).
 
     Returns:
-        Dict with keys ``excerpt``, ``role``, ``timestamp``.
+        Dict with keys ``excerpt``, ``role``, ``timestamp``, ``message_index``.
+        ``message_index`` is ``None`` when no match is found.
     """
     lower = term.lower()
+    message_index = 0
     try:
         with open(jsonl_path, encoding='utf-8', errors='replace') as fh:
             for raw_line in fh:
                 line = raw_line.strip()
-                if not line or lower not in line.lower():
+                if not line:
                     continue
                 try:
                     msg = json.loads(line)
                 except json.JSONDecodeError:
                     continue
                 role = msg.get('type', '')
-                if role not in ('user', 'assistant'):
-                    continue
-                content = msg.get('message', {}).get('content', [])
-                blocks = _content_to_blocks(content)
-                ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
-                matches = _collect_block_matches(blocks, lower, term, 0, role, ts, whole_word=whole_word)
-                if matches:
-                    return {
-                        'excerpt': matches[0].get('excerpt', ''),
-                        'role': role,
-                        'timestamp': ts,
-                    }
+                if role in ('user', 'assistant') and lower in line.lower():
+                    content = msg.get('message', {}).get('content', [])
+                    blocks = _content_to_blocks(content)
+                    ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
+                    matches = _collect_block_matches(blocks, lower, term, message_index, role, ts, whole_word=whole_word)
+                    if matches:
+                        return {
+                            'excerpt': matches[0].get('excerpt', ''),
+                            'role': role,
+                            'timestamp': ts,
+                            'message_index': message_index,
+                        }
+                message_index += 1
     except Exception:  # noqa: BLE001 — file read errors must never surface in search results
         pass
-    return {'excerpt': '', 'role': '', 'timestamp': ''}
+    return {'excerpt': '', 'role': '', 'timestamp': '', 'message_index': None}
 
 
 def search_sessions_for_term(
@@ -85,7 +90,8 @@ def search_sessions_for_term(
     Returns:
         List of match dicts, sorted most-recent-first, each containing:
         ``session``, ``modified``, ``project``, ``size_kb``,
-        ``readme_present``, ``excerpt``, ``role``, ``timestamp``.
+        ``readme_present``, ``excerpt``, ``role``, ``timestamp``,
+        ``message_index`` (0-based index for ``claude://session/NAME/message/N``).
     """
     if not sessions or not term:
         return []
@@ -117,6 +123,7 @@ def search_sessions_for_term(
             'excerpt':       snippet['excerpt'],
             'role':          snippet['role'],
             'timestamp':     snippet['timestamp'],
+            'message_index': snippet.get('message_index'),
         })
 
     results.sort(key=lambda x: x['modified'], reverse=True)

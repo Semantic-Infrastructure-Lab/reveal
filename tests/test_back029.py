@@ -98,7 +98,10 @@ class TestExtractFirstSnippet:
 
     def test_handles_missing_file_gracefully(self, tmp_path):
         result = _extract_first_snippet(tmp_path / 'nonexistent.jsonl', 'term')
-        assert result == {'excerpt': '', 'role': '', 'timestamp': ''}
+        assert result['excerpt'] == ''
+        assert result['role'] == ''
+        assert result['timestamp'] == ''
+        assert result['message_index'] is None
 
     def test_skips_tool_result_lines_without_text(self, tmp_path):
         jsonl = tmp_path / 'sess.jsonl'
@@ -392,3 +395,123 @@ class TestCrossSessionSearchRenderer:
         output = self._render(result)
         assert 'xyzzy' in output
         assert '0' in output
+
+
+# ─── BACK-267: message_index in cross-session search results ──────────────────
+
+class TestMessageIndexInSnippet:
+    """_extract_first_snippet returns the correct message_index (BACK-267)."""
+
+    def test_returns_message_index_zero_for_first_line(self, tmp_path):
+        jsonl = tmp_path / 'sess.jsonl'
+        jsonl.write_text(json.dumps(_user_msg('topstep combine')) + '\n')
+        result = _extract_first_snippet(jsonl, 'topstep')
+        assert result['message_index'] == 0
+
+    def test_returns_correct_index_when_match_is_not_first_line(self, tmp_path):
+        jsonl = tmp_path / 'sess.jsonl'
+        lines = [
+            json.dumps(_user_msg('unrelated first message')),
+            json.dumps(_assistant_msg('still no match here')),
+            json.dumps(_user_msg('topstep found at index 2')),
+        ]
+        jsonl.write_text('\n'.join(lines) + '\n')
+        result = _extract_first_snippet(jsonl, 'topstep')
+        assert result['message_index'] == 2
+
+    def test_returns_none_message_index_on_no_match(self, tmp_path):
+        jsonl = tmp_path / 'sess.jsonl'
+        jsonl.write_text(json.dumps(_user_msg('nothing to see here')) + '\n')
+        result = _extract_first_snippet(jsonl, 'kubernetes')
+        assert result['message_index'] is None
+
+    def test_non_user_assistant_lines_count_toward_index(self, tmp_path):
+        """System/tool lines increment the index even though they can't match."""
+        jsonl = tmp_path / 'sess.jsonl'
+        system_line = {'type': 'system', 'message': {'role': 'system', 'content': 'context'}}
+        lines = [
+            json.dumps(system_line),                             # index 0 — system, no match
+            json.dumps(_user_msg('topstep is the platform')),   # index 1 — should be returned
+        ]
+        jsonl.write_text('\n'.join(lines) + '\n')
+        result = _extract_first_snippet(jsonl, 'topstep')
+        assert result['message_index'] == 1
+
+
+class TestMessageIndexInSearchResults:
+    """search_sessions_for_term propagates message_index (BACK-267)."""
+
+    def _make_session(self, base: Path, name: str, messages: list) -> dict:
+        jsonl = _write_session(base, name, messages)
+        return {
+            'session': name,
+            'path': str(jsonl),
+            'modified': '2026-03-14T12:00:00',
+            'project': 'test',
+            'size_kb': 1,
+            'readme_present': False,
+        }
+
+    def test_result_includes_message_index(self, tmp_path):
+        session = self._make_session(tmp_path, 'my-sess', [_user_msg('topstep combine')])
+        results = search_sessions_for_term([session], 'topstep')
+        assert len(results) == 1
+        assert 'message_index' in results[0]
+        assert results[0]['message_index'] == 0
+
+    def test_message_index_reflects_position_in_file(self, tmp_path):
+        messages = [
+            _user_msg('first unrelated'),
+            _assistant_msg('second unrelated'),
+            _user_msg('topstep at index 2'),
+        ]
+        session = self._make_session(tmp_path, 'pos-sess', messages)
+        results = search_sessions_for_term([session], 'topstep')
+        assert results[0]['message_index'] == 2
+
+
+class TestCrossSessionSearchRendererJumpTarget:
+    """Renderer shows jump target URL when message_index is present (BACK-267)."""
+
+    def _render(self, result: dict) -> str:
+        buf = __import__('io').StringIO()
+        import sys
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            ClaudeRenderer._render_text(result)
+        finally:
+            sys.stdout = old
+        return buf.getvalue()
+
+    def _make_result(self, session: str, message_index) -> dict:
+        return {
+            'type': 'claude_cross_session_search',
+            'term': 'topstep',
+            'sessions_scanned': 10,
+            'match_count': 1,
+            'since': None,
+            'matches': [{
+                'session': session,
+                'modified': '2026-03-14T18:00:00',
+                'project': 'tia',
+                'role': 'user',
+                'excerpt': 'topstep combine',
+                'timestamp': '2026-03-14 18:00',
+                'readme_present': False,
+                'size_kb': 10,
+                'message_index': message_index,
+            }],
+        }
+
+    def test_shows_jump_target_when_message_index_present(self):
+        output = self._render(self._make_result('alpha-0314', 7))
+        assert 'claude://session/alpha-0314/message/7' in output
+
+    def test_no_jump_target_when_message_index_is_none(self):
+        output = self._render(self._make_result('alpha-0314', None))
+        assert 'message/' not in output
+
+    def test_jump_target_uses_correct_session_name(self):
+        output = self._render(self._make_result('solar-fire-0501', 3))
+        assert 'claude://session/solar-fire-0501/message/3' in output

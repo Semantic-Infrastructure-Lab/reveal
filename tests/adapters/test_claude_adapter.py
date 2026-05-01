@@ -711,6 +711,39 @@ class TestReconfigureBasePath:
         assert adapter.CLAUDE_HOME != original_home
         assert ClaudeAdapter.CLAUDE_HOME == original_home  # class untouched
 
+    def test_raises_when_path_contains_jsonl_directly(self, tmp_path):
+        """BACK-269: session dir passed as --base-path raises ValueError with hint."""
+        session_dir = tmp_path / '-home-user-sessions-my-sess'
+        session_dir.mkdir(parents=True)
+        (session_dir / 'my-sess.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('')
+        with pytest.raises(ValueError, match='session directory'):
+            adapter.reconfigure_base_path(session_dir)
+
+    def test_error_message_includes_parent_path(self, tmp_path):
+        """BACK-269: error message tells user the parent directory to use."""
+        session_dir = tmp_path / '.claude' / 'projects' / '-home-user-sessions-my-sess'
+        session_dir.mkdir(parents=True)
+        (session_dir / 'my-sess.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('')
+        with pytest.raises(ValueError, match=str(tmp_path / '.claude' / 'projects')):
+            adapter.reconfigure_base_path(session_dir)
+
+    def test_accepts_normal_projects_dir(self, tmp_path):
+        """BACK-269: a normal projects dir (no .jsonl at root) works fine."""
+        projects_dir = tmp_path / '.claude' / 'projects'
+        projects_dir.mkdir(parents=True)
+        # Create a session subdir with JSONL inside it (correct layout)
+        sess = projects_dir / '-home-user-sessions-my-sess'
+        sess.mkdir()
+        (sess / 'my-sess.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('')
+        adapter.reconfigure_base_path(projects_dir)  # should not raise
+        assert adapter.CONVERSATION_BASE == projects_dir
+
 
 class TestHelpDocumentation:
     """Tests for help documentation."""
