@@ -63,7 +63,7 @@ from .analysis import (
 _SCHEMA_QUERY_PARAMS = {
     'summary': {'type': 'flag', 'description': 'Session summary (overview + key events)'},
     'errors': {'type': 'flag', 'description': 'Filter for messages containing errors'},
-    'tools': {'type': 'string', 'description': 'Filter for specific tool usage', 'examples': ['?tools=Bash', '?tools=Edit']},
+    'tools': {'type': 'string', 'description': 'Filter for specific tool usage (comma-separated for multiple)', 'examples': ['?tools=Bash', '?tools=Edit', '?tools=Bash,Read']},
     'contains': {'type': 'string', 'description': 'Filter messages containing text', 'examples': ['?contains=reveal', '?contains=error']},
     'role': {'type': 'string', 'description': 'Filter by message role', 'values': ['user', 'assistant'], 'examples': ['?role=user']},
     'search': {
@@ -721,8 +721,9 @@ class ClaudeAdapter(ResourceAdapter):
 
         # Apply filters progressively
         if 'tools' in self.query_params:
-            tool_name = self.query_params['tools']
-            results = [r for r in results if r.get('tool_name') == tool_name]
+            tool_filter = self.query_params['tools']
+            tool_names = {n.strip() for n in tool_filter.split(',') if n.strip()}
+            results = [r for r in results if r.get('tool_name') in tool_names]
 
         if 'errors' in self.query_params:
             results = [r for r in results if r.get('is_error')]

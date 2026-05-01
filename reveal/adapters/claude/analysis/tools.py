@@ -172,25 +172,33 @@ def _extract_tool_result(tool_name: str, tur: Dict[str, Any]) -> Optional[Dict[s
 
 def get_tool_calls(messages: List[Dict], tool_name: str, session_name: str,
                    contract_base: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract all calls to specific tool.
+    """Extract all calls to one or more tools.
 
     Args:
         messages: List of message dictionaries
-        tool_name: Name of tool to filter (e.g., 'Bash', 'Read')
+        tool_name: Tool name(s) to filter.  Accepts a single name (e.g.
+            ``'Bash'``) or a comma-separated list (e.g. ``'Bash,Read'``).
         session_name: Name of the session
         contract_base: Base contract fields
 
     Returns:
-        Dictionary with tool call count and list of calls
+        Dictionary with tool call count and list of calls, sorted by
+        ``message_index``.  When multiple tools are requested,
+        each call entry includes a ``tool`` field so callers can tell them apart.
     """
     base = contract_base.copy()
     base['type'] = 'claude_tool_calls'
+
+    # Support comma-separated multi-tool filter (e.g. ?tools=Bash,Read).
+    tool_names: set = {n.strip() for n in tool_name.split(',') if n.strip()}
+    multi = len(tool_names) > 1
 
     tur_map = _build_tool_use_result_map(messages)
 
     tool_calls = []
     for i, msg, content in _iter_assistant_content(messages):
-        if content.get('type') == 'tool_use' and content.get('name') == tool_name:
+        name = content.get('name', '')
+        if content.get('type') == 'tool_use' and name in tool_names:
             tool_use_id = content.get('id')
             call_entry: Dict[str, Any] = {
                 'message_index': i,
@@ -199,9 +207,11 @@ def get_tool_calls(messages: List[Dict], tool_name: str, session_name: str,
                 'input': content.get('input'),
                 'timestamp': msg.get('timestamp'),
             }
+            if multi:
+                call_entry['tool'] = name
             tur = tur_map.get(tool_use_id) if tool_use_id else None
             if tur:
-                result_block = _extract_tool_result(tool_name, tur)
+                result_block = _extract_tool_result(name, tur)
                 if result_block is not None:
                     call_entry['result'] = result_block
             tool_calls.append(call_entry)
