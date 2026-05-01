@@ -1,4 +1,5 @@
 """Message-level renderers for the Claude adapter."""
+from typing import Optional
 
 
 def _tool_summary(name: str, inp: dict) -> str:
@@ -76,8 +77,11 @@ def _format_tool_params(name: str, inp: dict) -> list:
     return lines
 
 
-def _render_raw_block(block: dict) -> None:
-    """Print one content block from a raw message (text, tool_use, thinking, etc.)."""
+def _render_raw_block(block: dict, max_chars: Optional[int] = 500) -> None:
+    """Print one content block from a raw message (text, tool_use, thinking, etc.).
+
+    max_chars: None = no truncation; int = truncate tool_result at that many chars.
+    """
     btype = block.get('type', '?')
     if btype == 'text':
         print(block.get('text', ''))
@@ -95,9 +99,11 @@ def _render_raw_block(block: dict) -> None:
         else:
             text = str(content) if content else ''
         if text:
-            preview = text[:500]
-            suffix = f"\n  ... ({len(text) - 500:,} more chars)" if len(text) > 500 else ""
-            print(f"[tool_result]\n{preview}{suffix}")
+            if max_chars is not None and len(text) > max_chars:
+                print(f"[tool_result]\n{text[:max_chars]}")
+                print(f"  ... ({len(text) - max_chars:,} more chars)")
+            else:
+                print(f"[tool_result]\n{text}")
         else:
             print("[tool_result: (empty)]")
     elif btype == 'thinking':
@@ -113,6 +119,16 @@ def _render_claude_tool_calls(result: dict) -> None:
     call_count = result.get('call_count', 0)
     session = result.get('session', 'unknown')
 
+    display = result.get('_display', {})
+    verbose = display.get('verbose', False)
+    explicit_max = display.get('max_snippet_chars', None)
+    if verbose:
+        cmd_limit = None
+    elif explicit_max is not None:
+        cmd_limit = explicit_max
+    else:
+        cmd_limit = 100
+
     print(f"Tool: {tool_name} ({call_count} calls)")
     print(f"Session: {session}")
     print()
@@ -124,13 +140,17 @@ def _render_claude_tool_calls(result: dict) -> None:
         if tool_name == 'Bash':
             cmd = inp.get('command', '?')
             desc = inp.get('description', '')
+            if cmd_limit is not None and len(cmd) > cmd_limit:
+                display_cmd = cmd[:cmd_limit]
+                truncation = f"\n        ... ({len(cmd)} chars — use --verbose or --max-snippet-chars {len(cmd)} for full)"
+            else:
+                display_cmd = cmd
+                truncation = ""
             if desc:
                 print(f"[{i:3}] {desc}")
-                print(f"      $ {cmd[:100]}")
+                print(f"      $ {display_cmd}{truncation}")
             else:
-                print(f"[{i:3}] $ {cmd[:100]}")
-            if len(cmd) > 100:
-                print(f"        ... ({len(cmd)} chars)")
+                print(f"[{i:3}] $ {display_cmd}{truncation}")
         elif tool_name == 'Read':
             path = inp.get('file_path', '?')
             print(f"[{i:3}] {path}")
@@ -304,6 +324,16 @@ def _render_claude_message(result: dict) -> None:
     print(f"Role: {role}  |  {ts}")
     print()
 
+    display = result.get('_display', {})
+    verbose = display.get('verbose', False)
+    explicit_max = display.get('max_snippet_chars', None)
+    if verbose:
+        block_max = None  # no truncation
+    elif explicit_max is not None:
+        block_max = explicit_max
+    else:
+        block_max = 500  # default
+
     text = result.get('text', '')
     if text:
         print(text)
@@ -312,7 +342,7 @@ def _render_claude_message(result: dict) -> None:
         content = msg.get('content', [])
         if isinstance(content, list):
             for block in (b for b in content if isinstance(b, dict)):
-                _render_raw_block(block)
+                _render_raw_block(block, max_chars=block_max)
         elif isinstance(content, str):
             print(content)
 
