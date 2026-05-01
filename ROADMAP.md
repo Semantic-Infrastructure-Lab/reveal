@@ -7,7 +7,7 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
-### Unreleased (working tree)
+### v0.90.0
 - ✅ **`git://` blame % fix** — `clipped_lines` stored per filtered hunk in `_apply_element_blame_filter`; renderer uses clipped count for contributor %, eliminating >100% outputs on large hunks. (BACK-GIT-1, mighty-earth-0430)
 - ✅ **`git://` date filtering help** — `?date>YYYY-MM-DD`, `?since=YYYY-MM-DD` alias documented in `help://git`. Feature already worked; was undocumented. (BACK-GIT-2, mighty-earth-0430)
 - ✅ **`git://` `?type=diff`** — commit diff view with structural summary (added/removed/modified elements) + unified diff scoped to that commit vs parent. `?context=N`, `?element=func` hunk filtering. (BACK-GIT-3, mighty-earth-0430)
