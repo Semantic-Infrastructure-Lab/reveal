@@ -12,13 +12,20 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.90.1] - 2026-05-01 (session ancient-quasar-0501)
+## [0.90.1] - 2026-05-01 (sessions ancient-quasar-0501, coral-hue-0501, blazing-squall-0501)
+
+### Added
+- **`REVEAL_CLAUDE_BASE_PATH` env var** — persistent default for `--base-path`. Set once in your shell profile; `generic_adapter_handler` uses it when `--base-path` is absent. CLI flag still takes precedence. Reuses `reconfigure_base_path()` validation (session-dir check). 6 new tests. (BACK-272)
+- **`claude://` path aliases for query-routed views** — `/errors`, `/summary`, `/timeline`, `/tokens` now work as path aliases for `?errors`, `?summary`, `?timeline`, `?tokens`. Both forms return identical results. `_route_by_resource` updated; schema reflects all alias paths. 9 new tests. (BACK-270)
 
 ### Fixed
 - **`claude://` truncation bug #3 — `_format_tool_params` ignored `--verbose` and `--max-snippet-chars`** — Bash commands were always cut at 120 chars and Agent prompts at 100, regardless of display settings. `_format_tool_params` now accepts `max_chars: Optional[int] = 120`; `None` = no truncation (verbose), int = truncate at that length. `_render_raw_block` passes its `max_chars` through on `tool_use` blocks. 8 new tests. (BACK-263)
 - **`claude://` thinking blocks always truncated at 200 chars** — `_render_raw_block`'s `thinking` branch hardcoded `[:200]` regardless of `max_chars`. Now respects the same `max_chars` param used for `tool_result` blocks. Verbose mode shows full thinking content. 6 new tests. (BACK-268)
 - **`claude://SESSION-NAME/sub-path` failed without `session/` prefix** — omitting `session/` when a sub-path was present (e.g. `claude://ancient-quasar-0501/message/5`) mangled `session_name` to include the sub-path, causing `_find_conversation` to return `None`. `_parse_session_name` now detects the adjective-noun-MMDD session pattern and extracts only the session name, leaving sub-path routing intact. 5 new tests. (BACK-265)
 - **`?last=N` ignored N and always returned 1 turn** — `_route_by_query` checked `'last' in self.query_params` without reading the value, so `?last=3` returned 1 turn instead of 3. Now reads the integer value when present; bare `?last` (no `=N`) still means 1. 3 new tests. (BACK-266)
+- **Cross-session search results missing message index** — `_extract_first_snippet` now tracks `message_index` (0-based, counting all valid JSON lines). Renderer shows `→ claude://session/NAME/message/N` jump target on every match so agents can navigate directly to the hit. 8 new tests. (BACK-267)
+- **`--base-path` set to a session directory silently failed** — `reconfigure_base_path` now detects `.jsonl` files at the root of the given path and raises `ValueError` with hint: "Try the parent directory instead: `--base-path <parent>`". `uri.py` catches the error and prints it cleanly to stderr before exiting 1. 4 new tests. (BACK-269)
+- **`?tools=Bash,Read` comma-separated filter not supported** — `get_tool_calls` now parses comma-separated tool names; `_handle_composite_query` likewise. Multi-tool results include a `tool` field per call identifying which tool matched; single-tool mode is unchanged. 9 new tests. (BACK-271)
 
 ## [0.90.0] - 2026-04-30 (sessions savage-hunter-0426, fated-sword-0426, strong-scepter-0426, mighty-earth-0430, gapomiki-0430)
 
