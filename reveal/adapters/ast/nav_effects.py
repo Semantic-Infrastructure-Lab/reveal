@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .nav_calls import range_calls
 
-# Each entry: (kind_label, list_of_substrings_to_match_in_callee)
-# Matching is case-insensitive substring on the callee name.
+# Each entry: (kind_label, list_of_patterns).
+#
+# Matching model (BACK-283): patterns and callees are tokenized into segments
+# on the delimiters `.`, `->`, `::`, and whitespace. A pattern matches if its
+# segment sequence appears consecutively in the callee's segment sequence
+# (sliding-window equality, case-insensitive). This is segment-boundary
+# matching, not substring containment, so `header` no longer matches
+# `printHeader` and `mail` no longer matches `gmail`.
+#
 # Order matters — first match wins.
 _TAXONOMY: List[Tuple[str, List[str]]] = [
     ('hard_stop', ['die', 'exit', 'abort', 'sys.exit', 'os._exit', 'halt']),
@@ -27,9 +35,10 @@ _TAXONOMY: List[Tuple[str, List[str]]] = [
         'requests.get', 'requests.post', 'requests.put', 'requests.delete',
         'urllib.request', 'httpx.', 'aiohttp.',
         'fetch(', '->get(', '->post(',
-        # Note: bare 'header' would match user wrappers like 'printHeader',
-        # 'request_headers', 'getallheaders' — too greedy under substring match.
-        # Skip until the classifier moves to exact-or-boundary matching.
+        # Re-added 2026-05-05 (BACK-283): segment-boundary matching makes
+        # bare 'header' safe — it no longer matches user wrappers like
+        # 'printHeader' or 'request_headers'.
+        'header',
         'setcookie', 'setrawcookie', 'mail',
     ]),
     ('cache', [
@@ -65,14 +74,47 @@ _TAXONOMY: List[Tuple[str, List[str]]] = [
 ]
 
 
+_DELIM_RE = re.compile(r'->|::|\.|\s+')
+
+
+def _tokenize(s: str) -> List[str]:
+    """Lowercase, strip PHP `$` sigil and trailing `(`, split on delimiters."""
+    s = s.lower().strip()
+    if s.endswith('('):
+        s = s[:-1].rstrip()
+    s = s.lstrip('$')
+    parts = _DELIM_RE.split(s)
+    return [p for p in parts if p]
+
+
+# Pre-tokenize patterns once at module load.
+_COMPILED_TAXONOMY: List[Tuple[str, List[List[str]]]] = [
+    (kind, [_tokenize(p) for p in patterns])
+    for kind, patterns in _TAXONOMY
+]
+
+
+def _segments_contain(callee_segs: List[str], pattern_segs: List[str]) -> bool:
+    """True if pattern_segs appears as a consecutive sub-sequence of callee_segs."""
+    n = len(pattern_segs)
+    if n == 0 or n > len(callee_segs):
+        return False
+    for i in range(len(callee_segs) - n + 1):
+        if callee_segs[i:i + n] == pattern_segs:
+            return True
+    return False
+
+
 def classify_call(callee: str) -> Optional[str]:
     """Return the taxonomy kind for a callee string, or None if unclassified."""
     if not callee:
         return None
-    lower = callee.lower()
-    for kind, patterns in _TAXONOMY:
-        for pattern in patterns:
-            if pattern.lower() in lower:
+    callee_segs = _tokenize(callee)
+    if not callee_segs:
+        return None
+    for kind, pattern_list in _COMPILED_TAXONOMY:
+        for pattern_segs in pattern_list:
+            if _segments_contain(callee_segs, pattern_segs):
                 return kind
     return None
 

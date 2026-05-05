@@ -941,6 +941,59 @@ class TestClassifyCall(unittest.TestCase):
         self.assertEqual(classify_call('readfile'), 'file')
 
 
+class TestClassifyCallBoundaryMatch(unittest.TestCase):
+    """BACK-283: segment-boundary matching, not substring containment."""
+
+    def test_print_header_does_not_match_header(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('printHeader'))
+
+    def test_request_headers_does_not_match_header(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('request_headers'))
+
+    def test_gmail_does_not_match_mail(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('gmail'))
+
+    def test_mailer_send_does_not_match_mail(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('mailer.send'))
+
+    def test_mylog_does_not_match_log(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('mylog'))
+
+    def test_my_pdo_class_does_not_match_pdo(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('mypdo'))
+
+    def test_bare_header_classifies_as_http(self):
+        # Re-added in BACK-283 now that boundary matching is safe.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('header'), 'http')
+
+    def test_php_member_call_pdo_prepare_classifies_as_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('$pdo->prepare'), 'db')
+
+    def test_new_pdo_classifies_as_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('new PDO'), 'db')
+
+    def test_nested_segment_match_services_cache_set(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('services.cache.set'), 'cache')
+
+    def test_os_getenv_classifies_as_env_via_segment(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('os.getenv'), 'env')
+
+    def test_app_logger_info_classifies_as_log(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('app.logger.info'), 'log')
+
+
 class TestCollectEffects(unittest.TestCase):
 
     def setUp(self):
