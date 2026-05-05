@@ -431,3 +431,26 @@ cd ~/src/projects/zack/topstep && reveal arbiter/bot.py :393 --around
 ```
 
 This validates the D1/D3 claim that nav flags work on Python the same as on PHP — and reframes F6 from "PHP-specific" to "side-effect classifier is taxonomy-limited on every language".
+
+### 2026-05-05 (tempestuous-frost-0505) — BACK-283 landed; BACK-285 research surfaced two regressions
+
+**BACK-283 / F6.b-followup shipped** (commit `bb277b8`). `classify_call` now tokenizes patterns and callees on `.`, `->`, `::`, and whitespace (also strips PHP `$` sigil and trailing `(`), then sliding-window matches consecutive whole segments. `printHeader` no longer matches `header`; `gmail` no longer matches `mail`; `mylog` no longer matches `log`; `mypdo` no longer matches `pdo`. `header` re-added to http taxonomy. 12 new tests in `TestClassifyCallBoundaryMatch`. Full suite: 8613 passed, 0 failures.
+
+**BACK-285 research started; two issues caught:**
+
+1. **Stale-install gotcha** — the `reveal` CLI on this machine resolves to `~/.local/lib/python3.10/site-packages/reveal/` (last touched 2026-05-04), **not** `external-git`. Tests run from external-git so `pytest tests/` validates new code, but any CLI-driven dogfood (`reveal /path/to/peyton/...`) silently runs the OLD installed copy. The BACK-283 commit's "no peyton regression" claim was therefore tested against the previous code — an honest mistake. Workarounds: `PYTHONPATH=/home/scottsen/src/projects/reveal/external-git reveal …` for one-off dogfood, or `pip install -e /home/scottsen/src/projects/reveal/external-git` to wire the CLI to the working tree. Worth a one-time editable install across the dev machine.
+
+2. **BACK-283 introduced two real false positives** that boundary matching exposed (filed as BACK-286): `'->get('` and `'->post('` patterns in the http taxonomy. Under the old substring matcher these only matched the literal substring `->get(`, which never appeared in extracted callees (callees don't carry trailing `(`), so the patterns were effectively dead. Under the new tokenizer, `(` is stripped and `->` becomes a delimiter, so both collapse to `[get]` / `[post]` — matching **any** `.get` / `.post` call. Observed live on `arbiter/src/execution.py:359 actual_pos.get("side")` now misclassifying as `http`. Same risk for `dict.get`, `request.get`, etc. Fix: delete both patterns; rely on receiver-segment matching (BACK-285a) to cover the legitimate `requests.get` / `client.post` cases via receiver names.
+
+**BACK-285 plan emerged from research** — add a parallel `_RECEIVER_TAXONOMY` and `_classify_by_receiver(callee_segs)` that fires when any non-final segment of the callee equals a known receiver name. Seed with **universal** receivers only:
+
+| kind | receivers |
+|------|-----------|
+| db | `cursor`, `conn`, `connection`, `session`, `db` |
+| cache | `cache`, `redis`, `memcache` |
+| log | `logger`, `_log`, `log` |
+| http | `httpx`, `aiohttp`, `requests` |
+
+Project-specific receivers (`tsx`, `evlog`, `event_log`, `services.trade_db.*`, `services.market_data.*`, `services.exchange.*`, `discord`) are **deliberately left out** — they belong in `.reveal.yaml` per-project extension (BACK-238, now motivated). What BACK-285a alone restores: `cursor.execute` → db, `redis.get` → cache, `_log.warning` → log (the recall lost when BACK-283 stopped accidental substring matching). What BACK-285a does NOT restore without BACK-238: `place_order::self._post_raw`, `_fetch_md::market_data.get_bars`, `_place_and_verify_orders::tsx.get_open_position`. False-positive guard tests required: `dict.get`, `actual_pos.get` → unclassified.
+
+**Sequencing**: bundle BACK-286 cleanup into the BACK-285a commit (the receiver patterns are the replacement for the deleted `'->get('` / `'->post('`). BACK-238 follows as a separate change once the receiver-matching shape is stable.
