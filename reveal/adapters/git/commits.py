@@ -1,7 +1,7 @@
 """Git commit operations and formatting."""
 
 from datetime import datetime
-from typing import Dict, Any, List, TYPE_CHECKING
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 
 from ...utils.query import apply_result_control
 
@@ -54,10 +54,15 @@ def get_recent_commits(
     format_commit_func,
     matches_all_filters_func,
     result_control,
-    query_filters: list
+    query_filters: list,
+    no_merges: bool = False,
+    content_pattern: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Get recent commits from HEAD."""
     import pygit2
+
+    if content_pattern:
+        from .files import _commit_diff_contains
 
     commits: List[Dict[str, Any]] = []
 
@@ -68,8 +73,12 @@ def get_recent_commits(
         walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
 
         for commit in walker:
+            if no_merges and len(commit.parents) > 1:
+                continue
             commit_dict = format_commit_func(commit)
             if not matches_all_filters_func(commit_dict):
+                continue
+            if content_pattern and not _commit_diff_contains(repo, commit, '', content_pattern):
                 continue
             commits.append(commit_dict)
             if len(commits) >= limit:
@@ -91,10 +100,15 @@ def get_commit_history(
     format_commit_func,
     matches_all_filters_func,
     result_control,
-    query_filters: list
+    query_filters: list,
+    no_merges: bool = False,
+    content_pattern: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Get commit history from a starting commit."""
     import pygit2
+
+    if content_pattern:
+        from .files import _commit_diff_contains
 
     commits = []
 
@@ -102,8 +116,12 @@ def get_commit_history(
         walker = repo.walk(start_commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
 
         for commit in walker:
+            if no_merges and len(commit.parents) > 1:
+                continue
             commit_dict = format_commit_func(commit)
             if not matches_all_filters_func(commit_dict):
+                continue
+            if content_pattern and not _commit_diff_contains(repo, commit, '', content_pattern):
                 continue
             commits.append(commit_dict)
             if len(commits) >= limit:

@@ -179,14 +179,23 @@ class GitRenderer:
             print(f"  ... and {len(sorted_contributors) - 5} more contributors")
         print()
 
-        # Show suppressed noise commits if any
+        # Show suppressed/auto-ignored commits if any
         ignored = result.get('ignored')
         if ignored:
-            total_ignored_lines = sum(e['lines'] for e in ignored)
-            print(f"Suppressed ({len(ignored)} noise commit(s), {total_ignored_lines} lines excluded):")
-            for entry in ignored:
-                print(f"  {entry['hash']}  {entry['lines']:4} lines  {entry['message'][:60]}")
-            print()
+            auto_ignored = [e for e in ignored if e.get('source') in ('auto-detect', 'ignore-revs')]
+            explicit_ignored = [e for e in ignored if e.get('source') not in ('auto-detect', 'ignore-revs')]
+            if auto_ignored:
+                print(f"Auto-ignored {len(auto_ignored)} noise commit(s) — use ?ignore=off to include:")
+                for entry in auto_ignored:
+                    src = '.git-blame-ignore-revs' if entry.get('source') == 'ignore-revs' else 'noise heuristic'
+                    print(f"  {entry['hash']}  {entry['lines']:4} lines  {entry['message'][:55]}  [{src}]")
+                print()
+            if explicit_ignored:
+                total_lines = sum(e['lines'] for e in explicit_ignored)
+                print(f"Suppressed ({len(explicit_ignored)} user-specified commit(s), {total_lines} lines excluded):")
+                for entry in explicit_ignored:
+                    print(f"  {entry['hash']}  {entry['lines']:4} lines  {entry['message'][:60]}")
+                print()
 
         # Find key hunks (largest continuous blocks)
         key_hunks = sorted(result['hunks'], key=lambda h: h['lines']['count'], reverse=True)[:5]

@@ -1,9 +1,12 @@
 """Git file operations: history, blame, and content retrieval."""
 
 import os
+import re
 import sys
 from datetime import datetime
 from typing import Dict, Any, List, Optional, cast, TYPE_CHECKING
+
+_LINE_RANGE_RE = re.compile(r'^[Ll](\d+)-[Ll]?(\d+)$')
 
 if TYPE_CHECKING:
     import pygit2
@@ -230,14 +233,21 @@ def get_file_history(
 
         commit = cast('pygit2.Commit', obj)
 
+        no_merges = query.get('no_merges') in ('1', 'true', 'yes')
+        content_pattern: Optional[str] = query.get('content~') or query.get('content') or None
+
         # Walk commit history
         walker = repo.walk(commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
 
         for commit in walker:
+            if no_merges and len(commit.parents) > 1:
+                continue
             if not commit_touches_file_func(repo, commit, subpath):
                 continue
             commit_dict = format_commit_func(commit)
             if not matches_all_filters_func(commit_dict):
+                continue
+            if content_pattern and not _commit_diff_contains(repo, commit, subpath, content_pattern):
                 continue
             commits.append(commit_dict)
             if len(commits) >= limit:
@@ -262,6 +272,40 @@ def get_file_history(
 
     except (KeyError, pygit2.GitError) as e:
         raise ValueError(f"Failed to get file history: {subpath}") from e
+
+
+def _commit_diff_contains(
+    repo: 'pygit2.Repository',
+    commit: 'pygit2.Commit',
+    subpath: str,
+    pattern: str,
+) -> bool:
+    """Return True if pattern appears in the diff introduced by commit.
+
+    Searches the raw unified diff text, so it matches both added and removed
+    lines (classic pickaxe behaviour). Pass subpath='' to search all files.
+    """
+    import subprocess
+    repo_root = repo.workdir.rstrip('/\\') if repo.workdir else '.'
+    if commit.parents:
+        cmd = ['git', '-C', repo_root, 'diff',
+               str(commit.parents[0].id), str(commit.id)]
+    else:
+        empty_tree = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+        cmd = ['git', '-C', repo_root, 'diff', empty_tree, str(commit.id)]
+    if subpath:
+        cmd += ['--', subpath]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        for line in result.stdout.splitlines():
+            if (line and line[0] in ('+', '-')
+                    and not line.startswith('+++')
+                    and not line.startswith('---')
+                    and pattern in line):
+                return True
+        return False
+    except Exception:
+        return False
 
 
 def _filter_ignored_hunks(hunks: List[Dict[str, Any]], ignore_shas: List[str]):
@@ -292,15 +336,57 @@ def _filter_ignored_hunks(hunks: List[Dict[str, Any]], ignore_shas: List[str]):
     return kept, list(ignored_by_sha.values())
 
 
+def _file_has_no_named_elements(path: str, subpath: str) -> bool:
+    """Return True if the file has no analyzable functions or classes (procedural file)."""
+    try:
+        from reveal.registry import get_analyzer
+        file_path = os.path.join(path, subpath) if path and path != '.' else subpath
+        if not os.path.isabs(file_path):
+            file_path = os.path.abspath(file_path)
+        analyzer_class = get_analyzer(file_path)
+        if not analyzer_class:
+            return True
+        structure = analyzer_class(file_path).get_structure()
+        return not structure.get('functions') and not structure.get('classes')
+    except Exception:
+        return False
+
+
 def _apply_element_blame_filter(element_name, hunks, path, subpath, get_range_func):
-    """Filter blame hunks to the line range of a named element.
+    """Filter blame hunks to the line range of a named element or explicit L<s>-L<e> range.
 
     Returns (element_info, filtered_hunks). If element not found, returns (None, original_hunks).
     """
+    # Handle explicit line-range syntax: L128-L162 or L128-162
+    lr_match = _LINE_RANGE_RE.match(element_name)
+    if lr_match:
+        el_start = int(lr_match.group(1))
+        el_end = int(lr_match.group(2))
+        if el_start > el_end:
+            el_start, el_end = el_end, el_start
+        element_info = {'name': element_name, 'line_start': el_start, 'line_end': el_end}
+        filtered = []
+        for h in hunks:
+            h_start = h['lines']['start']
+            h_end = h_start + h['lines']['count'] - 1
+            if h_start <= el_end and h_end >= el_start:
+                clipped = min(h_end, el_end) - max(h_start, el_start) + 1
+                filtered.append({**h, 'clipped_lines': clipped})
+        return element_info, filtered
+
+    # Named element lookup
     element_range = get_range_func(element_name, path, subpath)
     if not element_range:
-        print(f"Note: Element '{element_name}' not found in {subpath}, showing full file blame",
-              file=sys.stderr)
+        if _file_has_no_named_elements(path, subpath):
+            print(
+                f"Warning: Element '{element_name}' not found in {subpath} — "
+                f"file has no named elements (procedural). "
+                f"Use ?element=L<start>-L<end> to blame a specific line range.",
+                file=sys.stderr,
+            )
+        else:
+            print(f"Note: Element '{element_name}' not found in {subpath}, showing full file blame",
+                  file=sys.stderr)
         return None, hunks
 
     element_info = {
@@ -377,13 +463,60 @@ def get_file_blame(
                 element_name, hunks, path, subpath, get_element_line_range_func
             )
 
-        # Apply ignore filter (?ignore=sha1,sha2) after element filtering so
-        # clipped_lines are already set before we count suppressed lines.
-        ignore_raw = query.get('ignore', '')
-        ignore_shas = [s.strip() for s in ignore_raw.split(',') if s.strip()] if ignore_raw else []
+        # Build ignore list: explicit ?ignore=sha, .git-blame-ignore-revs, noise heuristic.
+        # ?ignore=off disables all auto-ignore and shows raw blame.
+        import re
+        _NOISE_RE = re.compile(
+            r'normalize|line.end|gitattributes|format|whitespace|prettier|eslint'
+            r'|black|isort|autopep8|clang.?format',
+            re.IGNORECASE,
+        )
+        ignore_off = query.get('ignore', '').strip().lower() == 'off'
+        explicit_shas: List[str] = []
+        ignore_revs_shas: List[str] = []
+        auto_shas: List[str] = []
+        if not ignore_off:
+            ignore_raw = query.get('ignore', '')
+            explicit_shas = [s.strip() for s in ignore_raw.split(',') if s.strip()] if ignore_raw else []
+
+            # Honor .git-blame-ignore-revs if present
+            workdir = getattr(repo, 'workdir', None)
+            if workdir:
+                revs_path = os.path.join(workdir, '.git-blame-ignore-revs')
+                if os.path.exists(revs_path):
+                    with open(revs_path) as revs_f:
+                        for revs_line in revs_f:
+                            sha = revs_line.split('#')[0].strip()
+                            if sha and len(sha) >= 7:
+                                ignore_revs_shas.append(sha[:7])
+
+            # Auto-detect noise commits: noise message pattern AND owns >50% of hunks
+            total_hunks = len(hunks)
+            if total_hunks > 0:
+                hunk_counts: Dict[str, int] = {}
+                hunk_msg: Dict[str, str] = {}
+                for h in hunks:
+                    sha7 = h['commit']['hash']
+                    hunk_counts[sha7] = hunk_counts.get(sha7, 0) + 1
+                    hunk_msg[sha7] = h['commit']['message']
+                for sha7, count in hunk_counts.items():
+                    if count / total_hunks > 0.5 and _NOISE_RE.search(hunk_msg[sha7]):
+                        auto_shas.append(sha7)
+
+        all_ignore_shas = list(dict.fromkeys(explicit_shas + ignore_revs_shas + auto_shas))
         ignored_summary: List[Dict[str, Any]] = []
-        if ignore_shas:
-            hunks, ignored_summary = _filter_ignored_hunks(hunks, ignore_shas)
+        if all_ignore_shas:
+            hunks, ignored_summary = _filter_ignored_hunks(hunks, all_ignore_shas)
+            explicit_set = {s[:7] for s in explicit_shas}
+            revs_set = {s[:7] for s in ignore_revs_shas}
+            for entry in ignored_summary:
+                h7 = entry['hash'][:7]
+                if h7 in explicit_set:
+                    entry['source'] = 'explicit'
+                elif h7 in revs_set:
+                    entry['source'] = 'ignore-revs'
+                else:
+                    entry['source'] = 'auto-detect'
 
         # Check if detail mode is requested
         detail_mode = query.get('detail') == 'full'

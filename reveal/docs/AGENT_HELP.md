@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.90.1
+**Version:** 0.91.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -935,6 +935,11 @@ reveal 'git://src/auth.py@abc1234?raw=1'                         # previous raw 
 # File history — commits that touched a file
 reveal 'git://src/auth.py?type=history&limit=20'
 reveal 'git://src/auth.py?type=history&author=Alice&limit=10'
+reveal 'git://src/auth.py?type=history&no_merges=1'             # exclude merge commits (v0.91.0+)
+
+# Pickaxe search — history where a string appears in the diff (v0.91.0+)
+reveal 'git://src/auth.py?type=history&content~=SmLogs'         # commits that added/removed SmLogs
+reveal 'git://src/auth.py?type=history&content~=CURLOPT_TIMEOUT&no_merges=1'
 
 # Element-scoped history — commits that actually changed a specific function (v0.90.0+)
 # Runs analyzer per commit — use ?limit=N to keep it fast
@@ -948,19 +953,24 @@ reveal 'git://src/auth.py?type=history&since=2026-01-01&author=Jaydeep'
 # Blame — who owns which lines
 reveal 'git://src/auth.py?type=blame'                            # summary by contributor
 reveal 'git://src/auth.py?type=blame&element=process_payment'   # blame scoped to function
+reveal 'git://src/auth.py?type=blame&element=L128-L162'         # blame for explicit line range (v0.91.0+)
 
-# Noise-commit suppression — strip mass-formatting commits from blame (v0.90.0+)
-reveal 'git://src/auth.py?type=blame&ignore=69b0093'
-reveal 'git://src/auth.py?type=blame&ignore=69b0093,f5fcac0'    # multiple commits
+# Noise-commit suppression — strip mass-formatting commits from blame
+# Auto-ignored by default (v0.91.0+): .git-blame-ignore-revs + noise heuristic (>50% hunks, noise message)
+reveal 'git://src/auth.py?type=blame&ignore=off'                # disable auto-ignore, see raw blame
+reveal 'git://src/auth.py?type=blame&ignore=69b0093'            # explicit suppress (stacks with auto)
+reveal 'git://src/auth.py?type=blame&ignore=69b0093,f5fcac0'    # multiple explicit
 
 # The motivating combined pattern: who really changed this function, ignoring formatting?
-reveal 'git://src/auth.py?type=blame&element=process_payment&ignore=69b0093'
+reveal 'git://src/auth.py?type=blame&element=process_payment&ignore=off'
 ```
 
 **When to use each mode:**
 - `?type=diff` — "what exactly did this commit change?" (replaces `git show`)
 - `?type=history&element=func` — "when was this function changed and by whom?" (replaces file history + manual grep)
-- `?type=blame&ignore=sha` — "who really owns these lines?" (when mass-formatting commit dominates)
+- `?type=history&content~=X` — "which commits introduced or removed this string?" (pickaxe search)
+- `?type=blame` — "who really owns these lines?" (noise commits auto-suppressed; use `?ignore=off` for raw)
+- `?element=L128-L162` — blame for a procedural file or specific line range (no named element needed)
 
 **Performance note:** `?type=history&element=func` runs the analyzer once per commit per file. Use `?limit=10` or `?limit=20` for large file histories.
 

@@ -12,6 +12,17 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.91.0] - 2026-05-05 (sessions ionic-throne-0505, dafaso-0505)
+
+### Fixed
+- **YAML/JSON analyzer — multibyte UTF-8 characters corrupted subsequent key names** — tree-sitter returns byte offsets; slicing a Python `str` with byte offsets mangles names after any multibyte value (e.g. em-dash). `_get_key_info` now uses `_get_node_text()` instead of direct byte-slice. Same fix applied to `JsonAnalyzer`.
+
+### Added
+- **`git://` `?content~=string` pickaxe search in history** — scans `+`/`-` diff lines only (not context lines); works on file-scoped `?type=history` and repo-wide overview. Wired through `get_file_history`, `get_commit_history`, `get_recent_commits`. (BACK-279)
+- **`git://` `?no_merges=1` filter** — excludes merge commits (`len(parents) > 1`) from all history paths. (BACK-280)
+- **`git://` blame auto-ignore noise commits** — two layers: (1) honors `.git-blame-ignore-revs` if present in workdir; (2) heuristic — commit message matches noise pattern (`normalize|whitespace|format|prettier|black|...`) AND owns >50% of hunks. Each ignored entry tagged with `source` (`auto-detect`, `ignore-revs`, `explicit`). Renderer shows "Auto-ignored" section with source label + `?ignore=off` escape hatch. `?ignore=off` disables all auto-ignore and returns raw blame. (BACK-281)
+- **`git://` `?element=L128-L162` line-range blame** — targets an explicit line range without a named-element lookup; analyzer is bypassed entirely. Accepts uppercase `L` or lowercase `l`; swapped range is auto-normalized. When a named `?element=` lookup fails on a file with no functions or classes (procedural file), stderr emits a clear warning suggesting the `L<start>-L<end>` form. (BACK-282)
+
 ## [0.90.1] - 2026-05-01 (sessions ancient-quasar-0501, coral-hue-0501, blazing-squall-0501)
 
 ### Added

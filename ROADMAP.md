@@ -1,11 +1,17 @@
 # Reveal Roadmap
-> **Last updated**: 2026-05-01 (ancient-quasar-0501 — v0.90.1 claude:// UX patch)
+> **Last updated**: 2026-05-05 (ionic-throne-0505/dafaso-0505 — v0.91.0 git:// history/blame enhancements)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.91.0
+- ✅ **`git://` `?content~=string` pickaxe search** — scans `+`/`-` diff lines in history; works on file-scoped and repo-wide queries. (BACK-279, ionic-throne-0505)
+- ✅ **`git://` `?no_merges=1` filter** — excludes merge commits from all history paths. (BACK-280, ionic-throne-0505)
+- ✅ **`git://` blame auto-ignore noise commits** — `.git-blame-ignore-revs` honored automatically; heuristic auto-suppresses commits matching noise message pattern that own >50% of hunks. Source-tagged output; `?ignore=off` escape hatch. (BACK-281, dafaso-0505)
+- ✅ **`git://` `?element=L128-L162` line-range blame** — explicit line range bypasses analyzer; procedural-file fallback suggests this form when named lookup fails on a file with no elements. (BACK-282, dafaso-0505)
 
 ### v0.90.1
 - ✅ **`claude://` truncation bug #3 — `_format_tool_params`** — Bash/Agent params in `tool_use` blocks now respect `--verbose` and `--max-snippet-chars`; `max_chars=None` = no truncation. (BACK-263, ancient-quasar-0501)

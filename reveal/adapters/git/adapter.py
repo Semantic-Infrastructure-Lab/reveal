@@ -210,7 +210,8 @@ class GitAdapter(ResourceAdapter):
             if k in ['sort', 'limit', 'offset']:
                 result_control_parts.append(f"{k}={v}")
             # Operational parameters (exclude from both)
-            elif k in ['type', 'detail', 'element', 'ignore', 'raw', 'context']:
+            elif k in ['type', 'detail', 'element', 'ignore', 'raw', 'context',
+                       'no_merges', 'content', 'content~']:
                 continue
             # ?ref= overrides the starting ref (alias for @ref in the URI)
             elif k == 'ref':
@@ -392,6 +393,8 @@ class GitAdapter(ResourceAdapter):
 
         # Check query type for special operations
         query_type = self.query.get('type', None)
+        no_merges = self.query.get('no_merges') in ('1', 'true', 'yes')
+        content_pattern = self.query.get('content~') or self.query.get('content') or None
 
         if self.subpath:
             # Normalize subpath to be relative to the repo root, not CWD.
@@ -437,13 +440,16 @@ class GitAdapter(ResourceAdapter):
                 self.result_control,
                 commits.format_commit,
                 lambda cd: queries.matches_all_filters(cd, self.query_filters),
-                lambda repo, start_commit, limit: commits.get_commit_history(
-                    repo, start_commit, limit,
-                    commits.format_commit,
-                    lambda cd: queries.matches_all_filters(cd, self.query_filters),
-                    self.result_control,
-                    self.query_filters
-                )
+                lambda repo, start_commit, limit, _nm=no_merges, _cp=content_pattern: \
+                    commits.get_commit_history(
+                        repo, start_commit, limit,
+                        commits.format_commit,
+                        lambda cd: queries.matches_all_filters(cd, self.query_filters),
+                        self.result_control,
+                        self.query_filters,
+                        no_merges=_nm,
+                        content_pattern=_cp,
+                    )
             )
         else:
             return commits.get_repository_overview(
@@ -451,13 +457,16 @@ class GitAdapter(ResourceAdapter):
                 refs.get_head_info,
                 refs.list_branches,
                 refs.list_tags,
-                lambda repo, limit: commits.get_recent_commits(
-                    repo, limit,
-                    commits.format_commit,
-                    lambda cd: queries.matches_all_filters(cd, self.query_filters),
-                    self.result_control,
-                    self.query_filters
-                )
+                lambda repo, limit, _nm=no_merges, _cp=content_pattern: \
+                    commits.get_recent_commits(
+                        repo, limit,
+                        commits.format_commit,
+                        lambda cd: queries.matches_all_filters(cd, self.query_filters),
+                        self.result_control,
+                        self.query_filters,
+                        no_merges=_nm,
+                        content_pattern=_cp,
+                    )
             )
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
@@ -540,6 +549,10 @@ class GitAdapter(ResourceAdapter):
                 {'uri': 'git://src/app.py?type=history&date>2026-01-01', 'description': 'File history since a date (ISO format, operator form)'},
                 {'uri': 'git://src/app.py?type=history&since=2026-01-01', 'description': 'File history since a date (since= alias, equivalent)'},
                 {'uri': 'git://src/app.py?type=history&since=2026-01-01&author=John', 'description': 'History since date AND by author'},
+                {'uri': 'git://src/app.py?type=history&content~=MyClass', 'description': 'Commits where the diff added or removed "MyClass" (pickaxe search)'},
+                {'uri': 'git://.?content~=SmLogs', 'description': 'Repo-wide: find any commit whose diff contains "SmLogs"'},
+                {'uri': 'git://src/app.py?type=history&no_merges=1', 'description': 'File history excluding merge commits'},
+                {'uri': 'git://.@main?no_merges=1', 'description': 'Branch history without merge noise'},
             ],
             'query_parameters': {
                 'type': 'Operation type: history, blame, or diff. Default (no type): structural view of file at ref.',
@@ -554,6 +567,8 @@ class GitAdapter(ResourceAdapter):
                 'message': 'Filter commits by message (use ~= for regex matching)',
                 'hash': 'Filter commits by hash prefix',
                 'date': 'Filter commits by date — supports >, <, >=, <= with ISO date string (e.g. date>2026-01-01). Use since=YYYY-MM-DD as an ergonomic alias for date>=YYYY-MM-DD.',
+                'content~': 'Pickaxe search: only commits where the diff added or removed the given string. Works on file-scoped history (?type=history) and repo-wide (git://.?content~=X). Independent of commit message wording.',
+                'no_merges': 'Set to 1 to exclude merge commits (commits with more than one parent). Useful for repos with noisy merge-commit messages.',
             },
             'notes': [
                 'Requires pygit2: pip install reveal-cli[git]',

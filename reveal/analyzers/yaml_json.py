@@ -67,7 +67,7 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         """
         key_node = pair_node.child_by_field_name('key')
         if key_node:
-            key_name = self.content[key_node.start_byte:key_node.end_byte]
+            key_name = self._get_node_text(key_node)
             return key_name, key_node
         return None, None
 
@@ -166,8 +166,7 @@ class JsonAnalyzer(TreeSitterAnalyzer):
         """
         key_node = pair_node.child_by_field_name('key')
         if key_node:
-            key_text = self.content[key_node.start_byte:key_node.end_byte]
-            key_name = key_text.strip('"')
+            key_name = self._get_node_text(key_node).strip('"')
             return key_name, key_node
         return None, None
 

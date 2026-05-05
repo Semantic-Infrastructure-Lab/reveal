@@ -310,6 +310,35 @@ messages:
         finally:
             os.unlink(temp_path)
 
+    def test_multibyte_chars_in_value_dont_corrupt_subsequent_keys(self):
+        """Keys after multibyte UTF-8 values must have correct names.
+
+        Tree-sitter returns byte offsets. Slicing a Python str with byte offsets
+        corrupts key names whenever a multibyte character (e.g. em-dash U+2014 =
+        3 bytes) appears in an earlier value. Regression for the bug where
+        sociamonials-ops.yaml keys after the long description rendered as garbage.
+        """
+        code = (
+            'first: "value with em—dash"\n'  # em-dash = 3 UTF-8 bytes
+            'second: plain\n'
+            'third: another\n'
+        )
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = YamlAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            self.assertIn('keys', structure)
+            names = [k['name'] for k in structure['keys']]
+            self.assertEqual(names, ['first', 'second', 'third'])
+
+        finally:
+            os.unlink(temp_path)
+
 
 class TestCombinedAnalyzerBehavior(unittest.TestCase):
     """Test that YAML and JSON analyzers work together."""

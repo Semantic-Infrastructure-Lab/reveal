@@ -1662,3 +1662,449 @@ class TestRendererNewFeatures(unittest.TestCase):
         output = self._render(self._blame_result(hunks, ignored=ignored))
         self.assertIn('2', output)          # 2 noise commits
         self.assertIn('50', output)         # 30+20 total lines suppressed
+
+
+@pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+class TestContentPatternFilter:
+    """Tests for ?content~= pickaxe search in file and repo-wide history."""
+
+    def test_file_history_content_matches_commit_that_added_string(self, git_repo):
+        """content~= finds the commit that added the target string to README."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'history', 'content~': 'Updated content'},
+        )
+        result = adapter.get_structure()
+        assert result['type'] == 'git_file_history'
+        assert result['count'] == 1
+        assert 'Update README' in result['commits'][0]['message']
+
+    def test_file_history_content_no_match_returns_empty(self, git_repo):
+        """content~= with a string not in any diff returns zero commits."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'history', 'content~': 'this_string_never_appears_xyz'},
+        )
+        result = adapter.get_structure()
+        assert result['count'] == 0
+
+    def test_file_history_content_excludes_context_lines(self, git_repo_py_history):
+        """content~= does not fire on unchanged context lines — only added/removed."""
+        # "return a + b" appears in all 3 commits as context but was only
+        # introduced in commit 1.  The filter must match only commit 1.
+        adapter = GitAdapter(
+            path=str(git_repo_py_history),
+            subpath='calc.py',
+            query={'type': 'history', 'content~': 'return a + b'},
+        )
+        result = adapter.get_structure()
+        messages = [c['message'] for c in result['commits']]
+        assert any('Add calc.py' in m for m in messages)
+        assert not any('subtract' in m for m in messages)
+        assert not any('Improve' in m for m in messages)
+
+    def test_repo_wide_content_search(self, git_repo):
+        """content~= on repo overview (no subpath) searches across all files."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'content~': 'Hello, World!'},
+        )
+        result = adapter.get_structure()
+        found_messages = [c['message'] for c in result['commits']['recent']]
+        assert any('main.py' in m or 'Add' in m for m in found_messages)
+
+    def test_content_param_not_leaked_into_commit_filters(self, git_repo):
+        """content~ must not be treated as a commit-dict field filter (would match nothing)."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'history', 'content~': 'Initial content'},
+        )
+        result = adapter.get_structure()
+        # If content~ were treated as a commit-dict filter, count would be 0.
+        assert result['count'] >= 1
+
+
+@pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+class TestNoMergesFilter:
+    """Tests for ?no_merges=1 in file and repo-wide history."""
+
+    @pytest.fixture
+    def git_repo_with_merge(self, tmp_path):
+        """Repo with a merge commit: main branch has a merge from a feature branch."""
+        repo_path = tmp_path / "merge_repo"
+        repo_path.mkdir()
+        repo = pygit2.init_repository(str(repo_path))
+        sig = pygit2.Signature("Test User", "test@example.com")
+        f = repo_path / "file.txt"
+        idx = repo.index
+
+        # Commit 1 on master
+        f.write_text("line1\n")
+        idx.add("file.txt"); idx.write()
+        c1 = repo.create_commit("refs/heads/master", sig, sig,
+                                "Initial commit", idx.write_tree(), [])
+        repo.set_head("refs/heads/master")
+
+        # Commit 2 on feature branch
+        repo.branches.create("feature", repo.get(c1))
+        repo.checkout(repo.lookup_branch("feature").name)
+        f.write_text("line1\nfeature line\n")
+        idx.add("file.txt"); idx.write()
+        c2 = repo.create_commit("refs/heads/feature", sig, sig,
+                                "Feature commit", idx.write_tree(), [c1])
+
+        # Commit 3 on master (parallel)
+        repo.checkout(repo.lookup_branch("master").name)
+        f.write_text("line1\nmaster line\n")
+        idx.add("file.txt"); idx.write()
+        c3 = repo.create_commit("refs/heads/master", sig, sig,
+                                "Master commit", idx.write_tree(), [c1])
+
+        # Merge commit
+        repo.merge_commits(repo.get(c3), repo.get(c2))
+        f.write_text("line1\nfeature line\nmaster line\n")
+        idx.add("file.txt"); idx.write()
+        repo.create_commit("refs/heads/master", sig, sig,
+                           "Merge feature into master", idx.write_tree(), [c3, c2])
+
+        yield repo_path
+        import shutil
+        shutil.rmtree(repo_path, ignore_errors=True)
+
+    def test_no_merges_excludes_merge_commits_from_file_history(self, git_repo_with_merge):
+        """no_merges=1 removes multi-parent commits from file history."""
+        adapter = GitAdapter(
+            path=str(git_repo_with_merge),
+            subpath='file.txt',
+            query={'type': 'history', 'no_merges': '1'},
+        )
+        result = adapter.get_structure()
+        messages = [c['message'] for c in result['commits']]
+        assert not any('Merge' in m for m in messages)
+
+    def test_without_no_merges_includes_merge_commits(self, git_repo_with_merge):
+        """Without no_merges, merge commits appear in history."""
+        adapter = GitAdapter(
+            path=str(git_repo_with_merge),
+            subpath='file.txt',
+            query={'type': 'history'},
+        )
+        result = adapter.get_structure()
+        messages = [c['message'] for c in result['commits']]
+        assert any('Merge' in m for m in messages)
+
+    def test_no_merges_not_leaked_to_commit_filters(self, git_repo_with_merge):
+        """no_merges must not be treated as a commit-dict field filter."""
+        adapter = GitAdapter(
+            path=str(git_repo_with_merge),
+            subpath='file.txt',
+            query={'type': 'history', 'no_merges': '1'},
+        )
+        result = adapter.get_structure()
+        # Would be 0 if treated as a commit-dict field filter (no 'no_merges' field)
+        assert result['count'] >= 1
+
+
+# ---------------------------------------------------------------------------
+# BACK-281: auto-ignore noise commits + .git-blame-ignore-revs
+# ---------------------------------------------------------------------------
+
+class TestAutoIgnoreBlame:
+    """Auto-ignore noise commits and .git-blame-ignore-revs in blame output."""
+
+    @pytest.fixture
+    def noise_repo(self, tmp_path):
+        """Repo where a 'normalize whitespace' commit owns all lines."""
+        import pygit2
+        repo = pygit2.init_repository(str(tmp_path))
+        sig = pygit2.Signature('A', 'a@a.com')
+
+        # Commit 1: initial content
+        idx = repo.index
+        (tmp_path / 'f.txt').write_text('line1\nline2\n')
+        idx.add('f.txt'); idx.write()
+        c1 = repo.create_commit('refs/heads/master', sig, sig, 'initial', idx.write_tree(), [])
+
+        # Commit 2: noise commit rewrites all lines (trailing spaces = whitespace change)
+        (tmp_path / 'f.txt').write_text('line1 \nline2 \n')
+        idx.read()
+        idx.add('f.txt'); idx.write()
+        repo.create_commit('refs/heads/master', sig, sig, 'normalize whitespace', idx.write_tree(), [c1])
+
+        yield tmp_path
+        import shutil; shutil.rmtree(str(tmp_path), ignore_errors=True)
+
+    @pytest.fixture
+    def two_author_noise_repo(self, tmp_path):
+        """Repo with a real commit (many lines) plus a minor noise commit (<50% hunks)."""
+        import pygit2
+        repo = pygit2.init_repository(str(tmp_path))
+        sig = pygit2.Signature('A', 'a@a.com')
+
+        # Commit 1: many lines of real content
+        (tmp_path / 'f.txt').write_text('\n'.join(f'line{i}' for i in range(20)) + '\n')
+        idx = repo.index
+        idx.add('f.txt'); idx.write()
+        c1 = repo.create_commit('refs/heads/master', sig, sig, 'initial big file', idx.write_tree(), [])
+
+        # Commit 2: add a single trailing line (noise message, but only 1/21 hunks)
+        (tmp_path / 'f.txt').write_text('\n'.join(f'line{i}' for i in range(20)) + '\nnew\n')
+        idx.read()
+        idx.add('f.txt'); idx.write()
+        repo.create_commit('refs/heads/master', sig, sig, 'normalize whitespace', idx.write_tree(), [c1])
+
+        yield tmp_path
+        import shutil; shutil.rmtree(str(tmp_path), ignore_errors=True)
+
+    @pytest.fixture
+    def ignore_revs_repo(self, tmp_path):
+        """Repo with .git-blame-ignore-revs listing a real commit SHA."""
+        import pygit2
+        repo = pygit2.init_repository(str(tmp_path))
+        sig = pygit2.Signature('A', 'a@a.com')
+
+        (tmp_path / 'f.txt').write_text('line1\nline2\n')
+        idx = repo.index
+        idx.add('f.txt'); idx.write()
+        c1 = repo.create_commit('refs/heads/master', sig, sig, 'initial', idx.write_tree(), [])
+
+        (tmp_path / 'f.txt').write_text('line1\nline2\nupdated\n')
+        idx.read()
+        idx.add('f.txt'); idx.write()
+        c2 = repo.create_commit('refs/heads/master', sig, sig, 'update line', idx.write_tree(), [c1])
+
+        # Write .git-blame-ignore-revs listing c2
+        (tmp_path / '.git-blame-ignore-revs').write_text(f'{str(c2)}\n')
+
+        yield tmp_path, str(c2)[:7]
+        import shutil; shutil.rmtree(str(tmp_path), ignore_errors=True)
+
+    def test_noise_commit_auto_ignored_when_dominant(self, noise_repo):
+        """A noise commit owning all hunks is auto-ignored without ?ignore= flag."""
+        adapter = GitAdapter(path=str(noise_repo), subpath='f.txt', query={'type': 'blame'})
+        result = adapter.get_structure()
+        assert 'ignored' in result
+        assert any(e.get('source') == 'auto-detect' for e in result['ignored'])
+        noise_msgs = [e['message'] for e in result['ignored']]
+        assert any('normalize' in m.lower() for m in noise_msgs)
+
+    def test_noise_commit_not_auto_ignored_when_minority(self, two_author_noise_repo):
+        """A noise commit owning <50% of hunks is NOT auto-ignored."""
+        adapter = GitAdapter(path=str(two_author_noise_repo), subpath='f.txt', query={'type': 'blame'})
+        result = adapter.get_structure()
+        auto = [e for e in result.get('ignored', []) if e.get('source') == 'auto-detect']
+        assert len(auto) == 0
+
+    def test_ignore_off_disables_auto_ignore(self, noise_repo):
+        """?ignore=off suppresses all auto-ignore and returns raw blame."""
+        adapter = GitAdapter(path=str(noise_repo), subpath='f.txt', query={'type': 'blame', 'ignore': 'off'})
+        result = adapter.get_structure()
+        auto = [e for e in result.get('ignored', []) if e.get('source') == 'auto-detect']
+        assert len(auto) == 0
+
+    def test_ignore_revs_file_honored(self, ignore_revs_repo):
+        """Commits listed in .git-blame-ignore-revs are auto-suppressed with source=ignore-revs."""
+        repo_path, sha7 = ignore_revs_repo
+        adapter = GitAdapter(path=str(repo_path), subpath='f.txt', query={'type': 'blame'})
+        result = adapter.get_structure()
+        assert 'ignored' in result
+        revs_entries = [e for e in result['ignored'] if e.get('source') == 'ignore-revs']
+        assert len(revs_entries) >= 1
+        assert any(e['hash'] == sha7 for e in revs_entries)
+
+    def test_ignore_revs_off_disables_revs_file(self, ignore_revs_repo):
+        """?ignore=off disables .git-blame-ignore-revs too."""
+        repo_path, sha7 = ignore_revs_repo
+        adapter = GitAdapter(path=str(repo_path), subpath='f.txt', query={'type': 'blame', 'ignore': 'off'})
+        result = adapter.get_structure()
+        revs_entries = [e for e in result.get('ignored', []) if e.get('source') == 'ignore-revs']
+        assert len(revs_entries) == 0
+
+    def test_explicit_ignore_gets_explicit_source_tag(self, ignore_revs_repo):
+        """An explicit ?ignore=sha gets source='explicit'."""
+        repo_path, sha7 = ignore_revs_repo
+        # Use the c2 sha as explicit ignore too (it's already in ignore-revs, but let's use c1)
+        adapter_base = GitAdapter(path=str(repo_path), subpath='f.txt', query={'type': 'blame', 'ignore': 'off'})
+        base = adapter_base.get_structure()
+        first_hash = base['hunks'][0]['commit']['hash']
+        adapter = GitAdapter(path=str(repo_path), subpath='f.txt', query={'type': 'blame', 'ignore': first_hash})
+        result = adapter.get_structure()
+        explicit_entries = [e for e in result.get('ignored', []) if e.get('source') == 'explicit']
+        assert any(e['hash'] == first_hash for e in explicit_entries)
+
+
+class TestAutoIgnoreRenderer(unittest.TestCase):
+    """Renderer shows 'Auto-ignored' vs 'Suppressed' based on source field."""
+
+    def _capture(self, result):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            from reveal.adapters.git.renderer import GitRenderer
+            GitRenderer._render_file_blame_summary(result)
+        return buf.getvalue()
+
+    def _base_result(self):
+        return {
+            'path': 'f.py',
+            'lines': 10,
+            'hunks': [{'lines': {'start': 1, 'count': 10}, 'commit': {
+                'hash': 'abc1234', 'author': 'A', 'date': '2026-01-01', 'message': 'real work'
+            }}],
+        }
+
+    def test_auto_detect_shows_auto_ignored_header(self):
+        result = self._base_result()
+        result['ignored'] = [{'hash': 'def5678', 'lines': 5, 'message': 'normalize whitespace', 'source': 'auto-detect'}]
+        out = self._capture(result)
+        assert 'Auto-ignored' in out
+        assert 'noise heuristic' in out
+        assert '?ignore=off' in out
+
+    def test_ignore_revs_shows_auto_ignored_with_revs_label(self):
+        result = self._base_result()
+        result['ignored'] = [{'hash': 'aaa1111', 'lines': 3, 'message': 'reformat', 'source': 'ignore-revs'}]
+        out = self._capture(result)
+        assert 'Auto-ignored' in out
+        assert '.git-blame-ignore-revs' in out
+
+    def test_explicit_shows_suppressed_header(self):
+        result = self._base_result()
+        result['ignored'] = [{'hash': 'bbb2222', 'lines': 2, 'message': 'big refactor', 'source': 'explicit'}]
+        out = self._capture(result)
+        assert 'Suppressed' in out
+        assert 'user-specified' in out
+        assert 'Auto-ignored' not in out
+
+    def test_mixed_shows_both_sections(self):
+        result = self._base_result()
+        result['ignored'] = [
+            {'hash': 'ccc3333', 'lines': 4, 'message': 'normalize', 'source': 'auto-detect'},
+            {'hash': 'ddd4444', 'lines': 2, 'message': 'old refactor', 'source': 'explicit'},
+        ]
+        out = self._capture(result)
+        assert 'Auto-ignored' in out
+        assert 'Suppressed' in out
+
+
+# ---------------------------------------------------------------------------
+# BACK-282: L<start>-L<end> line-range element syntax + procedural fallback
+# ---------------------------------------------------------------------------
+
+class TestLineRangeElementSyntax:
+    """?element=L<start>-L<end> targets a line range without a named element lookup."""
+
+    def test_line_range_returns_element_info(self, git_repo):
+        """?element=L1-L3 sets element_info with line_start/line_end."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'blame', 'element': 'L1-L3'},
+        )
+        result = adapter.get_structure()
+        assert result['type'] == 'git_file_blame'
+        assert 'element' in result
+        assert result['element']['line_start'] == 1
+        assert result['element']['line_end'] == 3
+        assert result['element']['name'] == 'L1-L3'
+
+    def test_line_range_filters_hunks_to_range(self, git_repo):
+        """Hunks outside the requested range are excluded."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'blame', 'element': 'L1-L1'},
+        )
+        result = adapter.get_structure()
+        for h in result['hunks']:
+            h_start = h['lines']['start']
+            h_end = h_start + h['lines']['count'] - 1
+            assert h_start <= 1 and h_end >= 1, f"Hunk {h_start}-{h_end} is outside L1-L1"
+
+    def test_line_range_lowercase_l_accepted(self, git_repo):
+        """l1-l3 (lowercase l) is accepted as well as L1-L3."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'blame', 'element': 'l1-l3'},
+        )
+        result = adapter.get_structure()
+        assert 'element' in result
+        assert result['element']['line_start'] == 1
+        assert result['element']['line_end'] == 3
+
+    def test_line_range_swapped_order_normalized(self, git_repo):
+        """L5-L1 is treated as L1-L5 (start > end is corrected)."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'blame', 'element': 'L5-L1'},
+        )
+        result = adapter.get_structure()
+        assert result['element']['line_start'] == 1
+        assert result['element']['line_end'] == 5
+
+    def test_line_range_no_named_element_lookup(self, git_repo):
+        """L<s>-L<e> never calls get_element_line_range (analyzer bypass)."""
+        from unittest.mock import patch, MagicMock
+        mock_func = MagicMock(return_value=None)
+        from reveal.adapters.git import files as git_files
+        with patch.object(git_files, 'get_element_line_range', mock_func):
+            adapter = GitAdapter(
+                path=str(git_repo),
+                subpath='README.md',
+                query={'type': 'blame', 'element': 'L1-L2'},
+            )
+            result = adapter.get_structure()
+        mock_func.assert_not_called()
+        assert 'element' in result
+
+
+class TestProceduralFileFallback(unittest.TestCase):
+    """_apply_element_blame_filter emits a better message for procedural files."""
+
+    def _make_hunks(self):
+        return [{'lines': {'start': 1, 'count': 5}, 'commit': {
+            'hash': 'abc1234', 'author': 'A', 'date': '2026-01-01', 'message': 'init'
+        }}]
+
+    def test_procedural_file_suggestion_in_message(self):
+        """When file has no named elements, stderr includes L<start>-L<end> suggestion."""
+        import io
+        from reveal.adapters.git.files import _apply_element_blame_filter, _file_has_no_named_elements
+        from unittest.mock import patch
+
+        hunks = self._make_hunks()
+        buf = io.StringIO()
+        with patch('reveal.adapters.git.files._file_has_no_named_elements', return_value=True):
+            with patch('sys.stderr', buf):
+                element_info, result_hunks = _apply_element_blame_filter(
+                    'process_data', hunks, '/some/path', 'script.c',
+                    lambda name, path, sub: None
+                )
+        assert element_info is None
+        assert result_hunks is hunks
+        msg = buf.getvalue()
+        assert 'L<start>-L<end>' in msg
+        assert 'procedural' in msg.lower()
+
+    def test_normal_not_found_message_when_file_has_elements(self):
+        """When file has elements but the name is wrong, show the original note."""
+        import io
+        from reveal.adapters.git.files import _apply_element_blame_filter
+
+        hunks = self._make_hunks()
+        buf = io.StringIO()
+        with patch('reveal.adapters.git.files._file_has_no_named_elements', return_value=False):
+            with patch('sys.stderr', buf):
+                element_info, _ = _apply_element_blame_filter(
+                    'nonexistent_func', hunks, '/p', 'f.py',
+                    lambda name, path, sub: None
+                )
+        msg = buf.getvalue()
+        assert 'not found' in msg
+        assert 'L<start>-L<end>' not in msg
