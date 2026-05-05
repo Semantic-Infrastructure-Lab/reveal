@@ -6,6 +6,10 @@ Consolidates common patterns for searching up directory trees.
 from pathlib import Path
 from typing import Callable, Optional, List
 
+# Paths that should never be considered project roots (stray .git / pyproject.toml
+# at filesystem boundaries produces false positives in temp-dir tests and CI).
+_SYSTEM_ROOTS = frozenset({Path('/'), Path('/tmp'), Path('/var'), Path('/var/tmp')})
+
 
 def find_file_in_parents(
     start: Path,
@@ -115,7 +119,8 @@ def find_project_root(
     def has_marker(p: Path) -> bool:
         return any((p / marker).exists() for marker in markers)
 
-    return search_parents(start, has_marker)
+    result = search_parents(start, has_marker)
+    return None if result in _SYSTEM_ROOTS else result
 
 
 def get_relative_to_root(

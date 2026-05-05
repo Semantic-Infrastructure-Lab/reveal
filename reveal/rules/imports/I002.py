@@ -43,7 +43,8 @@ def _find_project_root(path: Path) -> Path:
         current = parent
 
     # .git is a strong project root signal even without pyproject.toml
-    if git_root is not None:
+    _system_roots = frozenset({Path('/'), Path('/tmp'), Path('/var'), Path('/var/tmp')})
+    if git_root is not None and git_root not in _system_roots:
         return git_root
 
     # Pass 2: topmost __init__.py boundary

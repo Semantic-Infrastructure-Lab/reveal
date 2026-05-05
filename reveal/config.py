@@ -402,12 +402,13 @@ class RevealConfig:
     @classmethod
     def _find_project_root_uncached(cls, start_path: Path) -> Path:
         """Filesystem traversal for _find_project_root (no caching)."""
+        _system_roots = frozenset({Path('/'), Path('/tmp'), Path('/var'), Path('/var/tmp')})
         current = start_path
         while current != current.parent:
             config_file = current / '.reveal.yaml'
             if config_file.exists() and cls._reveal_yaml_is_root(config_file):
                 return current.resolve()
-            if (current / '.git').exists():
+            if (current / '.git').exists() and current.resolve() not in _system_roots:
                 return current.resolve()
             current = current.parent
         return start_path.resolve()
