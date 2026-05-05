@@ -18,6 +18,7 @@ _TAXONOMY: List[Tuple[str, List[str]]] = [
         '::query', '::execute',
         'db_query', 'db_insert', 'db_update', 'db_delete',
         'wpdb', '$wpdb',
+        'pdo->', 'pdo::', 'new pdo',
     ]),
     ('http', [
         'curl_exec', 'curl_setopt', 'curl_init',
@@ -26,25 +27,36 @@ _TAXONOMY: List[Tuple[str, List[str]]] = [
         'requests.get', 'requests.post', 'requests.put', 'requests.delete',
         'urllib.request', 'httpx.', 'aiohttp.',
         'fetch(', '->get(', '->post(',
+        # Note: bare 'header' would match user wrappers like 'printHeader',
+        # 'request_headers', 'getallheaders' — too greedy under substring match.
+        # Skip until the classifier moves to exact-or-boundary matching.
+        'setcookie', 'setrawcookie', 'mail',
     ]),
     ('cache', [
         'memcache_get', 'memcache_set', 'memcache_delete', 'memcache_add',
         'redis->', 'redis::', 'apc_store', 'apcu_store', 'apcu_fetch',
+        'apc_fetch', 'apc_delete', 'apcu_delete',
         'wp_cache_get', 'wp_cache_set', 'wp_cache_delete',
         'cache.get', 'cache.set', 'cache.delete',
+    ]),
+    ('session', [
+        'session_start', 'session_destroy', 'session_regenerate_id',
+        'session_unset', 'session_write_close', 'session_id',
     ]),
     ('file', [
         'fopen', 'fwrite', 'fread', 'fclose', 'fputs',
         'file_put_contents', 'file_get_contents',
         'rename', 'unlink', 'mkdir', 'rmdir', 'copy',
+        'readfile', 'tmpfile',
         'open(', 'os.rename', 'os.unlink', 'os.mkdir', 'shutil.',
         'pathlib', 'Path(',
     ]),
+    ('env', ['getenv', 'putenv', 'os.environ', 'os.getenv']),
     ('log', [
-        'error_log', 'syslog', 'write_log',
+        'error_log', 'syslog', 'write_log', 'trigger_error',
         'logger.', 'logging.', 'log.', 'app.logger',
         'console.log', 'console.error', 'console.warn',
-        'var_dump',
+        'var_dump', 'phpinfo',
     ]),
     ('sleep', [
         'sleep', 'usleep', 'time.sleep', 'setTimeout', 'setInterval',

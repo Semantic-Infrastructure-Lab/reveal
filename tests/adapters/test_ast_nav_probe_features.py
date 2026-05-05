@@ -900,6 +900,46 @@ class TestClassifyCall(unittest.TestCase):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertEqual(classify_call('CURL_EXEC'), 'http')
 
+    def test_http_setcookie(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('setcookie'), 'http')
+
+    def test_http_mail(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('mail'), 'http')
+
+    def test_session_start(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('session_start'), 'session')
+
+    def test_session_destroy(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('session_destroy'), 'session')
+
+    def test_env_getenv(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('getenv'), 'env')
+
+    def test_env_os_environ(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('os.environ'), 'env')
+
+    def test_log_trigger_error(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('trigger_error'), 'log')
+
+    def test_db_pdo_method(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('$pdo->prepare'), 'db')
+
+    def test_cache_apc_fetch(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('apc_fetch'), 'cache')
+
+    def test_file_readfile(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('readfile'), 'file')
+
 
 class TestCollectEffects(unittest.TestCase):
 

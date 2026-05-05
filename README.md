@@ -40,6 +40,18 @@ reveal 'calls://src/?rank=callers&top=20'  # most architecturally coupled functi
 reveal 'calls://src/?uncalled'             # functions with no callers — rough check, verify results
 ```
 
+**Deep-dive code navigation (works on Python, PHP, and 35+ tree-sitter languages):**
+```bash
+reveal app.py process_batch --boundary       # inputs read, outputs/effects produced
+reveal app.py process_batch --sideeffects    # DB / HTTP / FS / logging calls, classified
+reveal app.py process_batch --deps           # what this range depends on (params, externals)
+reveal app.py process_batch --mutations      # values written here, where they're next read
+reveal app.py :123 --around                  # nearby context from a line number / stack trace
+reveal app.py process_batch --ifmap          # control-flow skeleton (branches + early exits)
+reveal legacy.php :120-340 --boundary        # same flags work on flat PHP, not just OO
+```
+Pinpoint inspection inside a single function or line range — built for triaging giant handlers, legacy files, and stack traces without reading top-to-bottom. See [`AGENT_HELP.md`](reveal/docs/AGENT_HELP.md) for the full nav-flag family.
+
 **PR-aware context snapshots for AI agents:**
 ```bash
 reveal pack src/ --since main --budget 8000   # changed files first, then key dependencies
@@ -64,8 +76,8 @@ reveal @domains.txt --check
 # Install once, works in Claude Code, Cursor, Windsurf, any MCP-compatible agent
 pip install reveal-cli
 reveal-mcp  # starts the server
-# Five tools: reveal_structure, reveal_element, reveal_query, reveal_pack, reveal_check
-# Agents get progressive disclosure and call-graph analysis — no subprocess overhead
+# Six tools: reveal_structure, reveal_element, reveal_nav, reveal_query, reveal_pack, reveal_check
+# Agents get progressive disclosure, deep-dive nav, and call-graph analysis — no subprocess overhead
 ```
 
 **Unified health checks across categories:**

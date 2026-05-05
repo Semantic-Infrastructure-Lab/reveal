@@ -102,7 +102,7 @@ Related strengths:
 Why this matters in practice:
 
 - the docs position token budgeting as a first-class workflow constraint, not an afterthought
-- the MCP server exposes purpose-built tools for structure, elements, queries, checks, and pack
+- the MCP server exposes purpose-built tools for structure, elements, nav (deep-dive boundary / sideeffects / deps / mutations), queries, checks, and pack
 - field selection and item limits make adapter output easier to fit into strict budgets
 
 This is one of Reveal's clearest differentiators.
@@ -208,6 +208,17 @@ reveal app.py process_batch --flowto
 reveal app.py process_batch --varflow result
 reveal app.py process_batch --mutations --range 20-80
 reveal app.py :123 --scope
+reveal app.py process_batch --boundary       # inputs read + outputs/effects in one view
+reveal app.py process_batch --sideeffects    # DB / HTTP / FS / logging calls, classified
+reveal app.py process_batch --deps           # what this range depends on
+```
+
+The same flags work on flat procedural PHP — useful for legacy WordPress/CodeIgniter triage:
+
+```bash
+reveal legacy_handler.php :120-340 --boundary       # what does this slice consume and emit?
+reveal legacy_handler.php :120-340 --sideeffects    # which DB / curl / session calls fire?
+reveal legacy_handler.php :120-340 --mutations      # which session/cache/global state changes?
 ```
 
 Why it is good for this:
@@ -216,6 +227,8 @@ Why it is good for this:
 - `--scope` shows enclosing function / class / block ancestry
 - `--ifmap` and `--catchmap` turn control flow into a readable skeleton
 - `--flowto` gives a reachability verdict for a range
+- `--boundary` summarises inputs and effects in one view — handy before refactor or extraction
+- `--sideeffects` classifies DB / HTTP / FS / logging calls so you can audit risk without reading every line
 - `--varflow`, `--deps`, and `--mutations` help with extraction and debugging
 
 Use Reveal for this when:

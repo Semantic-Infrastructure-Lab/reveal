@@ -68,7 +68,35 @@ reveal 'calls://src/?uncalled&type=function&top=20'  # verify results: entry poi
 
 ---
 
-### 2. Token-Budgeted Context Snapshots (`reveal pack`)
+### 2. Deep-Dive Code Navigation (Nav Flags)
+
+A family of flags for inspecting one function or line range without reading the whole file. Works on Python, PHP, and 35+ tree-sitter languages — including flat procedural files.
+
+```bash
+# Boundary contract for an unfamiliar code range — single highest-value flag
+reveal app.py process_order --boundary
+# → INPUTS (undefined reads) + ENVIRONMENT (superglobals on PHP) + EFFECTS (db/http/fs/log/...)
+
+# Classified side-effect calls, in line order
+reveal flat_legacy.php :120-340 --sideeffects
+# → L130  db   mysql_query("..."), L142  http  curl_exec(...), L150  log  error_log("...")
+
+# Refactor pre-flight: what would become parameters / return values?
+reveal app.py process_batch --deps        # → parameters
+reveal app.py process_batch --mutations   # → return values
+
+# Each return path + the condition chain that leads to it
+reveal app.py process_order --returns
+
+# Verbatim context around a stack-trace line number
+reveal app.py :123 --around 10
+```
+
+**What you get:** A direct equivalent for the most useful parts of dedicated forensic-analysis tools (boundary contracts, side-effect auditing, var-flow tracing, exit-path analysis) — but driven from the same CLI as the rest of Reveal, indexed by the same progressive-disclosure model. Especially strong on flat procedural PHP, where most static-analysis tooling assumes class-based code. See [`NAV_GUIDE.md`](guides/NAV_GUIDE.md) for the full flag list, or `reveal help://nav`.
+
+---
+
+### 3. Token-Budgeted Context Snapshots (`reveal pack`)
 
 Giving an AI agent codebase context is usually "read everything" or "let the agent figure it out." Pack makes an opinionated decision: *entry points first, then focus-matched files, then key directories, sized to fit a budget.*
 
@@ -93,7 +121,7 @@ reveal pack src/ --budget 8000 --format json
 
 ---
 
-### 3. Unified Health Checks (`reveal health`)
+### 4. Unified Health Checks (`reveal health`)
 
 One command. Code quality + SSL certificates + MySQL replication + domain DNS — all in the same invocation, all exit-code-governed.
 
@@ -115,7 +143,7 @@ reveal health ./src --format json | jq '.overall_exit'
 
 ---
 
-### 4. Composable Pipelines
+### 5. Composable Pipelines
 
 Reveal outputs structured data that becomes the next query's input. This is Unix philosophy applied to semantic queries.
 
@@ -139,7 +167,7 @@ reveal @domains.txt --check
 
 ---
 
-### 5. Docs as a Queryable Graph (`markdown://`)
+### 6. Docs as a Queryable Graph (`markdown://`)
 
 Documentation isn't text files — it's a graph. Reveal treats it that way.
 
@@ -164,7 +192,7 @@ reveal 'markdown://docs/?body-contains=retry&type=procedure'
 
 ---
 
-### 6. Automated Code Review (`reveal review`)
+### 7. Automated Code Review (`reveal review`)
 
 ```bash
 # Full PR review: structural diff → violations → hotspots → pass/fail
@@ -188,7 +216,7 @@ reveal review main..HEAD || exit 1
 
 ---
 
-### 7. Codebase Dashboard (`reveal overview` and `reveal deps`)
+### 8. Codebase Dashboard (`reveal overview` and `reveal deps`)
 
 Two commands for answering the orientation question before you start reading code.
 
@@ -208,7 +236,7 @@ reveal deps . --format json      # CI-friendly output
 
 ---
 
-### 8. Session Archaeology (`claude://`)
+### 9. Session Archaeology (`claude://`)
 
 Reveal can query AI session history as structured data — useful for workflows built on Claude Code.
 
@@ -281,7 +309,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 2. **`reveal health` spanning code + certs + DB + DNS** — a category collapse. One command, one JSON blob, one exit code.
 
-3. **Native MCP server (`reveal-mcp`)** — exposes all reveal capabilities as MCP tools for Claude Code, Cursor, and Windsurf. One install, five tools: `reveal_structure`, `reveal_element`, `reveal_query`, `reveal_pack`, `reveal_check`. Agents get progressive disclosure and call-graph analysis without subprocess overhead.
+3. **Native MCP server (`reveal-mcp`)** — exposes all reveal capabilities as MCP tools for Claude Code, Cursor, and Windsurf. One install, six tools: `reveal_structure`, `reveal_element`, `reveal_nav`, `reveal_query`, `reveal_pack`, `reveal_check`. Agents get progressive disclosure, deep-dive nav (boundary / sideeffects / deps / mutations), and call-graph analysis without subprocess overhead.
 
 4. **`reveal overview` + `reveal deps`** — codebase orientation dashboard and dependency health in one command each. `reveal deps` finds circular import chains and unused imports across a full project; `reveal overview` synthesises file count, language breakdown, quality score, and git velocity into a single output.
 
