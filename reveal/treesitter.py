@@ -91,6 +91,8 @@ CALL_NODE_TYPES = {
     'call',                    # Python
     'call_expression',         # JS, TS, Go, Rust, C, C++, Kotlin
     'function_call_expression', # PHP
+    'member_call_expression',  # PHP $obj->method()
+    'object_creation_expression', # PHP new ClassName()
     'method_call',             # Ruby, Rust (method syntax)
     'method_call_expression',  # Rust
     'invocation',              # C#

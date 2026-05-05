@@ -1013,6 +1013,60 @@ function processOrder($order_id) {
         self.assertFalse(any('die' in (c or '') for c in callees))
 
 
+class TestPhpMemberAndObjectCalls(unittest.TestCase):
+    """BACK-284: range_calls must detect PHP $obj->method() and new X()."""
+
+    def setUp(self):
+        code = """\
+<?php
+function audit_db() {
+    $dsn = getenv('DB_DSN');
+    $pdo = new PDO($dsn);
+    $stmt = $pdo->prepare("SELECT * FROM users");
+    $stmt->execute();
+    $row = $stmt->fetch();
+    return $row;
+}
+"""
+        self._tree, self._root, self._get_text, _ = _parse_php(code)
+
+    def _calls(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        return range_calls(self._root, 1, 999, self._get_text)
+
+    def test_object_creation_detected(self):
+        callees = [c['callee'] for c in self._calls()]
+        self.assertIn('new PDO', callees)
+
+    def test_member_call_detected(self):
+        callees = [c['callee'] for c in self._calls()]
+        self.assertIn('$pdo->prepare', callees)
+        self.assertIn('$stmt->execute', callees)
+        self.assertIn('$stmt->fetch', callees)
+
+    def test_bare_function_still_detected(self):
+        callees = [c['callee'] for c in self._calls()]
+        self.assertIn('getenv', callees)
+
+    def test_all_five_calls_present(self):
+        callees = [c['callee'] for c in self._calls()]
+        self.assertEqual(len(callees), 5)
+
+    def test_object_creation_classifies_as_db(self):
+        from reveal.adapters.ast.nav_effects import collect_effects
+        effects = collect_effects(self._root, 1, 999, self._get_text)
+        new_pdo = next((e for e in effects if e['callee'] == 'new PDO'), None)
+        self.assertIsNotNone(new_pdo)
+        self.assertEqual(new_pdo['kind'], 'db')
+
+    def test_member_call_classifies_as_db(self):
+        from reveal.adapters.ast.nav_effects import collect_effects
+        effects = collect_effects(self._root, 1, 999, self._get_text)
+        kinds_by_callee = {e['callee']: e['kind'] for e in effects}
+        self.assertEqual(kinds_by_callee.get('$stmt->execute'), 'db')
+        self.assertEqual(kinds_by_callee.get('$stmt->fetch'), 'db')
+
+
 class TestRenderEffects(unittest.TestCase):
 
     def _make_effects(self):

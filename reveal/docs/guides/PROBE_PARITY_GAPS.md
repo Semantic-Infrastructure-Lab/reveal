@@ -384,8 +384,12 @@ Several common PHP I/O builtins were missing from the classifier: `getenv`, `put
 **F6.b — Substring-match false positives** (mitigated 2026-05-05).
 Adding bare `'header'` to the http kind caused user wrappers like `printHeader` and `printSubheader` to misclassify as http (substring match is greedy). Removed `header` from the taxonomy with an in-code comment. The legitimate `header()` calls remain unclassified until the classifier moves from substring matching to an exact-or-boundary model. Tracking the underlying matcher upgrade as **F6.b-followup** — out of scope for this pass.
 
-**F6.c — `range_calls` doesn't pick up object instantiation or method calls on local variables in PHP** (open).
-On a synthetic file with `new PDO(...)` and `$pdo->prepare(...)`, only the bare-function calls are returned by `range_calls`; the object construction and the method dispatch don't appear. This is why several existing taxonomy patterns (`'->get('`, `'fetch('`, `'open('`, `'Path('`) appear to be dormant — they target callee shapes that `range_calls` does not currently emit on PHP. This is a real gap in the PHP call-detection layer (`reveal/adapters/ast/nav_calls.py`), not in the side-effect classifier. Filing as **F6.c (open)** for a separate session — it is the single biggest remaining "PHP `--sideeffects` looks empty" surprise after F6.a.
+**F6.c — `range_calls` doesn't pick up object instantiation or method calls on local variables in PHP** (~~open~~ **fixed 2026-05-05 bright-pulsar-0505**).
+On a synthetic file with `new PDO(...)` and `$pdo->prepare(...)`, only the bare-function calls were returned by `range_calls`; the object construction and the method dispatch did not appear. Root cause: `CALL_NODE_TYPES` in `reveal/treesitter.py` did not include `member_call_expression` or `object_creation_expression`, the two PHP node kinds for these forms. Fix: added both node types to `CALL_NODE_TYPES`, plus two new helpers in `nav_calls.py`:
+- `_extract_member_call_callee` emits `"<receiver>-><name>"` (e.g. `$pdo->prepare`, `$stmt->execute`) so existing taxonomy patterns like `'->execute'`, `'->fetch'`, `'pdo->'` match.
+- `_extract_object_creation_callee` emits `"new <Name>"` (e.g. `new PDO`) so the `'new pdo'` taxonomy pattern matches.
+
+Verified end-to-end on `audit_db()` synthetic — all 5 calls now detected, 4 classify (`getenv` → env, `new PDO` → db, `$pdo->prepare` → db via `pdo->`, `$stmt->execute` → db, `$stmt->fetch` → db). 6 new tests in `TestPhpMemberAndObjectCalls`. Full reveal test suite: 8601 passed, 0 failures.
 
 Net effect of this pass on D1/D3 claims: PHP `--sideeffects` now does meaningful work on flat procedural code (env reads, sessions, cookies, mail, trigger_error, apc cache, file reads). The discoverability story in the README and `WHAT_IS_REVEAL_GOOD_FOR.md` is now backed by working behaviour, not just nominal flag presence.
 

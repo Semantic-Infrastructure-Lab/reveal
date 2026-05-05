@@ -44,6 +44,17 @@ def _extract_callee(call_node: Any, get_text: Callable) -> Optional[str]:
     """Extract callee name from a call expression node."""
     if not call_node.children:
         return None
+
+    # PHP: $obj->method(args) — emit "<receiver>-><name>" so taxonomy patterns
+    # like '->execute', '->fetch', '->prepare' can match.
+    if call_node.type == 'member_call_expression':
+        return _extract_member_call_callee(call_node, get_text)
+
+    # PHP: new ClassName(args) — emit "new <name>" so taxonomy patterns
+    # like 'new pdo' can match.
+    if call_node.type == 'object_creation_expression':
+        return _extract_object_creation_callee(call_node, get_text)
+
     callee_node = call_node.children[0]
     text = get_text(callee_node).lstrip('*').strip()
     if callee_node.type == 'list_splat':
@@ -52,6 +63,41 @@ def _extract_callee(call_node: Any, get_text: Callable) -> Optional[str]:
             if t:
                 return t
     return text if text else None
+
+
+def _extract_member_call_callee(node: Any, get_text: Callable) -> Optional[str]:
+    """PHP member_call_expression: <receiver> (->|?->) <name> <arguments>."""
+    receiver_text: Optional[str] = None
+    method_name: Optional[str] = None
+    seen_arrow = False
+    for child in node.children:
+        if child.type in ('->', '?->'):
+            seen_arrow = True
+            continue
+        if child.type == 'arguments':
+            break
+        if not seen_arrow:
+            if receiver_text is None:
+                receiver_text = get_text(child).strip()
+        else:
+            if child.type == 'name':
+                method_name = get_text(child).strip()
+                break
+    if receiver_text and method_name:
+        return f"{receiver_text}->{method_name}"
+    if method_name:
+        return f"->{method_name}"
+    return None
+
+
+def _extract_object_creation_callee(node: Any, get_text: Callable) -> Optional[str]:
+    """PHP object_creation_expression: new <name|qualified_name> <arguments>."""
+    for child in node.children:
+        if child.type in ('name', 'qualified_name'):
+            class_name = get_text(child).strip()
+            if class_name:
+                return f"new {class_name}"
+    return None
 
 
 def _extract_first_arg(call_node: Any, get_text: Callable) -> tuple:
