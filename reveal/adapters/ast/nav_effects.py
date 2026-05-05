@@ -34,7 +34,7 @@ _TAXONOMY: List[Tuple[str, List[str]]] = [
         'wp_remote_get', 'wp_remote_post', 'wp_remote_request',
         'requests.get', 'requests.post', 'requests.put', 'requests.delete',
         'urllib.request', 'httpx.', 'aiohttp.',
-        'fetch(', '->get(', '->post(',
+        'fetch(',
         # Re-added 2026-05-05 (BACK-283): segment-boundary matching makes
         # bare 'header' safe — it no longer matches user wrappers like
         # 'printHeader' or 'request_headers'.
@@ -94,6 +94,22 @@ _COMPILED_TAXONOMY: List[Tuple[str, List[List[str]]]] = [
 ]
 
 
+# BACK-285a: receiver-shape heuristics. After full-pattern matching fails,
+# fall back to matching on a non-final segment of the callee. Catches calls
+# like `cursor.execute`, `_log.warning`, `redis.get` where the verb varies
+# but the receiver name is canonical. Non-final-only — `dict.get` (where
+# `dict` is final-prefix and `get` is the trailing verb) does not match,
+# and bare `cursor` (single segment) does not match. Project-specific
+# receivers (tsx, evlog, services.trade_db, ...) belong in BACK-238's
+# `.reveal.yaml` extension, not here.
+_RECEIVER_TAXONOMY: List[Tuple[str, List[str]]] = [
+    ('db', ['cursor', 'conn', 'connection', 'session', 'db']),
+    ('cache', ['cache', 'redis', 'memcache']),
+    ('log', ['logger', '_log', 'log']),
+    ('http', ['httpx', 'aiohttp', 'requests']),
+]
+
+
 def _segments_contain(callee_segs: List[str], pattern_segs: List[str]) -> bool:
     """True if pattern_segs appears as a consecutive sub-sequence of callee_segs."""
     n = len(pattern_segs)
@@ -103,6 +119,18 @@ def _segments_contain(callee_segs: List[str], pattern_segs: List[str]) -> bool:
         if callee_segs[i:i + n] == pattern_segs:
             return True
     return False
+
+
+def _classify_by_receiver(callee_segs: List[str]) -> Optional[str]:
+    """Classify by matching a non-final segment against receiver names."""
+    if len(callee_segs) < 2:
+        return None
+    non_final = callee_segs[:-1]
+    for kind, receivers in _RECEIVER_TAXONOMY:
+        for receiver in receivers:
+            if receiver in non_final:
+                return kind
+    return None
 
 
 def classify_call(callee: str) -> Optional[str]:
@@ -116,7 +144,7 @@ def classify_call(callee: str) -> Optional[str]:
         for pattern_segs in pattern_list:
             if _segments_contain(callee_segs, pattern_segs):
                 return kind
-    return None
+    return _classify_by_receiver(callee_segs)
 
 
 def collect_effects(

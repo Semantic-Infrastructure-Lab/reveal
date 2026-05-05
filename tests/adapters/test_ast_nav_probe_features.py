@@ -994,6 +994,79 @@ class TestClassifyCallBoundaryMatch(unittest.TestCase):
         self.assertEqual(classify_call('app.logger.info'), 'log')
 
 
+class TestClassifyCallReceiver(unittest.TestCase):
+    """BACK-285a: receiver-shape heuristics on non-final segments."""
+
+    def test_cursor_execute_classifies_as_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('cursor.execute'), 'db')
+
+    def test_conn_commit_classifies_as_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('conn.commit'), 'db')
+
+    def test_connection_close_classifies_as_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('connection.close'), 'db')
+
+    def test_underscore_log_warning_classifies_as_log(self):
+        # Restoration after BACK-283: was matched by substring on 'log',
+        # now matched cleanly via receiver segment.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('_log.warning'), 'log')
+
+    def test_aiohttp_get_classifies_as_http(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('aiohttp.get'), 'http')
+
+    # False-positive guards (BACK-286 regression coverage).
+
+    def test_dict_get_unclassified(self):
+        # Critical: BACK-286 surfaced this. `'->get('` deleted from http
+        # patterns; receiver pass must not turn `dict.get` into http either.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('dict.get'))
+
+    def test_actual_pos_get_unclassified(self):
+        # Observed live in peyton arbiter/src/execution.py:359.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('actual_pos.get'))
+
+    def test_bare_receiver_word_unclassified(self):
+        # Single segment is not a method call — nothing to classify.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('cursor'))
+
+    def test_final_segment_session_does_not_match(self):
+        # `session` only matches as a non-final receiver. `state.session`
+        # has `state` as the only non-final segment; should not classify.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('state.session'))
+
+    # Deferred-to-BACK-238 (project-specific receivers, intentionally None).
+
+    def test_evlog_emit_unclassified_universal_only(self):
+        # `evlog` is project-specific; needs .reveal.yaml extension.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('evlog.emit_entry'))
+
+    def test_tsx_get_open_position_unclassified_universal_only(self):
+        # `tsx` is project-specific; needs .reveal.yaml extension.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('tsx.get_open_position'))
+
+    # BACK-286: the deleted `->get(` / `->post(` patterns must not
+    # spuriously fire on bare verb names anymore.
+
+    def test_arbitrary_get_call_unclassified(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('mything.get'))
+
+    def test_arbitrary_post_call_unclassified(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('mything.post'))
+
+
 class TestCollectEffects(unittest.TestCase):
 
     def setUp(self):

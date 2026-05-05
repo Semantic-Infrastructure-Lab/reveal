@@ -454,3 +454,16 @@ This validates the D1/D3 claim that nav flags work on Python the same as on PHP 
 Project-specific receivers (`tsx`, `evlog`, `event_log`, `services.trade_db.*`, `services.market_data.*`, `services.exchange.*`, `discord`) are **deliberately left out** — they belong in `.reveal.yaml` per-project extension (BACK-238, now motivated). What BACK-285a alone restores: `cursor.execute` → db, `redis.get` → cache, `_log.warning` → log (the recall lost when BACK-283 stopped accidental substring matching). What BACK-285a does NOT restore without BACK-238: `place_order::self._post_raw`, `_fetch_md::market_data.get_bars`, `_place_and_verify_orders::tsx.get_open_position`. False-positive guard tests required: `dict.get`, `actual_pos.get` → unclassified.
 
 **Sequencing**: bundle BACK-286 cleanup into the BACK-285a commit (the receiver patterns are the replacement for the deleted `'->get('` / `'->post('`). BACK-238 follows as a separate change once the receiver-matching shape is stable.
+
+### 2026-05-05 (seismic-viper-0505) — BACK-285a + BACK-286 shipped
+
+**BACK-285a / F6.d Option B shipped.** Added `_RECEIVER_TAXONOMY` and `_classify_by_receiver(callee_segs)` to `nav_effects.py`. Receiver pass runs after the existing pattern pass fails, and only matches against **non-final** segments — single-segment callees (e.g. bare `cursor`) and trailing-segment matches (e.g. `state.session`) intentionally do not fire. Universal receivers only: `cursor/conn/connection/session/db` (db), `cache/redis/memcache` (cache), `logger/_log/log` (log), `httpx/aiohttp/requests` (http). 13 new tests in `TestClassifyCallReceiver`.
+
+**BACK-286 bundled.** Deleted `'->get('` and `'->post('` from the http taxonomy. Receiver-segment matching covers the legitimate `requests.get` / `client.post` cases via receiver names. False-positive guards in the new test class confirm `dict.get`, `actual_pos.get`, and `mything.post` all classify as None.
+
+Verified end-to-end on peyton (`PYTHONPATH=…/external-git reveal arbiter/src/execution.py _place_and_verify_orders --sideeffects`):
+- `_log.warning` / `_log.info` → log ✅ (restored via receiver match)
+- `actual_pos.get("side")` no longer misclassifies as http ✅ (BACK-286 fixed)
+- `evlog.emit_entry` / `evlog.new_trade_id` / `tsx.get_open_position` → unclassified ✅ (intentional — BACK-238 territory)
+
+Full reveal suite: **8626 passed, 22 skipped, 0 failures** (was 8613, +13). BACK-238 promoted from Low → Medium.
