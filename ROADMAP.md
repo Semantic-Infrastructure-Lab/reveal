@@ -7,6 +7,14 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.91.2
+- ✅ **Two new task patterns in `AGENT_HELP.md`** — *Inspect environment variables (`env://`)* and *Surface architectural seams* (ABCs, Protocols, TypedDicts, dataclasses). (BACK-293, mortal-oracle-0506)
+- ✅ **Subcommand + adapter coverage sweep across `--help` and `AGENT_HELP.md`** — every shipped subcommand and adapter is now discoverable. (BACK-292, enchanted-thunder-0506)
+- ✅ **Help-surface boundaries sharpened** — `--help` (humans), `--agent-help` (agents loading 12K-token context once), and `help://<topic>` (progressive per-topic) now have explicit non-overlapping audience statements. (BACK-293, mortal-oracle-0506)
+- ✅ **`--agent-help-full` removed** — was a no-op alias of `--agent-help` with misleading argparse text. End-to-end removal across 13 files including 3 obsolete tests. (BACK-293, mortal-oracle-0506)
+- ✅ **OSS hygiene — second-pass scrub of internal references in shipped surfaces** — `Peyton`/`arbiter`, `*.mytia.net`, `tia-proxy`, `tia-security-headers`, `sociamonials` replaced with generic placeholders across nginx/autossl/letsencrypt adapters and shipped docs. (fierce-deity-0506)
+- ✅ **Doc-quality findings cleared from `reveal check reveal/docs/`** — broken anchor, missing front matter, dead internal-docs pointer, and 5 × L005 low-cross-reference-density warnings all resolved. (fierce-deity-0506)
+
 ### v0.91.1
 - ✅ **Probe-parity P0 + PHP/Python side-effects taxonomy** — initial classifier with receiver-based taxonomy (`db`, `http`, `fs`, `cache`, `queue`) for Python and PHP. (3d38c25)
 - ✅ **Segment-boundary matching in `nav_effects.classify_call`** — fixes false matches on names that contain a taxonomy keyword as a substring. (BACK-283, thunderous-fusion-0503)

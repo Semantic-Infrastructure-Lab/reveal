@@ -12,6 +12,20 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.91.2] - 2026-05-06 (sessions enchanted-thunder-0506, mortal-oracle-0506, fierce-deity-0506)
+
+### Added
+- **Two new task patterns in `AGENT_HELP.md`** — *Inspect environment variables (`env://`)* and *Surface architectural seams (ABCs, Protocols, TypedDicts, dataclasses)*. Closes coverage gaps where `env://` had zero AGENT_HELP mentions and `contracts` had a Subcommands Reference row but no recipe. (BACK-293, mortal-oracle-0506)
+- **Subcommand + adapter coverage sweep across `--help` and `AGENT_HELP.md`** — every subcommand and adapter that ships in 0.91.x is now discoverable from the help surfaces; previously several were under-documented or missing entirely. (BACK-292, enchanted-thunder-0506)
+
+### Changed
+- **Help-surface boundaries sharpened** — `--help` (humans at a terminal), `--agent-help` (agents loading 12K-token context once), and `help://<topic>` (progressive per-topic) now have explicit non-overlapping audience statements in `AGENT_HELP.md`'s "About This Guide" and "Agent Introspection" sections. (BACK-293, mortal-oracle-0506)
+- **OSS hygiene — second-pass scrub of internal references in shipped surfaces** — `Peyton`/`arbiter` mentions removed from `reveal/adapters/claude/analysis/messages.py` docstring and `ADAPTER_AUTHORING_GUIDE.md` example tree; internal domains (`*.mytia.net`, `tia-proxy`, `tia-security-headers`) and customer names (`sociamonials`) replaced with generic `example.com`/`acme` placeholders across `nginx://` adapter docstrings and examples, `autossl://` help-data YAML, `nginx://` help-data YAML, `NGINX_GUIDE.md`, `LETSENCRYPT_ADAPTER_GUIDE.md`, `dns.py` real-world-use comment, and `N006.py` rule docstring. CHANGELOG/ROADMAP history mentions retained. (fierce-deity-0506)
+- **Doc-quality findings cleared from `reveal check reveal/docs/`** — RECIPES.md broken anchor (`Spreadsheet & BI` → `Spreadsheet and BI`), NAV_GUIDE.md missing front matter, internal-docs dead pointer in `ADAPTER_AUTHORING_GUIDE.md`, and 5 × L005 low-cross-reference-density warnings (BENCHMARKS, CI_RECIPES, MCP_SETUP, SUBCOMMANDS_GUIDE, UX_GUIDE) all resolved by adding proper `[text](path/file.md)` See Also sections. (fierce-deity-0506)
+
+### Removed
+- **`--agent-help-full` flag** — was a no-op alias of `--agent-help` with actively misleading argparse text ("brief" vs "comprehensive"; `diff` returned 0). Removed end-to-end across 13 files including 3 obsolete tests. (BACK-293, mortal-oracle-0506)
+
 ## [0.91.1] - 2026-05-06 (sessions thunderous-fusion-0503, fluorescent-aurora-0505, seismic-viper-0505, descending-radiation-0506)
 
 ### Added
