@@ -9,9 +9,9 @@ The dangerous combination is any of:
   - send_timeout < 60s   AND client_max_body_size > 10m
   - proxy_read_timeout < 60s AND client_max_body_size > 10m
 
-Real-world incident (Sociamonials, Feb 2026):
-    send_timeout 30s + client_max_body_size 200m caused silent media upload
-    failures.  Raising send_timeout to 300s resolved the issue.
+Typical incident shape:
+    send_timeout 30s + client_max_body_size 200m causes silent media upload
+    failures.  Raising send_timeout to 300s resolves the issue.
 
 Note: this rule checks both http{} directives and top-level (main context)
 directives, since the two values are often split across nginx.conf and a

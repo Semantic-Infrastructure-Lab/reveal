@@ -16,9 +16,9 @@ examples:
     description: 'Parse most recent AutoSSL run — per-user/domain summary'
   - uri: 'autossl://latest --only-failures'
     description: 'Show only domains with errors (defective/incomplete)'
-  - uri: 'autossl://latest --user=sociamonials'
+  - uri: 'autossl://latest --user=acme'
     description: 'Filter to a single cPanel user — avoids 800-domain output on shared hosts'
-  - uri: 'autossl://latest --user=sociamonials --only-failures'
+  - uri: 'autossl://latest --user=acme --only-failures'
     description: 'One user, failures only — the most focused diagnostic view'
   - uri: 'autossl://latest --summary'
     description: 'Aggregated counts only — fastest overview on large hosts'
@@ -28,9 +28,9 @@ examples:
     description: 'Failures only — URI query param form (option travels with resource)'
   - uri: "autossl://latest?summary"
     description: 'Summary only — URI query param form'
-  - uri: "autossl://latest?user=sociamonials"
+  - uri: "autossl://latest?user=acme"
     description: 'Filter to one user — URI query param form'
-  - uri: "autossl://latest?user=sociamonials&only-failures"
+  - uri: "autossl://latest?user=acme&only-failures"
     description: 'One user, failures only — fully composed URI'
 
   # Specific run by timestamp

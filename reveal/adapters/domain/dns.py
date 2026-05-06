@@ -555,9 +555,9 @@ def check_ns_authority(domain: str) -> Dict[str, Any]:
     and compares results. An orphaned NS is one that cannot be reached or
     returns NS records inconsistent with the consensus.
 
-    Real-world use case: sociamonials.com had dns1.web-hosting.com listed as
-    an NS record that was no longer authoritative — required 4 raw dig calls
-    to find. This check surfaces that class of problem automatically.
+    Real-world use case: a domain may have an NS record pointing to a host
+    that is no longer authoritative — finding this manually requires multiple
+    raw dig calls. This check surfaces that class of problem automatically.
 
     Args:
         domain: Domain name to audit

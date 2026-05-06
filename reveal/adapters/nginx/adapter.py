@@ -4,12 +4,12 @@ Provides a domain-centric view of nginx configuration, complementing
 the existing file-path analyzer (reveal /etc/nginx/conf.d/domain.conf).
 
 Usage:
-    reveal nginx://smd-ops.mytia.net           # vhost summary
-    reveal nginx://smd-ops.mytia.net/ports     # listening ports
-    reveal nginx://smd-ops.mytia.net/upstream  # proxy_pass targets + reachability
-    reveal nginx://smd-ops.mytia.net/auth      # auth_basic / auth_request directives
-    reveal nginx://smd-ops.mytia.net/locations # location blocks
-    reveal nginx://smd-ops.mytia.net/config    # full compiled config for this domain
+    reveal nginx://app.example.com           # vhost summary
+    reveal nginx://app.example.com/ports     # listening ports
+    reveal nginx://app.example.com/upstream  # proxy_pass targets + reachability
+    reveal nginx://app.example.com/auth      # auth_basic / auth_request directives
+    reveal nginx://app.example.com/locations # location blocks
+    reveal nginx://app.example.com/config    # full compiled config for this domain
     reveal nginx://                            # overview of all enabled sites
 """
 
@@ -793,12 +793,12 @@ class NginxUriAdapter(ResourceAdapter):
     a structured summary: ports, upstreams, auth, location blocks.
 
     Usage:
-        reveal nginx://smd-ops.mytia.net           # vhost summary
-        reveal nginx://smd-ops.mytia.net/ports     # listening ports
-        reveal nginx://smd-ops.mytia.net/upstream  # proxy_pass targets + reachability
-        reveal nginx://smd-ops.mytia.net/auth      # auth directives
-        reveal nginx://smd-ops.mytia.net/locations # location blocks
-        reveal nginx://smd-ops.mytia.net/config    # raw filtered config
+        reveal nginx://app.example.com           # vhost summary
+        reveal nginx://app.example.com/ports     # listening ports
+        reveal nginx://app.example.com/upstream  # proxy_pass targets + reachability
+        reveal nginx://app.example.com/auth      # auth directives
+        reveal nginx://app.example.com/locations # location blocks
+        reveal nginx://app.example.com/config    # raw filtered config
         reveal nginx://                            # overview of all enabled sites
     """
 

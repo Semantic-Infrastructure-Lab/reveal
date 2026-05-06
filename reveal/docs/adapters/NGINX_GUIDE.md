@@ -57,42 +57,42 @@ nginx://
 
 ```bash
 # Vhost summary — config file, ports, upstream, auth, locations
-reveal nginx://smd-ops.mytia.net
+reveal nginx://app.example.com
 
 # All enabled sites
 reveal nginx://
 
 # Just the ports (SSL on? redirect-to-https?)
-reveal nginx://smd-ops.mytia.net/ports
+reveal nginx://app.example.com/ports
 
 # Upstream reachability — is the backend actually listening?
-reveal nginx://smd-ops.mytia.net/upstream
+reveal nginx://app.example.com/upstream
 
 # Auth check — is auth_basic on or off?
-reveal nginx://smd-ops.mytia.net/auth
+reveal nginx://app.example.com/auth
 
 # All location blocks — what gets routed where?
-reveal nginx://smd-ops.mytia.net/locations
+reveal nginx://app.example.com/locations
 
 # Raw config — see the actual server block
-reveal nginx://smd-ops.mytia.net/config
+reveal nginx://app.example.com/config
 ```
 
 ---
 
 ### Example Output
 
-#### `reveal nginx://smd-ops.mytia.net`
+#### `reveal nginx://app.example.com`
 
 ```
-nginx://smd-ops.mytia.net
+nginx://app.example.com
 
-Config: /etc/nginx/sites-enabled/smd-ops.mytia.net
-  Symlink: → /etc/nginx/sites-available/smd-ops.mytia.net
+Config: /etc/nginx/sites-enabled/app.example.com
+  Symlink: → /etc/nginx/sites-available/app.example.com
 
 Ports:
   80   HTTP  → redirect to https
-  443  HTTPS  ssl_certificate /etc/nginx/ssl/smd-ops.mytia.net.crt
+  443  HTTPS  ssl_certificate /etc/nginx/ssl/app.example.com.crt
 
 Upstream: backend (proxy_pass http://127.0.0.1:8080)
   127.0.0.1:8080  ✅ reachable (3ms)
@@ -113,8 +113,8 @@ nginx:// — Enabled Sites (44 sites)
 
   File                                          Domains                       Symlink
   ──────────────────────────────────────────────────────────────────────────────────
-  sites-enabled/smd-ops.mytia.net               smd-ops.mytia.net             → sites-available/
-  sites-enabled/frono.mytia.net                 frono.mytia.net               → sites-available/
+  sites-enabled/app.example.com               app.example.com             → sites-available/
+  sites-enabled/frono.example.com                 frono.example.com               → sites-available/
   conf.d/default.conf                           _                             (regular file)
   ...
 ```
@@ -126,25 +126,25 @@ nginx:// — Enabled Sites (44 sites)
 #### After nginx config change
 
 ```bash
-reveal nginx://smd-ops.mytia.net            # verify config was applied
-reveal nginx://smd-ops.mytia.net/ports      # check SSL block is present
-reveal nginx://smd-ops.mytia.net/upstream   # verify upstream still reachable
-reveal ssl://smd-ops.mytia.net --check      # verify SSL cert intact
+reveal nginx://app.example.com            # verify config was applied
+reveal nginx://app.example.com/ports      # check SSL block is present
+reveal nginx://app.example.com/upstream   # verify upstream still reachable
+reveal ssl://app.example.com --check      # verify SSL cert intact
 ```
 
 #### Diagnose unexpected redirect
 
 ```bash
-reveal nginx://smd-ops.mytia.net            # see all location blocks at once
-reveal nginx://smd-ops.mytia.net/locations  # inspect location targets
-reveal domain://smd-ops.mytia.net --check   # verify DNS + HTTP response
+reveal nginx://app.example.com            # see all location blocks at once
+reveal nginx://app.example.com/locations  # inspect location targets
+reveal domain://app.example.com --check   # verify DNS + HTTP response
 ```
 
 #### Auth audit
 
 ```bash
-reveal nginx://smd-ops.mytia.net/auth       # check auth_basic on/off
-reveal nginx://smd-ops.mytia.net/config     # view raw config to verify
+reveal nginx://app.example.com/auth       # check auth_basic on/off
+reveal nginx://app.example.com/config     # view raw config to verify
 ```
 
 ---
@@ -200,8 +200,8 @@ Fleet Audit — (46 sites, 2026-03-19)
     Move these to nginx.conf http{} — one change fixes all sites.
 
   Snippet Consistency:
-    snippets/tia-security-headers.conf  — included by 38, missing from 8
-       Missing from: belize.mytia.net, motion.mytia.net, ...
+    snippets/security-headers.conf  — included by 38, missing from 8
+       Missing from: api.example.com, motion.example.com, ...
 
 Exit code: 2 (gaps found)
 ```

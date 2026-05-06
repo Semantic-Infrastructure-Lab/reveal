@@ -66,8 +66,8 @@ Certs are sorted by `days_until_expiry` ascending — imminent expirations and e
   name                  common name            expiry     SANs
   ──────────────────────────────────────────────────────────────
   old-app.example.com   old-app.example.com    EXPIRED    1 name(s)
-  mytia.net             mytia.net              87d        3 name(s)
-  api.mytia.net         api.mytia.net          87d        1 name(s)
+  example.com             example.com              87d        3 name(s)
+  api.example.com         api.example.com          87d        1 name(s)
 
   reveal letsencrypt:// --check-orphans    # find unreferenced certs
   # 1 cert(s) are EXPIRED — renew with: certbot renew
@@ -159,10 +159,10 @@ Key fields in the JSON response:
   "cert_count": 3,
   "certs": [
     {
-      "name": "mytia.net",
-      "cert_path": "/etc/letsencrypt/live/mytia.net/cert.pem",
-      "common_name": "mytia.net",
-      "san": ["mytia.net", "www.mytia.net", "api.mytia.net"],
+      "name": "example.com",
+      "cert_path": "/etc/letsencrypt/live/example.com/cert.pem",
+      "common_name": "example.com",
+      "san": ["example.com", "www.example.com", "api.example.com"],
       "days_until_expiry": 87,
       "not_after": "2026-06-14T12:00:00",
       "is_expired": false,
