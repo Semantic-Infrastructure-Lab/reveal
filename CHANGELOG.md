@@ -12,6 +12,21 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.91.1] - 2026-05-06 (sessions thunderous-fusion-0503, fluorescent-aurora-0505, seismic-viper-0505, descending-radiation-0506)
+
+### Added
+- **Probe-parity P0 + PHP/Python side-effects taxonomy** — initial side-effects classifier with receiver-based taxonomy (`db`, `http`, `fs`, `cache`, `queue`) covering Python and PHP. Foundation for nav probe parity work. (3d38c25)
+- **`engine` receiver in universal `_RECEIVER_TAXONOMY` `db` list** — SQLAlchemy is the dominant Python ORM; `engine.execute`, `engine.connect` now classify as db. Non-final-segment guards (`template_engine.render`, `rules_engine.evaluate`) verified. (BACK-290, descending-radiation-0506)
+
+### Fixed
+- **`nav_effects.classify_call` segment-boundary matching** — receiver classification now compares full segments instead of substrings, eliminating false matches on names that happen to contain a taxonomy keyword. (BACK-283, thunderous-fusion-0503)
+- **PHP `range_calls` detects `new X()` and `$var->method()`** — instantiation calls and member-call expressions on variables now register; previously only static and global calls were caught. (BACK-284, thunderous-fusion-0503)
+- **Receiver-segment classification + BACK-286 false-positive cleanup** — improved receiver heuristics; removed taxonomy entries that produced false positives in real-world repos. (BACK-285a/BACK-286, fluorescent-aurora-0505)
+
+### Changed
+- **OSS hygiene — TIA-internal jargon scrubbed from shipped docs** — `--validate-schema beth` → `session` across `SCHEMA_VALIDATION_HELP.md` (~25 sites; code-level alias retained for back-compat); `PROBE_PARITY_GAPS.md` moved to internal-docs (un-packaged); doc claim that `beth_topics` was required corrected to `topics` (matches schema); `topstep`/`sociamonials` examples in `RECIPES.md` and `AUTOSSL_ADAPTER_GUIDE.md` neutralized. (BACK-288, descending-radiation-0506)
+- **Test fixtures scrubbed of personal-project names and hardcoded `/home/scottsen/...` paths** — 9 files; one always-skipped contributor-hostile test removed (equivalent coverage exists). (BACK-289, descending-radiation-0506)
+
 ## [0.91.0] - 2026-05-05 (sessions ionic-throne-0505, dafaso-0505)
 
 ### Fixed

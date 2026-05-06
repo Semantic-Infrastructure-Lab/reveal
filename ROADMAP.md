@@ -1,11 +1,20 @@
 # Reveal Roadmap
-> **Last updated**: 2026-05-05 (ionic-throne-0505/dafaso-0505 — v0.91.0 git:// history/blame enhancements)
+> **Last updated**: 2026-05-06 (descending-radiation-0506 — v0.91.1 side-effects classifier maturity + OSS hygiene)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.91.1
+- ✅ **Probe-parity P0 + PHP/Python side-effects taxonomy** — initial classifier with receiver-based taxonomy (`db`, `http`, `fs`, `cache`, `queue`) for Python and PHP. (3d38c25)
+- ✅ **Segment-boundary matching in `nav_effects.classify_call`** — fixes false matches on names that contain a taxonomy keyword as a substring. (BACK-283, thunderous-fusion-0503)
+- ✅ **PHP `range_calls` detects `new X()` and `$var->method()`** — instantiation and variable member-calls now register. (BACK-284, thunderous-fusion-0503)
+- ✅ **Receiver-segment classification + false-positive cleanup** — improved heuristics, taxonomy entries with real-world false positives removed. (BACK-285a/BACK-286, fluorescent-aurora-0505)
+- ✅ **`engine` receiver added to universal `_RECEIVER_TAXONOMY` `db`** — SQLAlchemy `engine.execute`/`engine.connect` classify as db; non-final-segment guards verified. (BACK-290, descending-radiation-0506)
+- ✅ **OSS hygiene — TIA-internal jargon scrubbed from shipped docs** — `--validate-schema beth` → `session`; `PROBE_PARITY_GAPS.md` moved to internal-docs; required-field correction; example names neutralized. (BACK-288, descending-radiation-0506)
+- ✅ **Test fixtures scrubbed of personal-project names and hardcoded paths** — 9 files; always-skipped contributor-hostile test removed. (BACK-289, descending-radiation-0506)
 
 ### v0.91.0
 - ✅ **`git://` `?content~=string` pickaxe search** — scans `+`/`-` diff lines in history; works on file-scoped and repo-wide queries. (BACK-279, ionic-throne-0505)
