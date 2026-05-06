@@ -22,9 +22,27 @@ This is the complete offline reference for reveal (~26,500 tokens). Both `--agen
 
 ## Agent Introspection (v0.56.0+ - Complete Coverage)
 
-**NEW: Auto-discover capabilities programmatically**
+**Auto-discover capabilities programmatically.** Three discovery surfaces:
 
-AI agents can now query reveal's capabilities via machine-readable schemas:
+```bash
+# CLI discovery flags — what reveal can do
+reveal --adapters                # List every URI adapter (ast://, git://, claude://, ...)
+reveal --languages               # List every supported language
+reveal --discover                # Dump full adapter registry as JSON (schemas + params)
+reveal --capabilities <file>     # What can be extracted from this file (JSON)
+reveal --explain-file <file>     # Which analyzer + fallback status for this file
+
+# help:// adapter — read topic-by-topic
+reveal help://                   # List all help topics
+reveal help://<topic>            # Read a single topic (e.g. help://ast, help://tricks)
+reveal help://schemas/<adapter>  # Machine-readable adapter schema (preferred for agents)
+reveal help://examples/<task>    # Canonical query recipes per task category
+
+# This guide — comprehensive reference
+reveal --agent-help              # Same content as this file (~12K tokens)
+```
+
+**For agents: the canonical discovery recipe** is `reveal --discover` (full registry as JSON in one call) or, for a single adapter, `reveal help://schemas/<adapter> --format=json`. Both return query params, operators, output schemas, and example queries — generate valid queries from the schema rather than hardcoding URI syntax.
 
 ```bash
 # List all available adapter schemas
@@ -137,6 +155,36 @@ reveal help://examples/security --format=json        # Security analysis recipes
 2. **Medium** - `reveal src/main.py` (file structure)
 3. **Focused** - `reveal src/main.py load_config` (specific function)
 4. **Deep** - Read tool on extracted function only (last resort)
+
+---
+
+## Subcommands Reference
+
+Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set of **task-oriented subcommands**. Use subcommands when you know what kind of task you're doing — they pre-compose the right flags and produce focused output.
+
+| Subcommand | One-liner | Discover details |
+|------------|-----------|------------------|
+| `reveal overview [path]` | One-glance dashboard: languages, quality, hotspots, recent git | `reveal overview --help` |
+| `reveal architecture [path]` | Architectural brief: entry points, core abstractions, risks | `reveal architecture --help` |
+| `reveal deps [path]` | Dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
+| `reveal hotspots [path]` | High-complexity files and functions that need attention | `reveal hotspots --help` |
+| `reveal contracts [path]` | Architectural seams: ABCs, Protocols, TypedDicts, dataclasses | `reveal contracts --help` |
+| `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes | `reveal surface --help` |
+| `reveal trace --from FUNC` | Walk call graph from a named entry point; depth-indented narrative with side-effect classification | `reveal trace --help` |
+| `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
+| `reveal review <path>` | Assess quality + structural changes before a PR merge | `reveal review --help` |
+| `reveal health [path]` | Unified health: code rules + SSL + databases + DNS in one report | `reveal health --help` |
+| `reveal pack <path>` | Token-budgeted context snapshot for LLM consumption (use `--budget`, `--focus`, `--since`) | `reveal pack --help` |
+| `reveal dev <command>` | Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config | `reveal dev --help` |
+| `reveal scaffold <kind>` | Older alias of `reveal dev new-*` — prefer `reveal dev` for new work | `reveal scaffold --help` |
+
+**Rule of thumb:**
+- Exploring an unfamiliar codebase → `reveal overview` first, then `reveal architecture`.
+- Pre-merge review → `reveal review` (quality + structural diff in one).
+- Building LLM context with a token budget → `reveal pack`.
+- Tracing what a function actually does (calls + side-effects) → `reveal trace --from <func>`.
+- Mapping the system's external boundaries → `reveal surface`.
+- Building your own adapter, analyzer, or rule → `reveal dev new-adapter|new-analyzer|new-rule`.
 
 ---
 
@@ -1288,6 +1336,88 @@ reveal deps . --format json        # Machine-readable for CI
 **Exit codes:** 0 (clean) · 1 (circular deps or unused imports found — CI-friendly gate).
 
 **Use case:** Before a release or major refactor — confirm no accidental circular imports crept in, surface unused imports to clean up, see dependency surface area at a glance.
+
+---
+
+### Task: "Map every external surface of the system"
+
+**Pattern:**
+```bash
+reveal surface .                   # CLI commands, HTTP routes, env vars, network calls, FS writes
+reveal surface src/ --type http    # Filter to HTTP routes only
+reveal surface src/ --type env     # Filter to env-var reads only
+reveal surface . --format json     # Machine-readable, for diffing across versions
+```
+
+**What it finds:** CLI entry points (Click/argparse), HTTP routes (Flask/FastAPI/Django decorators), environment variable reads, network egress (requests, urllib, sockets), filesystem writes (open with `'w'`/`'a'`, `Path.write_*`, `shutil.*`), subprocess calls.
+
+**Use case:** Pre-deploy boundary audit, security review, or "what does this service expose / depend on?" When a config value, env var, or external endpoint changes, `reveal surface` tells you which code paths participate.
+
+---
+
+### Task: "Run a unified health check across code + infrastructure"
+
+**Pattern:**
+```bash
+reveal health .                    # Code quality + SSL + DB + DNS in one report
+reveal health . --select B,S       # Just bugs and security
+reveal health . --all              # Include all categories (verbose)
+```
+
+**Use case:** A single command that aggregates `reveal check` (code), `ssl://` (cert health), `mysql://`/`sqlite://` (DB health), and `domain://` (DNS) into one operator-friendly report. Use it for production readiness checks or scheduled monitoring jobs — not for routine code-quality runs (use `reveal check` for those).
+
+---
+
+### Task: "Extend reveal — scaffold a new adapter, analyzer, or rule"
+
+**Pattern:**
+```bash
+reveal dev new-adapter payments --uri pay      # New URI adapter (creates pay:// scheme)
+reveal dev new-analyzer kotlin --ext .kt       # New language analyzer
+reveal dev new-rule C001 deep-nesting          # New quality rule (category C, ID 001)
+reveal dev inspect-config                      # Show effective .reveal.yaml resolution
+```
+
+**Plugin discovery:** Custom adapters/analyzers placed in `<cwd>/.reveal/adapters/` or `~/.reveal/adapters/` are auto-discovered on first use (BACK-247/BACK-256). No registration needed beyond the `register_*` decorator.
+
+**Use case:** Reveal is intentionally extensible — when an agent needs to navigate a domain reveal doesn't yet understand (a custom DSL, a proprietary file format, an internal service), scaffold an adapter rather than hand-rolling parsing logic. The scaffolds include test stubs and follow the contract enforced by reveal's own quality rules.
+
+> Note: `reveal scaffold <kind>` is an older alias of `reveal dev new-*`. Both work; prefer `reveal dev` for new work — it's the maintained surface and adds `inspect-config`.
+
+---
+
+### Task: "Inspect a MySQL or SQLite database"
+
+**Pattern:**
+```bash
+# MySQL — connection from env or DSN
+reveal mysql://localhost/mydb              # Schema overview: tables, columns, row counts
+reveal mysql://localhost/mydb --check      # Health: missing PKs, oversized tables, no indexes
+reveal 'mysql://localhost/mydb?table=users'  # Single-table detail
+
+# SQLite — file-based
+reveal sqlite:///path/to/app.db            # Schema overview
+reveal 'sqlite:///path/to/app.db?table=trades&limit=10'  # Sample rows
+```
+
+**Discovery:** `reveal help://schemas/mysql --format=json` and `reveal help://schemas/sqlite --format=json` enumerate query params, table-detail modes, and check rules.
+
+**Use case:** Inspect schema, surface row-count outliers, and run health checks on databases without writing SQL or installing a DB client. Both adapters integrate with `reveal health` and `--check --only-failures` for CI gates.
+
+---
+
+### Task: "Diff two resources structurally"
+
+**Pattern:**
+```bash
+reveal 'diff://file_a.py:file_b.py'            # Structural diff: functions added/removed/modified
+reveal 'diff://before.py:after.py?context=3'   # With code context
+reveal 'diff://config.yaml:config_new.yaml'    # Works on any analyzer-supported type
+```
+
+**Discovery:** `reveal help://schemas/diff --format=json` for the full param list. Note: for git-history diffs prefer `git://file@sha?type=diff` (BACK-GIT-3) which is git-aware; `diff://` is for arbitrary on-disk pairs.
+
+**Use case:** Compare two checked-out versions of a file (e.g. `cp file.py file.py.bak`, edit, then diff) without `git stash`/branch acrobatics; or diff configs across environments where neither side is in git.
 
 ---
 

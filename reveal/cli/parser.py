@@ -132,10 +132,27 @@ def _build_subcommands_section() -> str:
     """Build the subcommands reference section."""
     return '''
 Subcommands (reveal <subcommand> --help for details):
-  reveal overview [path]  One-glance dashboard: languages, quality, hotspots, recent git
-  reveal deps [path]      Dependency health: external packages, circular deps, unused imports
-  reveal check <path>     Run quality rules on a file or directory
-                          (replaces: reveal <path> --check)
+  reveal overview [path]      One-glance dashboard: languages, quality, hotspots, recent git
+  reveal architecture [path]  Architectural brief: entry points, core abstractions, risks
+  reveal deps [path]          Dependency health: external packages, circular deps, unused imports
+  reveal hotspots [path]      High-complexity files and functions that need attention
+  reveal contracts [path]     Architectural seams: ABCs, Protocols, TypedDicts, dataclasses
+  reveal surface [path]       External surfaces: CLI, HTTP routes, env vars, network, FS writes
+  reveal trace --from FUNC    Walk call graph from a named entry; depth-indented narrative
+  reveal check <path>         Run quality rules on a file or directory
+  reveal review <path>        Assess quality + structural changes before a PR merge
+  reveal health [path]        Unified health: code rules + SSL + databases + DNS
+  reveal pack <path>          Token-budgeted context snapshot for LLM consumption
+  reveal dev <command>        Scaffold adapters/analyzers/rules; inspect .reveal.yaml
+  reveal scaffold <kind>      (alias of `reveal dev new-*` — prefer `reveal dev`)
+
+Discovery (find what reveal can do):
+  reveal --adapters           List all URI adapters (env://, ast://, git://, claude://, ...)
+  reveal --languages          List all supported languages
+  reveal --discover           Dump full adapter registry as JSON (schemas, params)
+  reveal help://              List help topics
+  reveal help://<topic>       Read a topic (e.g. help://ast, help://schemas/ast)
+  reveal --agent-help         Comprehensive agent reference (~12K tokens)
 '''
 
 
