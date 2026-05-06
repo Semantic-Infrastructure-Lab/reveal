@@ -78,7 +78,7 @@ class TestFileSessionsRouting:
 
     def test_files_does_not_interfere_with_search_route(self, tmp_path):
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
-            adapter = ClaudeAdapter('', query='search=topstep')
+            adapter = ClaudeAdapter('', query='search=payments')
             result = adapter.get_structure()
         assert result['type'] == 'claude_cross_session_search'
 

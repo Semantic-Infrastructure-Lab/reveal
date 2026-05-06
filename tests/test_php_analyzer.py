@@ -834,19 +834,5 @@ function bar($x) {
         finally:
             os.unlink(path)
 
-    def test_php_file_with_issues_scores_below_100(self):
-        """A PHP file with 30+ check issues should score below 100."""
-        probe = '/home/scottsen/src/projects/sociamonials-ops/tools/php-ast/php-ast-probe.php'
-        import os.path
-        if not os.path.exists(probe):
-            self.skipTest('php-ast-probe.php not available')
-        from reveal.adapters.stats.adapter import StatsAdapter
-        a = StatsAdapter(probe)
-        result = a.get_structure()
-        quality = result['files'][0]['quality']
-        self.assertLess(quality['score'], 100.0, 'File with 30+ issues should score below 100')
-        self.assertGreater(quality['check_issues'], 0, 'Should report check issue count')
-
-
 if __name__ == '__main__':
     unittest.main()

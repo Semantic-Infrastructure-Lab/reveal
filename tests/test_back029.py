@@ -56,25 +56,25 @@ class TestExtractFirstSnippet:
     def test_finds_user_message(self, tmp_path):
         jsonl = tmp_path / 'sess.jsonl'
         jsonl.write_text(
-            json.dumps(_user_msg('working on topstep MES bot today')) + '\n'
+            json.dumps(_user_msg('working on payments MES bot today')) + '\n'
         )
-        result = _extract_first_snippet(jsonl, 'topstep')
-        assert 'topstep' in result['excerpt'].lower()
+        result = _extract_first_snippet(jsonl, 'payments')
+        assert 'payments' in result['excerpt'].lower()
         assert result['role'] == 'user'
 
     def test_finds_assistant_message(self, tmp_path):
         jsonl = tmp_path / 'sess.jsonl'
         jsonl.write_text(
-            json.dumps(_assistant_msg('The TopStep combine limit is 3000')) + '\n'
+            json.dumps(_assistant_msg('The Payments combine limit is 3000')) + '\n'
         )
-        result = _extract_first_snippet(jsonl, 'topstep')
+        result = _extract_first_snippet(jsonl, 'payments')
         assert result['excerpt']
         assert result['role'] == 'assistant'
 
     def test_case_insensitive(self, tmp_path):
         jsonl = tmp_path / 'sess.jsonl'
-        jsonl.write_text(json.dumps(_user_msg('TOPSTEP is the platform')) + '\n')
-        result = _extract_first_snippet(jsonl, 'topstep')
+        jsonl.write_text(json.dumps(_user_msg('PAYMENTS is the platform')) + '\n')
+        result = _extract_first_snippet(jsonl, 'payments')
         assert result['excerpt']
 
     def test_skips_non_matching_lines(self, tmp_path):
@@ -82,11 +82,11 @@ class TestExtractFirstSnippet:
         lines = [
             json.dumps(_user_msg('completely unrelated content')),
             json.dumps(_user_msg('also irrelevant')),
-            json.dumps(_user_msg('finally: topstep mention here')),
+            json.dumps(_user_msg('finally: payments mention here')),
         ]
         jsonl.write_text('\n'.join(lines) + '\n')
-        result = _extract_first_snippet(jsonl, 'topstep')
-        assert 'topstep' in result['excerpt'].lower()
+        result = _extract_first_snippet(jsonl, 'payments')
+        assert 'payments' in result['excerpt'].lower()
 
     def test_returns_empty_dict_on_no_match(self, tmp_path):
         jsonl = tmp_path / 'sess.jsonl'
@@ -111,15 +111,15 @@ class TestExtractFirstSnippet:
             'timestamp': '2026-03-14T10:00:00',
             'message': {
                 'role': 'user',
-                'content': [{'type': 'tool_result', 'content': 'topstep data here'}],
+                'content': [{'type': 'tool_result', 'content': 'payments data here'}],
             },
         }
         # Followed by a proper text message
-        user_line = _user_msg('the topstep combine setup')
+        user_line = _user_msg('the payments combine setup')
         jsonl.write_text(
             json.dumps(tool_line) + '\n' + json.dumps(user_line) + '\n'
         )
-        result = _extract_first_snippet(jsonl, 'topstep')
+        result = _extract_first_snippet(jsonl, 'payments')
         # Should find the text message
         assert result['role'] in ('user', 'assistant')
 
@@ -145,11 +145,11 @@ class TestSearchSessionsForTerm:
 
     def test_finds_matching_sessions(self, tmp_path):
         sessions = self._make_sessions(tmp_path, [
-            ('alpha', [_user_msg('working on topstep today')], '2026-03-14'),
+            ('alpha', [_user_msg('working on payments today')], '2026-03-14'),
             ('beta',  [_user_msg('unrelated content here')],   '2026-03-14'),
-            ('gamma', [_user_msg('more topstep combine work')], '2026-03-13'),
+            ('gamma', [_user_msg('more payments combine work')], '2026-03-13'),
         ])
-        results = search_sessions_for_term(sessions, 'topstep')
+        results = search_sessions_for_term(sessions, 'payments')
         names = {r['session'] for r in results}
         assert 'alpha' in names
         assert 'gamma' in names
@@ -164,20 +164,20 @@ class TestSearchSessionsForTerm:
 
     def test_results_sorted_most_recent_first(self, tmp_path):
         sessions = self._make_sessions(tmp_path, [
-            ('older',  [_user_msg('topstep stuff')], '2026-03-10'),
-            ('newer',  [_user_msg('topstep work')],  '2026-03-14'),
-            ('middle', [_user_msg('topstep here')],  '2026-03-12'),
+            ('older',  [_user_msg('payments stuff')], '2026-03-10'),
+            ('newer',  [_user_msg('payments work')],  '2026-03-14'),
+            ('middle', [_user_msg('payments here')],  '2026-03-12'),
         ])
-        results = search_sessions_for_term(sessions, 'topstep')
+        results = search_sessions_for_term(sessions, 'payments')
         assert len(results) == 3
         dates = [r['modified'] for r in results]
         assert dates == sorted(dates, reverse=True)
 
     def test_result_has_required_fields(self, tmp_path):
         sessions = self._make_sessions(tmp_path, [
-            ('my-session', [_user_msg('topstep combine limits')], '2026-03-14'),
+            ('my-session', [_user_msg('payments combine limits')], '2026-03-14'),
         ])
-        results = search_sessions_for_term(sessions, 'topstep')
+        results = search_sessions_for_term(sessions, 'payments')
         assert len(results) == 1
         r = results[0]
         assert r['session'] == 'my-session'
@@ -189,13 +189,13 @@ class TestSearchSessionsForTerm:
 
     def test_excerpt_contains_context(self, tmp_path):
         sessions = self._make_sessions(tmp_path, [
-            ('my-sess', [_user_msg('checking topstep position limits today')], '2026-03-14'),
+            ('my-sess', [_user_msg('checking payments position limits today')], '2026-03-14'),
         ])
-        results = search_sessions_for_term(sessions, 'topstep')
+        results = search_sessions_for_term(sessions, 'payments')
         assert results[0]['excerpt']
 
     def test_empty_sessions_returns_empty(self, tmp_path):
-        assert search_sessions_for_term([], 'topstep') == []
+        assert search_sessions_for_term([], 'payments') == []
 
     def test_empty_term_returns_empty(self, tmp_path):
         sessions = self._make_sessions(tmp_path, [
@@ -205,10 +205,10 @@ class TestSearchSessionsForTerm:
 
     def test_case_insensitive_matching(self, tmp_path):
         sessions = self._make_sessions(tmp_path, [
-            ('s1', [_user_msg('TOPSTEP is the platform')], '2026-03-14'),
+            ('s1', [_user_msg('PAYMENTS is the platform')], '2026-03-14'),
         ])
-        results_lower = search_sessions_for_term(sessions, 'topstep')
-        results_upper = search_sessions_for_term(sessions, 'TOPSTEP')
+        results_lower = search_sessions_for_term(sessions, 'payments')
+        results_upper = search_sessions_for_term(sessions, 'PAYMENTS')
         assert len(results_lower) == 1
         assert len(results_upper) == 1
 
@@ -220,10 +220,10 @@ class TestCrossSessionSearchRouting:
     def test_search_param_routes_to_content_search(self, tmp_path):
         """claude://?search=term should invoke _search_sessions, not _list_sessions."""
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
-            adapter = ClaudeAdapter('', query='search=topstep')
+            adapter = ClaudeAdapter('', query='search=payments')
             result = adapter.get_structure()
         assert result['type'] == 'claude_cross_session_search'
-        assert result['term'] == 'topstep'
+        assert result['term'] == 'payments'
 
     def test_no_search_param_routes_to_list(self, tmp_path):
         """claude:// without ?search= should remain a session listing."""
@@ -242,7 +242,7 @@ class TestCrossSessionSearchRouting:
     def test_sessions_prefix_with_search_routes_to_content_search(self, tmp_path):
         """claude://sessions?search=term should also hit _search_sessions."""
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
-            adapter = ClaudeAdapter('sessions', query='search=topstep')
+            adapter = ClaudeAdapter('sessions', query='search=payments')
             result = adapter.get_structure()
         assert result['type'] == 'claude_cross_session_search'
 
@@ -261,14 +261,14 @@ class TestCrossSessionSearchRouting:
         old_dir = tmp_path / '-home-user-sessions-old-sess'
         old_dir.mkdir(parents=True)
         old_jsonl = old_dir / 'old-sess.jsonl'
-        old_jsonl.write_text(json.dumps(_user_msg('topstep data here')) + '\n')
+        old_jsonl.write_text(json.dumps(_user_msg('payments data here')) + '\n')
         # Force old mtime
         import os, time
         old_time = time.mktime(time.strptime('2026-01-01', '%Y-%m-%d'))
         os.utime(old_jsonl, (old_time, old_time))
 
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
-            adapter = ClaudeAdapter('', query='search=topstep&since=2026-03-01')
+            adapter = ClaudeAdapter('', query='search=payments&since=2026-03-01')
             result = adapter.get_structure()
 
         # Old session should NOT appear — filtered out by since before grep
@@ -290,14 +290,14 @@ class TestCrossSessionSearchIntegration:
 
     def test_finds_sessions_in_real_corpus(self, tmp_path):
         _write_session(tmp_path, 'alpha-0310',
-                       [_user_msg('working on topstep combine limits')])
+                       [_user_msg('working on payments combine limits')])
         _write_session(tmp_path, 'beta-0311',
                        [_user_msg('unrelated kubernetes deploy work')])
         _write_session(tmp_path, 'gamma-0312',
-                       [_user_msg('more topstep MES bot debugging')])
+                       [_user_msg('more payments MES bot debugging')])
 
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
-            adapter = ClaudeAdapter('', query='search=topstep')
+            adapter = ClaudeAdapter('', query='search=payments')
             result = adapter.get_structure()
 
         assert result['type'] == 'claude_cross_session_search'
@@ -337,21 +337,21 @@ class TestCrossSessionSearchRenderer:
     def test_renders_header(self):
         result = {
             'type': 'claude_cross_session_search',
-            'term': 'topstep',
+            'term': 'payments',
             'sessions_scanned': 100,
             'match_count': 3,
             'since': None,
             'matches': [],
         }
         output = self._render(result)
-        assert 'topstep' in output
+        assert 'payments' in output
         assert '100' in output
         assert '3' in output
 
     def test_renders_match_entries(self):
         result = {
             'type': 'claude_cross_session_search',
-            'term': 'topstep',
+            'term': 'payments',
             'sessions_scanned': 10,
             'match_count': 1,
             'since': None,
@@ -360,7 +360,7 @@ class TestCrossSessionSearchRenderer:
                 'modified': '2026-03-14T18:45:00',
                 'project': 'tia',
                 'role': 'user',
-                'excerpt': '...checking topstep combine data...',
+                'excerpt': '...checking payments combine data...',
                 'timestamp': '2026-03-14 18:44',
                 'readme_present': True,
                 'size_kb': 50,
@@ -369,7 +369,7 @@ class TestCrossSessionSearchRenderer:
         output = self._render(result)
         assert 'alpha-0314' in output
         assert 'tia' in output
-        assert 'topstep' in output
+        assert 'payments' in output
 
     def test_renders_since_in_header(self):
         result = {
@@ -404,8 +404,8 @@ class TestMessageIndexInSnippet:
 
     def test_returns_message_index_zero_for_first_line(self, tmp_path):
         jsonl = tmp_path / 'sess.jsonl'
-        jsonl.write_text(json.dumps(_user_msg('topstep combine')) + '\n')
-        result = _extract_first_snippet(jsonl, 'topstep')
+        jsonl.write_text(json.dumps(_user_msg('payments combine')) + '\n')
+        result = _extract_first_snippet(jsonl, 'payments')
         assert result['message_index'] == 0
 
     def test_returns_correct_index_when_match_is_not_first_line(self, tmp_path):
@@ -413,10 +413,10 @@ class TestMessageIndexInSnippet:
         lines = [
             json.dumps(_user_msg('unrelated first message')),
             json.dumps(_assistant_msg('still no match here')),
-            json.dumps(_user_msg('topstep found at index 2')),
+            json.dumps(_user_msg('payments found at index 2')),
         ]
         jsonl.write_text('\n'.join(lines) + '\n')
-        result = _extract_first_snippet(jsonl, 'topstep')
+        result = _extract_first_snippet(jsonl, 'payments')
         assert result['message_index'] == 2
 
     def test_returns_none_message_index_on_no_match(self, tmp_path):
@@ -431,10 +431,10 @@ class TestMessageIndexInSnippet:
         system_line = {'type': 'system', 'message': {'role': 'system', 'content': 'context'}}
         lines = [
             json.dumps(system_line),                             # index 0 — system, no match
-            json.dumps(_user_msg('topstep is the platform')),   # index 1 — should be returned
+            json.dumps(_user_msg('payments is the platform')),   # index 1 — should be returned
         ]
         jsonl.write_text('\n'.join(lines) + '\n')
-        result = _extract_first_snippet(jsonl, 'topstep')
+        result = _extract_first_snippet(jsonl, 'payments')
         assert result['message_index'] == 1
 
 
@@ -453,8 +453,8 @@ class TestMessageIndexInSearchResults:
         }
 
     def test_result_includes_message_index(self, tmp_path):
-        session = self._make_session(tmp_path, 'my-sess', [_user_msg('topstep combine')])
-        results = search_sessions_for_term([session], 'topstep')
+        session = self._make_session(tmp_path, 'my-sess', [_user_msg('payments combine')])
+        results = search_sessions_for_term([session], 'payments')
         assert len(results) == 1
         assert 'message_index' in results[0]
         assert results[0]['message_index'] == 0
@@ -463,10 +463,10 @@ class TestMessageIndexInSearchResults:
         messages = [
             _user_msg('first unrelated'),
             _assistant_msg('second unrelated'),
-            _user_msg('topstep at index 2'),
+            _user_msg('payments at index 2'),
         ]
         session = self._make_session(tmp_path, 'pos-sess', messages)
-        results = search_sessions_for_term([session], 'topstep')
+        results = search_sessions_for_term([session], 'payments')
         assert results[0]['message_index'] == 2
 
 
@@ -487,7 +487,7 @@ class TestCrossSessionSearchRendererJumpTarget:
     def _make_result(self, session: str, message_index) -> dict:
         return {
             'type': 'claude_cross_session_search',
-            'term': 'topstep',
+            'term': 'payments',
             'sessions_scanned': 10,
             'match_count': 1,
             'since': None,
@@ -496,7 +496,7 @@ class TestCrossSessionSearchRendererJumpTarget:
                 'modified': '2026-03-14T18:00:00',
                 'project': 'tia',
                 'role': 'user',
-                'excerpt': 'topstep combine',
+                'excerpt': 'payments combine',
                 'timestamp': '2026-03-14 18:00',
                 'readme_present': False,
                 'size_kb': 10,

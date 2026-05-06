@@ -909,7 +909,7 @@ class TestCheckHttpToHttpsRedirect(unittest.TestCase):
                 {'url': 'http://rfr.bz/', 'status': 301},
                 {'url': 'https://rfr.bz/', 'status': 302},
             ],
-            'final_url': 'https://sociamonials.com/',
+            'final_url': 'https://example.com/',
             'error': None,
         }
         with patch('reveal.adapters.domain.adapter._follow_redirect_chain', return_value=mock_chain):

@@ -316,7 +316,7 @@ messages:
         Tree-sitter returns byte offsets. Slicing a Python str with byte offsets
         corrupts key names whenever a multibyte character (e.g. em-dash U+2014 =
         3 bytes) appears in an earlier value. Regression for the bug where
-        sociamonials-ops.yaml keys after the long description rendered as garbage.
+        a real-world YAML's keys after the long description rendered as garbage.
         """
         code = (
             'first: "value with em—dash"\n'  # em-dash = 3 UTF-8 bytes

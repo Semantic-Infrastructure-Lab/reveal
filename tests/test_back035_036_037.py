@@ -20,33 +20,33 @@ from reveal.adapters.claude.renderer import ClaudeRenderer
 # ─── BACK-036: _extract_project_from_dir ──────────────────────────────────────
 
 class TestExtractProjectFromDir:
-    def test_tia_sessions_dir(self):
+    def test_workflow_sessions_dir(self):
         assert ClaudeAdapter._extract_project_from_dir(
-            '-home-scottsen-src-tia-sessions-hosefobe-0314'
-        ) == 'tia'
+            '-home-user-src-myapp-sessions-foo-0314'
+        ) == 'myapp'
 
     def test_reveal_project_dir(self):
         result = ClaudeAdapter._extract_project_from_dir(
-            '-home-scottsen-src-projects-reveal-external-git'
+            '-home-user-src-projects-reveal-external-git'
         )
         assert result == 'reveal'
 
-    def test_sdms_sessions_dir(self):
+    def test_nested_platform_sessions_dir(self):
         assert ClaudeAdapter._extract_project_from_dir(
-            '-home-scottsen-src-projects-sdms-platform-sessions-foo-0301'
+            '-home-user-src-projects-bigapp-platform-sessions-foo-0301'
         ) == 'platform'
 
-    def test_squaroids_project(self):
+    def test_games_subdir_project(self):
         result = ClaudeAdapter._extract_project_from_dir(
-            '-home-scottsen-src-projects-games-squaroids'
+            '-home-user-src-projects-games-tetris'
         )
-        assert result == 'squaroids'
+        assert result == 'tetris'
 
     def test_no_sessions_marker(self):
         result = ClaudeAdapter._extract_project_from_dir(
-            '-home-scottsen-src-tia'
+            '-home-user-src-myapp'
         )
-        assert result == 'tia'
+        assert result == 'myapp'
 
     def test_empty_dir_name(self):
         result = ClaudeAdapter._extract_project_from_dir('')
@@ -61,7 +61,7 @@ class TestExtractProjectFromDir:
 
 class TestCollectSessionsDirFields:
     def test_readme_present_true(self, tmp_path):
-        project_dir = tmp_path / '-home-user-src-tia-sessions-foo-0301'
+        project_dir = tmp_path / '-home-user-src-myapp-sessions-foo-0301'
         project_dir.mkdir()
         (project_dir / 'README.md').write_text('# Session')
         (project_dir / 'session.jsonl').write_text(
@@ -72,7 +72,7 @@ class TestCollectSessionsDirFields:
         assert sessions[0]['readme_present'] is True
 
     def test_readme_present_false(self, tmp_path):
-        project_dir = tmp_path / '-home-user-src-tia-sessions-bar-0302'
+        project_dir = tmp_path / '-home-user-src-myapp-sessions-bar-0302'
         project_dir.mkdir()
         (project_dir / 'session.jsonl').write_text(
             json.dumps({'type': 'user', 'message': {'content': 'hi'}}) + '\n'
@@ -92,17 +92,17 @@ class TestCollectSessionsDirFields:
         assert sessions[0]['readme_present'] is True
 
     def test_project_field_present(self, tmp_path):
-        project_dir = tmp_path / '-home-scottsen-src-tia-sessions-baz-0303'
+        project_dir = tmp_path / '-home-user-src-myapp-sessions-baz-0303'
         project_dir.mkdir()
         (project_dir / 'session.jsonl').write_text(
             json.dumps({'type': 'user', 'message': {'content': 'hi'}}) + '\n'
         )
         sessions = ClaudeAdapter._collect_sessions_from_dir(project_dir)
-        assert sessions[0]['project'] == 'tia'
+        assert sessions[0]['project'] == 'myapp'
 
     def test_all_sessions_share_same_readme_and_project(self, tmp_path):
         """All JSONL files in one dir share the same readme_present and project."""
-        project_dir = tmp_path / '-home-scottsen-src-tia-sessions-multi-0303'
+        project_dir = tmp_path / '-home-user-src-myapp-sessions-multi-0303'
         project_dir.mkdir()
         (project_dir / 'README.md').write_text('# Session')
         for i in range(3):
@@ -112,7 +112,7 @@ class TestCollectSessionsDirFields:
         sessions = ClaudeAdapter._collect_sessions_from_dir(project_dir)
         assert len(sessions) == 3
         assert all(s['readme_present'] is True for s in sessions)
-        assert all(s['project'] == 'tia' for s in sessions)
+        assert all(s['project'] == 'myapp' for s in sessions)
 
     def test_agent_jsonl_skipped(self, tmp_path):
         project_dir = tmp_path / '-home-user-src-app'
@@ -205,13 +205,13 @@ def _render_list(sessions, total=None):
 class TestRendererListColumns:
     def test_readme_present_shows_checkmark(self):
         sessions = [{'session': 'foo-0314', 'modified': '2026-03-14T10:00:00',
-                     'size_kb': 10, 'readme_present': True, 'project': 'tia', 'title': 'Test'}]
+                     'size_kb': 10, 'readme_present': True, 'project': 'myapp', 'title': 'Test'}]
         out = _render_list(sessions)
         assert '✓' in out
 
     def test_readme_absent_shows_x(self):
         sessions = [{'session': 'bar-0314', 'modified': '2026-03-14T10:00:00',
-                     'size_kb': 10, 'readme_present': False, 'project': 'tia', 'title': 'Test'}]
+                     'size_kb': 10, 'readme_present': False, 'project': 'myapp', 'title': 'Test'}]
         out = _render_list(sessions)
         assert '✗' in out
 

@@ -500,7 +500,7 @@ class TestM501TodoFixme(unittest.TestCase):
     def test_skip_templates_path(self):
         """Files under reveal/templates/ are not flagged."""
         content = "# TODO: scaffold placeholder\n"
-        path = "/home/scottsen/src/projects/reveal/external-git/reveal/templates/foo.py"
+        path = "/project/reveal/templates/foo.py"
         self.assertEqual(self._check(content, path=path), [])
 
     def test_skip_demo_adapter(self):

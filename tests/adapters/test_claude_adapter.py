@@ -570,12 +570,12 @@ class TestSearchSubcommand:
 
     def test_search_subpath_uses_path_term(self, tmp_path):
         """claude://search/<term> extracts the term from the path."""
-        adapter = ClaudeAdapter('search/topstep', query=None)
+        adapter = ClaudeAdapter('search/payments', query=None)
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
             result = adapter.get_structure()
 
         assert result['type'] == 'claude_cross_session_search'
-        assert result['term'] == 'topstep'
+        assert result['term'] == 'payments'
 
 
 class TestFindConversationAgentFilter:
@@ -829,7 +829,7 @@ class TestSessionDiscovery:
         # Mock the CONVERSATION_BASE to fixtures dir
         with patch.object(adapter, 'CONVERSATION_BASE', FIXTURES_DIR.parent):
             # Create expected directory structure
-            test_dir = FIXTURES_DIR.parent / '-home-scottsen-src-tia-sessions-test-session'
+            test_dir = FIXTURES_DIR.parent / '-home-user-src-myapp-sessions-test-session'
             test_dir.mkdir(exist_ok=True)
             test_file = test_dir / 'conversation.jsonl'
             test_file.write_text('{}')

@@ -1028,7 +1028,7 @@ class TestClassifyCallReceiver(unittest.TestCase):
         self.assertIsNone(classify_call('dict.get'))
 
     def test_actual_pos_get_unclassified(self):
-        # Observed live in peyton arbiter/src/execution.py:359.
+        # Real-world false positive: `actual_pos.get(...)` on a dict.
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertIsNone(classify_call('actual_pos.get'))
 
