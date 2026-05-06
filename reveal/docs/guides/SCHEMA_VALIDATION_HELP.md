@@ -21,8 +21,8 @@ Reveal validates markdown YAML front matter using **schema-aware quality rules (
 ## Quick Start
 
 ```bash
-# Validate Beth session README
-reveal README.md --validate-schema beth
+# Validate session README
+reveal README.md --validate-schema session
 
 # Validate Hugo blog post or static page
 reveal content/posts/article.md --validate-schema hugo
@@ -40,10 +40,10 @@ reveal vault/notes/project.md --validate-schema obsidian
 reveal document.md --validate-schema /path/to/custom-schema.yaml
 
 # JSON output for CI/CD
-reveal README.md --validate-schema beth --format json
+reveal README.md --validate-schema session --format json
 
 # Select specific validation rules
-reveal README.md --validate-schema beth --select F003,F004
+reveal README.md --validate-schema session --select F003,F004
 ```
 
 ---
@@ -52,17 +52,17 @@ reveal README.md --validate-schema beth --select F003,F004
 
 | Schema | Purpose | Required Fields | Community Reach |
 |--------|---------|----------------|----------------|
-| **beth** | Beth session READMEs | `session_id`, `beth_topics` | Workflow sessions |
+| **session** | Session/workflow READMEs | `session_id` | Workflow sessions |
 | **hugo** | Hugo static sites | `title` | 500K+ users |
 | **jekyll** | Jekyll (GitHub Pages) | `layout` | **1M+ users** |
 | **mkdocs** | MkDocs documentation | _(none)_ | Large Python ecosystem |
 | **obsidian** | Obsidian vaults | _(none)_ | 500K+ users |
 
-### Beth Schema
+### Session Schema
 **Target:** Session README files
 **Required:**
 - `session_id` - Pattern: `word-word-MMDD` (e.g., `cloudy-steam-0103`)
-- `beth_topics` - List of topics (minimum 1)
+- `topics` - List of topics (minimum 1)
 
 **Optional:** date, badge, type, project, files_modified, files_created, commits
 
@@ -76,7 +76,7 @@ reveal README.md --validate-schema beth --select F003,F004
 session_id: cloudy-steam-0103
 date: 2026-01-03
 badge: "Schema validation release prep"
-beth_topics: [reveal, schema-validation, release-management]
+topics: [reveal, schema-validation, release-management]
 type: production-execution
 ---
 ```
@@ -190,14 +190,14 @@ created: 2026-01-03
 ```
 /path/to/file.md:1:1 ⚠️  F001 No front matter found in markdown file
   💡 Add front matter block at top of file
-  📝 Schema: Beth Session Schema
+  📝 Schema: Session/Workflow Schema
 ```
 
 **How to fix:**
 ```markdown
 ---
 session_id: my-session-0103
-beth_topics: [testing]
+topics: [testing]
 ---
 
 # Your Content
@@ -274,7 +274,7 @@ tags: [single-tag, another-tag]
 ```
 /path/to/file.md:1:1 ⚠️  F005 Custom validation failed: Session ID format invalid
   💡 Session ID must match pattern: word-word-MMDD
-  📝 Schema: Beth Session Schema
+  📝 Schema: Session/Workflow Schema
 ```
 
 **How to fix:**
@@ -294,14 +294,14 @@ session_id: cloudy-steam-0103
 Default output for terminal use:
 
 ```bash
-reveal README.md --validate-schema beth
+reveal README.md --validate-schema session
 ```
 
 **Output:**
 ```
 /path/to/README.md:1:1 ⚠️  F003 Required field 'session_id' missing from front matter
   💡 Add 'session_id' to front matter
-  📝 Schema: Beth Session Schema
+  📝 Schema: Session/Workflow Schema
 
 1 issue found
 ```
@@ -310,7 +310,7 @@ reveal README.md --validate-schema beth
 Structured output for automation:
 
 ```bash
-reveal README.md --validate-schema beth --format json
+reveal README.md --validate-schema session --format json
 ```
 
 **Output:**
@@ -325,7 +325,7 @@ reveal README.md --validate-schema beth --format json
       "message": "Required field 'session_id' missing from front matter",
       "severity": "medium",
       "suggestion": "Add 'session_id' to front matter",
-      "context": "Schema: Beth Session Schema"
+      "context": "Schema: Session/Workflow Schema"
     }
   ],
   "summary": {
@@ -341,7 +341,7 @@ reveal README.md --validate-schema beth --format json
 Minimal output for scripting:
 
 ```bash
-reveal README.md --validate-schema beth --format grep
+reveal README.md --validate-schema session --format grep
 ```
 
 **Output:**
@@ -373,7 +373,7 @@ jobs:
       - name: Validate session READMEs
         run: |
           for file in sessions/*/README.md; do
-            reveal "$file" --validate-schema beth || exit 1
+            reveal "$file" --validate-schema session || exit 1
           done
       - name: Validate blog posts
         run: |
@@ -391,7 +391,7 @@ jobs:
 # Validate staged markdown files
 for file in $(git diff --cached --name-only --diff-filter=ACM | grep '\.md$'); do
   if [[ $file == sessions/*/README.md ]]; then
-    reveal "$file" --validate-schema beth || exit 1
+    reveal "$file" --validate-schema session || exit 1
   elif [[ $file == content/posts/*.md ]]; then
     reveal "$file" --validate-schema hugo || exit 1
   fi
@@ -491,7 +491,7 @@ validation_rules:
 
 ```bash
 # Validate all session READMEs
-find sessions -name "README.md" -exec reveal {} --validate-schema beth \;
+find sessions -name "README.md" -exec reveal {} --validate-schema session \;
 
 # Validate all blog posts
 find content/posts -name "*.md" -exec reveal {} --validate-schema hugo \;
@@ -505,7 +505,7 @@ find docs -name "*.md" -exec reveal {} --validate-schema mkdocs --format json \;
 
 ```bash
 # Only check required fields
-reveal README.md --validate-schema beth --select F003
+reveal README.md --validate-schema session --select F003
 
 # Check types and custom rules only
 reveal post.md --validate-schema hugo --select F004,F005
@@ -518,11 +518,11 @@ reveal note.md --validate-schema obsidian --ignore F002
 
 ```bash
 # Find all issues, output as JSON, filter with jq
-reveal README.md --validate-schema beth --format json | \
+reveal README.md --validate-schema session --format json | \
   jq '.detections[] | select(.severity == "high")'
 
 # Count issues by rule code
-reveal README.md --validate-schema beth --format json | \
+reveal README.md --validate-schema session --format json | \
   jq '.detections | group_by(.code) | map({code: .[0].code, count: length})'
 ```
 
@@ -541,7 +541,7 @@ Error: Schema 'myschema' not found
 1. Check spelling (case-sensitive)
 2. Use full path for custom schemas: `/path/to/schema.yaml`
 3. Verify schema file exists and is readable
-4. List available built-in schemas: `beth`, `hugo`, `jekyll`, `mkdocs`, `obsidian`
+4. List available built-in schemas: `session`, `hugo`, `jekyll`, `mkdocs`, `obsidian`
 
 ### Invalid YAML Syntax
 
@@ -580,7 +580,7 @@ F005 Custom validation failed: <expression>
 **Debug:**
 ```bash
 # Show all rules being run
-reveal README.md --validate-schema beth --verbose
+reveal README.md --validate-schema session --verbose
 
 # Check which rules are selected
 reveal --rules | grep F00
@@ -608,7 +608,7 @@ reveal --rules | grep F00
 ## Version History
 
 - **v0.29.0** - Initial release (Jan 2026)
-  - 5 built-in schemas (beth, hugo, jekyll, mkdocs, obsidian)
+  - 5 built-in schemas (session, hugo, jekyll, mkdocs, obsidian)
   - F001-F005 validation rules
   - Custom schema support
   - CI/CD integration (exit codes, JSON output)
@@ -618,13 +618,13 @@ reveal --rules | grep F00
 
 | Flag | Description |
 |------|-------------|
-| `--validate-schema SCHEMA` | Validate front matter against named or custom schema (e.g., `beth`, `hugo`, `/path/schema.yaml`) |
+| `--validate-schema SCHEMA` | Validate front matter against named or custom schema (e.g., `session`, `hugo`, `/path/schema.yaml`) |
 | `--list-schemas` | List all available built-in schemas |
 
 ```bash
-reveal README.md --validate-schema beth         # Validate against beth schema
+reveal README.md --validate-schema session         # Validate against session schema
 reveal README.md --validate-schema hugo         # Validate against hugo schema
-reveal . --validate-schema beth --format json   # Directory batch + JSON output
+reveal . --validate-schema session --format json   # Directory batch + JSON output
 reveal README.md --list-schemas                 # Show available built-in schemas
 ```
 

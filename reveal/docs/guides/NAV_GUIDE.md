@@ -111,5 +111,4 @@ Different scope, different question.
 ## See Also
 
 - [`AGENT_HELP.md`](../AGENT_HELP.md) — full reference with output samples for every flag
-- [`PROBE_PARITY_GAPS.md`](PROBE_PARITY_GAPS.md) — maintainer tracker for nav-layer feature gaps
 - [`WHAT_IS_REVEAL_GOOD_FOR.md`](WHAT_IS_REVEAL_GOOD_FOR.md) §5 — narrative use cases for nav flags

@@ -79,7 +79,7 @@ The URI query param form is preferred for pipelines — options travel with the
 resource string and compose naturally:
 
 ```bash
-reveal 'autossl://latest?user=sociamonials&only-failures'
+reveal 'autossl://latest?user=acme&only-failures'
 ```
 
 ---
@@ -197,7 +197,7 @@ Key fields:
   "domain_count": 847,
   "users": [
     {
-      "username": "sociamonials",
+      "username": "acme",
       "domains": [
         {
           "domain": "app.example.com",

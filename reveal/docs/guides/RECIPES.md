@@ -1103,14 +1103,14 @@ reveal 'claude://?since=today'
 
 ```bash
 # Find all sessions that mention a keyword
-reveal 'claude://?search=topstep'
+reveal 'claude://?search=migration'
 
 # Scope to recent sessions (recommended for large histories)
 reveal 'claude://?search=authentication&since=today'
 reveal 'claude://?search=deployment&since=2026-03-01'
 
 # Path-style alias (same result)
-reveal 'claude://search/topstep'
+reveal 'claude://search/migration'
 ```
 
 **Why:** With 2,000+ sessions, scanning manually doesn't scale. `?search=` pre-filters with parallel byte-scan (~0.7s for 2,700 files).

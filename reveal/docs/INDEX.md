@@ -97,7 +97,6 @@ Core reference and technical specifications:
 | [QUERY_PARAMETER_REFERENCE.md](guides/QUERY_PARAMETER_REFERENCE.md) | 363 | Query parameters for all adapters |
 | [FIELD_SELECTION_GUIDE.md](guides/FIELD_SELECTION_GUIDE.md) | 658 | Token reduction with --fields and budgets |
 | [ELEMENT_DISCOVERY_GUIDE.md](guides/ELEMENT_DISCOVERY_GUIDE.md) | 701 | Progressive disclosure with available_elements |
-| [PROBE_PARITY_GAPS.md](guides/PROBE_PARITY_GAPS.md) | — | Maintainer tracker: probe overlap, docs/help discoverability gaps, and real feature gaps |
 | [OUTPUT_CONTRACT.md](development/OUTPUT_CONTRACT.md) | 678 | JSON output specification |
 | [CONFIGURATION_GUIDE.md](guides/CONFIGURATION_GUIDE.md) | 662 | Configuration options and .reveal.yaml |
 | [CLI_INTEGRATION_GUIDE.md](development/CLI_INTEGRATION_GUIDE.md) | 281 | CLI integration patterns |
@@ -176,7 +175,6 @@ Complete reference for AI agent integration:
 - "For AI agents?" → [AGENT_HELP.md](AGENT_HELP.md)
 - "How does Reveal work internally?" → [ARCHITECTURE.md](../../ARCHITECTURE.md)
 - "Create custom adapter?" → [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md)
-- "What probe-style gaps still exist?" → [PROBE_PARITY_GAPS.md](guides/PROBE_PARITY_GAPS.md)
 
 **By Adapter**:
 Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-19-files) above.
