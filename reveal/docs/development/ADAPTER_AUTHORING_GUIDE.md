@@ -44,8 +44,6 @@ from reveal.adapters.base import ResourceAdapter, register_adapter, register_ren
 
 Internal package imports (`from .renderer import MyRenderer`) stay relative — those still work.
 
-See `internal-docs/BACKLOG.md §BACK-256` for history.
-
 ---
 
 ## Quick Start

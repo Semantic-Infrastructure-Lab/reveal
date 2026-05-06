@@ -31,7 +31,7 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
   - [Inspect Claude install state](#inspect-claude-install-state)
 - [JSON Navigation](#json-navigation)
 - [Database Operations](#database-operations)
-- [Spreadsheet & BI Inspection](#spreadsheet--bi-inspection)
+- [Spreadsheet and BI Inspection](#spreadsheet-and-bi-inspection)
 - [Infrastructure](#infrastructure)
   - [SSL certificate inspection](#ssl-certificate-inspection)
   - [On-disk certificate inspection](#on-disk-certificate-inspection)
@@ -880,7 +880,7 @@ reveal diff://sqlite://./dev.db:sqlite://./prod.db
 
 ---
 
-## Spreadsheet & BI Inspection
+## Spreadsheet and BI Inspection
 
 ### Explore an Excel workbook like a dataset
 

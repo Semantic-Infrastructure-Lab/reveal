@@ -699,5 +699,6 @@ reveal scaffold rule B007                     # new quality rule stub
 ### See Also
 
 - `reveal dev` — Developer tooling (includes scaffold wrappers)
-- `ADAPTER_AUTHORING_GUIDE.md` — Full adapter authoring guide
+- [ADAPTER_AUTHORING_GUIDE.md](../development/ADAPTER_AUTHORING_GUIDE.md) — Full adapter authoring guide
+- [RECIPES.md](RECIPES.md) — Task patterns that exercise the subcommands
 - `reveal help://scaffolding` — In-tool scaffolding reference

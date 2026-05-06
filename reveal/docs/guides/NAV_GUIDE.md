@@ -1,3 +1,7 @@
+---
+title: Deep-Dive Code Navigation (Nav Flags)
+category: guide
+---
 # Deep-Dive Code Navigation (Nav Flags)
 
 **One-line summary:** Pinpoint inspection inside a function or line range — control flow, data flow, side effects, and refactor pre-flight, all without reading the file top-to-bottom.

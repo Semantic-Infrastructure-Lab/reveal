@@ -219,3 +219,4 @@ reveal 'ast://file.py?name~=auth' | reveal --stdin --check
 - `reveal help://query-syntax` — Query operator reference (=, !=, >, ~=, ..)
 - `reveal help://query-parameter-reference` — Per-adapter query param documentation
 - [ADAPTER_CONSISTENCY.md](../development/ADAPTER_CONSISTENCY.md) — Architectural rationale
+- [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md) — Full query operator reference

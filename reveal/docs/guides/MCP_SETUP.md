@@ -177,3 +177,11 @@ reveal-mcp --help
 # Test directly (JSON-RPC over stdin)
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | reveal-mcp
 ```
+
+---
+
+## See Also
+
+- [../QUICK_START.md](../QUICK_START.md) — Ground yourself on the CLI before exposing reveal as MCP tools.
+- [RECIPES.md](RECIPES.md) — Task patterns that map directly onto the `reveal_*` MCP tools.
+- [../adapters/CLAUDE_ADAPTER_GUIDE.md](../adapters/CLAUDE_ADAPTER_GUIDE.md) — `claude://` adapter for inspecting Claude Code session transcripts.

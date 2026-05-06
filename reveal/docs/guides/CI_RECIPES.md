@@ -323,3 +323,11 @@ making them directly usable as CI gates with `|| exit 1`.
 **Advisory vs blocking**: Use exit 0 for first-time adoption (shows issues without blocking), then move to exit 1 once the team is used to the output.
 
 **Caching**: reveal has no index to cache — each run is fresh. This is intentional (no stale data) and keeps setup simple.
+
+---
+
+## See Also
+
+- [RECIPES.md](RECIPES.md) — General task recipes (CI is one application of these).
+- [SUBCOMMANDS_GUIDE.md](SUBCOMMANDS_GUIDE.md) — Reference for `review`, `check`, `health`, `pack`, `hotspots`.
+- [../QUICK_START.md](../QUICK_START.md) — First-run orientation before wiring into CI.

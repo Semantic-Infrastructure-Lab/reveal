@@ -169,3 +169,11 @@ reveal 'calls://reveal/?target=handle_file' | wc -c
 reveal 'ast://reveal/?show=functions' | wc -c
 reveal 'calls://reveal/?uncalled' | wc -c
 ```
+
+---
+
+## See Also
+
+- [QUICK_START.md](QUICK_START.md) — 5-minute intro to reveal's progressive-disclosure model.
+- [WHY_REVEAL.md](WHY_REVEAL.md) — Token-economics rationale behind these numbers.
+- [guides/RECIPES.md](guides/RECIPES.md) — Task-driven examples that exercise the patterns measured here.
