@@ -23,14 +23,14 @@ Reveal auto-discovers adapter packages from:
 Each plugin is a **package directory** (not a single file), matching the structure of built-in adapters:
 
 ```
-arbiter/.reveal/adapters/
-  trades/
-    __init__.py      # from .adapter import TradesAdapter
-    adapter.py       # @register_adapter('trades')
+myproject/.reveal/adapters/
+  myscheme/
+    __init__.py      # from .adapter import MySchemeAdapter
+    adapter.py       # @register_adapter('myscheme')
     renderer.py
-  signals/
+  otherscheme/
     __init__.py
-    adapter.py       # @register_adapter('signals')
+    adapter.py       # @register_adapter('otherscheme')
     renderer.py
 ```
 

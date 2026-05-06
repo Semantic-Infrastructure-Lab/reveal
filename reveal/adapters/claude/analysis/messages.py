@@ -294,7 +294,7 @@ def get_messages(messages: List[Dict], session_name: str,
     """Extract assistant narrative text turns (not tool calls).
 
     Returns what the assistant *said* — explanations, summaries, decisions —
-    not tool use records. Useful for understanding what Peyton/Claude was
+    not tool use records. Useful for understanding what the assistant was
     thinking and communicating, not just what it did.
 
     Args:
