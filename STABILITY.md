@@ -265,7 +265,7 @@ Tree-sitter extraction only, basic structure, no custom analyzers:
 **Beta flags:**
 - `--copy` / `-c` (clipboard)
 - `--frontmatter`, `--metadata`, `--semantic`, `--scripts`, `--styles` (HTML/Markdown)
-- `--agent-help`, `--agent-help-full` (AI agent guides)
+- `--agent-help` (AI agent guide)
 - `--validate-schema` (schema validation)
 - `--rules`, `--explain`, `--select` (quality rules)
 

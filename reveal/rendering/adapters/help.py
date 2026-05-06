@@ -13,7 +13,7 @@ PROJECT_ADAPTERS = {'claude'}
 
 GUIDE_CATEGORIES = {
     'getting_started': ['quick-start'],
-    'ai_guides': ['agent', 'agent-full', 'mcp'],
+    'ai_guides': ['agent', 'mcp'],
     'feature_guides': ['python-guide', 'markdown', 'reveal-guide', 'html', 'configuration', 'schemas', 'duplicates'],
     'best_practices': ['anti-patterns', 'tricks', 'ux'],
     'dev_guides': ['adapter-authoring', 'help'],
@@ -22,7 +22,6 @@ GUIDE_CATEGORIES = {
 TOKEN_ESTIMATES = {
     'quick-start': '~2,000',
     'agent': '~12,000',
-    'agent-full': '~12,000',
     'python-guide': '~2,500',
     'markdown': '~4,000',
     'reveal-guide': '~3,000',
@@ -278,8 +277,7 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
             GUIDE_CATEGORIES['ai_guides'],
             static, static_help_map,
             {
-                'agent': '\n                     Alias: --agent-help flag',
-                'agent-full': '\n                     Alias: --agent-help-full flag'
+                'agent': '\n                     Alias: --agent-help flag'
             }
         )
 
@@ -314,7 +312,6 @@ def _get_guide_description(topic: str) -> str:
     descriptions = {
         'quick-start': '5-minute introduction to reveal',
         'agent': 'Complete agent guide (task-based patterns, all adapters, troubleshooting)',
-        'agent-full': 'Complete agent guide (alias for agent)',
         'python': 'Python adapter with examples (duplicate of python-guide)',
         'python-guide': 'Python adapter deep dive',
         'reveal-guide': 'reveal:// adapter reference',
@@ -346,7 +343,8 @@ def _render_help_static_guide(data: Dict[str, Any]) -> None:
     topic = data.get('topic', 'unknown')
     file = data.get('file', 'unknown')
 
-    print(f"<!-- Source: {file} | Type: Static Guide | Access: reveal help://{topic} or --agent-help{'-full' if topic == 'agent-full' else ''} -->")
+    access_hint = " or --agent-help" if topic == 'agent' else ""
+    print(f"<!-- Source: {file} | Type: Static Guide | Access: reveal help://{topic}{access_hint} -->")
     print()
 
     print(data['content'])

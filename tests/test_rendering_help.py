@@ -96,11 +96,6 @@ class TestGetGuideDescription(unittest.TestCase):
         desc = _get_guide_description('agent')
         self.assertEqual(desc, 'Complete agent guide (task-based patterns, all adapters, troubleshooting)')
 
-    def test_agent_full_description(self):
-        """Should return correct description for agent-full guide."""
-        desc = _get_guide_description('agent-full')
-        self.assertEqual(desc, 'Complete agent guide (alias for agent)')
-
     def test_python_guide_description(self):
         """Should return correct description for python-guide."""
         desc = _get_guide_description('python-guide')
@@ -174,7 +169,7 @@ class TestRenderHelpListMode(unittest.TestCase):
     def test_with_static_guides(self):
         """Should render static guides section."""
         data = {
-            'static_guides': ['agent', 'agent-full', 'python-guide', 'anti-patterns']
+            'static_guides': ['agent', 'python-guide', 'anti-patterns']
         }
         output = capture_stdout(_render_help_list_mode, data)
         self.assertIn('STATIC GUIDES', output)
@@ -214,16 +209,6 @@ class TestRenderHelpStaticGuide(unittest.TestCase):
         self.assertIn('reveal help://agent', output)
         self.assertIn('# Agent Guide', output)
         self.assertIn('Some content here.', output)
-
-    def test_agent_full_alias(self):
-        """Should include -full suffix for agent-full topic."""
-        data = {
-            'topic': 'agent-full',
-            'file': 'agent-full.md',
-            'content': '# Full Guide'
-        }
-        output = capture_stdout(_render_help_static_guide, data)
-        self.assertIn('--agent-help-full', output)
 
     def test_error_handling(self):
         """Should handle error data and exit."""

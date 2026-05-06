@@ -447,8 +447,8 @@ A: Architecture is complete, implementation is planned. It's the highest-priorit
 ## Related Documentation
 
 **User Guides:**
-- `reveal help://agent` - AI agent quick reference (includes duplicate detection patterns)
-- `reveal --agent-help-full` - Complete AI agent guide
+- `reveal help://agent` - AI agent reference (includes duplicate detection patterns)
+- `reveal --agent-help` - Complete AI agent guide (~12K tokens)
 
 **Implementation:**
 - `reveal/rules/duplicates/D001.py` - Exact duplicate detection (186 lines)

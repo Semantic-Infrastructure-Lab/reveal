@@ -256,9 +256,9 @@ Three help tiers serve different consumers:
 
 | Tier | Command | Audience | Token cost |
 |------|---------|----------|------------|
-| 1 | `reveal --help` | Humans — CLI flag reference | Low |
-| 2 | `reveal help://<adapter>` | Humans + agents — structured adapter guide | Medium |
-| 3 | `reveal --agent-help` / `reveal --agent-help-full` | AI agents — llms.txt-style brief | Low / High |
+| 1 | `reveal --help` | Humans — argparse-generated flag/subcommand reference | Low |
+| 2 | `reveal help://<topic>` | Humans + agents — progressive per-topic discovery | Medium |
+| 3 | `reveal --agent-help` | AI agents — comprehensive task-pattern recipe reference | High (~12K tokens) |
 
 ### Schema Discovery
 

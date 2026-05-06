@@ -18,7 +18,6 @@ from .introspection import (
     handle_show_ast,
     handle_language_info,
     handle_agent_help,
-    handle_agent_help_full,
     handle_schema,
     _get_schema_v1,
     handle_rules_list,
@@ -59,7 +58,6 @@ from .decorators import (
 # Backward compatibility aliases (private names used in main.py)
 _handle_list_supported = handle_list_supported
 _handle_agent_help = handle_agent_help
-_handle_agent_help_full = handle_agent_help_full
 _handle_rules_list = handle_rules_list
 _handle_explain_rule = handle_explain_rule
 _handle_stdin_mode = handle_stdin_mode
@@ -77,7 +75,6 @@ __all__ = [
     'handle_show_ast',
     'handle_language_info',
     'handle_agent_help',
-    'handle_agent_help_full',
     'handle_schema',
     'handle_rules_list',
     'handle_explain_rule',
@@ -110,7 +107,6 @@ __all__ = [
     # Compat aliases
     '_handle_list_supported',
     '_handle_agent_help',
-    '_handle_agent_help_full',
     '_handle_rules_list',
     '_handle_explain_rule',
     '_handle_stdin_mode',

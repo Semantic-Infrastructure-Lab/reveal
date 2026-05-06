@@ -48,7 +48,6 @@ reveal --help
 **Usage:**
 ```bash
 reveal --agent-help           # Complete guide (~12,000 tokens)
-reveal --agent-help-full      # Same as --agent-help (alias)
 ```
 
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -178,7 +177,7 @@ reveal/docs/
 - Auto-updates when new adapters registered
 
 **Static Content** (Markdown Files):
-- AI agent guides (`help://agent`, `help://agent-full`)
+- AI agent guide (`help://agent`)
 - Feature guides (`help://python-guide`, `help://markdown`)
 - Best practices (`help://tricks`, `help://anti-patterns`)
 - Development (`help://adapter-authoring`)

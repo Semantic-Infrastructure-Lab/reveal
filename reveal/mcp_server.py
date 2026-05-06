@@ -109,7 +109,6 @@ def _default_args(**overrides) -> Namespace:
         show_ast=False,
         language_info=None,
         agent_help=False,
-        agent_help_full=False,
         discover=False,
         head=None,
         tail=None,

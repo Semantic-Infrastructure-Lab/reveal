@@ -12,11 +12,20 @@ category: guide
 
 ## About This Guide
 
-This is the complete offline reference for reveal (~26,500 tokens). Both `--agent-help` and `--agent-help-full` serve this file.
+**Audience:** AI agents (Claude Code, Copilot, Cursor, ...) loading reveal context once.
 
-**For interactive usage:** Use `reveal help://topic` for progressive, low-token discovery.
-- `reveal help://ast` - AST adapter details
-- `reveal help://tricks` - Cool tricks and hidden features
+**This guide answers:** *"Given task X, what's the canonical reveal recipe?"* — task-pattern recipes, adapter reference, anti-patterns, troubleshooting. Hand-curated and versioned with reveal.
+
+**For raw flag and subcommand listing** (the "what flags exist?" question), use `reveal --help` instead — it's argparse-generated and always reflects the live CLI.
+
+**For progressive, low-token discovery** (one topic at a time), use `reveal help://<topic>`:
+- `reveal help://` — index of all topics
+- `reveal help://ast` — AST adapter details
+- `reveal help://tricks` — cool tricks and hidden features
+- `reveal help://schemas/<adapter>` — machine-readable adapter schema
+- `reveal help://examples/<task>` — query recipes per task
+
+`--help`, `--agent-help`, and `help://` complement each other — they don't overlap.
 
 ---
 
@@ -40,6 +49,9 @@ reveal help://examples/<task>    # Canonical query recipes per task category
 
 # This guide — comprehensive reference
 reveal --agent-help              # Same content as this file (~12K tokens)
+
+# Raw flag/subcommand listing (different surface — argparse-generated)
+reveal --help                    # Every flag, every subcommand, with one-liners
 ```
 
 **For agents: the canonical discovery recipe** is `reveal --discover` (full registry as JSON in one call) or, for a single adapter, `reveal help://schemas/<adapter> --format=json`. Both return query params, operators, output schemas, and example queries — generate valid queries from the schema rather than hardcoding URI syntax.
@@ -1383,6 +1395,39 @@ reveal dev inspect-config                      # Show effective .reveal.yaml res
 **Use case:** Reveal is intentionally extensible — when an agent needs to navigate a domain reveal doesn't yet understand (a custom DSL, a proprietary file format, an internal service), scaffold an adapter rather than hand-rolling parsing logic. The scaffolds include test stubs and follow the contract enforced by reveal's own quality rules.
 
 > Note: `reveal scaffold <kind>` is an older alias of `reveal dev new-*`. Both work; prefer `reveal dev` for new work — it's the maintained surface and adds `inspect-config`.
+
+---
+
+### Task: "Inspect environment variables (env://)"
+
+**Pattern:**
+```bash
+reveal env://                              # All env vars, auto-categorized (System / Python / Node / Application / Custom)
+reveal env://PATH                          # Get a specific variable
+reveal env:// --format=json                # Machine-readable, for scripts
+reveal env:// --format=grep                # Pipeable KEY=VALUE
+```
+
+**What's auto-categorized:** System (PATH, HOME, SHELL, USER), Python (PYTHON*, VIRTUAL*, PYTHONPATH), Node (NODE*, NPM*, NVM*), Application (APP_*, DATABASE_*, REDIS_*, API_*), Custom (everything else). Sensitive values (passwords, tokens, API keys) are auto-redacted.
+
+**Discovery:** `reveal help://schemas/env --format=json` for the full param list.
+
+**Use case:** Check which env vars an agent or shell sees without dumping a 200-line `env` and grepping. Combine with `reveal surface` to map *reads* in code against what's *set* in the environment.
+
+---
+
+### Task: "Surface architectural seams (ABCs, Protocols, TypedDicts, dataclasses)"
+
+**Pattern:**
+```bash
+reveal contracts .                         # All architectural seams in a tree
+reveal contracts src/ --format=json        # Machine-readable, for diffing across versions
+reveal contracts src/services/             # Scope to a subsystem
+```
+
+**What it finds:** Abstract base classes (ABC, ABCMeta), `typing.Protocol` definitions, `TypedDict` schemas, `@dataclass` declarations, NamedTuple classes — the structural contracts a codebase exposes between modules.
+
+**Use case:** Before refactoring or extending a module, see the *interfaces* it ships rather than the implementation. Pairs well with `reveal architecture` (entry points + abstractions) and `reveal surface` (external boundaries) to build a 3-pass mental model: **architecture** → **contracts** → **surface**.
 
 ---
 
@@ -3731,7 +3776,7 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 ## Help System Overview
 
 **For AI agents (you):**
-- **Complete guide** (`reveal --agent-help` or `reveal --agent-help-full`) - This file (~12,000 tokens)
+- **Complete guide** (`reveal --agent-help`) - This file (~12,000 tokens)
 - **Progressive help** (`reveal help://topic`) - Low-token per-topic exploration
 
 **For humans:**

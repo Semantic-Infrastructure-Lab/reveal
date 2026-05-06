@@ -151,15 +151,6 @@ def handle_agent_help():
     sys.exit(0)
 
 
-def handle_agent_help_full():
-    """Handle --agent-help-full flag.
-
-    AGENT_HELP.md and AGENT_HELP_FULL.md were consolidated into a single file
-    at commit 9292da3. This flag is now an alias for --agent-help.
-    """
-    handle_agent_help()
-
-
 def handle_schema(version: Optional[str] = None):
     """Handle --schema flag to show Output Contract specification.
 

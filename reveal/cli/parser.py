@@ -225,9 +225,7 @@ def _add_discovery_options(group) -> None:
     group.add_argument('--language-info', type=str, metavar='LANG',
                        help='Show detailed information about a language (e.g., --language-info python or --language-info .py)')
     group.add_argument('--agent-help', action='store_true',
-                       help='Show agent usage guide (llms.txt-style brief reference)')
-    group.add_argument('--agent-help-full', action='store_true',
-                       help='Show comprehensive agent guide (complete examples, patterns, troubleshooting)')
+                       help='Show comprehensive agent reference (~12K tokens, task-pattern recipes for AI agents). Complements --help (raw flag listing).')
     group.add_argument('--discover', action='store_true',
                        help='Dump full adapter registry as JSON (schemas, output types, query params — for programmatic discovery)')
 

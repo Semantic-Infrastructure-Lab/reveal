@@ -124,7 +124,6 @@ class HelpAdapter(ResourceAdapter):
         help://adapters            # List all adapters with help
         help://quick               # Quick-reference cheat sheet (top 10 commands)
         help://agent               # Agent usage guide (AGENT_HELP.md)
-        help://agent-full          # Full agent guide (AGENT_HELP_FULL.md)
 
     Agent Introspection (v0.46.0+):
         help://schemas/ssl         # Machine-readable schema for ssl:// adapter
@@ -143,7 +142,6 @@ class HelpAdapter(ResourceAdapter):
         # Top-level docs (reveal/docs/)
         'quick-start': 'QUICK_START.md',
         'agent': 'AGENT_HELP.md',
-        'agent-full': 'AGENT_HELP.md',   # Alias (full version merged into AGENT_HELP.md)
         'anti-patterns': 'AGENT_HELP.md',  # Merged into AGENT_HELP.md
         # Adapter guides (reveal/docs/adapters/)
         'python': 'adapters/PYTHON_ADAPTER_GUIDE.md',
@@ -212,11 +210,7 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'uri': 'help://agent',
-                    'description': 'Agent usage patterns (brief guide)'
-                },
-                {
-                    'uri': 'help://agent-full',
-                    'description': 'Comprehensive agent guide (all patterns, examples)'
+                    'description': 'Comprehensive agent reference (~12K tokens, task-pattern recipes)'
                 },
                 {
                     'uri': 'help://tricks',
@@ -225,19 +219,19 @@ class HelpAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Each adapter exposes its own help via get_help() method',
-                'Static guides (agent, agent-full) load from markdown files',
+                'Static guides load from markdown files in reveal/docs/',
                 (
                     'New adapters automatically appear in help:// '
                     'when they implement get_help()'
                 ),
                 (
-                    'Alternative: Use --agent-help and --agent-help-full '
-                    'flags for llms.txt convention'
+                    'For agents: --agent-help dumps the full reference '
+                    '(~12K tokens, task-pattern recipes)'
                 )
             ],
             'see_also': [
-                'reveal --agent-help - Brief agent guide (llms.txt)',
-                'reveal --agent-help-full - Full agent guide',
+                'reveal --agent-help - Comprehensive agent reference (~12K tokens)',
+                'reveal --help - Raw flag and subcommand listing',
                 'reveal --list-supported - Supported file types'
             ]
         }
@@ -820,7 +814,7 @@ class HelpAdapter(ResourceAdapter):
         """Load help from static markdown file.
 
         Args:
-            topic: Topic name ('agent', 'agent-full', 'ast-adapter', etc.)
+            topic: Topic name ('agent', 'quick-start', 'tricks', etc.)
 
         Returns:
             Help content dict or None if file not found

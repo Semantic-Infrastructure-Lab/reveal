@@ -24,7 +24,6 @@ from reveal.cli.handlers import (
     handle_show_ast,
     handle_language_info,
     handle_agent_help,
-    handle_agent_help_full,
     handle_schema,
     _get_schema_v1,
     _aggregate_batch_stats,
@@ -475,7 +474,7 @@ class TestHandleLanguageInfo(unittest.TestCase):
 
 
 class TestHandleAgentHelp(unittest.TestCase):
-    """Tests for handle_agent_help and handle_agent_help_full functions."""
+    """Tests for handle_agent_help function."""
 
     @patch('sys.exit')
     @patch('sys.stdout', new_callable=StringIO)
@@ -499,19 +498,6 @@ class TestHandleAgentHelp(unittest.TestCase):
         self.assertIn('AGENT_HELP.md not found', error)
         self.assertIn('bug', error.lower())
         self.assertEqual(cm.exception.code, 1)
-
-    @patch('sys.exit')
-    @patch('sys.stdout', new_callable=StringIO)
-    @patch('builtins.open', new_callable=unittest.mock.mock_open, read_data="Agent help content")
-    def test_handle_agent_help_full_delegates_to_agent_help(self, mock_open, mock_stdout, mock_exit):
-        """Test --agent-help-full is an alias for --agent-help (files were consolidated at 9292da3)."""
-        handle_agent_help_full()
-        # Both flags should open AGENT_HELP.md (not the deleted AGENT_HELP_FULL.md)
-        opened_path = mock_open.call_args[0][0]
-        self.assertIn('AGENT_HELP.md', str(opened_path))
-        self.assertNotIn('AGENT_HELP_FULL.md', str(opened_path))
-        self.assertIn('Agent help content', mock_stdout.getvalue())
-        mock_exit.assert_called_once_with(0)
 
 
 class TestHandleSchema(unittest.TestCase):
