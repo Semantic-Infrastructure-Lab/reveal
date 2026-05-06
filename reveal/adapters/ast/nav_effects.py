@@ -103,7 +103,7 @@ _COMPILED_TAXONOMY: List[Tuple[str, List[List[str]]]] = [
 # receivers (tsx, evlog, services.trade_db, ...) belong in BACK-238's
 # `.reveal.yaml` extension, not here.
 _RECEIVER_TAXONOMY: List[Tuple[str, List[str]]] = [
-    ('db', ['cursor', 'conn', 'connection', 'session', 'db']),
+    ('db', ['cursor', 'conn', 'connection', 'session', 'db', 'engine']),
     ('cache', ['cache', 'redis', 'memcache']),
     ('log', ['logger', '_log', 'log']),
     ('http', ['httpx', 'aiohttp', 'requests']),

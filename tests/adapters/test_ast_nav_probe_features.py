@@ -1066,6 +1066,26 @@ class TestClassifyCallReceiver(unittest.TestCase):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertIsNone(classify_call('mything.post'))
 
+    # BACK-290: SQLAlchemy `engine` as a universal db receiver.
+
+    def test_engine_execute_classifies_as_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('engine.execute'), 'db')
+
+    def test_engine_connect_classifies_as_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('engine.connect'), 'db')
+
+    def test_template_engine_render_unclassified(self):
+        # Non-final-segment guard: `template_engine` is its own segment and
+        # should not match the bare `engine` receiver.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('template_engine.render'))
+
+    def test_rules_engine_evaluate_unclassified(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('rules_engine.evaluate'))
+
 
 class TestCollectEffects(unittest.TestCase):
 
