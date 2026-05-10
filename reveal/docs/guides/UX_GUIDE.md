@@ -124,6 +124,13 @@ reveal 'ast://file.py?name~=authenticate&type=function&complexity>10&sort=-compl
 
 **Why the rename?** `--search` implies "I'm looking for something" — ergonomic shorthand. `name~=` is a formal predicate: "name matches regex". They mean the same thing but belong to different layers.
 
+**Scope:** both `--search` and `?name~=` match named code elements only — functions, classes, structs, imports. Neither finds module-level variables or constants. For those, use `reveal_type`:
+
+```bash
+reveal file.py --search CONFIG          # ← finds nothing if CONFIG is a module-level variable
+reveal 'ast://file.py?reveal_type=CONFIG'  # ← correct path for variables/constants
+```
+
 ---
 
 ## `--head`/`--tail` vs `?limit=`/`?offset=` — Intentionally Different

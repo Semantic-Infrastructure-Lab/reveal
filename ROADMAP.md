@@ -1025,6 +1025,64 @@ A minimal M501 rule would detect `# TODO`, `# FIXME`, `# HACK`, `# XXX` patterns
 
 ---
 
+### BACK-294: `--search` zero-results hint + help text fix for module-level variables
+
+**Status**: Shipped: v0.91.3 (swift-massacre-0510)
+**Value**: Medium | **Lift**: Small
+**Filed**: burning-asteroid-0510 (2026-05-10)
+
+`reveal file.py --search "CONSTANT_NAME"` silently returns "No matches found." when the target is a module-level variable — not a filtering bug, but an element-collection gap. `get_structure()` only collects imports/functions/classes/structs; variable assignments are never in the candidate set.
+
+```bash
+# Bug: LIVE_SIGNALS is defined on line 111 of bot.py
+reveal bot.py --search "LIVE_SIGNALS"
+# → "No matches found."  ← no hint, user stuck
+
+# What works but users don't know about it:
+reveal 'ast://bot.py?reveal_type=LIVE_SIGNALS'
+# → L111  ASSIGN   LIVE_SIGNALS = ...  (module level)   list literal
+```
+
+**Two fixes (bundle into one commit):**
+
+1. **Zero-results hint** — in `rendering/adapters/ast.py` near the `"No matches found."` print: when the input was a file (not a directory) and the search term appears in the raw file content, emit `→ For variables/constants: reveal 'ast://FILE?reveal_type=TERM'`. Requires a quick grep of file content; skip hint for directory-mode searches.
+
+2. **Help text** — `cli/parser.py:332`: change `'Search for symbols matching pattern (regex on name field)'` to `'Search for named code elements (functions, classes, structs) by name pattern. For variables/constants, use: reveal "ast://file?reveal_type=NAME"'`.
+
+**Tests to add:**
+- `--search` on a file with a module-level constant → 0 results + emits `reveal_type` hint
+- `--search` on a file where the term genuinely doesn't exist → 0 results, no hint
+- Help text contains the `reveal_type` cross-reference
+
+---
+
+### BACK-295: Extend `get_structure()` to collect module-level variable assignments as `type=variable`
+
+**Status**: Open (hold — BACK-294 shipped in v0.91.3; revisit if hint proves insufficient)
+**Value**: Medium | **Lift**: Medium
+**Filed**: burning-asteroid-0510 (2026-05-10)
+
+Full root-cause fix for the BACK-294 class of bug. Adds a `variables` category to the element collection layer so `--search`, `name~=`, and `--type variable` work for module-level constants.
+
+```bash
+reveal bot.py --search "LIVE_SIGNALS"   # finds it after this fix
+reveal src/ --type variable             # all module-level constants across project
+reveal 'ast://src/?name~=^[A-Z_]+$'    # all SCREAMING_SNAKE constants
+```
+
+**Implementation:**
+
+- `treesitter.py`: add `_extract_variables()` — walk top-level nodes for `assignment` and `augmented_assignment` where LHS is a simple identifier. Scope to module-level only (depth 0) to avoid function-local noise. Populate a `variables` list in the structure dict returned by `get_structure()`.
+- `adapters/ast/filtering.py`: add `'variable'` / `'variables'` to `normalize_type_condition()`.
+- Default unfiltered output: **do not** include variables in the default listing (too noisy); require `--type variable` or explicit `name~=` to surface them. Or include only when querying a single file.
+- `ELEMENT_TYPE_MAP` in `treesitter.py`: add `'variable': ('assignment', 'augmented_assignment')`.
+
+**Risk:** Python `assignment` nodes are extremely common — naive extraction would flood directory-mode output. The depth-0 guard (module-level only) is essential. May still be too noisy for `reveal src/` without `--type variable`.
+
+**Revisit trigger:** BACK-294 ships and users still hit the wall (hint alone not enough), or a second distinct user asks to search for constants.
+
+---
+
 ### Additional Subcommands
 
 Eight subcommands (`check`, `review`, `pack`, `health`, `dev`, `hotspots`, `overview`, `deps`) shipped. Remaining subcommand ideas:

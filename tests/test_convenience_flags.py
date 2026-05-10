@@ -255,5 +255,45 @@ class TestConvenienceFlagsErrorHandling(unittest.TestCase):
             os.unlink(temp_file)
 
 
+    def test_search_hints_reveal_type_for_variable(self):
+        """--search on a file where the term is a module-level variable should hint at reveal_type."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write('LIVE_SIGNALS = [1, 2, 3]\n\ndef process(): pass\n')
+            temp_file = f.name
+        try:
+            result = self.run_reveal(temp_file, '--search', 'LIVE_SIGNALS')
+            self.assertEqual(result.returncode, 0, f"Failed with: {result.stderr}")
+            self.assertIn('Results: 0', result.stdout)
+            self.assertIn('reveal_type=LIVE_SIGNALS', result.stdout)
+            self.assertIn('not a named code element', result.stdout)
+        finally:
+            os.unlink(temp_file)
+
+    def test_search_no_hint_when_term_absent(self):
+        """--search with a term not in the file at all should not emit a reveal_type hint."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write('def process(): pass\n')
+            temp_file = f.name
+        try:
+            result = self.run_reveal(temp_file, '--search', 'NONEXISTENT_XYZ')
+            self.assertEqual(result.returncode, 0, f"Failed with: {result.stderr}")
+            self.assertNotIn('reveal_type', result.stdout)
+        finally:
+            os.unlink(temp_file)
+
+    def test_search_no_hint_for_complex_regex(self):
+        """--search with a complex regex pattern should not emit a reveal_type hint."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write('MY_VAR = 1\n\ndef process(): pass\n')
+            temp_file = f.name
+        try:
+            result = self.run_reveal(temp_file, '--search', '^MY.*VAR$')
+            self.assertEqual(result.returncode, 0, f"Failed with: {result.stderr}")
+            # Complex regex patterns should not trigger the hint
+            self.assertNotIn('reveal_type', result.stdout)
+        finally:
+            os.unlink(temp_file)
+
+
 if __name__ == '__main__':
     unittest.main()

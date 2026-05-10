@@ -385,6 +385,13 @@ reveal file.py --search get_repository
 reveal file.py --search get_repository --sort=-line_count
 ```
 
+**Scope of `--search`:** matches named code elements only — functions, classes, structs, imports. It does **not** find module-level variables or constants. For those, use `reveal_type`:
+
+```bash
+reveal file.py --search LIVE_SIGNALS      # ← finds nothing (LIVE_SIGNALS is a variable)
+reveal 'ast://file.py?reveal_type=LIVE_SIGNALS'  # ← correct path for variables
+```
+
 **When to use URI syntax instead:**
 - Multiple conditions: `?complexity>10&lines>50`
 - Range queries: `?lines=10..50`

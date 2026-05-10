@@ -330,7 +330,7 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
 
     # Convenience flags for within-file search and filtering
     parser.add_argument('--search', type=str, metavar='PATTERN',
-                        help='Search for symbols matching pattern (regex on name field)')
+                        help='Search for named code elements (functions, classes, structs) by name pattern (regex). For variables/constants, use: reveal "ast://file?reveal_type=NAME"')
     parser.add_argument('--sort', type=str, metavar='FIELD',
                         help='Sort results by field (e.g., modified, size, name, complexity). '
                              'Use --desc for descending order, or prefix with - in URI queries.')
