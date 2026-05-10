@@ -7,6 +7,11 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.91.3
+- ✅ **`--search` zero-results hint for variables/constants** — `reveal file.py --search "CONSTANT"` now emits a contextual `reveal_type=` hint when the term exists in the file but isn't a named code element. Silent for complex regex and absent terms. Help text updated. (BACK-294, burning-asteroid-0510)
+- ✅ **`--search` and `--type` on directories now work** — previously silently showed directory tree instead of searching. Dogfood fix. (swift-massacre-0510)
+- ✅ **Import cleanup** — `import re` moved to module level in `rendering/adapters/ast.py`; unused `Optional` removed from `nav_dict_heatmap.py`. (swift-massacre-0510)
+
 ### v0.91.2
 - ✅ **Two new task patterns in `AGENT_HELP.md`** — *Inspect environment variables (`env://`)* and *Surface architectural seams* (ABCs, Protocols, TypedDicts, dataclasses). (BACK-293, mortal-oracle-0506)
 - ✅ **Subcommand + adapter coverage sweep across `--help` and `AGENT_HELP.md`** — every shipped subcommand and adapter is now discoverable. (BACK-292, enchanted-thunder-0506)

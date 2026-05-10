@@ -12,6 +12,16 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.91.3] - 2026-05-10 (sessions burning-asteroid-0510, swift-massacre-0510)
+
+### Added
+- **`--search` zero-results hint for variables/constants** — when `reveal file.py --search "CONSTANT_NAME"` finds nothing and the term exists in the file as a plain identifier, emits a contextual hint: `For variables and constants: reveal 'ast://file?reveal_type=TERM'`. Silent for complex regex patterns and absent terms. `--search` help text updated to name the limitation explicitly. (BACK-294, burning-asteroid-0510)
+
+### Fixed
+- **`--search` and `--type` on directories were silently ignored** — `reveal src/ --search "MyClass"` showed the directory tree instead of searching across files. Now routes to `ast://` when `--search` or `--type` is present on a directory target. `--sort` alone still shows the directory tree. (swift-massacre-0510)
+- **`import re` moved to module level** in `rendering/adapters/ast.py` — was inside two function bodies (I005 duplicate + I006 inline import regression from BACK-294 commit). (swift-massacre-0510)
+- **Unused `Optional` import removed** from `adapters/ast/nav_dict_heatmap.py`. (swift-massacre-0510)
+
 ## [0.91.2] - 2026-05-06 (sessions enchanted-thunder-0506, mortal-oracle-0506, fierce-deity-0506)
 
 ### Added
