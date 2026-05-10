@@ -1,6 +1,7 @@
 """Renderer for ast:// code query adapter."""
 
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -220,7 +221,6 @@ def _suggest_reveal_type_if_variable(query: str, path: str) -> None:
     file_path = Path(path)
     if not file_path.is_file():
         return
-    import re
     # Extract value from "name~=TERM" or "name==TERM"
     match = re.search(r'\bname[~=!]+=?\s*(\S+)', query)
     if not match:
@@ -244,7 +244,6 @@ def _suggest_filter_correction(query: str) -> None:
     """Emit hints when the query contains known shorthands or unrecognized filter keys."""
     if not query or query == 'none':
         return
-    import re
     # format_query produces "key op value" parts joined by " AND "
     # Extract the leading identifier from each part to get the field names used.
     parts = [p.strip() for p in query.split(' AND ')]

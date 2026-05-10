@@ -295,5 +295,47 @@ class TestConvenienceFlagsErrorHandling(unittest.TestCase):
             os.unlink(temp_file)
 
 
+class TestConvenienceFlagsOnDirectory(unittest.TestCase):
+    """Test that convenience flags work on directories (not silently ignored)."""
+
+    def run_reveal(self, *args):
+        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
+        return subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        with open(os.path.join(self.tmpdir, 'alpha.py'), 'w') as f:
+            f.write('def alpha_func(): pass\nclass AlphaClass: pass\n')
+        with open(os.path.join(self.tmpdir, 'beta.py'), 'w') as f:
+            f.write('def beta_func(): pass\nclass BetaClass: pass\n')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir)
+
+    def test_search_on_directory_routes_to_ast(self):
+        """--search on a directory should search across files, not silently show tree."""
+        result = self.run_reveal(self.tmpdir, '--search', 'alpha')
+        self.assertEqual(result.returncode, 0, f"Failed with: {result.stderr}")
+        self.assertIn('alpha_func', result.stdout)
+        self.assertNotIn('beta_func', result.stdout)
+
+    def test_type_on_directory_routes_to_ast(self):
+        """--type on a directory should filter by element type across files."""
+        result = self.run_reveal(self.tmpdir, '--type', 'class')
+        self.assertEqual(result.returncode, 0, f"Failed with: {result.stderr}")
+        self.assertIn('AlphaClass', result.stdout)
+        self.assertIn('BetaClass', result.stdout)
+        self.assertNotIn('alpha_func', result.stdout)
+        self.assertNotIn('beta_func', result.stdout)
+
+    def test_sort_alone_on_directory_shows_tree(self):
+        """--sort alone on a directory should still show the directory tree (not AST)."""
+        result = self.run_reveal(self.tmpdir, '--sort', 'name')
+        self.assertEqual(result.returncode, 0, f"Failed with: {result.stderr}")
+        self.assertIn('alpha.py', result.stdout)
+        self.assertIn('beta.py', result.stdout)
+
+
 if __name__ == '__main__':
     unittest.main()

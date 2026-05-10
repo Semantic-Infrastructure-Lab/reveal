@@ -268,6 +268,9 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
     if getattr(args, 'meta', False):
         _show_directory_meta(path, args)
         return
+    if getattr(args, 'search', None) or getattr(args, 'type', None):
+        handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
+        return
     sort_by = getattr(args, 'sort', None)
     include_extensions = _parse_ext_arg(getattr(args, 'ext', None))
     if getattr(args, 'files', False):

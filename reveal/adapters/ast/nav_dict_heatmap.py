@@ -20,7 +20,7 @@ from __future__ import annotations
 import ast
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Set
 
 _BARE_DICT_NAMES = frozenset({'dict', 'Dict'})
 _SKIP_DIRS = {
