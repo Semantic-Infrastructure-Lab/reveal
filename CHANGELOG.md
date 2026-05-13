@@ -14,7 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (session cukite-0512)
 
+### Fixed
+- **`ast` ↔ `calls` mutual import cycle broken** (BACK-299) — `ast/adapter.py` imported `PYTHON_BUILTINS` from `calls/index.py` via a deferred function-body import; `calls/index.py` already imported from `ast/analysis.py`. Fix: moved `PYTHON_BUILTINS` definition to `ast/analysis.py` (the shared analysis module). Both adapters now import it from the same neutral location; no cross-package cycle.
+
 ### Refactored
+- **`adapters/base.py` split into factory + registry + ABC** (BACK-301) — 598-line file (fan-in 27, 5 responsibilities) split into `adapters/factory.py` (constructor try-chain), `adapters/registry.py` (scheme registries + plugin discovery), and `adapters/base.py` (ResourceAdapter ABC only, ~250L). All existing importers unchanged via re-exports in `base.py`.
+- **`_dispatch_nav` helpers extracted** (BACK-300) — Inline `--scope` and `--around` handler blocks and func_node resolution logic extracted into `_nav_scope`, `_nav_around`, and `_resolve_func_node`. `_dispatch_nav` reduced from 116 lines to ~35 lines of pure coordination.
 - **`mcp_server.py` kernel cleanup** (BACK-296, BACK-297, BACK-298) — three structural fixes:
   - `_default_args` (104 lines, 93 CLI flag defaults) extracted from `mcp_server.py` into `reveal/cli/defaults.py`; MCP server now imports it. Every CLI flag definition lives in one place.
   - `reveal_pack` rendering logic (file-tier grouping, content section assembly) moved from `mcp_server.py` into `cli/commands/pack.py` as `_format_pack_result` + `_format_file_line`. `reveal_pack` reduced from 117 lines / cx:43 to ~25 lines of pure orchestration. `mcp_server.py` overall: 593 → 430 lines.
