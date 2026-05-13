@@ -26,6 +26,21 @@ from .renderer import render_calls_structure
 from ...utils.query import parse_query_params
 from ...utils.results import ResultBuilder
 
+
+# Capability metadata for v1.1 contract (BACK-307).
+# Call-graph analysis is static — these limitations are universal across queries.
+_CALL_GRAPH_WARNINGS = [
+    {'code': 'W-CALLS-1', 'message': 'Dynamic dispatch (callbacks, getattr, runtime polymorphism) is not resolved.'},
+    {'code': 'W-CALLS-2', 'message': 'Method resolution order (MRO) is not considered.'},
+    {'code': 'W-CALLS-3', 'message': 'Calls via importlib/dynamic imports are not tracked.'},
+    {'code': 'W-CALLS-4', 'message': 'Calls inside string-evaluated code (eval/exec) are not detected.'},
+]
+_CALL_GRAPH_META_KWARGS: Dict[str, Any] = {
+    'parse_mode': 'tree_sitter_full',
+    'confidence': 0.85,
+    'warnings': _CALL_GRAPH_WARNINGS,
+}
+
 _HELP: Dict[str, Any] = {
     'name': 'calls',
     'description': 'Cross-file call graph queries — find callers or callees of any function.',
@@ -284,6 +299,7 @@ class CallsAdapter(ResourceAdapter):
                 source=self.path,
                 contract_version='1.1',
                 data=result_data,
+                **_CALL_GRAPH_META_KWARGS,
             )
 
         if rank == 'callers':
@@ -296,6 +312,7 @@ class CallsAdapter(ResourceAdapter):
                 source=self.path,
                 contract_version='1.1',
                 data=result_data,
+                **_CALL_GRAPH_META_KWARGS,
             )
 
         if uncalled:
@@ -311,6 +328,7 @@ class CallsAdapter(ResourceAdapter):
                 source=self.path,
                 contract_version='1.1',
                 data=result_data,
+                **_CALL_GRAPH_META_KWARGS,
             )
 
         if root:
@@ -327,6 +345,7 @@ class CallsAdapter(ResourceAdapter):
                 source=self.path,
                 contract_version='1.1',
                 data=result_data,
+                **_CALL_GRAPH_META_KWARGS,
             )
 
         if not target and not callees_target:
@@ -338,7 +357,8 @@ class CallsAdapter(ResourceAdapter):
                     'path': self.path,
                     'error': "Missing required parameter: target=<name>, callees=<name>, root=<name>, or rank=callers",
                     'example': f"calls://{self.path}?target=my_function",
-                }
+                },
+                **_CALL_GRAPH_META_KWARGS,
             )
 
         query_format = self.query_params.get('format', '')
@@ -354,6 +374,7 @@ class CallsAdapter(ResourceAdapter):
                 source=self.path,
                 contract_version='1.1',
                 data=result_data,
+                **_CALL_GRAPH_META_KWARGS,
             )
 
         depth = int(self.query_params.get('depth', '1'))
@@ -371,4 +392,5 @@ class CallsAdapter(ResourceAdapter):
             source=self.path,
             contract_version='1.1',
             data=result_data,
+            **_CALL_GRAPH_META_KWARGS,
         )
