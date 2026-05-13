@@ -9,13 +9,12 @@ invalidates only the entries affected.  In practice the whole index is rebuilt
 per directory when any file changes (simple and correct).
 """
 
-import builtins as _builtins_module
 import os
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from ..ast.analysis import collect_structures, is_code_file
+from ..ast.analysis import collect_structures, is_code_file, PYTHON_BUILTINS
 from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
 
 # Module-level LRU cache: directory → (cache_key, index)
@@ -24,13 +23,6 @@ from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees 
 # more than a handful cached simultaneously.
 _INDEX_CACHE: OrderedDict = OrderedDict()
 _INDEX_CACHE_MAX = 8
-
-# All public names in the Python builtins module — used to filter noise from
-# callees results.  Built at import time so it stays in sync with the running
-# Python version automatically.
-PYTHON_BUILTINS: frozenset = frozenset(
-    name for name in dir(_builtins_module) if not name.startswith('_')
-)
 
 # Decorators that cause the runtime to dispatch the function implicitly —
 # never appear as explicit call expressions in source code.

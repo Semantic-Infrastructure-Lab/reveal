@@ -10,7 +10,7 @@ from .queries import (
     extract_builtins_param as _extract_builtins_param,
     extract_reveal_type_param as _extract_reveal_type_param,
 )
-from .analysis import collect_structures
+from .analysis import collect_structures, PYTHON_BUILTINS
 from .filtering import apply_filters, matches_decorator
 from .help import get_help as _get_help, get_schema as _get_schema
 from .renderer import AstRenderer
@@ -214,7 +214,6 @@ class AstAdapter(ResourceAdapter):
 
         # Filter builtins from calls lists unless ?builtins=true
         if not self.include_builtins:
-            from ..calls.index import PYTHON_BUILTINS
             for elem in controlled:
                 if elem.get('calls'):
                     elem['calls'] = [c for c in elem['calls'] if c.split('.')[-1] not in PYTHON_BUILTINS]
