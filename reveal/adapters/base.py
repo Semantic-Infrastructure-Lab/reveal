@@ -1,157 +1,46 @@
-"""Base adapter interface for URI resources."""
+"""Base adapter interface for URI resources.
+
+This module defines the ResourceAdapter ABC and re-exports the factory and
+registry helpers so existing importers continue to work unchanged.
+
+Internal layout:
+  factory.py  — _try_* constructor patterns and _default_from_uri
+  registry.py — _ADAPTER_REGISTRY, _RENDERER_REGISTRY, decorators, plugin discovery
+  base.py     — ResourceAdapter ABC (this file)
+"""
 
 import logging
-import sys
 from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
-
-logger = logging.getLogger(__name__)
+from typing import Dict, Any, Optional, List
 
 from reveal.types import RevealMeta, RevealResult, WarningEntry
 
+# Re-exported for backward compatibility — existing importers need not change.
+from .factory import (  # noqa: F401
+    _is_constructor_error,
+    _try_no_args_init,
+    _try_query_parsing_init,
+    _try_keyword_args_init,
+    _try_resource_arg_init,
+    _try_full_uri_init,
+    _default_from_uri,
+)
+from .registry import (  # noqa: F401
+    _ADAPTER_REGISTRY,
+    _RENDERER_REGISTRY,
+    _adapter_plugins_loaded,
+    _load_adapter_plugin_dir,
+    discover_adapter_plugins,
+    _reset_adapter_plugin_discovery,
+    register_adapter,
+    get_adapter_class,
+    list_supported_schemes,
+    register_renderer,
+    get_renderer_class,
+    list_renderer_schemes,
+)
 
-# ---------------------------------------------------------------------------
-# Adapter initialization helpers
-# These try-functions are ordered by convention type. Each returns (adapter, error).
-# A non-None adapter = success. A non-None error is kept as "last error" for
-# reporting if all attempts fail.
-# ---------------------------------------------------------------------------
-
-def _is_constructor_error(exc: TypeError) -> bool:
-    """Return True if TypeError originated inside a constructor body.
-
-    A call-site TypeError (wrong number/type of arguments) is raised before
-    Python enters the constructor frame — its traceback has only one frame.
-    A TypeError raised inside __init__ has at least two frames (call site +
-    constructor body).  Detecting this lets _default_from_uri propagate real
-    constructor bugs rather than silently trying the next init pattern.
-    """
-    tb = exc.__traceback__
-    return tb is not None and tb.tb_next is not None
-
-
-def _try_no_args_init(adapter_class: type) -> Tuple[Any, Optional[Exception]]:
-    """Try no-argument initialization (env, python adapters)."""
-    try:
-        return adapter_class(), None
-    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
-        return None, None
-    except ImportError as e:
-        return None, e
-
-
-def _try_query_parsing_init(adapter_class: type, resource: str) -> Tuple[Any, Optional[Exception]]:
-    """Try query-parsing initialization (ast, json with ?query)."""
-    if '?' not in resource:
-        return None, None
-    try:
-        path, query = resource.split('?', 1)
-        path = path or '.'
-        return adapter_class(path, query), None
-    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
-        return None, None
-    except ImportError as e:
-        return None, e
-
-
-def _try_keyword_args_init(adapter_class: type, resource: str) -> Tuple[Any, Optional[Exception]]:
-    """Try keyword arguments initialization (markdown with base_path/query)."""
-    try:
-        if '?' in resource:
-            path_part, query = resource.split('?', 1)
-            path = path_part.rstrip('/') if path_part else '.'
-        else:
-            path = resource.rstrip('/') if resource else '.'
-            query = None
-        return adapter_class(base_path=path, query=query), None
-    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
-        return None, None
-    except ImportError as e:
-        return None, e
-
-
-def _try_resource_arg_init(adapter_class: type, resource: str) -> Tuple[Any, Optional[Exception]]:
-    """Try resource argument initialization (help, git, etc)."""
-    if resource is None:
-        return None, None
-    try:
-        if '?' not in resource:
-            path = resource or '.'
-            try:
-                return adapter_class(path, None), None
-            except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
-                return adapter_class(resource), None
-            except ImportError as e:
-                return None, e
-        else:
-            return adapter_class(resource), None
-    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError) as e:
-        return None, e
-    except ImportError as e:
-        return None, e
-
-
-def _try_full_uri_init(adapter_class: type, scheme: str, resource: str,
-                       element: Optional[str]) -> Tuple[Any, Optional[Exception]]:
-    """Try full URI initialization (mysql, sqlite)."""
-    try:
-        full_uri = f"{scheme}://{resource}"
-        if element and '://' in full_uri:
-            full_uri = f"{full_uri}/{element}"
-        return adapter_class(full_uri), None
-    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError) as e:
-        return None, e
-    except ImportError as e:
-        return None, e
-
-
-def _default_from_uri(adapter_class: type, scheme: str, resource: str,
-                      element: Optional[str]) -> Any:
-    """Default try-chain initialization used by ResourceAdapter.from_uri.
-
-    Available as a standalone function so the router can apply it to any
-    adapter class (including test doubles that don't inherit ResourceAdapter).
-
-    Raises:
-        ImportError: If initialization failed due to a missing optional dependency.
-        RuntimeError: If all initialization attempts failed.
-    """
-    if resource:
-        init_attempts = [
-            lambda: _try_query_parsing_init(adapter_class, resource),
-            lambda: _try_resource_arg_init(adapter_class, resource),
-            lambda: _try_keyword_args_init(adapter_class, resource),
-            lambda: _try_no_args_init(adapter_class),
-            lambda: _try_full_uri_init(adapter_class, scheme, resource, element),
-        ]
-    else:
-        init_attempts = [
-            lambda: _try_no_args_init(adapter_class),
-            lambda: _try_query_parsing_init(adapter_class, resource),
-            lambda: _try_keyword_args_init(adapter_class, resource),
-            lambda: _try_resource_arg_init(adapter_class, resource),
-            lambda: _try_full_uri_init(adapter_class, scheme, resource, element),
-        ]
-
-    init_error: Optional[Exception] = None
-    for attempt in init_attempts:
-        adapter, error = attempt()
-        if adapter is not None:
-            return adapter
-        if error is not None:
-            # TypeError that originated inside the constructor body (not a
-            # call-site signature mismatch) is a real bug — propagate it
-            # immediately rather than silently trying the next init pattern.
-            if isinstance(error, TypeError) and _is_constructor_error(error):
-                raise error
-            init_error = error
-
-    if isinstance(init_error, ImportError):
-        raise init_error
-    raise RuntimeError(
-        f"Could not initialize {scheme}:// adapter: {init_error}"
-    )
+logger = logging.getLogger(__name__)
 
 
 class ResourceAdapter(ABC):
@@ -424,175 +313,3 @@ class ResourceAdapter(ABC):
             See reveal/adapters/ssl.py, ast.py for reference implementations
         """
         return None
-
-
-# Registry for URI scheme adapters
-_ADAPTER_REGISTRY: Dict[str, type] = {}
-_adapter_plugins_loaded: bool = False
-
-
-def _load_adapter_plugin_dir(plugin_dir: Path) -> None:
-    """Import a single adapter package directory, logging failures without raising."""
-    import importlib.util
-    init_file = plugin_dir / '__init__.py'
-    if not init_file.exists():
-        return
-    module_name = f'reveal_plugin_adapter_{plugin_dir.name}'
-    try:
-        spec = importlib.util.spec_from_file_location(
-            module_name,
-            init_file,
-            submodule_search_locations=[str(plugin_dir)],
-        )
-        if spec and spec.loader:
-            mod = importlib.util.module_from_spec(spec)
-            sys.modules[module_name] = mod
-            spec.loader.exec_module(mod)
-            logger.debug('Loaded adapter plugin: %s', plugin_dir.name)
-    except Exception as e:
-        logger.warning('Adapter plugin load failed (%s): %s', plugin_dir.name, e)
-
-
-def discover_adapter_plugins(cwd: Optional[Path] = None) -> None:
-    """Load adapter packages from project-local and user-global plugin dirs.
-
-    Scans in order:
-      1. <cwd>/.reveal/adapters/  — project-local plugins
-      2. ~/.reveal/adapters/       — user-global plugins
-
-    Each discovered subdirectory with an __init__.py is imported; @register_adapter
-    decorators fire as a side effect, adding the adapter to _ADAPTER_REGISTRY.
-    Called once per process (no-op on subsequent calls).
-
-    Plugin adapters must use absolute imports from reveal.adapters.base rather
-    than relative imports, since they live outside the reveal package tree.
-    """
-    global _adapter_plugins_loaded
-    if _adapter_plugins_loaded:
-        return
-    _adapter_plugins_loaded = True
-
-    base = cwd if cwd is not None else Path.cwd()
-    plugin_dirs = [
-        base / '.reveal' / 'adapters',
-        Path.home() / '.reveal' / 'adapters',
-    ]
-    for plugin_dir in plugin_dirs:
-        if not plugin_dir.is_dir():
-            continue
-        for entry in sorted(plugin_dir.iterdir()):
-            if entry.is_dir():
-                _load_adapter_plugin_dir(entry)
-
-
-def _reset_adapter_plugin_discovery() -> None:
-    """Reset plugin discovery state — for test isolation only."""
-    global _adapter_plugins_loaded
-    _adapter_plugins_loaded = False
-
-
-def register_adapter(scheme: str):
-    """Decorator to register an adapter for a URI scheme.
-
-    Usage:
-        @register_adapter('postgres')
-        class PostgresAdapter(ResourceAdapter):
-            ...
-
-        # With renderer:
-        @register_adapter('postgres')
-        @register_renderer(PostgresRenderer)
-        class PostgresAdapter(ResourceAdapter):
-            ...
-
-    Args:
-        scheme: URI scheme to register (e.g., 'env', 'ast', 'postgres')
-    """
-    def decorator(cls):
-        _ADAPTER_REGISTRY[scheme.lower()] = cls
-        cls.scheme = scheme
-
-        # If a renderer was pending (from @register_renderer), register it now
-        if hasattr(cls, '_pending_renderer'):
-            renderer_class = cls._pending_renderer
-            _RENDERER_REGISTRY[scheme.lower()] = renderer_class
-            cls.renderer = renderer_class
-            delattr(cls, '_pending_renderer')  # Clean up
-
-        return cls
-    return decorator
-
-
-def get_adapter_class(scheme: str) -> Optional[type]:
-    """Get adapter class for a URI scheme.
-
-    Args:
-        scheme: URI scheme (e.g., 'env', 'ast')
-
-    Returns:
-        Adapter class or None if not found
-    """
-    discover_adapter_plugins()
-    return _ADAPTER_REGISTRY.get(scheme.lower())
-
-
-def list_supported_schemes() -> list:
-    """Get list of supported URI schemes.
-
-    Returns:
-        List of registered scheme names
-    """
-    return sorted(_ADAPTER_REGISTRY.keys())
-
-
-# Registry for URI scheme renderers
-_RENDERER_REGISTRY: Dict[str, type] = {}
-
-
-def register_renderer(renderer_class):
-    """Decorator to register a renderer for an adapter.
-
-    Usage:
-        @register_adapter('mysql')
-        @register_renderer(MySQLRenderer)
-        class MySQLAdapter(ResourceAdapter):
-            ...
-
-    The renderer is automatically paired with the adapter's scheme.
-
-    Note: Decorators are applied bottom-up, so register_renderer runs BEFORE
-    register_adapter. We store the renderer on the class and let register_adapter
-    complete the registration.
-
-    Args:
-        renderer_class: Renderer class with render_structure() method
-
-    Returns:
-        Decorator function that registers the renderer
-    """
-    def decorator(adapter_class):
-        # Store renderer class on adapter (register_adapter will use this)
-        adapter_class._pending_renderer = renderer_class
-        return adapter_class
-    return decorator
-
-
-def get_renderer_class(scheme: str) -> Optional[type]:
-    """Get renderer class for a URI scheme.
-
-    Args:
-        scheme: URI scheme (e.g., 'mysql', 'sqlite')
-
-    Returns:
-        Renderer class or None if not found
-    """
-    return _RENDERER_REGISTRY.get(scheme.lower())
-
-
-def list_renderer_schemes() -> list:
-    """Get list of schemes with registered renderers.
-
-    Returns:
-        List of scheme names that have renderers
-    """
-    return sorted(_RENDERER_REGISTRY.keys())

@@ -330,88 +330,74 @@ _NAV_DISPATCH: list[tuple[Callable, Callable]] = [
 ]
 
 
-def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
-    """Route to a nav handler based on the active flag.
-
-    Requires a TreeSitterAnalyzer with a parsed tree.  Exits with an error
-    message if the file type is not tree-sitter analysable.
-    """
-    from .treesitter import TreeSitterAnalyzer  # noqa: I006
-
-    if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
+def _nav_scope(analyzer, element: str, as_json: bool) -> None:
+    """Handle --scope: show lexical scope chain for a line reference."""
+    from .display.element import _parse_element_syntax  # noqa: I006
+    from .adapters.ast.nav import scope_chain, render_scope_chain  # noqa: I006
+    syntax = _parse_element_syntax(element)
+    if syntax['type'] != 'line':
         print(
-            'Error: nav flags require tree-sitter analysis.\n'
-            f'  File type may not be supported: {analyzer.path}',
+            f'Error: --scope requires a line reference (e.g., reveal file.py :123 --scope)\n'
+            f'  Got element: {element!r}',
             file=sys.stderr,
         )
         sys.exit(1)
-
-    from .display.element import _parse_element_syntax  # noqa: I006
-
-    as_json = output_format == 'json'
-
-    # ---- --scope / --around: pre-func_node flags ---------------------------
-    if getattr(args, 'scope', False):
-        from .adapters.ast.nav import scope_chain, render_scope_chain  # noqa: I006
-        syntax = _parse_element_syntax(element)
-        if syntax['type'] != 'line':
-            print(
-                f'Error: --scope requires a line reference (e.g., reveal file.py :123 --scope)\n'
-                f'  Got element: {element!r}',
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        line_no = syntax['start_line']
-        chain = scope_chain(analyzer.tree.root_node, line_no, analyzer._get_node_text)
-        if as_json:
-            _nav_json('scope', analyzer.path, element, line_no, line_no, chain)
-        else:
-            content_lines = analyzer.content.splitlines()
-            line_text = content_lines[line_no - 1].strip() if 0 < line_no <= len(content_lines) else ''
-            print(render_scope_chain(line_no, chain, line_text))
-        return
-
-    if getattr(args, 'around', None) is not None:
-        syntax = _parse_element_syntax(element)
-        if syntax['type'] != 'line':
-            print(
-                f'Error: --around requires a line reference (e.g., reveal file.py :123 --around)\n'
-                f'  Got element: {element!r}',
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        line_no = syntax['start_line']
-        n = args.around
+    line_no = syntax['start_line']
+    chain = scope_chain(analyzer.tree.root_node, line_no, analyzer._get_node_text)
+    if as_json:
+        _nav_json('scope', analyzer.path, element, line_no, line_no, chain)
+    else:
         content_lines = analyzer.content.splitlines()
-        total = len(content_lines)
-        start = max(1, line_no - n)
-        end = min(total, line_no + n)
-        if as_json:
-            findings = [
-                {'line': i + 1, 'text': content_lines[i], 'is_target': (i + 1) == line_no}
-                for i in range(start - 1, end)
-            ]
-            _nav_json('around', analyzer.path, element, start, end, findings,
-                      extra_meta={'target_line': line_no, 'context': n})
-        else:
-            for i in range(start - 1, end):
-                prefix = '▶' if (i + 1) == line_no else ' '
-                print(f'{prefix}{i + 1:5}  {content_lines[i]}')
-        return
+        line_text = content_lines[line_no - 1].strip() if 0 < line_no <= len(content_lines) else ''
+        print(render_scope_chain(line_no, chain, line_text))
 
-    # ---- Find the function/scope node (needed for all _NAV_DISPATCH flags) -
-    # For named functions: use the function node directly.
-    # For flat/procedural files (no named scope): fall back to root_node when
-    # the element is a line reference (:N or :N-M).  This enables --varflow,
-    # --calls, --ifmap, --catchmap, --exits, --flowto, --deps, --mutations on
-    # files that have no top-level function definitions.
+
+def _nav_around(analyzer, element: str, as_json: bool, n: int) -> None:
+    """Handle --around N: show N lines of context around a line reference."""
+    from .display.element import _parse_element_syntax  # noqa: I006
+    syntax = _parse_element_syntax(element)
+    if syntax['type'] != 'line':
+        print(
+            f'Error: --around requires a line reference (e.g., reveal file.py :123 --around)\n'
+            f'  Got element: {element!r}',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    line_no = syntax['start_line']
+    content_lines = analyzer.content.splitlines()
+    total = len(content_lines)
+    start = max(1, line_no - n)
+    end = min(total, line_no + n)
+    if as_json:
+        findings = [
+            {'line': i + 1, 'text': content_lines[i], 'is_target': (i + 1) == line_no}
+            for i in range(start - 1, end)
+        ]
+        _nav_json('around', analyzer.path, element, start, end, findings,
+                  extra_meta={'target_line': line_no, 'context': n})
+    else:
+        for i in range(start - 1, end):
+            prefix = '▶' if (i + 1) == line_no else ' '
+            print(f'{prefix}{i + 1:5}  {content_lines[i]}')
+
+
+def _resolve_func_node(analyzer, element: str):
+    """Resolve the function/scope node for nav flags that need an element.
+
+    For named functions: returns the function node directly.
+    For flat/procedural files: falls back to root_node when the element is a
+    line reference (:N or :N-M), enabling nav flags on files without top-level
+    function definitions.
+
+    Returns:
+        (func_node, func_start, func_end) or exits with an error message.
+    """
+    from .display.element import _parse_element_syntax  # noqa: I006
     func_node = _find_element_node(analyzer, element)
     if func_node is None:
         syntax = _parse_element_syntax(element) if element else None
         if syntax and syntax['type'] == 'line':
             func_node = analyzer.tree.root_node
-            # Honour the element's own range as the effective scope boundary.
-            # :N alone (no end) → start_line to end of file.
             func_start = syntax['start_line']
             func_end = (
                 syntax['end_line']
@@ -429,7 +415,36 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
     else:
         func_start = func_node.start_point[0] + 1
         func_end = func_node.end_point[0] + 1
+    return func_node, func_start, func_end
 
+
+def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
+    """Route to a nav handler based on the active flag.
+
+    Requires a TreeSitterAnalyzer with a parsed tree.  Exits with an error
+    message if the file type is not tree-sitter analysable.
+    """
+    from .treesitter import TreeSitterAnalyzer  # noqa: I006
+
+    if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
+        print(
+            'Error: nav flags require tree-sitter analysis.\n'
+            f'  File type may not be supported: {analyzer.path}',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    as_json = output_format == 'json'
+
+    # --scope and --around operate on a line reference, not a func node.
+    if getattr(args, 'scope', False):
+        _nav_scope(analyzer, element, as_json)
+        return
+    if getattr(args, 'around', None) is not None:
+        _nav_around(analyzer, element, as_json, args.around)
+        return
+
+    func_node, func_start, func_end = _resolve_func_node(analyzer, element)
     ctx = _NavCtx(
         func_node=func_node,
         element=element,
