@@ -252,6 +252,67 @@ def find_callees(
     }
 
 
+def _build_forward_index(
+    structures: List[Dict[str, Any]],
+    include_builtins: bool,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Build name → [{file, line, calls}] forward call index from collected structures."""
+    forward: Dict[str, List[Dict[str, Any]]] = {}
+    for file_struct in structures:
+        file_path = file_struct.get('file', '')
+        for elem in file_struct.get('elements', []):
+            if elem.get('category') not in ('functions', 'methods'):
+                continue
+            name = elem.get('name', '')
+            if not name:
+                continue
+            calls = elem.get('calls', [])
+            if not include_builtins:
+                calls = [c for c in calls if c.split('.')[-1] not in PYTHON_BUILTINS]
+            forward.setdefault(name, []).append({
+                'file': file_path,
+                'line': elem.get('line', 0),
+                'calls': calls,
+            })
+    return forward
+
+
+def _collect_level_entries(
+    current_names: Set[str],
+    forward: Dict[str, List[Dict[str, Any]]],
+    visited: Set[str],
+) -> Tuple[List[Dict[str, Any]], Set[str]]:
+    """Collect callee entries for one BFS level; return (entries, next_names).
+
+    Updates *visited* in-place to track seen callees across levels.
+    """
+    level_entries: List[Dict[str, Any]] = []
+    next_names: Set[str] = set()
+
+    for source_name in sorted(current_names):
+        seen_this_source: Set[str] = set()
+        for defn in forward.get(source_name, []):
+            for callee in defn['calls']:
+                tail = callee.split('.')[-1]
+                resolved_name = tail if tail in forward else callee
+                if resolved_name in seen_this_source or resolved_name in visited:
+                    continue
+                seen_this_source.add(resolved_name)
+                visited.add(resolved_name)
+                resolved = resolved_name in forward
+                level_entries.append({
+                    'caller': source_name,
+                    'callee': resolved_name,
+                    'resolved': resolved,
+                    'caller_file': defn['file'],
+                    'caller_line': defn['line'],
+                })
+                if resolved:
+                    next_names.add(resolved_name)
+
+    return level_entries, next_names
+
+
 def find_callees_recursive(
     path: str,
     root: str,
@@ -275,57 +336,14 @@ def find_callees_recursive(
     path_obj = Path(path)
     directory = path_obj if path_obj.is_dir() else path_obj.parent
     structures = collect_structures(str(directory))
-
-    # Build forward index: name → [{file, line, calls}]
-    forward: Dict[str, List[Dict[str, Any]]] = {}
-    for file_struct in structures:
-        file_path = file_struct.get('file', '')
-        for elem in file_struct.get('elements', []):
-            if elem.get('category') not in ('functions', 'methods'):
-                continue
-            name = elem.get('name', '')
-            if not name:
-                continue
-            calls = elem.get('calls', [])
-            if not include_builtins:
-                calls = [c for c in calls if c.split('.')[-1] not in PYTHON_BUILTINS]
-            forward.setdefault(name, []).append({
-                'file': file_path,
-                'line': elem.get('line', 0),
-                'calls': calls,
-            })
+    forward = _build_forward_index(structures, include_builtins)
 
     visited: Set[str] = {root}
     current_names: Set[str] = {root}
     levels: List[Dict[str, Any]] = []
 
     for level_num in range(1, depth + 1):
-        level_entries: List[Dict[str, Any]] = []
-        next_names: Set[str] = set()
-
-        for source_name in sorted(current_names):
-            seen_callees_this_source: Set[str] = set()
-            for defn in forward.get(source_name, []):
-                for callee in defn['calls']:
-                    # Normalise: strip trailing call-syntax noise, use tail for dotted names
-                    tail = callee.split('.')[-1]
-                    resolved_name = tail if tail in forward else callee
-                    if resolved_name in seen_callees_this_source or resolved_name in visited:
-                        continue
-                    seen_callees_this_source.add(resolved_name)
-                    visited.add(resolved_name)
-                    resolved = resolved_name in forward
-                    entry: Dict[str, Any] = {
-                        'caller': source_name,
-                        'callee': resolved_name,
-                        'resolved': resolved,
-                        'caller_file': defn['file'],
-                        'caller_line': defn['line'],
-                    }
-                    level_entries.append(entry)
-                    if resolved:
-                        next_names.add(resolved_name)
-
+        level_entries, next_names = _collect_level_entries(current_names, forward, visited)
         if level_entries:
             levels.append({'level': level_num, 'callees': level_entries})
         if not next_names:

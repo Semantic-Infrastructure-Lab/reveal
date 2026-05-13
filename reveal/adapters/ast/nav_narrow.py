@@ -300,7 +300,24 @@ def _handle_if(
             return after
         return type_set
 
-    # Walk elif/else chain carrying the "remainder" type-set forward
+    return _walk_alternatives(
+        alternatives, if_exits, if_types, else_types, type_set,
+        var_name, depth, get_text, events,
+    )
+
+
+def _walk_alternatives(
+    alternatives: list,
+    if_exits: bool,
+    if_types: FrozenSet[str],
+    else_types: FrozenSet[str],
+    type_set: FrozenSet[str],
+    var_name: str,
+    depth: int,
+    get_text: Callable,
+    events: List[Dict[str, Any]],
+) -> FrozenSet[str]:
+    """Walk elif/else chain; return type_set after the entire if/elif/else block."""
     remainder = else_types
     after = type_set
 
