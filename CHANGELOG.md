@@ -14,10 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (session cukite-0512)
 
+### Added
+- **Output Contract version policy doc** (BACK-305) — `docs/development/CONTRACT_VERSIONS.md` documents when to use `'1.0'` vs `'1.1'`, ResultBuilder auto-population semantics, parse_mode values, confidence bands, and field-add rules.
+- **Capability metadata in `calls://` results** (BACK-307) — Every `calls://` v1.1 response now includes `meta: {parse_mode: 'tree_sitter_full', confidence: 0.85, warnings: [...]}` listing the four universal static-analysis limitations (dynamic dispatch, MRO, importlib, eval/exec). Agents can decide whether to act on call-graph results or escalate.
+
 ### Fixed
 - **`ast` ↔ `calls` mutual import cycle broken** (BACK-299) — `ast/adapter.py` imported `PYTHON_BUILTINS` from `calls/index.py` via a deferred function-body import; `calls/index.py` already imported from `ast/analysis.py`. Fix: moved `PYTHON_BUILTINS` definition to `ast/analysis.py` (the shared analysis module). Both adapters now import it from the same neutral location; no cross-package cycle.
 
 ### Refactored
+- **`reveal/nav_handlers.py` extracted from `file_handler.py`** (BACK-306) — All 13 `_nav_*` handler implementations, `_NavCtx`, `_NAV_DISPATCH` table, and nav-flag helpers moved to a focused 314-line module. `file_handler.py` reduced from 625 → 352 lines, now focused on file routing/orchestration only. Nav symbols re-exported from `file_handler.py` for test backward compat.
+- **`find_callees_recursive` decomposed** (BACK-304) — `calls/index.py`'s 91-line BFS function (cx:27) split into `_build_forward_index()` (forward call index construction) and `_collect_level_entries()` (one BFS level with aliasing/dedup). The coordinator is now a clean 35-line BFS loop with cx:12.
+- **`_handle_if` decomposed** (BACK-303) — `nav_narrow.py`'s 113-line type-narrowing state machine (cx:33) split: the 50-line elif/else chain walker extracted into `_walk_alternatives()`. `_handle_if` now <50 lines focused on guard classification and the if-body walk; cx dropped below 10.
 - **`adapters/base.py` split into factory + registry + ABC** (BACK-301) — 598-line file (fan-in 27, 5 responsibilities) split into `adapters/factory.py` (constructor try-chain), `adapters/registry.py` (scheme registries + plugin discovery), and `adapters/base.py` (ResourceAdapter ABC only, ~250L). All existing importers unchanged via re-exports in `base.py`.
 - **`_dispatch_nav` helpers extracted** (BACK-300) — Inline `--scope` and `--around` handler blocks and func_node resolution logic extracted into `_nav_scope`, `_nav_around`, and `_resolve_func_node`. `_dispatch_nav` reduced from 116 lines to ~35 lines of pure coordination.
 - **`mcp_server.py` kernel cleanup** (BACK-296, BACK-297, BACK-298) — three structural fixes:
