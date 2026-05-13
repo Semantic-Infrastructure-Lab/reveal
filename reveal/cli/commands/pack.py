@@ -620,3 +620,84 @@ def _print_file_line(f: Dict[str, Any], verbose: bool) -> None:
         print(f"  {rel:50} {tokens:5} tokens  {lines:4} lines")
     else:
         print(f"  {rel}")
+
+
+def _format_file_line(f: Dict[str, Any]) -> str:
+    """Format one file entry as a string (verbose form, for MCP / string consumers)."""
+    return f"  {f['relative']:50} {f['tokens_approx']:5} tokens  {f['lines']:4} lines"
+
+
+def _format_pack_result(
+    path: Path,
+    selected: List[Dict[str, Any]],
+    meta: Dict[str, Any],
+    budget_tokens: Optional[int],
+    budget_lines: Optional[int],
+    since_error: Optional[str] = None,
+    content: bool = True,
+) -> str:
+    """Render pack output as a string (for MCP / non-stdout consumers).
+
+    Unlike :func:`_render_pack` (which prints), this returns the full result
+    as a single string suitable for returning from an MCP tool call.
+    """
+    since_val = meta.get('since')
+    budget_desc = f"~{budget_tokens} tokens" if budget_tokens else f"{budget_lines} lines"
+    since_desc = f"  [since {since_val}]" if since_val else ""
+    lines = [f"Pack: {path}  [{budget_desc} budget]{since_desc}"]
+    if since_val:
+        lines.append(f"Changed files:  {meta.get('changed_files_count', 0)} (boosted to top priority)")
+    if since_error:
+        lines.append(f"Warning: --since: {since_error}")
+    lines.append(
+        f"Selected {meta['selected']} of {meta['total_candidates']} files "
+        f"(~{meta['used_tokens_approx']} tokens, {meta['used_lines']} lines)"
+    )
+    lines.append("")
+
+    if not selected:
+        lines.append("No files fit within budget.")
+    else:
+        changed_f = [f for f in selected if f.get('changed')]
+        high_f = [f for f in selected if not f.get('changed') and f['priority'] >= 8]
+        medium_f = [f for f in selected if not f.get('changed') and 2 <= f['priority'] < 8]
+        low_f = [f for f in selected if not f.get('changed') and f['priority'] < 2]
+
+        if changed_f:
+            lines.append(f"── Changed files (since {since_val}) ──")
+            lines.extend(_format_file_line(f) for f in changed_f)
+            lines.append("")
+        if high_f:
+            lines.append("── Entry points / focus files ──")
+            lines.extend(_format_file_line(f) for f in high_f)
+            lines.append("")
+        if medium_f:
+            lines.append("── Key modules ──")
+            lines.extend(_format_file_line(f) for f in medium_f)
+            lines.append("")
+        if low_f:
+            lines.append("── Other files ──")
+            lines.extend(_format_file_line(f) for f in low_f)
+            lines.append("")
+        if meta['skipped'] > 0:
+            lines.append(f"[{meta['skipped']} files excluded — exceeded budget]")
+
+    if content and selected:
+        content_data = _collect_file_contents(selected)
+        lines.append("")
+        lines.append("━" * 70)
+        lines.append("CONTENT  (changed=full · key files=structure · low priority=names)")
+        lines.append("━" * 70)
+        name_only = []
+        for entry in content_data:
+            if entry['content_type'] == 'name_only':
+                name_only.append(entry['file'])
+                continue
+            marker = "  ◀ CHANGED (full content)" if entry['content_type'] == 'full' else ""
+            lines.append(f"\n── {entry['file']}{marker} ──")
+            lines.append(entry['content'].rstrip() if entry['content'].strip() else "[unreadable]")
+        if name_only:
+            lines.append("\n── Low-priority files (selected, structure omitted) ──")
+            lines.extend(f"  {f}" for f in name_only)
+
+    return "\n".join(lines)

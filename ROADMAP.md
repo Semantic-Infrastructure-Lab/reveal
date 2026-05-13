@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-05-06 (descending-radiation-0506 — v0.91.1 side-effects classifier maturity + OSS hygiene)
+> **Last updated**: 2026-05-12 (cukite-0512 — Architecture Hardening track added; source: `internal-docs/research/REVEAL_PROJECT_REVIEW_2026-05-12.md`)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -578,6 +578,48 @@ This document outlines reveal's development priorities and future direction. For
 - `domain://` HTTP response check — ✅ shipped in v0.60.0
 - `cpanel://USERNAME/full-audit` — ✅ shipped (platinum-gleam-0313): ssl + acl-check + nginx ACME in one pass; exits 2 on any failure
 - U6 follow-on — ✅ shipped (platinum-gleam-0313): `dns_points_here` annotation on `--dns-verified`; elsewhere domains excluded from summary counts; `[→ elsewhere]` renderer tag; `dns_elsewhere` result dict key for jq consumers
+
+---
+
+## Architecture Hardening Track
+
+> Identified via deep architecture investigation (cukite-0512, 2026-05-12).
+> Source: `internal-docs/research/REVEAL_PROJECT_REVIEW_2026-05-12.md`
+> **Direction**: shift from feature accumulation to architectural hardening — kernel contracts, adapter boundaries, and complexity reduction before the next feature wave.
+> Items are tracked in `internal-docs/BACKLOG.md` (BACK-296–307). This section documents the *intent* and *sequence*.
+
+### P0 — Stabilize the Kernel (do before major new adapters)
+
+**BACK-296** — Fix `stringzilla` phantom import in `utils/parallel.py` (B005). Runtime `ImportError` in clean environments. One-line fix.
+
+**BACK-297** — Extract `_default_args` from `mcp_server.py` → `cli/defaults.py`. Currently 104 lines / 93 hardcoded CLI flags inside the MCP server — every new flag requires a two-file edit.
+
+**BACK-298** — Finish `reveal_pack` extraction from `mcp_server.py`. The function (cx:43, 117L, zero tests) already delegates to `cli/commands/pack.py` but retains rendering decision logic that belongs there. After extraction the MCP server should be ~100 lines of protocol content.
+
+**BACK-301** — Split `adapters/base.py` (598L, fan-in 27, 5 responsibilities) into:
+  - `base.py` — `ResourceAdapter` ABC only
+  - `factory.py` — constructor resolution (`_try_*` functions, lines 1–155)
+  - `registry.py` — adapter registry + renderer registry + plugin discovery
+
+### P1 — Break Structural Cycles and Reduce Complexity
+
+**BACK-299** — Break `ast ↔ calls` mutual import cycle. Extract shared traversal primitives (`collect_structures` et al.) into `adapters/core/`. Neither sibling adapter should own shared logic.
+
+**BACK-300** — Convert `_dispatch_nav` (116L, cx:25) to a flag→handler dict in `file_handler.py`. Eliminates the 9 deferred function-body imports that are a cycle workaround, not intentional design.
+
+**BACK-302** — Write characterization tests for top-10 hotspot functions **before refactoring any of them**. All ten have zero test coverage. High complexity + no tests = refactoring hazard. Required prerequisite for BACK-298, BACK-300, BACK-303, BACK-304.
+
+**BACK-303** — Reduce `_handle_if` in `ast/nav_narrow.py` (cx:33). Closest to justified complexity (type-narrowing state machine), but the elif-chain dispatch can be extracted into a sub-function to bring cx below 15.
+
+**BACK-304** — Refactor `find_callees_recursive` in `calls/index.py` (cx:27, 91L). Combines BFS traversal, loop detection, aliasing, and accumulation. Missed by the original review; equal severity to `get_structure/ssl`.
+
+### P2 — Adapter Contract Standards
+
+**BACK-305** — Standardize `contract_version` policy. `ast/adapter.py` returns `'1.1'`; everything else returns `'1.0'`; no policy defines when to bump. Write the policy, then normalize all adapters in one pass. Also: `calls/adapter.py` is missing `source` and `source_type`.
+
+**BACK-306** — Split `file_handler.py` nav handler implementations from dispatch routing (companion to BACK-300). The 15 `_nav_*` implementations should move to their own module.
+
+**BACK-307** — Add adapter capability metadata — expose `confidence` and `limitations` in `meta` for adapters where analysis is approximate: `calls/` (misses dynamic dispatch), `ssl/` (may use cached cert), `claude/` (session parsing heuristics).
 
 ---
 

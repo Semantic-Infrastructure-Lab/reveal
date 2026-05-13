@@ -12,6 +12,16 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - (session cukite-0512)
+
+### Refactored
+- **`mcp_server.py` kernel cleanup** (BACK-296, BACK-297, BACK-298) — three structural fixes:
+  - `_default_args` (104 lines, 93 CLI flag defaults) extracted from `mcp_server.py` into `reveal/cli/defaults.py`; MCP server now imports it. Every CLI flag definition lives in one place.
+  - `reveal_pack` rendering logic (file-tier grouping, content section assembly) moved from `mcp_server.py` into `cli/commands/pack.py` as `_format_pack_result` + `_format_file_line`. `reveal_pack` reduced from 117 lines / cx:43 to ~25 lines of pure orchestration. `mcp_server.py` overall: 593 → 430 lines.
+  - `import stringzilla as sz` deferred import inside `utils/parallel.py:_scan_one` replaced with the module-level `_sz` alias already imported in the `try/except ImportError` guard (B005 fix).
+
+---
+
 ## [0.91.3] - 2026-05-10 (sessions burning-asteroid-0510, swift-massacre-0510)
 
 ### Added

@@ -40,10 +40,9 @@ def _scan_one(args: tuple) -> Path | None:
         with open(path, 'rb') as f:
             data = f.read()
         if _HAS_STRINGZILLA:
-            import stringzilla as sz
-            data_lower = sz.Str(data).lower()
+            data_lower = _sz.Str(data).lower()
             return path if all(
-                next(sz.find_all(data_lower, n), None) is not None
+                next(_sz.find_all(data_lower, n), None) is not None
                 for n in needles
             ) else None
         else:

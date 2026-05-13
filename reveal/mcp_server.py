@@ -20,9 +20,10 @@ Configuration example (Claude Code settings.json):
 import io
 import os
 import sys
-from argparse import Namespace
 
 from mcp.server.fastmcp import FastMCP
+
+from .cli.defaults import _default_args
 
 # Suppress update-check prints that would corrupt MCP tool responses.
 os.environ.setdefault('REVEAL_NO_UPDATE_CHECK', '1')
@@ -88,111 +89,6 @@ def _run_and_capture(fn, *args, **kwargs) -> str:
         return f"{out}\n[stderr: {err}]"
     return out
 
-
-def _default_args(**overrides) -> Namespace:
-    """Return a Namespace with all reveal CLI defaults for internal routing functions."""
-    defaults = dict(
-        path=None,
-        element=None,
-        format='text',
-        copy=False,
-        verbose=False,
-        no_breadcrumbs=False,
-        disable_breadcrumbs=False,
-        stdin=False,
-        meta=False,
-        list_supported=False,
-        languages=False,
-        adapters=False,
-        explain_file=False,
-        capabilities=False,
-        show_ast=False,
-        language_info=None,
-        agent_help=False,
-        discover=False,
-        head=None,
-        tail=None,
-        range=None,
-        search=None,
-        sort=None,
-        desc=False,
-        asc=False,
-        type=None,
-        all=False,
-        since=None,
-        base_path=None,
-        no_fallback=False,
-        depth=3,
-        max_entries=200,
-        dir_limit=50,
-        fast=False,
-        respect_gitignore=True,
-        exclude=None,
-        ext=None,
-        files=False,
-        outline=False,
-        hotspots=False,
-        code_only=False,
-        typed=False,
-        filter=None,
-        decorator_stats=False,
-        check=False,
-        config=None,
-        select=None,
-        ignore=None,
-        no_group=False,
-        recursive=False,
-        rules=False,
-        schema=False,
-        explain=None,
-        severity=None,
-        advanced=False,
-        only_failures=False,
-        batch=False,
-        fields=None,
-        max_items=None,
-        max_snippet_chars=None,
-        links=False,
-        link_type=None,
-        domain=None,
-        code=False,
-        language=None,
-        inline=False,
-        frontmatter=False,
-        related=False,
-        related_depth=1,
-        related_all=False,
-        related_flat=False,
-        related_limit=100,
-        section=None,
-        metadata=False,
-        semantic=None,
-        scripts=None,
-        styles=None,
-        validate_schema=None,
-        list_schemas=False,
-        summary=False,
-        expiring_within=None,
-        validate_nginx=False,
-        local_certs=False,
-        extract=None,
-        canonical_only=False,
-        check_acl=False,
-        validate_nginx_acme=False,
-        check_conflicts=False,
-        cpanel_certs=False,
-        diagnose=False,
-        log_path=None,
-        dns_verified=False,
-        check_live=False,
-        user=None,
-        # pack-specific
-        content=False,
-        focus=None,
-        budget='2000',
-    )
-    defaults.update(overrides)
-    return Namespace(**defaults)
 
 
 @mcp.tool()
@@ -405,7 +301,7 @@ def reveal_pack(
     from pathlib import Path
     from .cli.commands.pack import (
         _parse_budget, _get_changed_files, _collect_candidates,
-        _apply_budget, _collect_file_contents,
+        _apply_budget, _format_pack_result,
     )
 
     p = Path(path)
@@ -428,69 +324,10 @@ def reveal_pack(
         meta['since'] = since_val
         meta['changed_files_count'] = len(changed_files)
 
-    # Render text at MCP boundary
-    budget_desc = f"~{budget_tokens} tokens" if budget_tokens else f"{budget_lines} lines"
-    since_desc = f"  [since {since_val}]" if since_val else ""
-    lines = [f"Pack: {p}  [{budget_desc} budget]{since_desc}"]
-    if since_val:
-        lines.append(f"Changed files:  {meta.get('changed_files_count', 0)} (boosted to top priority)")
-    if since_error:
-        lines.append(f"Warning: --since: {since_error}")
-    lines.append(
-        f"Selected {meta['selected']} of {meta['total_candidates']} files "
-        f"(~{meta['used_tokens_approx']} tokens, {meta['used_lines']} lines)"
+    return _format_pack_result(
+        p, selected, meta, budget_tokens, budget_lines,
+        since_error=since_error, content=content,
     )
-    lines.append("")
-
-    if not selected:
-        lines.append("No files fit within budget.")
-    else:
-        def _file_line(f):
-            return f"  {f['relative']:50} {f['tokens_approx']:5} tokens  {f['lines']:4} lines"
-
-        changed_f = [f for f in selected if f.get('changed')]
-        high_f = [f for f in selected if not f.get('changed') and f['priority'] >= 8]
-        medium_f = [f for f in selected if not f.get('changed') and 2 <= f['priority'] < 8]
-        low_f = [f for f in selected if not f.get('changed') and f['priority'] < 2]
-
-        if changed_f:
-            lines.append(f"── Changed files (since {since_val}) ──")
-            lines.extend(_file_line(f) for f in changed_f)
-            lines.append("")
-        if high_f:
-            lines.append("── Entry points / focus files ──")
-            lines.extend(_file_line(f) for f in high_f)
-            lines.append("")
-        if medium_f:
-            lines.append("── Key modules ──")
-            lines.extend(_file_line(f) for f in medium_f)
-            lines.append("")
-        if low_f:
-            lines.append("── Other files ──")
-            lines.extend(_file_line(f) for f in low_f)
-            lines.append("")
-        if meta['skipped'] > 0:
-            lines.append(f"[{meta['skipped']} files excluded — exceeded budget]")
-
-    if content and selected:
-        content_data = _collect_file_contents(selected)
-        lines.append("")
-        lines.append("━" * 70)
-        lines.append("CONTENT  (changed=full · key files=structure · low priority=names)")
-        lines.append("━" * 70)
-        name_only = []
-        for entry in content_data:
-            if entry['content_type'] == 'name_only':
-                name_only.append(entry['file'])
-                continue
-            marker = "  ◀ CHANGED (full content)" if entry['content_type'] == 'full' else ""
-            lines.append(f"\n── {entry['file']}{marker} ──")
-            lines.append(entry['content'].rstrip() if entry['content'].strip() else "[unreadable]")
-        if name_only:
-            lines.append("\n── Low-priority files (selected, structure omitted) ──")
-            lines.extend(f"  {f}" for f in name_only)
-
-    return "\n".join(lines)
 
 
 @mcp.tool()
