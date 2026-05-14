@@ -25,6 +25,8 @@ For the full reference with output samples, see [`AGENT_HELP.md`](../AGENT_HELP.
 | `--flowto` | Can control reach the end of this range? |
 | `--calls` | What does this call? (sub-element scope) |
 | `--varflow VAR` | Where is VAR read, written, or tested? |
+| `--varflow VAR --cross-calls` | Same, but follows VAR across function call boundaries |
+| `--narrow VAR` | How does VAR's type narrow through control-flow branches? |
 | `--deps` | What variables flow INTO this range? |
 | `--mutations` (alias `--writes`) | What does this range write that's read later? |
 | `--sideeffects` | What DB/HTTP/FS/log/sleep calls fire here? |

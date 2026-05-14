@@ -272,12 +272,6 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--files', action='store_true',
                         help='Flat file list with timestamps sorted by mtime — replaces find|sort. '
                              'Combine with --ext to filter by type, --sort name/size/mtime, --desc.')
-    parser.add_argument('--outline', action='store_true',
-                        help='Two modes: without element → file-level hierarchical outline '
-                             '(classes with methods, nested structures); '
-                             'with element → control-flow skeleton of that function '
-                             '(branches, loops, returns). '
-                             'Example: `reveal file.py --outline` vs `reveal file.py myfunc --outline`')
     parser.add_argument('--hotspots', action='store_true',
                         help='Identify quality hotspots (requires stats:// adapter, shows worst 10 files by quality)')
     parser.add_argument('--code-only', action='store_true',
@@ -320,15 +314,13 @@ def _strip_path_quotes(value: str) -> str:
 
 
 def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
-    """Add semantic navigation options."""
+    """Add general navigation options (browsing, filtering, sorting)."""
     parser.add_argument('--head', type=int, metavar='N',
                         help='Show first N semantic units (records, functions, sections)')
     parser.add_argument('--tail', type=int, metavar='N',
                         help='Show last N semantic units (records, functions, sections)')
     parser.add_argument('--range', type=str, metavar='START-END',
                         help='Show semantic units in range (e.g., 10-20, 1-indexed)')
-
-    # Convenience flags for within-file search and filtering
     parser.add_argument('--search', type=str, metavar='PATTERN',
                         help='Search for named code elements (functions, classes, structs) by name pattern (regex). For variables/constants, use: reveal "ast://file?reveal_type=NAME"')
     parser.add_argument('--sort', type=str, metavar='FIELD',
@@ -347,9 +339,31 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--base-path', dest='base_path', type=_strip_path_quotes, metavar='DIR',
                         help='Point claude:// at a different Claude install — pass the projects dir and all paths (history, config, plans) derive from it (e.g., --base-path /mnt/wsl/.claude/projects)')
 
-    # Sub-function progressive disclosure (nav.py)
+
+def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
+    """Add element-scoped deep analysis flags (nav flags).
+
+    All flags in this group require a named element or :LINE range as the
+    second positional argument. Start with --outline or --boundary; add
+    --format json for machine-readable output.
+    """
+    parser.add_argument('--outline', action='store_true',
+                        help='Two modes: without element → file-level hierarchical outline '
+                             '(classes with methods, nested structures); '
+                             'with element → control-flow skeleton of that function '
+                             '(branches, loops, returns). '
+                             'Example: `reveal file.py --outline` vs `reveal file.py myfunc --outline`')
     parser.add_argument('--scope', action='store_true',
                         help='Show ancestor scope chain for a line (use with :LINE syntax, e.g., reveal file.py :123 --scope)')
+    parser.add_argument('--around', nargs='?', const=20, type=int, metavar='N',
+                        help='Show ±N lines centered on a target line with a pointer '
+                             '(e.g., reveal file.py :123 --around  or  reveal file.py :123 --around 10; default N=20)')
+    parser.add_argument('--boundary', action='store_true',
+                        help='Show boundary contract: INPUTS (undefined reads), ENVIRONMENT (superglobal reads), and EFFECTS (classified calls) '
+                             '(e.g., reveal file.php processOrder --boundary  or  reveal file.py myfunc --boundary)')
+    parser.add_argument('--sideeffects', action='store_true',
+                        help='Show classified side effects (db/http/cache/log/file/sleep/hard_stop) in a function or line range '
+                             '(e.g., reveal file.php :477-531 --sideeffects  or  reveal file.py myfunc --sideeffects)')
     parser.add_argument('--varflow', type=str, metavar='VAR',
                         help='Trace reads/writes of a variable within a function or flat file '
                              '(e.g., reveal file.py myfunc --varflow result  or  reveal file.php :1-2000 --varflow errormsg)')
@@ -361,9 +375,18 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                              'starting from its annotation (e.g., reveal file.py myfunc --narrow x)')
     parser.add_argument('--calls', nargs='?', const='FULL', type=str, metavar='START-END',
                         help='Show call sites in a line range (e.g., reveal file.py myfunc --calls 89-120  or  reveal file.php :477-531 --calls)')
-    parser.add_argument('--around', nargs='?', const=20, type=int, metavar='N',
-                        help='Show ±N lines centered on a target line with a pointer '
-                             '(e.g., reveal file.py :123 --around  or  reveal file.py :123 --around 10; default N=20)')
+    parser.add_argument('--deps', action='store_true',
+                        help='Show variables that flow INTO a line range (potential function params) '
+                             '(e.g., reveal file.php :1136-1463 --deps  or  reveal file.py myfunc --deps)')
+    parser.add_argument('--mutations', action='store_true',
+                        help='Show read-after-write hazards: variables written in a range and read after (potential return values). '
+                             'Alias: --writes. '
+                             '(e.g., reveal file.php :1136-1463 --mutations  or  reveal file.py myfunc --mutations)')
+    parser.add_argument('--writes', action='store_true',
+                        help='Alias for --mutations: show read-after-write hazards in a function or range')
+    parser.add_argument('--returns', action='store_true',
+                        help='Show return/exit paths with their gate chains (conditions that must be true to reach each exit) '
+                             '(e.g., reveal file.php processOrder --returns  or  reveal file.py myfunc --returns)')
     parser.add_argument('--ifmap', action='store_true',
                         help='Show branching skeleton (IF/ELIF/ELSE) for a function or line range '
                              '(e.g., reveal file.php :878-2130 --ifmap  or  reveal file.py myfunc --ifmap)')
@@ -376,24 +399,6 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--flowto', action='store_true',
                         help='Show exit nodes plus a reachability verdict for a line range '
                              '(e.g., reveal file.php :2928-3663 --flowto  or  reveal file.py myfunc --flowto)')
-    parser.add_argument('--deps', action='store_true',
-                        help='Show variables that flow INTO a line range (potential function params) '
-                             '(e.g., reveal file.php :1136-1463 --deps  or  reveal file.py myfunc --deps)')
-    parser.add_argument('--mutations', action='store_true',
-                        help='Show read-after-write hazards: variables written in a range and read after (potential return values). '
-                             'Alias: --writes. '
-                             '(e.g., reveal file.php :1136-1463 --mutations  or  reveal file.py myfunc --mutations)')
-    parser.add_argument('--writes', action='store_true',
-                        help='Alias for --mutations: show read-after-write hazards in a function or range')
-    parser.add_argument('--sideeffects', action='store_true',
-                        help='Show classified side effects (db/http/cache/log/file/sleep/hard_stop) in a function or line range '
-                             '(e.g., reveal file.php :477-531 --sideeffects  or  reveal file.py myfunc --sideeffects)')
-    parser.add_argument('--returns', action='store_true',
-                        help='Show return/exit paths with their gate chains (conditions that must be true to reach each exit) '
-                             '(e.g., reveal file.php processOrder --returns  or  reveal file.py myfunc --returns)')
-    parser.add_argument('--boundary', action='store_true',
-                        help='Show boundary contract: INPUTS (undefined reads), ENVIRONMENT (superglobal reads), and EFFECTS (classified calls) '
-                             '(e.g., reveal file.php processOrder --boundary  or  reveal file.py myfunc --boundary)')
 
 
 def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
@@ -572,8 +577,14 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     _add_discovery_options(g_discovery)
 
     # ── Navigation ────────────────────────────────────────────────────────────
-    g_nav = parser.add_argument_group('Navigation  [global — semantic slicing, flow analysis]')
+    g_nav = parser.add_argument_group('Navigation  [global — browse, filter, sort]')
     _add_navigation_options(g_nav)
+
+    # ── Code analysis ─────────────────────────────────────────────────────────
+    g_analysis = parser.add_argument_group(
+        'Code analysis  [element-scoped — use with a named function or :LINE range]\n'
+        '  Start with --outline or --boundary. Add --format json for structured output.')
+    _add_code_analysis_options(g_analysis)
 
     # ── Display ───────────────────────────────────────────────────────────────
     g_display = parser.add_argument_group('Display  [global — tree depth, filtering, layout]')
