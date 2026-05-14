@@ -52,8 +52,9 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
             if subdir.is_dir() and subdir.name not in ('__pycache__', 'help_data'):
                 adapter_files.extend(subdir.glob('*.py'))
 
-        # Filter out non-adapter files
-        adapter_files = [f for f in adapter_files if f.stem not in ('__init__', 'base', 'help_data')]
+        # Filter out non-adapter files (registry.py/factory.py are infrastructure,
+        # not adapters — their docstrings contain @register_adapter examples)
+        adapter_files = [f for f in adapter_files if f.stem not in ('__init__', 'base', 'help_data', 'registry', 'factory')]
 
         # Find which ones have @register_adapter
         registered_in_code = set()
