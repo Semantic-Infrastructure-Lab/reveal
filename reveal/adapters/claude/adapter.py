@@ -606,94 +606,67 @@ class ClaudeAdapter(ResourceAdapter):
             return result
         return self._route_by_resource(messages, conversation_path_str, contract_base)
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
-        """Return session structure based on query.
+    # Prefix → method-name table for simple resource routing.
+    # Each entry matches `resource == prefix` OR `resource.startswith(prefix + '/')`.
+    _RESOURCE_DISPATCH = [
+        ('files',    '_track_file_sessions'),
+        ('history',  '_get_history'),
+        ('info',     '_get_info'),
+        ('settings', '_get_settings'),
+        ('plans',    '_get_plans'),
+        ('config',   '_get_config'),
+        ('memory',   '_get_memory'),
+        ('agents',   '_get_agents'),
+        ('hooks',    '_get_hooks'),
+    ]
 
-        Routes to appropriate handler based on resource path and query.
-        Supports composite queries for filtering (e.g., ?tools=Bash&errors&contains=reveal).
-
-        Args:
-            **kwargs: Additional parameters (unused)
-
-        Returns:
-            Dictionary with session data (Output Contract v1.0 compliant)
-            All outputs include via _get_contract_base():
-                'contract_version': '1.0'
-                'type': adapter-specific type
-                'source': conversation file path
-                'source_type': 'file'
-        """
-        # Handle bare claude:// and sessions/ aliases.
-        # ?search=term at this level means cross-session content search.
-        # ?filter=term (or no ?search=) keeps the original session-name listing.
-        is_session_list_resource = (
+    def _is_session_list_resource(self) -> bool:
+        return (
             not self.resource
             or self.resource in ('.', '', 'sessions', 'sessions/')
             or self.resource.startswith('sessions/')
         )
-        if is_session_list_resource:
-            if self.query_params.get('search'):
-                return self._search_sessions()
-            return self._list_sessions()
 
-        # claude://search/<term> — path-based alias for cross-session content search.
-        # Also handles bare claude://search (prompts for a term).
+    def _inject_search_term(self) -> None:
+        """Copy path component of search/<term> into query_params['search']."""
+        parts = self.resource.split('/', 1)
+        path_term = parts[1].strip() if len(parts) > 1 else ''
+        if path_term and not self.query_params.get('search'):
+            self.query_params['search'] = path_term
+
+    def _resolve_resource_handler(self) -> Optional[Any]:
+        """Return bound handler for the current resource prefix, or None."""
+        for prefix, method_name in self._RESOURCE_DISPATCH:
+            if self.resource == prefix or self.resource.startswith(prefix + '/'):
+                return getattr(self, method_name)
+        return None
+
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
+        """Return session structure based on resource path and query params."""
+        # Bare claude://, sessions/, '.', '' → session list or cross-session search.
+        if self._is_session_list_resource():
+            return self._search_sessions() if self.query_params.get('search') else self._list_sessions()
+
+        # search/<term> — path-based alias; copy term into query_params first.
         if self.resource == 'search' or self.resource.startswith('search/'):
-            parts = self.resource.split('/', 1)
-            path_term = parts[1].strip() if len(parts) > 1 else ''
-            if path_term and not self.query_params.get('search'):
-                self.query_params['search'] = path_term
+            self._inject_search_term()
             return self._search_sessions()
 
-        # claude://files/<path> — cross-session file tracking.
-        if self.resource == 'files' or self.resource.startswith('files/'):
-            return self._track_file_sessions()
-
-        # claude://history — prompt history from ~/.claude/history.jsonl.
-        if self.resource == 'history' or self.resource.startswith('history'):
-            return self._get_history()
-
-        # claude://info — diagnostic path dump.
-        if self.resource == 'info':
-            return self._get_info()
-
-        # claude://settings — ~/.claude/settings.json.
-        if self.resource == 'settings':
-            return self._get_settings()
-
-        # claude://plans[/<name>] — list or read ~/.claude/plans/.
-        if self.resource == 'plans' or self.resource.startswith('plans/'):
-            return self._get_plans()
-
-        # claude://config — ~/.claude.json per-install config.
-        if self.resource == 'config':
-            return self._get_config()
-
-        # claude://memory[/<project>] — memory files from ~/.claude/projects/*/memory/.
-        if self.resource == 'memory' or self.resource.startswith('memory/'):
-            return self._get_memory()
-
-        # claude://agents[/<name>] — list or read ~/.claude/agents/.
-        if self.resource == 'agents' or self.resource.startswith('agents/'):
-            return self._get_agents()
-
-        # claude://hooks[/<event>] — list or read ~/.claude/hooks/.
-        if self.resource == 'hooks' or self.resource.startswith('hooks/'):
-            return self._get_hooks()
-
-        # claude://session/<id>/chain — session continuation chain traversal.
+        # /chain substring (not a simple prefix — appears mid-path).
         if '/chain' in self.resource:
             return self._get_chain()
 
+        # Simple prefix dispatch (files/, history, plans/, memory/, …).
+        handler = self._resolve_resource_handler()
+        if handler is not None:
+            return handler()
+
+        # Session message routing — load messages then dispatch by query/resource.
         messages = self._load_messages()
         contract_base = self._get_contract_base()
         conversation_path_str = str(self.conversation_path) if self.conversation_path else ''
-
-        # Check for composite query (multiple filters)
         if self._is_composite_query():
             return self._handle_composite_query(messages)
-
-        # Route to appropriate handler
         return self._route_query_handler(messages, conversation_path_str, contract_base)
 
     def _is_composite_query(self) -> bool:

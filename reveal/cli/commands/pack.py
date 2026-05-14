@@ -548,6 +548,51 @@ def _render_architecture_brief(selected: List[Dict[str, Any]]) -> None:
     print()
 
 
+def _print_pack_header(
+    path: Path,
+    meta: Dict[str, Any],
+    budget_tokens: Optional[int],
+    budget_lines: Optional[int],
+) -> None:
+    budget_desc = (f"~{budget_tokens} tokens" if budget_tokens else f"{budget_lines} lines")
+    since = meta.get('since')
+    since_desc = f"  [since {since}]" if since else ""
+    print(f"Pack: {path}  [{budget_desc} budget]{since_desc}")
+    if since:
+        print(f"Changed files:  {meta.get('changed_files_count', 0)} (boosted to top priority)")
+    print(f"Selected {meta['selected']} of {meta['total_candidates']} files "
+          f"(~{meta['used_tokens_approx']} tokens, {meta['used_lines']} lines)")
+    print()
+
+
+def _print_pack_file_groups(
+    selected: List[Dict[str, Any]],
+    meta: Dict[str, Any],
+    verbose: bool,
+    architecture: bool,
+) -> None:
+    since = meta.get('since')
+    if architecture:
+        _render_architecture_brief(selected)
+
+    changed = [f for f in selected if f.get('changed')]
+    high = [f for f in selected if not f.get('changed') and f['priority'] >= 8]
+    medium = [f for f in selected if not f.get('changed') and 2 <= f['priority'] < 8]
+    low = [f for f in selected if not f.get('changed') and f['priority'] < 2]
+
+    for label, group in [
+        (f"── Changed files (since {since}) ──", changed),
+        ("── Entry points / focus files ──", high),
+        ("── Key modules ──", medium),
+        ("── Other files ──", low),
+    ]:
+        if group:
+            print(label)
+            for f in group:
+                _print_file_line(f, verbose)
+            print()
+
+
 def _render_pack(
     path: Path,
     selected: List[Dict[str, Any]],
@@ -558,55 +603,11 @@ def _render_pack(
     architecture: bool = False,
 ) -> None:
     """Render pack output as text."""
-    budget_desc = (f"~{budget_tokens} tokens" if budget_tokens
-                   else f"{budget_lines} lines")
-    since = meta.get('since')
-    since_desc = f"  [since {since}]" if since else ""
-    print(f"Pack: {path}  [{budget_desc} budget]{since_desc}")
-    if since:
-        n_changed = meta.get('changed_files_count', 0)
-        print(f"Changed files:  {n_changed} (boosted to top priority)")
-    print(f"Selected {meta['selected']} of {meta['total_candidates']} files "
-          f"(~{meta['used_tokens_approx']} tokens, {meta['used_lines']} lines)")
-    print()
-
+    _print_pack_header(path, meta, budget_tokens, budget_lines)
     if not selected:
         print("No files fit within budget.")
         return
-
-    if architecture:
-        _render_architecture_brief(selected)
-
-    # Group by priority tier for display
-    changed = [f for f in selected if f.get('changed')]
-    high = [f for f in selected if not f.get('changed') and f['priority'] >= 8]
-    medium = [f for f in selected if not f.get('changed') and 2 <= f['priority'] < 8]
-    low = [f for f in selected if not f.get('changed') and f['priority'] < 2]
-
-    if changed:
-        print(f"── Changed files (since {since}) ──")
-        for f in changed:
-            _print_file_line(f, verbose)
-        print()
-
-    if high:
-        print("── Entry points / focus files ──")
-        for f in high:
-            _print_file_line(f, verbose)
-        print()
-
-    if medium:
-        print("── Key modules ──")
-        for f in medium:
-            _print_file_line(f, verbose)
-        print()
-
-    if low:
-        print("── Other files ──")
-        for f in low:
-            _print_file_line(f, verbose)
-        print()
-
+    _print_pack_file_groups(selected, meta, verbose, architecture)
     if meta['skipped'] > 0:
         print(f"[{meta['skipped']} files excluded — exceeded budget]")
 
