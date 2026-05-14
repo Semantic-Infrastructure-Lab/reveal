@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (session cukite-0512)
+## [0.92.0] - 2026-05-13 (sessions cukite-0512, garnet-palette-0513, peaceful-whirlwind-0513, desert-ice-0513)
 
 ### Added
 - **Output Contract version policy doc** (BACK-305) — `docs/development/CONTRACT_VERSIONS.md` documents when to use `'1.0'` vs `'1.1'`, ResultBuilder auto-population semantics, parse_mode values, confidence bands, and field-add rules.
