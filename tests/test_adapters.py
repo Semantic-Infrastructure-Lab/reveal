@@ -314,16 +314,17 @@ class TestHelpAdapter(unittest.TestCase):
         """Should retrieve help for specific adapter."""
         adapter = HelpAdapter()
 
-        # Test ast:// help
+        # ast and env are registered in STATIC_HELP, so they return static guides
         ast_help = adapter.get_element('ast')
         self.assertIsNotNone(ast_help)
-        self.assertEqual(ast_help['name'], 'ast')
-        self.assertIn('description', ast_help)
+        self.assertEqual(ast_help['type'], 'static_guide')
+        self.assertEqual(ast_help['topic'], 'ast')
+        self.assertIn('content', ast_help)
 
-        # Test env:// help
         env_help = adapter.get_element('env')
         self.assertIsNotNone(env_help)
-        self.assertEqual(env_help['name'], 'env')
+        self.assertEqual(env_help['type'], 'static_guide')
+        self.assertEqual(env_help['topic'], 'env')
 
     def test_get_all_adapters(self):
         """Should provide summary of all adapters."""

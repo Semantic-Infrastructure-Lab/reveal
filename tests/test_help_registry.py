@@ -116,6 +116,40 @@ class TestHelpRegistry(unittest.TestCase):
         self.assertIsNotNone(rel, 'help://ast not registered')
         self.assertTrue((_DOCS_ROOT / rel).exists(), f'AST guide missing at {rel}')
 
+    def test_progressive_disclosure_large_guide(self):
+        """Large guides (>200 lines) are truncated with a breadcrumb and /full hint."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('ast')
+        self.assertIsNotNone(result)
+        content = result['content']
+        self.assertIn('── Full guide: reveal help://ast/full', content,
+                      'Truncated view must include /full access hint')
+        self.assertIn('lines total. Sections:', content,
+                      'Truncated view must include section breadcrumb')
+        # Should NOT contain the full guide (which ends with Version History / FAQ)
+        self.assertNotIn('## Version History', content,
+                         'Truncated view should not include late sections')
+
+    def test_progressive_disclosure_full_bypass(self):
+        """help://ast/full returns the complete guide, bypassing truncation."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('ast/full')
+        self.assertIsNotNone(result)
+        content = result['content']
+        self.assertIn('## Version History', content,
+                      '/full must return the complete guide')
+        self.assertNotIn('reveal help://ast/full', content,
+                         '/full must not append breadcrumb footer')
+
+    def test_progressive_disclosure_small_guide_passthrough(self):
+        """Small guides (<=200 lines) are returned in full without truncation."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('nav')
+        self.assertIsNotNone(result)
+        content = result['content']
+        self.assertNotIn('Full guide:', content,
+                         'Short guides must not have a truncation footer')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -376,6 +376,9 @@ class HelpAdapter(ResourceAdapter):
         # Check for section extraction: help://ast/workflows
         if '/' in topic:
             adapter_name, section = topic.split('/', 1)
+            # Static guides support /full to bypass progressive disclosure
+            if adapter_name in self.help_topics and section == 'full':
+                return self._load_static_help(adapter_name, full=True)
             return self._get_adapter_section(adapter_name, section)
 
         # Quick-start orientation cheat sheet
@@ -842,11 +845,14 @@ class HelpAdapter(ResourceAdapter):
 
         return all_help
 
-    def _load_static_help(self, topic: str) -> Optional[Dict[str, Any]]:
+    _PROGRESSIVE_DISCLOSURE_THRESHOLD = 200
+
+    def _load_static_help(self, topic: str, full: bool = False) -> Optional[Dict[str, Any]]:
         """Load help from static markdown file.
 
         Args:
             topic: Topic name ('agent', 'quick-start', 'tricks', etc.)
+            full: If True, bypass progressive disclosure and return the complete file.
 
         Returns:
             Help content dict or None if file not found
@@ -861,6 +867,11 @@ class HelpAdapter(ResourceAdapter):
         try:
             with open(help_path, 'r', encoding='utf-8') as f:
                 content = f.read()
+
+            lines = content.splitlines()
+
+            if not full and len(lines) > self._PROGRESSIVE_DISCLOSURE_THRESHOLD:
+                content = self._truncate_to_first_section(topic, lines)
 
             return {
                 'type': 'static_guide',
@@ -882,6 +893,25 @@ class HelpAdapter(ResourceAdapter):
                 'error': 'Load failed',
                 'message': str(e)
             }
+
+    def _truncate_to_first_section(self, topic: str, lines: list[str]) -> str:
+        """Return header + first ## section + section breadcrumb for large guides."""
+        section_indices = [i for i, line in enumerate(lines) if line.startswith('## ')]
+        section_names = [lines[i][3:].strip() for i in section_indices]
+
+        if len(section_indices) >= 2:
+            preview = '\n'.join(lines[:section_indices[1]]).rstrip()
+        elif section_indices:
+            preview = '\n'.join(lines).rstrip()
+        else:
+            preview = '\n'.join(lines[:80]).rstrip()
+
+        breadcrumb = ' | '.join(section_names) if section_names else '(no sections)'
+        footer = (
+            f"\n\n── {len(lines)} lines total. Sections: {breadcrumb}\n"
+            f"── Full guide: reveal help://{topic}/full"
+        )
+        return preview + footer
 
     def _get_adapter_schema(self, adapter_name: str) -> Optional[Dict[str, Any]]:
         """Get machine-readable schema for an adapter.
