@@ -846,6 +846,9 @@ class HelpAdapter(ResourceAdapter):
         return all_help
 
     _PROGRESSIVE_DISCLOSURE_THRESHOLD = 200
+    # These topics are intentionally loaded in full — they are mega-docs that agents
+    # bootstrap from, or aliased sections where truncation serves the wrong content.
+    _FULL_ONLY_TOPICS = frozenset({'agent', 'anti-patterns'})
 
     def _load_static_help(self, topic: str, full: bool = False) -> Optional[Dict[str, Any]]:
         """Load help from static markdown file.
@@ -870,7 +873,8 @@ class HelpAdapter(ResourceAdapter):
 
             lines = content.splitlines()
 
-            if not full and len(lines) > self._PROGRESSIVE_DISCLOSURE_THRESHOLD:
+            if (not full and topic not in self._FULL_ONLY_TOPICS
+                    and len(lines) > self._PROGRESSIVE_DISCLOSURE_THRESHOLD):
                 content = self._truncate_to_first_section(topic, lines)
 
             return {
@@ -895,14 +899,23 @@ class HelpAdapter(ResourceAdapter):
             }
 
     def _truncate_to_first_section(self, topic: str, lines: list[str]) -> str:
-        """Return header + first ## section + section breadcrumb for large guides."""
+        """Return header + first meaningful content + section breadcrumb for large guides.
+
+        Shows enough content to be useful: at least 2 sections or 60 lines of body,
+        whichever cuts later — avoids the case where the first section is a skimpy
+        1-paragraph intro (e.g. quick-start's "Installation" section).
+        """
         section_indices = [i for i, line in enumerate(lines) if line.startswith('## ')]
         section_names = [lines[i][3:].strip() for i in section_indices]
 
-        if len(section_indices) >= 2:
-            preview = '\n'.join(lines[:section_indices[1]]).rstrip()
-        elif section_indices:
-            preview = '\n'.join(lines).rstrip()
+        if section_indices:
+            # Walk sections until we have at least 60 lines of body content
+            cut_at = section_indices[1] if len(section_indices) >= 2 else len(lines)
+            for i, idx in enumerate(section_indices[2:], start=2):
+                if cut_at >= 60:
+                    break
+                cut_at = idx
+            preview = '\n'.join(lines[:cut_at]).rstrip()
         else:
             preview = '\n'.join(lines[:80]).rstrip()
 

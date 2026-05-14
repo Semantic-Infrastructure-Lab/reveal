@@ -20,10 +20,14 @@ category: guide
 
 **For progressive, low-token discovery** (one topic at a time), use `reveal help://<topic>`:
 - `reveal help://` — index of all topics
-- `reveal help://ast` — AST adapter details
-- `reveal help://tricks` — cool tricks and hidden features
+- `reveal help://ast` — ast:// quick start (first section only; ~400 tokens)
+- `reveal help://ast/full` — complete ast:// guide (~4,000 tokens)
+- `reveal help://tricks` — RECIPES guide first section
+- `reveal help://tricks/full` — complete RECIPES guide
 - `reveal help://schemas/<adapter>` — machine-readable adapter schema
 - `reveal help://examples/<task>` — query recipes per task
+
+Guides >200 lines show the first section by default (progressive disclosure). Append `/full` to get the complete guide.
 
 `--help`, `--agent-help`, and `help://` complement each other — they don't overlap.
 
@@ -41,9 +45,10 @@ reveal --discover                # Dump full adapter registry as JSON (schemas +
 reveal --capabilities <file>     # What can be extracted from this file (JSON)
 reveal --explain-file <file>     # Which analyzer + fallback status for this file
 
-# help:// adapter — read topic-by-topic
+# help:// adapter — read topic-by-topic (progressive disclosure)
 reveal help://                   # List all help topics
-reveal help://<topic>            # Read a single topic (e.g. help://ast, help://tricks)
+reveal help://<topic>            # First section of a topic (e.g. help://ast, help://tricks)
+reveal help://<topic>/full       # Complete guide (e.g. help://ast/full)
 reveal help://schemas/<adapter>  # Machine-readable adapter schema (preferred for agents)
 reveal help://examples/<task>    # Canonical query recipes per task category
 

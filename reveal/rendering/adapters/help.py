@@ -162,6 +162,8 @@ def _render_static_guides_header() -> None:
     print("## 📄 STATIC GUIDES (Markdown Files)")
     print("Source: reveal/ and reveal/adapters/ directories")
     print("Location: Bundled with installation")
+    print("Progressive disclosure: guides >200 lines show first section by default.")
+    print("  Full guide: reveal help://<topic>/full")
     print()
 
 
@@ -192,7 +194,7 @@ def _render_guide_category(category_name: str, topics: list, static: list,
 
         print(f"  {topic:16} - {_get_guide_description(topic)}")
         print(f"                     File: {file}")
-        print(f"                     Token cost: {token_estimate}{extra_info}")
+        print(f"                     Token cost: {token_estimate} (full){extra_info}")
     print()
 
 
@@ -232,8 +234,9 @@ def _render_navigation_section() -> None:
     print("  reveal help://examples       # Canonical query recipes by task")
     print()
     print("**Learn specific feature:**")
-    print("  reveal help://ast           # Deep dive on ast://")
-    print("  reveal help://python        # Deep dive on python://")
+    print("  reveal help://ast           # ast:// quick start (first section)")
+    print("  reveal help://ast/full      # Complete ast:// guide")
+    print("  reveal help://python        # python:// quick start")
     print()
     print("**Best practices:**")
     print("  reveal help://anti-patterns # Common mistakes to avoid")

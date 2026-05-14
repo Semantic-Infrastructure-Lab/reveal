@@ -150,6 +150,29 @@ class TestHelpRegistry(unittest.TestCase):
         self.assertNotIn('Full guide:', content,
                          'Short guides must not have a truncation footer')
 
+    def test_full_only_topics_never_truncated(self):
+        """agent and anti-patterns are always returned in full (they are mega-docs)."""
+        adapter = HelpAdapter()
+        for topic in ('agent', 'anti-patterns'):
+            result = adapter.get_element(topic)
+            self.assertIsNotNone(result, f'help://{topic} must resolve')
+            content = result['content']
+            self.assertNotIn('Full guide:', content,
+                             f'help://{topic} must never be truncated')
+            self.assertGreater(len(content.splitlines()), 200,
+                               f'help://{topic} must return full content')
+
+    def test_quick_start_shows_multiple_sections(self):
+        """quick-start truncation shows enough content to be useful (at least 2 sections)."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('quick-start')
+        self.assertIsNotNone(result)
+        content = result['content']
+        # Should show more than just "Installation"
+        section_count = sum(1 for line in content.splitlines() if line.startswith('## '))
+        self.assertGreater(section_count, 1,
+                           'quick-start must show at least 2 sections to be useful')
+
 
 if __name__ == '__main__':
     unittest.main()
