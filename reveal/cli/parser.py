@@ -583,7 +583,8 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     # ── Code analysis ─────────────────────────────────────────────────────────
     g_analysis = parser.add_argument_group(
         'Code analysis  [element-scoped — use with a named function or :LINE range]\n'
-        '  Start with --outline or --boundary. Add --format json for structured output.')
+        '  Start with --outline or --boundary. Add --format json for structured output.\n'
+        '  Full guide: reveal help://nav')
     _add_code_analysis_options(g_analysis)
 
     # ── Display ───────────────────────────────────────────────────────────────
