@@ -14,7 +14,7 @@ PROJECT_ADAPTERS = {'claude'}
 GUIDE_CATEGORIES = {
     'getting_started': ['quick-start'],
     'ai_guides': ['agent', 'mcp'],
-    'feature_guides': ['python-guide', 'markdown', 'reveal-guide', 'html', 'configuration', 'schemas', 'duplicates'],
+    'feature_guides': ['python-guide', 'markdown', 'reveal-guide', 'html', 'configuration', 'schemas', 'duplicates', 'nav'],
     'best_practices': ['anti-patterns', 'tricks', 'ux'],
     'dev_guides': ['adapter-authoring', 'help'],
 }
@@ -29,11 +29,12 @@ TOKEN_ESTIMATES = {
     'configuration': '~3,500',
     'schemas': '~4,500',
     'duplicates': '~5,500',
-    'anti-patterns': '~2,000',
+    'anti-patterns': '~12,000',
     'tricks': '~3,500',
     'ux': '~3,000',
     'adapter-authoring': '~2,500',
     'help': '~2,500',
+    'nav': '~2,000',
 }
 
 
@@ -261,7 +262,7 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
 
     # Render static guides
     if static:
-        from reveal.adapters.help import HelpAdapter
+        from reveal.adapters.help import HelpAdapter  # noqa: I006 — deferred to avoid rendering→adapters→rendering cycle
         static_help_map = HelpAdapter.STATIC_HELP
 
         _render_static_guides_header()
@@ -332,6 +333,8 @@ def _get_guide_description(topic: str) -> str:
         'help': 'How the help system works (meta!)',
         'mcp': 'MCP server setup — 5 tools for Claude Code, Cursor, Windsurf',
         'mcp-setup': 'Alias for mcp',
+        'nav': 'Deep-dive code navigation flags (--outline, --boundary, --varflow, --sideeffects)',
+        'navigation': 'Alias for nav',
     }
     return descriptions.get(topic, 'Static guide')
 

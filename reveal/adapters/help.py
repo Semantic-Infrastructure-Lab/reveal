@@ -379,7 +379,10 @@ class HelpAdapter(ResourceAdapter):
             # Static guides support /full to bypass progressive disclosure
             if adapter_name in self.help_topics:
                 if section == 'full':
-                    return self._load_static_help(adapter_name, full=True)
+                    result = self._load_static_help(adapter_name, full=True)
+                    if result and 'error' not in result:
+                        result['topic'] = f'{adapter_name}/full'
+                    return result
                 # Fall through: if also a URI adapter, let it handle the section
             # Only route to adapter section handler when the adapter actually exists;
             # returning None here gives a clean "not found" rather than a misleading
