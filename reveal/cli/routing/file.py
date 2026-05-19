@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 # and reveal.cli.routing.file.handle_file in tests.
 from .uri import handle_uri  # noqa: E402
 from ...file_handler import handle_file  # noqa: E402
+from ...grep_handler import handle_grep  # noqa: E402
 
 
 _NGINX_ADAPTER_FLAGS = {
@@ -171,8 +172,8 @@ def _parse_ext_arg(ext_arg: Optional[str]) -> Optional[list]:
 def _build_ast_query_from_flags(path: Path, args: 'Namespace') -> str:
     """Build AST query URI from convenience flags."""
     query_params = []
-    if getattr(args, 'search', None):
-        query_params.append(f"name~={args.search}")
+    if getattr(args, 'name', None):
+        query_params.append(f"name~={args.name}")
     if getattr(args, 'type', None):
         query_params.append(f"type={args.type}")
     if getattr(args, 'sort', None):
@@ -268,7 +269,11 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
     if getattr(args, 'meta', False):
         _show_directory_meta(path, args)
         return
-    if getattr(args, 'search', None) or getattr(args, 'type', None):
+    if getattr(args, 'grep', None):
+        from ...grep_handler import handle_grep_directory
+        handle_grep_directory(str(path), args.grep, args)
+        return
+    if getattr(args, 'name', None) or getattr(args, 'type', None):
         handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
         return
     sort_by = getattr(args, 'sort', None)
@@ -294,7 +299,10 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
 
 def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Namespace') -> None:
     """Route a resolved file path — to ast query if convenience flags set, else normal handler."""
-    if getattr(args, 'search', None) or getattr(args, 'sort', None) or getattr(args, 'type', None):
+    if getattr(args, 'grep', None):
+        handle_grep(str(path), args.grep, args)
+        return
+    if getattr(args, 'name', None) or getattr(args, 'sort', None) or getattr(args, 'type', None):
         handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
         return
 

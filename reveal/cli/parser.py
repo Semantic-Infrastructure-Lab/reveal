@@ -321,8 +321,12 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                         help='Show last N semantic units (records, functions, sections)')
     parser.add_argument('--range', type=str, metavar='START-END',
                         help='Show semantic units in range (e.g., 10-20, 1-indexed)')
-    parser.add_argument('--search', type=str, metavar='PATTERN',
-                        help='Search for named code elements (functions, classes, structs) by name pattern (regex). For variables/constants, use: reveal "ast://file?reveal_type=NAME"')
+    parser.add_argument('--name', '--search', dest='name', type=str, metavar='PATTERN',
+                        help='Filter structural output to named elements (functions, classes, headings) whose name matches PATTERN (regex). Does NOT search text content — use --grep for that. (--search is a deprecated alias)')
+    parser.add_argument('--grep', type=str, metavar='PATTERN',
+                        help='Text search over file content, grouped by enclosing structural element (heading, function, class). Accepts regex. Use --ignore-case / -i for case-insensitive search.')
+    parser.add_argument('--ignore-case', '-i', dest='ignore_case', action='store_true',
+                        help='Case-insensitive match for --grep')
     parser.add_argument('--sort', type=str, metavar='FIELD',
                         help='Sort results by field (e.g., modified, size, name, complexity). '
                              'Use --desc for descending order, or prefix with - in URI queries.')

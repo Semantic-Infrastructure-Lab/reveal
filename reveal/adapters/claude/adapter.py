@@ -1091,7 +1091,7 @@ class ClaudeAdapter(ResourceAdapter):
         if type_filter:
             workflow = [s for s in workflow if (s.get('tool') or '').lower() == type_filter.lower()]
 
-        search_term = getattr(args, 'search', None)
+        search_term = getattr(args, 'name', None)
         if search_term:
             lower = search_term.lower()
             workflow = [
@@ -1120,12 +1120,12 @@ class ClaudeAdapter(ResourceAdapter):
 
     @staticmethod
     def _post_process_history(result: Dict[str, Any], args: Any) -> None:
-        """Apply --search, --since, --head/--all filters to claude_history results."""
+        """Apply --name/--search, --since, --head/--all filters to claude_history results."""
         entries = result.get('entries')
         if entries is None:
             return
 
-        search_term = getattr(args, 'search', None)
+        search_term = getattr(args, 'name', None)
         if search_term:
             lower = search_term.lower()
             entries = [e for e in entries if lower in e.get('prompt', '').lower()]
@@ -1146,12 +1146,12 @@ class ClaudeAdapter(ResourceAdapter):
 
     @staticmethod
     def _post_process_session_list(result: Dict[str, Any], args: Any) -> None:
-        """Apply --search, --since, --head/--all filters to claude_session_list results."""
+        """Apply --name/--search, --since, --head/--all filters to claude_session_list results."""
         sessions = result.get('recent_sessions')
         if sessions is None:
             return
 
-        search_term = getattr(args, 'search', None)
+        search_term = getattr(args, 'name', None)
         if search_term:
             lower = search_term.lower()
             sessions = [s for s in sessions if lower in s.get('session', '').lower()]
