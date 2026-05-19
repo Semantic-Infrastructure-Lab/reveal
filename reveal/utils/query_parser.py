@@ -79,11 +79,17 @@ def _try_parse_negation_filter(part: str) -> Optional[QueryFilter]:
 
 
 def _try_parse_two_char_operators(part: str, coerce_numeric: bool) -> Optional[QueryFilter]:
-    """Try to parse two-character operators (>=, <=, !=, ~=, !~)."""
+    """Try to parse two-character operators (>=, <=, !=, ~=, !~).
+
+    Also handles reversed/doubled forms: => -> >=, =< -> <=, =>= -> >=, =<= -> <=.
+    """
     for op in ['>=', '<=', '!=', '~=', '!~']:
         if op in part:
             field, value_str = part.split(op, 1)
             field = field.strip()
+            # Strip a spurious trailing = left by =>=, =<= patterns (e.g. field=>=10 -> field>=10)
+            if field.endswith('='):
+                field = field[:-1].strip()
             value_str = value_str.strip()
 
             value: Union[bool, int, float, str]
@@ -108,13 +114,21 @@ def _parse_equals_special_cases(field: str, value: str) -> Optional[QueryFilter]
 
 
 def _try_parse_single_char_operators(part: str, coerce_numeric: bool) -> Optional[QueryFilter]:
-    """Try to parse single-character operators (>, <, =)."""
+    """Try to parse single-character operators (>, <, =).
+
+    Also handles reversed forms: => -> >=, =< -> <= (field=trailing-= stripped, op promoted).
+    """
     for op in ['>', '<', '=']:
         if op not in part:
             continue
         field, value = part.split(op, 1)
         field = field.strip()
         value = value.strip()
+        # Detect reversed-operator typos: field=>val or field=<val
+        # The trailing = on the field means the user wrote => or =< instead of >= or <=
+        if op in ('>', '<') and field.endswith('='):
+            field = field[:-1].strip()
+            op = '>=' if op == '>' else '<='
         if op == '=':
             special_filter = _parse_equals_special_cases(field, value)
             if special_filter:

@@ -342,6 +342,49 @@ class TestNewOperators:
         assert not apply_filters(item_fail, filters)
 
 
+class TestReversedOperatorNormalization:
+    """Tests for BACK-311: => and =< reversed-operator typos silently returned 0 results."""
+
+    def test_reversed_gt_normalizes_to_gte(self):
+        """field=>val parsed as field>=val (user wrote => instead of >=)."""
+        filters = parse_query_filters('complexity=>10')
+        assert len(filters) == 1
+        assert filters[0] == QueryFilter('complexity', '>=', 10)
+
+    def test_doubled_gte_normalizes(self):
+        """field=>=val parsed as field>=val (user wrote =>= instead of >=)."""
+        filters = parse_query_filters('complexity=>=10')
+        assert len(filters) == 1
+        assert filters[0] == QueryFilter('complexity', '>=', 10)
+
+    def test_reversed_lt_normalizes_to_lte(self):
+        """field=<val parsed as field<=val (user wrote =< instead of <=)."""
+        filters = parse_query_filters('lines=<50')
+        assert len(filters) == 1
+        assert filters[0] == QueryFilter('lines', '<=', 50)
+
+    def test_doubled_lte_normalizes(self):
+        """field=<=val parsed as field<=val (user wrote =<= instead of <=)."""
+        filters = parse_query_filters('lines=<=50')
+        assert len(filters) == 1
+        assert filters[0] == QueryFilter('lines', '<=', 50)
+
+    def test_reversed_gt_actually_matches(self):
+        """Reversed => form returns correct results, not 0."""
+        filters = parse_query_filters('complexity=>10')
+        item_match = {'complexity': 15}
+        item_no_match = {'complexity': 5}
+        assert apply_filter(item_match, filters[0])
+        assert not apply_filter(item_no_match, filters[0])
+
+    def test_canonical_and_reversed_forms_equivalent(self):
+        """complexity>=10 and complexity=>10 and complexity=>=10 all produce the same filter."""
+        f1 = parse_query_filters('complexity>=10')
+        f2 = parse_query_filters('complexity=>10')
+        f3 = parse_query_filters('complexity=>=10')
+        assert f1[0] == f2[0] == f3[0]
+
+
 class TestResultControl:
     """Tests for result control (sort, limit, offset)."""
 
