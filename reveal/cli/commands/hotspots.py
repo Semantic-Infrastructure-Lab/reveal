@@ -86,7 +86,15 @@ def run_hotspots(args: Namespace) -> None:
         for fn in fn_hotspots:
             fn_name = fn.get('name', '')
             module_name = Path(fn.get('file', '')).stem
-            fn['has_test_hint'] = fn_name in test_index or module_name in test_index
+            bare = fn_name.lstrip('_')
+            fn['has_test_hint'] = (
+                fn_name in test_index or bare in test_index or module_name in test_index
+                or any(s.startswith(bare) for s in test_index)
+                or any(
+                    bare.endswith('_' + s) or bare.startswith(s + '_') or ('_' + s + '_') in bare
+                    for s in test_index if len(s) >= 5
+                )
+            )
 
     report = {
         'path': str(path),
@@ -208,7 +216,17 @@ def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Se
         # Test coverage heuristic
         if has_coverage_info:
             module_name = Path(loc).stem if loc else ''
-            covered = name in test_index or module_name in test_index  # type: ignore[operator]
+            bare = name.lstrip('_')
+            covered = (
+                name in test_index  # type: ignore[operator]
+                or bare in test_index
+                or module_name in test_index
+                or any(s.startswith(bare) for s in test_index)
+                or any(  # reverse: bare contains an index word, e.g. get_file_blame ← file_blame
+                    bare.endswith('_' + s) or bare.startswith(s + '_') or ('_' + s + '_') in bare
+                    for s in test_index if len(s) >= 5
+                )
+            )
             cov = '✅' if covered else '⚪'
             cov_str = f' {cov}'
         else:
@@ -219,10 +237,15 @@ def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Se
         print(f"  {icon}{cov_str} {name}  complexity: {cx}{lc_str}{loc_str}:{line}")
 
 
+def _camel_to_snake(name: str) -> str:
+    return re.sub(r'([A-Z])', lambda m: '_' + m.group(1).lower(), name).lstrip('_')
+
+
 def _build_test_name_index(path: Path) -> Set[str]:
-    """Heuristic: collect base names covered by test_* functions or test_<module>.py files."""
+    """Heuristic: collect base names covered by test files, test_* functions, and Test* classes."""
     names: Set[str] = set()
-    pattern = re.compile(r'^\s*def\s+test_(\w+)', re.MULTILINE)
+    fn_pattern = re.compile(r'^\s*def\s+test_(\w+)', re.MULTILINE)
+    cls_pattern = re.compile(r'^\s*class\s+Test(\w+)', re.MULTILINE)
     for candidate in ('tests', 'test', 'spec'):
         test_dir = path / candidate
         if not test_dir.is_dir():
@@ -236,7 +259,9 @@ def _build_test_name_index(path: Path) -> Set[str]:
                     names.add(fname[5:-3])  # test_liquidity_sweep.py → liquidity_sweep
                 try:
                     content = Path(os.path.join(root, fname)).read_text(errors='replace')
-                    names.update(m.group(1) for m in pattern.finditer(content))
+                    names.update(m.group(1) for m in fn_pattern.finditer(content))
+                    # TestClassifyGuard → classify_guard
+                    names.update(_camel_to_snake(m.group(1)) for m in cls_pattern.finditer(content))
                 except OSError:
                     pass
     return names
