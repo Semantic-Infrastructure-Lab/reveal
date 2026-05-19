@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-05-19 (sessions burning-comet-0518, astral-void-0519, fiery-hammer-0519, kiyemesu-0519)
+## [0.93.0] - 2026-05-19 (sessions burning-comet-0518, astral-void-0519, fiery-hammer-0519, kiyemesu-0519)
 
 ### Added
 - **`--name PATTERN` — canonical name for the structural name filter** (BACK-310) — `--search` renamed to `--name`; `--search` remains a silent backwards-compat alias (argparse-native, zero stderr noise). `--name` aligns with reveal's noun-based file-flag convention (`--links`, `--frontmatter`, `--code`, `--section`) and eliminates confusion with `--grep` (text search). All `args.search` callsites updated to `args.name`; `cli/defaults.py` updated; docs updated throughout with `--name` as primary spelling. 5 new alias-parity tests in `tests/test_convenience_flags.py`. See `internal-docs/planning/SEARCH_VS_GREP_FLAG_DESIGN_2026-05-19.md`.
