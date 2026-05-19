@@ -6,12 +6,21 @@ Groups matching lines by their enclosing structural element:
   - Flat files → bare line numbers
 """
 
+import os
 import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .utils import safe_json_dumps
+
+_BINARY_EXTENSIONS = frozenset({
+    '.pyc', '.pyo', '.pyd', '.so', '.dylib', '.dll', '.exe', '.bin', '.o', '.a',
+})
+_SKIP_DIRS = frozenset({
+    '__pycache__', 'node_modules', '.tox', '.venv', 'venv',
+    '.mypy_cache', '.ruff_cache', '.benchmarks', '.deepeval',
+})
 
 
 def handle_grep(path: str, pattern: str, args) -> None:
@@ -230,7 +239,7 @@ def handle_grep_directory(path: str, pattern: str, args) -> None:
         sys.exit(1)
 
     dir_path = Path(path)
-    file_results, total_hits = _collect_dir_results(dir_path, compiled)
+    file_results, total_hits = _collect_dir_results(dir_path, compiled, respect_gitignore)
 
     if output_format == 'json':
         _render_dir_json(file_results, path, pattern, total_hits)
@@ -241,25 +250,41 @@ def handle_grep_directory(path: str, pattern: str, args) -> None:
 def _collect_dir_results(
     dir_path: Path,
     compiled: 're.Pattern[str]',
+    respect_gitignore: bool = True,
 ) -> 'tuple[List[Dict[str, Any]], int]':
     """Walk dir_path and return (file_results, total_hits)."""
+    from .cli.file_checker import load_gitignore_patterns, should_skip_file
+    gitignore_patterns = load_gitignore_patterns(dir_path) if respect_gitignore else []
+
     file_results: List[Dict[str, Any]] = []
     total_hits = 0
-    for fpath in sorted(dir_path.rglob('*')):
-        if not fpath.is_file():
-            continue
-        try:
-            content = fpath.read_text(errors='replace')
-        except (OSError, UnicodeDecodeError):
-            continue
-        lines = content.splitlines()
-        hit_lines = [i for i, line in enumerate(lines, 1) if compiled.search(line)]
-        if not hit_lines:
-            continue
-        total_hits += len(hit_lines)
-        elements = _get_structural_elements(str(fpath))
-        groups = _group_by_element(hit_lines, elements)
-        file_results.append({'path': str(fpath), 'hits': hit_lines, 'groups': groups})
+    for root, dirs, files in os.walk(str(dir_path)):
+        dirs[:] = sorted(
+            d for d in dirs
+            if d not in _SKIP_DIRS and not d.startswith('.')
+        )
+        for fname in sorted(files):
+            fpath = Path(root) / fname
+            if fpath.suffix in _BINARY_EXTENSIONS:
+                continue
+            if gitignore_patterns:
+                try:
+                    if should_skip_file(fpath.relative_to(dir_path), gitignore_patterns):
+                        continue
+                except ValueError:
+                    pass
+            try:
+                content = fpath.read_text(errors='replace')
+            except (OSError, UnicodeDecodeError):
+                continue
+            lines = content.splitlines()
+            hit_lines = [i for i, line in enumerate(lines, 1) if compiled.search(line)]
+            if not hit_lines:
+                continue
+            total_hits += len(hit_lines)
+            elements = _get_structural_elements(str(fpath))
+            groups = _group_by_element(hit_lines, elements)
+            file_results.append({'path': str(fpath), 'hits': hit_lines, 'groups': groups})
     return file_results, total_hits
 
 

@@ -300,6 +300,8 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
 def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Namespace') -> None:
     """Route a resolved file path — to ast query if convenience flags set, else normal handler."""
     if getattr(args, 'grep', None):
+        if getattr(args, 'name', None):
+            print(f"Note: --name '{args.name}' ignored when --grep is used (--grep searches all text, --name filters structural output)", file=sys.stderr)
         handle_grep(str(path), args.grep, args)
         return
     if getattr(args, 'name', None) or getattr(args, 'sort', None) or getattr(args, 'type', None):
