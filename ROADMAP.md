@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-05-12 (cukite-0512 — Architecture Hardening track complete: BACK-296–307 all shipped)
+> **Last updated**: 2026-05-19 (freezing-snow-0519 — v0.93.0 shipped: --grep text search + 9 bug fixes, BACK-308–319)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
