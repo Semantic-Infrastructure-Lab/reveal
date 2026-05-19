@@ -141,7 +141,7 @@ class TestSinceToday:
             {'session': 'new', 'modified': f'{today}T12:00:00', 'size_kb': 1},
         ]
         result = self._make_result(sessions)
-        args = SimpleNamespace(search=None, since='today', all=True, head=None)
+        args = SimpleNamespace(name=None, since='today', all=True, head=None)
         with patch.object(ClaudeAdapter, '_read_session_title', return_value=None):
             ClaudeAdapter._post_process_session_list(result, args)
         names = [s['session'] for s in result['recent_sessions']]
@@ -155,7 +155,7 @@ class TestSinceToday:
             {'session': 'evening', 'modified': f'{today}T22:00:00', 'size_kb': 1},
         ]
         result = self._make_result(sessions)
-        args = SimpleNamespace(search=None, since='today', all=True, head=None)
+        args = SimpleNamespace(name=None, since='today', all=True, head=None)
         with patch.object(ClaudeAdapter, '_read_session_title', return_value=None):
             ClaudeAdapter._post_process_session_list(result, args)
         assert len(result['recent_sessions']) == 2
@@ -166,7 +166,7 @@ class TestSinceToday:
             {'session': 'after', 'modified': '2026-03-14T10:00:00', 'size_kb': 1},
         ]
         result = self._make_result(sessions)
-        args = SimpleNamespace(search=None, since='2026-03-14', all=True, head=None)
+        args = SimpleNamespace(name=None, since='2026-03-14', all=True, head=None)
         with patch.object(ClaudeAdapter, '_read_session_title', return_value=None):
             ClaudeAdapter._post_process_session_list(result, args)
         names = [s['session'] for s in result['recent_sessions']]
@@ -179,7 +179,7 @@ class TestSinceToday:
             {'session': 'new', 'modified': '2026-03-14T00:00:00', 'size_kb': 1},
         ]
         result = self._make_result(sessions)
-        args = SimpleNamespace(search=None, since=None, all=True, head=None)
+        args = SimpleNamespace(name=None, since=None, all=True, head=None)
         with patch.object(ClaudeAdapter, '_read_session_title', return_value=None):
             ClaudeAdapter._post_process_session_list(result, args)
         assert len(result['recent_sessions']) == 2

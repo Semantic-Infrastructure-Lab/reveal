@@ -174,5 +174,124 @@ class TestHelpRegistry(unittest.TestCase):
                            'quick-start must show at least 2 sections to be useful')
 
 
+class TestHelpErrorHandling(unittest.TestCase):
+    """Unknown topic routing returns None cleanly, not a misleading error dict."""
+
+    def test_unknown_topic_returns_none(self):
+        """help://nonexistent → None (rendered as clean 'not found', not a traceback)."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('nonexistent')
+        self.assertIsNone(result, 'Unknown bare topic must return None')
+
+    def test_unknown_topic_with_full_suffix_returns_none(self):
+        """help://nonexistent/full must return None, not 'Unknown section full'."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('nonexistent/full')
+        self.assertIsNone(result,
+            'Unknown topic/full must return None, not a misleading section-name error')
+
+    def test_unknown_topic_with_section_returns_none(self):
+        """help://nonexistent/workflows must return None cleanly."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('nonexistent/workflows')
+        self.assertIsNone(result)
+
+    def test_known_guide_full_still_works(self):
+        """help://ux/full must still return content after the routing fix."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('ux/full')
+        self.assertIsNotNone(result, 'help://ux/full must resolve')
+        self.assertIn('content', result)
+        self.assertIn('--name', result['content'])
+
+    def test_known_adapter_section_still_works(self):
+        """help://ast/workflows must still work (adapter in both help_topics and registry)."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('ast/workflows')
+        self.assertIsNotNone(result, 'help://ast/workflows must resolve')
+
+
+class TestHelpContentCurrency(unittest.TestCase):
+    """Spot-check that help:// content reflects current flag names."""
+
+    def _get_content(self, topic: str) -> str:
+        adapter = HelpAdapter()
+        result = adapter.get_element(topic)
+        self.assertIsNotNone(result, f'help://{topic} must resolve')
+        return result.get('content', '')
+
+    def test_ux_guide_uses_name_flag_as_primary(self):
+        """help://ux/full must show --name as the primary structural filter flag."""
+        content = self._get_content('ux/full')
+        self.assertIn('--name', content,
+                      'UX guide must document the --name flag')
+
+    def test_ux_guide_documents_grep_flag(self):
+        """help://ux/full must document --grep for text search."""
+        content = self._get_content('ux/full')
+        self.assertIn('--grep', content,
+                      'UX guide must document the --grep flag')
+
+    def test_agent_guide_uses_name_flag(self):
+        """help://agent must mention --name (the canonical structural filter flag)."""
+        content = self._get_content('agent')
+        self.assertIn('--name', content,
+                      'Agent guide must document --name flag')
+
+    def test_agent_guide_documents_grep_flag(self):
+        """help://agent must mention --grep for text search."""
+        content = self._get_content('agent')
+        self.assertIn('--grep', content,
+                      'Agent guide must document --grep flag')
+
+    def test_ux_guide_search_only_as_alias(self):
+        """help://ux/full must not use --search as a standalone example (only as deprecated alias mention)."""
+        content = self._get_content('ux/full')
+        lines_with_search = [
+            line for line in content.splitlines()
+            if '--search' in line
+            and 'alias' not in line.lower()
+            and 'deprecated' not in line.lower()
+            and 'was the old' not in line.lower()
+            and 'renamed' not in line.lower()
+            and 'becomes' not in line.lower()  # migration comments explaining the rename
+        ]
+        self.assertFalse(
+            lines_with_search,
+            f'--search appears as non-alias in ux/full:\n' + '\n'.join(f'  {l}' for l in lines_with_search)
+        )
+
+
+class TestCliHelpOutput(unittest.TestCase):
+    """Validate --help flag output reflects current flag names and aliases."""
+
+    def _get_help_output(self) -> str:
+        import subprocess, sys
+        result = subprocess.run(
+            [sys.executable, '-m', 'reveal.main', '--help'],
+            capture_output=True, text=True,
+            cwd=str(_DOCS_ROOT.parent.parent)
+        )
+        return result.stdout + result.stderr
+
+    def test_name_flag_shown_as_primary_in_help(self):
+        """--help must show --name as the primary flag, with --search as alias."""
+        output = self._get_help_output()
+        self.assertIn('--name PATTERN, --search PATTERN', output,
+                      '--help must show --name as primary with --search as alias')
+
+    def test_grep_flag_in_help(self):
+        """--help must document --grep."""
+        output = self._get_help_output()
+        self.assertIn('--grep PATTERN', output,
+                      '--help must document --grep flag')
+
+    def test_search_deprecated_note_in_help(self):
+        """--help must mention that --search is a deprecated alias."""
+        output = self._get_help_output()
+        self.assertIn('deprecated alias', output,
+                      '--help must note that --search is deprecated')
+
+
 if __name__ == '__main__':
     unittest.main()

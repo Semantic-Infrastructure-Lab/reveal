@@ -1,4 +1,4 @@
-"""Integration tests for convenience flags (--search, --sort, --type).
+"""Integration tests for convenience flags (--name/--search, --sort, --type).
 
 Tests that convenience flags work correctly for within-file search and filtering,
 and that they properly translate to AST queries under the hood.
@@ -335,6 +335,66 @@ class TestConvenienceFlagsOnDirectory(unittest.TestCase):
         self.assertEqual(result.returncode, 0, f"Failed with: {result.stderr}")
         self.assertIn('alpha.py', result.stdout)
         self.assertIn('beta.py', result.stdout)
+
+
+class TestNameFlagAlias(unittest.TestCase):
+    """--name is the canonical flag; --search is a backwards-compat alias. Both must produce identical output."""
+
+    def run_reveal(self, *args):
+        import subprocess
+        import sys
+        return subprocess.run(
+            [sys.executable, '-m', 'reveal.main'] + list(args),
+            capture_output=True, text=True,
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+
+    def setUp(self):
+        import tempfile
+        self.tmpfile = tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False)
+        self.tmpfile.write(
+            'def alpha_function():\n    pass\n\ndef beta_function():\n    pass\n\nclass AlphaClass:\n    pass\n'
+        )
+        self.tmpfile.flush()
+        self.tmpfile.close()
+
+    def tearDown(self):
+        os.unlink(self.tmpfile.name)
+
+    def test_name_flag_finds_matches(self):
+        """--name should find elements matching pattern."""
+        result = self.run_reveal(self.tmpfile.name, '--name', 'alpha')
+        self.assertEqual(result.returncode, 0, f"Failed with: {result.stderr}")
+        self.assertIn('alpha_function', result.stdout)
+        self.assertNotIn('beta_function', result.stdout)
+
+    def test_name_and_search_produce_identical_output(self):
+        """--name and --search (alias) must produce byte-identical output."""
+        r_name = self.run_reveal(self.tmpfile.name, '--name', 'alpha')
+        r_search = self.run_reveal(self.tmpfile.name, '--search', 'alpha')
+        self.assertEqual(r_name.returncode, 0)
+        self.assertEqual(r_search.returncode, 0)
+        self.assertEqual(r_name.stdout, r_search.stdout,
+                         "--name and --search produced different output")
+
+    def test_name_flag_no_matches(self):
+        """--name with no matches should return empty results."""
+        result = self.run_reveal(self.tmpfile.name, '--name', 'nonexistent')
+        self.assertEqual(result.returncode, 0, f"Failed with: {result.stderr}")
+        self.assertIn('Results: 0', result.stdout)
+
+    def test_name_flag_regex(self):
+        """--name should support regex patterns."""
+        result = self.run_reveal(self.tmpfile.name, '--name', '^alpha')
+        self.assertEqual(result.returncode, 0, f"Failed with: {result.stderr}")
+        self.assertIn('alpha_function', result.stdout)
+        self.assertNotIn('beta_function', result.stdout)
+
+    def test_name_and_search_regex_identical(self):
+        """--name and --search with regex must produce identical output."""
+        r_name = self.run_reveal(self.tmpfile.name, '--name', '^alpha')
+        r_search = self.run_reveal(self.tmpfile.name, '--search', '^alpha')
+        self.assertEqual(r_name.stdout, r_search.stdout)
 
 
 if __name__ == '__main__':

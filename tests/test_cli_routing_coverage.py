@@ -465,12 +465,12 @@ class TestParseExtArg:
 class TestBuildAstQueryFromFlags:
     def test_desc_sort_prepends_dash(self):
         """Cover line 577: --desc flag prepends - to sort field."""
-        args = _args(search=None, type=None, sort='name', desc=True)
+        args = _args(name=None, type=None, sort='name', desc=True)
         result = _build_ast_query_from_flags(Path('app.py'), args)
         assert 'sort=-name' in result
 
-    def test_search_and_type_combined(self):
-        args = _args(search='foo', type='function', sort=None, desc=False)
+    def test_name_and_type_combined(self):
+        args = _args(name='foo', type='function', sort=None, desc=False)
         result = _build_ast_query_from_flags(Path('app.py'), args)
         assert 'name~=foo' in result
         assert 'type=function' in result
@@ -573,7 +573,7 @@ class TestHandleFilePath:
         """Cover lines 697-702: --section on .py file → error."""
         f = tmp_path / 'app.py'
         f.write_text('x = 1\n')
-        args = _args(search=None, sort=None, type=None,
+        args = _args(name=None, sort=None, type=None,
                      element=None, section='intro',
                      meta=False, format='text',
                      respect_gitignore=True, exclude=[], depth=3,
@@ -595,7 +595,7 @@ class TestHandleFileOrDirectory:
                      check_conflicts=False, cpanel_certs=False, diagnose=False,
                      expiring_within=None, summary=False, validate_nginx=False,
                      related=False, related_all=False,
-                     search=None, sort=None, type=None,
+                     name=None, sort=None, type=None,
                      element=None, meta=False, format='text',
                      respect_gitignore=True, exclude=[], depth=3,
                      max_entries=100, fast=False, asc=False, desc=False,
@@ -768,23 +768,23 @@ class TestHandleDirectoryPath:
         assert 'file list output' in captured.out
 
 
-# ─── _handle_file_path — search/sort/type flag → handle_uri (lines 697-698) ──
+# ─── _handle_file_path — name/sort/type flag → handle_uri (lines 697-698) ──
 
-class TestHandleFilePathSearchFlag:
-    def test_search_flag_routes_to_handle_uri(self, tmp_path):
-        """Cover lines 697-698: args.search set → _build_ast_query_from_flags + handle_uri."""
+class TestHandleFilePathNameFlag:
+    def test_name_flag_routes_to_handle_uri(self, tmp_path):
+        """Cover lines 697-698: args.name set → _build_ast_query_from_flags + handle_uri."""
         from reveal.cli.routing import _handle_file_path
 
         f = tmp_path / 'app.py'
         f.write_text('def foo(): pass\n')
-        args = _args(search='foo', sort=None, type=None, element=None,
+        args = _args(name='foo', sort=None, type=None, element=None,
                      section=None, meta=False, format='text',
                      respect_gitignore=True, exclude=[], depth=3,
                      max_entries=100, fast=False, asc=False, desc=False,
                      ext=None, dir_limit=0)
 
         with patch('reveal.cli.routing.file.handle_uri') as mock_handle_uri:
-            with patch('reveal.cli.routing.file._build_ast_query_from_flags', return_value='ast://app.py?search=foo'):
+            with patch('reveal.cli.routing.file._build_ast_query_from_flags', return_value='ast://app.py?name~=foo'):
                 _handle_file_path(f, None, args)
                 mock_handle_uri.assert_called_once()
 
@@ -798,7 +798,7 @@ class TestHandleFilePathSectionOnMarkdown:
 
         f = tmp_path / 'README.md'
         f.write_text('# Intro\nHello\n')
-        args = _args(search=None, sort=None, type=None, element=None,
+        args = _args(name=None, sort=None, type=None, element=None,
                      section='Intro', meta=False, format='text',
                      respect_gitignore=True, exclude=[], depth=3,
                      max_entries=100, fast=False, asc=False, desc=False,
