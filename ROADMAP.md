@@ -7,7 +7,12 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
-### Unreleased (session cukite-0512) — Architecture Hardening Sweep
+### v0.93.0 — `--grep` text search + 9 bug fixes
+- ✅ **`--grep PATTERN` — universal text search with structural context** — hits grouped by enclosing element (heading, function, class). Directory mode, `--ignore-case`, JSON output. `grep_handler.py` ~210 lines. (BACK-309)
+- ✅ **`--search` → `--name` rename** — `--search` kept as silent backwards-compat alias. Aligns with reveal's noun-based flag convention and eliminates confusion with `--grep`. (BACK-310)
+- ✅ 7 additional bug fixes: `ast://` reversed operators (BACK-311), `review` progress feedback (BACK-312), gitignore directory patterns (BACK-313), hotspot test-coverage heuristic (BACK-314), `--grep` scanning `__pycache__`/binaries (BACK-315), `--grep`+`--name` conflict (BACK-316), `help://` token estimate + breadcrumb + index visibility (BACK-317/318/319).
+
+### v0.92.0 — Architecture Hardening Sweep
 - ✅ **`mcp_server.py` kernel cleanup** — 593→430 lines. `_default_args` (104L, 93 CLI flags) extracted to `cli/defaults.py`; `reveal_pack` rendering (cx:43→25L coordination) moved to `cli/commands/pack.py` as `_format_pack_result`. Stringzilla deferred import B005 fixed in `utils/parallel.py`. (BACK-296, BACK-297, BACK-298)
 - ✅ **`adapters/base.py` split into 3 focused modules** — 598L fan-in 27 split into `adapters/factory.py` (constructor try-chain) + `adapters/registry.py` (scheme registries + plugin discovery) + `adapters/base.py` (ResourceAdapter ABC only, ~250L). Zero importer changes via re-exports. (BACK-301)
 - ✅ **`ast` ↔ `calls` mutual import cycle broken** — `PYTHON_BUILTINS` moved from `calls/index.py` to `ast/analysis.py`; both adapters now import from a neutral location. Deferred function-body import in `ast/adapter.py` eliminated. (BACK-299)
