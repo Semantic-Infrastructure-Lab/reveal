@@ -229,11 +229,22 @@ def handle_grep_directory(path: str, pattern: str, args) -> None:
         print(f"Error: invalid pattern '{pattern}': {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Collect text files under directory
     dir_path = Path(path)
+    file_results, total_hits = _collect_dir_results(dir_path, compiled)
+
+    if output_format == 'json':
+        _render_dir_json(file_results, path, pattern, total_hits)
+    else:
+        _render_dir_text(file_results, dir_path, total_hits, path, pattern)
+
+
+def _collect_dir_results(
+    dir_path: Path,
+    compiled: 're.Pattern[str]',
+) -> 'tuple[List[Dict[str, Any]], int]':
+    """Walk dir_path and return (file_results, total_hits)."""
     file_results: List[Dict[str, Any]] = []
     total_hits = 0
-
     for fpath in sorted(dir_path.rglob('*')):
         if not fpath.is_file():
             continue
@@ -249,24 +260,16 @@ def handle_grep_directory(path: str, pattern: str, args) -> None:
         elements = _get_structural_elements(str(fpath))
         groups = _group_by_element(hit_lines, elements)
         file_results.append({'path': str(fpath), 'hits': hit_lines, 'groups': groups})
+    return file_results, total_hits
 
-    if output_format == 'json':
-        print(safe_json_dumps({
-            'type': 'grep_results',
-            'path': path,
-            'pattern': pattern,
-            'total_hits': total_hits,
-            'files': [
-                {
-                    'path': r['path'],
-                    'hits': len(r['hits']),
-                    'groups': [{'name': g['name'], 'kind': g['kind'], 'lines': g['lines']} for g in r['groups']],
-                }
-                for r in file_results
-            ],
-        }))
-        return
 
+def _render_dir_text(
+    file_results: List[Dict[str, Any]],
+    dir_path: Path,
+    total_hits: int,
+    path: str,
+    pattern: str,
+) -> None:
     file_word = "file" if len(file_results) == 1 else "files"
     hit_word = "hit" if total_hits == 1 else "hits"
     print(f"Text search: {path}  —  pattern: {pattern}")
@@ -275,7 +278,6 @@ def handle_grep_directory(path: str, pattern: str, args) -> None:
         return
     print(f"{total_hits} {hit_word} across {len(file_results)} {file_word}")
     print()
-
     for result in file_results:
         rel = Path(result['path']).relative_to(dir_path)
         print(f"File: {rel}")
@@ -295,6 +297,28 @@ def handle_grep_directory(path: str, pattern: str, args) -> None:
                 for ln in group['lines']:
                     print(f"  line {ln}")
         print()
+
+
+def _render_dir_json(
+    file_results: List[Dict[str, Any]],
+    path: str,
+    pattern: str,
+    total_hits: int,
+) -> None:
+    print(safe_json_dumps({
+        'type': 'grep_results',
+        'path': path,
+        'pattern': pattern,
+        'total_hits': total_hits,
+        'files': [
+            {
+                'path': r['path'],
+                'hits': len(r['hits']),
+                'groups': [{'name': g['name'], 'kind': g['kind'], 'lines': g['lines']} for g in r['groups']],
+            }
+            for r in file_results
+        ],
+    }))
 
 
 def _format_lines(lines: List[int]) -> str:
