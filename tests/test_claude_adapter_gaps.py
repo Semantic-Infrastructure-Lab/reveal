@@ -511,7 +511,7 @@ class TestPostProcess:
 
     def _args(self, **kwargs) -> Namespace:
         defaults = dict(head=None, tail=None, range=None, verbose=False,
-                        max_snippet_chars=None, type=None, search=None,
+                        max_snippet_chars=None, type=None, name=None,
                         since=None, all=False)
         defaults.update(kwargs)
         return Namespace(**defaults)
@@ -599,7 +599,7 @@ class TestSliceList:
 class TestPostProcessWorkflow:
 
     def _args(self, **kwargs) -> Namespace:
-        defaults = dict(head=None, tail=None, range=None, type=None, search=None)
+        defaults = dict(head=None, tail=None, range=None, type=None, name=None)
         defaults.update(kwargs)
         return Namespace(**defaults)
 
@@ -629,7 +629,7 @@ class TestPostProcessWorkflow:
     def test_search_filter(self):
         steps = [self._step('Bash', 'ls'), self._step('Read', 'config.py')]
         result = dict(self._workflow_result(steps))
-        ClaudeAdapter._post_process_workflow(result, self._args(search='config'))
+        ClaudeAdapter._post_process_workflow(result, self._args(name='config'))
         assert len(result['workflow']) == 1
         assert result['workflow'][0]['detail'] == 'config.py'
 
@@ -656,7 +656,7 @@ class TestPostProcessWorkflow:
 class TestPostProcessSessionList:
 
     def _args(self, **kwargs) -> Namespace:
-        defaults = dict(head=None, tail=None, range=None, search=None, since=None, all=False)
+        defaults = dict(head=None, tail=None, range=None, name=None, since=None, all=False)
         defaults.update(kwargs)
         return Namespace(**defaults)
 
@@ -678,7 +678,7 @@ class TestPostProcessSessionList:
     def test_search_filters_by_session_name(self):
         sessions = self._sessions(['alpha-session', 'beta-session', 'alpha-two'])
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args(search='alpha', all=True))
+        ClaudeAdapter._post_process_session_list(result, self._args(name='alpha', all=True))
         assert all('alpha' in s['session'] for s in result['recent_sessions'])
 
     def test_since_filters_by_modified_date(self):

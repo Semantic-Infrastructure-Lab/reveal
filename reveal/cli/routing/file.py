@@ -270,6 +270,8 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
         _show_directory_meta(path, args)
         return
     if getattr(args, 'grep', None):
+        if getattr(args, 'name', None):
+            print("Note: --name ignored when --grep is used (--grep searches all text, --name filters structural output)", file=sys.stderr)
         from ...grep_handler import handle_grep_directory
         handle_grep_directory(str(path), args.grep, args)
         return

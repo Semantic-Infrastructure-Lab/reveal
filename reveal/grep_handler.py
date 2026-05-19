@@ -10,6 +10,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from argparse import Namespace
 from typing import Any, Dict, List, Optional
 
 from .utils import safe_json_dumps
@@ -23,7 +24,7 @@ _SKIP_DIRS = frozenset({
 })
 
 
-def handle_grep(path: str, pattern: str, args) -> None:
+def handle_grep(path: str, pattern: str, args: Namespace) -> None:
     """Text search over a single file, grouped by enclosing structural element."""
     output_format = getattr(args, 'format', 'text')
     ignore_case = getattr(args, 'ignore_case', False)
@@ -59,7 +60,7 @@ def handle_grep(path: str, pattern: str, args) -> None:
 def _get_structural_elements(path: str) -> List[Dict[str, Any]]:
     """Return named structural elements with line ranges for a file."""
     try:
-        from .registry import get_analyzer
+        from .registry import get_analyzer  # deferred: cli.routing → grep_handler cycle
         analyzer_class = get_analyzer(path)
         if analyzer_class is None:
             return []
@@ -152,7 +153,10 @@ def _group_by_element(
 
     all_groups = list(seen.values())
     if ungrouped:
-        all_groups.append({'name': None, 'kind': None, 'level': None, 'elem_line': ungrouped[0], 'lines': ungrouped})
+        all_groups.append({
+            'name': None, 'kind': None, 'level': None,
+            'elem_line': ungrouped[0], 'lines': ungrouped,
+        })
     return sorted(all_groups, key=lambda g: g['elem_line'])
 
 
@@ -171,7 +175,9 @@ def _render_text(
 
     if not hit_lines:
         print("No matches found.")
-        print(f"  Tip: --grep searches literal/regex text. For named elements use: reveal {path} --name '{pattern}'")
+        if not re.search(r'[|+*?\\[\]{}()]', pattern):
+            print(f"  Tip: --grep searches literal/regex text. "
+                  f"For named elements use: reveal {path} --name '{pattern}'")
         return
 
     hit_word = "hit" if total == 1 else "hits"
@@ -224,7 +230,7 @@ def _render_json(
     }))
 
 
-def handle_grep_directory(path: str, pattern: str, args) -> None:
+def handle_grep_directory(path: str, pattern: str, args: Namespace) -> None:
     """Text search across all files in a directory, grouped by file then element."""
     output_format = getattr(args, 'format', 'text')
     ignore_case = getattr(args, 'ignore_case', False)
@@ -253,7 +259,7 @@ def _collect_dir_results(
     respect_gitignore: bool = True,
 ) -> 'tuple[List[Dict[str, Any]], int]':
     """Walk dir_path and return (file_results, total_hits)."""
-    from .cli.file_checker import load_gitignore_patterns, should_skip_file
+    from .cli.file_checker import load_gitignore_patterns, should_skip_file  # deferred: cli cycle
     gitignore_patterns = load_gitignore_patterns(dir_path) if respect_gitignore else []
 
     file_results: List[Dict[str, Any]] = []
@@ -339,7 +345,10 @@ def _render_dir_json(
             {
                 'path': r['path'],
                 'hits': len(r['hits']),
-                'groups': [{'name': g['name'], 'kind': g['kind'], 'lines': g['lines']} for g in r['groups']],
+                'groups': [
+                    {'name': g['name'], 'kind': g['kind'], 'lines': g['lines']}
+                    for g in r['groups']
+                ],
             }
             for r in file_results
         ],
