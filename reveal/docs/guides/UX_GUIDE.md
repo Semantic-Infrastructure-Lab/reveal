@@ -18,7 +18,7 @@ Understanding when to use flags vs query params is the key mental model for reve
 |------|----------|-----------|---------|
 | **1. Resource Identity** | *What are we inspecting?* | URI | `ssl://host`, `ast://./src`, `file.py` |
 | **2. Operations** | *What to do with it?* | Universal CLI flags | `--check`, `--format`, `--fields` |
-| **3. Filters / Options** | *What to show?* | URI query params (for URIs); CLI flags (for files) | `?summary`, `--search` |
+| **3. Filters / Options** | *What to show?* | URI query params (for URIs); CLI flags (for files) | `?summary`, `--name` |
 
 The key rule:
 > **URI adapters** (`ssl://`, `cpanel://`, `ast://`, etc.) — adapter-specific options go in the URI query string.
@@ -61,7 +61,7 @@ reveal file.py --head 10           # First 10 results
 
 **File-target-specific options** — only meaningful on the right file type:
 ```bash
-reveal file.py --search auth       # Search file structure
+reveal file.py --name auth         # Search file structure
 reveal file.py --type function     # Filter by element type
 reveal nginx.conf --diagnose       # nginx-specific analysis
 reveal doc.md --links              # markdown-specific
@@ -94,7 +94,8 @@ For file targets, convenience flags translate to URI params when you switch to U
 
 | Concept | File path (CLI flag) | URI (query param) | Note |
 |---------|---------------------|-------------------|------|
-| Name search | `--search pattern` | `?name~=pattern` | Different names — `--search` is ergonomic; `name~=` is the formal filter |
+| Name search | `--name pattern` | `?name~=pattern` | Different names — `--name` is ergonomic; `name~=` is the formal filter (`--search` is a deprecated alias for `--name`) |
+| Text search | `--grep pattern` | *(no URI equivalent)* | Text content search; results grouped by enclosing element |
 | Type filter | `--type function` | `?type=function` | Same ✓ |
 | Sort ascending | `--sort field` | `?sort=field` | Same ✓ |
 | Sort descending | `--sort field --desc` | `?sort=-field` | CLI needs two flags; URI uses `-` prefix |
@@ -106,30 +107,41 @@ For file targets, convenience flags translate to URI params when you switch to U
 
 ---
 
-## `--search` vs `?name~=` — The Most Confusing Rename
+## `--name` vs `?name~=` — The Most Confusing Rename
 
-When escalating from a file-path command to a URI command, `--search` becomes `?name~=`:
+When escalating from a file-path command to a URI command, `--name` becomes `?name~=`:
 
 ```bash
 # Step 1: Start simple
-reveal file.py --search authenticate
+reveal file.py --name authenticate
 
 # Step 2: Add filters
-reveal file.py --search authenticate --type function --sort=-complexity
+reveal file.py --name authenticate --type function --sort=-complexity
 
 # Step 3: Need complex conditions? Switch to URI — NOTE the rename
 reveal 'ast://file.py?name~=authenticate&type=function&complexity>10&sort=-complexity'
-#                       ^^^^^^^^^^^                               ← --search becomes name~=
+#                       ^^^^^^^^^^^                               ← --name becomes name~=
 ```
 
-**Why the rename?** `--search` implies "I'm looking for something" — ergonomic shorthand. `name~=` is a formal predicate: "name matches regex". They mean the same thing but belong to different layers.
+**Why the rename?** `--name` is an ergonomic shorthand; `name~=` is a formal predicate: "name matches regex". They mean the same thing but belong to different layers. (`--search` was the old name for `--name` and remains a backwards-compat alias.)
 
-**Scope:** both `--search` and `?name~=` match named code elements only — functions, classes, structs, imports. Neither finds module-level variables or constants. For those, use `reveal_type`:
+**Scope:** both `--name` and `?name~=` match named code elements only — functions, classes, structs, imports. They do **not** search text content. Use `--grep` for that:
 
 ```bash
-reveal file.py --search CONFIG          # ← finds nothing if CONFIG is a module-level variable
-reveal 'ast://file.py?reveal_type=CONFIG'  # ← correct path for variables/constants
+reveal file.py --name CONFIG                      # ← finds nothing (CONFIG is a variable, not a named element)
+reveal 'ast://file.py?reveal_type=CONFIG'         # ← variables/constants
+reveal file.py --grep CONFIG                      # ← every line containing the text "CONFIG"
+reveal doc.md --grep 'BACK-308'                   # ← text in table cells, body, anywhere
 ```
+
+**`--name` vs `--grep` at a glance:**
+
+| | `--name` | `--grep` |
+|---|---|---|
+| Finds | Named elements by name | Any line by text content |
+| Markdown | Headings whose title matches | Lines in any section (body, tables, code) |
+| Output | Element list (line, complexity, signature) | Hits grouped by enclosing element |
+| URI form | `?name~=pattern` | No URI equivalent |
 
 ---
 
@@ -182,10 +194,10 @@ The recommended workflow — start simple, escalate to URI only when needed:
 reveal file.py
 
 # Step 2: Filter with convenience flags (80% of queries)
-reveal file.py --search auth --type function
+reveal file.py --name auth --type function
 
 # Step 3: Add sort
-reveal file.py --search auth --type function --sort=-complexity
+reveal file.py --name auth --type function --sort=-complexity
 
 # Step 4: Complex multi-condition query → switch to URI
 # (--search becomes ?name~=, rest maps cleanly)

@@ -347,7 +347,7 @@ src/processor/main.py:
 
 ```bash
 # Find functions by name pattern (simple)
-reveal file.py --search connection
+reveal file.py --name connection
 # Same as: reveal 'ast://file.py?name~=connection'
 
 # Filter by element type
@@ -359,7 +359,7 @@ reveal file.py --sort complexity          # Ascending
 reveal file.py --sort=-complexity         # Descending (note the = sign)
 
 # Combine flags
-reveal file.py --search test --type function --sort=-complexity
+reveal file.py --name test --type function --sort=-complexity
 # Same as: reveal 'ast://file.py?name~=test&type=function&sort=-complexity'
 ```
 
@@ -372,7 +372,7 @@ reveal file.py --search test --type function --sort=-complexity
 
 | Task | Convenience Flags | URI Syntax |
 |------|------------------|------------|
-| Find by name | `--search pattern` | `?name~=pattern` |
+| Find by name | `--name pattern` | `?name~=pattern` |
 | Filter type | `--type function` | `?type=function` |
 | Sort results | `--sort field` | `?sort=field` |
 | Complex query | ❌ (use URI) | `?complexity>10&lines>50&sort=-complexity` |
@@ -383,19 +383,45 @@ reveal file.py --search test --type function --sort=-complexity
 grep -n "get_repository" file.py
 
 # New workflow (reveal)
-reveal file.py --search get_repository
+reveal file.py --name get_repository
 # Output shows line numbers, complexity, signatures
 
 # With sorting
-reveal file.py --search get_repository --sort=-line_count
+reveal file.py --name get_repository --sort=-line_count
 ```
 
-**Scope of `--search`:** matches named code elements only — functions, classes, structs, imports. It does **not** find module-level variables or constants. For those, use `reveal_type`:
+**Scope of `--name`:** matches named code elements only — functions, classes, structs, imports. It does **not** search text content. For text search, use `--grep`. (`--search` is a deprecated alias for `--name`.)
 
 ```bash
-reveal file.py --search LIVE_SIGNALS      # ← finds nothing (LIVE_SIGNALS is a variable)
-reveal 'ast://file.py?reveal_type=LIVE_SIGNALS'  # ← correct path for variables
+reveal file.py --name LIVE_SIGNALS        # ← finds nothing (LIVE_SIGNALS is a variable)
+reveal 'ast://file.py?reveal_type=LIVE_SIGNALS'  # ← correct path for variables/constants
+reveal file.py --grep LIVE_SIGNALS        # ← finds every line containing the text
 ```
+
+**`--grep`: text search with structural context**
+
+```bash
+# Find text in a file — results grouped by enclosing element
+reveal doc.md --grep 'EX-12h'       # hits grouped by heading (table cells, body text, anywhere)
+reveal file.py --grep 'escape'       # hits grouped by function/class
+reveal file.txt --grep 'error'       # bare line numbers (no structure)
+
+# Case-insensitive
+reveal doc.md --grep 'config' -i
+
+# Regex
+reveal file.py --grep 'def .*_handler'
+
+# Across a directory
+reveal src/ --grep 'TODO'            # grouped by file, then by element
+```
+
+**`--name` vs `--grep`:**
+
+| Flag | Finds | Output |
+|------|-------|--------|
+| `--name pattern` | Named elements whose **name** matches (functions, headings, classes) | Element list with line/complexity |
+| `--grep pattern` | Every **line** matching the text, grouped by enclosing element | Hits by section/function |
 
 **When to use URI syntax instead:**
 - Multiple conditions: `?complexity>10&lines>50`
@@ -2134,7 +2160,11 @@ reveal doc.md --code --inline
 # Get YAML frontmatter
 reveal doc.md --frontmatter
 
-# Search file body text (text after frontmatter)
+# Text search in a single file — hits grouped by heading (finds table cells, body text, anywhere)
+reveal doc.md --grep 'search-term'
+reveal doc.md --grep 'EX-12h' -i      # case-insensitive; works for hyphenated IDs, version strings, etc.
+
+# Search across a directory of markdown files — hits with body content (not just frontmatter)
 reveal 'markdown://docs/?body-contains=nginx'
 
 # Combine body search with frontmatter filter and sort
@@ -2626,7 +2656,7 @@ exit 0
 - Binary files (use file-specific tools like `objdump`, `hexdump`)
 - Very large files >10MB (performance degrades, use `head`/`tail`)
 - Real-time log tailing (use `tail -f`)
-- Text search across many files (use `ripgrep`/`grep` - much faster)
+- Text search across hundreds of files at scale (use `ripgrep`/`grep` — faster; use `reveal --grep` when you want structural context)
 - Compiled binaries (use language-specific tools)
 - Media files (images, videos, audio)
 
@@ -3810,10 +3840,21 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 
 ## When to Use grep/find (Rare Cases)
 
-**Use grep when:**
-- Searching for exact text strings in logs
-- Looking for specific error messages
-- Searching non-code files (binaries, data files)
+**Use `reveal --grep` when:**
+- Searching text content in a file (logs, docs, source) and want to know *which section/function* each hit lives in
+- Looking for a string that isn't a named element (table cells, comments, variable values)
+- You want to stay in reveal without context-switching to the shell
+
+```bash
+reveal service.log --grep 'ERROR'        # hits grouped by any structural context
+reveal doc.md --grep 'EX-12h'           # table cell hit → shows enclosing heading
+reveal src/ --grep 'deprecated' -i      # directory scan with element context
+```
+
+**Use shell grep/ripgrep when:**
+- Searching across hundreds of files (ripgrep is much faster at scale)
+- Searching binary or non-text files
+- Piping to non-reveal tools (`xargs`, `awk`, etc.)
 
 **Use find when:**
 - Finding files by modification time

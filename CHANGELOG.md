@@ -12,6 +12,28 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-05-19 (session burning-comet-0518)
+
+### Added
+- **`--name PATTERN` — canonical name for the structural name filter** (BACK-310) — `--search` renamed to `--name`; `--search` remains a silent backwards-compat alias (argparse-native, zero stderr noise). `--name` aligns with reveal's noun-based file-flag convention (`--links`, `--frontmatter`, `--code`, `--section`) and eliminates confusion with `--grep` (text search). All `args.search` callsites updated to `args.name`; `cli/defaults.py` updated; docs updated throughout with `--name` as primary spelling. 5 new alias-parity tests in `tests/test_convenience_flags.py`. See `internal-docs/planning/SEARCH_VS_GREP_FLAG_DESIGN_2026-05-19.md`.
+- **`--grep PATTERN` — universal text search with structural context** (BACK-309) — new `reveal/grep_handler.py` (~210 lines). Hits grouped by enclosing element: markdown → nearest preceding heading; code (Python/JS/etc) → enclosing function or class; flat/unknown → bare line numbers. Directory mode (`reveal src/ --grep TERM`) groups by file then element. `--ignore-case` / `-i` for case-insensitive match. `--format json` wired through. Module-level hits (imports, top-of-file code) sort by line position rather than bucketing at end. Wired into `cli/routing/file.py` before existing AST-query routing; `cli/defaults.py` extended with `grep=None, ignore_case=False`. 17 new tests in `tests/test_grep_handler.py`. Closes the long-standing "I want text search with structure" gap that previously forced agents out to shell grep. See `internal-docs/planning/SEARCH_VS_GREP_FLAG_DESIGN_2026-05-19.md`.
+
+### Fixed
+- **`ast://` reversed operators silently returned 0 results** (BACK-311) — `>=/<=` written as `=>/=<` or `=>=/=<=` produced 0 hits with no error. Fix: `utils/query_parser.py` `_try_parse_two_char_operators` and `_try_parse_single_char_operators` normalize reversed forms to canonical `>=`/`<=` before comparison. 6 new tests in `TestReversedOperatorNormalization`.
+- **`reveal review` printed nothing for ~30s then exited silently** (BACK-312) — no feedback during the three slow phases (imports graph, complexity scan, quality lint) made it appear hung. Fix: `cli/commands/review.py::run_review` now prints a stderr progress header before each phase (e.g. `-- [1/3] building imports graph...`).
+- **Gitignore directory-trailing-slash patterns excluded nothing** (BACK-313) — `should_skip_file` tested `fnmatch('htmlcov/index.html', 'htmlcov/')` which always returns False. Fix: `cli/file_checker.py` strips trailing slashes from directory patterns and checks `parts[0]` of the relative path, so `htmlcov/`, `dist/`, `.benchmarks/` all correctly exclude their entire trees. 9 new tests in `TestShouldSkipFile`.
+- **`--search` 0-results hint broader and correct for non-Python files** (BACK-308) — `_suggest_reveal_type_if_variable()` in `rendering/adapters/ast.py` had two narrow guards that prevented it firing on the common confusion case: (1) `fullmatch([A-Za-z_][A-Za-z0-9_]*)` rejected hyphenated terms (`BACK-308`, `EX-12h`, version strings); (2) it always suggested `ast://file?reveal_type=TERM` — a Python-introspection tool that's nonsensical for markdown. Fix: relaxed guard to "skip complex regex patterns" (pipes/quantifiers/brackets) rather than "Python identifier only"; branched suggestion by file extension — `.py`/`.pyi` → `reveal_type`, everything else → `--grep`. Original report: `feedback/PEYTON_SEARCH_FLAG_CONFUSION_2026-05-18.md`.
+
+### Changed
+- **`--search` → `--name` rename shipped** (BACK-310) — see Added section above.
+- **`--name` `--help` text clarified** — was "Search for named code elements..."; now "Filter structural output to named elements... Does NOT search text content — use --grep for that." (`--search` is a deprecated alias.) The word "search" carries strong text-search connotations for users coming from grep/ripgrep/Google; the new wording is explicit about the structural-filter semantics.
+- **`AGENT_HELP.md` updated** — "Search within a single file" task adds a `--grep` block with side-by-side comparison; "Work with Markdown documentation" task adds a single-file `--grep` example alongside the directory-scoped `body-contains` URI form; "When reveal Won't Help" softened from "text search across many files" to "hundreds of files at scale"; "When to Use grep/find" section now leads with `reveal --grep` (in-tool, structural context) and relegates shell grep to large-scale / binary / piping use cases.
+- **`UX_GUIDE.md` updated** — Flag-to-Param table gains a `--grep` row (no URI equivalent); "`--search` vs `?name~=`" section now contrasts `--search` vs `--grep` with a comparison table.
+
+
+---
+
+
 ## [0.92.0] - 2026-05-13 (sessions cukite-0512, garnet-palette-0513, peaceful-whirlwind-0513, desert-ice-0513)
 
 ### Added
