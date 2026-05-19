@@ -373,13 +373,20 @@ class HelpAdapter(ResourceAdapter):
             task_name = topic.split('/', 1)[1]
             return self._get_example_recipes(task_name)
 
-        # Check for section extraction: help://ast/workflows
+        # Check for section extraction: help://ast/workflows or help://ast/full
         if '/' in topic:
             adapter_name, section = topic.split('/', 1)
             # Static guides support /full to bypass progressive disclosure
-            if adapter_name in self.help_topics and section == 'full':
-                return self._load_static_help(adapter_name, full=True)
-            return self._get_adapter_section(adapter_name, section)
+            if adapter_name in self.help_topics:
+                if section == 'full':
+                    return self._load_static_help(adapter_name, full=True)
+                # Fall through: if also a URI adapter, let it handle the section
+            # Only route to adapter section handler when the adapter actually exists;
+            # returning None here gives a clean "not found" rather than a misleading
+            # "Unknown section" error when the base topic doesn't exist at all.
+            if adapter_name in _ADAPTER_REGISTRY:
+                return self._get_adapter_section(adapter_name, section)
+            return None
 
         # Quick-start orientation cheat sheet
         if topic == 'quick':

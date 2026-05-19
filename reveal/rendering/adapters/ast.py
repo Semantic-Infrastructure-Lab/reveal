@@ -215,19 +215,18 @@ def _render_reveal_type(data: Dict[str, Any], output_format: str) -> None:
 
 
 def _suggest_reveal_type_if_variable(query: str, path: str) -> None:
-    """When a name search on a single file finds nothing, check if the term exists as a variable."""
+    """When a name search on a single file finds nothing, check if the term exists in the file."""
     if not query or query == 'none' or not path:
         return
     file_path = Path(path)
     if not file_path.is_file():
         return
-    # Extract value from "name~=TERM" or "name==TERM"
     match = re.search(r'\bname[~=!]+=?\s*(\S+)', query)
     if not match:
         return
     term = match.group(1).lstrip('^').rstrip('$')
-    # Only hint for simple identifiers (not complex regex patterns)
-    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', term):
+    # Skip complex regex patterns (pipes, quantifiers, brackets)
+    if re.search(r'[|+*?\\[\]{}()]', term):
         return
     try:
         content = file_path.read_text(errors='replace')
@@ -236,8 +235,13 @@ def _suggest_reveal_type_if_variable(query: str, path: str) -> None:
     if term not in content:
         return
     print()
-    print(f"Hint: '{term}' exists in this file but is not a named code element (function/class/struct).")
-    print(f"  For variables and constants: reveal 'ast://{path}?reveal_type={term}'")
+    suffix = file_path.suffix.lower()
+    if suffix in ('.py', '.pyi'):
+        print(f"Hint: '{term}' exists in this file but is not a named code element (function/class/struct).")
+        print(f"  For variables and constants: reveal 'ast://{path}?reveal_type={term}'")
+    else:
+        print(f"Hint: '{term}' exists in this file but is not a named element.")
+        print(f"  For text search: reveal {path} --grep '{term}'")
 
 
 def _suggest_filter_correction(query: str) -> None:
