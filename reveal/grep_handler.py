@@ -60,7 +60,7 @@ def handle_grep(path: str, pattern: str, args: Namespace) -> None:
 def _get_structural_elements(path: str) -> List[Dict[str, Any]]:
     """Return named structural elements with line ranges for a file."""
     try:
-        from .registry import get_analyzer  # deferred: cli.routing → grep_handler cycle
+        from .registry import get_analyzer  # noqa: I006  # deferred: cli.routing → grep_handler cycle
         analyzer_class = get_analyzer(path)
         if analyzer_class is None:
             return []
@@ -259,7 +259,7 @@ def _collect_dir_results(
     respect_gitignore: bool = True,
 ) -> 'tuple[List[Dict[str, Any]], int]':
     """Walk dir_path and return (file_results, total_hits)."""
-    from .cli.file_checker import load_gitignore_patterns, should_skip_file  # deferred: cli cycle
+    from .cli.file_checker import load_gitignore_patterns, should_skip_file  # noqa: I006  # deferred: cli cycle
     gitignore_patterns = load_gitignore_patterns(dir_path) if respect_gitignore else []
 
     file_results: List[Dict[str, Any]] = []
