@@ -67,14 +67,17 @@ def run_review(args: Namespace) -> None:
         path = Path(target)
 
     # Step 3: Quality check
+    print("  Checking quality rules…", file=sys.stderr)
     violations = _run_check(path, args.select)
     report['sections']['violations'] = violations
 
     # Step 4: Hotspots
+    print("  Analyzing hotspots…", file=sys.stderr)
     hotspots = _run_hotspots(path)
     report['sections']['hotspots'] = hotspots
 
     # Step 5: Complexity
+    print("  Scanning complexity…", file=sys.stderr)
     complexity = _run_complexity(path)
     report['sections']['complexity'] = complexity
 

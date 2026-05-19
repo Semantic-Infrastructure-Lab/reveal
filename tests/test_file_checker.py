@@ -125,6 +125,25 @@ class TestShouldSkipFile:
         assert should_skip_file(Path('secrets.yaml'), patterns) is True
         assert should_skip_file(Path('config.yaml'), patterns) is False
 
+    def test_directory_trailing_slash_pattern(self):
+        """BACK-313: gitignore 'htmlcov/' pattern must exclude files inside htmlcov/."""
+        patterns = ['htmlcov/']
+
+        assert should_skip_file(Path('htmlcov/index.html'), patterns) is True
+        assert should_skip_file(Path('htmlcov/reveal_main_py.html'), patterns) is True
+        assert should_skip_file(Path('reveal/main.py'), patterns) is False
+        assert should_skip_file(Path('tests/test_foo.py'), patterns) is False
+
+    def test_multiple_gitignore_directory_patterns(self):
+        """Common gitignore directory patterns all correctly exclude nested files."""
+        patterns = ['htmlcov/', 'dist/', '.coverage', 'coverage.json']
+
+        assert should_skip_file(Path('htmlcov/index.html'), patterns) is True
+        assert should_skip_file(Path('dist/reveal-0.92.0.tar.gz'), patterns) is True
+        assert should_skip_file(Path('coverage.json'), patterns) is True
+        assert should_skip_file(Path('reveal/main.py'), patterns) is False
+        assert should_skip_file(Path('tests/test_foo.py'), patterns) is False
+
 
 class TestCollectFilesToCheck:
     """Tests for collect_files_to_check function."""

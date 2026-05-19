@@ -228,9 +228,24 @@ def should_skip_file(relative_path: Path, gitignore_patterns: List[str]) -> bool
     """
     import fnmatch
 
+    path_str = str(relative_path)
+    parts = relative_path.parts
+
     for pattern in gitignore_patterns:
-        if fnmatch.fnmatch(str(relative_path), pattern):
+        # Exact fnmatch on full path
+        if fnmatch.fnmatch(path_str, pattern):
             return True
+        # Directory patterns (trailing /): match any file whose path starts with that dir
+        # gitignore's "htmlcov/" means "htmlcov/ and all its contents"
+        if pattern.endswith('/'):
+            dir_name = pattern.rstrip('/')
+            if parts and fnmatch.fnmatch(parts[0], dir_name):
+                return True
+        # Bare directory name without slash: also treat as directory prefix match
+        # e.g. "htmlcov" should match "htmlcov/index.html"
+        elif '/' not in pattern and '.' not in pattern and '*' not in pattern:
+            if parts and fnmatch.fnmatch(parts[0], pattern):
+                return True
     return False
 
 
