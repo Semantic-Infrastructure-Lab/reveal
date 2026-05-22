@@ -1,5 +1,6 @@
 """Unit tests for Claude Code conversation adapter."""
 
+import re
 import pytest
 import json
 import sys
@@ -728,7 +729,7 @@ class TestReconfigureBasePath:
         (session_dir / 'my-sess.jsonl').write_text('{}')
 
         adapter = ClaudeAdapter('')
-        with pytest.raises(ValueError, match=str(tmp_path / '.claude' / 'projects')):
+        with pytest.raises(ValueError, match=re.escape(str(tmp_path / '.claude' / 'projects'))):
             adapter.reconfigure_base_path(session_dir)
 
     def test_accepts_normal_projects_dir(self, tmp_path):

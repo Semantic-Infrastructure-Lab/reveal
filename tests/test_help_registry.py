@@ -52,7 +52,7 @@ class TestHelpRegistry(unittest.TestCase):
         registered = self._registered_files()
         orphans = []
         for md in sorted((_DOCS_ROOT / 'adapters').glob('*.md')):
-            rel = str(md.relative_to(_DOCS_ROOT))
+            rel = md.relative_to(_DOCS_ROOT).as_posix()
             if rel not in registered and rel not in _INTENTIONALLY_EXCLUDED:
                 orphans.append(f'  {rel}')
         self.assertFalse(
@@ -67,7 +67,7 @@ class TestHelpRegistry(unittest.TestCase):
         registered = self._registered_files()
         orphans = []
         for md in sorted((_DOCS_ROOT / 'guides').glob('*.md')):
-            rel = str(md.relative_to(_DOCS_ROOT))
+            rel = md.relative_to(_DOCS_ROOT).as_posix()
             if rel not in registered and rel not in _INTENTIONALLY_EXCLUDED:
                 orphans.append(f'  {rel}')
         self.assertFalse(
@@ -82,7 +82,7 @@ class TestHelpRegistry(unittest.TestCase):
         registered = self._registered_files()
         orphans = []
         for md in sorted((_DOCS_ROOT / 'development').glob('*.md')):
-            rel = str(md.relative_to(_DOCS_ROOT))
+            rel = md.relative_to(_DOCS_ROOT).as_posix()
             if rel not in registered and rel not in _INTENTIONALLY_EXCLUDED:
                 orphans.append(f'  {rel}')
         self.assertFalse(
@@ -97,7 +97,7 @@ class TestHelpRegistry(unittest.TestCase):
         registered = self._registered_files()
         orphans = []
         for md in sorted(_DOCS_ROOT.glob('*.md')):
-            rel = str(md.relative_to(_DOCS_ROOT))
+            rel = md.relative_to(_DOCS_ROOT).as_posix()
             if rel not in registered and rel not in _INTENTIONALLY_EXCLUDED:
                 orphans.append(f'  {rel}')
         self.assertFalse(

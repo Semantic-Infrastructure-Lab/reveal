@@ -364,7 +364,7 @@ class HelpAdapter(ResourceAdapter):
         metadata_by_file: Dict[str, Dict[str, str]] = {}
         if docs_dir.exists():
             for md in docs_dir.rglob('*.md'):
-                rel = str(md.relative_to(docs_dir))
+                rel = md.relative_to(docs_dir).as_posix()
                 metadata_by_file[rel] = _read_help_frontmatter(md)
 
         def _build(topic: str, file: str) -> GuideEntry:
@@ -390,13 +390,13 @@ class HelpAdapter(ResourceAdapter):
             # AST_ADAPTER_GUIDE.md -> 'ast-adapter'; QUERY_SYNTAX_GUIDE.md -> 'query-syntax'
             for guide in docs_dir.rglob('*_GUIDE.md'):
                 topic = guide.stem.lower().replace('_guide', '').replace('_', '-')
-                rel = str(guide.relative_to(docs_dir))
+                rel = guide.relative_to(docs_dir).as_posix()
                 discovered[topic] = _build(topic, rel)
 
             # Catch any *GUIDE.md without the underscore separator (e.g. HTMLGUIDE.md).
             seen_files = {e.file for e in discovered.values()}
             for guide in docs_dir.rglob('*GUIDE.md'):
-                rel = str(guide.relative_to(docs_dir))
+                rel = guide.relative_to(docs_dir).as_posix()
                 if rel in seen_files:
                     continue
                 topic = guide.stem.lower().replace('guide', '').replace('_', '-').strip('-')

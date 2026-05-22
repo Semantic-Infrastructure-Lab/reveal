@@ -424,7 +424,7 @@ class TestRunArchitecture(unittest.TestCase):
             run_architecture(args)
 
     def test_no_imports_skips_analysis(self):
-        args = _args(path='/tmp', no_imports=True)
+        args = _args(path='.', no_imports=True)
         with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=[]):
             with patch('reveal.cli.commands.architecture._run_imports_analysis') as mock_imports:
                 with patch('reveal.cli.commands.architecture._render_brief'):
@@ -432,7 +432,7 @@ class TestRunArchitecture(unittest.TestCase):
         mock_imports.assert_not_called()
 
     def test_json_output(self):
-        args = _args(path='/tmp', format='json')
+        args = _args(path='.', format='json')
         mock_complex = [{'name': 'f', 'complexity': 25, 'file': '/tmp/a.py'}]
         with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=mock_complex):
             with patch('reveal.cli.commands.architecture._run_imports_analysis', return_value=_IMPORTS_DATA):
@@ -445,7 +445,7 @@ class TestRunArchitecture(unittest.TestCase):
         self.assertIn('next_commands', data)
 
     def test_json_facts_structure(self):
-        args = _args(path='/tmp', format='json')
+        args = _args(path='.', format='json')
         with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=[]):
             with patch('reveal.cli.commands.architecture._run_imports_analysis', return_value=_IMPORTS_DATA):
                 out = _capture(run_architecture, args)
@@ -457,7 +457,7 @@ class TestRunArchitecture(unittest.TestCase):
         self.assertIn('circular_groups', facts)
 
     def test_text_output_renders(self):
-        args = _args(path='/tmp')
+        args = _args(path='.')
         with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=_COMPLEX_FNS):
             with patch('reveal.cli.commands.architecture._run_imports_analysis', return_value=_IMPORTS_DATA):
                 out = _capture(run_architecture, args)
@@ -465,7 +465,7 @@ class TestRunArchitecture(unittest.TestCase):
         self.assertIn('Architecture Brief', out)
 
     def test_text_output_sections(self):
-        args = _args(path='/tmp')
+        args = _args(path='.')
         with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=_COMPLEX_FNS):
             with patch('reveal.cli.commands.architecture._run_imports_analysis', return_value=_IMPORTS_DATA):
                 out = _capture(run_architecture, args)
@@ -477,14 +477,14 @@ class TestRunArchitecture(unittest.TestCase):
         self.assertIn('Next Commands', out)
 
     def test_dynamic_imports_note_shown(self):
-        args = _args(path='/tmp')
+        args = _args(path='.')
         with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=[]):
             with patch('reveal.cli.commands.architecture._run_imports_analysis', return_value=_IMPORTS_DATA):
                 out = _capture(run_architecture, args)
         self.assertIn('static imports only', out)
 
     def test_dynamic_imports_note_hidden_when_no_imports(self):
-        args = _args(path='/tmp', no_imports=True)
+        args = _args(path='.', no_imports=True)
         with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=[]):
             out = _capture(run_architecture, args)
         self.assertNotIn('static imports only', out)

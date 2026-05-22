@@ -58,7 +58,7 @@ def _render(path: str, func_name: str, var_name: str) -> str:
 def _cli(path: str, func: str, var: str) -> str:
     out = subprocess.run(
         ['reveal', path, func, '--narrow', var],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding='utf-8',
     )
     return out.stdout
 

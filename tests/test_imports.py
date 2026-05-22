@@ -903,7 +903,7 @@ class TestFanInRanking:
         result = adapter.get_structure()
 
         assert result['type'] == 'fan_in_ranking'
-        entries = {e['file'].split('/')[-1]: e for e in result['entries']}
+        entries = {Path(e['file']).name: e for e in result['entries']}
         assert entries['utils.py']['fan_in'] == 2
         assert entries['main.py']['fan_in'] == 0
 
@@ -939,7 +939,7 @@ class TestFanInRanking:
         adapter = ImportsAdapter(str(tmp_path), 'rank=fan-in')
         result = adapter.get_structure()
 
-        entries = {e['file'].split('/')[-1]: e for e in result['entries']}
+        entries = {Path(e['file']).name: e for e in result['entries']}
         assert entries['importer.py']['fan_out'] == 1
         assert entries['utils.py']['fan_out'] == 0
 
@@ -994,7 +994,7 @@ class TestEntrypoints:
         result = adapter.get_structure()
 
         assert result['type'] == 'entrypoints'
-        names = [e['file'].split('/')[-1] for e in result['entries']]
+        names = [Path(e['file']).name for e in result['entries']]
         assert 'main.py' in names
         assert 'utils.py' not in names
 
@@ -1009,7 +1009,7 @@ class TestEntrypoints:
         adapter = ImportsAdapter(str(tmp_path), 'entrypoints')
         result = adapter.get_structure()
 
-        names = [e['file'].split('/')[-1] for e in result['entries']]
+        names = [Path(e['file']).name for e in result['entries']]
         assert names.index('heavy.py') < names.index('light.py')
 
     def test_entrypoints_fan_out_populated(self, tmp_path):
@@ -1020,7 +1020,7 @@ class TestEntrypoints:
         adapter = ImportsAdapter(str(tmp_path), 'entrypoints')
         result = adapter.get_structure()
 
-        entries = {e['file'].split('/')[-1]: e for e in result['entries']}
+        entries = {Path(e['file']).name: e for e in result['entries']}
         assert entries['main.py']['fan_out'] == 1
 
     def test_entrypoints_total_scanned(self, tmp_path):

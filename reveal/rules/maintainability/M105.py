@@ -61,7 +61,7 @@ class M105(BaseRule):
         detections: List[Detection] = []
 
         # Only check handler files
-        if not file_path.endswith('.py') or '/handlers_' not in file_path:
+        if not file_path.endswith('.py') or not Path(file_path).name.startswith('handlers_'):
             return detections
 
         # Find all handler functions

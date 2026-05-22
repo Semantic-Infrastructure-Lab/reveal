@@ -298,6 +298,6 @@ def _relpath(file_str: str, base_path: Optional[Path]) -> str:
     if not base_path:
         return file_str
     try:
-        return str(Path(file_str).relative_to(base_path))
+        return Path(file_str).relative_to(base_path).as_posix()
     except ValueError:
         return file_str

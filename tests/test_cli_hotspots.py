@@ -103,25 +103,25 @@ class TestRunFileHotspots(unittest.TestCase):
     @patch('reveal.adapters.stats.StatsAdapter.get_structure')
     def test_returns_hotspots_list(self, mock_gs):
         mock_gs.return_value = {'hotspots': [_file_hotspot('a.py', 60), _file_hotspot('b.py', 75)]}
-        result = _run_file_hotspots(Path('/tmp'), top=10)
+        result = _run_file_hotspots(Path('.'), top=10)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]['file'], 'a.py')
 
     @patch('reveal.adapters.stats.StatsAdapter.get_structure')
     def test_respects_top_limit(self, mock_gs):
         mock_gs.return_value = {'hotspots': [_file_hotspot(f'f{i}.py', 50) for i in range(20)]}
-        result = _run_file_hotspots(Path('/tmp'), top=5)
+        result = _run_file_hotspots(Path('.'), top=5)
         self.assertEqual(len(result), 5)
 
     @patch('reveal.adapters.stats.StatsAdapter.get_structure')
     def test_missing_hotspots_key_returns_empty(self, mock_gs):
         mock_gs.return_value = {'other': []}
-        result = _run_file_hotspots(Path('/tmp'), top=10)
+        result = _run_file_hotspots(Path('.'), top=10)
         self.assertEqual(result, [])
 
     @patch('reveal.adapters.stats.StatsAdapter.get_structure', side_effect=Exception("boom"))
     def test_exception_returns_empty(self, _mock):
-        result = _run_file_hotspots(Path('/tmp'), top=10)
+        result = _run_file_hotspots(Path('.'), top=10)
         self.assertEqual(result, [])
 
 
