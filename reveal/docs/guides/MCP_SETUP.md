@@ -6,6 +6,10 @@ beth_topics:
   - mcp
   - claude-code
   - agent-integration
+help_topic: mcp
+help_description: "MCP server setup — 5 tools for Claude Code, Cursor, Windsurf"
+help_category: ai_guides
+help_token_estimate: "~2,000"
 ---
 
 # Reveal MCP Server

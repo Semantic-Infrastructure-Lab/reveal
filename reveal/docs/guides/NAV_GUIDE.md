@@ -1,6 +1,10 @@
 ---
 title: Deep-Dive Code Navigation (Nav Flags)
 category: guide
+help_topic: nav
+help_description: "Deep-dive code navigation flags (--outline, --boundary, --varflow, --sideeffects)"
+help_category: feature_guides
+help_token_estimate: "~2,000"
 ---
 # Deep-Dive Code Navigation (Nav Flags)
 

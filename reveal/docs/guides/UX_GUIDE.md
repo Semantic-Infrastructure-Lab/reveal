@@ -2,6 +2,10 @@
 title: "Reveal UX Guide: CLI Flags vs URI Query Parameters"
 type: guide
 category: best-practices
+help_topic: ux
+help_description: "CLI flags vs URI query params — when to use each, progressive escalation, flag-to-param translation"
+help_category: best_practices
+help_token_estimate: "~3,000"
 ---
 
 # Reveal UX Guide: CLI Flags vs URI Query Parameters
@@ -219,6 +223,7 @@ reveal 'ast://file.py?name~=auth' | reveal --stdin --check
 | `stats://` | ✅ Metric filtering | `?hotspots`, `?min_complexity=10` |
 | `git://` | ✅ Commit filtering | `?author=`, `?since=`, `?type=` |
 | `calls://` | ✅ Call graph | `?target=fn`, `?top=10` |
+| `patches://` | ✅ Test patch pressure | `?group=target`, `?min=3`, `?limit=20` |
 | `claude://` | ✅ Session filtering | `?summary`, `?errors`, `?contains=` |
 | `xlsx://` | ✅ Sheet/range | `?sheet=Sales`, `?range=A1:D10` |
 | `ssl://` | ✅ Expiry/summary | `?expiring-within=30`, `?summary` |

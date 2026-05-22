@@ -1,9 +1,13 @@
 ---
 title: Reveal - AI Agent Reference (Complete)
 category: guide
+help_topic: agent
+help_description: Complete agent guide (task-based patterns, all adapters, troubleshooting)
+help_category: ai_guides
+help_token_estimate: "~12,000"
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.93.0
+**Version:** 0.94.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -187,6 +191,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal hotspots [path]` | High-complexity files and functions that need attention | `reveal hotspots --help` |
 | `reveal contracts [path]` | Architectural seams: ABCs, Protocols, TypedDicts, dataclasses | `reveal contracts --help` |
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes | `reveal surface --help` |
+| `reveal testability [path]` | Test patch pressure joined with production boundary fan-out | `reveal testability --help` |
 | `reveal trace --from FUNC` | Walk call graph from a named entry point; depth-indented narrative with side-effect classification | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
 | `reveal review <path>` | Assess quality + structural changes before a PR merge | `reveal review --help` |
@@ -201,6 +206,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 - Building LLM context with a token budget → `reveal pack`.
 - Tracing what a function actually does (calls + side-effects) → `reveal trace --from <func>`.
 - Mapping the system's external boundaries → `reveal surface`.
+- Finding testability pressure → `reveal testability src --tests tests`.
 - Building your own adapter, analyzer, or rule → `reveal dev new-adapter|new-analyzer|new-rule`.
 
 ---
@@ -533,6 +539,35 @@ rules:
 | **I001** | `__init__.py` re-exports | Fixed in v0.61+: I001 now skips `__all__`-listed names |
 
 **M102 heuristic detail:** M102 (unused module members) scans call sites within the same file and across the project. It cannot follow `getattr(module, name)()` dispatch, `importlib.import_module` loading, or registration patterns like `RULES = {k: v for k, v in globals().items() if isinstance(v, BaseRule)}`. When you see M102 on a file full of small classes with no direct callers, check whether a registry or factory loads them.
+
+---
+
+### Task: "Find testability pressure"
+
+**Pattern:**
+```bash
+# Raw patch pressure in tests
+reveal patches://tests
+reveal 'patches://tests?group=target&limit=20'
+reveal 'patches://tests?group=test&min=3'
+
+# Combined report: test patches + production boundary fan-out
+reveal testability src --tests tests
+reveal testability src --tests tests --top 20
+reveal testability src --tests tests --format json
+```
+
+**Why this works:** Patch-heavy tests often point at production code that mixes runtime boundaries with decision logic. `patches://` shows what tests patch. `reveal testability` joins that pressure with production functions that touch network clients, persistence, filesystem state, notifications, clocks, environment/config, global state, or mutation.
+
+**How to interpret it:** This is advisory. Mocking an external API, clock, certificate probe, or filesystem boundary can be correct. High signal comes from repeated private/internal patches or patch pressure that overlaps with high boundary fan-out.
+
+**Follow-up commands:**
+```bash
+reveal src/module.py function_name --boundary
+reveal src/module.py function_name --sideeffects
+reveal 'calls://src?callees=function_name'
+reveal surface src
+```
 
 ---
 

@@ -1,6 +1,10 @@
 ---
 title: The Reveal Help System
 category: guide
+help_topic: help
+help_description: How the help system works (meta!)
+help_category: dev_guides
+help_token_estimate: "~2,500"
 ---
 # The Reveal Help System
 

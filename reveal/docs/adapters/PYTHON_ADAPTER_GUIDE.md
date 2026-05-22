@@ -1,6 +1,10 @@
 ---
 title: Python Adapter (python://) - Complete Guide
 category: guide
+help_topic: python-guide
+help_description: Python adapter deep dive
+help_category: feature_guides
+help_token_estimate: "~2,500"
 ---
 # Python Adapter (python://) - Complete Guide
 

@@ -1,10 +1,69 @@
 """Help adapter (help://) - Meta-adapter for exploring reveal's capabilities."""
 
 import sys
+from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer, _ADAPTER_REGISTRY
 from ..rendering import render_help
+
+# Valid help_category values for the help:// index listing.
+# Guides without help_category (or with an unknown value) are accessible by
+# topic name but don't appear in the index — same as today's uncategorized
+# behavior, but now explicit rather than accidental.
+VALID_HELP_CATEGORIES = {
+    'getting_started',
+    'ai_guides',
+    'feature_guides',
+    'best_practices',
+    'dev_guides',
+}
+
+
+def _read_help_frontmatter(path: Path) -> Dict[str, str]:
+    """Extract help_* fields from a markdown file's YAML frontmatter.
+
+    Returns an empty dict if the file has no frontmatter or yaml parsing fails.
+    Only the four help_* fields are read; other frontmatter is ignored.
+
+    Fields:
+        help_topic        Canonical topic for index display (optional). If set,
+                          only this topic gets help_category — other aliases of
+                          the same file remain reachable but stay out of the index.
+        help_description  One-line description shown in the help index.
+        help_category     One of VALID_HELP_CATEGORIES; absent or empty hides
+                          the topic from the index but keeps direct access.
+        help_token_estimate  Rough token cost of the full guide, e.g. "~3,000".
+    """
+    # Lazy import — yaml isn't needed unless the help adapter is instantiated,
+    # and we want to keep this helper testable in isolation from the markdown
+    # adapter's frontmatter machinery.
+    from .markdown.files import extract_frontmatter
+    fm = extract_frontmatter(path) or {}
+    return {
+        k: str(fm[k])
+        for k in ('help_topic', 'help_description', 'help_category', 'help_token_estimate')
+        if k in fm and fm[k] is not None
+    }
+
+
+@dataclass(frozen=True)
+class GuideEntry:
+    """Registered help topic with metadata sourced from guide frontmatter.
+
+    A single guide file can be reached via multiple topics (aliases). All
+    topics for the same file share the same description/category/token_estimate
+    pulled from that file's frontmatter — the renderer dedupes by file path
+    when building the index.
+    """
+    topic: str
+    file: str               # relative path under reveal/docs/
+    description: str = ""
+    category: str = ""      # one of VALID_HELP_CATEGORIES, or "" to hide from index
+    token_estimate: str = ""
+
+    def to_dict(self) -> Dict[str, str]:
+        return asdict(self)
 
 _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
     'security': {
@@ -161,6 +220,8 @@ class HelpAdapter(ResourceAdapter):
         'markdown': 'adapters/MARKDOWN_GUIDE.md',
         'mysql': 'adapters/MYSQL_ADAPTER_GUIDE.md',
         'nginx': 'adapters/NGINX_GUIDE.md',
+        'patches': 'adapters/PATCHES_ADAPTER_GUIDE.md',
+        'patches-guide': 'adapters/PATCHES_ADAPTER_GUIDE.md',
         'python': 'adapters/PYTHON_ADAPTER_GUIDE.md',
         'python-guide': 'adapters/PYTHON_ADAPTER_GUIDE.md',
         'reveal-guide': 'adapters/REVEAL_ADAPTER_GUIDE.md',
@@ -190,6 +251,7 @@ class HelpAdapter(ResourceAdapter):
         'review': 'guides/SUBCOMMANDS_GUIDE.md',
         'schema': 'guides/SCHEMA_VALIDATION_HELP.md',
         'schemas': 'guides/SCHEMA_VALIDATION_HELP.md',
+        'testability': 'guides/TESTABILITY_GUIDE.md',
         'tricks': 'guides/RECIPES.md',   # Merged into RECIPES.md (task-based workflows)
         'ux': 'guides/UX_GUIDE.md',
         'what-is': 'guides/WHAT_IS_REVEAL_GOOD_FOR.md',
@@ -279,47 +341,77 @@ class HelpAdapter(ResourceAdapter):
         # STATIC_HELP takes precedence (allows aliases and special mappings)
         self.help_topics = self._discover_and_merge_guides()
 
-    def _discover_and_merge_guides(self) -> Dict[str, str]:
-        """Auto-discover guide files and merge with STATIC_HELP.
+    def _discover_and_merge_guides(self) -> Dict[str, GuideEntry]:
+        """Auto-discover guide files, parse frontmatter, merge with STATIC_HELP.
 
-        Automatically discovers *_GUIDE.md files in reveal/docs/ and makes them
-        accessible via help:// URIs. Manual STATIC_HELP entries take precedence,
-        allowing for aliases and custom topic names.
+        Discovery walks reveal/docs/ for *_GUIDE.md and *GUIDE.md files and
+        derives a topic name from each filename. STATIC_HELP entries add extra
+        topic names (aliases) for the same files and register non-*GUIDE.md
+        docs (QUICK_START.md, AGENT_HELP.md, etc.) that auto-discovery misses.
+
+        Metadata (description, category, token_estimate) is read from each
+        file's frontmatter — never from a parallel Python dict. Aliases inherit
+        their target file's metadata so adding `mcp-setup` and `mcp` for the
+        same file does not double-list in the index.
 
         Returns:
-            Dict mapping topic names to guide filenames
+            Dict mapping topic name → GuideEntry.
         """
-        discovered = {}
-
-        # Find reveal/docs directory
         docs_dir = Path(__file__).parent.parent / 'docs'
 
+        # Phase 1: parse frontmatter for every markdown file under docs/ once.
+        # Aliases will look up metadata by relative file path.
+        metadata_by_file: Dict[str, Dict[str, str]] = {}
         if docs_dir.exists():
-            # Auto-discover *_GUIDE.md files recursively (e.g., adapters/AST_ADAPTER_GUIDE.md)
-            for guide in docs_dir.rglob('*_GUIDE.md'):
-                # Convert filename to topic name
-                # AST_ADAPTER_GUIDE.md -> ast-adapter
-                # QUERY_SYNTAX_GUIDE.md -> query-syntax
-                topic = guide.stem.lower().replace('_guide', '').replace('_', '-')
-                # Store relative path from docs_dir (e.g., 'adapters/AST_ADAPTER_GUIDE.md')
-                discovered[topic] = str(guide.relative_to(docs_dir))
+            for md in docs_dir.rglob('*.md'):
+                rel = str(md.relative_to(docs_dir))
+                metadata_by_file[rel] = _read_help_frontmatter(md)
 
-            # Also check for *GUIDE.md pattern (without underscore before GUIDE)
+        def _build(topic: str, file: str) -> GuideEntry:
+            fm = metadata_by_file.get(file, {})
+            # If frontmatter declares a canonical topic, only that topic is
+            # categorized (and therefore listed in the index). Other topics
+            # for the same file stay reachable but uncategorized.
+            canonical = fm.get('help_topic', '')
+            category = fm.get('help_category', '')
+            if canonical and topic != canonical:
+                category = ''
+            return GuideEntry(
+                topic=topic,
+                file=file,
+                description=fm.get('help_description', ''),
+                category=category,
+                token_estimate=fm.get('help_token_estimate', ''),
+            )
+
+        # Phase 2: auto-discover canonical topics from *_GUIDE.md / *GUIDE.md.
+        discovered: Dict[str, GuideEntry] = {}
+        if docs_dir.exists():
+            # AST_ADAPTER_GUIDE.md -> 'ast-adapter'; QUERY_SYNTAX_GUIDE.md -> 'query-syntax'
+            for guide in docs_dir.rglob('*_GUIDE.md'):
+                topic = guide.stem.lower().replace('_guide', '').replace('_', '-')
+                rel = str(guide.relative_to(docs_dir))
+                discovered[topic] = _build(topic, rel)
+
+            # Catch any *GUIDE.md without the underscore separator (e.g. HTMLGUIDE.md).
+            seen_files = {e.file for e in discovered.values()}
             for guide in docs_dir.rglob('*GUIDE.md'):
-                relative = str(guide.relative_to(docs_dir))
-                if relative in discovered.values():
+                rel = str(guide.relative_to(docs_dir))
+                if rel in seen_files:
                     continue
-                # HTMLGUIDE.md -> html (unlikely but handle it)
                 topic = guide.stem.lower().replace('guide', '').replace('_', '-').strip('-')
                 if topic:
-                    discovered[topic] = relative
+                    discovered[topic] = _build(topic, rel)
 
-        # Merge: discovered guides + STATIC_HELP (STATIC_HELP takes precedence)
-        # This allows STATIC_HELP to:
-        #   - Define aliases (e.g., 'tricks' -> 'RECIPES.md')
-        #   - Override auto-discovered names (e.g., 'python' -> 'PYTHON_ADAPTER_GUIDE.md')
-        #   - Reference non-guide files (e.g., 'agent' -> 'AGENT_HELP.md')
-        return {**discovered, **self.STATIC_HELP}
+        # Phase 3: merge STATIC_HELP. STATIC_HELP takes precedence — it provides
+        # friendly topic names (e.g. 'ast' overrides discovered 'ast-adapter'),
+        # explicit aliases ('config' → CONFIGURATION_GUIDE.md), and registers
+        # non-*GUIDE.md docs (QUICK_START.md, AGENT_HELP.md, etc.).
+        merged = dict(discovered)
+        for topic, file in self.STATIC_HELP.items():
+            merged[topic] = _build(topic, file)
+
+        return merged
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get help structure (list of available topics)."""
@@ -330,7 +422,10 @@ class HelpAdapter(ResourceAdapter):
             'source_type': 'runtime',
             'available_topics': self._list_topics(),
             'adapters': self._list_adapters(),
-            'static_guides': list(self.help_topics.keys())
+            # Each entry: {topic, file, description, category, token_estimate}.
+            # The renderer reads category/description/token_estimate from here;
+            # there is no parallel dict in the renderer module.
+            'static_guides': [entry.to_dict() for entry in self.help_topics.values()],
         }
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
@@ -870,9 +965,10 @@ class HelpAdapter(ResourceAdapter):
         Returns:
             Help content dict or None if file not found
         """
-        filename = self.help_topics.get(topic)
-        if not filename:
+        entry = self.help_topics.get(topic)
+        if not entry:
             return None
+        filename = entry.file
 
         # Help files are in reveal/docs/ directory
         help_path = Path(__file__).parent.parent / 'docs' / filename

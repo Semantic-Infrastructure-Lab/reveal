@@ -1,6 +1,10 @@
 ---
 title: Duplicate Code Detection in Reveal
 category: guide
+help_topic: duplicates
+help_description: "Duplicate code detection (D001/D002 rules, workflows, limitations)"
+help_category: feature_guides
+help_token_estimate: "~5,500"
 ---
 # Duplicate Code Detection in Reveal
 

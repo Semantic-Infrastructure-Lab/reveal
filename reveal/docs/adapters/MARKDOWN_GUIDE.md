@@ -1,6 +1,10 @@
 ---
 title: Markdown Support - Complete Guide
 category: guide
+help_topic: markdown
+help_description: Markdown feature guide
+help_category: feature_guides
+help_token_estimate: "~4,000"
 ---
 # Markdown Support - Complete Guide
 

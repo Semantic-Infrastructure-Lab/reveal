@@ -86,6 +86,7 @@ def _dispatch_subcommand() -> bool:
         'review':       ('reveal.cli.commands.review',       'create_review_parser',       'run_review'),
         'scaffold':     ('reveal.cli.commands.scaffold',     'create_scaffold_parser',     'run_scaffold'),
         'surface':      ('reveal.cli.commands.surface',      'create_surface_parser',      'run_surface'),
+        'testability':  ('reveal.cli.commands.testability',  'create_testability_parser',  'run_testability'),
         'trace':        ('reveal.cli.commands.trace',         'create_trace_parser',         'run_trace'),
     }
 

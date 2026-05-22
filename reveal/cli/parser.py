@@ -138,6 +138,7 @@ Subcommands (reveal <subcommand> --help for details):
   reveal hotspots [path]      High-complexity files and functions that need attention
   reveal contracts [path]     Architectural seams: ABCs, Protocols, TypedDicts, dataclasses
   reveal surface [path]       External surfaces: CLI, HTTP routes, env vars, network, FS writes
+  reveal testability [path]   Test patch pressure joined with production boundary fan-out
   reveal trace --from FUNC    Walk call graph from a named entry; depth-indented narrative
   reveal check <path>         Run quality rules on a file or directory
   reveal review <path>        Assess quality + structural changes before a PR merge

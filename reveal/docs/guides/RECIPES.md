@@ -1,6 +1,10 @@
 ---
 title: Reveal Recipes
 category: reference
+help_topic: tricks
+help_description: Cool tricks and hidden features
+help_category: best_practices
+help_token_estimate: "~3,500"
 ---
 # Reveal Recipes
 
@@ -19,6 +23,7 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
 - [Large-Function Navigation](#large-function-navigation)
 - [Refactoring & Quality](#refactoring-quality)
   - [Trace call relationships](#trace-call-relationships)
+  - [Find testability pressure](#find-testability-pressure)
 - [Documentation Maintenance](#documentation-maintenance)
   - [Search doc body text](#search-doc-body-text)
   - [Count values across a field](#count-values-across-a-field)
@@ -72,6 +77,16 @@ reveal review main..HEAD
 
 **Why this matters:** `pack` curates token-budgeted context, and `review`
 composes structural diff, checks, hotspots, and complexity delta in one pass.
+
+### Testability pressure
+
+```bash
+reveal 'patches://tests?group=target&limit=20'
+reveal testability src --tests tests
+```
+
+**Why this matters:** Patch pressure becomes useful when grouped by production
+target and joined to functions that cross runtime boundaries.
 
 ### Adapter graph + documentation graph
 
@@ -395,6 +410,34 @@ reveal 'ast://./src?lines>100'
 
 # Code golf (complex but short - suspicious)
 reveal 'ast://./src?complexity>10&lines<50'
+```
+
+### Find testability pressure
+
+```bash
+# What do tests patch most often?
+reveal 'patches://tests?group=target&limit=20'
+
+# Which tests need many patches?
+reveal 'patches://tests?group=test&min=3'
+
+# Join patch pressure with production boundary fan-out
+reveal testability src --tests tests
+reveal testability src --tests tests --top 20
+reveal testability src --tests tests --format json
+```
+
+Use this before refactoring patch-heavy test areas. The report is advisory:
+mocking an external API, clock, filesystem, DNS, or certificate probe can be
+correct. The strongest signal is repeated private/internal patching that
+overlaps with production functions touching several runtime boundaries.
+
+Follow up on a reported function:
+
+```bash
+reveal src/module.py function_name --boundary
+reveal src/module.py function_name --sideeffects
+reveal 'calls://src?callees=function_name'
 ```
 
 ### Complexity analysis

@@ -14,14 +14,14 @@ category: reference
 ## Quick Navigation
 
 - **New users** → [QUICK_START.md](QUICK_START.md) → [RECIPES.md](guides/RECIPES.md)
-- **Adapters** → See [Adapter Guides](#adapter-guides-19-files) below
+- **Adapters** → See [Adapter Guides](#adapter-guides-20-files) below
 - **nginx / cPanel operator** → [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md)
 - **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (3,265 lines)
 - **Developers** → [Development Guides](#development-guides-4-files)
 
 ---
 
-## User Guides (7 files)
+## User Guides (8 files)
 
 | File | Lines | Description |
 |------|-------|-------------|
@@ -33,10 +33,11 @@ category: reference
 | [MCP_SETUP.md](guides/MCP_SETUP.md) | — | MCP server setup for Claude Code, Cursor, Windsurf — 5 tools, stdio/SSE transports |
 | [CI_RECIPES.md](guides/CI_RECIPES.md) | — | GitHub Actions and GitLab CI ready-to-paste YAML: PR review, complexity gate, hotspot tracking, SSL checks |
 | [RECIPES.md](guides/RECIPES.md) | — | Task-based workflows, multi-adapter patterns, and real-world scenarios |
+| [TESTABILITY_GUIDE.md](guides/TESTABILITY_GUIDE.md) | — | Test patch pressure joined with production boundary fan-out (`reveal testability`) |
 
 ---
 
-## Adapter Guides (19 files)
+## Adapter Guides (20 files)
 
 Complete guides for all URI protocol adapters.
 
@@ -61,6 +62,7 @@ Complete guides for all URI protocol adapters.
 | [SSL_ADAPTER_GUIDE.md](adapters/SSL_ADAPTER_GUIDE.md) | 1488 | SSL/TLS certificate analysis and validation |
 | [STATS_ADAPTER_GUIDE.md](adapters/STATS_ADAPTER_GUIDE.md) | 1874 | Codebase statistics and metrics collection |
 | [XLSX_ADAPTER_GUIDE.md](adapters/XLSX_ADAPTER_GUIDE.md) | 651 | Excel/XLSX file analysis and data extraction |
+| [PATCHES_ADAPTER_GUIDE.md](adapters/PATCHES_ADAPTER_GUIDE.md) | — | Test patch pressure: repeated mocks, private patches, patch-heavy tests |
 
 **Adapters without dedicated guides** (covered elsewhere or minimal):
 - `autossl://` — see [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) (cPanel AutoSSL logs)
@@ -108,13 +110,14 @@ Core reference and technical specifications:
 
 ---
 
-## Subcommand Guides (1 file)
+## Subcommand Guides (2 files)
 
-Reference guides for all reveal subcommands (`architecture`, `check`, `deps`, `dev`, `health`, `hotspots`, `overview`, `pack`, `review`, `scaffold`):
+Reference guides for all reveal subcommands (`architecture`, `check`, `deps`, `dev`, `health`, `hotspots`, `overview`, `pack`, `review`, `scaffold`, `testability`):
 
 | File | Lines | Description |
 |------|-------|-------------|
 | [SUBCOMMANDS_GUIDE.md](guides/SUBCOMMANDS_GUIDE.md) | — | All subcommand reference: `architecture`, `check`, `deps`, `dev`, `health`, `hotspots`, `overview`, `pack`, `review`, `scaffold` |
+| [TESTABILITY_GUIDE.md](guides/TESTABILITY_GUIDE.md) | — | `reveal testability` workflow: joins test patch pressure with production boundary profiles |
 
 ---
 
@@ -170,14 +173,14 @@ Complete reference for AI agent integration:
 - "What is Reveal good for?" → [WHAT_IS_REVEAL_GOOD_FOR.md](guides/WHAT_IS_REVEAL_GOOD_FOR.md)
 - "What makes Reveal different?" → [WHY_REVEAL.md](WHY_REVEAL.md)
 - "What can Reveal do?" → [RECIPES.md](guides/RECIPES.md)
-- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-19-files)
+- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-20-files)
 - "How do queries work?" → [QUERY_SYNTAX_GUIDE.md](guides/QUERY_SYNTAX_GUIDE.md)
 - "For AI agents?" → [AGENT_HELP.md](AGENT_HELP.md)
 - "How does Reveal work internally?" → [ARCHITECTURE.md](../../ARCHITECTURE.md)
 - "Create custom adapter?" → [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md)
 
 **By Adapter**:
-Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-19-files) above.
+Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-20-files) above.
 
 ---
 

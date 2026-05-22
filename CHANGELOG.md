@@ -12,6 +12,18 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.94.0] - 2026-05-22 (sessions pokawuko-0522, celestial-force-0522)
+
+### Added
+- **`reveal testability` — per-target patch pressure joined with production fan-out** (pokawuko-0522) — new `patches://` adapter and `reveal testability` subcommand. Scans Python tests for `mock.patch`/`monkeypatch` targets, groups by patched symbol, joins with `calls://` boundary data so each pressure target is annotated with its production caller count. Surfaces seams that look like single boundaries in tests but are actually fan-out hubs in production. Schema + URI: `patches://tests?group=target`; CLI: `reveal testability`. 10 new tests in `tests/test_testability.py`.
+- **`patches://` suppresses sys.stdout/sys.stderr by default** (pokawuko-0522) — when scanning real test suites, `sys.stdout`/`sys.stderr`/`sys.stdin`/`builtins.print`/`builtins.input` dominated the top of the pressure list (94 patches in reveal's own suite — pure noise). `_SUPPRESSED_TARGETS` frozenset hides these by default; opt back in with `patches://tests?suppress=false`. Renderer prints a "Suppressed N targets" note. Fixes a subtle `False or 'true'` short-circuit bug in query-param bool parsing along the way.
+- **Frontmatter-driven help metadata** (celestial-force-0522) — `help_topic`, `help_description`, `help_category`, `help_token_estimate` fields read from each guide's YAML frontmatter via `_read_help_frontmatter`. Replaces three parallel Python dicts in `reveal/rendering/adapters/help.py` (`descriptions`, `GUIDE_CATEGORIES`, `TOKEN_ESTIMATES`) — these are deleted. New `GuideEntry` dataclass in `reveal/adapters/help.py`; `_discover_and_merge_guides` returns `Dict[str, GuideEntry]` instead of `Dict[str, str]`. STATIC_HELP is now a routing/alias table only; metadata lives with the documents it describes (reveal eating its own dogfood). Five new enforcement tests in `tests/test_help_registry.py::TestHelpFrontmatterMetadata` turn the previous silent fallback ("Static guide") into structural failures.
+
+### Changed
+- **`help://` index entry for `anti-patterns` removed** (celestial-force-0522) — `anti-patterns` was an alias to `AGENT_HELP.md` that appeared in the Best Practices section of the help index. Under one-file-one-canonical-topic, AGENT_HELP.md is canonical for `agent` (ai_guides) — `anti-patterns` remains reachable via direct access (`reveal help://anti-patterns`) but no longer double-lists under Best Practices. To restore visibility, extract the anti-patterns content into its own file.
+
+---
+
 ## [0.93.0] - 2026-05-19 (sessions burning-comet-0518, astral-void-0519, fiery-hammer-0519, kiyemesu-0519)
 
 ### Added

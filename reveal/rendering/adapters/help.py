@@ -8,33 +8,27 @@ from reveal.utils import safe_json_dumps
 
 # Module constants for help list mode
 STABLE_ADAPTERS = {'help', 'env', 'ast', 'python', 'reveal'}
-BETA_ADAPTERS = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git', 'ssl', 'domain', 'xlsx', 'cpanel', 'autossl', 'nginx', 'letsencrypt', 'calls'}
+BETA_ADAPTERS = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git', 'ssl', 'domain', 'xlsx', 'cpanel', 'autossl', 'nginx', 'letsencrypt', 'calls', 'patches'}
 PROJECT_ADAPTERS = {'claude'}
 
-GUIDE_CATEGORIES = {
-    'getting_started': ['quick-start'],
-    'ai_guides': ['agent', 'mcp'],
-    'feature_guides': ['python-guide', 'markdown', 'reveal-guide', 'html', 'configuration', 'schemas', 'duplicates', 'nav'],
-    'best_practices': ['anti-patterns', 'tricks', 'ux'],
-    'dev_guides': ['adapter-authoring', 'help'],
-}
+# Display order for help_category sections. Categories are defined in
+# VALID_HELP_CATEGORIES (reveal/adapters/help.py); this dict pairs each with
+# its display label. Any category not listed here is silently ignored by the
+# index renderer.
+_CATEGORY_LABELS = (
+    ('getting_started', 'Getting Started'),
+    ('ai_guides', 'For AI Agents'),
+    ('feature_guides', 'Feature Guides'),
+    ('best_practices', 'Best Practices'),
+    ('dev_guides', 'Development'),
+)
 
-TOKEN_ESTIMATES = {
-    'quick-start': '~2,000',
-    'agent': '~12,000',
-    'python-guide': '~2,500',
-    'markdown': '~4,000',
-    'reveal-guide': '~3,000',
-    'html': '~2,000',
-    'configuration': '~3,500',
-    'schemas': '~4,500',
-    'duplicates': '~5,500',
-    'anti-patterns': '~12,000',
-    'tricks': '~3,500',
-    'ux': '~3,000',
-    'adapter-authoring': '~2,500',
-    'help': '~2,500',
-    'nav': '~2,000',
+# Per-topic display annotations shown after the token-cost line (e.g. flag
+# aliases). Keep small — most guide metadata lives in frontmatter, but a few
+# annotations are about CLI integration, not the doc itself.
+_TOPIC_ANNOTATIONS = {
+    'quick-start': "\n                     Recommended: Start here if you're new to reveal!",
+    'agent': '\n                     Alias: --agent-help flag',
 }
 
 
@@ -168,34 +162,28 @@ def _render_static_guides_header() -> None:
     print()
 
 
-def _render_guide_category(category_name: str, topics: list, static: list,
-                            static_help_map: dict, special_handling: Optional[dict] = None) -> None:
-    """Render a category of guide topics.
+def _render_guide_category(category_label: str, entries: list) -> None:
+    """Render a category of guide entries.
 
     Args:
-        category_name: Display name for the category
-        topics: List of topic IDs in this category
-        static: List of available static guides
-        static_help_map: Map of topic IDs to file paths
-        special_handling: Optional dict with topic-specific handling (aliases, notes, etc.)
+        category_label: Display name for the category section.
+        entries: List of guide entry dicts (each has topic/file/description/
+                 category/token_estimate). Already filtered to this category
+                 and deduped by file path.
     """
-    available_topics = [t for t in topics if t in static]
-    if not available_topics and category_name != "For AI Agents":
+    if not entries:
         return
 
-    print(f"### {category_name}")
-    for topic in available_topics:
-        file = static_help_map.get(topic, 'unknown')
-        token_estimate = TOKEN_ESTIMATES.get(topic, '~2,000')
+    print(f"### {category_label}")
+    for entry in entries:
+        topic = entry['topic']
+        description = entry.get('description') or 'Static guide'
+        token_estimate = entry.get('token_estimate') or '~2,000'
+        annotation = _TOPIC_ANNOTATIONS.get(topic, '')
 
-        # Handle special cases
-        extra_info = ''
-        if special_handling and topic in special_handling:
-            extra_info = special_handling[topic]
-
-        print(f"  {topic:16} - {_get_guide_description(topic)}")
-        print(f"                     File: {file}")
-        print(f"                     Token cost: {token_estimate} (full){extra_info}")
+        print(f"  {topic:16} - {description}")
+        print(f"                     File: {entry['file']}")
+        print(f"                     Token cost: {token_estimate} (full){annotation}")
     print()
 
 
@@ -249,94 +237,47 @@ def _render_navigation_section() -> None:
     print("  -> reveal help://adapter-authoring  # Learn how to build adapters")
 
 
+def _select_index_entries(entries: list) -> Dict[str, list]:
+    """Group categorized entries by help_category, deduped by file path.
+
+    A guide file reachable via multiple topics (e.g. 'config' + 'configuration'
+    both point to CONFIGURATION_GUIDE.md) appears once per category, under the
+    shortest topic name. Aliases that share metadata with a canonical entry
+    inherit the canonical's category — dedup-by-file picks one.
+    """
+    by_category: Dict[str, Dict[str, dict]] = {}
+    for entry in entries:
+        category = entry.get('category') or ''
+        if not category:
+            continue
+        bucket = by_category.setdefault(category, {})
+        existing = bucket.get(entry['file'])
+        # Prefer the shortest topic (typically the canonical, e.g. 'mcp' over 'mcp-setup').
+        if existing is None or len(entry['topic']) < len(existing['topic']):
+            bucket[entry['file']] = entry
+    return {
+        category: sorted(files.values(), key=lambda e: e['topic'])
+        for category, files in by_category.items()
+    }
+
+
 def _render_help_list_mode(data: Dict[str, Any]) -> None:
     """Render help system topic list (reveal help://)."""
     _render_help_header()
 
-    # Group topics
     adapters = [a for a in data.get('adapters', []) if a.get('has_help')]
     static = data.get('static_guides', [])
 
-    # Render dynamic adapters
     _render_dynamic_adapters_section(adapters)
 
-    # Render static guides
     if static:
-        from reveal.adapters.help import HelpAdapter  # noqa: I006 — deferred to avoid rendering→adapters→rendering cycle
-        static_help_map = HelpAdapter.STATIC_HELP
-
         _render_static_guides_header()
+        grouped = _select_index_entries(static)
+        for category_key, label in _CATEGORY_LABELS:
+            _render_guide_category(label, grouped.get(category_key, []))
 
-        # Getting Started
-        _render_guide_category(
-            "Getting Started",
-            GUIDE_CATEGORIES['getting_started'],
-            static, static_help_map,
-            {'quick-start': '\n                     Recommended: Start here if you\'re new to reveal!'}
-        )
-
-        # AI Agent Guides
-        _render_guide_category(
-            "For AI Agents",
-            GUIDE_CATEGORIES['ai_guides'],
-            static, static_help_map,
-            {
-                'agent': '\n                     Alias: --agent-help flag'
-            }
-        )
-
-        # Feature Guides
-        _render_guide_category(
-            "Feature Guides",
-            GUIDE_CATEGORIES['feature_guides'],
-            static, static_help_map
-        )
-
-        # Best Practices
-        _render_guide_category(
-            "Best Practices",
-            GUIDE_CATEGORIES['best_practices'],
-            static, static_help_map
-        )
-
-        # Development
-        _render_guide_category(
-            "Development",
-            GUIDE_CATEGORIES['dev_guides'],
-            static, static_help_map
-        )
-
-    # Special topics and navigation
     _render_special_topics_section()
     _render_navigation_section()
-
-
-def _get_guide_description(topic: str) -> str:
-    """Get human-friendly description for a guide topic."""
-    descriptions = {
-        'quick-start': '5-minute introduction to reveal',
-        'agent': 'Complete agent guide (task-based patterns, all adapters, troubleshooting)',
-        'python': 'Python adapter with examples (duplicate of python-guide)',
-        'python-guide': 'Python adapter deep dive',
-        'reveal-guide': 'reveal:// adapter reference',
-        'markdown': 'Markdown feature guide',
-        'html': 'HTML feature guide',
-        'configuration': 'Configuration system (rules, env vars, precedence)',
-        'config': 'Alias for configuration',
-        'schemas': 'Schema validation for markdown front matter (v0.29.0+)',
-        'duplicates': 'Duplicate code detection (D001/D002 rules, workflows, limitations)',
-        'duplicate-detection': 'Alias for duplicates',
-        'anti-patterns': 'Common mistakes to avoid',
-        'adapter-authoring': 'Build your own adapters',
-        'tricks': 'Cool tricks and hidden features',
-        'ux': 'CLI flags vs URI query params — when to use each, progressive escalation, flag-to-param translation',
-        'help': 'How the help system works (meta!)',
-        'mcp': 'MCP server setup — 5 tools for Claude Code, Cursor, Windsurf',
-        'mcp-setup': 'Alias for mcp',
-        'nav': 'Deep-dive code navigation flags (--outline, --boundary, --varflow, --sideeffects)',
-        'navigation': 'Alias for nav',
-    }
-    return descriptions.get(topic, 'Static guide')
 
 
 def _render_help_static_guide(data: Dict[str, Any]) -> None:

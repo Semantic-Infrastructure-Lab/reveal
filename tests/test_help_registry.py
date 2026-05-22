@@ -1,8 +1,11 @@
 """Tests for help:// static guide registry integrity.
 
-Prevents two failure modes:
+Prevents three failure modes:
   1. Dead links — STATIC_HELP entry points to a file that doesn't exist on disk.
   2. Orphaned docs — a user-facing markdown file exists but has no help:// route.
+  3. Silent help-index regressions — a guide is categorized (help_category) but
+     missing help_description, or declares an unknown help_category, or claims
+     help_topic that no STATIC_HELP/auto-discovery entry resolves to.
 
 When adding a new guide under reveal/docs/, either:
   a) Add it to HelpAdapter.STATIC_HELP in reveal/adapters/help.py, OR
@@ -11,7 +14,7 @@ When adding a new guide under reveal/docs/, either:
 import unittest
 from pathlib import Path
 
-from reveal.adapters.help import HelpAdapter
+from reveal.adapters.help import HelpAdapter, VALID_HELP_CATEGORIES, _read_help_frontmatter
 
 # Docs that live under reveal/docs/ but are intentionally not in help://.
 # Key: path relative to reveal/docs/. Value: reason for exclusion.
@@ -172,6 +175,103 @@ class TestHelpRegistry(unittest.TestCase):
         section_count = sum(1 for line in content.splitlines() if line.startswith('## '))
         self.assertGreater(section_count, 1,
                            'quick-start must show at least 2 sections to be useful')
+
+
+class TestHelpFrontmatterMetadata(unittest.TestCase):
+    """Validate the help_* frontmatter fields that drive the help:// index.
+
+    These tests turn what used to be silent fallbacks ('Static guide' default
+    description, missing categories) into structural errors. They are the
+    enforcement layer that makes frontmatter the single source of truth.
+    """
+
+    def _all_guide_entries(self):
+        """Build the merged registry the same way HelpAdapter does."""
+        return HelpAdapter()._discover_and_merge_guides()
+
+    def test_categorized_guides_have_descriptions(self):
+        """Any guide that declares help_category must also declare help_description.
+
+        Without this, the index falls back to 'Static guide' — exactly the
+        silent failure the frontmatter migration was meant to eliminate.
+        """
+        entries = self._all_guide_entries()
+        missing = []
+        for entry in entries.values():
+            if entry.category and not entry.description:
+                missing.append(f'  help://{entry.topic} → {entry.file}')
+        self.assertFalse(
+            missing,
+            'Guides with help_category but no help_description (silent fallback):\n'
+            + '\n'.join(missing)
+            + '\nAdd help_description to the frontmatter.'
+        )
+
+    def test_help_categories_are_valid(self):
+        """Every help_category value must be in VALID_HELP_CATEGORIES."""
+        entries = self._all_guide_entries()
+        bad = []
+        for entry in entries.values():
+            if entry.category and entry.category not in VALID_HELP_CATEGORIES:
+                bad.append(
+                    f'  help://{entry.topic} → {entry.file} declares '
+                    f'help_category={entry.category!r} (not in {sorted(VALID_HELP_CATEGORIES)})'
+                )
+        self.assertFalse(
+            bad,
+            'Guides with unknown help_category values:\n' + '\n'.join(bad)
+        )
+
+    def test_each_category_has_at_least_one_guide(self):
+        """Every valid category should have at least one categorized guide.
+
+        Catches the case where renaming a category leaves a section in
+        VALID_HELP_CATEGORIES but no guide opts into it.
+        """
+        entries = self._all_guide_entries()
+        seen = {e.category for e in entries.values() if e.category}
+        missing = VALID_HELP_CATEGORIES - seen
+        self.assertFalse(
+            missing,
+            f'Categories in VALID_HELP_CATEGORIES with no guides assigned: {sorted(missing)}'
+        )
+
+    def test_categorized_guides_have_token_estimate(self):
+        """Categorized guides should declare help_token_estimate.
+
+        Missing values fall back to '~2,000' which is misleading for large
+        guides (e.g. AGENT_HELP.md is ~12,000).
+        """
+        entries = self._all_guide_entries()
+        missing = []
+        for entry in entries.values():
+            if entry.category and not entry.token_estimate:
+                missing.append(f'  help://{entry.topic} → {entry.file}')
+        self.assertFalse(
+            missing,
+            'Categorized guides without help_token_estimate (defaults to ~2,000):\n'
+            + '\n'.join(missing)
+        )
+
+    def test_help_topic_resolves(self):
+        """If a file declares help_topic, that topic must exist in the registry.
+
+        Catches typos (help_topic: aget) and stale declarations after STATIC_HELP renames.
+        """
+        entries = self._all_guide_entries()
+        files_with_canonical = {}
+        for md in _DOCS_ROOT.rglob('*.md'):
+            fm = _read_help_frontmatter(md)
+            canonical = fm.get('help_topic')
+            if canonical:
+                files_with_canonical[str(md.relative_to(_DOCS_ROOT))] = canonical
+
+        unresolved = []
+        topics = set(entries.keys())
+        for file, canonical in files_with_canonical.items():
+            if canonical not in topics:
+                unresolved.append(f'  {file} declares help_topic={canonical!r} but no topic resolves to it')
+        self.assertFalse(unresolved, 'Unresolved help_topic declarations:\n' + '\n'.join(unresolved))
 
 
 class TestHelpErrorHandling(unittest.TestCase):

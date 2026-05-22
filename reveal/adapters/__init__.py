@@ -32,6 +32,7 @@ from .letsencrypt import LetsEncryptAdapter
 from .nginx import NginxUriAdapter
 from .calls import CallsAdapter
 from .depends import DependsAdapter
+from .patches import PatchesAdapter
 
 # Optional adapters (require extra dependencies)
 try:
@@ -73,6 +74,7 @@ __all__ = [
     'NginxUriAdapter',
     'CallsAdapter',
     'DependsAdapter',
+    'PatchesAdapter',
 ]
 if _git_available:
     __all__.append('GitAdapter')

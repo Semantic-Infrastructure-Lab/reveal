@@ -1,6 +1,10 @@
 ---
 title: Reveal Adapter Authoring Guide
 category: guide
+help_topic: adapter-authoring
+help_description: Build your own adapters
+help_category: dev_guides
+help_token_estimate: "~2,500"
 ---
 # Reveal Adapter Authoring Guide
 

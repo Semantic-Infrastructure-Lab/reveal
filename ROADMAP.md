@@ -1,11 +1,16 @@
 # Reveal Roadmap
-> **Last updated**: 2026-05-19 (freezing-snow-0519 — v0.93.0 shipped: --grep text search + 9 bug fixes, BACK-308–319)
+> **Last updated**: 2026-05-22 (dark-fusion-0522 — v0.94.0 shipped: reveal testability + patches:// adapter + frontmatter-driven help metadata)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.94.0 — `reveal testability` + `patches://` adapter + frontmatter help metadata
+- ✅ **`reveal testability` subcommand** — per-target patch pressure joined with production fan-out. Scans Python tests for `mock.patch`/`monkeypatch` targets, joins with `calls://` boundary data so each pressure target is annotated with its production caller count. Surfaces seams that look like single boundaries in tests but are actually fan-out hubs in production. CLI: `reveal testability [src] [--tests tests] [--top N]`. (pokawuko-0522)
+- ✅ **`patches://` URI adapter** — `patches://tests?group=target` shows patch pressure by target; `group=test` shows most-patched tests. `_SUPPRESSED_TARGETS` hides stdlib I/O noise (stdout/stderr/print/input) by default; `suppress=false` to include. Fixed `False or 'true'` short-circuit bug in query-param bool parsing. (pokawuko-0522)
+- ✅ **Frontmatter-driven help metadata** — `help_topic`, `help_description`, `help_category`, `help_token_estimate` fields read from each guide's YAML frontmatter. Deleted 3 parallel Python dicts from renderer (`descriptions`, `GUIDE_CATEGORIES`, `TOKEN_ESTIMATES`). New `GuideEntry` dataclass; STATIC_HELP is now a routing/alias table only. 5 new enforcement tests turn the previous silent "Static guide" fallback into structural failures. (celestial-force-0522)
 
 ### v0.93.0 — `--grep` text search + 9 bug fixes
 - ✅ **`--grep PATTERN` — universal text search with structural context** — hits grouped by enclosing element (heading, function, class). Directory mode, `--ignore-case`, JSON output. `grep_handler.py` ~210 lines. (BACK-309)

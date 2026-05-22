@@ -12,11 +12,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from reveal.rendering.adapters.help import (
     _render_help_breadcrumbs,
     _render_help_list_mode,
-    _get_guide_description,
     _render_help_static_guide,
     _render_help_adapter_summary,
     _render_help_section,
     _render_help_adapter_specific,
+    _select_index_entries,
     render_help,
 )
 
@@ -88,43 +88,36 @@ class TestRenderHelpBreadcrumbs(unittest.TestCase):
         self.assertNotIn('Next Steps', output)
 
 
-class TestGetGuideDescription(unittest.TestCase):
-    """Test guide description retrieval."""
+class TestSelectIndexEntries(unittest.TestCase):
+    """Test grouping + dedup of guide entries for the help index."""
 
-    def test_agent_description(self):
-        """Should return correct description for agent guide."""
-        desc = _get_guide_description('agent')
-        self.assertEqual(desc, 'Complete agent guide (task-based patterns, all adapters, troubleshooting)')
+    def test_groups_by_category(self):
+        entries = [
+            {'topic': 'agent', 'file': 'AGENT_HELP.md', 'description': 'd', 'category': 'ai_guides', 'token_estimate': '~12,000'},
+            {'topic': 'ux', 'file': 'guides/UX_GUIDE.md', 'description': 'd', 'category': 'best_practices', 'token_estimate': '~3,000'},
+        ]
+        grouped = _select_index_entries(entries)
+        self.assertIn('ai_guides', grouped)
+        self.assertIn('best_practices', grouped)
+        self.assertEqual(len(grouped['ai_guides']), 1)
+        self.assertEqual(grouped['ai_guides'][0]['topic'], 'agent')
 
-    def test_python_guide_description(self):
-        """Should return correct description for python-guide."""
-        desc = _get_guide_description('python-guide')
-        self.assertEqual(desc, 'Python adapter deep dive')
+    def test_dedupes_by_file_prefers_shortest_topic(self):
+        """When two topics point at the same file, the index lists one (shortest topic)."""
+        entries = [
+            {'topic': 'mcp-setup', 'file': 'guides/MCP_SETUP.md', 'description': 'd', 'category': 'ai_guides', 'token_estimate': '~2,000'},
+            {'topic': 'mcp', 'file': 'guides/MCP_SETUP.md', 'description': 'd', 'category': 'ai_guides', 'token_estimate': '~2,000'},
+        ]
+        grouped = _select_index_entries(entries)
+        self.assertEqual(len(grouped['ai_guides']), 1)
+        self.assertEqual(grouped['ai_guides'][0]['topic'], 'mcp')
 
-    def test_anti_patterns_description(self):
-        """Should return correct description for anti-patterns."""
-        desc = _get_guide_description('anti-patterns')
-        self.assertEqual(desc, 'Common mistakes to avoid')
-
-    def test_tricks_description(self):
-        """Should return correct description for tricks."""
-        desc = _get_guide_description('tricks')
-        self.assertEqual(desc, 'Cool tricks and hidden features')
-
-    def test_markdown_description(self):
-        """Should return correct description for markdown."""
-        desc = _get_guide_description('markdown')
-        self.assertEqual(desc, 'Markdown feature guide')
-
-    def test_adapter_authoring_description(self):
-        """Should return correct description for adapter-authoring."""
-        desc = _get_guide_description('adapter-authoring')
-        self.assertEqual(desc, 'Build your own adapters')
-
-    def test_unknown_topic_default(self):
-        """Should return default description for unknown topics."""
-        desc = _get_guide_description('unknown-topic')
-        self.assertEqual(desc, 'Static guide')
+    def test_uncategorized_entries_excluded(self):
+        """Entries with empty category are not shown in the index."""
+        entries = [
+            {'topic': 'orphan', 'file': 'X.md', 'description': '', 'category': '', 'token_estimate': ''},
+        ]
+        self.assertEqual(_select_index_entries(entries), {})
 
 
 class TestRenderHelpListMode(unittest.TestCase):
@@ -167,16 +160,26 @@ class TestRenderHelpListMode(unittest.TestCase):
         self.assertNotIn('other://', output)
 
     def test_with_static_guides(self):
-        """Should render static guides section."""
+        """Should render static guides section using metadata from each entry."""
         data = {
-            'static_guides': ['agent', 'python-guide', 'anti-patterns']
+            'static_guides': [
+                {'topic': 'agent', 'file': 'AGENT_HELP.md',
+                 'description': 'Complete agent guide', 'category': 'ai_guides',
+                 'token_estimate': '~12,000'},
+                {'topic': 'python-guide', 'file': 'adapters/PYTHON_ADAPTER_GUIDE.md',
+                 'description': 'Python adapter deep dive', 'category': 'feature_guides',
+                 'token_estimate': '~2,500'},
+                {'topic': 'anti-patterns', 'file': 'AGENT_HELP.md',
+                 'description': 'Common mistakes', 'category': 'best_practices',
+                 'token_estimate': '~12,000'},
+            ]
         }
         output = capture_stdout(_render_help_list_mode, data)
         self.assertIn('STATIC GUIDES', output)
         self.assertIn('For AI Agents', output)
         self.assertIn('agent', output)
-        self.assertIn('~12,000', output)  # Token estimate
-        self.assertIn('--agent-help flag', output)  # Alias
+        self.assertIn('~12,000', output)
+        self.assertIn('--agent-help flag', output)  # _TOPIC_ANNOTATIONS for 'agent'
         self.assertIn('Feature Guides', output)
         self.assertIn('python-guide', output)
         self.assertIn('Best Practices', output)

@@ -1,6 +1,10 @@
 ---
 title: Reveal Quick Start (5 Minutes)
 category: reference
+help_topic: quick-start
+help_description: 5-minute introduction to reveal
+help_category: getting_started
+help_token_estimate: "~2,000"
 ---
 # Reveal Quick Start (5 Minutes)
 

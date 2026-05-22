@@ -2,7 +2,7 @@
 
 **Reveal is how AI agents understand codebases without wasting tokens.**
 
-A local-first, adapter-driven semantic inspection layer — progressive disclosure enforced by design. One CLI, 23 URI adapters, 185+ languages. Structure before content, always. Engineers and AI systems use the same tool, the same syntax, the same progressive drill-down.
+A local-first, adapter-driven semantic inspection layer — progressive disclosure enforced by design. One CLI, 24 URI adapters, 185+ languages. Structure before content, always. Engineers and AI systems use the same tool, the same syntax, the same progressive drill-down.
 
 ```bash
 reveal src/auth.py validate_token           # What does this function do?
@@ -127,12 +127,13 @@ reveal surface src/            # external boundary map: CLI args, routes, env va
 reveal dev new-adapter <name>  # scaffold new adapters/rules
 ```
 
-## Adapters (23 built-in)
+## Adapters (24 built-in)
 
 | Adapter | What it queries |
 |---------|-----------------|
 | `ast://` | Functions, classes, complexity, decorators — 185+ languages |
 | `calls://` | Cross-file call graph: callers, callees, coupling metrics, dead code |
+| `depends://` | Inverse module dependency graph: who imports this module |
 | `diff://` | Structural diff between branches or commits (with per-function complexity delta) |
 | `imports://` | Dependency graph, circular imports, unused imports |
 | `stats://` | Codebase quality scores, hotspots, duplication |
@@ -149,6 +150,7 @@ reveal dev new-adapter <name>  # scaffold new adapters/rules
 | `json://` | JMESPath queries, nested navigation, flatten |
 | `env://` | Environment variable analysis, `.env` validation |
 | `python://` | Runtime introspection of live Python modules |
+| `patches://` | Test patch pressure: repeated mocks, private patches, patch-heavy tests |
 | `xlsx://` | Excel data extraction and analysis |
 | `claude://` | AI session history, tool usage, file access patterns |
 | `reveal://` | Reveal introspects itself: adapters, rules, config |
