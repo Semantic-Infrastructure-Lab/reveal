@@ -19,6 +19,7 @@ from typing import Any, List, Set, Optional
 from .types import ImportStatement
 from .base import LanguageExtractor, register_extractor
 from ...registry import get_analyzer
+from ...core import node_children as _children
 
 logger = logging.getLogger(__name__)
 
@@ -117,9 +118,9 @@ class JavaScriptExtractor(LanguageExtractor):
                 symbols.add(name)
 
             # Also handle member expression (foo.bar -> track 'foo')
-            if node.parent and node.parent.type == 'member_expression':
+            if node.parent() and node.parent().kind() == 'member_expression':
                 # Get root of member expression chain
-                root = self._get_root_identifier(node.parent, analyzer)
+                root = self._get_root_identifier(node.parent(), analyzer)
                 if root:
                     symbols.add(root)
 
@@ -135,8 +136,8 @@ class JavaScriptExtractor(LanguageExtractor):
         Returns:
             Module path or None
         """
-        for child in node.children:
-            if child.type == 'string':
+        for child in _children(node):
+            if child.kind() == 'string':
                 # Get string content, strip quotes
                 return str(analyzer._get_node_text(child)).strip("'\"")
         return None
@@ -150,17 +151,17 @@ class JavaScriptExtractor(LanguageExtractor):
         Returns:
             import_clause node or None
         """
-        for child in node.children:
-            if child.type == 'import_clause':
+        for child in _children(node):
+            if child.kind() == 'import_clause':
                 return child
         return None
 
     def _parse_named_imports_child(self, child, analyzer) -> list:
         """Extract imported names from a named_imports node."""
         names = []
-        for subchild in child.children:
-            if subchild.type == 'import_specifier':
-                spec_children = list(subchild.children)
+        for subchild in _children(child):
+            if subchild.kind() == 'import_specifier':
+                spec_children = _children(subchild)
                 if spec_children:
                     names.append(analyzer._get_node_text(spec_children[0]))
         return names
@@ -179,18 +180,18 @@ class JavaScriptExtractor(LanguageExtractor):
         import_type = 'es6_import'
         alias = None
 
-        for child in import_clause.children:
-            if child.type == 'namespace_import':
+        for child in _children(import_clause):
+            if child.kind() == 'namespace_import':
                 import_type = 'namespace_import'
                 imported_names = ['*']
-                id_node = next((sc for sc in child.children if sc.type == 'identifier'), None)
+                id_node = next((sc for sc in _children(child) if sc.kind() == 'identifier'), None)
                 alias = analyzer._get_node_text(id_node) if id_node else None
 
-            elif child.type == 'named_imports':
+            elif child.kind() == 'named_imports':
                 # import { foo, bar } from 'module'
                 imported_names.extend(self._parse_named_imports_child(child, analyzer))
 
-            elif child.type == 'identifier':
+            elif child.kind() == 'identifier':
                 # Default import: import foo from 'module'
                 imported_names.insert(0, analyzer._get_node_text(child))
                 if import_type == 'es6_import':
@@ -208,7 +209,7 @@ class JavaScriptExtractor(LanguageExtractor):
             import foo, { bar } from 'module'       # import_clause with both
             import 'module'                         # just string node (side-effect)
         """
-        line_number = node.start_point[0] + 1
+        line_number = node.start_position().row + 1
 
         # Extract module path
         module_path = self._extract_module_path_from_import(node, analyzer)
@@ -242,12 +243,12 @@ class JavaScriptExtractor(LanguageExtractor):
         Returns:
             'require', 'import', or None
         """
-        for child in node.children:
-            if child.type == 'identifier':
+        for child in _children(node):
+            if child.kind() == 'identifier':
                 text = analyzer._get_node_text(child)
                 if text == 'require':
                     return 'require'
-            elif child.type == 'import':
+            elif child.kind() == 'import':
                 return 'import'
         return None
 
@@ -257,9 +258,9 @@ class JavaScriptExtractor(LanguageExtractor):
         Returns:
             Module path string or None
         """
-        args_node = next((c for c in node.children if c.type == 'arguments'), None)
+        args_node = next((c for c in _children(node) if c.kind() == 'arguments'), None)
         if args_node:
-            str_node = next((a for a in args_node.children if a.type == 'string'), None)
+            str_node = next((a for a in _children(args_node) if a.kind() == 'string'), None)
             if str_node:
                 text = analyzer._get_node_text(str_node)
                 return str(text).strip('"\'') if text is not None else None
@@ -302,14 +303,14 @@ class JavaScriptExtractor(LanguageExtractor):
             const foo = require('module')           -> ['foo']
             const { foo, bar } = require('module')  -> ['foo', 'bar']
         """
-        parent = node.parent
-        if not parent or parent.type != 'variable_declarator':
+        parent = node.parent()
+        if not parent or parent.kind() != 'variable_declarator':
             return []
 
-        if not parent.children:
+        if not parent.child_count():
             return []
 
-        left_side = analyzer._get_node_text(parent.children[0])
+        left_side = analyzer._get_node_text(parent.child(0))
 
         # Destructured: { foo, bar }
         if left_side.startswith('{'):
@@ -353,7 +354,7 @@ class JavaScriptExtractor(LanguageExtractor):
         if not module_path:
             return None
 
-        line_number = node.start_point[0] + 1
+        line_number = node.start_position().row + 1
 
         # Handle dynamic import
         if func_name == 'import':
@@ -373,17 +374,17 @@ class JavaScriptExtractor(LanguageExtractor):
         - Import names
         - Object property keys
         """
-        if not node.parent:
+        if not node.parent():
             return True
 
         # Walk up the tree to check if we're inside an import statement
         current = node
         while current:
-            if current.type == 'import_statement':
+            if current.kind() == 'import_statement':
                 return False
-            current = current.parent
+            current = current.parent()
 
-        parent_type = node.parent.type
+        parent_type = node.parent().kind()
 
         # Skip definition contexts
         if parent_type in ('function_declaration', 'class_declaration', 'method_definition',
@@ -394,13 +395,15 @@ class JavaScriptExtractor(LanguageExtractor):
         # For variable declarations, check if this is the identifier being declared
         if parent_type == 'variable_declarator':
             # First child is the name being declared
-            if node.parent.children and node.parent.children[0] == node:
+            _p = node.parent()
+            if _p and _p.child_count() > 0 and _p.child(0).start_byte() == node.start_byte():
                 return False
 
         # For member expressions like { key: value }, skip keys
         if parent_type == 'pair':
             # First child is the key
-            if node.parent.children and node.parent.children[0] == node:
+            _p = node.parent()
+            if _p and _p.child_count() > 0 and _p.child(0).start_byte() == node.start_byte():
                 return False
 
         # For import specifiers like { foo as bar }, both names are part of import
@@ -419,15 +422,15 @@ class JavaScriptExtractor(LanguageExtractor):
         """
         # Walk up the member expression chain to find the root
         current = member_expr_node
-        while current and current.type == 'member_expression':
+        while current and current.kind() == 'member_expression':
             # Member expression has structure: object.property
-            if current.children:
-                current = current.children[0]  # Get 'object' part
+            if _children(current):
+                current = current.child(0)  # Get 'object' part
             else:
                 break
 
         # Current should now be an identifier
-        if current and current.type == 'identifier':
+        if current and current.kind() == 'identifier':
             result = analyzer._get_node_text(current)
             return str(result) if result is not None else None
 

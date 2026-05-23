@@ -126,7 +126,7 @@ class TestFormatASTNode(unittest.TestCase):
         if not self.has_tree:
             self.skipTest("No tree-sitter parser available")
 
-        node = self.analyzer.tree.root_node
+        node = self.analyzer.tree.root_node()
         result = _format_ast_node(node, depth=0)
 
         self.assertIsInstance(result, str)
@@ -137,7 +137,7 @@ class TestFormatASTNode(unittest.TestCase):
         if not self.has_tree:
             self.skipTest("No tree-sitter parser available")
 
-        node = self.analyzer.tree.root_node
+        node = self.analyzer.tree.root_node()
         result = _format_ast_node(node, depth=2, prefix="  ")
 
         self.assertIsInstance(result, str)
@@ -149,7 +149,7 @@ class TestFormatASTNode(unittest.TestCase):
         if not self.has_tree:
             self.skipTest("No tree-sitter parser available")
 
-        node = self.analyzer.tree.root_node
+        node = self.analyzer.tree.root_node()
         result = _format_ast_node(node, depth=0, max_depth=1)
 
         self.assertIsInstance(result, str)

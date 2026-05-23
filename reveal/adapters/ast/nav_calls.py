@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
+from ...core import node_children as _children
 
 
 def range_calls(
@@ -24,17 +25,17 @@ def range_calls(
         call_node_types = CALL_NODE_TYPES
 
     results: List[Dict[str, Any]] = []
-    stack = list(reversed(func_node.children))
+    stack = list(reversed(_children(func_node)))
     while stack:
         node = stack.pop()
-        line = node.start_point[0] + 1
-        if node.end_point[0] + 1 < from_line or line > to_line:
+        line = node.start_position().row + 1
+        if node.end_position().row + 1 < from_line or line > to_line:
             continue
-        if node.type in call_node_types and from_line <= line <= to_line:
+        if node.kind() in call_node_types and from_line <= line <= to_line:
             callee = _extract_callee(node, get_text)
             first_arg, has_more = _extract_first_arg(node, get_text)
             results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
-        stack.extend(reversed(node.children))
+        stack.extend(reversed(_children(node)))
 
     results.sort(key=lambda r: r['line'])
     return results
@@ -42,23 +43,23 @@ def range_calls(
 
 def _extract_callee(call_node: Any, get_text: Callable) -> Optional[str]:
     """Extract callee name from a call expression node."""
-    if not call_node.children:
+    if not call_node.child_count():
         return None
 
     # PHP: $obj->method(args) — emit "<receiver>-><name>" so taxonomy patterns
     # like '->execute', '->fetch', '->prepare' can match.
-    if call_node.type == 'member_call_expression':
+    if call_node.kind() == 'member_call_expression':
         return _extract_member_call_callee(call_node, get_text)
 
     # PHP: new ClassName(args) — emit "new <name>" so taxonomy patterns
     # like 'new pdo' can match.
-    if call_node.type == 'object_creation_expression':
+    if call_node.kind() == 'object_creation_expression':
         return _extract_object_creation_callee(call_node, get_text)
 
-    callee_node = call_node.children[0]
+    callee_node = call_node.child(0)
     text = get_text(callee_node).lstrip('*').strip()
-    if callee_node.type == 'list_splat':
-        for child in callee_node.children:
+    if callee_node.kind() == 'list_splat':
+        for child in _children(callee_node):
             t = get_text(child).lstrip('*').strip()
             if t:
                 return t
@@ -70,17 +71,17 @@ def _extract_member_call_callee(node: Any, get_text: Callable) -> Optional[str]:
     receiver_text: Optional[str] = None
     method_name: Optional[str] = None
     seen_arrow = False
-    for child in node.children:
-        if child.type in ('->', '?->'):
+    for child in _children(node):
+        if child.kind() in ('->', '?->'):
             seen_arrow = True
             continue
-        if child.type == 'arguments':
+        if child.kind() == 'arguments':
             break
         if not seen_arrow:
             if receiver_text is None:
                 receiver_text = get_text(child).strip()
         else:
-            if child.type == 'name':
+            if child.kind() == 'name':
                 method_name = get_text(child).strip()
                 break
     if receiver_text and method_name:
@@ -92,8 +93,8 @@ def _extract_member_call_callee(node: Any, get_text: Callable) -> Optional[str]:
 
 def _extract_object_creation_callee(node: Any, get_text: Callable) -> Optional[str]:
     """PHP object_creation_expression: new <name|qualified_name> <arguments>."""
-    for child in node.children:
-        if child.type in ('name', 'qualified_name'):
+    for child in _children(node):
+        if child.kind() in ('name', 'qualified_name'):
             class_name = get_text(child).strip()
             if class_name:
                 return f"new {class_name}"
@@ -102,11 +103,11 @@ def _extract_object_creation_callee(node: Any, get_text: Callable) -> Optional[s
 
 def _extract_first_arg(call_node: Any, get_text: Callable) -> tuple:
     """Extract the first argument and whether more args follow."""
-    for child in call_node.children:
-        if child.type in ('argument_list', 'arguments', 'call_arguments'):
+    for child in _children(call_node):
+        if child.kind() in ('argument_list', 'arguments', 'call_arguments'):
             real_args = [
-                c for c in child.children
-                if c.type not in ('(', ')', ',', 'comment') and c.is_named
+                c for c in _children(child)
+                if c.kind() not in ('(', ')', ',', 'comment') and c.is_named()
             ]
             if not real_args:
                 return None, False

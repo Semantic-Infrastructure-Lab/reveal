@@ -12,6 +12,7 @@ Benefits:
 import logging
 from pathlib import Path
 from typing import List, Set, Optional
+from ...core import node_children as _children
 
 logger = logging.getLogger(__name__)
 
@@ -106,8 +107,8 @@ class GoExtractor(LanguageExtractor):
                 symbols.add(name)
 
             # Handle selector expressions (pkg.Function -> track 'pkg')
-            if node.parent and node.parent.type == 'selector_expression':
-                root = self._get_root_identifier(node.parent, analyzer)
+            if node.parent() and node.parent().kind() == 'selector_expression':
+                root = self._get_root_identifier(node.parent(), analyzer)
                 if root:
                     symbols.add(root)
 
@@ -122,23 +123,23 @@ class GoExtractor(LanguageExtractor):
             . "fmt"                         # dot + interpreted_string_literal
             _ "database/sql/driver"         # blank_identifier + interpreted_string_literal
         """
-        line_number = spec_node.start_point[0] + 1
+        line_number = spec_node.start_position().row + 1
 
         # Extract components from AST
         package_path = None
         alias = None
 
-        for child in spec_node.children:
-            if child.type == 'interpreted_string_literal':
+        for child in _children(spec_node):
+            if child.kind() == 'interpreted_string_literal':
                 # Extract package path (strip quotes)
                 package_path = analyzer._get_node_text(child).strip('"')
-            elif child.type == 'package_identifier':
+            elif child.kind() == 'package_identifier':
                 # Aliased import: f "io"
                 alias = analyzer._get_node_text(child)
-            elif child.type == 'dot':
+            elif child.kind() == 'dot':
                 # Dot import: . "strings"
                 alias = '.'
-            elif child.type == 'blank_identifier':
+            elif child.kind() == 'blank_identifier':
                 # Blank import: _ "database/sql/driver"
                 alias = '_'
 
@@ -204,17 +205,17 @@ class GoExtractor(LanguageExtractor):
         - Variable declarations (left side of :=)
         - Import names
         """
-        if not node.parent:
+        if not node.parent():
             return True
 
         # Walk up to check if inside import
         current = node
         while current:
-            if current.type in ('import_declaration', 'import_spec'):
+            if current.kind() in ('import_declaration', 'import_spec'):
                 return False
-            current = current.parent
+            current = current.parent()
 
-        parent_type = node.parent.type
+        parent_type = node.parent().kind()
 
         # Skip definition contexts
         if parent_type in ('function_declaration', 'method_declaration',
@@ -226,13 +227,15 @@ class GoExtractor(LanguageExtractor):
         # For short variable declarations (x := 5), check if left side
         if parent_type == 'short_var_declaration':
             # First child (or part of expression_list) is being declared
-            if node.parent.children and node.parent.children[0] == node:
+            _p = node.parent()
+            if _p and _p.child_count() > 0 and _p.child(0).start_byte() == node.start_byte():
                 return False
 
         # For var declarations
         if parent_type == 'var_spec':
             # Name is first child
-            if node.parent.children and node.parent.children[0] == node:
+            _p = node.parent()
+            if _p and _p.child_count() > 0 and _p.child(0).start_byte() == node.start_byte():
                 return False
 
         return True
@@ -246,14 +249,14 @@ class GoExtractor(LanguageExtractor):
         """
         # Walk up selector expression chain to find root
         current = selector_node
-        while current and current.type == 'selector_expression':
-            if current.children:
-                current = current.children[0]  # Get operand (left side)
+        while current and current.kind() == 'selector_expression':
+            if _children(current):
+                current = current.child(0)  # Get operand (left side)
             else:
                 break
 
         # Should now be an identifier
-        if current and current.type == 'identifier':
+        if current and current.kind() == 'identifier':
             return analyzer._get_node_text(current)
 
         return None

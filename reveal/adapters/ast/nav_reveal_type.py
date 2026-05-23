@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from ...core import suppress_treesitter_warnings  # noqa: F401 — called at scan time
+from ...core import node_children as _children
 
 
 # ─────────────────────────── public entry point ──────────────────────────────
@@ -67,7 +68,7 @@ def _scan_file(file_path: str, var_name: str, evidence: List[Dict[str, Any]]) ->
         if not hasattr(analyzer, 'tree') or not analyzer.tree:
             return
         get_text: Callable = analyzer._get_node_text
-        root = analyzer.tree.root_node
+        root = analyzer.tree.root_node()
         _walk(root, var_name, get_text, file_path, evidence, func_stack=[])
     except Exception:  # noqa: BLE001
         pass
@@ -83,12 +84,12 @@ def _walk(
     evidence: List[Dict[str, Any]],
     func_stack: List[str],
 ) -> None:
-    ntype = node.type
+    ntype = node.kind()
 
     if ntype in ('function_definition', 'async_function_definition'):
         name_node = node.child_by_field_name('name')
         func_name = get_text(name_node) if name_node else '?'
-        func_line = node.start_point[0] + 1
+        func_line = node.start_position().row + 1
 
         params_node = node.child_by_field_name('parameters')
         if params_node:
@@ -99,7 +100,7 @@ def _walk(
         func_stack.append(func_name)
         body = node.child_by_field_name('body')
         if body:
-            for child in body.children:
+            for child in _children(body):
                 _walk(child, var_name, get_text, file_path, evidence, func_stack)
         func_stack.pop()
         return  # body already walked above
@@ -120,12 +121,12 @@ def _walk(
         # Still walk the body
         body = node.child_by_field_name('body')
         if body:
-            for child in body.children:
+            for child in _children(body):
                 _walk(child, var_name, get_text, file_path, evidence, func_stack)
         return
 
     # Generic recursion for all other nodes
-    for child in node.children:
+    for child in _children(node):
         _walk(child, var_name, get_text, file_path, evidence, func_stack)
 
 
@@ -140,15 +141,15 @@ def _check_parameters(
     func_line: int,
     evidence: List[Dict[str, Any]],
 ) -> None:
-    for child in params_node.children:
-        ctype = child.type
+    for child in _children(params_node):
+        ctype = child.kind()
         if ctype == 'identifier':
             if get_text(child) == var_name:
                 evidence.append({
                     'file': file_path,
                     'function': func_name,
                     'func_line': func_line,
-                    'line': child.start_point[0] + 1,
+                    'line': child.start_position().row + 1,
                     'kind': 'param',
                     'annotation': '',
                     'shape': '',
@@ -161,7 +162,7 @@ def _check_parameters(
                     'file': file_path,
                     'function': func_name,
                     'func_line': func_line,
-                    'line': child.start_point[0] + 1,
+                    'line': child.start_position().row + 1,
                     'kind': 'param',
                     'annotation': annotation,
                     'shape': '',
@@ -173,7 +174,7 @@ def _check_parameters(
                     'file': file_path,
                     'function': func_name,
                     'func_line': func_line,
-                    'line': child.start_point[0] + 1,
+                    'line': child.start_position().row + 1,
                     'kind': 'param',
                     'annotation': '',
                     'shape': '',
@@ -182,8 +183,8 @@ def _check_parameters(
 
 def _first_identifier(node: Any, get_text: Callable) -> Optional[tuple]:
     """Return (name, node) of the first identifier child, or None."""
-    for child in node.children:
-        if child.type == 'identifier':
+    for child in _children(node):
+        if child.kind() == 'identifier':
             return (get_text(child), child)
     return None
 
@@ -193,10 +194,10 @@ def _extract_annotation(typed_node: Any, get_text: Callable) -> str:
     # typed_parameter: identifier ":" type
     # Children: identifier, ":", type_node
     found_colon = False
-    for child in typed_node.children:
-        if child.type == ':':
+    for child in _children(typed_node):
+        if child.kind() == ':':
             found_colon = True
-        elif found_colon and child.type not in ('=', 'comment'):
+        elif found_colon and child.kind() not in ('=', 'comment'):
             return get_text(child).strip()
     return ''
 
@@ -225,10 +226,10 @@ def _check_assignment(
 
 
 def _lhs_contains_var(node: Any, var_name: str, get_text: Callable) -> bool:
-    if node.type == 'identifier' and get_text(node) == var_name:
+    if node.kind() == 'identifier' and get_text(node) == var_name:
         return True
     # tuple/list unpacking: a, b = ...
-    for child in node.children:
+    for child in _children(node):
         if _lhs_contains_var(child, var_name, get_text):
             return True
     return False
@@ -254,7 +255,7 @@ def _add_assign(
         'file': file_path,
         'function': func_stack[-1] if func_stack else '',
         'func_line': 0,
-        'line': node.start_point[0] + 1,
+        'line': node.start_position().row + 1,
         'kind': 'assign',
         'annotation': annotation,
         'shape': shape,
@@ -287,7 +288,7 @@ def _check_for(
         'file': file_path,
         'function': func_stack[-1] if func_stack else '',
         'func_line': 0,
-        'line': node.start_point[0] + 1,
+        'line': node.start_position().row + 1,
         'kind': 'for',
         'annotation': '',
         'shape': shape,
@@ -299,12 +300,12 @@ def _check_for(
 def _infer_shape(node: Any, get_text: Callable) -> str:
     if node is None:
         return ''
-    ntype = node.type
+    ntype = node.kind()
 
     if ntype == 'dictionary':
         keys = []
-        for child in node.children:
-            if child.type == 'pair':
+        for child in _children(node):
+            if child.kind() == 'pair':
                 key_node = child.child_by_field_name('key')
                 if key_node:
                     k = get_text(key_node).strip('"\'')
@@ -348,7 +349,8 @@ def _infer_shape(node: Any, get_text: Callable) -> str:
         return 'conditional expression'
 
     elif ntype == 'await':
-        inner = node.children[-1] if node.children else None
+        children = _children(node)
+        inner = children[-1] if children else None
         inner_shape = _infer_shape(inner, get_text) if inner else ''
         return f'await {inner_shape}' if inner_shape else 'await expression'
 

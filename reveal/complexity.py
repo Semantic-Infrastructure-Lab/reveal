@@ -4,6 +4,8 @@ Standalone functions — no TreeSitterAnalyzer dependency — so the check/revie
 flow can import this without pulling the full analyzer base class into scope.
 """
 
+from .core import node_children as _children
+
 
 def calculate_complexity_and_depth(node) -> tuple:
     """Compute cyclomatic complexity and max nesting depth in one iterative pass.
@@ -71,8 +73,8 @@ def calculate_complexity_and_depth(node) -> tuple:
         n, n_type, depth = stack.pop()
         if depth > max_depth:
             max_depth = depth
-        for child in n.children:
-            child_type = child.type
+        for child in _children(n):
+            child_type = child.kind()
             if child_type in decision_types and (n_type is None or (n_type, child_type) not in keyword_pairs):
                 decision_count += 1
             child_depth = depth + 1 if child_type in nesting_types else depth

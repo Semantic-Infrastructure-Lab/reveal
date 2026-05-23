@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
+from ...core import node_children as _children
 
 
 @dataclass
@@ -21,10 +22,10 @@ class VarFlowWalker:
     events: List[Dict[str, Any]] = field(default_factory=list)
 
     def walk(self, n: Any, c: str) -> None:
-        ntype = n.type
-        line = n.start_point[0] + 1
+        ntype = n.kind()
+        line = n.start_position().row + 1
 
-        if n.end_point[0] + 1 < self.from_line or line > self.to_line:
+        if n.end_position().row + 1 < self.from_line or line > self.to_line:
             return
 
         if ntype in ('identifier', 'variable_name') and self.get_text(n) == self.var_name:
@@ -46,7 +47,7 @@ class VarFlowWalker:
         elif ntype == 'call':
             self._walk_call(n, c)
         else:
-            for child in n.children:
+            for child in _children(n):
                 self.walk(child, c)
 
     def _walk_assignment(self, n: Any, ntype: str, c: str) -> None:
@@ -59,17 +60,17 @@ class VarFlowWalker:
         if right:
             self.walk(right, 'READ')
         processed = {
-            (left.start_byte, left.end_byte) if left else None,
-            (right.start_byte, right.end_byte) if right else None,
+            (left.start_byte(), left.end_byte()) if left else None,
+            (right.start_byte(), right.end_byte()) if right else None,
         }
-        for child in n.children:
-            if (child.start_byte, child.end_byte) not in processed:
+        for child in _children(n):
+            if (child.start_byte(), child.end_byte()) not in processed:
                 self.walk(child, c)
 
     def _walk_named_expression(self, n: Any) -> None:
-        if n.children:
-            self.walk(n.children[0], 'WRITE')
-            for child in n.children[1:]:
+        if _children(n):
+            self.walk(n.child(0), 'WRITE')
+            for child in _children(n)[1:]:
                 self.walk(child, 'READ')
 
     def _walk_for(self, n: Any, c: str) -> None:
@@ -78,23 +79,23 @@ class VarFlowWalker:
         body = n.child_by_field_name('body')
         processed: set = set()
         if left:
-            processed.add((left.start_byte, left.end_byte))
+            processed.add((left.start_byte(), left.end_byte()))
             self.walk(left, 'WRITE')
         if right:
-            processed.add((right.start_byte, right.end_byte))
+            processed.add((right.start_byte(), right.end_byte()))
             self.walk(right, 'READ')
         if body:
-            processed.add((body.start_byte, body.end_byte))
+            processed.add((body.start_byte(), body.end_byte()))
             self.walk(body, 'READ')
-        for child in n.children:
-            if (child.start_byte, child.end_byte) not in processed:
+        for child in _children(n):
+            if (child.start_byte(), child.end_byte()) not in processed:
                 self.walk(child, c)
 
     def _walk_with(self, n: Any, c: str) -> None:
-        for child in n.children:
-            if child.type == 'with_clause':
-                for item in child.children:
-                    if item.type == 'with_item':
+        for child in _children(n):
+            if child.kind() == 'with_clause':
+                for item in _children(child):
+                    if item.kind() == 'with_item':
                         value = item.child_by_field_name('value')
                         alias = item.child_by_field_name('alias')
                         if value:
@@ -103,8 +104,8 @@ class VarFlowWalker:
                             self.walk(alias, 'WRITE')
                     else:
                         self.walk(item, c)
-            elif child.type == 'as_pattern':
-                children = child.children
+            elif child.kind() == 'as_pattern':
+                children = _children(child)
                 if children:
                     self.walk(children[0], 'READ')
                     if len(children) > 2:
@@ -116,21 +117,21 @@ class VarFlowWalker:
         cond = n.child_by_field_name('condition')
         processed: set = set()
         if cond:
-            processed.add((cond.start_byte, cond.end_byte))
+            processed.add((cond.start_byte(), cond.end_byte()))
             self.walk(cond, 'READ/COND')
-        for child in n.children:
-            if (child.start_byte, child.end_byte) not in processed:
+        for child in _children(n):
+            if (child.start_byte(), child.end_byte()) not in processed:
                 self.walk(child, c)
 
     def _expand_dict_writes(self, dict_node: Any, via: str) -> None:
         """Emit one WRITE event per key in a dict literal `{key: val, ...}`."""
-        for pair in dict_node.children:
-            if pair.type == 'pair':
+        for pair in _children(dict_node):
+            if pair.kind() == 'pair':
                 key_node = pair.child_by_field_name('key')
                 val_node = pair.child_by_field_name('value')
                 if key_node:
                     key_text = self.get_text(key_node)
-                    kline = key_node.start_point[0] + 1
+                    kline = key_node.start_position().row + 1
                     if self.from_line <= kline <= self.to_line:
                         self.events.append({
                             'kind': 'WRITE',
@@ -140,7 +141,7 @@ class VarFlowWalker:
                         })
                 if val_node:
                     self.walk(val_node, 'READ')
-            elif pair.type not in ('{', '}', ','):
+            elif pair.kind() not in ('{', '}', ','):
                 self.walk(pair, 'READ')
 
     def _walk_call(self, n: Any, c: str) -> None:
@@ -148,27 +149,27 @@ class VarFlowWalker:
         func = n.child_by_field_name('function')
         args = n.child_by_field_name('arguments')
 
-        if func and func.type == 'attribute':
+        if func and func.kind() == 'attribute':
             obj = func.child_by_field_name('object')
             attr = func.child_by_field_name('attribute')
             if obj and self.get_text(obj) == self.var_name and attr:
                 method = self.get_text(attr)
-                obj_line = obj.start_point[0] + 1
+                obj_line = obj.start_position().row + 1
                 if self.from_line <= obj_line <= self.to_line:
                     self.events.append({'kind': 'READ', 'line': obj_line, 'node': obj})
 
                 if method == 'update' and args:
-                    for arg in args.children:
-                        if arg.type == 'dictionary':
+                    for arg in _children(args):
+                        if arg.kind() == 'dictionary':
                             self._expand_dict_writes(arg, 'update')
-                        elif arg.type not in (',', '(', ')'):
+                        elif arg.kind() not in (',', '(', ')'):
                             self.walk(arg, 'READ')
                 elif method == 'setdefault' and args:
-                    arg_nodes = [ch for ch in args.children if ch.type not in (',', '(', ')')]
+                    arg_nodes = [ch for ch in _children(args) if ch.kind() not in (',', '(', ')')]
                     if arg_nodes:
                         key_node = arg_nodes[0]
                         key_text = self.get_text(key_node)
-                        kline = key_node.start_point[0] + 1
+                        kline = key_node.start_position().row + 1
                         if self.from_line <= kline <= self.to_line:
                             self.events.append({
                                 'kind': 'WRITE',
@@ -180,11 +181,11 @@ class VarFlowWalker:
                             self.walk(val_node, 'READ')
                 else:
                     if args:
-                        for child in args.children:
+                        for child in _children(args):
                             self.walk(child, 'READ')
                 return
 
-        for child in n.children:
+        for child in _children(n):
             self.walk(child, c)
 
 
@@ -207,11 +208,11 @@ def var_flow(
     )
     walker.walk(func_node, 'READ')
     events = walker.events
-    events.sort(key=lambda e: (e['line'], e['node'].start_point[1]))
+    events.sort(key=lambda e: (e['line'], e['node'].start_position().column))
     seen: set = set()
     unique = []
     for ev in events:
-        key = (ev['line'], ev['node'].start_point[1], ev['kind'])
+        key = (ev['line'], ev['node'].start_position().column, ev['kind'])
         if key not in seen:
             seen.add(key)
             unique.append(ev)
@@ -249,17 +250,17 @@ def _collect_identifier_names(
 ) -> frozenset:
     """Return the set of identifier names that appear in a line range."""
     names: set = set()
-    stack = list(reversed(scope_node.children))
+    stack = list(reversed(_children(scope_node)))
     while stack:
         node = stack.pop()
-        line = node.start_point[0] + 1
-        if node.end_point[0] + 1 < from_line or line > to_line:
+        line = node.start_position().row + 1
+        if node.end_position().row + 1 < from_line or line > to_line:
             continue
-        if node.type in ('identifier', 'variable_name') and from_line <= line <= to_line:
+        if node.kind() in ('identifier', 'variable_name') and from_line <= line <= to_line:
             text = get_text(node)
             if text:
                 names.add(text)
-        stack.extend(reversed(node.children))
+        stack.extend(reversed(_children(node)))
     return frozenset(names)
 
 
@@ -273,7 +274,7 @@ def all_var_flow(
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Collect var_flow events for every identifier that appears in a line range."""
     if full_to is None:
-        full_to = scope_node.end_point[0] + 1
+        full_to = scope_node.end_position().row + 1
 
     names = _collect_identifier_names(scope_node, from_line, to_line, get_text)
     result: Dict[str, List[Dict[str, Any]]] = {}

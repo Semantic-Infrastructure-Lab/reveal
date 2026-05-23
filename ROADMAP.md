@@ -1161,6 +1161,84 @@ reveal --pr                 # PR context auto-detection
 
 ---
 
+## Technical Debt & Planned Infrastructure
+
+### tree-sitter-language-pack 1.x Migration
+
+**Status**: ✅ **Complete** (lightning-sphinx-0522, 2026-05-22) — pin lifted, all 8700 tests passing on 1.8.1
+**Value delivered**: +140 languages (165 → 305), active maintenance, security patches
+**Approach taken**: Direct migration (no compat shim) — 28 production files updated, mechanical API renames + 3 consolidated helpers in `reveal/core/treesitter_compat.py` (`node_children`, `node_prev_sibling`, `node_next_sibling`)
+**Investigated**: enigmatic-helix-0522 (2026-05-22)
+**Migrated**: lightning-sphinx-0522 (2026-05-22)
+
+#### Background
+
+`tree-sitter-language-pack` 0.x (last release: 0.13.0, late 2024) is frozen and abandoned — no security patches, no new languages, unlikely to get Python 3.14 wheels. The 1.x series (kreuzberg-dev, Rust/PyO3 rewrite) is actively maintained with releases every 2–3 weeks.
+
+The 1.x package is **not API-compatible** with 0.x. It is a completely different Rust/PyO3 implementation. `get_parser()` returns `builtins.Parser` (not `tree_sitter.Parser`), and every Node attribute became a method call instead of a property:
+
+| API | 0.x (current) | 1.x |
+|-----|--------------|-----|
+| Parse input | `parser.parse(bytes)` | `parser.parse(str)` |
+| Root node | `tree.root_node` *(property)* | `tree.root_node()` *(method)* |
+| Node type | `node.type` | `node.kind()` |
+| Children list | `node.children` | `[node.child(i) for i in range(node.child_count())]` |
+| Named children | `node.named_children` | `[node.named_child(i) for i in range(node.named_child_count())]` |
+| Node text | `node.text` | `src[node.start_byte():node.end_byte()]` |
+| Byte offsets | `node.start_byte` *(property)* | `node.start_byte()` *(method)* |
+| Position | `node.start_point` → `(row, col)` | `node.start_position()` → `Point` |
+| Predicates | `node.is_named` *(property)* | `node.is_named()` *(method)* |
+
+#### Platform compatibility (1.x)
+
+- **Linux wheels tagged `manylinux_2_34`** — excludes Ubuntu 20.04 (glibc 2.31) and Debian 11 (glibc 2.31). Both are past or near EOL (Ubuntu 20.04 standard support ended April 2025). Low severity for reveal's developer-skewing user base; not a blocker.
+- **Alpine/musl**: no musllinux wheels — Alpine Docker images unsupported.
+- **macOS**: Intel (10.12+) and Apple Silicon (11.0+) both supported.
+- **Windows**: `win_amd64` and `win_arm64` — full support.
+- **Python**: single `abi3` wheel covers 3.10–3.14+.
+
+#### Offline/CI story (1.x)
+
+Grammars are downloaded on first use and cached (`~/.cache/tree-sitter-language-pack` on Linux). Pre-fetch at Docker build time or CI setup:
+
+```python
+from tree_sitter_language_pack import download_all
+download_all()  # fetch all 305 grammars; no-op if already cached
+```
+
+Cache directory is configurable (`PackConfig(cache_dir="/path")`). Cache is keyed to grammar ABI version, not library version — minor upgrades don't force re-downloads.
+
+#### Migration plan (4 phases)
+
+**Phase 1 — Investigation** ✅ Complete (enigmatic-helix-0522)
+
+**Phase 2 — Direct migration** ✅ Complete (lightning-sphinx-0522)
+
+Compat shim was rejected in favor of direct migration once the real scope was understood: ~25 production files use tree-sitter node APIs directly (not just `treesitter.py`), so a shim wrapping nodes at `_parse_tree()` would have required wrapping every node returned through every internal API — same blast radius as direct migration, with extra indirection.
+
+Mechanical changes applied across 28 files:
+- `node.type` → `node.kind()`
+- `node.children` → `node_children(node)` helper (aliased `_children`)
+- `node.start_point[0]` → `node.start_position().row`
+- `node.start_byte`/`end_byte`/`root_node`/`is_named`/`child_count` → method calls
+- `node.parent` → `node.parent()` (tree-sitter only — pathlib `.parent` untouched)
+- `node.prev_sibling`/`next_sibling` (removed in 1.x) → `node_prev_sibling`/`node_next_sibling` helpers (walk parent's children by `start_byte()` since 1.x node equality is unreliable)
+- `node.text` (removed) → byte-slice from source
+- `parser.parse(bytes)` → `parser.parse(str)`
+- `parent.children[0] == node` (broken equality) → `parent.child(0).start_byte() == node.start_byte()`
+
+Helpers consolidated in `reveal/core/treesitter_compat.py`. Two new regression tests guard against drift: `tests/test_treesitter_compat.py` (14 helper tests) and `tests/test_no_tree_sitter_0x_api_leak.py` (greps production tree for 0.x API patterns; fails CI if reintroduced).
+
+**Phase 3 — Lift the pin** ✅ Complete
+
+`tree-sitter-language-pack>=1.8.1` in `pyproject.toml`. All 8700 tests pass on 1.8.1.
+
+**Phase 4 — Native migration (optional, not yet done)**
+
+1.x's `process()` API does structured extraction (functions, classes, imports) natively — may allow deleting large chunks of reveal's own extraction logic. Defer until there's a concrete win to chase.
+
+---
+
 ## Explicitly Not Planned
 
 These violate reveal's mission ("reveal reveals, doesn't modify") or have unclear value:

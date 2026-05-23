@@ -12,6 +12,7 @@ Benefits:
 from typing import Dict, Any, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
+from ..core import node_children as _children
 
 
 @register('.toml', name='TOML', icon='')
@@ -25,18 +26,18 @@ class TomlAnalyzer(TreeSitterAnalyzer):
 
     def _process_toml_pair_node(self, node, keys: list) -> None:
         """Extract a top-level key-value pair node into the keys list."""
-        if node.children and node.children[0].type in ['bare_key', 'dotted_key', 'quoted_key']:
-            key_node = node.children[0]
+        if _children(node) and node.child(0).kind() in ['bare_key', 'dotted_key', 'quoted_key']:
+            key_node = node.child(0)
             keys.append({
-                'line_start': node.start_point[0] + 1,
-                'name': self.content[key_node.start_byte:key_node.end_byte],
+                'line_start': node.start_position().row + 1,
+                'name': self.content[key_node.start_byte():key_node.end_byte()],
             })
 
     def _process_toml_table_node(self, node, outline: bool, sections: list) -> None:
         """Extract a table/table_array node into the sections list."""
         section_name = self._extract_table_name(node)
         section_info: Dict[str, Any] = {
-            'line_start': node.start_point[0] + 1,
+            'line_start': node.start_position().row + 1,
             'name': section_name,
         }
         if outline:
@@ -52,10 +53,10 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         sections: list = []
         keys: list = []
 
-        for node in self.tree.root_node.children:
-            if node.type == 'pair':
+        for node in _children(self.tree.root_node()):
+            if node.kind() == 'pair':
                 self._process_toml_pair_node(node, keys)
-            elif node.type in ('table', 'table_array_element'):
+            elif node.kind() in ('table', 'table_array_element'):
                 self._process_toml_table_node(node, outline, sections)
 
         result = {}
@@ -77,33 +78,33 @@ class TomlAnalyzer(TreeSitterAnalyzer):
     def _extract_table_name(self, node) -> str:
         """Extract section name from table node."""
         # Find the key node between [ and ]
-        for child in node.children:
-            if child.type in ['bare_key', 'dotted_key', 'quoted_key']:
-                return self.content[child.start_byte:child.end_byte]
+        for child in _children(node):
+            if child.kind() in ['bare_key', 'dotted_key', 'quoted_key']:
+                return self.content[child.start_byte():child.end_byte()]
         return ''
 
     def _find_section_end_line(self, node) -> int:
         """Return end line for a section node (stops at next table or EOF)."""
-        end_line = node.end_point[0] + 1
-        for sibling in self.tree.root_node.children:
-            if sibling.start_point[0] <= node.start_point[0]:
+        end_line = node.end_position().row + 1
+        for sibling in _children(self.tree.root_node()):
+            if sibling.start_position().row <= node.start_position().row:
                 continue
-            if sibling.type in ['table', 'table_array_element']:
-                return sibling.start_point[0]
-            if sibling.type == 'pair':
-                end_line = max(end_line, sibling.end_point[0] + 1)
+            if sibling.kind() in ['table', 'table_array_element']:
+                return sibling.start_position().row
+            if sibling.kind() == 'pair':
+                end_line = max(end_line, sibling.end_position().row + 1)
         return end_line
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a TOML section by name."""
         if not self.tree:
             return super().extract_element(element_type, name)
-        for node in self.tree.root_node.children:
-            if node.type not in ['table', 'table_array_element']:
+        for node in _children(self.tree.root_node()):
+            if node.kind() not in ['table', 'table_array_element']:
                 continue
             if self._extract_table_name(node) != name:
                 continue
-            start_line = node.start_point[0] + 1
+            start_line = node.start_position().row + 1
             end_line = self._find_section_end_line(node)
             source = '\n'.join(self.lines[start_line - 1:end_line])
             return {'name': name, 'line_start': start_line, 'line_end': end_line, 'source': source}

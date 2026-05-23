@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .nav_calls import _extract_callee
 from .nav_varflow import all_var_flow
+from ...core import node_children as _children
 
 
 # Language-construct names treated as hard exits even when represented as calls
@@ -46,22 +47,22 @@ def collect_exits(
         call_node_types = CALL_NODE_TYPES
 
     results: List[Dict[str, Any]] = []
-    stack = list(reversed(scope_node.children))
+    stack = list(reversed(_children(scope_node)))
     while stack:
         node = stack.pop()
-        line = node.start_point[0] + 1
-        if node.end_point[0] + 1 < from_line or line > to_line:
+        line = node.start_position().row + 1
+        if node.end_position().row + 1 < from_line or line > to_line:
             continue
 
         if from_line <= line <= to_line:
-            if node.type in _EXIT_KIND:
-                kind = _EXIT_KIND[node.type]
+            if node.kind() in _EXIT_KIND:
+                kind = _EXIT_KIND[node.kind()]
                 text = get_text(node).splitlines()[0].strip()
                 if len(text) > 80:
                     text = text[:77] + '...'
                 results.append({'kind': kind, 'line': line, 'text': text})
                 continue
-            if node.type in call_node_types:
+            if node.kind() in call_node_types:
                 callee = _extract_callee(node, get_text)
                 if callee in _EXIT_CALL_NAMES:
                     text = get_text(node).splitlines()[0].strip()
@@ -69,7 +70,7 @@ def collect_exits(
                         text = text[:77] + '...'
                     results.append({'kind': 'EXIT', 'line': line, 'text': text})
 
-        stack.extend(reversed(node.children))
+        stack.extend(reversed(_children(node)))
 
     results.sort(key=lambda r: r['line'])
     return results
@@ -140,7 +141,7 @@ def collect_mutations(
     get_text: Callable,
 ) -> List[Dict[str, Any]]:
     """Identify variables written in a range that are read after it (potential returns)."""
-    full_to = scope_node.end_point[0] + 1
+    full_to = scope_node.end_position().row + 1
     all_events = all_var_flow(
         scope_node, from_line, to_line, get_text, full_to=full_to
     )
@@ -219,8 +220,8 @@ def _get_condition(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]:
     cond = node.child_by_field_name('condition')
     if cond is None:
         # PHP: condition is a parenthesized_expression positional child
-        for child in node.children:
-            if child.type == 'parenthesized_expression':
+        for child in _children(node):
+            if child.kind() == 'parenthesized_expression':
                 cond = child
                 break
     if cond is None:
@@ -230,7 +231,7 @@ def _get_condition(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]:
         text = text[1:-1].strip()
     if len(text) > 60:
         text = text[:57] + '...'
-    return {'line': cond.start_point[0] + 1, 'text': text}
+    return {'line': cond.start_position().row + 1, 'text': text}
 
 
 def collect_gate_chains(
@@ -255,11 +256,11 @@ def collect_gate_chains(
     results: List[Dict[str, Any]] = []
 
     def walk(node: Any, gates: List[Dict[str, Any]]) -> None:
-        line = node.start_point[0] + 1
-        if node.end_point[0] + 1 < from_line or line > to_line:
+        line = node.start_position().row + 1
+        if node.end_position().row + 1 < from_line or line > to_line:
             return
 
-        ntype = node.type
+        ntype = node.kind()
 
         if from_line <= line <= to_line:
             if ntype in _EXIT_KIND:
@@ -279,10 +280,10 @@ def collect_gate_chains(
         if ntype in _GATE_NODE_TYPES:
             cond = _get_condition(node, get_text)
             new_gates = gates + [cond] if cond else gates
-            for child in node.children:
+            for child in _children(node):
                 walk(child, new_gates)
         else:
-            for child in node.children:
+            for child in _children(node):
                 walk(child, gates)
 
     walk(scope_node, [])

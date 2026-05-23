@@ -11,6 +11,16 @@ Modules:
     treesitter_compat: Tree-sitter compatibility layer and warning suppression
 """
 
-from .treesitter_compat import suppress_treesitter_warnings
+from .treesitter_compat import (
+    suppress_treesitter_warnings,
+    node_children,
+    node_prev_sibling,
+    node_next_sibling,
+)
 
-__all__ = ['suppress_treesitter_warnings']
+__all__ = [
+    'suppress_treesitter_warnings',
+    'node_children',
+    'node_prev_sibling',
+    'node_next_sibling',
+]

@@ -7,6 +7,7 @@ from reveal.base import FileAnalyzer
 from reveal.treesitter import (
     ELEMENT_TYPE_MAP, PARENT_NODE_TYPES, CHILD_NODE_TYPES, ALL_ELEMENT_NODE_TYPES
 )
+from reveal.core import node_children as _children
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 
 # Dominant category priority by file type
@@ -189,8 +190,8 @@ def _try_treesitter_extraction(analyzer, element: str):
             if node:
                 return {
                     'name': element,
-                    'line_start': node.start_point[0] + 1,
-                    'line_end': node.end_point[0] + 1,
+                    'line_start': node.start_position().row + 1,
+                    'line_end': node.end_position().row + 1,
                     'source': analyzer._get_node_text(node),
                 }
     return None
@@ -319,8 +320,8 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
 
 def _find_child_in_subtree(analyzer, node, target_name: str):
     """Recursively search for a named child node within a subtree."""
-    for child in node.children:
-        if child.type in CHILD_NODE_TYPES:
+    for child in _children(node):
+        if child.kind() in CHILD_NODE_TYPES:
             if analyzer._get_node_name(child) == target_name:
                 return child
         result = _find_child_in_subtree(analyzer, child, target_name)
@@ -364,8 +365,8 @@ def _extract_hierarchical_element(analyzer, element: str):
 
     return {
         'name': element,
-        'line_start': child_node.start_point[0] + 1,
-        'line_end': child_node.end_point[0] + 1,
+        'line_start': child_node.start_position().row + 1,
+        'line_end': child_node.end_position().row + 1,
         'source': analyzer._get_node_text(child_node),
     }
 
@@ -399,8 +400,8 @@ def _extract_element_at_line(analyzer, target_line: int):
 
     for node_type in ALL_ELEMENT_NODE_TYPES:
         for node in analyzer._find_nodes_by_type(node_type):
-            start = node.start_point[0] + 1  # 1-indexed
-            end = node.end_point[0] + 1
+            start = node.start_position().row + 1  # 1-indexed
+            end = node.end_position().row + 1
             if not (start <= target_line <= end):
                 continue
             span = end - start
@@ -414,8 +415,8 @@ def _extract_element_at_line(analyzer, target_line: int):
     name = analyzer._get_node_name(best_match) or f"element@{target_line}"
     return {
         'name': name,
-        'line_start': best_match.start_point[0] + 1,
-        'line_end': best_match.end_point[0] + 1,
+        'line_start': best_match.start_position().row + 1,
+        'line_end': best_match.end_position().row + 1,
         'source': analyzer._get_node_text(best_match),
     }
 
@@ -646,7 +647,7 @@ def _get_source_for_item(analyzer, item, line_start, line_end):
     for node_type in ALL_ELEMENT_NODE_TYPES:
         nodes = analyzer._find_nodes_by_type(node_type)
         for node in nodes:
-            start = node.start_point[0] + 1
+            start = node.start_position().row + 1
             if start == line_start:
                 return analyzer._get_node_text(node)
 

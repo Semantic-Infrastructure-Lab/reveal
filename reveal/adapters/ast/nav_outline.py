@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, List
+from ...core import node_children as _children
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +78,7 @@ KEYWORD_LABEL: Dict[str, str] = {
 
 def _node_label(node: Any, get_text: Callable) -> str:
     """Return 'KEYWORD  condition_text' for a scope or exit node."""
-    keyword = KEYWORD_LABEL.get(node.type, node.type.upper())
+    keyword = KEYWORD_LABEL.get(node.kind(), node.kind().upper())
     first_line = get_text(node).splitlines()[0].strip().rstrip(':').rstrip('{').strip()
     lower = first_line.lower()
     kw_lower = keyword.lower()
@@ -99,11 +100,11 @@ def _make_item(
     is_exit: bool = False,
 ) -> Dict[str, Any]:
     return {
-        'type': node.type,
-        'keyword': KEYWORD_LABEL.get(node.type, node.type.upper()),
+        'type': node.kind(),
+        'keyword': KEYWORD_LABEL.get(node.kind(), node.kind().upper()),
         'label': _node_label(node, get_text),
-        'line_start': node.start_point[0] + 1,
-        'line_end': node.end_point[0] + 1,
+        'line_start': node.start_position().row + 1,
+        'line_end': node.end_position().row + 1,
         'depth': depth,
         'is_exit': is_exit,
     }
@@ -132,9 +133,9 @@ def _collect_outline(
     max_depth: int,
 ) -> None:
     """Walk node's children, appending scope/exit items at the given depth."""
-    for child in node.children:
-        ctype = child.type
-        if not child.is_named:
+    for child in _children(node):
+        ctype = child.kind()
+        if not child.is_named():
             continue
         if ctype in FUNCTION_TYPES:
             items.append(_make_item(child, depth, get_text))
@@ -164,9 +165,9 @@ def _collect_scope_interior(
     max_depth: int,
 ) -> None:
     """Process the interior of a scope node."""
-    for child in scope_node.children:
-        ctype = child.type
-        if not child.is_named:
+    for child in _children(scope_node):
+        ctype = child.kind()
+        if not child.is_named():
             continue
         if ctype in FUNCTION_TYPES:
             items.append(_make_item(child, scope_depth + 1, get_text))
@@ -211,15 +212,15 @@ def _find_ancestors(
     depth: int,
 ) -> None:
     """Recursively find scope nodes that contain line_no."""
-    start = node.start_point[0] + 1
-    end = node.end_point[0] + 1
+    start = node.start_position().row + 1
+    end = node.end_position().row + 1
     if not (start <= line_no <= end):
         return
 
-    if node.is_named and (node.type in SCOPE_NODES or node.type in FUNCTION_TYPES):
+    if node.is_named() and (node.kind() in SCOPE_NODES or node.kind() in FUNCTION_TYPES):
         chain.append({
-            'type': node.type,
-            'keyword': KEYWORD_LABEL.get(node.type, node.type.upper()),
+            'type': node.kind(),
+            'keyword': KEYWORD_LABEL.get(node.kind(), node.kind().upper()),
             'label': _node_label(node, get_text),
             'line_start': start,
             'line_end': end,
@@ -227,7 +228,7 @@ def _find_ancestors(
         })
         depth += 1
 
-    for child in node.children:
+    for child in _children(node):
         _find_ancestors(child, line_no, get_text, chain, depth)
 
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..structure_options import StructureOptions
+from ..core import node_children as _children
 
 # Cache for markdown_inline parse results, keyed by (path, mtime_ns).
 # Avoids re-parsing the same file's inline content when multiple rules or
@@ -77,7 +78,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
 
                 inline_parser = get_parser('markdown_inline')
-                self.inline_tree = inline_parser.parse(self.content.encode('utf-8'))
+                self.inline_tree = inline_parser.parse(self.content)
                 if cache_key is not None:
                     _inline_parse_cache[cache_key] = self.inline_tree
             except Exception:
@@ -97,13 +98,13 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         results = []
 
         def _traverse(node):
-            if node.type == node_type:
+            if node.kind() == node_type:
                 results.append(node)
-            for child in node.children:
+            for child in _children(node):
                 _traverse(child)
 
-        if tree and tree.root_node:
-            _traverse(tree.root_node)
+        if tree and tree.root_node():
+            _traverse(tree.root_node())
 
         return results
 
@@ -254,16 +255,16 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
             # The first child is usually the marker (atx_h1_marker, atx_h2_marker, etc.)
             # The second child is inline (heading content)
-            for child in node.children:
-                if 'marker' in child.type:
+            for child in _children(node):
+                if 'marker' in child.kind():
                     # atx_h1_marker, atx_h2_marker, etc.
-                    level = int(child.type[5])  # Extract number from 'atx_h1_marker'
-                elif child.type == 'inline':
-                    title = child.text.decode('utf-8').strip()
+                    level = int(child.kind()[5])  # Extract number from 'atx_h1_marker'
+                elif child.kind() == 'inline':
+                    title = self._get_node_text(child).strip()
 
             if level and title:
                 headings.append({
-                    'line': node.start_point[0] + 1,  # tree-sitter uses 0-indexed
+                    'line': node.start_position().row + 1,  # tree-sitter uses 0-indexed
                     'level': level,
                     'name': title,
                 })
@@ -342,10 +343,10 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         Returns:
             Link text or None if not found
         """
-        for child in node.children:
-            if child.type == 'link_text':
+        for child in _children(node):
+            if child.kind() == 'link_text':
                 # In inline grammar, link_text contains the text directly
-                return cast(str, child.text.decode('utf-8'))
+                return cast(str, self._get_node_text(child))
         return None
 
     def _extract_link_destination(self, node) -> Optional[str]:
@@ -357,10 +358,10 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         Returns:
             Link URL or None if not found
         """
-        for child in node.children:
-            if child.type == 'link_destination':
+        for child in _children(node):
+            if child.kind() == 'link_destination':
                 # In inline grammar, link_destination contains the URL directly
-                return cast(str, child.text.decode('utf-8'))
+                return cast(str, self._get_node_text(child))
         return None
 
     def _build_link_info(self, node, text: str, url: str) -> Dict[str, Any]:
@@ -374,8 +375,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         Returns:
             Dict with link metadata
         """
-        line = node.start_point[0] + 1
-        column = node.start_point[1] + 1
+        line = node.start_position().row + 1
+        column = node.start_position().column + 1
 
         link_info = self._classify_link(url, text, line)
         link_info['column'] = column
@@ -553,11 +554,11 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         Returns:
             Language identifier or 'text' if not specified
         """
-        for child in node.children:
-            if child.type == 'info_string':
+        for child in _children(node):
+            if child.kind() == 'info_string':
                 # Language tag (e.g., 'python', 'javascript')
                 # In new grammar, info_string directly contains the language text
-                lang = cast(str, child.text.decode('utf-8').strip())
+                lang = cast(str, self._get_node_text(child).strip())
                 return lang if lang else 'text'
         return 'text'
 
@@ -570,9 +571,9 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         Returns:
             Source code string
         """
-        for child in node.children:
-            if child.type == 'code_fence_content':
-                return cast(str, child.text.decode('utf-8'))
+        for child in _children(node):
+            if child.kind() == 'code_fence_content':
+                return cast(str, self._get_node_text(child))
         return ''
 
     def _build_fenced_block_info(self, node, block_lang: str, source: str) -> Dict[str, Any]:
@@ -587,8 +588,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             Dict with line_start, line_end, language, source, etc.
         """
         # Get position (tree-sitter is 0-indexed)
-        line_start = node.start_point[0] + 1
-        line_end = node.end_point[0] + 1
+        line_start = node.start_position().row + 1
+        line_end = node.end_position().row + 1
         line_count = source.count('\n') + 1 if source else 0
 
         return {
@@ -703,14 +704,14 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         for node in code_span_nodes:
             # Extract the code text - in new grammar, code_span text includes backticks
             # So we need to strip them
-            full_text = node.text.decode('utf-8')
+            full_text = self._get_node_text(node)
             # Remove leading/trailing backticks
             source = full_text.strip('`').strip()
 
             if source:
                 # Get position (tree-sitter is 0-indexed)
-                line = node.start_point[0] + 1
-                column = node.start_point[1] + 1
+                line = node.start_position().row + 1
+                column = node.start_position().column + 1
 
                 inline_blocks.append({
                     'line': line,

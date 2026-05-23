@@ -12,6 +12,7 @@ Benefits:
 import logging
 from pathlib import Path
 from typing import List, Set, Optional
+from ...core import node_children as _children, node_prev_sibling as _prev_sibling
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +109,8 @@ class RustExtractor(LanguageExtractor):
                 symbols.add(name)
 
             # Handle field expressions (foo.bar -> track 'foo')
-            if node.parent and node.parent.type == 'field_expression':
-                root = self._get_root_identifier(node.parent, analyzer)
+            if node.parent() and node.parent().kind() == 'field_expression':
+                root = self._get_root_identifier(node.parent(), analyzer)
                 if root:
                     symbols.add(root)
 
@@ -124,24 +125,24 @@ class RustExtractor(LanguageExtractor):
             use std::io::Result as IoResult;     # use_as_clause
             use std::collections::*;              # use_wildcard
         """
-        line_number = node.start_point[0] + 1
+        line_number = node.start_position().row + 1
 
         # Find the main use clause (skip 'pub', 'use' keywords, ';')
-        for child in node.children:
-            if child.type == 'scoped_identifier':
+        for child in _children(node):
+            if child.kind() == 'scoped_identifier':
                 # Simple use: use std::collections::HashMap
                 use_path = analyzer._get_node_text(child)
                 return [self._create_import(file_path, line_number, use_path)]
 
-            elif child.type == 'scoped_use_list':
+            elif child.kind() == 'scoped_use_list':
                 # Nested use: use std::{fs, io}
                 return self._parse_scoped_use_list(child, file_path, line_number, analyzer)
 
-            elif child.type == 'use_as_clause':
+            elif child.kind() == 'use_as_clause':
                 # Aliased use: use std::io::Result as IoResult
                 return self._parse_use_as_clause(child, file_path, line_number, analyzer)
 
-            elif child.type == 'use_wildcard':
+            elif child.kind() == 'use_wildcard':
                 # Glob use: use std::collections::*
                 use_path = analyzer._get_node_text(child)
                 return [self._create_import(file_path, line_number, use_path)]
@@ -156,30 +157,30 @@ class RustExtractor(LanguageExtractor):
         base_path = None
         use_list_node = None
 
-        for child in node.children:
-            if child.type in ('identifier', 'scoped_identifier'):
+        for child in _children(node):
+            if child.kind() in ('identifier', 'scoped_identifier'):
                 base_path = analyzer._get_node_text(child)
-            elif child.type == 'use_list':
+            elif child.kind() == 'use_list':
                 use_list_node = child
 
         if not base_path or not use_list_node:
             return imports
 
         # Parse each item in the use_list
-        for item in use_list_node.children:
-            if item.type == 'identifier':
+        for item in _children(use_list_node):
+            if item.kind() == 'identifier':
                 # Simple item: fs
                 item_name = analyzer._get_node_text(item)
                 full_path = f"{base_path}::{item_name}"
                 imports.append(self._create_import(
                     file_path, line_number, full_path, imported_name=item_name
                 ))
-            elif item.type == 'use_as_clause':
+            elif item.kind() == 'use_as_clause':
                 # Aliased item: io as MyIo
                 imports.extend(self._parse_nested_use_as(
                     item, file_path, line_number, analyzer, base_path
                 ))
-            elif item.type == 'scoped_identifier':
+            elif item.kind() == 'scoped_identifier':
                 # Nested path: collections::HashMap
                 item_path = analyzer._get_node_text(item)
                 full_path = f"{base_path}::{item_path}"
@@ -195,10 +196,10 @@ class RustExtractor(LanguageExtractor):
         use_path = None
         alias = None
 
-        for child in node.children:
-            if child.type == 'scoped_identifier':
+        for child in _children(node):
+            if child.kind() == 'scoped_identifier':
                 use_path = analyzer._get_node_text(child)
-            elif child.type == 'identifier' and analyzer._get_node_text(child.prev_sibling or child) == 'as':
+            elif child.kind() == 'identifier' and analyzer._get_node_text(_prev_sibling(child) or child) == 'as':
                 alias = analyzer._get_node_text(child)
 
         if not use_path:
@@ -211,8 +212,8 @@ class RustExtractor(LanguageExtractor):
         item_name = None
         alias = None
 
-        for child in node.children:
-            if child.type == 'identifier':
+        for child in _children(node):
+            if child.kind() == 'identifier':
                 if not item_name:
                     item_name = analyzer._get_node_text(child)
                 else:
@@ -282,17 +283,17 @@ class RustExtractor(LanguageExtractor):
         - Variable bindings (let statements)
         - Use statement names
         """
-        if not node.parent:
+        if not node.parent():
             return True
 
         # Walk up to check if inside use declaration
         current = node
         while current:
-            if current.type == 'use_declaration':
+            if current.kind() == 'use_declaration':
                 return False
-            current = current.parent
+            current = current.parent()
 
-        parent_type = node.parent.type
+        parent_type = node.parent().kind()
 
         # Skip definition contexts
         # Note: 'function_signature_item' removed - it was filtering return types as definitions
@@ -320,14 +321,14 @@ class RustExtractor(LanguageExtractor):
         """
         # Walk up field expression chain to find root
         current = field_expr_node
-        while current and current.type == 'field_expression':
-            if current.children:
-                current = current.children[0]  # Get value (left side)
+        while current and current.kind() == 'field_expression':
+            if _children(current):
+                current = current.child(0)  # Get value (left side)
             else:
                 break
 
         # Should now be an identifier
-        if current and current.type == 'identifier':
+        if current and current.kind() == 'identifier':
             return analyzer._get_node_text(current)
 
         return None

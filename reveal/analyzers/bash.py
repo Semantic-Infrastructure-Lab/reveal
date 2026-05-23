@@ -3,6 +3,7 @@
 from typing import Optional, List, Dict, Any
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
+from ..core import node_children as _children
 
 _MAX_VALUE_LEN = 60
 
@@ -35,8 +36,8 @@ class BashAnalyzer(TreeSitterAnalyzer):
         This is called by _extract_functions() and other extraction methods.
         """
         # Look for 'word' child (bash uses this instead of 'identifier')
-        for child in node.children:
-            if child.type == 'word':
+        for child in _children(node):
+            if child.kind() == 'word':
                 return self._get_node_text(child)
 
         # Fallback to parent implementation (checks for 'identifier' or 'name')
@@ -51,8 +52,8 @@ class BashAnalyzer(TreeSitterAnalyzer):
             return []
 
         variables = []
-        for child in self.tree.root_node.children:
-            if child.type != 'variable_assignment':
+        for child in _children(self.tree.root_node()):
+            if child.kind() != 'variable_assignment':
                 continue
             name_node = child.child_by_field_name('name')
             value_node = child.child_by_field_name('value')
@@ -63,7 +64,7 @@ class BashAnalyzer(TreeSitterAnalyzer):
             if len(value) > _MAX_VALUE_LEN:
                 value = value[:_MAX_VALUE_LEN - 3] + '...'
             variables.append({
-                'line': child.start_point[0] + 1,
+                'line': child.start_position().row + 1,
                 'name': name,
                 'signature': f' = {value}' if value else '',
             })

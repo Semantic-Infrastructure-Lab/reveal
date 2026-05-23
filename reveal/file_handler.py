@@ -147,7 +147,7 @@ def _resolve_func_node(analyzer, element: str):
     if func_node is None:
         syntax = _parse_element_syntax(element) if element else None
         if syntax and syntax['type'] == 'line':
-            func_node = analyzer.tree.root_node
+            func_node = analyzer.tree.root_node()
             func_start = syntax['start_line']
             func_end = (
                 syntax['end_line']
@@ -163,8 +163,8 @@ def _resolve_func_node(analyzer, element: str):
             )
             sys.exit(1)
     else:
-        func_start = func_node.start_point[0] + 1
-        func_end = func_node.end_point[0] + 1
+        func_start = func_node.start_position().row + 1
+        func_end = func_node.end_position().row + 1
     return func_node, func_start, func_end
 
 

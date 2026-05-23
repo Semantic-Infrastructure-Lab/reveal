@@ -16,12 +16,13 @@ import tree_sitter_language_pack as ts
 def _parse_python(code: str):
     """Parse Python code and return (tree, root_node, get_text_fn, content_bytes)."""
     parser = ts.get_parser('python')
-    content_bytes = textwrap.dedent(code).lstrip('\n').encode('utf-8')
-    tree = parser.parse(content_bytes)
-    root = tree.root_node
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+    root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte:node.end_byte].decode('utf-8')
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
 
     return tree, root, get_text, content_bytes
 
@@ -29,14 +30,14 @@ def _parse_python(code: str):
 
 def _find_func_with_text(root, get_text, name: str):
     """Find a function_definition node whose identifier matches name."""
-    stack = list(root.children)
+    stack = [root.child(i) for i in range(root.child_count())]
     while stack:
         node = stack.pop()
-        if node.type == 'function_definition':
-            for child in node.children:
-                if child.type == 'identifier' and get_text(child) == name:
+        if node.kind() == 'function_definition':
+            for child in [node.child(i) for i in range(node.child_count())]:
+                if child.kind() == 'identifier' and get_text(child) == name:
                     return node
-        stack.extend(reversed(node.children))
+        stack.extend(reversed([node.child(i) for i in range(node.child_count())]))
     return None
 
 
@@ -351,7 +352,7 @@ class TestVarFlow(unittest.TestCase):
 
     def test_no_duplicate_events(self):
         events = self._flow('result')
-        positions = [(e['line'], e['node'].start_point[1]) for e in events]
+        positions = [(e['line'], e['node'].start_position().column) for e in events]
         self.assertEqual(len(positions), len(set(positions)))
 
 

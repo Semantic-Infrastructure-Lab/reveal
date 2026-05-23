@@ -12,6 +12,7 @@ Benefits:
 from typing import Dict, List, Any, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
+from ..core import node_children as _children
 
 
 @register('Dockerfile', name='Dockerfile', icon='')
@@ -48,14 +49,14 @@ class DockerfileAnalyzer(TreeSitterAnalyzer):
         }
 
         # Extract all instructions
-        for node in self.tree.root_node.children:
-            if node.type in instruction_map:
-                key = instruction_map[node.type]
+        for node in _children(self.tree.root_node()):
+            if node.kind() in instruction_map:
+                key = instruction_map[node.kind()]
                 if key not in structure:
                     structure[key] = []
 
                 # Extract instruction content
-                line_num = node.start_point[0] + 1
+                line_num = node.start_position().row + 1
                 content = self._get_instruction_content(node)
 
                 if key == 'from':
@@ -90,11 +91,11 @@ class DockerfileAnalyzer(TreeSitterAnalyzer):
         """Extract content from instruction node, handling various formats."""
         # Get all text except the directive keyword itself
         parts = []
-        for child in node.children:
-            if child.type not in ['FROM', 'RUN', 'COPY', 'ADD', 'ENV', 'EXPOSE',
+        for child in _children(node):
+            if child.kind() not in ['FROM', 'RUN', 'COPY', 'ADD', 'ENV', 'EXPOSE',
                                   'WORKDIR', 'ENTRYPOINT', 'CMD', 'LABEL', 'ARG']:
                 # Get text content, handling line continuations
-                text = self.content[child.start_byte:child.end_byte]
+                text = self.content[child.start_byte():child.end_byte()]
                 # Normalize whitespace from line continuations
                 text = ' '.join(text.split())
                 if text.strip():

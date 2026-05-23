@@ -2,6 +2,7 @@
 from typing import Dict, List, Any, Optional, Tuple
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
+from ..core import node_children as _children
 
 
 @register('.tf', '.tfvars', '.hcl', name='HCL', icon='🏗️')
@@ -63,7 +64,7 @@ class HCLAnalyzer(TreeSitterAnalyzer):
             attributes = self._extract_block_attributes(block_node)
 
             block_info = {
-                'line': block_node.start_point[0] + 1,
+                'line': block_node.start_position().row + 1,
                 'name': name,
             }
 
@@ -86,10 +87,10 @@ class HCLAnalyzer(TreeSitterAnalyzer):
         block_identifier = None
         labels = []
 
-        for i, child in enumerate(block_node.children):
-            if child.type == 'identifier' and i == 0:
+        for i, child in enumerate(_children(block_node)):
+            if child.kind() == 'identifier' and i == 0:
                 block_identifier = self._get_node_text(child)
-            elif child.type == 'string_lit':
+            elif child.kind() == 'string_lit':
                 # Remove quotes from string literals
                 label_text = self._get_node_text(child)
                 if label_text.startswith('"') and label_text.endswith('"'):
@@ -151,22 +152,22 @@ class HCLAnalyzer(TreeSitterAnalyzer):
         """Parse key and value from a single HCL attribute node."""
         key = None
         value = None
-        for attr_child in attr_node.children:
-            if attr_child.type == 'identifier' and key is None:
+        for attr_child in _children(attr_node):
+            if attr_child.kind() == 'identifier' and key is None:
                 key = self._get_node_text(attr_child)
-            elif attr_child.type in ['string_lit', 'number_lit', 'bool_lit']:
+            elif attr_child.kind() in ['string_lit', 'number_lit', 'bool_lit']:
                 value = self._get_node_text(attr_child)
                 if value and value.startswith('"') and value.endswith('"'):
                     value = value[1:-1]
-            elif attr_child.type == 'expression':
+            elif attr_child.kind() == 'expression':
                 value = self._get_node_text(attr_child)
         return key, value
 
     def _extract_body_attributes(self, body_node) -> Dict[str, str]:
         """Extract key-value attributes from a body node."""
         attributes = {}
-        for child in body_node.children:
-            if child.type != 'attribute':
+        for child in _children(body_node):
+            if child.kind() != 'attribute':
                 continue
             key, value = self._parse_attribute_node(child)
             if key:
@@ -175,7 +176,7 @@ class HCLAnalyzer(TreeSitterAnalyzer):
 
     def _extract_block_attributes(self, block_node) -> Dict[str, str]:
         """Extract key-value attributes from a block's body."""
-        for child in block_node.children:
-            if child.type == 'body':
+        for child in _children(block_node):
+            if child.kind() == 'body':
                 return self._extract_body_attributes(child)
         return {}

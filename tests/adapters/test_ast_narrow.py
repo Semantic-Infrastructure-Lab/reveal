@@ -33,9 +33,9 @@ def _analyzer(path: str) -> PythonAnalyzer:
 
 
 def _find_func(analyzer: PythonAnalyzer, name: str):
-    for n in analyzer.tree.root_node.children:
-        if n.type == 'function_definition':
-            ident = next((c for c in n.children if c.type == 'identifier'), None)
+    for n in [analyzer.tree.root_node().child(i) for i in range(analyzer.tree.root_node().child_count())]:
+        if n.kind() == 'function_definition':
+            ident = next((c for c in [n.child(i) for i in range(n.child_count())] if c.kind() == 'identifier'), None)
             if ident and analyzer._get_node_text(ident) == name:
                 return n
     return None
@@ -126,12 +126,12 @@ def f(x: Optional[str]) -> None:
 
     def _conditions(self):
         fn = _find_func(self.a, 'f')
-        body = next(c for c in fn.children if c.type == 'block')
+        body = next(c for c in [fn.child(i) for i in range(fn.child_count())] if c.kind() == 'block')
         conds = []
-        for stmt in body.children:
-            if stmt.type == 'if_statement':
+        for stmt in [body.child(i) for i in range(body.child_count())]:
+            if stmt.kind() == 'if_statement':
                 skip = {'if', ':', 'block', 'elif_clause', 'else_clause', 'comment'}
-                cond = next((c for c in stmt.children if c.type not in skip), None)
+                cond = next((c for c in [stmt.child(i) for i in range(stmt.child_count())] if c.kind() not in skip), None)
                 conds.append(cond)
         return conds
 

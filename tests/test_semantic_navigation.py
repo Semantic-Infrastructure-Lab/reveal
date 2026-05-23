@@ -400,14 +400,14 @@ class TestRangeWithNavFlags(unittest.TestCase):
 
     def test_exits_with_tuple_range(self):
         """--exits with a pre-parsed tuple range should not crash and find exits.
-        collect_exits (L723) unconditionally returns at its end, so RETURN is certain."""
+        collect_exits unconditionally returns at its end, so RETURN is certain."""
         import io, sys
         from reveal.file_handler import _dispatch_nav
         from reveal.analyzers.python import PythonAnalyzer
 
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
-        args = self._make_args(exits=True, range=(30, 75))
+        args = self._make_args(exits=True, range=(30, 80))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured

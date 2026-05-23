@@ -12,6 +12,7 @@ Benefits:
 from typing import Dict, List, Any, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
+from ..core import node_children as _children
 
 
 @register('.yaml', '.yml', name='YAML', icon='')
@@ -26,19 +27,19 @@ class YamlAnalyzer(TreeSitterAnalyzer):
     def _get_mapping_pairs(self, block_node) -> List[Any]:
         """Extract block_mapping_pair nodes from a block_node child."""
         pairs: List[Any] = []
-        for mapping_child in block_node.children:
-            if mapping_child.type == 'block_mapping':
+        for mapping_child in _children(block_node):
+            if mapping_child.kind() == 'block_mapping':
                 pairs.extend(
-                    p for p in mapping_child.children
-                    if p.type == 'block_mapping_pair'
+                    p for p in _children(mapping_child)
+                    if p.kind() == 'block_mapping_pair'
                 )
         return pairs
 
     def _get_document_mapping_pairs(self, doc_node) -> List[Any]:
         """Return mapping pairs from a YAML document node."""
         pairs: List[Any] = []
-        for child in doc_node.children:
-            if child.type == 'block_node':
+        for child in _children(doc_node):
+            if child.kind() == 'block_node':
                 pairs.extend(self._get_mapping_pairs(child))
         return pairs
 
@@ -51,8 +52,8 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         if not self.tree:
             return []
         pairs: List[Any] = []
-        for node in self.tree.root_node.children:
-            if node.type == 'document':
+        for node in _children(self.tree.root_node()):
+            if node.kind() == 'document':
                 pairs.extend(self._get_document_mapping_pairs(node))
         return pairs
 
@@ -84,7 +85,7 @@ class YamlAnalyzer(TreeSitterAnalyzer):
             key_name, _ = self._extract_key_info(pair)
             if key_name:
                 keys.append({
-                    'line_start': pair.start_point[0] + 1,
+                    'line_start': pair.start_position().row + 1,
                     'name': key_name,
                 })
 
@@ -116,8 +117,8 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         for pair in pairs:
             key_name, _ = self._extract_key_info(pair)
             if key_name == name:
-                start_line = pair.start_point[0] + 1
-                end_line = pair.end_point[0] + 1
+                start_line = pair.start_position().row + 1
+                end_line = pair.end_position().row + 1
                 source = '\n'.join(self.lines[start_line-1:end_line])
 
                 return {
@@ -150,9 +151,9 @@ class JsonAnalyzer(TreeSitterAnalyzer):
         # Only look for pairs that are direct children of the root object
         if not self.tree:
             return pairs
-        for node in self.tree.root_node.children:
-            if node.type == 'object':
-                pairs.extend(c for c in node.children if c.type == 'pair')
+        for node in _children(self.tree.root_node()):
+            if node.kind() == 'object':
+                pairs.extend(c for c in _children(node) if c.kind() == 'pair')
         return pairs
 
     def _extract_key_info(self, pair_node):
@@ -183,7 +184,7 @@ class JsonAnalyzer(TreeSitterAnalyzer):
             key_name, _ = self._extract_key_info(pair)
             if key_name:
                 keys.append({
-                    'line_start': pair.start_point[0] + 1,
+                    'line_start': pair.start_position().row + 1,
                     'name': key_name,
                 })
 
@@ -215,8 +216,8 @@ class JsonAnalyzer(TreeSitterAnalyzer):
         for pair in pairs:
             key_name, _ = self._extract_key_info(pair)
             if key_name == name:
-                start_line = pair.start_point[0] + 1
-                end_line = pair.end_point[0] + 1
+                start_line = pair.start_position().row + 1
+                end_line = pair.end_position().row + 1
                 source = '\n'.join(self.lines[start_line-1:end_line])
 
                 return {

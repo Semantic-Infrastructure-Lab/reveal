@@ -25,6 +25,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from .nav_varflow import var_flow, render_var_flow
+from ...core import node_children as _children
 
 _MAX_DEPTH = 3
 
@@ -98,8 +99,8 @@ def _collect_frames(
         kw_name = callout['param'] if callout['arg_pos'] == -1 else ''
         mapped_param = _resolve_param_name(callee_node, callout['arg_pos'], get_text, kw_name)
         callout['param'] = mapped_param  # update so renderer sees resolved name
-        callee_start = callee_node.start_point[0] + 1
-        callee_end = callee_node.end_point[0] + 1
+        callee_start = callee_node.start_position().row + 1
+        callee_end = callee_node.end_position().row + 1
         _collect_frames(
             analyzer, callee_node, mapped_param,
             callee_start, callee_end, get_text,
@@ -137,10 +138,10 @@ def _scan_for_callouts(
     get_text: Callable,
     callouts: List[Dict[str, Any]],
 ) -> None:
-    ntype = node.type
-    line = node.start_point[0] + 1
+    ntype = node.kind()
+    line = node.start_position().row + 1
 
-    if line > to_line or node.end_point[0] + 1 < from_line:
+    if line > to_line or node.end_position().row + 1 < from_line:
         return
 
     if ntype in ('function_definition', 'async_function_definition'):
@@ -155,19 +156,19 @@ def _scan_for_callouts(
             if callee_name:
                 _check_args_for_var(callee_name, args_part, var_name, line, get_text, callouts)
         # Still recurse into arguments (could have nested calls)
-        for child in node.children:
+        for child in _children(node):
             _scan_for_callouts(child, var_name, from_line, to_line, get_text, callouts)
         return
 
-    for child in node.children:
+    for child in _children(node):
         _scan_for_callouts(child, var_name, from_line, to_line, get_text, callouts)
 
 
 def _extract_callee_name(func_node: Any, get_text: Callable) -> Optional[str]:
-    if func_node.type == 'identifier':
+    if func_node.kind() == 'identifier':
         name = get_text(func_node)
         return name if name else None
-    if func_node.type == 'attribute':
+    if func_node.kind() == 'attribute':
         attr = func_node.child_by_field_name('attribute')
         return get_text(attr) if attr else None
     return None
@@ -182,10 +183,10 @@ def _check_args_for_var(
     callouts: List[Dict[str, Any]],
 ) -> None:
     arg_pos = 0
-    for child in args_node.children:
-        if child.type in (',', '(', ')'):
+    for child in _children(args_node):
+        if child.kind() in (',', '(', ')'):
             continue
-        if child.type == 'keyword_argument':
+        if child.kind() == 'keyword_argument':
             # keyword_argument: name=value
             key_node = child.child_by_field_name('name')
             val_node = child.child_by_field_name('value')
@@ -209,7 +210,7 @@ def _check_args_for_var(
 
 
 def _node_is_var(node: Any, var_name: str, get_text: Callable) -> bool:
-    return node.type == 'identifier' and get_text(node) == var_name
+    return node.kind() == 'identifier' and get_text(node) == var_name
 
 
 # ─────────────────────────── callee lookup ───────────────────────────────────
@@ -237,20 +238,20 @@ def _resolve_param_name(callee_node: Any, arg_pos: int, get_text: Callable, kw_n
     if not params:
         return str(arg_pos)
     pos = 0
-    for child in params.children:
-        if child.type in (',', '(', ')'):
+    for child in _children(params):
+        if child.kind() in (',', '(', ')'):
             continue
-        if child.type == 'identifier':
+        if child.kind() == 'identifier':
             name = get_text(child)
             if name in ('self', 'cls'):
                 continue
             if pos == arg_pos:
                 return name
             pos += 1
-        elif child.type in ('typed_parameter', 'default_parameter', 'typed_default_parameter'):
+        elif child.kind() in ('typed_parameter', 'default_parameter', 'typed_default_parameter'):
             ident = None
-            for sub in child.children:
-                if sub.type == 'identifier':
+            for sub in _children(child):
+                if sub.kind() == 'identifier':
                     ident = sub
                     break
             if ident:

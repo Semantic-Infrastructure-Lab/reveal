@@ -27,26 +27,27 @@ import tree_sitter_language_pack as ts
 def _parse_python(code: str):
     """Parse Python code and return (tree, root, get_text, content_bytes)."""
     parser = ts.get_parser('python')
-    content_bytes = textwrap.dedent(code).lstrip('\n').encode('utf-8')
-    tree = parser.parse(content_bytes)
-    root = tree.root_node
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+    root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte:node.end_byte].decode('utf-8')
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
 
     return tree, root, get_text, content_bytes
 
 
 def _find_func(root, get_text, name: str):
     """Find a function_definition node by name."""
-    stack = list(root.children)
+    stack = [root.child(i) for i in range(root.child_count())]
     while stack:
         node = stack.pop()
-        if node.type == 'function_definition':
-            for child in node.children:
-                if child.type == 'identifier' and get_text(child) == name:
+        if node.kind() == 'function_definition':
+            for child in [node.child(i) for i in range(node.child_count())]:
+                if child.kind() == 'identifier' and get_text(child) == name:
                     return node
-        stack.extend(reversed(node.children))
+        stack.extend(reversed([node.child(i) for i in range(node.child_count())]))
     return None
 
 
@@ -690,8 +691,8 @@ class TestIfmapCatchmapFiltering(unittest.TestCase):
         items = element_outline(self._func, self._get_text, max_depth=5)
         IF_KEYWORDS = frozenset({'IF', 'ELIF', 'ELSE', 'SWITCH', 'CASE', 'DEFAULT'})
         filtered = [i for i in items if i['keyword'] in IF_KEYWORDS]
-        func_start = self._func.start_point[0] + 1
-        func_end = self._func.end_point[0] + 1
+        func_start = self._func.start_position().row + 1
+        func_end = self._func.end_position().row + 1
         result = render_branchmap(filtered, func_start, func_end)
         self.assertIn('IF', result)
 
@@ -824,12 +825,13 @@ class TestCollectIdentifierNames(unittest.TestCase):
 def _parse_php(code: str):
     """Parse PHP code and return (tree, root, get_text, content_bytes)."""
     parser = ts.get_parser('php')
-    content_bytes = textwrap.dedent(code).lstrip('\n').encode('utf-8')
-    tree = parser.parse(content_bytes)
-    root = tree.root_node
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+    root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte:node.end_byte].decode('utf-8')
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
 
     return tree, root, get_text, content_bytes
 
@@ -1499,8 +1501,8 @@ def process(data, user_id):
         self._tree, self._root, self._get_text, _ = _parse_python(code)
         func = _find_func(self._root, self._get_text, 'process')
         self._func = func
-        self._start = func.start_point[0] + 1
-        self._end = func.end_point[0] + 1
+        self._start = func.start_position().row + 1
+        self._end = func.end_position().row + 1
 
     def _boundary(self):
         from reveal.adapters.ast.nav_boundary import collect_boundary

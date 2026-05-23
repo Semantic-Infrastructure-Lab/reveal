@@ -13,6 +13,18 @@ from reveal.analyzers.imports.javascript import JavaScriptExtractor
 from reveal.analyzers.imports.types import ImportStatement
 
 
+def _mock_ts_node(kind='', children=None, parent_result=None, start_byte=0):
+    """Create a mock tree-sitter 1.x compatible node."""
+    m = MagicMock()
+    m.kind.return_value = kind
+    children = children or []
+    m.child_count.return_value = len(children)
+    m.child.side_effect = lambda i: children[i] if 0 <= i < len(children) else None
+    m.parent.return_value = parent_result
+    m.start_byte.return_value = start_byte
+    return m
+
+
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _write_js(tmp_path: Path, name: str, code: str) -> Path:
@@ -223,38 +235,32 @@ class TestParseDestructuredNames:
 class TestExtractRequireImportedNames:
     def test_no_parent_returns_empty(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        node.parent = None
+        node = _mock_ts_node(parent_result=None)
         analyzer = MagicMock()
         result = e._extract_require_imported_names(node, analyzer)
         assert result == []
 
     def test_parent_not_variable_declarator_returns_empty(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        node.parent = MagicMock()
-        node.parent.type = 'expression_statement'
+        parent = _mock_ts_node(kind='expression_statement')
+        node = _mock_ts_node(parent_result=parent)
         analyzer = MagicMock()
         result = e._extract_require_imported_names(node, analyzer)
         assert result == []
 
     def test_parent_no_children_returns_empty(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        node.parent = MagicMock()
-        node.parent.type = 'variable_declarator'
-        node.parent.children = []
+        parent = _mock_ts_node(kind='variable_declarator', children=[])
+        node = _mock_ts_node(parent_result=parent)
         analyzer = MagicMock()
         result = e._extract_require_imported_names(node, analyzer)
         assert result == []
 
     def test_destructured_const(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        node.parent = MagicMock()
-        node.parent.type = 'variable_declarator'
-        child = MagicMock()
-        node.parent.children = [child]
+        child = _mock_ts_node()
+        parent = _mock_ts_node(kind='variable_declarator', children=[child])
+        node = _mock_ts_node(parent_result=parent)
         analyzer = MagicMock()
         analyzer._get_node_text.return_value = '{ foo, bar }'
         result = e._extract_require_imported_names(node, analyzer)
@@ -263,11 +269,9 @@ class TestExtractRequireImportedNames:
 
     def test_single_name_const(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        node.parent = MagicMock()
-        node.parent.type = 'variable_declarator'
-        child = MagicMock()
-        node.parent.children = [child]
+        child = _mock_ts_node()
+        parent = _mock_ts_node(kind='variable_declarator', children=[child])
+        node = _mock_ts_node(parent_result=parent)
         analyzer = MagicMock()
         analyzer._get_node_text.return_value = 'fs'
         result = e._extract_require_imported_names(node, analyzer)
@@ -279,105 +283,76 @@ class TestExtractRequireImportedNames:
 class TestIsUsageContext:
     def test_no_parent_returns_true(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        node.parent = None
+        node = _mock_ts_node(parent_result=None)
         assert e._is_usage_context(node) is True
 
     def test_inside_import_statement_returns_false(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        inner = MagicMock()
-        inner.type = 'something'
-        import_anc = MagicMock()
-        import_anc.type = 'import_statement'
-        import_anc.parent = None
-        inner.parent = import_anc
-        node.parent = inner
+        import_anc = _mock_ts_node(kind='import_statement', parent_result=None)
+        inner = _mock_ts_node(kind='something', parent_result=import_anc)
+        node = _mock_ts_node(parent_result=inner)
         assert e._is_usage_context(node) is False
 
     def test_function_declaration_returns_false(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        parent = MagicMock()
-        parent.type = 'function_declaration'
-        parent.parent = None
-        node.parent = parent
+        parent = _mock_ts_node(kind='function_declaration', parent_result=None)
+        node = _mock_ts_node(parent_result=parent)
         assert e._is_usage_context(node) is False
 
     def test_class_declaration_returns_false(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        parent = MagicMock()
-        parent.type = 'class_declaration'
-        parent.parent = None
-        node.parent = parent
+        parent = _mock_ts_node(kind='class_declaration', parent_result=None)
+        node = _mock_ts_node(parent_result=parent)
         assert e._is_usage_context(node) is False
 
     def test_formal_parameters_returns_false(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        parent = MagicMock()
-        parent.type = 'formal_parameters'
-        parent.parent = None
-        node.parent = parent
+        parent = _mock_ts_node(kind='formal_parameters', parent_result=None)
+        node = _mock_ts_node(parent_result=parent)
         assert e._is_usage_context(node) is False
 
     def test_variable_declarator_first_child_returns_false(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        parent = MagicMock()
-        parent.type = 'variable_declarator'
-        parent.parent = None
-        parent.children = [node, MagicMock()]
-        node.parent = parent
+        node_sb = 42
+        first_child = _mock_ts_node(start_byte=node_sb)
+        other = _mock_ts_node(start_byte=99)
+        parent = _mock_ts_node(kind='variable_declarator', children=[first_child, other], parent_result=None)
+        node = _mock_ts_node(parent_result=parent, start_byte=node_sb)
         assert e._is_usage_context(node) is False
 
     def test_variable_declarator_not_first_returns_true(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        other = MagicMock()
-        parent = MagicMock()
-        parent.type = 'variable_declarator'
-        parent.parent = None
-        parent.children = [other, node]
-        node.parent = parent
+        node_sb = 42
+        first_child = _mock_ts_node(start_byte=10)
+        other = _mock_ts_node(start_byte=node_sb)
+        parent = _mock_ts_node(kind='variable_declarator', children=[first_child, other], parent_result=None)
+        node = _mock_ts_node(parent_result=parent, start_byte=node_sb)
         assert e._is_usage_context(node) is True
 
     def test_pair_first_child_key_returns_false(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        parent = MagicMock()
-        parent.type = 'pair'
-        parent.parent = None
-        parent.children = [node]
-        node.parent = parent
+        node_sb = 42
+        first_child = _mock_ts_node(start_byte=node_sb)
+        parent = _mock_ts_node(kind='pair', children=[first_child], parent_result=None)
+        node = _mock_ts_node(parent_result=parent, start_byte=node_sb)
         assert e._is_usage_context(node) is False
 
     def test_import_specifier_returns_false(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        parent = MagicMock()
-        parent.type = 'import_specifier'
-        parent.parent = None
-        node.parent = parent
+        parent = _mock_ts_node(kind='import_specifier', parent_result=None)
+        node = _mock_ts_node(parent_result=parent)
         assert e._is_usage_context(node) is False
 
     def test_namespace_import_returns_false(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        parent = MagicMock()
-        parent.type = 'namespace_import'
-        parent.parent = None
-        node.parent = parent
+        parent = _mock_ts_node(kind='namespace_import', parent_result=None)
+        node = _mock_ts_node(parent_result=parent)
         assert e._is_usage_context(node) is False
 
     def test_call_expression_returns_true(self):
         e = JavaScriptExtractor()
-        node = MagicMock()
-        parent = MagicMock()
-        parent.type = 'call_expression'
-        parent.parent = None
-        node.parent = parent
+        parent = _mock_ts_node(kind='call_expression', parent_result=None)
+        node = _mock_ts_node(parent_result=parent)
         assert e._is_usage_context(node) is True
 
 
@@ -389,12 +364,8 @@ class TestGetRootIdentifier:
         analyzer = MagicMock()
         analyzer._get_node_text.return_value = 'React'
 
-        ident = MagicMock()
-        ident.type = 'identifier'
-
-        member = MagicMock()
-        member.type = 'member_expression'
-        member.children = [ident]
+        ident = _mock_ts_node(kind='identifier')
+        member = _mock_ts_node(kind='member_expression', children=[ident])
 
         result = e._get_root_identifier(member, analyzer)
         assert result == 'React'
@@ -404,16 +375,9 @@ class TestGetRootIdentifier:
         analyzer = MagicMock()
         analyzer._get_node_text.return_value = 'foo'
 
-        root = MagicMock()
-        root.type = 'identifier'
-
-        inner = MagicMock()
-        inner.type = 'member_expression'
-        inner.children = [root]
-
-        outer = MagicMock()
-        outer.type = 'member_expression'
-        outer.children = [inner]
+        root = _mock_ts_node(kind='identifier')
+        inner = _mock_ts_node(kind='member_expression', children=[root])
+        outer = _mock_ts_node(kind='member_expression', children=[inner])
 
         result = e._get_root_identifier(outer, analyzer)
         assert result == 'foo'
@@ -422,12 +386,8 @@ class TestGetRootIdentifier:
         e = JavaScriptExtractor()
         analyzer = MagicMock()
 
-        non_ident = MagicMock()
-        non_ident.type = 'call_expression'
-
-        member = MagicMock()
-        member.type = 'member_expression'
-        member.children = [non_ident]
+        non_ident = _mock_ts_node(kind='call_expression')
+        member = _mock_ts_node(kind='member_expression', children=[non_ident])
 
         result = e._get_root_identifier(member, analyzer)
         assert result is None
@@ -436,9 +396,7 @@ class TestGetRootIdentifier:
         e = JavaScriptExtractor()
         analyzer = MagicMock()
 
-        member = MagicMock()
-        member.type = 'member_expression'
-        member.children = []
+        member = _mock_ts_node(kind='member_expression', children=[])
 
         result = e._get_root_identifier(member, analyzer)
         assert result is None
@@ -448,12 +406,8 @@ class TestGetRootIdentifier:
         analyzer = MagicMock()
         analyzer._get_node_text.return_value = None
 
-        ident = MagicMock()
-        ident.type = 'identifier'
-
-        member = MagicMock()
-        member.type = 'member_expression'
-        member.children = [ident]
+        ident = _mock_ts_node(kind='identifier')
+        member = _mock_ts_node(kind='member_expression', children=[ident])
 
         result = e._get_root_identifier(member, analyzer)
         assert result is None

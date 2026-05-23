@@ -16,6 +16,7 @@ import logging
 import os
 from pathlib import Path
 from typing import List, Set, Optional, Dict, Tuple
+from ...core import node_children as _children, node_prev_sibling as _prev_sibling
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ class PythonExtractor(LanguageExtractor):
         except Exception:  # noqa: BLE001
             return None
 
-    def _is_inside_type_checking(self, node) -> bool:
+    def _is_inside_type_checking(self, node, analyzer=None) -> bool:
         """Check if import node is inside a TYPE_CHECKING conditional block.
 
         Walks up the AST to detect patterns like:
@@ -110,22 +111,19 @@ class PythonExtractor(LanguageExtractor):
         Returns:
             True if import is inside TYPE_CHECKING block
         """
-        current = node.parent
+        current = node.parent()
         while current:
-            if current.type == 'if_statement' and len(current.children) > 1:
-                condition_text = self._get_node_text_from_tree(current.children[1], current)
+            if current.kind() == 'if_statement' and current.child_count() > 1:
+                condition_text = self._get_node_text_from_tree(current.child(1), analyzer)
                 if 'TYPE_CHECKING' in condition_text:
                     return True
-            current = current.parent
+            current = current.parent()
         return False
 
     def _get_node_text_from_tree(self, node, analyzer_or_tree) -> str:
         """Helper to get node text when we have a tree reference."""
         if hasattr(analyzer_or_tree, '_get_node_text'):
             return str(analyzer_or_tree._get_node_text(node))
-        # Fallback: decode bytes
-        if hasattr(node, 'text'):
-            return str(node.text.decode('utf-8'))
         return ""
 
     def _parse_import_statement(self, node, file_path: Path, analyzer, source_lines: List[str]) -> List[ImportStatement]:
@@ -133,11 +131,11 @@ class PythonExtractor(LanguageExtractor):
         imports = []
 
         # Detect TYPE_CHECKING context
-        is_type_checking = self._is_inside_type_checking(node)
+        is_type_checking = self._is_inside_type_checking(node, analyzer)
 
         # Get source line (0-indexed -> 1-indexed)
-        line_number = node.start_point[0] + 1
-        source_line = source_lines[node.start_point[0]].rstrip() if node.start_point[0] < len(source_lines) else ""
+        line_number = node.start_position().row + 1
+        source_line = source_lines[node.start_position().row].rstrip() if node.start_position().row < len(source_lines) else ""
 
         # Get full import text for parsing
         import_text = analyzer._get_node_text(node)
@@ -186,12 +184,12 @@ class PythonExtractor(LanguageExtractor):
         module_name = ''
         level = 0
 
-        for child in node.children:
-            if child.type == 'relative_import':
+        for child in _children(node):
+            if child.kind() == 'relative_import':
                 is_relative = True
                 module_name, level = self._parse_relative_import(child, analyzer)
-            elif (child.type == 'dotted_name' and child.prev_sibling and
-                  analyzer._get_node_text(child.prev_sibling) == 'from'):
+            elif (child.kind() == 'dotted_name' and _prev_sibling(child) and
+                  analyzer._get_node_text(_prev_sibling(child)) == 'from'):
                 module_name = analyzer._get_node_text(child)
                 break
 
@@ -201,13 +199,13 @@ class PythonExtractor(LanguageExtractor):
         """Extract module name and dot-level from a relative_import node."""
         level = 0
         module_name = ''
-        for subchild in rel_node.children:
-            if subchild.type == '.':
+        for subchild in _children(rel_node):
+            if subchild.kind() == '.':
                 level += 1
-            elif subchild.type == 'import_prefix':
+            elif subchild.kind() == 'import_prefix':
                 # tree-sitter-python wraps dots in import_prefix node
-                level += sum(1 for c in subchild.children if c.type == '.')
-            elif subchild.type == 'dotted_name':
+                level += sum(1 for c in _children(subchild) if c.kind() == '.')
+            elif subchild.kind() == 'dotted_name':
                 module_name = analyzer._get_node_text(subchild)
         return module_name, level
 
@@ -221,9 +219,9 @@ class PythonExtractor(LanguageExtractor):
         import_type = 'from_import'
         seen_import_keyword = False
 
-        for child in node.children:
+        for child in _children(node):
             # Wait until we see the 'import' keyword
-            if child.type == 'import':
+            if child.kind() == 'import':
                 seen_import_keyword = True
                 continue
 
@@ -231,17 +229,17 @@ class PythonExtractor(LanguageExtractor):
                 continue
 
             # Skip commas and parentheses
-            if child.type in [',', '(', ')']:
+            if child.kind() in [',', '(', ')']:
                 continue
 
             # Wildcard import: from x import *
-            if child.type == 'wildcard_import' or analyzer._get_node_text(child) == '*':
+            if child.kind() == 'wildcard_import' or analyzer._get_node_text(child) == '*':
                 return ['*'], 'star_import'
 
             # Regular imports: from x import Name or from x import Name as Alias
-            if child.type == 'dotted_name':
+            if child.kind() == 'dotted_name':
                 imported_names.append(analyzer._get_node_text(child))
-            elif child.type == 'aliased_import':
+            elif child.kind() == 'aliased_import':
                 imported_names.append(analyzer._get_node_text(child))
 
         return imported_names, import_type
@@ -249,11 +247,11 @@ class PythonExtractor(LanguageExtractor):
     def _parse_from_import(self, node, file_path: Path, analyzer, source_lines: List[str]) -> List[ImportStatement]:
         """Parse 'from x import y' statements."""
         # Detect TYPE_CHECKING context
-        is_type_checking = self._is_inside_type_checking(node)
+        is_type_checking = self._is_inside_type_checking(node, analyzer)
 
         # Get source line (0-indexed -> 1-indexed)
-        line_number = node.start_point[0] + 1
-        source_line = source_lines[node.start_point[0]].rstrip() if node.start_point[0] < len(source_lines) else ""
+        line_number = node.start_position().row + 1
+        source_line = source_lines[node.start_position().row].rstrip() if node.start_position().row < len(source_lines) else ""
 
         # Extract module name and imported names
         module_name, is_relative, level = self._extract_from_module_name(node, analyzer)
@@ -312,9 +310,9 @@ class PythonExtractor(LanguageExtractor):
                 symbols.add(name)
 
             # Also handle attribute access (os.path -> track 'os')
-            if node.parent and node.parent.type == 'attribute':
+            if node.parent() and node.parent().kind() == 'attribute':
                 # Get root of attribute chain
-                root = self._get_root_identifier(node.parent, analyzer)
+                root = self._get_root_identifier(node.parent(), analyzer)
                 if root:
                     symbols.add(root)
 
@@ -329,10 +327,10 @@ class PythonExtractor(LanguageExtractor):
         - Assignment targets
         - Import names
         """
-        if not node.parent:
+        if not node.parent():
             return True
 
-        parent_type = node.parent.type
+        parent_type = node.parent().kind()
 
         # Fast path: common definition/import contexts at immediate parent level.
         # import_from_name covers `from x import NAME` identifiers;
@@ -343,18 +341,19 @@ class PythonExtractor(LanguageExtractor):
 
         # Check for import statement ancestor. Import identifiers are at most
         # 2-3 levels below their containing import_statement, so bound the walk.
-        current = node.parent
+        current = node.parent()
         for _ in range(3):
-            if current.type in ('import_statement', 'import_from_statement'):
+            if current.kind() in ('import_statement', 'import_from_statement'):
                 return False
-            current = current.parent
+            current = current.parent()
             if current is None:
                 break
 
         # For assignments and keyword args, only filter the target/key (left side),
         # not the value (right side) which is a genuine usage context.
         if parent_type in ('assignment', 'keyword_argument'):
-            if node.parent.children and node.parent.children[0] == node:
+            _p = node.parent()
+            if _p and _p.child_count() > 0 and _p.child(0).start_byte() == node.start_byte():
                 return False
 
         return True
@@ -368,15 +367,15 @@ class PythonExtractor(LanguageExtractor):
         """
         # Walk up the attribute chain to find the root
         current = attribute_node
-        while current and current.type == 'attribute':
+        while current and current.kind() == 'attribute':
             # Attribute nodes have structure: object.attribute
-            if current.children:
-                current = current.children[0]
+            if _children(current):
+                current = current.child(0)
             else:
                 break
 
         # Current should now be an identifier
-        if current and current.type == 'identifier':
+        if current and current.kind() == 'identifier':
             result = analyzer._get_node_text(current)
             return str(result) if result is not None else None
 
@@ -416,10 +415,10 @@ class PythonExtractor(LanguageExtractor):
     def _extract_string_literals(self, node, analyzer) -> List[str]:
         """Recursively extract string content from AST nodes."""
         strings = []
-        if node.type == 'string':
+        if node.kind() == 'string':
             text = analyzer._get_node_text(node).strip('"\'')
             strings.append(text)
-        for child in node.children:
+        for child in _children(node):
             strings.extend(self._extract_string_literals(child, analyzer))
         return strings
 

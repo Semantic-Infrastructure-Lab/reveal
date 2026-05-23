@@ -12,6 +12,21 @@ from reveal.analyzers.imports.go import GoExtractor
 from reveal.analyzers.imports.types import ImportStatement
 
 
+def _mock_ts_node(kind='', children=None, parent_result=None, start_byte=0):
+    """Create a mock tree-sitter 1.x compatible node.
+
+    1.x API: kind(), child_count(), child(i), parent(), start_byte() are all methods.
+    """
+    m = MagicMock()
+    m.kind.return_value = kind
+    children = children or []
+    m.child_count.return_value = len(children)
+    m.child.side_effect = lambda i: children[i] if 0 <= i < len(children) else None
+    m.parent.return_value = parent_result
+    m.start_byte.return_value = start_byte
+    return m
+
+
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _write_go(tmp_path: Path, name: str, code: str) -> Path:
@@ -255,61 +270,42 @@ class TestCreateImport:
 # ─── _is_usage_context ───────────────────────────────────────────────────────
 
 class TestIsUsageContext:
-    def _make_node(self, parent_type=None, parent_children=None, chain=None):
-        """Build a mock node with parent chain."""
-        node = MagicMock()
-
+    def _make_node(self, parent_type=None, parent_children=None, chain=None, node_sb=42):
+        """Build a mock node with parent chain (1.x API)."""
         if chain:
-            # Build ancestor chain
-            current = node
-            current.type = chain[0]
-            for i, typ in enumerate(chain[1:], 1):
-                parent = MagicMock()
-                parent.type = typ
-                parent.parent = MagicMock() if i < len(chain) - 1 else None
-                current.parent = parent
-                current = parent
-            node.parent = MagicMock()
-            node.parent.type = chain[1] if len(chain) > 1 else None
+            # Build ancestor chain bottom-up
+            # The last element in chain is the topmost ancestor (no further parent)
+            top = _mock_ts_node(kind=chain[-1], parent_result=None)
+            current_parent = top
+            for typ in reversed(chain[1:-1]):
+                p = _mock_ts_node(kind=typ, parent_result=current_parent)
+                current_parent = p
+            node = _mock_ts_node(kind=chain[0], parent_result=current_parent, start_byte=node_sb)
             return node
 
         if parent_type is None:
-            node.parent = None
-        else:
-            node.parent = MagicMock()
-            node.parent.type = parent_type
-            node.parent.parent = None
-            if parent_children is not None:
-                node.parent.children = parent_children
-            else:
-                node.parent.children = []
-        return node
+            return _mock_ts_node(parent_result=None, start_byte=node_sb)
+
+        parent_children = parent_children if parent_children is not None else []
+        parent = _mock_ts_node(kind=parent_type, children=parent_children, parent_result=None)
+        return _mock_ts_node(parent_result=parent, start_byte=node_sb)
 
     def test_no_parent_returns_true(self):
-        node = MagicMock()
-        node.parent = None
+        node = _mock_ts_node(parent_result=None)
         assert GoExtractor()._is_usage_context(node) is True
 
     def test_inside_import_declaration_returns_false(self):
         e = GoExtractor()
-        node = MagicMock()
-        # Build a chain: node → param → import_declaration
-        inner = MagicMock()
-        inner.type = 'something'
-        import_parent = MagicMock()
-        import_parent.type = 'import_declaration'
-        import_parent.parent = None
-        inner.parent = import_parent
-        node.parent = inner
+        # Chain: node → inner('something') → import_declaration
+        import_parent = _mock_ts_node(kind='import_declaration', parent_result=None)
+        inner = _mock_ts_node(kind='something', parent_result=import_parent)
+        node = _mock_ts_node(parent_result=inner)
         assert e._is_usage_context(node) is False
 
     def test_inside_import_spec_returns_false(self):
         e = GoExtractor()
-        node = MagicMock()
-        spec = MagicMock()
-        spec.type = 'import_spec'
-        spec.parent = None
-        node.parent = spec
+        spec = _mock_ts_node(kind='import_spec', parent_result=None)
+        node = _mock_ts_node(parent_result=spec)
         assert e._is_usage_context(node) is False
 
     def test_function_declaration_parent_returns_false(self):
@@ -339,44 +335,39 @@ class TestIsUsageContext:
 
     def test_short_var_declaration_first_child_returns_false(self):
         e = GoExtractor()
-        node = MagicMock()
-        parent = MagicMock()
-        parent.type = 'short_var_declaration'
-        parent.parent = None
-        parent.children = [node, MagicMock()]  # node is first child
-        node.parent = parent
+        # node is the first child of parent (same start_byte)
+        node_sb = 42
+        first_child = _mock_ts_node(start_byte=node_sb)  # same start_byte as node
+        other = _mock_ts_node(start_byte=99)
+        parent = _mock_ts_node(kind='short_var_declaration', children=[first_child, other], parent_result=None)
+        node = _mock_ts_node(parent_result=parent, start_byte=node_sb)
         assert e._is_usage_context(node) is False
 
     def test_short_var_declaration_not_first_child_returns_true(self):
         e = GoExtractor()
-        node = MagicMock()
-        other = MagicMock()
-        parent = MagicMock()
-        parent.type = 'short_var_declaration'
-        parent.parent = None
-        parent.children = [other, node]  # node is NOT first child
-        node.parent = parent
+        # node is NOT first child (different start_byte from child(0))
+        node_sb = 42
+        first_child = _mock_ts_node(start_byte=10)  # different from node
+        other = _mock_ts_node(start_byte=node_sb)
+        parent = _mock_ts_node(kind='short_var_declaration', children=[first_child, other], parent_result=None)
+        node = _mock_ts_node(parent_result=parent, start_byte=node_sb)
         assert e._is_usage_context(node) is True
 
     def test_var_spec_first_child_returns_false(self):
         e = GoExtractor()
-        node = MagicMock()
-        parent = MagicMock()
-        parent.type = 'var_spec'
-        parent.parent = None
-        parent.children = [node]
-        node.parent = parent
+        node_sb = 42
+        first_child = _mock_ts_node(start_byte=node_sb)
+        parent = _mock_ts_node(kind='var_spec', children=[first_child], parent_result=None)
+        node = _mock_ts_node(parent_result=parent, start_byte=node_sb)
         assert e._is_usage_context(node) is False
 
     def test_var_spec_not_first_child_returns_true(self):
         e = GoExtractor()
-        node = MagicMock()
-        other = MagicMock()
-        parent = MagicMock()
-        parent.type = 'var_spec'
-        parent.parent = None
-        parent.children = [other, node]
-        node.parent = parent
+        node_sb = 42
+        first_child = _mock_ts_node(start_byte=10)
+        other = _mock_ts_node(start_byte=node_sb)
+        parent = _mock_ts_node(kind='var_spec', children=[first_child, other], parent_result=None)
+        node = _mock_ts_node(parent_result=parent, start_byte=node_sb)
         assert e._is_usage_context(node) is True
 
     def test_plain_usage_returns_true(self):
@@ -394,12 +385,8 @@ class TestGetRootIdentifier:
         analyzer._get_node_text.return_value = 'fmt'
 
         # selector_expression → identifier child
-        ident = MagicMock()
-        ident.type = 'identifier'
-
-        selector = MagicMock()
-        selector.type = 'selector_expression'
-        selector.children = [ident]
+        ident = _mock_ts_node(kind='identifier')
+        selector = _mock_ts_node(kind='selector_expression', children=[ident])
 
         result = e._get_root_identifier(selector, analyzer)
         assert result == 'fmt'
@@ -410,16 +397,9 @@ class TestGetRootIdentifier:
         analyzer._get_node_text.return_value = 'os'
 
         # selector → selector → identifier
-        root_ident = MagicMock()
-        root_ident.type = 'identifier'
-
-        inner = MagicMock()
-        inner.type = 'selector_expression'
-        inner.children = [root_ident]
-
-        outer = MagicMock()
-        outer.type = 'selector_expression'
-        outer.children = [inner]
+        root_ident = _mock_ts_node(kind='identifier')
+        inner = _mock_ts_node(kind='selector_expression', children=[root_ident])
+        outer = _mock_ts_node(kind='selector_expression', children=[inner])
 
         result = e._get_root_identifier(outer, analyzer)
         assert result == 'os'
@@ -429,12 +409,8 @@ class TestGetRootIdentifier:
         analyzer = MagicMock()
 
         # selector_expression whose child is not an identifier
-        non_ident = MagicMock()
-        non_ident.type = 'call_expression'
-
-        selector = MagicMock()
-        selector.type = 'selector_expression'
-        selector.children = [non_ident]
+        non_ident = _mock_ts_node(kind='call_expression')
+        selector = _mock_ts_node(kind='selector_expression', children=[non_ident])
 
         result = e._get_root_identifier(selector, analyzer)
         assert result is None
@@ -443,9 +419,7 @@ class TestGetRootIdentifier:
         e = GoExtractor()
         analyzer = MagicMock()
 
-        selector = MagicMock()
-        selector.type = 'selector_expression'
-        selector.children = []
+        selector = _mock_ts_node(kind='selector_expression', children=[])
 
         result = e._get_root_identifier(selector, analyzer)
         assert result is None

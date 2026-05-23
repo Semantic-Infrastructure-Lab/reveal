@@ -276,7 +276,7 @@ def _nav_scope(analyzer, element: str, as_json: bool) -> None:
         )
         sys.exit(1)
     line_no = syntax['start_line']
-    chain = scope_chain(analyzer.tree.root_node, line_no, analyzer._get_node_text)
+    chain = scope_chain(analyzer.tree.root_node(), line_no, analyzer._get_node_text)
     if as_json:
         _nav_json('scope', analyzer.path, element, line_no, line_no, chain)
     else:

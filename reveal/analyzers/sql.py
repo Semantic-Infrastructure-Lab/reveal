@@ -3,6 +3,7 @@
 from typing import Dict, List, Any, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
+from ..core import node_children as _children
 
 
 @register('.sql', name='SQL', icon='🗄️')
@@ -16,22 +17,22 @@ class SQLAnalyzer(TreeSitterAnalyzer):
 
     def _find_identifier_child(self, node) -> Optional[str]:
         """Find the first identifier child's text (searches recursively)."""
-        direct = next((c for c in node.children if c.type == 'identifier'), None)
+        direct = next((c for c in _children(node) if c.kind() == 'identifier'), None)
         if direct:
             return self._get_node_text(direct)
         # In new grammar, identifier is often nested in object_reference
-        for child in node.children:
-            if child.type != 'object_reference':
+        for child in _children(node):
+            if child.kind() != 'object_reference':
                 continue
-            nested = next((gc for gc in child.children if gc.type == 'identifier'), None)
+            nested = next((gc for gc in _children(child) if gc.kind() == 'identifier'), None)
             if nested:
                 return self._get_node_text(nested)
         return None
 
     def _node_to_function_dict(self, node, name: str) -> Dict[str, Any]:
         """Convert a tree-sitter node to a function dict."""
-        line_start = node.start_point[0] + 1
-        line_end = node.end_point[0] + 1
+        line_start = node.start_position().row + 1
+        line_end = node.end_position().row + 1
         return {
             'line': line_start,
             'line_end': line_end,
@@ -45,8 +46,8 @@ class SQLAnalyzer(TreeSitterAnalyzer):
 
     def _node_to_class_dict(self, node, name: str) -> Dict[str, Any]:
         """Convert a tree-sitter node to a class/table dict."""
-        line_start = node.start_point[0] + 1
-        line_end = node.end_point[0] + 1
+        line_start = node.start_position().row + 1
+        line_end = node.end_position().row + 1
         return {
             'line': line_start,
             'line_end': line_end,

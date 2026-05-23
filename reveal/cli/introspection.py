@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
 from ..registry import get_analyzer, get_all_analyzers
+from ..core import node_children as _children
 
 _CAPABILITY_METHODS = [
     ('get_functions', 'Functions'),
@@ -141,8 +142,9 @@ def show_ast(path: str, max_depth: Optional[int] = None) -> str:
         lines.append(f"🌳 Tree-sitter AST: {path}")
         lines.append("")
 
-        root_node = analyzer.tree.root_node
-        lines.append(_format_ast_node(root_node, depth=0, max_depth=max_depth))
+        root_node = analyzer.tree.root_node()
+        src_bytes = analyzer.content.encode('utf-8')
+        lines.append(_format_ast_node(root_node, depth=0, max_depth=max_depth, src_bytes=src_bytes))
 
         return "\n".join(lines)
 
@@ -150,7 +152,7 @@ def show_ast(path: str, max_depth: Optional[int] = None) -> str:
         return f"❌ Error analyzing file: {e}"
 
 
-def _format_ast_node(node, depth: int = 0, max_depth: Optional[int] = None, prefix: str = "") -> str:
+def _format_ast_node(node, depth: int = 0, max_depth: Optional[int] = None, prefix: str = "", src_bytes: bytes = b"") -> str:
     """Format a tree-sitter node for display.
 
     Args:
@@ -169,11 +171,11 @@ def _format_ast_node(node, depth: int = 0, max_depth: Optional[int] = None, pref
 
     # Node type and text
     indent = "  " * depth
-    node_type = node.type
+    node_type = node.kind()
 
     # Show text for leaf nodes
-    if node.child_count == 0:
-        text = node.text.decode('utf-8', errors='ignore') if node.text else ""
+    if node.child_count() == 0:
+        text = src_bytes[node.start_byte():node.end_byte()].decode('utf-8', errors='ignore') if src_bytes else ""
         if len(text) > 50:
             text = text[:47] + "..."
         lines.append(f"{indent}{node_type}: \"{text}\"")
@@ -181,8 +183,8 @@ def _format_ast_node(node, depth: int = 0, max_depth: Optional[int] = None, pref
         lines.append(f"{indent}{node_type}")
 
     # Recurse for children
-    for child in node.children:
-        lines.append(_format_ast_node(child, depth + 1, max_depth, prefix))
+    for child in _children(node):
+        lines.append(_format_ast_node(child, depth + 1, max_depth, prefix, src_bytes))
 
     return "\n".join(lines)
 
