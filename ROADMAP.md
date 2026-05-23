@@ -1,11 +1,15 @@
 # Reveal Roadmap
-> **Last updated**: 2026-05-22 (dark-fusion-0522 — v0.94.0 shipped: reveal testability + patches:// adapter + frontmatter-driven help metadata)
+> **Last updated**: 2026-05-22 (floating-cluster-0522 — v0.95.0 shipped: tree-sitter-language-pack 1.x migration)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.95.0 — tree-sitter-language-pack 1.x migration
+- ✅ **tree-sitter-language-pack 1.x** — pin lifted from `<1.0.0` to `>=1.8.1`. 28 production files migrated. Three compat helpers (`node_children`, `node_prev_sibling`, `node_next_sibling`) consolidated in `reveal/core/treesitter_compat.py`. Gains: 305 languages (was ~165), single abi3 wheel for Python 3.10–3.14+. **Breaking**: glibc floor raised to manylinux_2_34; Alpine/musl unsupported. (lightning-sphinx-0522)
+- ✅ **Post-migration bug fixes** — markdown inline parser silently disabled (`parser.parse(bytes)` → `str`); Python `TYPE_CHECKING` detection always returned `False` (lost `node.text` fallback, now threads `analyzer` through); `test_no_tree_sitter_0x_api_leak.py` extended with `parser.parse(bytes)` pattern. (floating-cluster-0522)
 
 ### v0.94.0 — `reveal testability` + `patches://` adapter + frontmatter help metadata
 - ✅ **`reveal testability` subcommand** — per-target patch pressure joined with production fan-out. Scans Python tests for `mock.patch`/`monkeypatch` targets, joins with `calls://` boundary data so each pressure target is annotated with its production caller count. Surfaces seams that look like single boundaries in tests but are actually fan-out hubs in production. CLI: `reveal testability [src] [--tests tests] [--top N]`. (pokawuko-0522)
