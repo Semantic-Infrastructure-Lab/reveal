@@ -1163,5 +1163,129 @@ class TestL003FrameworkDetectionMethods(unittest.TestCase):
         # Either found or not, the fallback code path ran
 
 
+class TestL001DirectoryIndexResolution(unittest.TestCase):
+    """L001 should treat directory links as valid when an index document exists."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.rule = L001()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def _create(self, rel_path: str, content: str = "# Doc") -> str:
+        path = os.path.join(self.temp_dir, rel_path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def test_directory_link_valid_when_readme_exists(self):
+        """Link to directory passes when directory/README.md exists."""
+        self._create("archive/README.md")
+        src = self._create("index.md", "[Archive](archive/)")
+        detections = self.rule.check(src, None, "[Archive](archive/)")
+        self.assertEqual(detections, [])
+
+    def test_directory_link_valid_when_index_md_exists(self):
+        """Link to directory passes when directory/index.md exists."""
+        self._create("archive/index.md")
+        src = self._create("index.md", "[Archive](archive/)")
+        detections = self.rule.check(src, None, "[Archive](archive/)")
+        self.assertEqual(detections, [])
+
+    def test_directory_link_valid_when_INDEX_md_exists(self):
+        """Link to directory passes when directory/INDEX.md exists."""
+        self._create("archive/INDEX.md")
+        src = self._create("index.md", "[Archive](archive/)")
+        detections = self.rule.check(src, None, "[Archive](archive/)")
+        self.assertEqual(detections, [])
+
+    def test_directory_link_valid_when_underscore_index_exists(self):
+        """Link to directory passes when directory/_index.md exists."""
+        self._create("archive/_index.md")
+        src = self._create("index.md", "[Archive](archive/)")
+        detections = self.rule.check(src, None, "[Archive](archive/)")
+        self.assertEqual(detections, [])
+
+    def test_directory_link_fails_when_no_index(self):
+        """Link to directory fails when the directory has no recognized index."""
+        os.makedirs(os.path.join(self.temp_dir, "archive"), exist_ok=True)
+        # create an unrelated file so the dir exists but has no index
+        self._create("archive/notes.txt")
+        src = self._create("index.md", "[Archive](archive/)")
+        detections = self.rule.check(src, None, "[Archive](archive/)")
+        self.assertEqual(len(detections), 1)
+        self.assertEqual(detections[0].rule_code, 'L001')
+
+    def test_directory_link_fails_when_directory_missing(self):
+        """Link to a nonexistent directory still fails."""
+        src = self._create("index.md", "[Archive](archive/)")
+        detections = self.rule.check(src, None, "[Archive](archive/)")
+        self.assertEqual(len(detections), 1)
+
+
+class TestL003LocalFileCitationSuppression(unittest.TestCase):
+    """L003 should not fire on absolute local filesystem citations."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.rule = L003()
+        self.rule.framework = 'static'
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def _create(self, rel_path: str, content: str = "") -> str:
+        path = os.path.join(self.temp_dir, rel_path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def test_absolute_local_md_file_not_flagged(self):
+        """Existing absolute local Markdown file link does not trigger L003."""
+        target = self._create("notes.md", "# Notes")
+        content = f"See [{target}]({target}).\n"
+        src = self._create("doc.md", content)
+        self.rule.docs_root = None
+        detections = self.rule.check(src, None, content)
+        self.assertEqual(detections, [])
+
+    def test_absolute_local_py_file_with_line_not_flagged(self):
+        """Existing absolute local Python file with :line suffix does not trigger L003."""
+        target = self._create("execution.py", "x = 1")
+        url_with_line = f"{target}:81"
+        content = f"See [{url_with_line}]({url_with_line}).\n"
+        src = self._create("doc.md", content)
+        self.rule.docs_root = None
+        detections = self.rule.check(src, None, content)
+        self.assertEqual(detections, [])
+
+    def test_absolute_local_py_file_with_line_col_not_flagged(self):
+        """Existing absolute local file with :line:col suffix does not trigger L003."""
+        target = self._create("execution.py", "x = 1")
+        url_with_lc = f"{target}:81:4"
+        content = f"See [{url_with_lc}]({url_with_lc}).\n"
+        src = self._create("doc.md", content)
+        self.rule.docs_root = None
+        detections = self.rule.check(src, None, content)
+        self.assertEqual(detections, [])
+
+    def test_missing_static_route_still_flagged(self):
+        """A missing static-site route continues to trigger L003."""
+        docs_dir = os.path.join(self.temp_dir, "docs")
+        os.makedirs(docs_dir, exist_ok=True)
+        content = "See [guide](/missing-page).\n"
+        src = self._create("docs/index.md", content)
+        self.rule.docs_root = type('P', (), {'__truediv__': lambda s, o: __import__('pathlib').Path(docs_dir) / o, '__bool__': lambda s: True})()
+        self.rule.docs_root = __import__('pathlib').Path(docs_dir)
+        detections = self.rule.check(src, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertEqual(detections[0].rule_code, 'L003')
+
+
 if __name__ == '__main__':
     unittest.main()

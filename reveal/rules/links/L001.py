@@ -195,6 +195,9 @@ class L001(BaseRule):
             return (True, "file_not_found")
 
         if target.is_dir():
+            for index_name in ('README.md', 'INDEX.md', 'index.md', '_index.md'):
+                if (target / index_name).exists():
+                    return (False, "")
             return (True, "target_is_directory")
 
         # Check for case mismatch
@@ -265,10 +268,10 @@ class L001(BaseRule):
     def _suggestions_for_reason(self, reason: str, target_path: Path, file_part: str, broken_url: str) -> list:
         """Return reason-specific suggestions for a broken link."""
         if reason == "target_is_directory":
-            suggestions = ["Link points to a directory, not a file"]
-            if (target_path / "index.md").exists():
-                suggestions.append(f"Use: {file_part}/index.md")
-            return suggestions
+            return [
+                "Link points to a directory with no index",
+                "Create README.md or INDEX.md in that directory, or link to a specific file",
+            ]
         if reason == "case_mismatch":
             case_match = self._find_case_mismatch(target_path)
             return [f"Fix case to match actual file: {case_match}" if case_match

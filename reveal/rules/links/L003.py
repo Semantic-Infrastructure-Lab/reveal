@@ -5,6 +5,7 @@ but don't resolve correctly to the expected files.
 """
 
 import logging
+import re
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
@@ -77,6 +78,11 @@ class L003(BaseRule):
 
             # Skip external protocol-relative URLs (//example.com)
             if url.startswith('//'):
+                continue
+
+            # Absolute local filesystem citations (e.g. /abs/path/file.py:81) are
+            # code-navigation references, not web routes — skip framework validation.
+            if self._is_local_file_citation(url):
                 continue
 
             # Check if this framework route has a mismatch
@@ -218,6 +224,17 @@ class L003(BaseRule):
 
         # Fallback: use parent directory of the file
         return path.parent
+
+    def _is_local_file_citation(self, url: str) -> bool:
+        """Return True when *url* is a local filesystem citation, not a web route.
+
+        Recognises /absolute/path/file.ext, /abs/path/file.ext:line, and
+        /abs/path/file.ext:line:col — common in code-review documents that cite
+        specific source locations.  The file must exist on disk.
+        """
+        path_part = url.split('#')[0]
+        path_part = re.sub(r':\d+(:\d+)?$', '', path_part)
+        return Path(path_part).is_file()
 
     def _is_broken_route(
         self, base_path: Path, url: str
