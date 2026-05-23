@@ -9,6 +9,7 @@ from reveal.rules.bugs.B001 import B001
 from reveal.rules.complexity.C901 import C901
 from reveal.rules.refactoring.R913 import R913
 from reveal.rules.security.S701 import S701
+from reveal.rules.security.S001 import S001
 from reveal.rules.imports.I001 import I001
 
 
@@ -452,6 +453,149 @@ FROM nginx:1.25
 
         finally:
             self.teardown_file(path)
+
+
+class TestS001HardcodedSecrets(unittest.TestCase):
+    """Test S001: Hardcoded secrets detector."""
+
+    rule = S001()
+
+    def _py(self, content: str) -> str:
+        """Write content to a temp .py file and return the path."""
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, 'test.py')
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def _env(self, content: str) -> str:
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, '.env')
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def _yaml(self, content: str) -> str:
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, 'config.yaml')
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def _check(self, path: str, content: str):
+        return self.rule.check(path, None, content)
+
+    # Python: positive cases
+
+    def test_py_simple_assignment_flagged(self):
+        content = 'API_KEY = "sk-proj-abc123xyz789"\n'
+        path = self._py(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 1)
+        self.assertEqual(dets[0].rule_code, 'S001')
+        self.assertIn('API_KEY', dets[0].message)
+
+    def test_py_known_prefix_always_flagged(self):
+        """Known-bad prefix overrides short length / non-secret name."""
+        content = 'token = "ghp_abc123"\n'
+        path = self._py(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 1)
+
+    def test_py_password_flagged(self):
+        content = 'DATABASE_PASSWORD = "s3cr3t!pass"\n'
+        path = self._py(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 1)
+
+    def test_py_annotated_assignment_flagged(self):
+        content = 'secret_key: str = "real-secret-value-here"\n'
+        path = self._py(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 1)
+
+    # Python: negative cases
+
+    def test_py_env_var_reference_ok(self):
+        content = 'API_KEY = os.environ.get("API_KEY")\n'
+        path = self._py(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    def test_py_placeholder_ok(self):
+        content = 'API_KEY = "your-api-key-here"\n'
+        path = self._py(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    def test_py_angle_bracket_ok(self):
+        content = 'SECRET = "<your_secret>"\n'
+        path = self._py(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    def test_py_test_value_ok(self):
+        content = 'api_key = "test"\n'
+        path = self._py(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    def test_py_non_secret_name_ok(self):
+        content = 'debug = "sk-proj-abc123"\n'
+        path = self._py(content)
+        # "debug" doesn't match secret name pattern
+        dets = self._check(path, content)
+        # Known prefix overrides for name-based — but no, S001 requires both
+        # name match OR known prefix (only name-based for Python, prefix is value-based)
+        # Actually: name must match for Python path. "debug" doesn't match.
+        self.assertEqual(len(dets), 0)
+
+    def test_py_none_value_ok(self):
+        content = 'API_KEY = None\n'
+        path = self._py(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    # .env file
+
+    def test_env_secret_flagged(self):
+        content = 'DATABASE_PASSWORD=s3cr3t!pass\n'
+        path = self._env(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 1)
+        self.assertIn('DATABASE_PASSWORD', dets[0].message)
+
+    def test_env_comment_ignored(self):
+        content = '# DATABASE_PASSWORD=secret\n'
+        path = self._env(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    def test_env_env_var_ref_ok(self):
+        content = 'API_TOKEN=${REAL_TOKEN}\n'
+        path = self._env(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    # YAML
+
+    def test_yaml_secret_flagged(self):
+        content = 'api_key: "real-secret-value-here"\n'
+        path = self._yaml(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 1)
+
+    def test_yaml_placeholder_ok(self):
+        content = 'api_key: <YOUR_API_KEY>\n'
+        path = self._yaml(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    def test_yaml_env_ref_ok(self):
+        content = 'api_key: ${API_KEY}\n'
+        path = self._yaml(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
 
 
 class TestI001UnusedImports(unittest.TestCase):
