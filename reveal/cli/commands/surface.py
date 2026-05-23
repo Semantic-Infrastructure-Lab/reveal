@@ -36,6 +36,7 @@ def create_surface_parser() -> argparse.ArgumentParser:
             "Examples:\n"
             "  reveal surface ./src          # All surfaces in src/\n"
             "  reveal surface .              # Entire project\n"
+            "  reveal surface . --top 20     # Top 20 entries per category\n"
             "  reveal surface . --format json\n"
             "  reveal surface . --type env   # Only env vars\n"
         )
@@ -52,6 +53,13 @@ def create_surface_parser() -> argparse.ArgumentParser:
         default='',
         help='Filter to one surface type: cli, http, mcp, env, network, fs, db, sdk'
     )
+    parser.add_argument(
+        '--top',
+        metavar='N',
+        type=int,
+        default=None,
+        help='Show only the top N entries per surface type (default: all)'
+    )
     return parser
 
 
@@ -62,13 +70,14 @@ def run_surface(args: Namespace) -> None:
         sys.exit(1)
 
     type_filter = getattr(args, 'type', '')
+    top = getattr(args, 'top', None)
     report = _scan_surface(path, type_filter=type_filter)
 
     if args.format == 'json':
         print(json.dumps(report, indent=2, default=str))
         return
 
-    _render_report(report)
+    _render_report(report, top=top)
 
 
 def _scan_surface(path: Path, type_filter: str = '') -> Dict[str, Any]:
@@ -105,7 +114,7 @@ def _collect_python_files(path: Path) -> List[Path]:
     return files
 
 
-def _render_report(report: Dict[str, Any]) -> None:
+def _render_report(report: Dict[str, Any], top: int = None) -> None:
     path = report['path']
     total = report['total']
     surfaces = report['surfaces']
@@ -114,6 +123,8 @@ def _render_report(report: Dict[str, Any]) -> None:
     print(f"Surface: {path}")
     print("━" * 50)
     print(f"Total surface entries: {total}")
+    if top is not None:
+        print(f"Showing top {top} per category  (use --top N or omit for all)")
     print()
 
     if total == 0:
@@ -125,9 +136,13 @@ def _render_report(report: Dict[str, Any]) -> None:
         entries = surfaces.get(key, [])
         if not entries:
             continue
+        shown = entries[:top] if top is not None else entries
+        truncated = len(entries) - len(shown)
         print(f"{label} ({len(entries)}):")
-        for entry in entries:
+        for entry in shown:
             _render_entry(key, entry)
+        if truncated:
+            print(f"  … {truncated} more (use --top {len(entries)} or --type {key} to see all)")
         print()
 
 

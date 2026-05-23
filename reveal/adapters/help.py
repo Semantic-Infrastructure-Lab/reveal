@@ -494,6 +494,10 @@ class HelpAdapter(ResourceAdapter):
         if topic == 'relationships':
             return self._get_adapter_relationships()
 
+        # Anti-patterns: extract bounded section from AGENT_HELP rather than dumping full doc
+        if topic == 'anti-patterns':
+            return self._get_anti_patterns_section()
+
         # Check if it's a static guide (includes auto-discovered + manual)
         if topic in self.help_topics:
             return self._load_static_help(topic)
@@ -925,6 +929,40 @@ class HelpAdapter(ResourceAdapter):
             ],
         }
 
+    def _get_anti_patterns_section(self) -> Optional[Dict[str, Any]]:
+        """Extract the Common Mistakes section from AGENT_HELP.md.
+
+        Returns a bounded, focused result rather than the full 4K-line guide.
+        Use help://agent for the complete guide.
+        """
+        help_path = Path(__file__).parent.parent / 'docs' / 'AGENT_HELP.md'
+        try:
+            lines = help_path.read_text(encoding='utf-8').splitlines()
+        except Exception:
+            return None
+
+        # Find the section and extract until the next ## heading
+        start = None
+        for i, line in enumerate(lines):
+            if line.startswith('## Common Mistakes'):
+                start = i
+                break
+        if start is None:
+            return None
+
+        section_lines = []
+        for line in lines[start:]:
+            if section_lines and line.startswith('## '):
+                break
+            section_lines.append(line)
+
+        return {
+            'type': 'static_help',
+            'topic': 'anti-patterns',
+            'content': '\n'.join(section_lines),
+            'note': 'Extracted from AGENT_HELP.md — use help://agent for the complete guide.',
+        }
+
     # Internal/scaffold adapters excluded from public listings
     _INTERNAL_ADAPTERS = {'demo', 'test'}
 
@@ -955,7 +993,7 @@ class HelpAdapter(ResourceAdapter):
     _PROGRESSIVE_DISCLOSURE_THRESHOLD = 200
     # These topics are intentionally loaded in full — they are mega-docs that agents
     # bootstrap from, or aliased sections where truncation serves the wrong content.
-    _FULL_ONLY_TOPICS = frozenset({'agent', 'anti-patterns'})
+    _FULL_ONLY_TOPICS = frozenset({'agent'})
 
     def _load_static_help(self, topic: str, full: bool = False) -> Optional[Dict[str, Any]]:
         """Load help from static markdown file.

@@ -153,17 +153,28 @@ class TestHelpRegistry(unittest.TestCase):
         self.assertNotIn('Full guide:', content,
                          'Short guides must not have a truncation footer')
 
-    def test_full_only_topics_never_truncated(self):
-        """agent and anti-patterns are always returned in full (they are mega-docs)."""
+    def test_agent_topic_never_truncated(self):
+        """help://agent always returns the complete guide — it is a bootstrap mega-doc."""
         adapter = HelpAdapter()
-        for topic in ('agent', 'anti-patterns'):
-            result = adapter.get_element(topic)
-            self.assertIsNotNone(result, f'help://{topic} must resolve')
-            content = result['content']
-            self.assertNotIn('Full guide:', content,
-                             f'help://{topic} must never be truncated')
-            self.assertGreater(len(content.splitlines()), 200,
-                               f'help://{topic} must return full content')
+        result = adapter.get_element('agent')
+        self.assertIsNotNone(result, 'help://agent must resolve')
+        content = result['content']
+        self.assertNotIn('Full guide:', content, 'help://agent must never be truncated')
+        self.assertGreater(len(content.splitlines()), 200,
+                           'help://agent must return full content')
+
+    def test_anti_patterns_bounded_section(self):
+        """help://anti-patterns returns a focused excerpt, not the full 4K-line guide."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('anti-patterns')
+        self.assertIsNotNone(result, 'help://anti-patterns must resolve')
+        content = result['content']
+        self.assertIn('Common Mistakes', content,
+                      'anti-patterns must include the Common Mistakes section')
+        self.assertLess(len(content.splitlines()), 200,
+                        'anti-patterns must be bounded (< 200 lines), not the full guide')
+        self.assertIn('help://agent', result.get('note', ''),
+                      'anti-patterns result must point to the full guide')
 
     def test_quick_start_shows_multiple_sections(self):
         """quick-start truncation shows enough content to be useful (at least 2 sections)."""

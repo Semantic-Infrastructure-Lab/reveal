@@ -23,6 +23,7 @@ from reveal.rules.validation.V013 import V013
 from reveal.rules.validation.V015 import V015
 from reveal.rules.validation.V016 import V016
 from reveal.rules.validation.V024 import V024
+from reveal.rules.validation.V025 import V025
 from reveal.rules.validation.V017 import V017
 from reveal.rules.validation.V018 import V018
 from reveal.rules.validation.V019 import V019
@@ -2132,6 +2133,69 @@ class TestV024AdapterGuideCoverage(unittest.TestCase):
         """Integration: all public adapters now have guides — V024 should fire zero times."""
         detections = self.rule.check('reveal://', None, '')
         self.assertEqual(len(detections), 0)
+
+
+class TestV025AdapterRelationshipCoverage(unittest.TestCase):
+    """Test V025: Adapter relationship map coverage."""
+
+    def setUp(self):
+        self.rule = V025()
+
+    def test_metadata(self):
+        self.assertEqual(self.rule.code, "V025")
+        self.assertEqual(self.rule.severity.name, "HIGH")
+        self.assertIn("relationship", self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content=""
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_adapter_in_cluster_passes(self):
+        """Adapter present in relationship clusters produces no detection."""
+        with patch.object(self.rule, '_get_public_schemes', return_value=['ast', 'ssl']), \
+             patch.object(self.rule, '_get_mapped_adapters', return_value={'ast', 'ssl'}), \
+             patch('reveal.rules.validation.V025.find_reveal_root', return_value=Path('/fake')):
+            detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(len(detections), 0)
+
+    def test_adapter_missing_from_clusters_flagged(self):
+        """Adapter absent from all clusters produces a detection."""
+        with patch.object(self.rule, '_get_public_schemes', return_value=['newadapter']), \
+             patch.object(self.rule, '_get_mapped_adapters', return_value=set()), \
+             patch('reveal.rules.validation.V025.find_reveal_root', return_value=Path('/fake')):
+            detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(len(detections), 1)
+        self.assertIn('newadapter', detections[0].message)
+
+    def test_exempt_adapters_not_flagged(self):
+        """demo, test, and help adapters are never flagged."""
+        with patch.object(self.rule, '_get_public_schemes',
+                          return_value=['demo', 'test', 'help']), \
+             patch.object(self.rule, '_get_mapped_adapters', return_value=set()), \
+             patch('reveal.rules.validation.V025.find_reveal_root', return_value=Path('/fake')):
+            detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(len(detections), 0)
+
+    def test_suggestion_points_to_help_py(self):
+        """Detection suggestion references the relationship map location."""
+        with patch.object(self.rule, '_get_public_schemes', return_value=['orphan']), \
+             patch.object(self.rule, '_get_mapped_adapters', return_value=set()), \
+             patch('reveal.rules.validation.V025.find_reveal_root', return_value=Path('/fake')):
+            detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(len(detections), 1)
+        self.assertIn('help.py', detections[0].suggestion)
+        self.assertIn('_get_adapter_relationships', detections[0].suggestion)
+
+    def test_live_registry_all_adapters_in_relationships(self):
+        """Integration: all public adapters appear in help://relationships — V025 fires zero times."""
+        detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(len(detections), 0,
+                         f"Adapters not in relationship map: "
+                         f"{[d.message for d in detections]}")
 
 
 if __name__ == '__main__':

@@ -45,11 +45,17 @@ class TestCreateSurfaceParser(unittest.TestCase):
         args = parser.parse_args([])
         self.assertEqual(args.path, '.')
         self.assertEqual(args.type, '')
+        self.assertIsNone(args.top)
 
     def test_type_flag(self):
         parser = create_surface_parser()
         args = parser.parse_args(['--type', 'env'])
         self.assertEqual(args.type, 'env')
+
+    def test_top_flag(self):
+        parser = create_surface_parser()
+        args = parser.parse_args(['--top', '20'])
+        self.assertEqual(args.top, 20)
 
 
 class TestClassifiers(unittest.TestCase):
@@ -236,10 +242,10 @@ class TestScanSurface(unittest.TestCase):
 
 class TestRenderReport(unittest.TestCase):
 
-    def _capture(self, report):
+    def _capture(self, report, **kwargs):
         buf = StringIO()
         with patch('sys.stdout', buf):
-            _render_report(report)
+            _render_report(report, **kwargs)
         return buf.getvalue()
 
     def _empty_report(self, **kwargs):
@@ -250,6 +256,14 @@ class TestRenderReport(unittest.TestCase):
         }
         base.update(kwargs)
         return base
+
+    def _report_with_env(self, n: int):
+        surfs = {k: [] for k in ('cli', 'http', 'mcp', 'network', 'db', 'sdk', 'fs')}
+        surfs['env'] = [
+            {'type': 'env_var', 'name': f'KEY_{i}', 'expr': 'os.getenv', 'file': 'app.py', 'line': i}
+            for i in range(n)
+        ]
+        return self._empty_report(total=n, surfaces=surfs)
 
     def test_no_surfaces_shows_message(self):
         out = self._capture(self._empty_report())
@@ -266,6 +280,36 @@ class TestRenderReport(unittest.TestCase):
         out = self._capture(report)
         self.assertIn('API_KEY', out)
         self.assertIn('Environment variables', out)
+
+    def test_top_limits_entries_shown(self):
+        out = self._capture(self._report_with_env(10), top=3)
+        # Only first 3 should appear
+        self.assertIn('KEY_0', out)
+        self.assertIn('KEY_2', out)
+        self.assertNotIn('KEY_3', out)
+
+    def test_top_shows_truncation_hint(self):
+        out = self._capture(self._report_with_env(10), top=3)
+        self.assertIn('7 more', out)
+        self.assertIn('--top 10', out)
+
+    def test_top_none_shows_all(self):
+        out = self._capture(self._report_with_env(10))
+        self.assertIn('KEY_9', out)
+        self.assertNotIn('more', out)
+
+    def test_top_header_shown_when_limited(self):
+        out = self._capture(self._report_with_env(5), top=2)
+        self.assertIn('Showing top 2', out)
+
+    def test_top_no_header_when_unlimited(self):
+        out = self._capture(self._report_with_env(5))
+        self.assertNotIn('Showing top', out)
+
+    def test_top_larger_than_count_shows_all(self):
+        out = self._capture(self._report_with_env(3), top=100)
+        self.assertIn('KEY_2', out)
+        self.assertNotIn('more', out)
 
 
 class TestRunSurface(unittest.TestCase):

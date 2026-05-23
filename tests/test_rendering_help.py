@@ -749,12 +749,13 @@ class TestRenderHelpRelationships(unittest.TestCase):
     def test_all_adapters_in_relationships(self):
         """Every registered public adapter should appear in at least one cluster."""
         from reveal.adapters.base import _ADAPTER_REGISTRY
+        from reveal.adapters.help import HelpAdapter
         result = self._get_relationships()
         adapters_in_clusters = {
             a for cluster in result['clusters']
             for a in cluster['adapters']
         }
-        all_registered = set(_ADAPTER_REGISTRY.keys())
+        all_registered = set(_ADAPTER_REGISTRY.keys()) - HelpAdapter._INTERNAL_ADAPTERS
         missing = all_registered - adapters_in_clusters
         self.assertEqual(missing, set(), f"Registered adapters missing from relationship clusters: {missing}")
 
