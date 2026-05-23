@@ -747,18 +747,16 @@ class TestRenderHelpRelationships(unittest.TestCase):
         self.assertIn('power_pairs', data)
 
     def test_all_adapters_in_relationships(self):
-        """All major adapters (excl. demo) should appear in at least one cluster."""
+        """Every registered public adapter should appear in at least one cluster."""
+        from reveal.adapters.base import _ADAPTER_REGISTRY
         result = self._get_relationships()
         adapters_in_clusters = {
             a for cluster in result['clusters']
             for a in cluster['adapters']
         }
-        major_adapters = {'ast', 'calls', 'diff', 'stats', 'imports', 'git',
-                          'nginx', 'ssl', 'domain', 'cpanel', 'autossl',
-                          'sqlite', 'mysql', 'json', 'env', 'xlsx',
-                          'claude', 'markdown', 'python', 'reveal', 'help'}
-        missing = major_adapters - adapters_in_clusters
-        self.assertEqual(missing, set(), f"Adapters missing from relationship clusters: {missing}")
+        all_registered = set(_ADAPTER_REGISTRY.keys())
+        missing = all_registered - adapters_in_clusters
+        self.assertEqual(missing, set(), f"Registered adapters missing from relationship clusters: {missing}")
 
     def test_related_adapters_expanded(self):
         """Breadcrumbs should now cover all major adapters."""

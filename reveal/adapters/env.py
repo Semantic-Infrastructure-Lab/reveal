@@ -76,7 +76,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
     },
     {
         'uri': 'env://DATABASE_URL',
-        'description': 'Sensitive variable — value automatically redacted to *** unless --show-secrets',
+        'description': 'Sensitive variable — value automatically redacted to ***',
         'output_type': 'env_variable'
     },
     {
@@ -93,7 +93,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
 
 _SCHEMA_NOTES = [
     'Sensitive values are auto-redacted based on name patterns (PASSWORD, SECRET, TOKEN, KEY, etc.)',
-    'Redacted values shown as *** — use --show-secrets to reveal (requires explicit flag)',
+    'Redacted values shown as *** — sensitive values are not accessible via CLI (by design)',
     'env:// groups all vars by category: System, Python, Node, Application, Custom',
     'env://VAR_NAME returns the single variable with sensitivity classification',
     '--format=json exposes per-variable sensitive flag for programmatic filtering',

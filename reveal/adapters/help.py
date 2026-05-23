@@ -787,8 +787,8 @@ class HelpAdapter(ResourceAdapter):
                     'description': 'Static quality rules — complexity, unused imports, long functions',
                 },
                 {
-                    'cmd': 'reveal <file.py> --pattern',
-                    'description': 'Pattern detection rules — security, anti-patterns, code smells',
+                    'cmd': "reveal 'patches://tests?group=target&limit=10'",
+                    'description': 'Test coverage pressure — which functions are most frequently patched in tests',
                 },
                 {
                     'cmd': 'find src/ -name "*.py" | reveal --stdin --check',
@@ -796,7 +796,7 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'cmd': 'reveal help://adapters',
-                    'description': 'List all 23 adapters with syntax and examples',
+                    'description': 'List all adapters with syntax and examples',
                 },
             ],
             'decision_tree': [
@@ -838,13 +838,15 @@ class HelpAdapter(ResourceAdapter):
             'clusters': [
                 {
                     'name': 'Code Analysis',
-                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git'],
+                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches'],
                     'pairs': [
                         ('ast', 'calls', 'structure feeds call-graph queries'),
                         ('ast', 'diff', 'compare element complexity across versions'),
                         ('ast', 'stats', 'same code, different lens: quality metrics'),
                         ('ast', 'imports', 'structure + dependency graph'),
                         ('calls', 'diff', 'impact analysis: who calls what changed'),
+                        ('patches', 'ast', 'test churn pressure on specific functions'),
+                        ('patches', 'calls', 'highest-churn tests + call-graph identifies blast radius'),
                         ('imports', 'depends', 'forward imports + reverse dependency graph'),
                         ('stats', 'git', 'quality score over commit history'),
                         ('git', 'diff', 'git history drives structural diff views'),

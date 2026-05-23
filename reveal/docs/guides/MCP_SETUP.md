@@ -7,7 +7,7 @@ beth_topics:
   - claude-code
   - agent-integration
 help_topic: mcp
-help_description: "MCP server setup — 5 tools for Claude Code, Cursor, Windsurf"
+help_description: "MCP server setup — 6 tools for Claude Code, Cursor, Windsurf"
 help_category: ai_guides
 help_token_estimate: "~2,000"
 ---
@@ -88,7 +88,7 @@ reveal_element("src/auth.py", "validate_token")
 
 ### `reveal_query(uri)`
 
-Run any reveal URI query across all 23 adapters. Same syntax as the CLI.
+Run any reveal URI query across all adapters. Same syntax as the CLI.
 
 ```
 reveal_query("ast://src/?complexity>10&sort=-complexity")
