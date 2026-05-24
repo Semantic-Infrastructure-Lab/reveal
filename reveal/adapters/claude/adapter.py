@@ -11,7 +11,7 @@ _SESSION_NAME_RE = re.compile(r'^([a-z]+-[a-z]+-\d{4})(?:/|$)')
 
 logger = logging.getLogger(__name__)
 from typing import Dict, List, Any, Optional
-from datetime import datetime, date as _date
+from datetime import date
 import json
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -54,7 +54,6 @@ from .analysis import (
     get_workflow,
     get_context_changes,
     get_token_breakdown,
-    search_sessions_for_term,
     get_session_agents,
     get_message_range,
 )
@@ -1133,7 +1132,6 @@ class ClaudeAdapter(ResourceAdapter):
         since = getattr(args, 'since', None)
         if since:
             if since == 'today':
-                from datetime import date
                 since = date.today().isoformat()
             entries = [e for e in entries if e.get('timestamp', '') >= since]
 
@@ -1159,7 +1157,6 @@ class ClaudeAdapter(ResourceAdapter):
         since = getattr(args, 'since', None)
         if since:
             if since == 'today':
-                from datetime import date
                 since = date.today().isoformat()
             sessions = [s for s in sessions if s.get('modified', '') >= since]
 

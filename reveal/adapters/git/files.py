@@ -465,7 +465,6 @@ def get_file_blame(
 
         # Build ignore list: explicit ?ignore=sha, .git-blame-ignore-revs, noise heuristic.
         # ?ignore=off disables all auto-ignore and shows raw blame.
-        import re
         _NOISE_RE = re.compile(
             r'normalize|line.end|gitattributes|format|whitespace|prettier|eslint'
             r'|black|isort|autopep8|clang.?format',

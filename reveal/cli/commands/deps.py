@@ -7,7 +7,7 @@ import sys
 from argparse import Namespace
 from collections import Counter
 from pathlib import Path
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List
 
 from reveal.adapters.imports import ImportsAdapter
 

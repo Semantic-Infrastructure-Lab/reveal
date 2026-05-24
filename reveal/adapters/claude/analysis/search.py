@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from ....utils.parallel import grep_files
 from .messages import _content_to_blocks, _collect_block_matches

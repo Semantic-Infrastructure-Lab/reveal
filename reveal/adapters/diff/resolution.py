@@ -3,7 +3,7 @@
 import inspect
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Iterator, cast
+from typing import Dict, Any, Optional, Iterator, cast
 
 from .git import resolve_git_ref, resolve_git_adapter
 from ..base import get_adapter_class

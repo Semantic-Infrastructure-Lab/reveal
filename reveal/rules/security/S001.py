@@ -7,7 +7,7 @@ secret-like variable names. Covers Python, .env, YAML, and TOML files.
 import ast
 import re
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin

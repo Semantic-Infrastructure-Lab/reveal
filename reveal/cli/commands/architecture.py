@@ -6,7 +6,6 @@ Composes imports graph, complexity data, and cycle analysis into facts + risks +
 import argparse
 import json
 import logging
-import os
 import sys
 from argparse import Namespace
 from pathlib import Path

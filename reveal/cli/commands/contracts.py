@@ -5,7 +5,7 @@ import json
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Set
 
 _CONTRACT_PATH_HINTS: frozenset = frozenset({
     'base', 'schema', 'contract', 'protocol', 'interface',
