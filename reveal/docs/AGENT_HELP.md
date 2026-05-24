@@ -447,6 +447,12 @@ reveal check file.py                   # Check single file
 reveal check src/ --select B,S         # Bugs & security only
 reveal check src/ --format json        # JSON for CI/CD gating
 
+# Named profiles (v0.96.0+)
+reveal check src/ --profile maintenance   # complexity, duplication, structure
+reveal check src/ --profile security      # S001 secrets + link validity
+reveal check src/ --profile ci-strict     # all rules, strict thresholds
+reveal --profiles                          # list all profiles with rule sets
+
 # Legacy flag form (still works)
 reveal file.py --check
 reveal file.py --check --select B,S    # Bugs & security only
@@ -468,12 +474,12 @@ reveal check Dockerfile                # Docker best practices (S701)
 - **M** (maintainability) - Code maintainability checks (M101-M105)
 - **N** (nginx) - Nginx configuration validation (N001-N012)
 - **R** (refactoring) - Refactoring opportunities (R913)
-- **S** (security) - Security vulnerabilities (S701)
-- **T** (types) - Type annotation issues (T004)
+- **S** (security) - Security vulnerabilities (S001 opt-in, S701)
+- **T** (types) - Type annotation issues (T004-T006)
 - **U** (urls) - URL consistency and security (U501, U502)
-- **V** (validation) - Internal validation rules (V001-V023)
+- **V** (validation) - Internal validation rules (V001-V025)
 
-**List all rules:** `reveal --rules`
+**List all rules (including opt-in):** `reveal --rules`
 **Explain specific rule:** `reveal --explain B001`
 
 **Example output:**
@@ -3291,6 +3297,22 @@ except Exception as e:
 
 ### Security Issues (S)
 
+**S001: Hardcoded secrets** *(opt-in — enable via `--select S001` or `--profile security`)*
+```python
+# ❌ Bad - secret committed to source
+OPENAI_API_KEY = "sk-proj-abc123..."
+password = "hunter2"
+
+# ✅ Good
+import os
+OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+```
+- Detects `sk-proj-`, `ghp_`, `AKIA*` key prefixes and secret-named assignments
+- Applies to `.py`, `.env`, `.yaml`, `.toml`
+- Opt-in by default (not in standard `reveal check` run — enable explicitly)
+
+---
+
 **S701: Docker security best practices**
 ```dockerfile
 # ❌ Bad - Running as root
@@ -3959,6 +3981,14 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
 - **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `stats://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `stats://` complexity no longer stuck at 1.00
+- **v0.96.0** - `reveal check --profile NAME` (built-in presets: `maintenance`, `security`, `ci-strict`; project-defined via `.reveal.yaml`); S001 hardcoded secrets rule (opt-in — `sk-proj-`/`ghp_`/`AKIA*` + secret-named vars); PHP `calls://` OO support (`$obj->method()`, `new ClassName()` callers indexed cross-file); `reveal --rules` shows opt-in rules with `○` icon; I002 false positives 143→0 (TYPE_CHECKING + function-body imports excluded from cycle graph); I005 TYPE_CHECKING false positive fixed; `reveal hotspots`/`testability` perf: 74s→10.5s / 3min→9s via gitignore pruning + ProcessPoolExecutor + lru_cache; V025 relationship drift rule (`reveal:// --check`); L001 resolves directory links to index file, L003 ignores local citations.
+- **v0.95.0** - tree-sitter-language-pack 1.x migration: 305 languages (was ~165), single abi3 wheel for Python 3.10–3.14+. **Breaking**: glibc floor raised to manylinux_2_34 (Ubuntu 22.04+, Debian 12+); Alpine/musl and Ubuntu 20.04 no longer supported. `reveal/core/treesitter_compat.py` for 1.x API shims.
+- **v0.94.0** - `reveal testability` subcommand: per-target patch pressure joined with production fan-out (which seams look contained in tests but are fan-out hubs in production). `patches://tests?group=target` URI adapter. Frontmatter-driven help metadata (`help_topic`, `help_category`, `help_token_estimate` fields replace parallel Python dicts).
+- **v0.93.0** - `--grep PATTERN` text search with structural context: hits grouped by enclosing function/heading, `--ignore-case`, directory mode. `--name` canonical flag (`--search` kept as alias).
+- **v0.92.0** - Architecture hardening: `adapters/base.py` split into `factory.py`/`registry.py`/ABC; nav handlers extracted to `nav_handlers.py`; ast↔calls circular import broken; `_default_args` centralized in `cli/defaults.py`. All changes backward-compatible.
+- **v0.91.x** - `reveal --help` epilog expanded to all 13 subcommands + discovery flags; AGENT_HELP coverage gaps closed (env://, contracts, surface, mysql://, sqlite://); `--agent-help-full` removed (was no-op alias); `--search` 0-results hint now fires on non-Python files; gitignore directory pattern fix in `should_skip_file` (was generating ~3500 spurious M501 on htmlcov/).
+- **v0.90.x** - `git://` comprehensive history/blame: element-scoped history, `?type=diff` per-commit structure diff, blame with noise-commit suppression (`?ignore=sha`, `.git-blame-ignore-revs`), `?content~=` pickaxe search, `?no_merges=1`. `reveal pack --architecture` boost. `claude://` base-path env var (`REVEAL_CLAUDE_BASE_PATH`).
+- **v0.88.0–v0.89.0** - `reveal trace --json` flag (BACK-251); `reveal surface` env-var false positives fixed (dict `.get()` no longer misclassified); hotspot test-coverage heuristic improvements (private `_` functions, `Test*` class names, reverse-match fallback).
 - **v0.87.0** - Plugin auto-discovery: drop a `*_analyzer.py` with a `@register`-decorated `FileAnalyzer` subclass into `.reveal/analyzers/` (project-local) or `~/.reveal/plugins/` (user-global) — it loads automatically on the next `reveal` run. Zero registration boilerplate. `reveal pack --architecture`: fan-in-ranked entry points + top-5 core abstractions appended to pack output. `claude/renderer.py` split into 4 thematic submodules (BACK-241).
 - **v0.86.0** - `reveal trace` subcommand: depth-indented execution narrative from a named entry point. Combines `calls://` recursive callees walk with per-function params and classified side-effects (hard_stop, db, http, cache, file, log, sleep). `--depth N` (1–5, default 2), `--format json` output. Prunes builtins and external callees by default.
 - **v0.85.0** - 5 new features: `reveal hotspots` test-coverage heuristic (✅/⚪ per function, scans `tests/`/`test/`/`spec/`); `calls://?root=fn&depth=N` recursive callees walk (BFS, cap 5, resolved vs external); `reveal contracts src/` (ABCs, Protocols, TypedDicts, @dataclass, Pydantic BaseModels, `--abstract-only`); `reveal surface src/` (CLI args, HTTP routes, MCP tools, env vars, network/DB/SDK imports, filesystem writes, `--type` filter); `calls://?modules=true` module dependency graph (191 nodes / 248 edges on reveal's own codebase, `?external=true`, dot format).
