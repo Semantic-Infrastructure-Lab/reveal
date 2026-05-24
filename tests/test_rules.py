@@ -1013,6 +1013,77 @@ def func():
         finally:
             self.teardown_module(temp_dir)
 
+    def test_type_checking_import_not_flagged_as_cycle(self):
+        """if TYPE_CHECKING: import X should not create a graph edge even if X imports back."""
+        files = {
+            'registry.py': (
+                "from typing import TYPE_CHECKING\n"
+                "if TYPE_CHECKING:\n"
+                "    import analyzer\n"
+                "\n"
+                "def register():\n"
+                "    pass\n"
+            ),
+            'analyzer.py': (
+                "from registry import register\n"
+                "\n"
+                "class Analyzer:\n"
+                "    pass\n"
+            ),
+        }
+        temp_dir = self.create_temp_module(files)
+        try:
+            from reveal.rules.imports.I002 import I002
+            rule = I002()
+
+            detections = rule.check(str(temp_dir / 'registry.py'), None, files['registry.py'])
+            self.assertEqual(len(detections), 0,
+                "TYPE_CHECKING import should not create a cycle edge")
+        finally:
+            self.teardown_module(temp_dir)
+
+    def test_function_body_import_not_flagged_as_cycle(self):
+        """Deferred imports inside function bodies must not create cycle edges."""
+        files = {
+            'registry.py': (
+                "def get_analyzer():\n"
+                "    from analyzers import Analyzer\n"
+                "    return Analyzer\n"
+            ),
+            'analyzers.py': (
+                "from registry import get_analyzer\n"
+                "\n"
+                "class Analyzer:\n"
+                "    pass\n"
+            ),
+        }
+        temp_dir = self.create_temp_module(files)
+        try:
+            from reveal.rules.imports.I002 import I002
+            rule = I002()
+
+            detections = rule.check(str(temp_dir / 'registry.py'), None, files['registry.py'])
+            self.assertEqual(len(detections), 0,
+                "Function-body import should not create a cycle edge")
+        finally:
+            self.teardown_module(temp_dir)
+
+    def test_real_top_level_cycle_still_detected(self):
+        """Regression: real top-level cycles must still be caught after the fix."""
+        files = {
+            'alpha.py': "import beta\n",
+            'beta.py': "import alpha\n",
+        }
+        temp_dir = self.create_temp_module(files)
+        try:
+            from reveal.rules.imports.I002 import I002
+            rule = I002()
+            detections = rule.check(str(temp_dir / 'alpha.py'), None, files['alpha.py'])
+            self.assertGreater(len(detections), 0,
+                "Real top-level cycle must still be detected")
+        finally:
+            self.teardown_module(temp_dir)
+
 
 class TestI002ProjectRootCache(unittest.TestCase):
     """Regression tests for I002 cache keying on project root, not file parent.

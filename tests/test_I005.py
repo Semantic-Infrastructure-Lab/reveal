@@ -213,5 +213,63 @@ class TestI005MixedDuplicates(unittest.TestCase):
         self.assertEqual(lines, {5, 6})
 
 
+class TestI005RealFileTYPECHECKING(unittest.TestCase):
+    """I005 on real on-disk Python files — TYPE_CHECKING suppression."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp(prefix='reveal_test_i005_')
+        self.rule = I005()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _write(self, name, code):
+        from pathlib import Path
+        p = Path(self.tmp) / name
+        p.write_text(code)
+        return str(p)
+
+    def test_type_checking_import_not_counted_as_first_seen(self):
+        """if TYPE_CHECKING: import X at line N must not cause the function-body
+        import X at line M to be flagged as a duplicate of N."""
+        path = self._write('mod.py', (
+            "from typing import TYPE_CHECKING\n"
+            "if TYPE_CHECKING:\n"
+            "    import pygit2\n"
+            "\n"
+            "def get_repo():\n"
+            "    import pygit2\n"
+            "    return pygit2.Repository('.')\n"
+        ))
+        result = self.rule.check(path, {}, "")
+        self.assertEqual(result, [],
+            "TYPE_CHECKING import must not be the canonical 'first seen'")
+
+    def test_two_function_body_imports_still_flagged(self):
+        """Two identical imports both inside separate function bodies ARE duplicates."""
+        path = self._write('mod.py', (
+            "def fn_a():\n"
+            "    import re\n"
+            "\n"
+            "def fn_b():\n"
+            "    import re\n"
+        ))
+        result = self.rule.check(path, {}, "")
+        self.assertEqual(len(result), 1, "Duplicate function-body imports should still be detected")
+        self.assertEqual(result[0].line, 5)
+
+    def test_module_level_duplicate_still_flagged(self):
+        """A plain module-level duplicate (no TYPE_CHECKING) is still caught."""
+        path = self._write('mod.py', (
+            "import os\n"
+            "import os\n"
+        ))
+        result = self.rule.check(path, {}, "")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].line, 2)
+
+
 if __name__ == '__main__':
     unittest.main()

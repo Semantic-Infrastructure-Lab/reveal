@@ -350,6 +350,70 @@ def main():
         assert 'print' in symbols
         # 'sys' imported but not used, so won't be in used symbols
 
+    def test_is_type_checking_flag_set(self, tmp_path):
+        """Imports inside 'if TYPE_CHECKING:' blocks must be flagged."""
+        code = (
+            "from __future__ import annotations\n"
+            "from typing import TYPE_CHECKING\n"
+            "if TYPE_CHECKING:\n"
+            "    import pygit2\n"
+            "    from pathlib import Path\n"
+            "import os\n"
+        )
+        test_file = tmp_path / "test.py"
+        test_file.write_text(code)
+
+        imports = extract_python_imports(test_file)
+        by_module = {stmt.module_name: stmt for stmt in imports}
+
+        assert by_module['pygit2'].is_type_checking is True
+        assert by_module['pathlib'].is_type_checking is True
+        assert by_module['os'].is_type_checking is False
+
+    def test_is_in_function_flag_set(self, tmp_path):
+        """Imports inside function bodies must have is_in_function=True."""
+        code = (
+            "import os\n"
+            "\n"
+            "def helper():\n"
+            "    import re\n"
+            "    from pathlib import Path\n"
+        )
+        test_file = tmp_path / "test.py"
+        test_file.write_text(code)
+
+        imports = extract_python_imports(test_file)
+        by_module = {stmt.module_name: stmt for stmt in imports}
+
+        assert by_module['os'].is_in_function is False
+        assert by_module['re'].is_in_function is True
+        assert by_module['pathlib'].is_in_function is True
+
+    def test_type_checking_and_function_body_are_independent(self, tmp_path):
+        """is_type_checking and is_in_function are set independently."""
+        code = (
+            "from typing import TYPE_CHECKING\n"
+            "if TYPE_CHECKING:\n"
+            "    import T1\n"
+            "\n"
+            "def fn():\n"
+            "    import F1\n"
+            "\n"
+            "import Top\n"
+        )
+        test_file = tmp_path / "test.py"
+        test_file.write_text(code)
+
+        imports = extract_python_imports(test_file)
+        by_module = {stmt.module_name: stmt for stmt in imports}
+
+        assert by_module['T1'].is_type_checking is True
+        assert by_module['T1'].is_in_function is False
+        assert by_module['F1'].is_type_checking is False
+        assert by_module['F1'].is_in_function is True
+        assert by_module['Top'].is_type_checking is False
+        assert by_module['Top'].is_in_function is False
+
 
 class TestImportsAdapter:
     """Test ImportsAdapter."""
