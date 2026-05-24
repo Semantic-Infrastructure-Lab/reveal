@@ -9,7 +9,7 @@ from collections import defaultdict
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ...analyzers.imports.base import get_all_extensions
+from ...analyzers.imports.base import get_all_extensions, get_extractor
 
 logger = logging.getLogger(__name__)
 
@@ -65,26 +65,45 @@ class I005(BaseRule):
         """
         detections: List[Detection] = []
 
-        # Get imports from structure
-        if not structure:
-            return detections
-        imports = structure.get('imports', [])
-        if not imports:
-            return detections
+        from pathlib import Path
+        path = Path(file_path)
 
-        # Track import statements and their locations
-        # Key: normalized import statement, Value: list of (line, statement)
-        import_occurrences = defaultdict(list)
+        # For on-disk Python files, use ImportStatement objects which carry
+        # is_type_checking — TYPE_CHECKING imports must not be counted as the
+        # canonical "first" occurrence when flagging function-body imports as
+        # duplicates (they are never executed at runtime).
+        import_occurrences: defaultdict = defaultdict(list)
+        used_extractor = False
+        if path.exists():
+            extractor = get_extractor(path)
+            if extractor:
+                try:
+                    stmt_imports = extractor.extract_imports(path)
+                    for stmt in stmt_imports:
+                        if stmt.is_type_checking:
+                            continue
+                        normalized = ' '.join(stmt.source_line.split()).lower() if stmt.source_line else None
+                        if not normalized:
+                            continue
+                        import_occurrences[normalized].append((stmt.line_number, stmt.source_line.strip()))
+                    used_extractor = True
+                except Exception:
+                    pass
 
-        for imp in imports:
-            # Normalize the import statement for comparison
-            statement = self._normalize_import(imp)
-            if not statement:
-                continue
-
-            line = imp.get('line') or imp.get('line_start', 0)
-            display = imp.get('content', '') or imp.get('statement', '') or statement
-            import_occurrences[statement].append((line, display))
+        if not used_extractor:
+            # Fallback: use structure dict (non-Python files, non-existent paths, or extractor failure)
+            if not structure:
+                return detections
+            imports = structure.get('imports', [])
+            if not imports:
+                return detections
+            for imp in imports:
+                statement = self._normalize_import(imp)
+                if not statement:
+                    continue
+                line = imp.get('line') or imp.get('line_start', 0)
+                display = imp.get('content', '') or imp.get('statement', '') or statement
+                import_occurrences[statement].append((line, display))
 
         # Find duplicates (imports that appear more than once)
         for statement, occurrences in import_occurrences.items():

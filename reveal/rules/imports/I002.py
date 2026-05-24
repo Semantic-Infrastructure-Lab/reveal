@@ -192,6 +192,11 @@ class I002(BaseRule):
                 continue
             base_path = file_path.parent
             for stmt in imports:
+                # Skip imports that can't cause circular ImportError at startup:
+                # - TYPE_CHECKING imports never run at runtime
+                # - Function-body imports run after all top-level code completes
+                if stmt.is_type_checking or stmt.is_in_function:
+                    continue
                 # For `from . import X, Y, Z` (relative, no module path), each
                 # imported name may resolve to a distinct sibling module.  Emit
                 # one edge per name so that all submodule dependencies are tracked

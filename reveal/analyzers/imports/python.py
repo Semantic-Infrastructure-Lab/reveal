@@ -120,6 +120,15 @@ class PythonExtractor(LanguageExtractor):
             current = current.parent()
         return False
 
+    def _is_inside_function(self, node) -> bool:
+        """Check if import node is inside a function or method body."""
+        current = node.parent()
+        while current:
+            if current.kind() in ('function_definition', 'decorated_definition'):
+                return True
+            current = current.parent()
+        return False
+
     def _get_node_text_from_tree(self, node, analyzer_or_tree) -> str:
         """Helper to get node text when we have a tree reference."""
         if hasattr(analyzer_or_tree, '_get_node_text'):
@@ -130,8 +139,9 @@ class PythonExtractor(LanguageExtractor):
         """Parse 'import x, y as z' statements."""
         imports = []
 
-        # Detect TYPE_CHECKING context
+        # Detect TYPE_CHECKING context and function body
         is_type_checking = self._is_inside_type_checking(node, analyzer)
+        is_in_function = self._is_inside_function(node)
 
         # Get source line (0-indexed -> 1-indexed)
         line_number = node.start_position().row + 1
@@ -169,6 +179,7 @@ class PythonExtractor(LanguageExtractor):
                 import_type='import',
                 alias=alias,
                 is_type_checking=is_type_checking,
+                is_in_function=is_in_function,
                 source_line=source_line
             ))
 
@@ -246,8 +257,9 @@ class PythonExtractor(LanguageExtractor):
 
     def _parse_from_import(self, node, file_path: Path, analyzer, source_lines: List[str]) -> List[ImportStatement]:
         """Parse 'from x import y' statements."""
-        # Detect TYPE_CHECKING context
+        # Detect TYPE_CHECKING context and function body
         is_type_checking = self._is_inside_type_checking(node, analyzer)
+        is_in_function = self._is_inside_function(node)
 
         # Get source line (0-indexed -> 1-indexed)
         line_number = node.start_position().row + 1
@@ -266,6 +278,7 @@ class PythonExtractor(LanguageExtractor):
             import_type=import_type,
             alias=None,  # from imports don't have module-level aliases
             is_type_checking=is_type_checking,
+            is_in_function=is_in_function,
             source_line=source_line,
             level=level,
         )]

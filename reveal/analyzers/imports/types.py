@@ -24,6 +24,7 @@ class ImportStatement:
     import_type: str  # 'import', 'from_import', 'star_import'
     alias: Optional[str] = None  # 'np' in 'import numpy as np'
     is_type_checking: bool = False  # True if inside 'if TYPE_CHECKING:' block
+    is_in_function: bool = False  # True if inside a function/method body
     source_line: str = ""  # Full source line (for noqa comment detection)
     level: int = 0  # Relative import level: 0=absolute, 1='.', 2='..', etc.
 

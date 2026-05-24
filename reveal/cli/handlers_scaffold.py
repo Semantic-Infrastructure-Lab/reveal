@@ -2,7 +2,7 @@
 
 import sys
 
-from ..cli.scaffold import scaffold_adapter, scaffold_analyzer, scaffold_rule
+from .scaffold import scaffold_adapter, scaffold_analyzer, scaffold_rule
 
 
 def handle_scaffold_adapter(name: str, uri: str, force: bool = False) -> None:
