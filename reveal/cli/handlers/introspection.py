@@ -256,21 +256,45 @@ def handle_rules_list(version: str):
         by_category[cat].append(rule)
 
     # Print by category
+    enabled_count = sum(1 for r in rules if r['enabled'])
+    disabled_count = len(rules) - enabled_count
     for category in sorted(by_category.keys()):
         cat_rules = by_category[category]
         print(f"{category.upper()} Rules ({len(cat_rules)}):")
         for rule in sorted(cat_rules, key=lambda r: r['code']):
-            status = "✓" if rule['enabled'] else "✗"
+            status = "✓" if rule['enabled'] else "○"
             severity_icon = {"low": "ℹ️", "medium": "⚠️", "high": "❌", "critical": "🚨"}.get(rule['severity'], "")
-            print(f"  {status} {rule['code']:8s} {severity_icon} {rule['message']}")
+            opt_in_tag = " [opt-in]" if not rule['enabled'] else ""
+            print(f"  {status} {rule['code']:8s} {severity_icon} {rule['message']}{opt_in_tag}")
             # Show file patterns if not universal
             patterns = rule.get('file_patterns', ['*'])
             if patterns and patterns != ['*']:
                 print(f"             Files: {', '.join(_normalize_patterns(patterns))}")
         print()
 
-    print(f"Total: {len(rules)} rules")
+    print(f"Total: {enabled_count} rules ({disabled_count} opt-in, enable via --select <code>)")
     print("\nUsage: reveal <file> --check --select B,S --ignore E501")
+    sys.exit(0)
+
+
+def handle_profiles_list():
+    """Handle --profiles flag to list available rule profiles."""
+    from ...rules.profiles import list_profiles
+    profiles = list_profiles()
+
+    print("Available rule profiles\n")
+    for p in profiles:
+        builtin_tag = "" if p['builtin'] else " [project]"
+        print(f"  {p['name']}{builtin_tag}")
+        print(f"    {p['description']}")
+        if p['select']:
+            print(f"    select: {', '.join(p['select'])}")
+        if p['ignore']:
+            print(f"    ignore: {', '.join(p['ignore'])}")
+        print()
+
+    print("Usage: reveal check <path> --profile maintenance")
+    print("       reveal check <path> --profile security --ignore N")
     sys.exit(0)
 
 

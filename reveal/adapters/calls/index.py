@@ -73,8 +73,14 @@ def _index_callee(
     record: Dict[str, Any],
     alias_map: Dict[str, str],
 ) -> None:
-    """Add *record* to *index* under the bare name, dotted form, and canonical alias."""
-    bare = callee.split('.')[-1] if '.' in callee else callee
+    """Add *record* to *index* under the bare name, dotted/arrow form, and canonical alias."""
+    # Split on '.' (Python/JS) or '->' (PHP method calls like '$this->validate')
+    if '->' in callee:
+        bare = callee.split('->')[-1]
+    elif '.' in callee:
+        bare = callee.split('.')[-1]
+    else:
+        bare = callee
     index.setdefault(bare, []).append(record)
     if bare != callee:
         index.setdefault(callee, []).append(record)

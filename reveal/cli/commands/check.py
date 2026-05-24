@@ -66,6 +66,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help='Ignore specific rules or categories (e.g., "E501" or "C")',
     )
     parser.add_argument(
+        '--profile', type=str, metavar='NAME',
+        help='Apply a named rule preset (e.g., maintenance, security, ci-strict). '
+             'Use reveal --profiles to list available profiles.',
+    )
+    parser.add_argument(
         '--only-failures', action='store_true',
         help='Only show failed/warning checks (hide healthy results)',
     )
@@ -120,6 +125,21 @@ def run_check(args: Namespace) -> None:
         from reveal.cli.handlers import handle_explain_rule
         handle_explain_rule(args.explain)
         return
+
+    # Resolve --profile into select/ignore before running checks
+    profile_name = getattr(args, 'profile', None)
+    if profile_name:
+        from reveal.rules.profiles import resolve_profile
+        try:
+            resolved = resolve_profile(profile_name)
+        except KeyError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        # Profile values are lower-priority than explicit --select/--ignore
+        if not args.select:
+            args.select = ','.join(resolved['select'])
+        if not args.ignore and resolved['ignore']:
+            args.ignore = ','.join(resolved['ignore'])
 
     path_str = getattr(args, 'path', None)
     if not path_str:

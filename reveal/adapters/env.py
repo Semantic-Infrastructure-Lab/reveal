@@ -249,7 +249,7 @@ class EnvAdapter(ResourceAdapter):
             'notes': [
                 'Sensitive values are automatically redacted (shown as ***)',
                 'Patterns that trigger redaction: PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH',
-                'Use show_secrets parameter (not exposed via CLI) to reveal sensitive values in code'
+                'Secret values are never disclosed — redaction is enforced at all output layers'
             ],
             'output_formats': ['text', 'json', 'grep'],
             'see_also': [

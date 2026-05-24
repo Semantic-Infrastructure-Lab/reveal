@@ -189,6 +189,18 @@ CONFIG_SCHEMA = {
                 "breadcrumbs": {"type": "boolean"}
             },
             "additionalProperties": False
+        },
+        "profiles": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "properties": {
+                    "description": {"type": "string"},
+                    "select": {"type": "array", "items": {"type": "string"}},
+                    "ignore": {"type": "array", "items": {"type": "string"}}
+                },
+                "additionalProperties": False
+            }
         }
     },
     "additionalProperties": False

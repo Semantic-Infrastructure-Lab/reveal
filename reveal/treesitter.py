@@ -796,33 +796,56 @@ class TreeSitterAnalyzer(FileAnalyzer):
     def _get_callee_name(self, call_node) -> Optional[str]:
         """Extract the callee name from a call expression node.
 
-        Handles four forms:
-          - Simple:    foo()        → "foo"
-          - Attribute: self.bar()  → "self.bar"
-          - Chained:   a.b.c()    → "a.b.c"
-          - Starred:   *foo(bar)  → "foo"  (tree-sitter parses splat as callee)
-            Also: *self.bar(x)   → "self.bar"
-
-        For starred forms tree-sitter embeds `*` inside the callee node text.
-        We strip any leading `*` from the final name so callers-index lookups
-        match the bare function name.
+        Handles five forms:
+          - Simple:         foo()             → "foo"
+          - Attribute:      self.bar()        → "self.bar"
+          - Chained:        a.b.c()           → "a.b.c"
+          - Starred:        *foo(bar)         → "foo"
+          - PHP method:     $obj->method()    → "$obj->method"
+          - PHP new:        new ClassName()   → "new ClassName"
         """
         if not call_node.child_count():
             return None
+
+        # PHP: $obj->method() — member_call_expression children are:
+        #   receiver (->|?->) name arguments
+        if call_node.kind() == 'member_call_expression':
+            receiver_text = None
+            method_name = None
+            seen_arrow = False
+            for child in _children(call_node):
+                if child.kind() in ('->', '?->'):
+                    seen_arrow = True
+                    continue
+                if child.kind() == 'arguments':
+                    break
+                if not seen_arrow:
+                    receiver_text = self._get_node_text(child)
+                else:
+                    method_name = self._get_node_text(child)
+            if method_name:
+                return f"{receiver_text}->{method_name}" if receiver_text else method_name
+            return None
+
+        # PHP: new ClassName() — object_creation_expression
+        if call_node.kind() == 'object_creation_expression':
+            for child in _children(call_node):
+                if child.kind() not in ('new', 'arguments'):
+                    return f"new {self._get_node_text(child)}"
+            return None
+
         callee_node = call_node.child(0)
         if callee_node.kind() == 'identifier':
             return self._get_node_text(callee_node)
         if callee_node.kind() in CALLEE_ATTRIBUTE_TYPES:
             return self._get_node_text(callee_node).lstrip('*')
         # tree-sitter parses `*foo(args)` as call(list_splat(*foo), args).
-        # Unwrap the list_splat to get the real function name.
         if callee_node.kind() == 'list_splat':
             for child in _children(callee_node):
                 if child.kind() == 'identifier':
                     return self._get_node_text(child)
                 if child.kind() in CALLEE_ATTRIBUTE_TYPES:
                     return self._get_node_text(child).lstrip('*')
-        # Fallback: try to get any text from the callee node, stripping splat prefix
         text = self._get_node_text(callee_node).strip().lstrip('*')
         return text if text else None
 

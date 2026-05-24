@@ -22,6 +22,7 @@ from .handlers import (
     handle_language_info,
     handle_agent_help,
     handle_rules_list,
+    handle_profiles_list,
     handle_schema,
     handle_explain_rule,
     handle_list_schemas,

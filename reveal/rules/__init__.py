@@ -404,7 +404,8 @@ class RuleRegistry:
     def list_rules(
         cls,
         select: Optional[List[str]] = None,
-        category: Optional[RulePrefix] = None
+        category: Optional[RulePrefix] = None,
+        include_disabled: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         List rules with metadata.
@@ -412,6 +413,8 @@ class RuleRegistry:
         Args:
             select: Filter by patterns (e.g., ["B", "S"])
             category: Filter by category
+            include_disabled: When True (default), include opt-in/disabled rules so users
+                can discover them. The enabled field in the returned dict indicates status.
 
         Returns:
             List of rule metadata dicts
@@ -419,7 +422,13 @@ class RuleRegistry:
         if not cls._discovered:
             cls.discover()
 
-        rules = cls.get_rules(select=select)
+        if select:
+            rules = cls.get_rules(select=select)
+        elif include_disabled:
+            # Return all rules (enabled + disabled) so the listing is complete
+            rules = sorted(cls._rules.copy(), key=lambda r: r.code)
+        else:
+            rules = cls.get_rules(select=None)
 
         if category:
             rules = [r for r in rules if r.category == category]

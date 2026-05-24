@@ -407,23 +407,6 @@ Value: *** (sensitive)
 Length: 87 characters
 ```
 
-### Show Secrets (Programmatic Only)
-
-**NOT available via CLI** (security protection). Only accessible in code:
-
-```python
-from reveal.adapters.env import EnvAdapter
-
-adapter = EnvAdapter()
-result = adapter.get_element('DATABASE_URL', show_secrets=True)
-print(result['raw_value'])  # Actual value
-```
-
-**Why not expose via CLI?**
-- Prevents accidental logging in scripts
-- Forces explicit handling in code
-- Reduces risk of secrets in shell history
-
 ---
 
 ## Workflows
@@ -920,25 +903,7 @@ reveal env://DATABASE_URL
 reveal env:// > env-report.txt
 ```
 
-### 2. Use Programmatic Access for Secrets
-
-**❌ Bad**:
-```bash
-# Trying to reveal secrets via CLI (not possible)
-reveal env://SECRET_KEY --show-secrets  # Flag doesn't exist
-```
-
-**✅ Good**:
-```python
-# Programmatic access with explicit show_secrets
-from reveal.adapters.env import EnvAdapter
-
-adapter = EnvAdapter()
-result = adapter.get_element('SECRET_KEY', show_secrets=True)
-secret = result['raw_value']  # Use carefully
-```
-
-### 3. Audit Sensitive Variable Exposure
+### 2. Audit Sensitive Variable Exposure
 
 **Regular audits**:
 ```bash
@@ -1267,14 +1232,7 @@ DATABASE_KEY="some-secret-key"
 
 ### Q4: How do I reveal sensitive values?
 
-**A**: Not possible via CLI (security by design). Use programmatic access:
-```python
-from reveal.adapters.env import EnvAdapter
-
-adapter = EnvAdapter()
-result = adapter.get_element('SECRET_KEY', show_secrets=True)
-print(result['raw_value'])  # Handle carefully
-```
+**A**: Not possible — sensitive values are always redacted by design. Use your shell or secrets manager to access raw values outside of reveal.
 
 ### Q5: Why doesn't env:// show variables from .env files?
 
