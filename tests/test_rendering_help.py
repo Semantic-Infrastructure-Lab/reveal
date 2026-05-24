@@ -682,6 +682,26 @@ class TestHelpQuick(unittest.TestCase):
         data = json.loads(output)
         self.assertEqual(data['type'], 'help_quick')
 
+    def test_command_flags_are_recognized_by_cli(self):
+        """BACK-329: no quick-ref command may use a flag the CLI parser rejects."""
+        import re
+        from reveal.cli.parser import create_argument_parser
+        from reveal import __version__
+
+        result = self._get_quick()
+        parser = create_argument_parser(__version__)
+        known_flags = {opt for action in parser._actions for opt in action.option_strings}
+
+        sources = [(item['cmd'], 'commands') for item in result.get('commands', [])]
+        sources += [(item['example'], 'decision_tree') for item in result.get('decision_tree', [])]
+
+        for cmd, section in sources:
+            for flag in re.findall(r'(--[\w-]+)', cmd):
+                self.assertIn(
+                    flag, known_flags,
+                    f"help://quick {section} entry uses unrecognized flag {flag!r}: {cmd!r}",
+                )
+
 
 class TestRenderHelpRelationships(unittest.TestCase):
     """Tests for help://relationships renderer."""
