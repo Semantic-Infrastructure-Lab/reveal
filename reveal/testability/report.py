@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
@@ -143,11 +144,13 @@ def _target_matches_profile(src_path: str, target: str, profile: BoundaryProfile
     return _module_matches(module, module_name)
 
 
+@lru_cache(maxsize=None)
 def _target_symbol(target: str) -> str:
     parts = target.split('.')
     return parts[-1] if parts else target
 
 
+@lru_cache(maxsize=None)
 def _target_module(target: str) -> str:
     parts = target.split('.')
     return '.'.join(parts[:-1])
@@ -157,6 +160,7 @@ def _is_generic_patch_object_module(module: str) -> bool:
     return module in {'adapter', 'obj', 'target', 'module', 'mock'}
 
 
+@lru_cache(maxsize=None)
 def _module_matches(target_module: str, source_module: str) -> bool:
     if not target_module or not source_module:
         return False

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
@@ -144,6 +145,7 @@ def _mutation_sites(calls: List[str], base_line: int) -> List[int]:
     return sites
 
 
+@lru_cache(maxsize=None)
 def module_name_from_file(file_path: str, src_root: str) -> str:
     """Best-effort module name for a file under a source root."""
     try:

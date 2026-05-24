@@ -20,6 +20,26 @@ from .queries import get_quality_config, field_value, compare, matches_filters
 from .aggregation import aggregate_stats, identify_hotspots
 
 
+def _analyze_file_worker(args: tuple):
+    """Top-level worker for ProcessPoolExecutor — args must be picklable.
+
+    Defined at module level (not as a closure) so pickling works.
+    Tree-sitter nodes are safe here because each worker process has its own
+    C runtime; there is no cross-thread node transfer.
+    """
+    file_path_str, quality_config, base_path_str = args
+    from pathlib import Path as _Path
+    from reveal.adapters.stats.analysis import analyze_file as _analyze_file
+    from reveal.adapters.stats.analysis import get_file_display_path as _get_display
+    from reveal.adapters.stats.metrics import calculate_file_stats as _calc_stats
+    _fp = _Path(file_path_str)
+    _bp = _Path(base_path_str)
+    return _analyze_file(
+        _fp,
+        lambda fp, s, c: _calc_stats(fp, s, c, quality_config, lambda p: _get_display(p, _bp))
+    )
+
+
 _SCHEMA_QUERY_PARAMS = {
     'hotspots': {'type': 'boolean', 'description': 'Include hotspot analysis (files needing attention)', 'examples': ['hotspots=true']},
     'code_only': {'type': 'boolean', 'description': 'Exclude data/config files from analysis', 'examples': ['code_only=true']},
@@ -177,21 +197,32 @@ class StatsAdapter(ResourceAdapter):
     def _collect_filtered_stats(self, code_only, min_lines, max_lines,
                                 min_complexity, max_complexity, min_functions) -> list:
         """Collect file stats that match the specified filters."""
-        file_stats = []
-        for file_path in find_analyzable_files(self.path, code_only=code_only):
-            stats = analyze_file(
-                file_path,
-                lambda fp, structure, content: calculate_file_stats(
-                    fp, structure, content, self._quality_config,
-                    lambda p: get_file_display_path(p, self.path)
-                )
-            )
-            if stats and matches_filters(
-                stats, min_lines, max_lines, min_complexity, max_complexity, min_functions,
+        from concurrent.futures import ProcessPoolExecutor
+
+        files = list(find_analyzable_files(self.path, code_only=code_only))
+        if not files:
+            return []
+
+        quality_config = self._quality_config
+        base_path_str = str(self.path)
+        args = [(str(f), quality_config, base_path_str) for f in files]
+
+        # Use up to 8 workers; fall back to serial for tiny file sets to avoid
+        # process-spawn overhead.
+        workers = min(8, max(1, len(files) // 10))
+        if workers > 1:
+            with ProcessPoolExecutor(max_workers=workers) as executor:
+                all_stats = list(executor.map(_analyze_file_worker, args))
+        else:
+            all_stats = [_analyze_file_worker(a) for a in args]
+
+        return [
+            s for s in all_stats
+            if s and matches_filters(
+                s, min_lines, max_lines, min_complexity, max_complexity, min_functions,
                 self.query_filters, field_value, compare
-            ):
-                file_stats.append(stats)
-        return file_stats
+            )
+        ]
 
     def _apply_sorting(self, file_stats: list) -> list:
         """Apply sorting to file stats if sort field is specified."""

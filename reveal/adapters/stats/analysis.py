@@ -25,26 +25,69 @@ def _is_large_json(file_path: Path) -> bool:
         return False
 
 
-def find_analyzable_files(directory: Path, code_only: bool = False) -> Iterator[Path]:
+_ALWAYS_SKIP_DIRS = {
+    '.git', '__pycache__', 'node_modules', '.venv', 'venv',
+    'dist', 'build', '.pytest_cache', '.mypy_cache',
+    'htmlcov', '.benchmarks', '.deepeval', '.tox', '.ruff_cache',
+    'sdist', '.eggs',
+}
+
+
+def find_analyzable_files(
+    directory: Path,
+    code_only: bool = False,
+    respect_gitignore: bool = True,
+) -> Iterator[Path]:
     """Yield files that can be analyzed.
 
     Args:
         directory: Directory to search
         code_only: If True, exclude data/config files
+        respect_gitignore: If True, skip gitignored directories and files
 
     Yields:
         Analyzable file paths one at a time (generator — avoids materializing
         the full list into memory before analysis begins).
     """
+    gitignore_patterns: List[str] = []
+    if respect_gitignore:
+        try:
+            from ...cli.file_checker import load_gitignore_patterns  # deferred: cli cycle
+            gitignore_patterns = load_gitignore_patterns(directory)
+        except Exception:
+            pass
+
     for root, dirs, files in os.walk(directory):
-        # Skip common ignore directories
-        dirs[:] = [d for d in dirs if d not in {
-            '.git', '__pycache__', 'node_modules', '.venv', 'venv',
-            'dist', 'build', '.pytest_cache', '.mypy_cache'
-        }]
+        root_path = Path(root)
+
+        # Prune well-known and gitignored directories in-place so os.walk
+        # never descends into them.
+        def _keep_dir(d: str) -> bool:
+            if d in _ALWAYS_SKIP_DIRS:
+                return False
+            if gitignore_patterns:
+                from ...cli.file_checker import should_skip_file  # deferred: cli cycle
+                try:
+                    rel = (root_path / d).relative_to(directory)
+                    # Append a dummy filename so should_skip_file sees parts correctly
+                    if should_skip_file(rel / '_', gitignore_patterns):
+                        return False
+                except ValueError:
+                    pass
+            return True
+
+        dirs[:] = [d for d in dirs if _keep_dir(d)]
 
         for file in files:
-            file_path = Path(root) / file
+            file_path = root_path / file
+
+            if gitignore_patterns:
+                from ...cli.file_checker import should_skip_file  # deferred: cli cycle
+                try:
+                    if should_skip_file(file_path.relative_to(directory), gitignore_patterns):
+                        continue
+                except ValueError:
+                    pass
 
             # Check if reveal can analyze this file type
             if not get_analyzer(str(file_path)):
