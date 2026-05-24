@@ -12,6 +12,34 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.96.0] - 2026-05-24 (sessions invisible-sun-0524, distant-pulsar-0523, dipuhi-0523, twinkling-galaxy-0524, masuruko-0524)
+
+### Added
+- **`reveal check --profile NAME` — named rule presets** (invisible-sun-0524) — new `reveal/rules/profiles.py` with three built-in profiles: `maintenance` (complexity, duplication, structure rules), `security` (S001 secrets + link validity), `ci-strict` (all rules, strict thresholds). `--profile NAME` arg on `reveal check` resolves to `select`/`ignore` before running; explicit `--select`/`--ignore` take precedence. `reveal --profiles` lists all profiles with rule sets. `profiles:` key added to `.reveal.yaml` CONFIG_SCHEMA for project-defined presets.
+- **S001 — hardcoded secrets rule** (invisible-sun-0524 / 6a845a1) — detects high-entropy strings and secret-named assignments in `.py`, `.env`, `.yaml`, `.toml`. Patterns: `sk-proj-`, `ghp_`, `AKIA*` key prefixes plus variable names matching `password`, `secret`, `api_key`, `token`, `private_key`. Opt-in by default (not in standard `reveal check` run); enable via `--select S001` or `--profile security`. Tests at `tests/test_rules.py::TestS001HardcodedSecrets`.
+- **V025 — relationship drift detection** (distant-pulsar-0523) — `reveal:// --check` now fires V025 when any registered public adapter is absent from the `help://relationships` clusters map. Catches relationship-map drift automatically; previously required manual audits. `test_all_adapters_in_relationships` fixed to exclude `_INTERNAL_ADAPTERS` (was failing in full suite when demo adapter got registered).
+- **`reveal surface --top N`** (distant-pulsar-0523) — limits entries shown per category with a truncation hint (e.g. "... and 12 more entry points").
+
+### Fixed
+- **PHP `calls://` cross-file call graph** (invisible-sun-0524) — two fixes: (1) `_get_callee_name` in `treesitter.py` now handles `member_call_expression` (`$obj->method()` → `$obj->method`) and `object_creation_expression` (`new ClassName()` → `new ClassName`); (2) `_index_callee` in `calls/index.py` splits on `->` as well as `.` so PHP method callers index under the bare method name. Cross-file `calls://src/?target=validate` now finds `$this->validate()` callers.
+- **`reveal --rules` hid opt-in/disabled rules** (invisible-sun-0524) — `list_rules()` now returns all rules including `enabled=False` ones. `handle_rules_list` renders disabled rules with `○` status icon and `[opt-in]` tag; total line updated to `N rules (M opt-in, enable via --select <code>)`.
+- **I002 false positives: 143 → 0** (twinkling-galaxy-0524) — `_resolve_graph_dependencies` in `I002.py` now skips both `is_type_checking` and `is_in_function` imports when building the cycle graph. Root causes: `if TYPE_CHECKING: import pygit2` in `git/files.py` was treated as a top-level edge generating cycles against all runtime deferred imports; deferred import inside `_get_nginx_analyzer_class()` created a false `registry → analyzers → registry` cycle (38 reports alone). `ImportStatement.is_in_function` field added to `reveal/analyzers/imports/types.py`.
+- **I005 false positive — `if TYPE_CHECKING:` imports flagged as "first seen"** (twinkling-galaxy-0524) — `I005.py:check` now uses `extractor.extract_imports()` for on-disk Python files, skipping `is_type_checking` imports when building the first-seen set. Previously `if TYPE_CHECKING: import pygit2` at line 12 was "first seen", flagging all runtime deferred `import pygit2` at lines 22/126/223/418 as duplicates.
+- **L001 resolves directory links to index file** (314b605) — `reveal/rules/links/L001.py` now resolves `[text](some/dir/)` and `[text](some/dir)` to `some/dir/index.md`/`README.md` before checking existence. Eliminates false positives on directory-relative links that resolve correctly in rendered docs.
+- **L003 ignores local-file citations** (314b605) — L003 (external link rot) no longer fires on `[text](./local-file.md)` or `[text](../relative/path.md)` — local paths are always valid from a lint perspective.
+- **Removed false `--show-secrets` guidance from env adapter** (60e6767) — `ENV_ADAPTER_GUIDE.md` "Show Secrets (Programmatic Only)" section removed; the programmatic `show_secrets=True` flag does not exist in the CLI. Replaced with "Audit Sensitive Variable Exposure" section clarifying redaction is enforced at all output layers.
+- **`help://quick` carried dead `--pattern` flag** (dipuhi-0523) — removed from `help://quick` and replaced with a `patches://` example. Smoke test `test_command_flags_are_recognized_by_cli` added to `TestHelpQuick` — extracts all `--flags` from the quick-ref and asserts each is in the live argparse parser (catches future drift).
+- **`hotspots`, `overview`, `testability` timeout on large codebases** (dipuhi-0523) — three root causes: (1) `find_analyzable_files` scanned gitignored dirs (`htmlcov/` alone was 730/1473 files on reveal's own tree); (2) `_collect_filtered_stats` was serial — parallelised with `ProcessPoolExecutor` (8 workers); (3) `testability` had O(N²) `_target_matches_profile` calls (3.4M on reveal's tree) each calling `Path.resolve()`. Fixes: gitignore-aware pruning, parallelism, `@lru_cache` on four path helpers. Results: `hotspots` 74s→10.5s; `testability` 3min→9s; `overview` from timeout to 21s wall.
+
+### Chore
+- **17 unused imports removed** (twinkling-galaxy-0524) — dogfood `reveal check` found stale typing generics (`Tuple`, `Optional`, `List`), unused stdlib (`os`, `sys`, `Path`), and dead module-level imports in `claude/adapter.py`. One real `import re` inside a function body removed from `git/files.py`.
+
+### Tests
+- 9 new regression tests for TYPE_CHECKING and function-body import handling: 3 in `test_imports.py` (extractor `is_in_function`/`is_type_checking` flag detection), 3 in `test_rules.py` (I002 cycle suppression), 3 in `test_I005.py` (real-file TYPE_CHECKING suppression). (twinkling-galaxy-0524)
+- MCP guide tool count auto-validated: `test_tool_count_matches_guide` in `TestMCPServerIntegration` parses the first `N tools` phrase in `MCP_SETUP.md` and asserts it matches `len(mcp._tool_manager._tools)`. (invisible-sun-0524)
+
+---
+
 ## [0.95.0] - 2026-05-22 (sessions pokawuko-0522, celestial-force-0522, lightning-sphinx-0522, floating-cluster-0522)
 
 ### Changed

@@ -7,6 +7,17 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.96.0 — named profiles, PHP call graphs, import rule false-positive fixes
+- ✅ **`reveal check --profile NAME`** — `maintenance`, `security`, `ci-strict` built-in presets; project-defined profiles via `.reveal.yaml`. `reveal --profiles` lists all. (invisible-sun-0524)
+- ✅ **S001 hardcoded secrets rule** — detects `sk-proj-`/`ghp_`/`AKIA*` prefixes and secret-named assignments in `.py`, `.env`, `.yaml`, `.toml`. Opt-in via `--select S001` or `--profile security`. (invisible-sun-0524 / 6a845a1)
+- ✅ **PHP `calls://` OO support** — `$obj->method()` and `new ClassName()` callers now indexed and resolved cross-file. (invisible-sun-0524)
+- ✅ **`reveal --rules` shows opt-in rules** — disabled rules rendered with `○` icon and `[opt-in]` tag; total line reports count. (invisible-sun-0524)
+- ✅ **I002 false positives 143 → 0** — `if TYPE_CHECKING:` and function-body imports excluded from cycle graph. `ImportStatement.is_in_function` added. (twinkling-galaxy-0524)
+- ✅ **I005 false positive fixed** — `if TYPE_CHECKING:` imports skipped when building "first seen" set. (twinkling-galaxy-0524)
+- ✅ **hotspots/overview/testability timeouts fixed** — gitignore-aware pruning + `ProcessPoolExecutor` parallelism + `@lru_cache` on path helpers: hotspots 74s→10.5s, testability 3min→9s. (dipuhi-0523)
+- ✅ **V025 relationship drift rule** — `reveal:// --check` catches adapter/relationship-map divergence. (distant-pulsar-0523)
+- ✅ **L001/L003 rule fixes** — L001 resolves directory links to index file; L003 ignores local-file citations. (masuruko-0524)
+
 ### v0.95.0 — tree-sitter-language-pack 1.x migration
 - ✅ **tree-sitter-language-pack 1.x** — pin lifted from `<1.0.0` to `>=1.8.1`. 28 production files migrated. Three compat helpers (`node_children`, `node_prev_sibling`, `node_next_sibling`) consolidated in `reveal/core/treesitter_compat.py`. Gains: 305 languages (was ~165), single abi3 wheel for Python 3.10–3.14+. **Breaking**: glibc floor raised to manylinux_2_34; Alpine/musl unsupported. (lightning-sphinx-0522)
 - ✅ **Post-migration bug fixes** — markdown inline parser silently disabled (`parser.parse(bytes)` → `str`); Python `TYPE_CHECKING` detection always returned `False` (lost `node.text` fallback, now threads `analyzer` through); `test_no_tree_sitter_0x_api_leak.py` extended with `parser.parse(bytes)` pattern. (floating-cluster-0522)
