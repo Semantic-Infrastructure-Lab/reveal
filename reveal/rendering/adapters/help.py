@@ -191,6 +191,10 @@ def _render_special_topics_section() -> None:
     """Render special topics section."""
     print("## 🧭 SPECIAL TOPICS")
     print()
+    print("  quick            - Compact intent router: decision tree + key commands")
+    print("                     Type: Generated")
+    print("                     Token cost: ~300 tokens (start here for AI agents)")
+    print()
     print("  adapters         - Summary of all URI adapters")
     print("                     Type: Generated")
     print("                     Token cost: ~300 tokens")
@@ -214,7 +218,8 @@ def _render_navigation_section() -> None:
     print("  reveal help://quick-start   # 5-minute introduction")
     print()
     print("**Bootstrap (AI agents):**")
-    print("  reveal --agent-help         # Complete agent guide (~12,000 tokens)")
+    print("  reveal help://quick        # Compact intent router (~300 tokens, start here)")
+    print("  reveal --agent-help        # Complete reference guide (~12,000 tokens)")
     print()
     print("**Discover adapters:**")
     print("  reveal help://adapters       # Summary of all URI adapters")
@@ -679,7 +684,10 @@ def _render_schema_output_types(output_types: Any) -> None:
             print(f"  {name:30} — {odesc}")
     else:
         for otype in output_types:
-            print(f"  {otype.get('type', ''):30} — {otype.get('description', '')}")
+            if isinstance(otype, str):
+                print(f"  {otype}")
+            else:
+                print(f"  {otype.get('type', ''):30} — {otype.get('description', '')}")
     print()
 
 
@@ -867,6 +875,7 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
 
     renderers = {
         'static_guide': _render_help_static_guide,
+        'static_help': _render_help_static_guide,
         'adapter_summary': _render_help_adapter_summary,
         'help_section': _render_help_section,
         'query_recipes': _render_query_recipes,

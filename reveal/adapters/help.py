@@ -207,6 +207,7 @@ class HelpAdapter(ResourceAdapter):
         'autossl': 'adapters/AUTOSSL_ADAPTER_GUIDE.md',
         'calls': 'adapters/CALLS_ADAPTER_GUIDE.md',
         'claude': 'adapters/CLAUDE_ADAPTER_GUIDE.md',
+            'codex': 'adapters/CODEX_ADAPTER_GUIDE.md',
         'cpanel': 'adapters/CPANEL_ADAPTER_GUIDE.md',
         'depends': 'adapters/DEPENDS_ADAPTER_GUIDE.md',
         'diff': 'adapters/DIFF_ADAPTER_GUIDE.md',
@@ -822,8 +823,8 @@ class HelpAdapter(ResourceAdapter):
                  'use': 'domain://', 'example': "reveal domain://example.com"},
                 {'want': 'inspect a SQLite or MySQL database',
                  'use': 'sqlite:// / mysql://', 'example': "reveal sqlite:///path/to/app.db"},
-                {'want': 'explore Claude session history',
-                 'use': 'claude://', 'example': "reveal claude://session/<id>/workflow"},
+                {'want': 'search prior Claude sessions by topic or project',
+                 'use': 'claude://', 'example': "reveal 'claude://sessions/?search=peyton' --format=json"},
             ],
             'next_steps': [
                 'reveal help://adapters          # full adapter list',
@@ -883,9 +884,10 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'name': 'Sessions & Docs',
-                    'adapters': ['claude', 'git', 'markdown'],
+                    'adapters': ['claude', 'codex', 'git', 'markdown'],
                     'pairs': [
                         ('claude', 'git', 'cross-reference session work with code changes'),
+                        ('codex', 'claude', 'OpenAI Codex vs Claude Code session analysis'),
                         ('claude', 'markdown', 'session docs and knowledge base'),
                         ('markdown', 'git', 'doc history and authorship'),
                     ],

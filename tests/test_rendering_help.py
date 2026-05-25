@@ -794,5 +794,99 @@ class TestRenderHelpRelationships(unittest.TestCase):
         self.assertIn('help://git', output)
 
 
+class TestAntiPatternsRendering(unittest.TestCase):
+    """S1.3: help://anti-patterns text rendering must produce non-empty non-adapter output."""
+
+    def test_static_help_type_dispatches_to_static_guide_renderer(self):
+        """'static_help' type must render via static guide renderer, not fall through to adapter-specific."""
+        data = {
+            'type': 'static_help',
+            'topic': 'anti-patterns',
+            'content': '## Common Mistakes\n\nDo not do X.',
+            'note': 'Extracted from AGENT_HELP.md — use help://agent for the complete guide.',
+        }
+        output = capture_stdout(render_help, data, 'text', False)
+        self.assertIn('Common Mistakes', output)
+        # adapter-specific renderer would show "# anti-patterns://" — confirm it does NOT
+        self.assertNotIn('# anti-patterns://', output)
+
+    def test_anti_patterns_real_content_renders_as_text(self):
+        """help://anti-patterns full pipeline produces readable markdown text."""
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter('help://anti-patterns')
+        result = adapter.get_element('anti-patterns')
+        self.assertIsNotNone(result)
+        output = capture_stdout(render_help, result, 'text', False)
+        self.assertIn('Common Mistakes', output)
+        self.assertGreater(len(output.strip()), 100)
+
+
+class TestHelpQuickIndex(unittest.TestCase):
+    """S1.4: help:// index SPECIAL TOPICS must list 'quick'; Navigation Tips must show help://quick."""
+
+    def _get_index_output(self):
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter('help://')
+        result = adapter.get_structure()
+        return capture_stdout(render_help, result, 'text', True)
+
+    def test_special_topics_lists_quick(self):
+        output = self._get_index_output()
+        self.assertIn('quick', output)
+
+    def test_navigation_tips_bootstrap_shows_help_quick(self):
+        output = self._get_index_output()
+        self.assertIn('help://quick', output)
+
+    def test_navigation_tips_bootstrap_still_shows_agent_help(self):
+        output = self._get_index_output()
+        self.assertIn('--agent-help', output)
+
+
+class TestClaudeRowInQuickHelp(unittest.TestCase):
+    """S1.2: help://quick claude decision_tree row must reference sessions/?search=."""
+
+    def _get_quick(self):
+        from reveal.adapters.help import HelpAdapter
+        return HelpAdapter('help://quick').get_element('quick')
+
+    def test_claude_row_example_uses_sessions_search(self):
+        result = self._get_quick()
+        claude_rows = [r for r in result['decision_tree'] if r['use'] == 'claude://']
+        self.assertEqual(len(claude_rows), 1, 'Expected exactly one claude:// row in decision_tree')
+        self.assertIn('?search=', claude_rows[0]['example'])
+
+    def test_claude_row_want_describes_search(self):
+        result = self._get_quick()
+        claude_rows = [r for r in result['decision_tree'] if r['use'] == 'claude://']
+        self.assertIn('search', claude_rows[0]['want'].lower())
+
+
+class TestNoStaleAgentHelpDescriptions(unittest.TestCase):
+    """S1.5: docs must not describe --agent-help as a 'quick reference'."""
+
+    def _read(self, rel_path):
+        import os
+        base = os.path.join(os.path.dirname(__file__), '..', 'reveal', 'docs')
+        with open(os.path.join(base, rel_path), encoding='utf-8') as f:
+            return f.read()
+
+    def _agent_help_contexts(self, text):
+        """Return lines that mention --agent-help."""
+        return [line for line in text.splitlines() if '--agent-help' in line]
+
+    def test_readme_agent_help_not_quick_reference(self):
+        text = self._read('README.md')
+        for line in self._agent_help_contexts(text):
+            self.assertNotIn('quick reference', line.lower(),
+                             f'README.md calls --agent-help a quick reference: {line!r}')
+
+    def test_quick_start_agent_help_not_quick_reference(self):
+        text = self._read('QUICK_START.md')
+        for line in self._agent_help_contexts(text):
+            self.assertNotIn('quick reference', line.lower(),
+                             f'QUICK_START.md calls --agent-help a quick reference: {line!r}')
+
+
 if __name__ == '__main__':
     unittest.main()

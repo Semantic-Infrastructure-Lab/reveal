@@ -2726,12 +2726,13 @@ A:
 
 **Q: Can I search across all sessions?**
 
-A: Not directly with claude://. Use shell loops:
+A: Yes — use `claude://sessions/?search=term`:
 ```bash
-for session in $(ls ~/.claude/projects/my-project/); do
-  reveal claude://session/$session?contains=error
-done
+reveal 'claude://sessions/?search=error'
+reveal 'claude://sessions/?search=auth&since=2026-03-01'
+reveal 'claude://sessions/?search=validate_token' --all
 ```
+See the [Cross-session search](#cross-session-search) section for full syntax and filters.
 
 ---
 
