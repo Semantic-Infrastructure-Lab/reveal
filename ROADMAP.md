@@ -1,11 +1,14 @@
 # Reveal Roadmap
-> **Last updated**: 2026-05-22 (floating-cluster-0522 — v0.95.0 shipped: tree-sitter-language-pack 1.x migration)
+> **Last updated**: 2026-05-24 (crackling-current-0524 — v0.96.1 shipped: `--type <filetype>` directory routing fix)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.96.1 — routing fix: `--type <filetype>` on directories
+- ✅ **`--type markdown` / `--type python` on directories now filters files** — previously routed to AST query handler and returned 0 results silently. Known file-type names are translated to extension filters; AST node types (`class`, `function`) still route to AST handler unchanged. (crackling-current-0524)
 
 ### v0.96.0 — named profiles, PHP call graphs, import rule false-positive fixes
 - ✅ **`reveal check --profile NAME`** — `maintenance`, `security`, `ci-strict` built-in presets; project-defined profiles via `.reveal.yaml`. `reveal --profiles` lists all. (invisible-sun-0524)
@@ -1137,6 +1140,79 @@ reveal 'ast://src/?name~=^[A-Z_]+$'    # all SCREAMING_SNAKE constants
 **Risk:** Python `assignment` nodes are extremely common — naive extraction would flood directory-mode output. The depth-0 guard (module-level only) is essential. May still be too noisy for `reveal src/` without `--type variable`.
 
 **Revisit trigger:** BACK-294 ships and users still hit the wall (hint alone not enough), or a second distinct user asks to search for constants.
+
+---
+
+### BACK-296: `codex://` adapter — Codex CLI session analysis
+
+**Status:** Open  
+**Design doc:** `internal-docs/design/CODEX_ADAPTER_DESIGN_2026-05-24.md`  
+**Target:** v0.97.0 (Phase 1)
+
+A peer adapter to `claude://` for navigating [OpenAI Codex CLI](https://github.com/openai/codex) sessions. Codex stores sessions differently from Claude Code — SQLite index + per-session JSONL with a typed event envelope — so this is a new adapter, not a fork of `claude://`.
+
+**What it enables:**
+
+```bash
+reveal 'codex://'                            # list sessions from SQLite threads table
+reveal 'codex://sessions/?search=peyton'     # fast metadata search (SQLite)
+reveal 'codex://019e5cc5'                    # session overview (turns, tools, tokens, duration)
+reveal 'codex://019e5cc5?last'               # last agent message — recovery pattern
+reveal 'codex://info'                        # resolved paths, DB stats
+reveal 'codex://history'                     # ~/.codex/history.jsonl
+reveal 'codex://config'                      # ~/.codex/config.toml (secrets masked)
+reveal 'codex://memories'                    # ~/.codex/memories/ (MEMORY.md + summaries)
+reveal 'codex://rules'                       # ~/.codex/rules/*.rules (Starlark permission rules)
+```
+
+Phase 2 adds session analysis depth (`/tools`, `/shell`, `/errors`, `?tokens`, content search).  
+Phase 3 adds `/workflow`, `/timeline`, goal tracking, memory pipeline introspection.
+
+**Key structural differences from `claude://`:**
+
+| Dimension | Claude | Codex |
+|---|---|---|
+| Session ID | Named slug (`amber-fire-0425`) | UUID — surface `threads.title` for display |
+| Primary index | Filesystem scan of `~/.claude/projects/` | SQLite `threads` table — use this first |
+| Tool calls | `tool_use`/`tool_result` inside message blocks | `function_call`/`function_call_output` as separate JSONL lines linked by `call_id` |
+| Reasoning | `thinking` blocks — readable | `encrypted_content` — opaque; show count only |
+| Shell execution | Bash tool call | Dedicated `exec_command_begin/end` events with exit code + duration |
+| Config | JSON | TOML |
+| Goals | None | `goals_1.sqlite/thread_goals` — per-thread objective + token budget |
+| Memory citation | None | `agent_message.memory_citation` — names the memory file cited |
+
+**JSONL record types** (Rust source: `codex-rs/protocol/src/protocol.rs`):
+- `session_meta` — id, cwd, model_provider, git state, thread_source
+- `turn_context` — model, sandbox_policy, approval_policy, effort (per-turn)
+- `event_msg` — user_message, agent_message, task_started, task_complete, exec_command_begin/end, token_count, error, warning, request_permissions
+- `response_item` — message, reasoning (encrypted), function_call, function_call_output, local_shell_call, web_search_call
+
+**Shared infrastructure to build first:**
+
+`reveal/adapters/agent_base.py` — `pair_tool_calls(calls, outputs, call_id_field)` utility. Structurally identical logic needed in both `claude://` (matches `tool_use` → `tool_result` by `id`) and `codex://` (matches `function_call` → `function_call_output` by `call_id`). Build once, test once.
+
+**File layout** (mirrors `claude/` exactly):
+
+```
+reveal/adapters/codex/
+  __init__.py
+  adapter.py               ← routing, SQLite path resolution, dispatch
+  handlers/
+    sessions.py            ← list (SQLite-first), metadata search, content search
+    system.py              ← history, config (TOML), rules, memories
+  analysis/
+    messages.py            ← user/agent turns, memory citations
+    tools.py               ← function_call pairing, shell tracking, success rates
+    errors.py              ← error/warning/guardian_warning events
+    overview.py            ← session metrics, duration, goal status
+    search.py              ← cross-session content search
+    timeline.py            ← chronological event stream
+  renderer.py + render_*.py
+```
+
+**Environment overrides:** `REVEAL_CODEX_HOME` (default `~/.codex`), `REVEAL_CODEX_DB` (default `~/.codex/state_5.sqlite`).
+
+**Do not** build a unified `agent://` namespace yet — wait until a third agent adapter (Gemini CLI, etc.) makes the abstraction earn its keep.
 
 ---
 

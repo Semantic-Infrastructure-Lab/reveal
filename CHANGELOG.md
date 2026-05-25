@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.96.1] - 2026-05-24 (session crackling-current-0524)
+
+### Fixed
+- **`--type <filetype>` on a directory now filters files instead of silently returning zero results** (crackling-current-0524) — `reveal . --type markdown` (and `--type python`, `--type yaml`, etc.) routed to the AST query handler (`ast://.?type=markdown`), which found no AST nodes of that name and returned 0 results with no error. Root cause: `_handle_directory_path` in `routing/file.py` unconditionally treated `--type` as an AST node-type filter even when the value was a file-format name. Fix: known file-type names (`markdown`→`.md,.markdown`, `python`→`.py`, `yaml`→`.yaml,.yml`, etc.) are translated to extension filters and applied to the directory display. Unknown values (AST node types like `class`, `function`) still route to the AST handler as before. Combination `--name Foo --type function` also continues to work — `--name` presence always triggers AST routing.
+
+---
+
 ## [0.96.0] - 2026-05-24 (sessions invisible-sun-0524, distant-pulsar-0523, dipuhi-0523, twinkling-galaxy-0524, masuruko-0524)
 
 ### Added
