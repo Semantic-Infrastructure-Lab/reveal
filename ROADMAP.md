@@ -1,11 +1,17 @@
 # Reveal Roadmap
-> **Last updated**: 2026-05-24 (crackling-current-0524 — v0.96.1 shipped: `--type <filetype>` directory routing fix)
+> **Last updated**: 2026-05-24 (xerothermic-maelstrom-0524 — v0.97.0 shipped: `codex://` adapter + agent discoverability)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.97.0 — `codex://` adapter + agent discoverability
+- ✅ **`codex://` adapter** — full Claude Code session explorer: listing, search, overview, messages, tools, shell, errors, workflow, timeline, tokens, goal, memories/pipeline, history, config, rules, info. (onyx-spectrum-0524)
+- ✅ **Agent discoverability Sprint 1-3** — `claude://` schema params (`?params`, `?last`, `?tool`, `?turns`, `?since`); `help://` decision tree and recipes; MCP_SETUP.md cross-resource workflows; README AI agents section; AGENT_HELP.md codex row. (roaring-tide-0524, xerothermic-maelstrom-0524)
+- ✅ **5 bug fixes** — Path(None) crash, cli_flags renderer dict handling, grand_total cumulative, tokens_used=0 guard, content search false positives. (roaring-tide-0524)
+- ✅ **7 mypy fixes + 13 regression tests** in new codex adapter code. (roaring-tide-0524)
 
 ### v0.96.1 — routing fix: `--type <filetype>` on directories
 - ✅ **`--type markdown` / `--type python` on directories now filters files** — previously routed to AST query handler and returned 0 results silently. Known file-type names are translated to extension filters; AST node types (`class`, `function`) still route to AST handler unchanged. (crackling-current-0524)

@@ -12,6 +12,27 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.97.0] - 2026-05-24 (sessions onyx-spectrum-0524, roaring-tide-0524, xerothermic-maelstrom-0524)
+
+### Added
+- **`codex://` adapter — full Claude Code session explorer** — Phase 1+2+3 complete. `reveal codex://` lists all sessions with token counts and summaries; `reveal 'codex://SESSION'` shows full overview (goal, memories, pipeline, config, rules); `reveal 'codex://SESSION/messages'` browses conversation with role/token/tool breakdowns; `reveal 'codex://SESSION/tools'` summarizes tool calls with success/failure counts; `reveal 'codex://SESSION/shell'` shows all bash commands run; `reveal 'codex://SESSION/errors'` surfaces failures and retries; `reveal 'codex://SESSION/workflow'` traces task creation and completion; `reveal 'codex://SESSION/timeline'` shows conversation arc with phase detection; `reveal 'codex://SESSION/?goal'` extracts session goal; `?search=TERM` filters to sessions containing a term with contextual snippets. Adapts to Claude Code's JSONL format with graceful handling of all message types (user, assistant, tool_result, tool_use). (onyx-spectrum-0524)
+- **Agent discoverability — Sprint 1-3** — `claude://` schema gains `?params`, `?last`, `?tool`, `?turns`, `?since` query parameters; `help://` decision_tree and recipes entries guide agents to the right resource for common tasks; `MCP_SETUP.md` cross-resource workflow examples; `README.md` AI agents section; `AGENT_HELP.md` codex row added. 17 new tests across claude adapter schema parity and help registry. (roaring-tide-0524)
+
+### Fixed
+- **`codex://` Path(None) crash** — `dict.get('key', default)` returns `None` (not default) when the key is present with a NULL SQLite value; `rollout_path` column is sometimes NULL, causing `Path(None)` TypeError. Fixed with explicit `None` check. (roaring-tide-0524)
+- **`help://` cli_flags renderer dropping descriptions** — Sprint 1-3 changed `cli_flags` from list to dict; `_render_schema_cli_flags` was iterating dict keys, silently dropping all flag descriptions. Fixed by iterating `.items()`. (roaring-tide-0524)
+- **`codex://` `grand_total` tokens using per-request delta** — `grand_total` was reading last-turn per-request usage delta instead of cumulative session total. Added `get_grand_total_tokens()` to `analysis/messages.py`. (roaring-tide-0524)
+- **`codex://` `tokens_used == 0` falsy guard** — `tokens_used or jsonl_total` silently replaced a legitimate `0` with the JSONL total. Changed to `is not None` guard. (roaring-tide-0524)
+- **`codex://` content search false positives** — sessions where the search term appeared only in tool payloads (not user/agent turns) were included in results with empty snippet lists. Fixed by only appending sessions with at least one snippet. (roaring-tide-0524)
+
+### Chore
+- 7 mypy errors fixed in new codex adapter code: `str()` casts in `overview.py`, `messages.py`, `timeline.py`; explicit `last` typing in `_parse_token_usage`; `Callable` annotation on dynamic dispatch in `adapter.py`; removed dead `# type: ignore` in `handlers/system.py`. (roaring-tide-0524)
+
+### Tests
+- 13 regression tests added in `tests/adapters/test_codex_adapter.py`: `TestRegressionNullRolloutPath`, `TestRegressionContentSearchFalsePositive`, `TestRegressionGrandTotalCumulative`, `TestRegressionTokensUsedZero`, `TestRegressionCliFlags`, and 8 more covering schema parity and edge cases. (roaring-tide-0524)
+
+---
+
 ## [0.96.1] - 2026-05-24 (session crackling-current-0524)
 
 ### Fixed
