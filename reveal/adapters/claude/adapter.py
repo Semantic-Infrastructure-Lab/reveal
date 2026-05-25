@@ -67,8 +67,33 @@ _SCHEMA_QUERY_PARAMS = {
     'role': {'type': 'string', 'description': 'Filter by message role', 'values': ['user', 'assistant'], 'examples': ['?role=user']},
     'search': {
         'type': 'string',
-        'description': 'Search all message content (text, thinking, tool inputs) for a term (case-insensitive)',
-        'examples': ['?search=path traversal', '?search=FileNotFoundError']
+        'description': 'Search all message content (text, thinking, tool inputs) for a term (case-insensitive). On claude://sessions/ performs cross-session search.',
+        'examples': ['?search=path traversal', '?search=FileNotFoundError', '?search=validate_token']
+    },
+    'since': {
+        'type': 'string',
+        'description': 'Filter by date — ISO 8601 date string or "today". On sessions/: narrows corpus before scanning. On history: filters by prompt timestamp.',
+        'examples': ['?since=2026-03-01', '?since=today']
+    },
+    'word': {
+        'type': 'flag',
+        'description': 'Whole-word match for ?search= (cross-session search only). Prevents substring matches.',
+        'examples': ['?search=auth&word']
+    },
+    'filter': {
+        'type': 'string',
+        'description': 'Filter session list by name substring (claude://sessions/ list mode). Alias of ?search= for list filtering.',
+        'examples': ['?filter=peyton']
+    },
+    'project': {
+        'type': 'string',
+        'description': 'Filter by project name (claude://history only). Scopes results to sessions in the specified project directory.',
+        'examples': ['?project=my-project']
+    },
+    'key': {
+        'type': 'string',
+        'description': 'Dot-path key lookup for claude://settings and claude://config. Returns the value at that path.',
+        'examples': ['?key=theme', '?key=env.ANTHROPIC_API_KEY']
     },
     'tail': {
         'type': 'integer',
@@ -84,6 +109,18 @@ _SCHEMA_QUERY_PARAMS = {
         'type': 'flag',
         'description': 'Token usage breakdown by message role (input/output/cache)',
         'examples': ['?tokens']
+    },
+}
+
+_SCHEMA_CLI_FLAGS = {
+    '--all': {
+        'description': 'Return all results (cross-session search: disable default 20-result cap)',
+        'applies_to': ['claude://sessions/?search='],
+    },
+    '--base-path': {
+        'description': 'Override the sessions base directory. Required when sessions live outside ~/.claude/projects/ (e.g. ~/src/tia/sessions/ for TIA).',
+        'applies_to': ['claude://sessions/', 'claude://session/<name>'],
+        'examples': ["reveal 'claude://sessions/?search=term' --base-path ~/src/tia/sessions"],
     },
 }
 
@@ -822,7 +859,7 @@ class ClaudeAdapter(ResourceAdapter):
             'uri_syntax': 'claude://session/{name}[/resource][?query]',
             'query_params': _SCHEMA_QUERY_PARAMS,
             'elements': _SCHEMA_ELEMENTS,
-            'cli_flags': [],
+            'cli_flags': _SCHEMA_CLI_FLAGS,
             'supports_batch': False,
             'supports_advanced': False,
             'output_types': _SCHEMA_OUTPUT_TYPES,

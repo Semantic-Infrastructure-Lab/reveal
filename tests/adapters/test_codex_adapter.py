@@ -931,3 +931,226 @@ class TestMemoriesPipeline:
         adapter = self._make_pipeline_adapter(tmp_path)
         result = adapter.get_structure()
         assert result['type'] == 'codex_memories_pipeline'
+
+
+# ---------------------------------------------------------------------------
+# Regression tests — bugs found in review
+# ---------------------------------------------------------------------------
+
+def _make_nullable_rollout_db(tmp_path: Path, jsonl_path: Path) -> Path:
+    """DB with a session whose rollout_path is SQL NULL (not empty string)."""
+    db_path = tmp_path / 'state_null.sqlite'
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("""
+        CREATE TABLE threads (
+            id TEXT PRIMARY KEY,
+            rollout_path TEXT,
+            created_at INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            title TEXT NOT NULL DEFAULT '',
+            first_user_message TEXT NOT NULL DEFAULT '',
+            model TEXT,
+            model_provider TEXT NOT NULL DEFAULT 'openai',
+            tokens_used INTEGER NOT NULL DEFAULT 0,
+            thread_source TEXT,
+            archived INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    # Session with NULL rollout_path
+    conn.execute(
+        "INSERT INTO threads (id, rollout_path, title, first_user_message, tokens_used, thread_source, archived) "
+        "VALUES ('null-session', NULL, 'null rollout', 'do something', 0, NULL, 0)"
+    )
+    # Session with valid rollout_path
+    conn.execute(
+        "INSERT INTO threads (id, rollout_path, title, first_user_message, tokens_used, thread_source, archived) "
+        "VALUES ('valid-session', ?, 'refactor module', 'Help me refactor this module.', 620, NULL, 0)",
+        (str(jsonl_path),)
+    )
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+class TestRegressionNullRolloutPath:
+    """Regression: content_search_sessions must not crash on NULL rollout_path."""
+
+    def test_null_rollout_path_does_not_crash(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        db_path = _make_nullable_rollout_db(tmp_path, jsonl_path)
+        from reveal.adapters.codex.handlers.sessions import content_search_sessions
+        result = content_search_sessions(db_path, 'refactor')
+        assert result['type'] == 'codex_content_search'
+        assert result['total'] >= 0
+
+    def test_null_rollout_session_excluded_from_results(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        db_path = _make_nullable_rollout_db(tmp_path, jsonl_path)
+        from reveal.adapters.codex.handlers.sessions import content_search_sessions
+        result = content_search_sessions(db_path, 'refactor')
+        ids = [s['id'] for s in result['sessions']]
+        assert 'null-session' not in ids
+
+    def test_valid_session_still_found(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        db_path = _make_nullable_rollout_db(tmp_path, jsonl_path)
+        from reveal.adapters.codex.handlers.sessions import content_search_sessions
+        result = content_search_sessions(db_path, 'refactor')
+        ids = [s['id'] for s in result['sessions']]
+        assert 'valid-session' in ids
+
+
+class TestRegressionContentSearchFalsePositive:
+    """Regression: sessions with no user/agent message matches must be excluded."""
+
+    def test_tool_only_match_not_in_results(self, tmp_path):
+        # JSONL with term only in a function_call_output (not in user/agent message)
+        tool_only_line = json.dumps({
+            'timestamp': '2026-05-24T11:00:00Z', 'type': 'response_item',
+            'payload': {'type': 'function_call_output', 'call_id': 'c1',
+                        'output': 'unique_term_xyz appears here'}
+        })
+        jsonl_path = tmp_path / 'tool_only.jsonl'
+        jsonl_path.write_text(tool_only_line + '\n', encoding='utf-8')
+
+        db_path = tmp_path / 'state_tool.sqlite'
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE threads (
+                id TEXT PRIMARY KEY, rollout_path TEXT,
+                created_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL DEFAULT 0,
+                title TEXT NOT NULL DEFAULT '',
+                first_user_message TEXT NOT NULL DEFAULT '',
+                model TEXT, model_provider TEXT NOT NULL DEFAULT 'openai',
+                tokens_used INTEGER NOT NULL DEFAULT 0,
+                thread_source TEXT, archived INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        conn.execute(
+            "INSERT INTO threads VALUES ('s1', ?, 0, 0, '', '', 'gpt-4', 'openai', 0, NULL, 0)",
+            (str(jsonl_path),)
+        )
+        conn.commit()
+        conn.close()
+
+        from reveal.adapters.codex.handlers.sessions import content_search_sessions
+        result = content_search_sessions(db_path, 'unique_term_xyz')
+        assert result['total'] == 0, "Session with term only in tool output must not appear in results"
+
+
+class TestRegressionGrandTotalCumulative:
+    """Regression: grand_total must use total_token_usage (cumulative), not last_token_usage (per-request)."""
+
+    def test_grand_total_uses_cumulative_not_last_delta(self, tmp_path):
+        # Two token_count events:
+        #   turn 1: last=500, cumulative=500
+        #   turn 2: last=300 (per-request delta), cumulative=800 (grand total)
+        lines = [
+            json.dumps({'timestamp': 't1', 'type': 'event_msg', 'payload': {
+                'type': 'token_count',
+                'info': {
+                    'last_token_usage': {'input_tokens': 400, 'output_tokens': 100, 'total_tokens': 500},
+                    'total_token_usage': {'input_tokens': 400, 'output_tokens': 100, 'total_tokens': 500},
+                }
+            }}),
+            json.dumps({'timestamp': 't2', 'type': 'event_msg', 'payload': {
+                'type': 'token_count',
+                'info': {
+                    'last_token_usage': {'input_tokens': 200, 'output_tokens': 100, 'total_tokens': 300},
+                    'total_token_usage': {'input_tokens': 600, 'output_tokens': 200, 'total_tokens': 800},
+                }
+            }}),
+        ]
+        jsonl_path = tmp_path / 'multi_turn.jsonl'
+        jsonl_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+        db_path = _make_sqlite_db(tmp_path, jsonl_path)
+        adapter = CodexAdapter(_SESSION_UUID, query='tokens')
+        adapter.CODEX_HOME = tmp_path
+        adapter.CODEX_DB = db_path
+        result = adapter.get_structure()
+
+        assert result['total_turns'] == 2
+        assert result['grand_total'] == 800, (
+            f"grand_total should be 800 (cumulative total_token_usage), got {result['grand_total']}"
+        )
+
+    def test_grand_total_not_last_turn_delta(self, tmp_path):
+        # Verify grand_total != last turn's per-request delta when they differ
+        lines = [
+            json.dumps({'timestamp': 't1', 'type': 'event_msg', 'payload': {
+                'type': 'token_count',
+                'info': {
+                    'last_token_usage': {'total_tokens': 500},
+                    'total_token_usage': {'total_tokens': 500},
+                }
+            }}),
+            json.dumps({'timestamp': 't2', 'type': 'event_msg', 'payload': {
+                'type': 'token_count',
+                'info': {
+                    'last_token_usage': {'total_tokens': 300},
+                    'total_token_usage': {'total_tokens': 800},
+                }
+            }}),
+        ]
+        jsonl_path = tmp_path / 'multi2.jsonl'
+        jsonl_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+        db_path = _make_sqlite_db(tmp_path, jsonl_path)
+        adapter = CodexAdapter(_SESSION_UUID, query='tokens')
+        adapter.CODEX_HOME = tmp_path
+        adapter.CODEX_DB = db_path
+        result = adapter.get_structure()
+
+        assert result['grand_total'] != 300, "grand_total must not equal last-turn per-request delta"
+        assert result['grand_total'] == 800
+
+
+class TestRegressionTokensUsedZero:
+    """Regression: tokens_used=0 in SQLite must not be replaced by JSONL-derived total."""
+
+    def test_zero_tokens_used_not_overridden(self, tmp_path):
+        from reveal.adapters.codex.analysis.overview import get_overview
+        # Session row with explicit 0 (e.g. aborted session)
+        session_row = {'tokens_used': 0, 'title': 'test', 'model': 'gpt-4',
+                       'model_provider': 'openai', 'reasoning_effort': None, 'cwd': '/tmp',
+                       'approval_mode': None, 'cli_version': None, 'git_branch': None}
+        # Records with some token events
+        records = [{'timestamp': 't1', 'type': 'event_msg', 'payload': {
+            'type': 'token_count',
+            'info': {'total_token_usage': {'total_tokens': 999}}
+        }}]
+        result = get_overview(records, session_row)
+        assert result['tokens_used'] == 0, (
+            f"tokens_used=0 must not be replaced by JSONL total, got {result['tokens_used']}"
+        )
+
+
+class TestRegressionCliFlags:
+    """Regression: _render_schema_cli_flags must handle dict-format cli_flags."""
+
+    def test_dict_cli_flags_renders_without_crash(self, capsys):
+        from reveal.rendering.adapters.help import _render_schema_cli_flags
+        flags = {
+            '--all': {'description': 'Return all results', 'applies_to': ['claude://sessions/?search=']},
+            '--base-path': {'description': 'Override the sessions base directory'},
+        }
+        _render_schema_cli_flags(flags)
+        out = capsys.readouterr().out
+        assert '--all' in out
+        assert '--base-path' in out
+
+    def test_dict_cli_flags_includes_descriptions(self, capsys):
+        from reveal.rendering.adapters.help import _render_schema_cli_flags
+        flags = {'--all': {'description': 'Return all results'}}
+        _render_schema_cli_flags(flags)
+        out = capsys.readouterr().out
+        assert 'Return all results' in out
+
+    def test_list_cli_flags_still_works(self, capsys):
+        from reveal.rendering.adapters.help import _render_schema_cli_flags
+        _render_schema_cli_flags(['--json', '--verbose'])
+        out = capsys.readouterr().out
+        assert '--json' in out
+        assert '--verbose' in out

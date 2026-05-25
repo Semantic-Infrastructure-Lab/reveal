@@ -6,7 +6,7 @@ import os
 import re
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import CodexRenderer
@@ -25,7 +25,7 @@ from .handlers.system import (
     get_memories_pipeline as _h_get_memories_pipeline,
 )
 from .handlers.goals import get_goal as _h_get_goal
-from .analysis.messages import extract_messages, get_last_agent_message, get_token_turns
+from .analysis.messages import extract_messages, get_last_agent_message, get_token_turns, get_grand_total_tokens
 from .analysis.tools import get_tool_pairs, get_shell_commands
 from .analysis.errors import get_errors as _analysis_get_errors
 from .analysis.overview import get_overview as _analysis_get_overview
@@ -220,7 +220,8 @@ class CodexAdapter(ResourceAdapter):
         # Named resources: info, history, config, memories, rules
         for prefix, method_name in self._NAMED_RESOURCES.items():
             if self.resource == prefix or self.resource.startswith(prefix + '/'):
-                return getattr(self, method_name)()
+                handler: Callable[[], Dict[str, Any]] = getattr(self, method_name)
+                return handler()
 
         # UUID → session analysis
         session_id = self._session_id_from_resource()
@@ -344,8 +345,7 @@ class CodexAdapter(ResourceAdapter):
         turns = get_token_turns(records)
         b['token_turns'] = turns
         b['total_turns'] = len(turns)
-        total = turns[-1].get('total_tokens') if turns else None
-        b['grand_total'] = total
+        b['grand_total'] = get_grand_total_tokens(records)
         return b
 
     def _result_workflow(self, records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> Dict[str, Any]:

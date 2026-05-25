@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 def _payload_type(rec: Dict[str, Any]) -> str:
     """Return the payload subtype of a record, or '' if unavailable."""
-    return rec.get('payload', {}).get('type', '')
+    return str(rec.get('payload', {}).get('type', ''))
 
 
 def extract_messages(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -43,7 +43,7 @@ def _parse_token_usage(payload: Dict[str, Any]) -> Dict[str, Any]:
     simplified flat format used in tests (payload.input_tokens etc.).
     """
     info = payload.get('info', {})
-    last = info.get('last_token_usage')
+    last: Dict[str, Any] = info.get('last_token_usage') or {}
     if last:
         return last
     # flat/legacy format
@@ -70,6 +70,27 @@ def get_token_turns(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         usage = _parse_token_usage(rec.get('payload', {}))
         turns.append({'turn': n, 'timestamp': rec.get('timestamp'), **usage})
     return turns
+
+
+def get_grand_total_tokens(records: List[Dict[str, Any]]) -> Optional[int]:
+    """Return the session's cumulative token total from the last token_count event.
+
+    Uses payload.info.total_token_usage.total_tokens (cumulative), not the
+    per-request last_token_usage delta used by get_token_turns().
+    """
+    last_total: Optional[int] = None
+    for rec in records:
+        if rec.get('type') != 'event_msg':
+            continue
+        if _payload_type(rec) != 'token_count':
+            continue
+        payload = rec.get('payload', {})
+        info = payload.get('info', {})
+        tu = info.get('total_token_usage', {})
+        tt = tu.get('total_tokens') or payload.get('total_tokens')
+        if tt is not None:
+            last_total = tt
+    return last_total
 
 
 def get_last_agent_message(records: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

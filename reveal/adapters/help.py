@@ -131,7 +131,55 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Validate internal links', 'query': 'reveal docs/README.md --links --link-type internal', 'description': 'Find broken internal links in a doc', 'output_type': 'markdown_query'},
             {'goal': 'Get document outline', 'query': 'reveal docs/README.md --outline', 'description': 'Hierarchical heading tree', 'output_type': 'markdown_query'},
         ]
-    }
+    },
+    'sessions': {
+        'type': 'query_recipes',
+        'task': 'sessions',
+        'description': 'Claude Code session analysis — tool usage, files, errors, workflows',
+        'recipes': [
+            {'goal': 'Session overview', 'query': 'reveal claude://session/my-session', 'description': 'Message count, tool calls, duration, tool summary', 'output_type': 'claude_overview'},
+            {'goal': 'Search across all sessions', 'query': "reveal 'claude://sessions/?search=validate_token'", 'description': 'Cross-session content search', 'output_type': 'claude_cross_session_search'},
+            {'goal': 'Session tool usage', 'query': 'reveal claude://session/my-session/tools', 'description': 'Tool call counts and success rates', 'output_type': 'claude_tools'},
+            {'goal': 'Files touched in a session', 'query': 'reveal claude://session/my-session/files', 'description': 'All Read/Write/Edit operations', 'output_type': 'claude_files'},
+            {'goal': 'Session errors', 'query': 'reveal claude://session/my-session?errors', 'description': 'All errors with context', 'output_type': 'claude_errors'},
+            {'goal': 'Codex session overview', 'query': 'reveal codex://SESSION-ID', 'description': 'Turns, tools, tokens, duration for a Codex CLI session', 'output_type': 'codex_overview'},
+            {'goal': 'Search Codex sessions', 'query': "reveal 'codex://sessions/?search=validate_token'", 'description': 'Search by title or first message', 'output_type': 'codex_session_list'},
+            {'goal': 'Full-text search across Codex content', 'query': "reveal 'codex://sessions/?content=authentication'", 'description': 'Scan JSONL event files for a term', 'output_type': 'codex_search'},
+        ]
+    },
+    'history': {
+        'type': 'query_recipes',
+        'task': 'history',
+        'description': 'Prompt history and session discovery across all projects',
+        'recipes': [
+            {'goal': 'Recent prompts', 'query': 'reveal claude://history', 'description': 'Last 50 prompts across all projects', 'output_type': 'claude_history'},
+            {'goal': 'Search prompt history', 'query': "reveal 'claude://history?search=deploy&since=2026-03-01'", 'description': 'Filter prompts by keyword and date', 'output_type': 'claude_history'},
+            {'goal': 'Prompts for a specific project', 'query': "reveal 'claude://history?project=my-project'", 'description': 'Scope history to one project', 'output_type': 'claude_history'},
+            {'goal': 'List all sessions', 'query': 'reveal claude://sessions/', 'description': 'All sessions with metadata', 'output_type': 'claude_session_list'},
+        ]
+    },
+    'data': {
+        'type': 'query_recipes',
+        'task': 'data',
+        'description': 'Database and structured data inspection — SQLite, MySQL, Excel',
+        'recipes': [
+            {'goal': 'List database tables', 'query': 'reveal sqlite:///path/to/app.db', 'description': 'Schema overview with row counts', 'output_type': 'sqlite_overview'},
+            {'goal': 'Inspect a table', 'query': 'reveal sqlite:///path/to/app.db/users', 'description': 'Column types, constraints, sample rows', 'output_type': 'sqlite_table'},
+            {'goal': 'MySQL database overview', 'query': 'reveal mysql://user:pass@host/dbname', 'description': 'Tables, row counts, schema summary', 'output_type': 'mysql_overview'},
+            {'goal': 'Inspect an Excel workbook', 'query': 'reveal data.xlsx', 'description': 'Sheet names, column headers, row counts', 'output_type': 'xlsx_overview'},
+        ]
+    },
+    'runtime': {
+        'type': 'query_recipes',
+        'task': 'runtime',
+        'description': 'Runtime environment — env vars, Python packages, reveal install state',
+        'recipes': [
+            {'goal': 'All environment variables', 'query': 'reveal env://', 'description': 'Full env dump grouped by prefix', 'output_type': 'env_overview'},
+            {'goal': 'Filter env by prefix', 'query': "reveal 'env://?prefix=DB'", 'description': 'Show only DB_* variables', 'output_type': 'env_filtered'},
+            {'goal': 'Python package versions', 'query': 'reveal python://', 'description': 'Installed packages with versions', 'output_type': 'python_overview'},
+            {'goal': 'Reveal install info', 'query': 'reveal reveal://', 'description': 'Registered analyzers, adapters, rules', 'output_type': 'reveal_overview'},
+        ]
+    },
 }
 
 
@@ -821,10 +869,20 @@ class HelpAdapter(ResourceAdapter):
                  'use': 'nginx://', 'example': "reveal nginx://example.com"},
                 {'want': 'domain DNS / WHOIS / email health',
                  'use': 'domain://', 'example': "reveal domain://example.com"},
-                {'want': 'inspect a SQLite or MySQL database',
-                 'use': 'sqlite:// / mysql://', 'example': "reveal sqlite:///path/to/app.db"},
+                {'want': 'search git commit history by message, author, or date',
+                 'use': 'git://', 'example': "reveal 'git://.?message~=fix'"},
+                {'want': 'search markdown docs or notes by content',
+                 'use': 'markdown://', 'example': "reveal docs/ --grep 'keyword'"},
+                {'want': 'inspect a SQLite, MySQL database, or Excel workbook',
+                 'use': 'sqlite:// / mysql:// / xlsx://', 'example': "reveal sqlite:///path/to/app.db"},
+                {'want': 'inspect environment variables or Python runtime',
+                 'use': 'env:// / python://', 'example': "reveal env://"},
                 {'want': 'search prior Claude sessions by topic or project',
                  'use': 'claude://', 'example': "reveal 'claude://sessions/?search=peyton' --format=json"},
+                {'want': 'search OpenAI Codex CLI sessions by title or content',
+                 'use': 'codex://', 'example': "reveal 'codex://sessions/?search=peyton'"},
+                {'want': 'discover live project-specific adapters',
+                 'use': 'help://adapters', 'example': "reveal help://adapters"},
             ],
             'next_steps': [
                 'reveal help://adapters          # full adapter list',

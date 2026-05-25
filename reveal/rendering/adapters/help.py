@@ -704,17 +704,23 @@ def _render_schema_example_queries(example_queries: list) -> None:
     print()
 
 
-def _render_schema_cli_flags(cli_flags: list) -> None:
+def _render_schema_cli_flags(cli_flags) -> None:
     if not cli_flags:
         return
     print("## CLI Flags")
-    for flag in cli_flags:
-        if isinstance(flag, dict):
-            print(f"  {flag['flag']}")
-            if flag.get('description'):
-                print(f"    {flag['description']}")
-        else:
-            print(f"  {flag}")
+    if isinstance(cli_flags, dict):
+        for flag_name, meta in cli_flags.items():
+            print(f"  {flag_name}")
+            if isinstance(meta, dict) and meta.get('description'):
+                print(f"    {meta['description']}")
+    else:
+        for flag in cli_flags:
+            if isinstance(flag, dict):
+                print(f"  {flag['flag']}")
+                if flag.get('description'):
+                    print(f"    {flag['description']}")
+            else:
+                print(f"  {flag}")
     print()
 
 

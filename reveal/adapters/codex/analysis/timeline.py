@@ -41,7 +41,7 @@ def _summarize(rtype: str, payload: Dict[str, Any]) -> str:
                 # List of content blocks — extract text from first block
                 for block in content:
                     if isinstance(block, dict) and block.get('type') == 'input_text':
-                        return block.get('text', '')[:60]
+                        return str(block.get('text', ''))[:60]
                 return f"[{len(content)} content block(s)]"
             return str(content)[:60]
         return ptype or rtype

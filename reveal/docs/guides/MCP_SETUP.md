@@ -162,6 +162,41 @@ reveal_query("calls://src/?uncalled")
 reveal_query("calls://src/?target=validate_token&depth=3")
 ```
 
+## Cross-Resource Workflows
+
+Reveal adapters cover more than source code. Use `reveal_query` for any URI adapter:
+
+```
+# Search prior Claude sessions for a topic
+reveal_query("claude://sessions/?search=validate_token")
+reveal_query("claude://sessions/?search=auth&since=2026-03-01")
+
+# Search OpenAI Codex CLI sessions
+reveal_query("codex://sessions/?search=validate_token")
+reveal_query("codex://sessions/?content=authentication")
+
+# Git history — commits mentioning a keyword
+reveal_query("git://.?message~=fix")
+
+# Markdown docs — full-text + metadata filter
+reveal_query("markdown://docs/?body-contains=retry&type=procedure")
+
+# SQLite database introspection
+reveal_query("sqlite:///path/to/app.db")
+
+# Discover all available adapters (including project-local plugins)
+reveal_query("help://adapters")
+
+# Get machine-readable schema for any adapter
+reveal_query("help://schemas/claude")
+reveal_query("help://schemas/git")
+```
+
+When you're uncertain what adapter to use, start with:
+```
+reveal_query("help://quick")   # compact intent router, ~300 tokens
+```
+
 ## Token Efficiency
 
 | Tool | Typical tokens | vs reading directly |

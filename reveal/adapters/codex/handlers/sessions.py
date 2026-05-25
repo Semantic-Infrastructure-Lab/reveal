@@ -137,7 +137,10 @@ def content_search_sessions(db_path: Path, query: str, max_matches_per_session: 
 
     for row in rows:
         d = _row_to_dict(row)
-        rollout = Path(d.get('rollout_path', ''))
+        rollout_raw = d.get('rollout_path')
+        if not rollout_raw:
+            continue
+        rollout = Path(rollout_raw)
         if not rollout.exists():
             continue
         try:
@@ -171,13 +174,14 @@ def content_search_sessions(db_path: Path, query: str, max_matches_per_session: 
                 'snippet': text[:200],
             })
 
-        matched.append({
-            'id': d['id'],
-            'title': d.get('title', ''),
-            'updated_at': _format_ts(d.get('updated_at')),
-            'model': d.get('model'),
-            'matches': snippets,
-            'match_count': len(snippets),
-        })
+        if snippets:
+            matched.append({
+                'id': d['id'],
+                'title': d.get('title', ''),
+                'updated_at': _format_ts(d.get('updated_at')),
+                'model': d.get('model'),
+                'matches': snippets,
+                'match_count': len(snippets),
+            })
 
     return {**base, 'sessions': matched, 'total': len(matched)}

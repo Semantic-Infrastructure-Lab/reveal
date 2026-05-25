@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 
 def _payload_type(rec: Dict[str, Any]) -> str:
-    return rec.get('payload', {}).get('type', '')
+    return str(rec.get('payload', {}).get('type', ''))
 
 
 def get_overview(records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> Dict[str, Any]:
@@ -66,7 +66,7 @@ def get_overview(records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> 
         'model': session_row.get('model'),
         'model_provider': session_row.get('model_provider'),
         'reasoning_effort': session_row.get('reasoning_effort'),
-        'tokens_used': session_row.get('tokens_used') or total_tokens,
+        'tokens_used': session_row.get('tokens_used') if session_row.get('tokens_used') is not None else total_tokens,
         'cwd': session_row.get('cwd'),
         'approval_mode': session_row.get('approval_mode'),
         'cli_version': session_row.get('cli_version'),

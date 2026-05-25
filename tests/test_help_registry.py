@@ -159,7 +159,7 @@ class TestHelpRegistry(unittest.TestCase):
         result = adapter.get_element('agent')
         self.assertIsNotNone(result, 'help://agent must resolve')
         content = result['content']
-        self.assertNotIn('Full guide:', content, 'help://agent must never be truncated')
+        self.assertNotIn('── Full guide:', content, 'help://agent must never be truncated')
         self.assertGreater(len(content.splitlines()), 200,
                            'help://agent must return full content')
 

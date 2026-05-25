@@ -1106,3 +1106,54 @@ class TestPostProcessMessageRange:
         result = {'type': 'claude_message_range', 'messages': None}
         ClaudeAdapter._post_process_message_range(result, self._args())
         assert result['messages'] is None  # unchanged
+
+
+# ─── S3.3: Schema parameter parity ───────────────────────────────────────────
+
+class TestClaudeSchemaParamParity:
+    """S3.3: _SCHEMA_QUERY_PARAMS must document every param used by handlers."""
+
+    HANDLER_PARAMS = {'summary', 'errors', 'tools', 'contains', 'role',
+                      'search', 'since', 'word', 'filter', 'project', 'key',
+                      'tail', 'last', 'tokens'}
+
+    def _schema_params(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        return set(_SCHEMA_QUERY_PARAMS.keys())
+
+    def test_all_handler_params_in_schema(self):
+        missing = self.HANDLER_PARAMS - self._schema_params()
+        assert missing == set(), f"Handler params missing from schema: {missing}"
+
+    def test_since_documented(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        assert 'since' in _SCHEMA_QUERY_PARAMS
+        assert 'today' in _SCHEMA_QUERY_PARAMS['since']['examples'][0] or \
+               any('today' in ex for ex in _SCHEMA_QUERY_PARAMS['since']['examples'])
+
+    def test_word_documented(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        assert 'word' in _SCHEMA_QUERY_PARAMS
+        assert _SCHEMA_QUERY_PARAMS['word']['type'] == 'flag'
+
+    def test_filter_documented(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        assert 'filter' in _SCHEMA_QUERY_PARAMS
+
+    def test_project_documented(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        assert 'project' in _SCHEMA_QUERY_PARAMS
+
+    def test_key_documented(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        assert 'key' in _SCHEMA_QUERY_PARAMS
+
+    def test_cli_flags_include_all_and_base_path(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_CLI_FLAGS
+        assert '--all' in _SCHEMA_CLI_FLAGS
+        assert '--base-path' in _SCHEMA_CLI_FLAGS
+
+    def test_schema_cli_flags_wired_into_get_schema(self):
+        schema = ClaudeAdapter.get_schema()
+        assert '--all' in schema['cli_flags']
+        assert '--base-path' in schema['cli_flags']

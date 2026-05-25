@@ -99,6 +99,39 @@ reveal claude://sessions/                          # list all sessions
 reveal 'claude://sessions/?search=validate_token' # cross-session search
 ```
 
+## Using Reveal with AI Agents
+
+Add to your `CLAUDE.md` or `AGENTS.md` so agents discover all adapters at setup time, not mid-task:
+
+```md
+## Reveal Usage
+
+Reveal is a structured resource explorer. Before broad discovery searches over
+a supported resource, check whether Reveal has an adapter — not just for source
+code, but for sessions, git history, documents, data stores, and runtime state.
+
+| Need | Adapter | Example |
+|------|---------|---------|
+| Code structure / functions | `ast://` | `reveal ast://src/?type=function` |
+| Call relationships | `calls://` | `reveal 'calls://src/?target=my_fn'` |
+| Imports / change impact | `imports://` `depends://` | `reveal imports://src/` |
+| Git history / diffs | `git://` `diff://` | `reveal 'git://.?message~=fix'` |
+| Claude sessions / prompts | `claude://` | `reveal 'claude://sessions/?search=peyton'` |
+| Codex CLI sessions | `codex://` | `reveal 'codex://sessions/?search=peyton'` |
+| Markdown / docs | `markdown://` | `reveal docs/ --grep 'decision'` |
+| Databases / workbooks | `sqlite://` `mysql://` `xlsx://` | `reveal sqlite:///app.db` |
+| Environment / runtime | `env://` `python://` | `reveal env://` |
+| Project-specific tools | live plugins | `reveal help://adapters` |
+
+When adapter syntax is uncertain:
+1. `reveal help://quick` — compact intent router (~300 tokens)
+2. `reveal help://schemas/<adapter> --format=json` — exact query params
+3. Prefer scoped, bounded queries first; drill down as needed.
+4. Confirm consequential findings by reading source or running targeted checks.
+```
+
+---
+
 ## What Reveal Does (and Doesn't)
 
 | Reveal does | Reveal does not |

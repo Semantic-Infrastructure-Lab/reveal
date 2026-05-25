@@ -51,6 +51,7 @@ Start with `reveal help://quick` (~300 tokens) — it routes you to the right ad
 | Call relationships | `calls://` | `reveal 'calls://src/?target=my_fn'` |
 | Git history / diffs | `git://` `diff://` | `reveal 'git://.?message~=fix'` |
 | Claude sessions / prompts | `claude://` | `reveal 'claude://sessions/?search=peyton'` |
+| Codex CLI sessions | `codex://` | `reveal 'codex://sessions/?search=peyton'` |
 | Markdown / docs | `markdown://` | `reveal docs/ --grep 'decision'` |
 | Databases / workbooks | `sqlite://` `mysql://` `xlsx://` | `reveal sqlite:///app.db` |
 | Environment / runtime | `env://` `python://` | `reveal env://` |
