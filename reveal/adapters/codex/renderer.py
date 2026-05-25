@@ -22,6 +22,10 @@ from .render_analytics import (
     _render_codex_errors,
     _render_codex_shell,
     _render_codex_tokens,
+    _render_codex_workflow,
+    _render_codex_timeline,
+    _render_codex_goal,
+    _render_codex_memories_pipeline,
 )
 
 
@@ -50,6 +54,10 @@ class CodexRenderer(TypeDispatchRenderer):
     _render_codex_errors = staticmethod(_render_codex_errors)
     _render_codex_shell = staticmethod(_render_codex_shell)
     _render_codex_tokens = staticmethod(_render_codex_tokens)
+    _render_codex_workflow = staticmethod(_render_codex_workflow)
+    _render_codex_timeline = staticmethod(_render_codex_timeline)
+    _render_codex_goal = staticmethod(_render_codex_goal)
+    _render_codex_memories_pipeline = staticmethod(_render_codex_memories_pipeline)
 
     # Content search renderer
     _render_codex_content_search = staticmethod(_render_codex_content_search)

@@ -631,3 +631,303 @@ class TestOutputContract:
         result = adapter.get_structure()
         self._check(result)
         assert result['type'] == 'codex_not_installed'
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: /workflow, /timeline, ?goal, memories/pipeline
+# ---------------------------------------------------------------------------
+
+class TestWorkflow:
+    def test_workflow_type(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/workflow', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert result['type'] == 'codex_workflow'
+
+    def test_workflow_has_events(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/workflow', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert 'events' in result
+        assert result['total'] == len(result['events'])
+
+    def test_workflow_includes_tool_and_shell(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/workflow', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        kinds = {e['kind'] for e in result['events']}
+        assert 'tool_call' in kinds
+        assert 'shell' in kinds
+
+    def test_workflow_sorted_by_timestamp(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/workflow', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        timestamps = [e['timestamp'] for e in result['events'] if e['timestamp']]
+        assert timestamps == sorted(timestamps)
+
+    def test_workflow_tool_has_name(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/workflow', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        tools = [e for e in result['events'] if e['kind'] == 'tool_call']
+        assert tools[0]['name'] == 'read_file'
+
+    def test_workflow_shell_has_exit_code(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/workflow', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        shells = [e for e in result['events'] if e['kind'] == 'shell']
+        assert shells[0]['exit_code'] == 0
+
+    def test_workflow_contract(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/workflow', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        for field in ('contract_version', 'type', 'source', 'source_type'):
+            assert field in result
+
+
+class TestTimeline:
+    def test_timeline_type(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/timeline', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert result['type'] == 'codex_timeline'
+
+    def test_timeline_has_events(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/timeline', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert 'events' in result
+        assert result['total'] == len(result['events'])
+
+    def test_timeline_count_matches_fixture(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/timeline', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        # Fixture has 12 JSONL lines
+        assert result['total'] == 12
+
+    def test_timeline_events_have_required_keys(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/timeline', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        for ev in result['events']:
+            assert 'timestamp' in ev
+            assert 'event_type' in ev
+            assert 'payload_type' in ev
+            assert 'summary' in ev
+
+    def test_timeline_sorted_by_timestamp(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/timeline', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        timestamps = [e['timestamp'] for e in result['events'] if e['timestamp']]
+        assert timestamps == sorted(timestamps)
+
+    def test_timeline_contract(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/timeline', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        for field in ('contract_version', 'type', 'source', 'source_type'):
+            assert field in result
+
+
+class TestGoal:
+    def _make_goals_db(self, tmp_path: Path) -> Path:
+        db_path = tmp_path / 'goals_1.sqlite'
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE thread_goals (
+                thread_id TEXT PRIMARY KEY NOT NULL,
+                goal_id TEXT NOT NULL,
+                objective TEXT NOT NULL,
+                status TEXT NOT NULL,
+                token_budget INTEGER,
+                tokens_used INTEGER NOT NULL DEFAULT 0,
+                time_used_seconds INTEGER NOT NULL DEFAULT 0,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+            )
+        """)
+        conn.execute(
+            "INSERT INTO thread_goals VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (_SESSION_UUID, 'goal-001', 'Refactor the auth module', 'active',
+             50000, 12500, 300, 1716544800000, 1716544900000)
+        )
+        conn.commit()
+        conn.close()
+        return db_path
+
+    def test_goal_type(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        self._make_goals_db(tmp_path)
+        adapter = _make_adapter(_SESSION_UUID, tmp_path, jsonl_path, query='goal')
+        result = adapter.get_structure()
+        assert result['type'] == 'codex_goal'
+
+    def test_goal_returns_objective(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        self._make_goals_db(tmp_path)
+        adapter = _make_adapter(_SESSION_UUID, tmp_path, jsonl_path, query='goal')
+        result = adapter.get_structure()
+        assert result['goal'] is not None
+        assert result['goal']['objective'] == 'Refactor the auth module'
+
+    def test_goal_returns_status(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        self._make_goals_db(tmp_path)
+        adapter = _make_adapter(_SESSION_UUID, tmp_path, jsonl_path, query='goal')
+        result = adapter.get_structure()
+        assert result['goal']['status'] == 'active'
+
+    def test_goal_returns_token_budget(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        self._make_goals_db(tmp_path)
+        adapter = _make_adapter(_SESSION_UUID, tmp_path, jsonl_path, query='goal')
+        result = adapter.get_structure()
+        assert result['goal']['token_budget'] == 50000
+        assert result['goal']['tokens_used'] == 12500
+
+    def test_goal_none_when_no_row(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        # goals db exists but no row for this thread
+        db_path = tmp_path / 'goals_1.sqlite'
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE thread_goals (
+                thread_id TEXT PRIMARY KEY NOT NULL,
+                goal_id TEXT NOT NULL, objective TEXT NOT NULL,
+                status TEXT NOT NULL, token_budget INTEGER,
+                tokens_used INTEGER NOT NULL DEFAULT 0,
+                time_used_seconds INTEGER NOT NULL DEFAULT 0,
+                created_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL
+            )
+        """)
+        conn.commit()
+        conn.close()
+        adapter = _make_adapter(_SESSION_UUID, tmp_path, jsonl_path, query='goal')
+        result = adapter.get_structure()
+        assert result['type'] == 'codex_goal'
+        assert result['goal'] is None
+
+    def test_goal_none_when_no_db(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(_SESSION_UUID, tmp_path, jsonl_path, query='goal')
+        # no goals_1.sqlite in tmp_path
+        result = adapter.get_structure()
+        assert result['type'] == 'codex_goal'
+        assert result['goal'] is None
+
+    def test_goal_contract(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        self._make_goals_db(tmp_path)
+        adapter = _make_adapter(_SESSION_UUID, tmp_path, jsonl_path, query='goal')
+        result = adapter.get_structure()
+        for field in ('contract_version', 'type', 'source', 'source_type'):
+            assert field in result
+
+
+class TestMemoriesPipeline:
+    def _make_pipeline_db(self, tmp_path: Path) -> Path:
+        db_path = tmp_path / 'state_pipeline.sqlite'
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE stage1_outputs (
+                thread_id TEXT PRIMARY KEY,
+                source_updated_at INTEGER NOT NULL,
+                raw_memory TEXT NOT NULL,
+                rollout_summary TEXT NOT NULL,
+                generated_at INTEGER NOT NULL,
+                rollout_slug TEXT,
+                usage_count INTEGER,
+                last_usage INTEGER,
+                selected_for_phase2 INTEGER NOT NULL DEFAULT 0,
+                selected_for_phase2_source_updated_at INTEGER
+            )
+        """)
+        conn.execute(
+            "INSERT INTO stage1_outputs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ('thread-aaa', 1716544800, 'raw memory text', 'Summary of session', 1716544900,
+             'my-session-slug', 3, 1716545000, 1, None)
+        )
+        conn.execute(
+            "INSERT INTO stage1_outputs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ('thread-bbb', 1716544700, 'another raw memory', 'Another summary', 1716544750,
+             'other-session-slug', 0, None, 0, None)
+        )
+        conn.commit()
+        conn.close()
+        return db_path
+
+    def _make_pipeline_adapter(self, tmp_path: Path) -> 'CodexAdapter':
+        db_path = self._make_pipeline_db(tmp_path)
+        adapter = CodexAdapter('memories/pipeline')
+        adapter.CODEX_HOME = tmp_path
+        adapter.CODEX_DB = db_path
+        return adapter
+
+    def test_pipeline_type(self, tmp_path):
+        adapter = self._make_pipeline_adapter(tmp_path)
+        result = adapter.get_structure()
+        assert result['type'] == 'codex_memories_pipeline'
+
+    def test_pipeline_stage1_count(self, tmp_path):
+        adapter = self._make_pipeline_adapter(tmp_path)
+        result = adapter.get_structure()
+        assert result['stage1_total'] == 2
+
+    def test_pipeline_stage2_selected(self, tmp_path):
+        adapter = self._make_pipeline_adapter(tmp_path)
+        result = adapter.get_structure()
+        assert result['stage2_selected'] == 1
+
+    def test_pipeline_recent_outputs(self, tmp_path):
+        adapter = self._make_pipeline_adapter(tmp_path)
+        result = adapter.get_structure()
+        assert len(result['recent_outputs']) == 2
+
+    def test_pipeline_output_has_slug(self, tmp_path):
+        adapter = self._make_pipeline_adapter(tmp_path)
+        result = adapter.get_structure()
+        slugs = [r.get('rollout_slug') for r in result['recent_outputs']]
+        assert 'my-session-slug' in slugs
+
+    def test_pipeline_zero_when_empty(self, tmp_path):
+        db_path = tmp_path / 'empty.sqlite'
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE stage1_outputs (
+                thread_id TEXT PRIMARY KEY,
+                source_updated_at INTEGER NOT NULL,
+                raw_memory TEXT NOT NULL DEFAULT '',
+                rollout_summary TEXT NOT NULL DEFAULT '',
+                generated_at INTEGER NOT NULL DEFAULT 0,
+                rollout_slug TEXT,
+                usage_count INTEGER,
+                last_usage INTEGER,
+                selected_for_phase2 INTEGER NOT NULL DEFAULT 0,
+                selected_for_phase2_source_updated_at INTEGER
+            )
+        """)
+        conn.commit()
+        conn.close()
+        adapter = CodexAdapter('memories/pipeline')
+        adapter.CODEX_HOME = tmp_path
+        adapter.CODEX_DB = db_path
+        result = adapter.get_structure()
+        assert result['stage1_total'] == 0
+        assert result['stage2_selected'] == 0
+        assert result['recent_outputs'] == []
+
+    def test_pipeline_contract(self, tmp_path):
+        adapter = self._make_pipeline_adapter(tmp_path)
+        result = adapter.get_structure()
+        for field in ('contract_version', 'type', 'source', 'source_type'):
+            assert field in result
+
+    def test_pipeline_contract_in_output_contract_suite(self, tmp_path):
+        adapter = self._make_pipeline_adapter(tmp_path)
+        result = adapter.get_structure()
+        assert result['type'] == 'codex_memories_pipeline'

@@ -68,6 +68,104 @@ def _render_codex_shell(result: dict) -> None:
         print()
 
 
+def _render_codex_workflow(result: dict) -> None:
+    events = result.get('events', [])
+    total = result.get('total', len(events))
+    print(f"Codex Workflow: {total} action(s)")
+    print()
+    for ev in events:
+        kind = ev.get('kind', '?')
+        ts = (ev.get('timestamp') or '')[:19]
+        if kind == 'tool_call':
+            name = ev.get('name', '?')
+            args = str(ev.get('arguments', ''))[:60]
+            status = '✓' if ev.get('success') else '✗'
+            print(f"  [{status}] tool  {name}({args})  [{ts}]")
+            out = str(ev.get('output') or '')
+            if out:
+                print(f"      → {out[:100]}")
+        elif kind == 'shell':
+            cmd = ev.get('command', [])
+            if isinstance(cmd, list) and len(cmd) >= 3 and cmd[1] == '-lc':
+                cmd_str = cmd[2]
+            elif isinstance(cmd, list):
+                cmd_str = ' '.join(str(c) for c in cmd)
+            else:
+                cmd_str = str(cmd)
+            exit_code = ev.get('exit_code')
+            dur = ev.get('duration_ms', 0)
+            status = '✓' if ev.get('success') else '✗'
+            print(f"  [{status}] shell $ {cmd_str[:80]}  [{ts}]")
+            parts = []
+            if exit_code is not None:
+                parts.append(f"exit={exit_code}")
+            if dur:
+                parts.append(f"{dur}ms")
+            if parts:
+                print(f"      → {' '.join(parts)}")
+        print()
+
+
+def _render_codex_timeline(result: dict) -> None:
+    events = result.get('events', [])
+    total = result.get('total', len(events))
+    print(f"Codex Timeline: {total} event(s)")
+    print()
+    for ev in events:
+        ts = (ev.get('timestamp') or '')[:19]
+        etype = ev.get('event_type', '?')
+        ptype = ev.get('payload_type', '')
+        label = f"{etype}/{ptype}" if ptype else etype
+        summary = ev.get('summary', '')
+        print(f"  {ts}  [{label:<30}]  {summary[:80]}")
+    print()
+
+
+def _render_codex_goal(result: dict) -> None:
+    goal = result.get('goal')
+    thread_id = result.get('thread_id', result.get('session_id', ''))
+    if not goal:
+        print(f"Codex Goal: (none set for {thread_id[:8]})")
+        return
+    print(f"Codex Goal: {thread_id[:8]}")
+    print()
+    print(f"  Objective:  {goal.get('objective', '')}")
+    print(f"  Status:     {goal.get('status', '?')}")
+    budget = goal.get('token_budget')
+    used = goal.get('tokens_used', 0)
+    if budget:
+        pct = round(100 * used / budget) if budget else 0
+        print(f"  Tokens:     {used:,} / {budget:,} ({pct}%)")
+    else:
+        print(f"  Tokens:     {used:,} (no budget)")
+    time_s = goal.get('time_used_seconds', 0)
+    if time_s:
+        print(f"  Time used:  {time_s}s")
+    print()
+
+
+def _render_codex_memories_pipeline(result: dict) -> None:
+    stage1 = result.get('stage1_total', 0)
+    stage2 = result.get('stage2_selected', 0)
+    recent = result.get('recent_outputs', [])
+    print(f"Codex Memory Pipeline")
+    print()
+    print(f"  Stage 1 outputs:     {stage1}")
+    print(f"  Selected for Stage 2: {stage2}")
+    print()
+    if recent:
+        print(f"  Recent Stage 1 outputs (up to 20):")
+        for row in recent:
+            tid = (row.get('thread_id') or '')[:8]
+            slug = row.get('rollout_slug') or ''
+            phase2 = '✓' if row.get('selected_for_phase2') else ' '
+            uses = row.get('usage_count') or 0
+            print(f"    [{phase2}] {tid}  {slug[:30]}  uses={uses}")
+    else:
+        print("  (no stage1_outputs yet)")
+    print()
+
+
 def _render_codex_tokens(result: dict) -> None:
     turns = result.get('token_turns', [])
     total_turns = result.get('total_turns', len(turns))

@@ -22,11 +22,15 @@ from .handlers.system import (
     get_config as _h_get_config,
     get_memories as _h_get_memories,
     get_rules as _h_get_rules,
+    get_memories_pipeline as _h_get_memories_pipeline,
 )
+from .handlers.goals import get_goal as _h_get_goal
 from .analysis.messages import extract_messages, get_last_agent_message, get_token_turns
 from .analysis.tools import get_tool_pairs, get_shell_commands
 from .analysis.errors import get_errors as _analysis_get_errors
 from .analysis.overview import get_overview as _analysis_get_overview
+from .analysis.workflow import get_workflow as _analysis_get_workflow
+from .analysis.timeline import get_timeline as _analysis_get_timeline
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +198,9 @@ class CodexAdapter(ResourceAdapter):
         'rules': '_get_rules',
     }
 
+    # memories/pipeline is a sub-path of memories — routed before generic memories
+    _MEMORIES_PIPELINE = 'memories/pipeline'
+
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Route codex:// resource to the appropriate handler."""
         # Bare or sessions/ → list, search, or content search
@@ -205,6 +212,10 @@ class CodexAdapter(ResourceAdapter):
             if search:
                 return _h_search_sessions(self.CODEX_DB, search)
             return _h_list_sessions(self.CODEX_DB)
+
+        # memories/pipeline — check before generic memories
+        if self.resource == self._MEMORIES_PIPELINE:
+            return self._get_memories_pipeline()
 
         # Named resources: info, history, config, memories, rules
         for prefix, method_name in self._NAMED_RESOURCES.items():
@@ -244,11 +255,13 @@ class CodexAdapter(ResourceAdapter):
 
         sub = self._session_sub_path()
 
-        # ?last / ?tokens → query-param routes
+        # ?last / ?tokens / ?goal → query-param routes
         if 'last' in self.query_params or self.query_params.get('last') is not None:
             return self._result_last(records, session_row)
         if 'tokens' in self.query_params or self.query_params.get('tokens') is not None:
             return self._result_tokens(records, session_row)
+        if 'goal' in self.query_params or self.query_params.get('goal') is not None:
+            return self._result_goal(session_row)
 
         if sub == 'messages':
             return self._result_messages(records, session_row)
@@ -258,6 +271,10 @@ class CodexAdapter(ResourceAdapter):
             return self._result_errors(records, session_row)
         if sub == 'shell':
             return self._result_shell(records, session_row)
+        if sub == 'workflow':
+            return self._result_workflow(records, session_row)
+        if sub == 'timeline':
+            return self._result_timeline(records, session_row)
 
         # Default: overview
         return self._result_overview(records, session_row)
@@ -331,6 +348,27 @@ class CodexAdapter(ResourceAdapter):
         b['grand_total'] = total
         return b
 
+    def _result_workflow(self, records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> Dict[str, Any]:
+        b = self._base('codex_workflow', session_row)
+        events = _analysis_get_workflow(records)
+        b['events'] = events
+        b['total'] = len(events)
+        return b
+
+    def _result_timeline(self, records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> Dict[str, Any]:
+        b = self._base('codex_timeline', session_row)
+        events = _analysis_get_timeline(records)
+        b['events'] = events
+        b['total'] = len(events)
+        return b
+
+    def _result_goal(self, session_row: Dict[str, Any]) -> Dict[str, Any]:
+        thread_id = session_row.get('id', '')
+        result = _h_get_goal(self.CODEX_HOME, thread_id)
+        # Merge session_id into result for contract consistency
+        result['session_id'] = thread_id
+        return result
+
     # ------------------------------------------------------------------
     # Named resource handlers
     # ------------------------------------------------------------------
@@ -350,16 +388,21 @@ class CodexAdapter(ResourceAdapter):
     def _get_rules(self) -> Dict[str, Any]:
         return _h_get_rules(self.CODEX_HOME)
 
+    def _get_memories_pipeline(self) -> Dict[str, Any]:
+        return _h_get_memories_pipeline(self.CODEX_DB)
+
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         return {
             'adapter': 'codex',
             'description': 'OpenAI Codex CLI session analysis',
-            'uri_syntax': 'codex://[sessions[/?search=term|?content=term] | <UUID>[/messages|tools|errors|shell][?last|?tokens] | info | history | config | memories | rules]',
+            'uri_syntax': 'codex://[sessions[/?search=term|?content=term] | <UUID>[/messages|tools|errors|shell|workflow|timeline][?last|?tokens|?goal] | info | history | config | memories[/pipeline] | rules]',
             'output_types': [
                 'codex_session_list', 'codex_session_overview', 'codex_content_search',
-                'codex_info', 'codex_history', 'codex_config', 'codex_memories', 'codex_rules',
-                'codex_messages', 'codex_tools', 'codex_errors', 'codex_shell', 'codex_tokens',
+                'codex_info', 'codex_history', 'codex_config', 'codex_memories',
+                'codex_memories_pipeline', 'codex_rules',
+                'codex_messages', 'codex_tools', 'codex_errors', 'codex_shell',
+                'codex_tokens', 'codex_workflow', 'codex_timeline', 'codex_goal',
             ],
         }
 
@@ -375,14 +418,18 @@ class CodexAdapter(ResourceAdapter):
                 'codex://<UUID>                                     # session overview\n'
                 'codex://<UUID>?last                                # last agent message\n'
                 'codex://<UUID>?tokens                              # per-turn token breakdown\n'
+                'codex://<UUID>?goal                                # thread goal (goals_1.sqlite)\n'
                 'codex://<UUID>/messages                            # user + agent turns\n'
                 'codex://<UUID>/tools                               # function_call pairs + success rates\n'
                 'codex://<UUID>/shell                               # shell commands + exit codes\n'
                 'codex://<UUID>/errors                              # error/warning events\n'
+                'codex://<UUID>/workflow                            # tools + shell interleaved chronologically\n'
+                'codex://<UUID>/timeline                            # all events in order\n'
                 'codex://info                                       # install paths + DB stats\n'
                 'codex://history                                    # ~/.codex/history.jsonl\n'
                 'codex://config                                     # ~/.codex/config.toml (secrets masked)\n'
                 'codex://memories                                   # ~/.codex/memories/\n'
+                'codex://memories/pipeline                          # Stage1/Stage2 memory pipeline status\n'
                 'codex://rules                                      # ~/.codex/rules/*.rules'
             ),
             'examples': [
@@ -392,13 +439,17 @@ class CodexAdapter(ResourceAdapter):
                 {'uri': 'codex://019e5cc5', 'description': 'Session overview: turns, tool calls, tokens, duration'},
                 {'uri': 'codex://019e5cc5?last', 'description': 'Last agent message only — fast recovery pattern'},
                 {'uri': 'codex://019e5cc5?tokens', 'description': 'Per-turn token breakdown (input/output/cached/reasoning)'},
+                {'uri': 'codex://019e5cc5?goal', 'description': 'Thread goal objective + token budget (goals_1.sqlite)'},
                 {'uri': 'codex://019e5cc5/messages', 'description': 'All user and agent turns in order'},
                 {'uri': 'codex://019e5cc5/tools', 'description': 'Paired function_call + output events'},
                 {'uri': 'codex://019e5cc5/shell', 'description': 'Shell commands with exit codes and output'},
                 {'uri': 'codex://019e5cc5/errors', 'description': 'Errors and warnings from the session'},
+                {'uri': 'codex://019e5cc5/workflow', 'description': 'Tools + shell interleaved chronologically'},
+                {'uri': 'codex://019e5cc5/timeline', 'description': 'Full chronological event stream'},
                 {'uri': 'codex://info', 'description': 'Install paths and DB stats'},
                 {'uri': 'codex://history', 'description': 'Prompt history from ~/.codex/history.jsonl'},
                 {'uri': 'codex://config', 'description': 'Config TOML (secrets masked)'},
+                {'uri': 'codex://memories/pipeline', 'description': 'Stage1/Stage2 memory pipeline status'},
             ],
             'features': [
                 'SQLite-backed session listing (fast, no JSONL scan needed for list/search)',
@@ -407,10 +458,13 @@ class CodexAdapter(ResourceAdapter):
                 'Full-text JSONL content search across all sessions',
                 'Shell command tracking with exit codes, output, and duration',
                 'Tool call pairing (function_call + function_call_output)',
+                'Chronological workflow view — tools + shell interleaved by timestamp',
+                'Full timeline — all event types in session order',
+                'Thread goal tracking (goals_1.sqlite) — objective + token budget',
+                'Memory pipeline status — Stage1/Stage2 consolidation from stage1_outputs',
                 'Reasoning block count (content encrypted — only count shown)',
                 'Memory citations in agent_message turns',
                 'Config TOML with secret masking',
-                'Goals DB integration (per-thread objective + token budget)',
             ],
             'notes': [
                 'Sessions stored in ~/.codex/sessions/ as per-session JSONL files',

@@ -79,10 +79,13 @@ reveal 'codex://info'
 | `codex://<UUID>` | Overview: turns, tool calls, tokens, duration, git state |
 | `codex://<UUID>?last` | Last agent message only — fast recovery pattern |
 | `codex://<UUID>?tokens` | Per-turn token breakdown (input/output/cached/reasoning) |
+| `codex://<UUID>?goal` | Thread goal from `goals_1.sqlite` (objective, status, token budget) |
 | `codex://<UUID>/messages` | All user and agent turns in order |
 | `codex://<UUID>/tools` | Paired `function_call` + `function_call_output` events |
 | `codex://<UUID>/shell` | `exec_command_end` events: command, exit code, output |
 | `codex://<UUID>/errors` | Error, warning, and guardian_warning events |
+| `codex://<UUID>/workflow` | Tool calls + shell commands interleaved chronologically |
+| `codex://<UUID>/timeline` | All events in session order with brief summaries |
 
 **UUID prefix**: You can use the first 7+ hex characters instead of the full UUID. `reveal 'codex://019e5cc5'` resolves to the matching session.
 
@@ -94,6 +97,7 @@ reveal 'codex://info'
 | `codex://history` | `~/.codex/history.jsonl` prompt history |
 | `codex://config` | `~/.codex/config.toml` with secrets masked |
 | `codex://memories` | `~/.codex/memories/` MEMORY.md and summaries |
+| `codex://memories/pipeline` | Stage1/Stage2 memory consolidation pipeline status |
 | `codex://rules` | `~/.codex/rules/*.rules` Starlark permission rules |
 
 ---

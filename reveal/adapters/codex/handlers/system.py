@@ -177,6 +177,46 @@ def get_memories(codex_home: Path) -> Dict[str, Any]:
     return {**base, 'memories': memories, 'total': len(memories)}
 
 
+def get_memories_pipeline(db_path: Path) -> Dict[str, Any]:
+    """Return Stage1/Stage2 memory pipeline status from stage1_outputs table."""
+    base: Dict[str, Any] = {
+        'contract_version': '1.0',
+        'type': 'codex_memories_pipeline',
+        'source': str(db_path),
+        'source_type': 'sqlite',
+    }
+
+    if not db_path.exists():
+        return {**base, 'stage1_total': 0, 'stage2_selected': 0, 'recent_outputs': []}
+
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute("SELECT COUNT(*) FROM stage1_outputs").fetchone()
+            total = row[0] if row else 0
+            row2 = conn.execute(
+                "SELECT COUNT(*) FROM stage1_outputs WHERE selected_for_phase2 = 1"
+            ).fetchone()
+            phase2_selected = row2[0] if row2 else 0
+            rows = conn.execute(
+                """SELECT thread_id, rollout_slug, generated_at,
+                          selected_for_phase2, usage_count, last_usage
+                   FROM stage1_outputs ORDER BY source_updated_at DESC LIMIT 20"""
+            ).fetchall()
+            return {
+                **base,
+                'stage1_total': total,
+                'stage2_selected': phase2_selected,
+                'recent_outputs': [dict(r) for r in rows],
+            }
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        return {**base, 'stage1_total': 0, 'stage2_selected': 0, 'recent_outputs': [],
+                'error': str(exc)}
+
+
 def get_rules(codex_home: Path) -> Dict[str, Any]:
     """List *.rules files in ~/.codex/rules/ with their content."""
     rules_dir = codex_home / 'rules'
