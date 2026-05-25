@@ -275,11 +275,41 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
         from ...grep_handler import handle_grep_directory
         handle_grep_directory(str(path), args.grep, args)
         return
-    if getattr(args, 'name', None) or getattr(args, 'type', None):
+    # --type on a directory without --name can mean two different things:
+    #   1. File-type filter (--type markdown, --type python) — user wants to
+    #      filter the directory listing to files of that language/format.
+    #   2. AST node-type filter (--type class, --type function) — user wants to
+    #      search for AST nodes of that type across the directory.
+    # Distinguish by checking against known file-type names. If the value
+    # matches a known file type, translate to extensions and fall through to
+    # the directory display. Otherwise, route to the AST handler as before.
+    _TYPE_TO_EXT = {
+        'python': 'py', 'py': 'py',
+        'markdown': 'md,markdown', 'md': 'md,markdown',
+        'yaml': 'yaml,yml', 'yml': 'yaml,yml',
+        'json': 'json', 'toml': 'toml', 'ini': 'ini', 'cfg': 'cfg',
+        'sql': 'sql', 'sh': 'sh', 'bash': 'sh',
+        'typescript': 'ts,tsx', 'ts': 'ts,tsx',
+        'javascript': 'js,jsx', 'js': 'js,jsx',
+        'html': 'html,htm', 'css': 'css',
+        'rust': 'rs', 'go': 'go', 'java': 'java', 'kotlin': 'kt',
+        'ruby': 'rb', 'php': 'php',
+    }
+    type_from_args = getattr(args, 'type', None)
+    ext_from_args = getattr(args, 'ext', None)
+    if type_from_args and not getattr(args, 'name', None):
+        mapped = _TYPE_TO_EXT.get(type_from_args.lower())
+        if mapped and not ext_from_args:
+            ext_from_args = mapped  # treat as file-type filter; fall through
+        else:
+            # AST node-type filter (class, function, etc.) or --ext already set
+            handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
+            return
+    elif getattr(args, 'name', None):
         handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
         return
     sort_by = getattr(args, 'sort', None)
-    include_extensions = _parse_ext_arg(getattr(args, 'ext', None))
+    include_extensions = _parse_ext_arg(ext_from_args)
     if getattr(args, 'files', False):
         # --files defaults to newest-first; --asc flips it
         sort_desc = not getattr(args, 'asc', False)
