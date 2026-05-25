@@ -15,9 +15,13 @@ The **codex://** adapter navigates and analyzes [OpenAI Codex CLI](https://githu
 **Key capabilities:**
 - Session listing and metadata search via SQLite (fast — no JSONL scanning)
 - Full-text content search across all session JSONL files
+- Chronological workflow view — tool calls + shell commands interleaved by timestamp
+- Full event timeline — every JSONL event type in session order
 - Per-turn token breakdown (input/output/cached/reasoning split)
-- Shell command tracking with exit codes and output
+- Shell command tracking with exit codes, output, and duration
 - Tool call pairing (`function_call` + `function_call_output`)
+- Thread goal tracking (`goals_1.sqlite`) — objective, status, token budget
+- Memory pipeline status — Stage1/Stage2 consolidation from `stage1_outputs`
 - Install introspection (config, history, memories, rules)
 
 ---
@@ -43,6 +47,9 @@ reveal 'codex://019e5cc5?last'
 # Per-turn token breakdown
 reveal 'codex://019e5cc5?tokens'
 
+# Thread goal (objective + token budget)
+reveal 'codex://019e5cc5?goal'
+
 # Conversation turns (user + agent messages)
 reveal 'codex://019e5cc5/messages'
 
@@ -55,8 +62,17 @@ reveal 'codex://019e5cc5/shell'
 # Errors and warnings from the session
 reveal 'codex://019e5cc5/errors'
 
+# Tools + shell interleaved chronologically
+reveal 'codex://019e5cc5/workflow'
+
+# Full event stream in session order
+reveal 'codex://019e5cc5/timeline'
+
 # Install info and DB stats
 reveal 'codex://info'
+
+# Memory pipeline status
+reveal 'codex://memories/pipeline'
 ```
 
 ---
@@ -102,6 +118,63 @@ reveal 'codex://info'
 
 ---
 
+## Workflow
+
+`/workflow` interleaves tool calls and shell commands in chronological order — the same sequence the agent executed them. Use this when you want to understand what the session actually did and in what order.
+
+```bash
+reveal 'codex://019d9da3/workflow'
+# Codex Workflow: 299 action(s)
+#
+#   [✓] tool  exec_command({"cmd":"find /home/scottsen/src/projects -maxdepth 2...)  [2026-04-17T22:51:18]
+#       → Chunk ID: f1427c
+#
+#   [✓] shell $ find /home/scottsen/src/projects -maxdepth 2 -type d -iname '*reveal*'  [2026-04-17T22:51:18]
+#       → exit=0
+#
+#   [✓] tool  exec_command({"cmd":"ls -la /home/scottsen/src/projects/reveal"...})  [2026-04-17T22:51:24]
+#       → Chunk ID: 9e60cd
+```
+
+Two event kinds appear:
+- **tool** — a `function_call`/`function_call_output` pair; `[✓]` if an output was paired, `[✗]` if not
+- **shell** — a native `exec_command_end` event (only in sessions using the sandbox shell); `[✓]` if `exit_code == 0`
+
+Note: in most recent Codex sessions, shell execution goes through the `exec_command` function_call tool (appears as `tool` kind). Native `exec_command_end` events appear in older or sandbox-mode sessions.
+
+---
+
+## Timeline
+
+`/timeline` shows every JSONL event in the session — the raw event stream with brief summaries. Use this for full forensic analysis of what happened and when.
+
+```bash
+reveal 'codex://019e5cc8/timeline'
+# Codex Timeline: 640 event(s)
+#
+#   2026-05-25T01:38:35  [session_meta                  ]  session  model=?
+#   2026-05-25T01:38:35  [event_msg/task_started        ]  task started
+#   2026-05-25T01:38:35  [response_item/message         ]  <permissions instructions>
+#   2026-05-25T01:38:35  [turn_context                  ]  cwd=/home/scottsen/src/projects/zack/topstep
+#   2026-05-25T01:38:35  [event_msg/user_message        ]  which/where !tia-launcher  ? read that script
+#   2026-05-25T01:38:40  [event_msg/agent_message       ]  I'll locate `tia-launcher` on the active PATH...
+#   2026-05-25T01:38:40  [response_item/function_call   ]  exec_command({"cmd":"command -V tia-launcher"...})
+#   2026-05-25T01:38:40  [response_item/function_call_output]  → Chunk ID: 9f6153
+#   2026-05-25T01:38:40  [event_msg/token_count         ]  tokens total=16548
+```
+
+Event types in the stream:
+- `session_meta` — session ID, cwd, model, git state
+- `turn_context` — model, sandbox policy, approval mode (per-turn)
+- `event_msg/user_message` / `event_msg/agent_message` — conversation turns
+- `response_item/function_call` / `response_item/function_call_output` — tool execution
+- `event_msg/exec_command_end` — native shell execution (sandbox mode)
+- `event_msg/token_count` — running token totals after each API call
+- `event_msg/task_complete` — turn duration and token summary
+- `response_item/reasoning` — reasoning steps (content encrypted — count only)
+
+---
+
 ## Token Analysis
 
 Codex emits `token_count` events after each API request with a delta (`last_token_usage`) and running total (`total_token_usage`). The `?tokens` route surfaces the per-turn breakdown:
@@ -128,21 +201,62 @@ Fields:
 
 ## Shell Commands
 
-Codex tracks shell execution via `exec_command_end` events (no separate begin event — the end event contains everything):
+Codex tracks native shell execution via `exec_command_end` events (no separate begin event — the end event contains everything: command list, exit code, output, duration):
 
 ```bash
-reveal 'codex://019e5cc5/shell'
-# Codex Shell Calls: 4
+reveal 'codex://019d9da3/shell'
+# Codex Shell Calls: 143
 #
-#   $ pwd  [2026-05-25T01:36:01]
-#     → exit=0  8ms
-#     /home/scottsen/src/projects/...
+#   $ find /home/scottsen/src/projects -maxdepth 2 -type d -iname '*reveal*'  [2026-04-17T22:51:18]
+#     → exit=0
+#     /home/scottsen/src/projects/reveal
 #
-#   $ rg --files -g 'README.md'  [2026-05-25T01:36:05]
-#     → exit=0  45ms
-#     docs/README.md
-#     src/README.md
+#   $ rg --files /home/scottsen/src/projects | rg '/(package.json|Cargo.toml|...)'  [2026-04-17T22:51:18]
+#     → exit=0
+#     /home/scottsen/src/projects/decision-gate/README.md
 ```
+
+See also: `exec_command` tool calls appear in `/tools` and `/workflow`. In recent Codex sessions most shell execution goes through the `exec_command` function_call tool rather than native `exec_command_end` events.
+
+---
+
+## Thread Goals
+
+Codex supports `/goal` slash commands that set a per-thread objective and optional token budget in `~/.codex/goals_1.sqlite`. Most sessions have no goal set.
+
+```bash
+reveal 'codex://019e5cc5?goal'
+# Codex Goal: 019e5cc5
+#
+#   Objective:  Refactor the authentication module
+#   Status:     active
+#   Tokens:     12,500 / 50,000 (25%)
+#   Time used:  300s
+```
+
+Status values: `active`, `paused`, `blocked`, `usage_limited`, `budget_limited`, `complete`.
+
+When no goal is set: `Codex Goal: (none set for 019e5cc5)`.
+
+---
+
+## Memory Pipeline
+
+Codex runs a background memory consolidation process. Stage 1 extracts memory-relevant items from eligible sessions; Stage 2 consolidates them into `~/.codex/memories/MEMORY.md`. The `memories/pipeline` route shows the current status:
+
+```bash
+reveal 'codex://memories/pipeline'
+# Codex Memory Pipeline
+#
+#   Stage 1 outputs:      47
+#   Selected for Stage 2:  8
+#
+#   Recent Stage 1 outputs (up to 20):
+#     [✓] 019d9da3  my-session-slug       uses=3
+#     [ ] 019d9dd4  other-session-slug    uses=0
+```
+
+`[✓]` marks entries selected for Stage 2 consolidation. `uses` counts how many times the memory was cited in a session. `memories/pipeline` reads from `state_5.sqlite`'s `stage1_outputs` table — the same DB as the session index.
 
 ---
 
@@ -167,15 +281,15 @@ This is a full-file scan — use `?search=` first for fast SQLite metadata filte
 
 ```
 ~/.codex/
-├── state_5.sqlite        ← session index (SQLite) — primary lookup
+├── state_5.sqlite        ← session index + stage1_outputs (primary lookup)
+├── goals_1.sqlite        ← per-thread objectives + token budgets
 ├── sessions/
 │   └── 2026/05/25/
 │       └── rollout-*.jsonl   ← per-session event stream
 ├── history.jsonl         ← prompt history
-├── config.toml           ← user config
-├── memories/             ← MEMORY.md + session summaries
-├── rules/                ← Starlark permission rules
-└── goals_1.sqlite        ← per-thread objectives + token budgets
+├── config.toml           ← user config (secrets masked by reveal)
+├── memories/             ← MEMORY.md + session summaries (Stage 2 output)
+└── rules/                ← Starlark permission rules
 ```
 
 ---
@@ -187,9 +301,11 @@ This is a full-file scan — use `?search=` first for fast SQLite metadata filte
 | Session ID | UUID (7+ hex prefix works) | Named slug (`amber-fire-0425`) |
 | Primary index | SQLite `threads` table | Filesystem scan |
 | Tool calls | `function_call`/`function_call_output` (JSONL events) | `tool_use`/`tool_result` (message blocks) |
-| Shell execution | Dedicated `exec_command_end` events | Bash tool call in tool_use |
+| Shell execution | Dedicated `exec_command_end` events OR `exec_command` tool | Bash tool call in tool_use |
 | Reasoning | `encrypted_content` — count only | `thinking` blocks — readable |
 | Token data | Per-request via `token_count` events | Estimated from char count |
+| Goals | `goals_1.sqlite` thread_goals | None |
+| Memory pipeline | `stage1_outputs` → `memories/` | None |
 | Config | TOML | JSON |
 
 ---

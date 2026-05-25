@@ -37,6 +37,27 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 
 ---
 
+## Before You Read This
+
+**This is a reference guide (~12,000 tokens). You do not need to read it upfront.**
+
+Start with `reveal help://quick` (~300 tokens) — it routes you to the right adapter for your task. Load sections of this guide only when you need deep reference on a specific adapter or pattern.
+
+**Reveal covers more than source code.** Before broad discovery over any supported resource, check whether an adapter exists:
+
+| Need | Adapter | Example |
+|------|---------|---------|
+| Code structure / functions | `ast://` | `reveal ast://src/?type=function` |
+| Call relationships | `calls://` | `reveal 'calls://src/?target=my_fn'` |
+| Git history / diffs | `git://` `diff://` | `reveal 'git://.?message~=fix'` |
+| Claude sessions / prompts | `claude://` | `reveal 'claude://sessions/?search=peyton'` |
+| Markdown / docs | `markdown://` | `reveal docs/ --grep 'decision'` |
+| Databases / workbooks | `sqlite://` `mysql://` `xlsx://` | `reveal sqlite:///app.db` |
+| Environment / runtime | `env://` `python://` | `reveal env://` |
+| Project-specific tools | live plugins | `reveal help://adapters` |
+
+---
+
 ## Agent Introspection (v0.56.0+ - Complete Coverage)
 
 **Auto-discover capabilities programmatically.** Three discovery surfaces:
@@ -2413,6 +2434,147 @@ reveal claude://session/my-session-0302/workflow
 # 4. Drill into files if you need to know what was touched
 reveal claude://session/my-session-0302/files
 ```
+
+---
+
+### Task: "Analyze Codex CLI sessions (codex://)"
+
+The `codex://` adapter navigates and analyzes [OpenAI Codex CLI](https://github.com/openai/codex) sessions. Codex uses a SQLite session index (`~/.codex/state_5.sqlite`) and per-session JSONL event files — a different storage model from Claude Code, so this is a dedicated adapter rather than a fork of `claude://`.
+
+**Session discovery and search:**
+```bash
+# List all sessions (newest first, SQLite — fast)
+reveal 'codex://'
+
+# Filter by title or first message
+reveal 'codex://sessions/?search=peyton'
+
+# Full-text search across all session JSONL content
+reveal 'codex://sessions/?content=authentication'
+```
+
+**Session analysis:**
+```bash
+# Session overview: turns, tool calls, tokens, duration, git state
+reveal 'codex://019e5cc5'
+
+# Fast session recovery — last agent message only
+reveal 'codex://019e5cc5?last'
+
+# Per-turn token breakdown (input/cached/output/reasoning)
+reveal 'codex://019e5cc5?tokens'
+
+# Thread goal from goals_1.sqlite (objective + token budget)
+reveal 'codex://019e5cc5?goal'
+
+# User + agent conversation turns
+reveal 'codex://019e5cc5/messages'
+
+# Paired function_call + function_call_output events
+reveal 'codex://019e5cc5/tools'
+
+# Shell commands with exit codes and output
+reveal 'codex://019e5cc5/shell'
+
+# Errors and warnings
+reveal 'codex://019e5cc5/errors'
+
+# Tools + shell interleaved chronologically
+reveal 'codex://019e5cc5/workflow'
+
+# Full event stream (all JSONL event types in order)
+reveal 'codex://019e5cc5/timeline'
+```
+
+**Codex install introspection:**
+```bash
+# Resolved paths + DB stats
+reveal 'codex://info'
+
+# ~/.codex/history.jsonl prompt history
+reveal 'codex://history'
+
+# ~/.codex/config.toml (secrets masked)
+reveal 'codex://config'
+
+# ~/.codex/memories/ (MEMORY.md + session summaries)
+reveal 'codex://memories'
+
+# Stage1/Stage2 memory consolidation pipeline status
+reveal 'codex://memories/pipeline'
+
+# ~/.codex/rules/*.rules (Starlark permission rules)
+reveal 'codex://rules'
+```
+
+**UUID prefix**: Use the first 7+ hex chars of a UUID — `reveal 'codex://019e5cc5'` resolves to the matching session. No need to type the full UUID.
+
+**codex:// session views:**
+- `codex://` — list all user sessions (subagent sessions filtered out)
+- `codex://<UUID>` — overview: turns, tool calls, tokens, duration, git branch
+- `codex://<UUID>?last` — last agent message — fastest recovery
+- `codex://<UUID>?tokens` — per-turn table: INPUT / CACHED / OUTPUT / REASON / TOTAL
+- `codex://<UUID>?goal` — thread goal from `goals_1.sqlite` (objective, status, token budget)
+- `codex://<UUID>/messages` — user + agent conversation turns with memory citations
+- `codex://<UUID>/tools` — function_call/output pairs with success rates
+- `codex://<UUID>/shell` — exec_command_end events: command, exit code, output
+- `codex://<UUID>/errors` — error/warning/guardian_warning events
+- `codex://<UUID>/workflow` — tool calls + shell commands interleaved chronologically
+- `codex://<UUID>/timeline` — every JSONL event with brief summary (session_meta, turn_context, messages, tool calls, token counts, etc.)
+
+**codex:// install views:**
+- `codex://info` — diagnostic path dump (resolved dirs, DB stats)
+- `codex://history` — prompt history from `~/.codex/history.jsonl`
+- `codex://config` — `~/.codex/config.toml` with secrets masked
+- `codex://memories` — `~/.codex/memories/` tree with file content
+- `codex://memories/pipeline` — Stage1/Stage2 consolidation status from `stage1_outputs`
+- `codex://rules` — Starlark permission rules from `~/.codex/rules/*.rules`
+
+**When to use which view:**
+
+| Scenario | Command |
+|----------|---------|
+| "What did this session do?" | `reveal 'codex://<UUID>'` |
+| "What order did things happen?" | `.../workflow` |
+| "What was every event?" | `.../timeline` |
+| "How many tokens did it use?" | `...?tokens` |
+| "What shell commands ran?" | `.../shell` |
+| "Which tools were called?" | `.../tools` |
+| "Why did something fail?" | `.../errors` |
+| "Where did the session stop?" | `...?last` |
+| "What was the goal?" | `...?goal` |
+| "Find sessions about X" | `codex://sessions/?search=X` |
+| "Has X been discussed?" | `codex://sessions/?content=X` |
+| "What's in memory?" | `codex://memories` |
+| "Is memory pipeline running?" | `codex://memories/pipeline` |
+
+**Progressive analysis workflow:**
+```bash
+# 1. Start with overview (cheapest)
+reveal 'codex://019e5cc5'
+
+# 2. See what happened in order
+reveal 'codex://019e5cc5/workflow'
+
+# 3. Check token cost
+reveal 'codex://019e5cc5?tokens'
+
+# 4. Drill into errors if something went wrong
+reveal 'codex://019e5cc5/errors'
+
+# 5. Full forensics if needed
+reveal 'codex://019e5cc5/timeline'
+```
+
+**Key differences from claude://:**
+- Session IDs are UUIDs (not slug names) — use 7+ hex prefix for convenience
+- SQLite-first: session listing and search never touch JSONL files
+- Reasoning blocks are encrypted — only count is shown, not content
+- Native shell execution via `exec_command_end` events (older/sandbox sessions) OR `exec_command` function_call tool (recent sessions)
+- Thread goals: `goals_1.sqlite` stores per-session objective + token budget
+- Memory pipeline: `stage1_outputs` table tracks consolidation state
+
+Full guide: `reveal help://codex`
 
 ---
 
