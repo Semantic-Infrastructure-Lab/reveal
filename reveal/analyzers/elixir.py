@@ -7,6 +7,7 @@ from ..treesitter import TreeSitterAnalyzer
 
 
 @register('.ex', name='Elixir', icon='')
+@register('.exs', name='Elixir Script', icon='')
 class ElixirAnalyzer(TreeSitterAnalyzer):
     """Elixir file analyzer.
 

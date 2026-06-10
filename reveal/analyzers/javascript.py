@@ -5,6 +5,9 @@ from ..treesitter import TreeSitterAnalyzer
 
 
 @register('.js', name='JavaScript', icon='')
+@register('.jsx', name='JavaScript React', icon='')
+@register('.mjs', name='JavaScript Module', icon='')
+@register('.cjs', name='JavaScript CommonJS', icon='')
 class JavaScriptAnalyzer(TreeSitterAnalyzer):
     """JavaScript file analyzer.
 

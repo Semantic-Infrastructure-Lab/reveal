@@ -209,6 +209,20 @@ def _find_language_by_name(language: str) -> Tuple[Optional[str], Optional[Dict]
     if not matches:
         return None, None, f"❌ Language not found: {language}\n\nTry: reveal --languages to see all supported languages"
 
+    # When multiple extensions match, try to resolve to a single result.
+    if len(matches) > 1:
+        # 1. Prefer exact name match (e.g. "javascript" → "JavaScript" not "JavaScript React")
+        exact = [(e, i) for e, i in matches if i['name'].lower() == language.lower()]
+        if len(exact) == 1:
+            return exact[0][0], exact[0][1], None
+        # 2. If all exact-name matches share one analyzer class (e.g. .js/.jsx/.mjs/.cjs),
+        #    return the shortest extension as the canonical one.
+        if len(exact) > 1:
+            classes = {id(i.get('class')) for _, i in exact}
+            if len(classes) <= 1:
+                exact.sort(key=lambda t: len(t[0]))
+                return exact[0][0], exact[0][1], None
+
     if len(matches) > 1:
         lines = [f"🔍 Multiple matches for '{language}':"]
         lines.append("")
