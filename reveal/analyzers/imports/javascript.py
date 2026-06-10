@@ -124,6 +124,12 @@ class JavaScriptExtractor(LanguageExtractor):
                 if root:
                     symbols.add(root)
 
+        # TypeScript: type_identifier nodes appear in type annotation positions
+        # (`: IFoo`, `<IFoo>`, `extends IFoo`). The _is_usage_context check is for
+        # runtime identifiers; type positions are always usages, so we add them all.
+        for node in analyzer._find_nodes_by_type('type_identifier'):
+            symbols.add(analyzer._get_node_text(node))
+
         return symbols
 
     def _extract_module_path_from_import(self, node, analyzer) -> Optional[str]:
