@@ -600,5 +600,68 @@ pub fn main() !void {
             os.unlink(temp_path)
 
 
+    def test_signature_format_no_double_name(self):
+        """Signature should be '(params)' not 'name(params)' — display renders name+signature."""
+        code = '''
+pub fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+pub fn init() void {}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.zig', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = ZigAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            funcs = {f['name']: f for f in structure.get('functions', [])}
+
+            # Signature must start with '(' — not with the function name
+            self.assertIn('add', funcs)
+            self.assertEqual(funcs['add']['signature'], '(a, b)')
+
+            # No-param function: signature should be empty string (not the name)
+            self.assertIn('init', funcs)
+            self.assertEqual(funcs['init']['signature'], '')
+        finally:
+            os.unlink(temp_path)
+
+    def test_extract_element_by_name(self):
+        """reveal file.zig funcname should extract the function source."""
+        code = '''
+pub fn multiply(a: i32, b: i32) i32 {
+    return a * b;
+}
+
+pub fn divide(a: i32, b: i32) i32 {
+    return @divTrunc(a, b);
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.zig', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = ZigAnalyzer(temp_path)
+
+            result = analyzer.extract_element('function', 'multiply')
+            self.assertIsNotNone(result, "extract_element('function', 'multiply') returned None")
+            self.assertEqual(result['name'], 'multiply')
+            self.assertIn('multiply', result['source'])
+            self.assertNotIn('divide', result['source'])
+
+            result2 = analyzer.extract_element('function', 'divide')
+            self.assertIsNotNone(result2)
+            self.assertEqual(result2['name'], 'divide')
+
+            # Non-existent function
+            self.assertIsNone(analyzer.extract_element('function', 'nonexistent'))
+        finally:
+            os.unlink(temp_path)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -89,8 +89,8 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         return []
 
     def _build_function_signature(self, fn_name: str, params: List[str]) -> str:
-        """Build function signature string."""
-        return f"{fn_name}({', '.join(params)})" if params else fn_name
+        """Build function signature string (params only, no name — matches display convention)."""
+        return f"({', '.join(params)})" if params else ""
 
     def _build_function_info(self, decl_node, fn_name: str, signature: str, has_pub: bool) -> Dict[str, Any]:
         """Build function information dictionary."""
@@ -239,6 +239,22 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                 name = self._get_node_text(child)
                 return name[1:-1] if name.startswith('"') and name.endswith('"') else name
         return None
+
+    def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
+        """Extract a named function from Zig source."""
+        if element_type == 'function' and self.tree:
+            for decl_node in self._find_nodes_by_type('Decl'):
+                fn_proto = self._find_fn_proto(decl_node)
+                if fn_proto:
+                    fn_name = self._extract_function_name(fn_proto)
+                    if fn_name == name:
+                        return {
+                            'name': name,
+                            'line_start': decl_node.start_position().row + 1,
+                            'line_end': decl_node.end_position().row + 1,
+                            'source': self._get_node_text(decl_node),
+                        }
+        return super().extract_element(element_type, name)
 
     def _extract_tests(self) -> List[Dict[str, Any]]:
         """Extract test blocks."""

@@ -22,6 +22,7 @@ _INTENTIONALLY_EXCLUDED = {
     'BENCHMARKS.md': 'performance data, not a user guide',
     'INDEX.md': 'table-of-contents meta-file, not standalone content',
     'README.md': 'mirrors top-level package README, not a guide',
+    'development/WINDOWS_SIGNING.md': 'internal signing cert workflow, not a user guide',
 }
 
 _DOCS_ROOT = Path(__file__).parent.parent / 'reveal' / 'docs'
