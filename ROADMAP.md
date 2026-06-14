@@ -1260,6 +1260,24 @@ reveal --pr                 # PR context auto-detection
 
 ## Technical Debt & Planned Infrastructure
 
+### Windows Code Signing (SignPath Foundation)
+
+**Status**: 🔬 Planned — application to SignPath Foundation not yet submitted
+**Value**: High | **Lift**: Medium
+**Doc**: [`reveal/docs/development/WINDOWS_SIGNING.md`](reveal/docs/development/WINDOWS_SIGNING.md)
+
+pip generates `reveal.exe` unsigned at install time — structurally unresolvable through pip. On Windows machines with ACP/WDAC enabled, upgrades break the tool. Observed concretely 2026-05-25 (hidden-sword-0525).
+
+Plan:
+1. **Phase 1** — Apply to [SignPath Foundation](https://signpath.org/) (free Authenticode signing for OSS, HSM-backed, GitHub Actions native)
+2. **Phase 2** — Add `reveal/__main__.py` so `python -m reveal` works as ACP-safe fallback (one-file fix, no cert needed)
+3. **Phase 3** — PyInstaller single-file `reveal.exe`, signed via SignPath in GitHub Actions, distributed as GitHub Release binary
+4. **Phase 4** — Document signed binary as the recommended Windows install path in README/QUICK_START
+
+Discovery: hidden-sword-0525 (2026-05-25)
+
+---
+
 ### tree-sitter-language-pack 1.x Migration
 
 **Status**: ✅ **Complete** (lightning-sphinx-0522, 2026-05-22) — pin lifted, all 8700 tests passing on 1.8.1

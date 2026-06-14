@@ -131,6 +131,7 @@ For contributors and adapter authors:
 | [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md) | 454 | Create custom adapters |
 | [ADAPTER_CONSISTENCY.md](development/ADAPTER_CONSISTENCY.md) | 388 | Adapter UX patterns and consistency |
 | [SCAFFOLDING_GUIDE.md](development/SCAFFOLDING_GUIDE.md) | 390 | CLI scaffolding system |
+| [WINDOWS_SIGNING.md](development/WINDOWS_SIGNING.md) | — | Windows ACP problem, SignPath Foundation plan, PyInstaller signing pipeline |
 
 **Total**: ~1,542 lines
 

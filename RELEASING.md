@@ -333,6 +333,10 @@ Bumping mid-session causes the doc validation test (`test_agent_help_is_current_
 - [ ] `pip install --upgrade reveal-cli` works
 - [ ] `reveal --version` shows correct version
 
+**Windows signed binary** (once SignPath Foundation is set up — see [`WINDOWS_SIGNING.md`](reveal/docs/development/WINDOWS_SIGNING.md)):
+- [ ] GitHub Actions `build-windows.yml` attached signed `reveal.exe` to the GitHub Release
+- [ ] Download and run the binary to confirm it launches without ACP warnings
+
 ---
 
 ## Quick Reference
