@@ -12,6 +12,18 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.98.0] - 2026-06-14 (sessions bright-singularity-0613, hehacapo-0613, voltaic-leviathan-0614)
+
+### Fixed
+- **Zig: doubled function names in display** — `_build_function_signature` returned `"sin(value)"` but the display layer renders `f"{name}{signature}"`, producing `sinsin(value)`. Changed to return params only: `"(value)"` or `""` for zero-param functions. (hehacapo-0613)
+- **Zig: named extraction failing** — `reveal file.zig funcname` raised an error because base `extract_element` searches Python/Go/Rust node type names, none of which match Zig's `Decl`/`FnProto` tree. Added `ZigAnalyzer.extract_element` override walking `Decl` nodes. Verified against `/opt/zig/lib/std/math.zig`. (hehacapo-0613)
+- **`reveal check`/`hotspots` hang on non-Python projects — BACK-338** — Three layered defects in I002's `_find_project_root` caused the import-graph build to scan the entire filesystem when a stray ancestor `__init__.py` existed above a non-Python project. **(A)** Pass-2 `__init__.py` walk rewritten to only ascend a contiguous chain rooted at the target's own dir — a non-package directory never ascends. **(B)** Pass-1 now checks `_PROJECT_MARKERS` (`pyproject.toml`, `setup.py`, `package.json`, `go.mod`, `Cargo.toml`) before falling back to the init-chain walk. **(C)** `_i002_preload` was unconditional — now skips the import-graph build when I002 is not in the effective rule set (e.g. `--select C901`). Hardening: `_collect_raw_imports` aborts to an empty graph + logged WARNING past `REVEAL_I002_MAX_FILES` (default 20 000) — future mis-detection degrades to a logged skip, never a hang. (bright-singularity-0613 filed, hehacapo-0613 fixed)
+
+### Tests
+- **+27 tests** — `TestI002ProjectRootBACK338` (8 tests) in `test_rules.py`; Defect C + preload-signature tests in `test_file_checker.py`; Zig display and named-extraction tests in `test_zig_analyzer.py`. Full suite: 8921 passed, 22 skipped. (hehacapo-0613)
+
+---
+
 ## [0.97.0] - 2026-05-24 (sessions onyx-spectrum-0524, roaring-tide-0524, xerothermic-maelstrom-0524)
 
 ### Added

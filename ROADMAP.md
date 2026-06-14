@@ -7,6 +7,12 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.98.0 — Zig analyzer fixes + `reveal check`/`hotspots` hang fix (BACK-338)
+- ✅ **Zig: doubled function names fixed** — `_build_function_signature` now returns params only; display no longer produces `sinsin(value)`. (hehacapo-0613)
+- ✅ **Zig: named extraction fixed** — `reveal file.zig funcname` works via `ZigAnalyzer.extract_element` override walking `Decl` nodes. (hehacapo-0613)
+- ✅ **BACK-338: `reveal check`/`hotspots` hang on non-Python projects** — Three I002 defects fixed: stray-ancestor `__init__.py` hijack (A), non-Python markers ignored (B), unconditional preload on `--select C901` (C). File-count ceiling aborts to logged skip as hardening. (bright-singularity-0613, hehacapo-0613, voltaic-leviathan-0614)
+- ✅ **+27 tests** in `test_rules.py`, `test_file_checker.py`, `test_zig_analyzer.py`. Suite: 8921 passed. (hehacapo-0613)
+
 ### v0.97.0 — `codex://` adapter + agent discoverability
 - ✅ **`codex://` adapter** — full Claude Code session explorer: listing, search, overview, messages, tools, shell, errors, workflow, timeline, tokens, goal, memories/pipeline, history, config, rules, info. (onyx-spectrum-0524)
 - ✅ **Agent discoverability Sprint 1-3** — `claude://` schema params (`?params`, `?last`, `?tool`, `?turns`, `?since`); `help://` decision tree and recipes; MCP_SETUP.md cross-resource workflows; README AI agents section; AGENT_HELP.md codex row. (roaring-tide-0524, xerothermic-maelstrom-0524)
