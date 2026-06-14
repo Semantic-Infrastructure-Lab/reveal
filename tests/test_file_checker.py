@@ -369,32 +369,48 @@ class TestI002Preload:
 
     def test_preload_skipped_when_i002_ignored(self, tmp_path):
         """_i002_preload returns empty dict when I002 is in the ignore list."""
-        result = _i002_preload(tmp_path, ignore=["I002"])
+        result = _i002_preload(tmp_path, select=None, ignore=["I002"])
         assert result == {}
 
     def test_preload_skipped_when_i002_in_ignore_with_others(self, tmp_path):
         """_i002_preload returns empty dict when I002 is among other ignored rules."""
-        result = _i002_preload(tmp_path, ignore=["V001", "I002", "F001"])
+        result = _i002_preload(tmp_path, select=None, ignore=["V001", "I002", "F001"])
         assert result == {}
+
+    def test_preload_skipped_when_select_excludes_i002(self, tmp_path):
+        """_i002_preload returns empty dict when --select asks for unrelated rules (BACK-338 Defect C).
+
+        ``check <dir> --select C901`` must not trigger the I002 import-graph build —
+        the user asked for a complexity rule, nothing in the I category.
+        """
+        (tmp_path / "a.py").write_text("import os\n")
+        result = _i002_preload(tmp_path, select=["C901"], ignore=None)
+        assert result == {}
+
+    def test_preload_runs_when_select_includes_i_category(self, tmp_path):
+        """_i002_preload builds the graph when --select includes the I category."""
+        (tmp_path / "a.py").write_text("import os\n")
+        result = _i002_preload(tmp_path, select=["I"], ignore=None)
+        assert isinstance(result, dict)
 
     def test_preload_runs_when_ignore_is_none(self, tmp_path):
         """_i002_preload attempts graph build when ignore=None."""
         (tmp_path / "a.py").write_text("import os\n")
-        result = _i002_preload(tmp_path, ignore=None)
+        result = _i002_preload(tmp_path, select=None, ignore=None)
         # Should return a dict (may be empty if no cycles, but a dict either way)
         assert isinstance(result, dict)
 
     def test_preload_runs_when_ignore_excludes_i002(self, tmp_path):
         """_i002_preload attempts graph build when I002 is not in ignore list."""
         (tmp_path / "a.py").write_text("import os\n")
-        result = _i002_preload(tmp_path, ignore=["V001"])
+        result = _i002_preload(tmp_path, select=None, ignore=["V001"])
         assert isinstance(result, dict)
 
     def test_preload_survives_import_error(self, tmp_path):
         """_i002_preload returns empty dict if I002 module cannot be imported."""
         with patch("reveal.cli.file_checker._i002_preload", wraps=_i002_preload):
             with patch.dict("sys.modules", {"reveal.rules.imports.I002": None}):
-                result = _i002_preload(tmp_path, ignore=None)
+                result = _i002_preload(tmp_path, select=None, ignore=None)
         assert isinstance(result, dict)
 
     def test_init_worker_populates_cache(self, tmp_path):
@@ -452,8 +468,8 @@ class TestI002Preload:
 
         preload_calls = []
 
-        def fake_preload(directory, ignore):
-            preload_calls.append((directory, ignore))
+        def fake_preload(directory, select, ignore):
+            preload_calls.append((directory, select, ignore))
             return {}
 
         with patch("reveal.cli.file_checker._i002_preload", side_effect=fake_preload):

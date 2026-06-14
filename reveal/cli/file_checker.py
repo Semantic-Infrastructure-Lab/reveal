@@ -42,19 +42,35 @@ def _parallel_worker(packed_args: tuple) -> tuple:
     return file_path, issue_count, detections
 
 
-def _i002_preload(directory: Path, ignore) -> dict:
+def _i002_will_run(select, ignore) -> bool:
+    """Return True if I002 is in the effective rule set for the given filters.
+
+    Delegates to the same RuleRegistry resolution the per-file check uses, so
+    the preload decision can never drift from what actually runs. In particular
+    this honors --select: ``check <dir> --select C901`` must not trigger the
+    expensive I002 import-graph build (BACK-338).
+    """
+    from reveal.rules import RuleRegistry
+    rules = RuleRegistry.get_rules(select=select, ignore=ignore)
+    return any(r.code == "I002" for r in rules)
+
+
+def _i002_preload(directory: Path, select, ignore) -> dict:
     """Build the I002 import graph in the main process before spawning workers.
 
     Returns a plain dict (project_root -> ImportGraph) ready to pickle into
     each worker via the ProcessPoolExecutor initializer.  Workers that receive
     a non-empty cache skip the expensive tree-sitter scan entirely.
 
+    Skips the build entirely (returns {}) when I002 is not in the effective rule
+    set — e.g. it is ignored, or --select asks for unrelated rules only.
+
     Returns an empty dict on any error so the caller degrades gracefully to
     the old per-worker build behaviour.
     """
-    if ignore and "I002" in ignore:
-        return {}
     try:
+        if not _i002_will_run(select, ignore):
+            return {}
         from reveal.rules.imports.I002 import I002, _find_project_root, _graph_cache
         root = _find_project_root(directory.resolve())
         I002()._build_import_graph(root)   # populates _graph_cache in main process
@@ -99,7 +115,7 @@ def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
     # Capping at 4 leaves remaining cores free and reduces IPC pressure.
     workers = min(4, os.cpu_count() or 4, len(files))
     args_iter = [(f, directory, select, ignore) for f in files]
-    graph_cache = _i002_preload(directory, ignore)
+    graph_cache = _i002_preload(directory, select, ignore)
     with ProcessPoolExecutor(
         max_workers=workers,
         initializer=_i002_init_worker,
@@ -130,7 +146,7 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
     from concurrent.futures import as_completed
     workers = min(4, os.cpu_count() or 4, len(files))
     args_list = [(f, directory, select, ignore) for f in files]
-    graph_cache = _i002_preload(directory, ignore)
+    graph_cache = _i002_preload(directory, select, ignore)
     with ProcessPoolExecutor(
         max_workers=workers,
         initializer=_i002_init_worker,

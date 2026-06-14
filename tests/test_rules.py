@@ -1152,6 +1152,154 @@ class TestI002ProjectRootCache(unittest.TestCase):
                          f"Expected {self.tmp}, got {root}")
 
 
+class TestI002ProjectRootBACK338(unittest.TestCase):
+    """Regression tests for BACK-338: check/hotspots hang on non-Python projects.
+
+    Root cause was _find_project_root mis-detecting the project root and making
+    I002 scan tens of thousands of unrelated files. Three layered defects:
+      A — Pass-2 __init__.py walk crossed project boundaries (stray ancestor
+          __init__.py hijacked the root of an unrelated non-package dir).
+      B — non-Python project markers (package.json/go.mod/Cargo.toml) ignored.
+      + a file-count ceiling so any future mis-detection degrades to a logged
+        skip instead of an infinite hang.
+    """
+
+    def setUp(self):
+        import tempfile
+        self.tmp = Path(tempfile.mkdtemp(prefix='reveal_back338_'))
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_stray_ancestor_init_does_not_hijack_root(self):
+        """Defect A: a far-ancestor __init__.py must not hijack a non-package dir.
+
+        This is the exact BACK-338 shape: a TS file deep under a shared src/
+        whose only Python marker is a stray __init__.py several levels up.
+        """
+        from reveal.rules.imports.I002 import _find_project_root
+        stray = self.tmp / 'src'
+        proj = stray / 'projects' / 'myapp' / 'server' / 'src'
+        proj.mkdir(parents=True)
+        (stray / '__init__.py').write_text('')   # stray, far-ancestor marker
+        target = proj / 'index.ts'
+        target.write_text('import {x} from "./y";\n')
+
+        root = _find_project_root(target.resolve())
+        self.assertNotEqual(root, stray,
+                            "stray ancestor __init__.py hijacked the root (Defect A)")
+        # With no nearer marker, falls back to the target's own directory
+        self.assertEqual(root, proj.resolve())
+
+    def test_contiguous_python_package_still_resolves_to_top(self):
+        """Defect A must not regress real Python packages — contiguous chain still works."""
+        from reveal.rules.imports.I002 import _find_project_root
+        pkg = self.tmp / 'mypkg'
+        sub = pkg / 'sub'
+        sub.mkdir(parents=True)
+        (pkg / '__init__.py').write_text('')
+        (sub / '__init__.py').write_text('')
+        mod = sub / 'mod.py'
+        mod.write_text('x = 1\n')
+
+        root = _find_project_root(mod.resolve())
+        self.assertEqual(root, pkg.resolve(),
+                         "contiguous __init__.py chain should resolve to package top")
+
+    def test_package_json_marker_detected(self):
+        """Defect B: package.json marks a JS/TS project root."""
+        from reveal.rules.imports.I002 import _find_project_root
+        proj = self.tmp / 'tia-chess' / 'server'
+        src = proj / 'src'
+        src.mkdir(parents=True)
+        (proj / 'package.json').write_text('{"name": "server"}\n')
+        target = src / 'index.ts'
+        target.write_text('import {x} from "./y";\n')
+
+        root = _find_project_root(target.resolve())
+        self.assertEqual(root, proj.resolve(),
+                         "package.json should mark the project root (Defect B)")
+
+    def test_innermost_package_json_wins(self):
+        """Defect B: in a monorepo, the nearest package.json is the project boundary."""
+        from reveal.rules.imports.I002 import _find_project_root
+        outer = self.tmp / 'monorepo'
+        inner = outer / 'packages' / 'server'
+        src = inner / 'src'
+        src.mkdir(parents=True)
+        (outer / 'package.json').write_text('{"name": "monorepo"}\n')
+        (inner / 'package.json').write_text('{"name": "server"}\n')
+        target = src / 'index.ts'
+        target.write_text('export const x = 1;\n')
+
+        root = _find_project_root(target.resolve())
+        self.assertEqual(root, inner.resolve(),
+                         "nearest package.json should win over an outer one")
+
+    def test_go_and_rust_markers_detected(self):
+        """Defect B: go.mod and Cargo.toml also mark project roots."""
+        from reveal.rules.imports.I002 import _find_project_root
+
+        go_proj = self.tmp / 'goapp'
+        go_sub = go_proj / 'internal'
+        go_sub.mkdir(parents=True)
+        (go_proj / 'go.mod').write_text('module goapp\n')
+        go_target = go_sub / 'main.go'
+        go_target.write_text('package internal\n')
+        self.assertEqual(_find_project_root(go_target.resolve()), go_proj.resolve())
+
+        rust_proj = self.tmp / 'rustapp'
+        rust_sub = rust_proj / 'src'
+        rust_sub.mkdir(parents=True)
+        (rust_proj / 'Cargo.toml').write_text('[package]\nname = "rustapp"\n')
+        rust_target = rust_sub / 'lib.rs'
+        rust_target.write_text('pub fn x() {}\n')
+        self.assertEqual(_find_project_root(rust_target.resolve()), rust_proj.resolve())
+
+    def test_file_count_ceiling_aborts_scan(self):
+        """Hardening: scan aborts to empty graph past the file ceiling (logged skip)."""
+        import os
+        from unittest import mock
+        from reveal.rules.imports.I002 import I002, _graph_cache
+        for i in range(6):
+            (self.tmp / f'm{i}.py').write_text('import os\n')
+        _graph_cache.clear()
+        with mock.patch.dict(os.environ, {'REVEAL_I002_MAX_FILES': '3'}):
+            imports = I002()._collect_raw_imports(self.tmp)
+        self.assertEqual(imports, [],
+                         "scan should abort to empty list when ceiling exceeded")
+
+    def test_ceiling_env_override_invalid_falls_back_to_default(self):
+        """A non-integer REVEAL_I002_MAX_FILES falls back to the default ceiling."""
+        import os
+        from unittest import mock
+        from reveal.rules.imports.I002 import _max_graph_files, _DEFAULT_MAX_GRAPH_FILES
+        with mock.patch.dict(os.environ, {'REVEAL_I002_MAX_FILES': 'not-a-number'}):
+            self.assertEqual(_max_graph_files(), _DEFAULT_MAX_GRAPH_FILES)
+
+    def test_back338_check_does_not_hang_on_ts_project(self):
+        """End-to-end: I002.check on a TS file under a stray __init__.py is bounded.
+
+        Before the fix this scanned the whole ancestor tree. Now it must return
+        quickly (no cycle in a 1-file project) regardless of the stray marker.
+        """
+        from reveal.rules.imports.I002 import I002, _graph_cache
+        stray = self.tmp / 'src'
+        proj = stray / 'projects' / 'app' / 'server' / 'src'
+        proj.mkdir(parents=True)
+        (stray / '__init__.py').write_text('')
+        target = proj / 'index.ts'
+        target.write_text('import {y} from "./y";\n')
+        (proj / 'y.ts').write_text('export const y = 1;\n')
+
+        _graph_cache.clear()
+        detections = I002().check(str(target), None, target.read_text())
+        self.assertEqual(detections, [], "no cycle expected; scan must stay bounded")
+        # The cached scan root must be the local project, never the stray ancestor
+        self.assertNotIn(stray.resolve(), _graph_cache)
+
+
 class TestI001EdgeCases(unittest.TestCase):
     """Additional edge case tests for I001."""
 

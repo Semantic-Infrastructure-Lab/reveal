@@ -301,6 +301,21 @@ export REVEAL_E501_MAX_LENGTH=120
 reveal --check file.py
 ```
 
+#### `REVEAL_I002_MAX_FILES`
+Safety ceiling on the number of source files I002 (circular-dependency rule)
+will scan when building its import graph for a project. Default `20000`.
+
+I002 scans every source file under the detected project root. If root detection
+ever points at a tree far larger than a single project, the scan would otherwise
+run for minutes; instead it aborts past this ceiling, logs a warning, and skips
+circular-dependency analysis for that run. Raise it only for genuinely huge
+monorepos:
+
+```bash
+export REVEAL_I002_MAX_FILES=50000
+reveal check very-large-monorepo/
+```
+
 #### `REVEAL_BREADCRUMBS`
 Control navigation hints after output:
 

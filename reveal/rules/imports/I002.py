@@ -5,6 +5,7 @@ Supports Python, JavaScript, Go, and Rust.
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -20,12 +21,53 @@ logger = logging.getLogger(__name__)
 # per process (was once per subdirectory, defeating the cache on deep trees).
 _graph_cache: Dict[Path, 'ImportGraph'] = {}
 
+# Project-root marker files, one per supported language. The presence of any of
+# these at a directory level means "this directory is a project root, stop here".
+# Without the non-Python markers, a TS/Go/Rust project with no .git would fall
+# through to the __init__.py heuristic and could mis-detect a far ancestor as the
+# root (BACK-338), then scan tens of thousands of unrelated files.
+_PROJECT_MARKERS = (
+    'pyproject.toml',  # Python
+    'setup.py',        # Python
+    'package.json',    # JavaScript / TypeScript
+    'go.mod',          # Go
+    'Cargo.toml',      # Rust
+)
+
+# Safety ceiling on the import-graph scan. A correctly-detected project root
+# almost never exceeds this; blowing past it means root detection went wrong
+# (BACK-338). When tripped we log and return an empty graph — a logged skip, not
+# a silent multi-minute hang. Override with REVEAL_I002_MAX_FILES for monorepos.
+_DEFAULT_MAX_GRAPH_FILES = 20000
+
+
+def _max_graph_files() -> int:
+    """Read the import-graph file ceiling, honoring REVEAL_I002_MAX_FILES."""
+    raw = os.environ.get('REVEAL_I002_MAX_FILES')
+    if raw:
+        try:
+            value = int(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            logger.debug("Invalid REVEAL_I002_MAX_FILES=%r, using default", raw)
+    return _DEFAULT_MAX_GRAPH_FILES
+
 
 def _find_project_root(path: Path) -> Path:
-    """Walk up from path to find the project root (pyproject.toml/setup.py).
+    """Walk up from path to find the project root.
 
-    Falls back to the topmost directory containing __init__.py, then to
-    path.parent if no markers are found.
+    Resolution order:
+      1. The nearest ancestor holding a language project marker
+         (pyproject.toml, setup.py, package.json, go.mod, Cargo.toml).
+      2. The nearest ancestor holding a .git directory.
+      3. The top of the *contiguous* __init__.py chain rooted at the target's
+         own directory (Python packages only).
+      4. path.parent, if none of the above apply.
+
+    Step 3 is deliberately contiguous: a stray __init__.py far up the tree (a
+    common leftover in a shared src/ or home dir) must never hijack the root of
+    an unrelated, non-package directory and trigger a whole-tree scan (BACK-338).
     """
     current = path.parent
 
@@ -33,28 +75,30 @@ def _find_project_root(path: Path) -> Path:
     sentinel = current
     git_root = None
     for _ in range(15):
-        if (current / 'pyproject.toml').exists() or (current / 'setup.py').exists():
+        if any((current / marker).exists() for marker in _PROJECT_MARKERS):
             return current
         if git_root is None and (current / '.git').exists():
-            git_root = current  # note it, keep walking for pyproject.toml above it
+            git_root = current  # note it, keep walking for a marker above it
         parent = current.parent
         if parent == current:
             break
         current = parent
 
-    # .git is a strong project root signal even without pyproject.toml
+    # .git is a strong project root signal even without a marker file
     _system_roots = frozenset({Path('/'), Path('/tmp'), Path('/var'), Path('/var/tmp')})
     if git_root is not None and git_root not in _system_roots:
         return git_root
 
-    # Pass 2: topmost __init__.py boundary
-    current = sentinel
-    for _ in range(15):
-        if (current / '__init__.py').exists():
+    # Pass 2: contiguous __init__.py chain from the target's own package upward.
+    # If the target directory is not itself a Python package, do NOT ascend —
+    # this is what prevents a far-ancestor __init__.py from hijacking the root.
+    if (sentinel / '__init__.py').exists():
+        current = sentinel
+        for _ in range(15):
             parent = current.parent
-            if not (parent / '__init__.py').exists():
+            if parent == current or not (parent / '__init__.py').exists():
                 return current
-        current = current.parent
+            current = parent
 
     return sentinel
 
@@ -163,15 +207,33 @@ class I002(BaseRule):
         return graph
 
     def _collect_raw_imports(self, directory: Path) -> list:
-        """Phase 1: Walk directory and extract raw import statements from all files."""
+        """Phase 1: Walk directory and extract raw import statements from all files.
+
+        Aborts to an empty list if the number of supported source files exceeds
+        the configured ceiling (REVEAL_I002_MAX_FILES). That only happens when
+        project-root detection has gone wrong and pointed the scan at a tree far
+        larger than any single project (BACK-338); bailing keeps the failure a
+        logged skip rather than a multi-minute hang.
+        """
         all_imports = []
         supported_extensions = get_all_extensions()
+        max_files = _max_graph_files()
+        scanned = 0
 
         for file_path in directory.rglob("*"):
             if not file_path.is_file():
                 continue
             if file_path.suffix not in supported_extensions:
                 continue
+            scanned += 1
+            if scanned > max_files:
+                logger.warning(
+                    "I002: import-graph scan of %s exceeded %d source files; "
+                    "skipping circular-dependency analysis (likely a project-root "
+                    "mis-detection — set REVEAL_I002_MAX_FILES to raise the limit)",
+                    directory, max_files,
+                )
+                return []
             extractor = get_extractor(file_path)
             if not extractor:
                 continue
