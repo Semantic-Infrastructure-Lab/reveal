@@ -12,6 +12,21 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`claude://session/<name>/prompts` — human-typed prompts only (BACK-340)** — `/user` encodes tool-result turns as `role: user`, so a session with ~15 real prompts shows ~170 "user" messages. The new `/prompts` resource filters to messages with at least one `type: text` block, excluding pure `tool_result` wrappers. New `get_human_prompts()` in `analysis/messages.py`, dedicated `_render_claude_user_prompts` renderer, `claude_user_prompts` output type in the schema. `/user` is unchanged for backward compatibility. (risen-scepter-0614)
+- **`?snippet=N` for cross-session search context (BACK-342)** — `reveal 'claude://sessions/?search=term&snippet=300'` controls the characters of context around each match (default 120, clamped 60–500). Threaded `window_chars` through `search_sessions()` → `search_sessions_for_term()` → `_extract_first_snippet()` → `_collect_block_matches()` → `_search_block()` → `_find_excerpt()`. Removed the hard 200-char cap in the cross-session renderer (within-session search renderer cap unchanged). (risen-scepter-0614)
+
+### Fixed
+- **claude:// session titles: skip harness XML and single-word acks (BACK-341)** — UUID-named sessions (Windows / multi-user, no `session badge`) showed titles like `<local-command-caveat>...` or `aye`. `_parse_jsonl_line_for_title` now skips candidates matching `^<[a-z]` (harness-injected XML tags: `<local-command-caveat>`, `<command-name>`, `<bash-input>`, `<bash-stdout>`) and candidates shorter than 5 chars (`aye`, `ok`). A `<` mid-sentence (`Is x < y?`) is preserved. Additionally, `_scan_jsonl_for_title` now scans assistant Bash calls for `session badge "..."` and returns it when present — the listing path is now badge-aware, matching the detail view. (risen-scepter-0614)
+
+### Tests
+- **+30 tests** in `tests/test_claude_adapter_gaps.py` — `TestGetHumanPrompts` (7), `TestPromptsRoute` (3), `TestParseJsonlLineForTitleXmlSkip` (6), `TestParseJsonlLineForTitleMinLength` (5), `TestScanJsonlForTitleBadge` (4), `TestSnippetWindowParam` (5). Full suite: 8951 passed, 22 skipped. (risen-scepter-0614)
+
+### Known gaps (filed, not yet fixed)
+- BACK-344 `/timeline` has no renderer (data generates correctly, always falls back to key/value dump). BACK-345 `/thinking` wastes 141 lines on encrypted/empty blocks in recent sessions. BACK-346 `/messages` is undiscoverable (not in help elements). BACK-347 no sub-agent session navigation. BACK-348 listing lacks duration/message-count columns. BACK-349 no `?until=DATE` range filter. See `internal-docs/feedback/CLAUDE_ADAPTER_RESOURCE_AUDIT_2026-06-14.md`.
+
 ## [0.98.0] - 2026-06-14 (sessions bright-singularity-0613, hehacapo-0613, voltaic-leviathan-0614)
 
 ### Fixed

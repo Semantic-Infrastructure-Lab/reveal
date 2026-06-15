@@ -162,15 +162,15 @@ reveal claude://session/infernal-earth-0118?tools=Read
 
 **Returns**: Filtered messages/operations for specified tool
 
-### 9. Read User Messages (the Prompt)
+### 9. Read User Prompts (what the human asked)
 
-See what the user sent — initial prompt as full text, later turns compact:
+See only the prompts the human typed — tool-result turns excluded:
 
 ```bash
-reveal claude://session/infernal-earth-0118/user
+reveal claude://session/infernal-earth-0118/prompts
 ```
 
-**Returns**: Initial prompt text in full, subsequent tool-result turns summarized
+**Returns**: Each human prompt in full, no tool-result noise. (Use `/user` instead if you need to see tool-result turn boundaries too.)
 
 ### 10. Read Assistant Responses (the Findings)
 
@@ -694,7 +694,29 @@ reveal claude://session/infernal-earth-0118/context
 
 ---
 
-### 8. user
+### 8. prompts
+
+**Description**: Human-typed prompts only — messages that contain at least one `text` block. Pure tool-result wrapper messages are excluded.
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>/prompts
+```
+
+**Example**:
+```bash
+reveal claude://session/infernal-earth-0118/prompts
+```
+
+**Output**: Each human prompt with timestamp and full text (first prompt up to 1200 chars, rest up to 300). No `[N tool result(s)]` noise.
+
+**Use when**: You want to read *what the human asked* without wading through tool-result turns. This is the resource to reach for when reviewing intent. The Claude API encodes tool-result turns as `role: user`, so `/user` mixes them in with real prompts — a session with ~15 prompts can show ~170 "user" messages. `/prompts` filters those out.
+
+**vs `/user`**: `/user` shows *all* user-role turns (prompts + tool-result summaries); `/prompts` shows *only* the text the human typed. Prefer `/prompts` for reading intent; use `/user` only when you specifically need to see the tool-result turn boundaries.
+
+---
+
+### 9. user
 
 **Description**: User messages with normalized content — initial prompt as full text, subsequent tool-result turns summarized
 
@@ -710,13 +732,13 @@ reveal claude://session/infernal-earth-0118/user
 
 **Output**: Each user turn with timestamp; first message shown in full (the prompt), tool-result turns shown as `[N tool result(s)]`
 
-**Use when**: Extract the original prompt, compare prompts across sessions, understand what the user asked
+**Use when**: You need to see tool-result turn boundaries alongside prompts. **For reading just what the human asked, prefer [`/prompts`](#8-prompts)** — it strips the tool-result noise.
 
 **Note**: User message content in Claude Code JSONL can be a bare string (initial prompt) or a list of tool_result blocks. This view normalizes both.
 
 ---
 
-### 9. assistant
+### 10. assistant
 
 **Description**: Assistant text responses only — thinking blocks and tool calls stripped, with metadata header per message
 
@@ -738,7 +760,7 @@ reveal claude://session/infernal-earth-0118/assistant?full
 
 ---
 
-### 10. message/\<n\>
+### 11. message/\<n\>
 
 **Description**: Read a single message by index with full content — text, tool_use params, and tool_result output all shown
 
@@ -760,7 +782,7 @@ reveal claude://session/infernal-earth-0118/message/-1
 
 ---
 
-### 11. message (range)
+### 12. message (range)
 
 **Description**: Read a range of messages (both user and assistant, interleaved) using the standard `--range` flag
 
@@ -788,7 +810,7 @@ reveal claude://session/infernal-earth-0118/message --range 5-15
 
 ---
 
-### 12. agents
+### 13. agents
 
 **Description**: Agent tool calls made during the session with per-agent telemetry
 
@@ -808,7 +830,7 @@ reveal claude://session/infernal-earth-0118/agents
 
 ---
 
-### 13. chain
+### 14. chain
 
 **Description**: Session continuation chain traversal — follows `continuing_from:` links in README frontmatter back through the session history
 
@@ -1789,7 +1811,22 @@ reveal 'claude://search/validate_token'
 
 # Show all matches (no 20-result limit)
 reveal 'claude://sessions/?search=auth' --all
+
+# Widen the context snippet around each match (default 120, range 60–500)
+reveal 'claude://sessions/?search=validate_token&snippet=300'
+
+# Whole-word match (no substring hits: "auth" won't match "authenticate")
+reveal 'claude://sessions/?search=auth&word'
 ```
+
+**Query parameters:**
+
+| Param | Effect |
+|-------|--------|
+| `?search=TERM` | Term to find (case-insensitive substring by default) |
+| `?since=DATE` | ISO date or `today` — narrows the corpus before scanning (faster) |
+| `?word` | Whole-word match — prevents substring hits |
+| `?snippet=N` | Characters of context around each match. Default `120`, clamped to `60–500`. Use a larger value when the 120-char default doesn't show enough to understand why the term matched. |
 
 ---
 
