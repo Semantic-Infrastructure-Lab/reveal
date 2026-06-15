@@ -1446,3 +1446,175 @@ class TestSnippetWindowParam:
     def test_snippet_documented_in_schema(self):
         from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
         assert 'snippet' in _SCHEMA_QUERY_PARAMS
+
+
+class TestBack344TimelineRenderer:
+    """BACK-344: /timeline had no renderer — always fell back to key/value dump."""
+
+    def _make_timeline_result(self, events):
+        return {
+            'type': 'claude_timeline',
+            'session': 'test-session-0101',
+            'event_count': len(events),
+            'timeline': events,
+        }
+
+    def test_timeline_renderer_dispatched(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        result = self._make_timeline_result([
+            {'index': 0, 'timestamp': '2026-01-01T10:00:00Z', 'event_type': 'tool_call', 'tool_name': 'Bash'},
+        ])
+        ClaudeRenderer._render_text(result)
+        out = capsys.readouterr().out
+        assert 'Timeline:' in out
+        assert 'tool_call' not in out  # rendered as label, not raw type
+
+    def test_tool_call_shows_tool_name(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_claude_timeline
+        result = self._make_timeline_result([
+            {'index': 2, 'timestamp': '2026-01-01T09:15:00Z', 'event_type': 'tool_call', 'tool_name': 'Read'},
+        ])
+        _render_claude_timeline(result)
+        out = capsys.readouterr().out
+        assert 'Read' in out
+        assert 'TOOL' in out
+
+    def test_tool_result_shows_status(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_claude_timeline
+        result = self._make_timeline_result([
+            {'index': 3, 'timestamp': '2026-01-01T09:15:01Z', 'event_type': 'tool_result',
+             'tool_name': 'Read', 'is_error': False, 'content_preview': 'file contents here'},
+        ])
+        _render_claude_timeline(result)
+        out = capsys.readouterr().out
+        assert '[ok]' in out
+        assert 'file contents here' in out
+
+    def test_thinking_shows_tokens(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_claude_timeline
+        result = self._make_timeline_result([
+            {'index': 1, 'timestamp': '2026-01-01T09:14:00Z', 'event_type': 'thinking', 'tokens_approx': 42},
+        ])
+        _render_claude_timeline(result)
+        out = capsys.readouterr().out
+        assert '42 tokens' in out
+        assert 'THINK' in out
+
+    def test_assistant_message_shows_preview(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_claude_timeline
+        result = self._make_timeline_result([
+            {'index': 4, 'timestamp': '2026-01-01T09:16:00Z', 'event_type': 'assistant_message',
+             'content_preview': 'Here is what I found'},
+        ])
+        _render_claude_timeline(result)
+        out = capsys.readouterr().out
+        assert 'Here is what I found' in out
+        assert 'ASST' in out
+
+    def test_empty_timeline(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_claude_timeline
+        result = self._make_timeline_result([])
+        _render_claude_timeline(result)
+        out = capsys.readouterr().out
+        assert '0 events' in out
+
+    def test_timeline_in_schema_elements(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_ELEMENTS
+        assert 'timeline' in _SCHEMA_ELEMENTS
+
+    def test_timeline_in_schema_example_queries(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_EXAMPLE_QUERIES
+        uris = [q.get('uri', '') for q in _SCHEMA_EXAMPLE_QUERIES]
+        assert any('/timeline' in u for u in uris)
+
+
+class TestBack345ThinkingEmptyBlocks:
+    """BACK-345: /thinking emitted 141 lines of empty encrypted blocks."""
+
+    def _make_thinking_result(self, blocks):
+        return {
+            'type': 'claude_thinking',
+            'session': 'test-session-0101',
+            'thinking_block_count': len(blocks),
+            'total_tokens_estimate': sum(b.get('char_count', 0) // 4 for b in blocks),
+            'blocks': blocks,
+        }
+
+    def test_all_empty_emits_summary_line(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_claude_thinking
+        result = self._make_thinking_result([
+            {'message_index': 1, 'timestamp': '2026-06-01T10:00:00Z', 'char_count': 0, 'content': ''},
+            {'message_index': 3, 'timestamp': '2026-06-01T10:01:00Z', 'char_count': 0, 'content': ''},
+        ])
+        _render_claude_thinking(result)
+        out = capsys.readouterr().out
+        assert 'encrypted' in out
+        assert '2 thinking blocks' in out
+        # No per-block separator lines — should NOT have the separator dashes
+        assert '─' * 60 not in out
+
+    def test_all_empty_no_per_block_output(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_claude_thinking
+        result = self._make_thinking_result([
+            {'message_index': 1, 'timestamp': '2026-06-01T10:00:00Z', 'char_count': 0, 'content': '  '},
+        ])
+        _render_claude_thinking(result)
+        out = capsys.readouterr().out
+        # The word 'Message' appears in per-block headers — should not be present for empty blocks
+        assert 'Message 1' not in out
+
+    def test_non_empty_blocks_render_normally(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_claude_thinking
+        result = self._make_thinking_result([
+            {'message_index': 2, 'timestamp': '2026-01-01T09:00:00Z', 'char_count': 30, 'content': 'actual thinking here'},
+        ])
+        _render_claude_thinking(result)
+        out = capsys.readouterr().out
+        assert 'actual thinking here' in out
+        assert '─' * 60 in out
+
+    def test_mixed_empty_and_content_skips_empty(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_claude_thinking
+        result = self._make_thinking_result([
+            {'message_index': 1, 'timestamp': '2026-01-01T09:00:00Z', 'char_count': 0, 'content': ''},
+            {'message_index': 3, 'timestamp': '2026-01-01T09:05:00Z', 'char_count': 20, 'content': 'real content'},
+        ])
+        _render_claude_thinking(result)
+        out = capsys.readouterr().out
+        assert 'real content' in out
+        # Should not show the summary line since not all-empty
+        assert 'encrypted' not in out
+
+    def test_no_blocks_does_not_crash(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_claude_thinking
+        result = self._make_thinking_result([])
+        _render_claude_thinking(result)
+        capsys.readouterr()  # no crash
+
+
+class TestBack346MessagesDiscoverable:
+    """BACK-346: /messages missing from schema elements and help examples."""
+
+    def test_messages_in_schema_elements(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_ELEMENTS
+        assert 'messages' in _SCHEMA_ELEMENTS
+
+    def test_prompts_in_schema_elements(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_ELEMENTS
+        assert 'prompts' in _SCHEMA_ELEMENTS
+
+    def test_messages_in_schema_example_queries(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_EXAMPLE_QUERIES
+        uris = [q.get('uri', '') for q in _SCHEMA_EXAMPLE_QUERIES]
+        assert any('/messages' in u for u in uris)
+
+    def test_messages_in_help_examples(self):
+        from reveal.adapters.claude.adapter import ClaudeAdapter
+        examples = ClaudeAdapter._get_help_examples()
+        uris = [e.get('uri', '') for e in examples]
+        assert any('/messages' in u for u in uris)
+
+    def test_messages_output_type_in_schema(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_OUTPUT_TYPES
+        types = [ot.get('type') for ot in _SCHEMA_OUTPUT_TYPES]
+        assert 'claude_messages' in types

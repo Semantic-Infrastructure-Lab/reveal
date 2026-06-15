@@ -140,6 +140,8 @@ _SCHEMA_ELEMENTS = {
     'summary': 'Session summary with key events (path alias for ?summary)',
     'tokens': 'Token usage breakdown (path alias for ?tokens)',
     'context': 'Context window changes over session',
+    'messages': 'All assistant narrative turns (text only, no tool calls) — best for reading what was said',
+    'prompts': 'Human-typed prompts only — excludes tool-result wrapper turns',
     'user': 'User messages: initial prompt full text + tool-result turn summaries',
     'assistant': 'Assistant messages: text blocks only (skips thinking/tool_use)',
     'message/<n>': 'Single message by zero-based index (or negative: message/-1 = last message)'
@@ -259,6 +261,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'claude://session/infernal-earth-0118?tools=Bash', 'description': 'Filter for Bash tool usage', 'query_param': '?tools=Bash', 'output_type': 'claude_overview'},
     {'uri': 'claude://session/infernal-earth-0118?errors', 'description': 'Filter for error messages', 'query_param': '?errors', 'output_type': 'claude_overview'},
     {'uri': 'claude://session/infernal-earth-0118?summary', 'description': 'Session summary with key events', 'query_param': '?summary', 'output_type': 'claude_overview'},
+    {'uri': 'claude://session/infernal-earth-0118/messages', 'description': 'All assistant narrative turns (text only) — best resource for reading what was said', 'element': 'messages', 'output_type': 'claude_messages'},
     {'uri': 'claude://session/infernal-earth-0118/user', 'description': 'User messages: initial prompt + tool-result turn summaries', 'element': 'user', 'output_type': 'claude_user_messages'},
     {'uri': 'claude://session/infernal-earth-0118/assistant', 'description': 'Assistant messages: text responses (thinking/tools hidden)', 'element': 'assistant', 'output_type': 'claude_assistant_messages'},
     {'uri': 'claude://session/infernal-earth-0118/thinking', 'description': 'All thinking blocks with content and token estimates', 'element': 'thinking', 'output_type': 'claude_thinking'},
@@ -911,6 +914,10 @@ class ClaudeAdapter(ResourceAdapter):
             {
                 'uri': 'claude://session/infernal-earth-0118?tools=Bash',
                 'description': 'Filter to specific tool calls'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118/messages',
+                'description': 'All assistant narrative turns (text only) — best resource for reading what was said'
             },
             {
                 'uri': 'claude://session/infernal-earth-0118/prompts',

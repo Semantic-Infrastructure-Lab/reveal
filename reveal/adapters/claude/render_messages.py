@@ -217,11 +217,20 @@ def _render_claude_thinking(result: dict) -> None:
     print(f"Blocks: {count} | ~{total_tokens} tokens")
     print()
 
-    for i, block in enumerate(result.get('blocks', []), 1):
+    blocks = result.get('blocks', [])
+    all_empty = all(not block.get('content', '').strip() for block in blocks)
+    if all_empty and blocks:
+        print(f"{count} thinking blocks — content unavailable (encrypted)")
+        return
+
+    for i, block in enumerate(blocks, 1):
         msg_idx = block.get('message_index', '?')
         char_count = block.get('char_count', 0)
         ts = (block.get('timestamp') or '')[:16].replace('T', ' ')
         content = block.get('content', '')
+
+        if not content.strip():
+            continue
 
         print(f"[{i}] Message {msg_idx}  {ts}  ({char_count} chars)")
         print('─' * 60)
@@ -534,3 +543,41 @@ def _render_claude_messages(result: dict) -> None:
         else:
             print(text)
         print()
+
+
+def _render_claude_timeline(result: dict) -> None:
+    """Render chronological conversation timeline."""
+    session = result.get('session', 'unknown')
+    event_count = result.get('event_count', 0)
+
+    print(f"Timeline: {session} ({event_count} events)")
+    print()
+
+    _TYPE_LABELS = {
+        'tool_call': 'TOOL  ',
+        'tool_result': 'RESULT',
+        'assistant_message': 'ASST  ',
+        'user_message': 'USER  ',
+        'thinking': 'THINK ',
+    }
+
+    for i, event in enumerate(result.get('timeline', []), 1):
+        event_type = event.get('event_type', 'unknown')
+        label = _TYPE_LABELS.get(event_type, event_type[:6].upper().ljust(6))
+        ts = (event.get('timestamp') or '')[:16].replace('T', ' ')
+        idx = event.get('index', '?')
+
+        if event_type == 'tool_call':
+            tool = event.get('tool_name', '?')
+            print(f"[{i:3}] {label}  msg={idx}  {ts}  {tool}")
+        elif event_type == 'tool_result':
+            tool = event.get('tool_name', '?')
+            status = 'ok' if not event.get('is_error') else 'err'
+            preview = (event.get('content_preview') or '')[:60]
+            print(f"[{i:3}] {label}  msg={idx}  {ts}  {tool} [{status}]  {preview}")
+        elif event_type == 'thinking':
+            tokens = event.get('tokens_approx', 0)
+            print(f"[{i:3}] {label}  msg={idx}  {ts}  ~{tokens} tokens")
+        else:
+            preview = (event.get('content_preview') or '')[:80]
+            print(f"[{i:3}] {label}  msg={idx}  {ts}  {preview}")
