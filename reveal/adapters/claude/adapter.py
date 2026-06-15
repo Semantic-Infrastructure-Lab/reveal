@@ -45,6 +45,7 @@ from .analysis import (
     get_overview,
     get_summary,
     filter_by_role,
+    get_human_prompts,
     get_message,
     get_thinking_blocks,
     search_messages,
@@ -79,6 +80,11 @@ _SCHEMA_QUERY_PARAMS = {
         'type': 'flag',
         'description': 'Whole-word match for ?search= (cross-session search only). Prevents substring matches.',
         'examples': ['?search=auth&word']
+    },
+    'snippet': {
+        'type': 'integer',
+        'description': 'Characters of context around search match (cross-session search only). Default 120, range 60–500.',
+        'examples': ['?search=term&snippet=300', '?search=term&snippet=250']
     },
     'filter': {
         'type': 'string',
@@ -614,6 +620,8 @@ class ClaudeAdapter(ResourceAdapter):
             return get_timeline(messages, self.session_name, contract_base)
         if '/tokens' in self.resource:
             return get_token_breakdown(messages, self.session_name, contract_base)
+        if '/prompts' in self.resource:
+            return get_human_prompts(messages, self.session_name, contract_base)
         if '/user' in self.resource:
             return filter_by_role(messages, 'user', self.session_name, contract_base)
         if '/assistant' in self.resource:

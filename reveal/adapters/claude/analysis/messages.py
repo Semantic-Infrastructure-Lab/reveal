@@ -77,6 +77,38 @@ def filter_by_role(messages: List[Dict], role: str, session_name: str,
     return base
 
 
+def get_human_prompts(messages: List[Dict], session_name: str,
+                      contract_base: Dict[str, Any]) -> Dict[str, Any]:
+    """Return only messages where a human typed text — excludes pure tool-result wraps.
+
+    A user message is a real prompt if its content contains at least one text block.
+    Tool-result wrapper messages (role: user, content: [tool_result]) are excluded.
+    """
+    base = contract_base.copy()
+    base['type'] = 'claude_user_prompts'
+
+    filtered = []
+    for i, msg in enumerate(messages):
+        if msg.get('type') != 'user':
+            continue
+        blocks = _content_to_blocks(msg.get('message', {}).get('content', []))
+        if not any(b.get('type') == 'text' for b in blocks):
+            continue
+        filtered.append({
+            'message_index': i,
+            'timestamp': msg.get('timestamp'),
+            'content': blocks,
+        })
+
+    base.update({
+        'session': session_name,
+        'role': 'user',
+        'message_count': len(filtered),
+        'messages': filtered,
+    })
+    return base
+
+
 def get_message(messages: List[Dict], msg_id: int, session_name: str,
                 contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Get specific message by index.
@@ -185,7 +217,7 @@ def _matches_term(text: str, lower_term: str, whole_word: bool) -> bool:
 
 
 def _search_block(block: Dict, lower_term: str, term: str, i: int, role: str, ts: str,
-                  whole_word: bool = False):
+                  whole_word: bool = False, window_chars: int = 120):
     """Search a single content block for the term. Returns a match dict or None."""
     if not isinstance(block, dict):
         return None
@@ -194,12 +226,12 @@ def _search_block(block: Dict, lower_term: str, term: str, i: int, role: str, ts
         text = block.get('text', '')
         if _matches_term(text, lower_term, whole_word):
             return {'message_index': i, 'role': role, 'block_type': 'text',
-                    'timestamp': ts, 'excerpt': _find_excerpt(text, term)}
+                    'timestamp': ts, 'excerpt': _find_excerpt(text, term, window=window_chars)}
     elif btype == 'thinking':
         text = block.get('thinking', '')
         if _matches_term(text, lower_term, whole_word):
             return {'message_index': i, 'role': role, 'block_type': 'thinking',
-                    'timestamp': ts, 'excerpt': _find_excerpt(text, term)}
+                    'timestamp': ts, 'excerpt': _find_excerpt(text, term, window=window_chars)}
     elif btype == 'tool_use':
         inp = block.get('input', {})
         searchable = ' '.join(str(v) for v in inp.values() if isinstance(v, str))
@@ -216,7 +248,7 @@ def _search_block(block: Dict, lower_term: str, term: str, i: int, role: str, ts
             text = str(content) if content else ''
         if text and _matches_term(text, lower_term, whole_word):
             return {'message_index': i, 'role': role, 'block_type': 'tool_result',
-                    'timestamp': ts, 'excerpt': _find_excerpt(text, term)}
+                    'timestamp': ts, 'excerpt': _find_excerpt(text, term, window=window_chars)}
     return None
 
 
@@ -233,13 +265,14 @@ def _extract_text_parts(content: list) -> List[str]:
 
 def _collect_block_matches(
     blocks: list, lower_term: str, term: str, msg_index: int, role: str, ts: str,
-    whole_word: bool = False,
+    whole_word: bool = False, window_chars: int = 120,
 ) -> list:
     """Search all blocks for term and return list of match dicts."""
     matches = []
     for block in blocks:
         try:
-            match = _search_block(block, lower_term, term, msg_index, role, ts, whole_word=whole_word)
+            match = _search_block(block, lower_term, term, msg_index, role, ts,
+                                  whole_word=whole_word, window_chars=window_chars)
             if match:
                 matches.append(match)
         except Exception:

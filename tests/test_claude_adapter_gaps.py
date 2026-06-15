@@ -1157,3 +1157,256 @@ class TestClaudeSchemaParamParity:
         schema = ClaudeAdapter.get_schema()
         assert '--all' in schema['cli_flags']
         assert '--base-path' in schema['cli_flags']
+
+
+# ─── BACK-341: session title — min-length skip ───────────────────────────────
+
+class TestParseJsonlLineForTitleMinLength:
+
+    def _line(self, text: str) -> str:
+        return json.dumps({'type': 'user', 'message': {'content': text}})
+
+    def test_skips_single_short_word(self):
+        # "aye" is Zack's common boot confirmation — should not become a title
+        assert ClaudeAdapter._parse_jsonl_line_for_title(self._line('aye')) is None
+
+    def test_skips_four_char_word(self):
+        assert ClaudeAdapter._parse_jsonl_line_for_title(self._line('okay')) is None
+
+    def test_accepts_five_char_candidate(self):
+        result = ClaudeAdapter._parse_jsonl_line_for_title(self._line('hello'))
+        assert result == 'hello'
+
+    def test_accepts_normal_prompt(self):
+        result = ClaudeAdapter._parse_jsonl_line_for_title(self._line('run a review on the week'))
+        assert result == 'run a review on the week'
+
+    def test_boot_dot_still_accepted(self):
+        # 'boot.' is 5 chars and is not the reserved 'boot' skip
+        result = ClaudeAdapter._parse_jsonl_line_for_title(self._line('boot.'))
+        assert result == 'boot.'
+
+
+# ─── BACK-341: session title — badge extraction in listing ───────────────────
+
+class TestScanJsonlForTitleBadge:
+
+    def _write_jsonl(self, tmp_path: Path, messages: list) -> Path:
+        p = tmp_path / 'session.jsonl'
+        p.write_text('\n'.join(json.dumps(m) for m in messages) + '\n')
+        return p
+
+    def _badge_msg(self, badge_text: str) -> dict:
+        return {
+            'type': 'assistant',
+            'message': {'content': [
+                {'type': 'tool_use', 'name': 'Bash',
+                 'input': {'command': f'tia session badge "{badge_text}"'}}
+            ]},
+        }
+
+    def test_badge_wins_over_user_text(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import _scan_jsonl_for_title
+        p = self._write_jsonl(tmp_path, [
+            _user_msg('aye'),
+            self._badge_msg('reveal — fix title extraction'),
+        ])
+        assert _scan_jsonl_for_title(p) == 'reveal — fix title extraction'
+
+    def test_falls_back_to_user_text_when_no_badge(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import _scan_jsonl_for_title
+        p = self._write_jsonl(tmp_path, [
+            _user_msg('aye'),
+            _user_msg('run a review on the week'),
+        ])
+        # "aye" is skipped (<5 chars); falls back to the next prompt
+        assert _scan_jsonl_for_title(p) == 'run a review on the week'
+
+    def test_badge_with_spaces_in_command(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import _scan_jsonl_for_title
+        p = self._write_jsonl(tmp_path, [
+            {'type': 'assistant', 'message': {'content': [
+                {'type': 'tool_use', 'name': 'Bash',
+                 'input': {'command': 'some prefix\ntia session badge "peyton — live soak"\nsome suffix'}}
+            ]}},
+        ])
+        assert _scan_jsonl_for_title(p) == 'peyton — live soak'
+
+    def test_non_bash_tool_use_ignored(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import _scan_jsonl_for_title
+        p = self._write_jsonl(tmp_path, [
+            {'type': 'assistant', 'message': {'content': [
+                {'type': 'tool_use', 'name': 'Read',
+                 'input': {'file_path': 'session badge "should not match"'}}
+            ]}},
+            _user_msg('real user prompt here'),
+        ])
+        assert _scan_jsonl_for_title(p) == 'real user prompt here'
+
+
+# ─── BACK-340: /prompts resource ─────────────────────────────────────────────
+
+class TestGetHumanPrompts:
+
+    def _cb(self):
+        return {'contract_version': '1.0', 'source': 'test', 'source_type': 'file'}
+
+    def test_returns_correct_type(self):
+        from reveal.adapters.claude.analysis.messages import get_human_prompts
+        result = get_human_prompts([], 'sess', self._cb())
+        assert result['type'] == 'claude_user_prompts'
+
+    def test_excludes_pure_tool_result_messages(self):
+        from reveal.adapters.claude.analysis.messages import get_human_prompts
+        messages = [
+            _tool_result_msg('tu_1', 'output'),
+            _tool_result_msg('tu_2', 'output2'),
+        ]
+        result = get_human_prompts(messages, 'sess', self._cb())
+        assert result['message_count'] == 0
+        assert result['messages'] == []
+
+    def test_includes_text_messages(self):
+        from reveal.adapters.claude.analysis.messages import get_human_prompts
+        messages = [_user_msg('hello'), _user_msg('fix the bug')]
+        result = get_human_prompts(messages, 'sess', self._cb())
+        assert result['message_count'] == 2
+
+    def test_mixed_filters_correctly(self):
+        from reveal.adapters.claude.analysis.messages import get_human_prompts
+        messages = [
+            _user_msg('first real prompt'),
+            _tool_result_msg('tu_1'),
+            _user_msg('second real prompt'),
+            _tool_result_msg('tu_2'),
+            _tool_result_msg('tu_3'),
+        ]
+        result = get_human_prompts(messages, 'sess', self._cb())
+        assert result['message_count'] == 2
+        texts = [b['text'] for m in result['messages'] for b in m['content'] if b.get('type') == 'text']
+        assert texts == ['first real prompt', 'second real prompt']
+
+    def test_preserves_message_index(self):
+        from reveal.adapters.claude.analysis.messages import get_human_prompts
+        messages = [
+            _tool_result_msg('tu_1'),
+            _user_msg('real prompt'),
+        ]
+        result = get_human_prompts(messages, 'sess', self._cb())
+        assert result['messages'][0]['message_index'] == 1
+
+    def test_excludes_assistant_messages(self):
+        from reveal.adapters.claude.analysis.messages import get_human_prompts
+        messages = [_assistant_msg('hi'), _user_msg('hello')]
+        result = get_human_prompts(messages, 'sess', self._cb())
+        assert result['message_count'] == 1
+
+    def test_message_with_text_and_tool_result_blocks_is_included(self):
+        # Edge case: a user message with both text and tool_result blocks should be included
+        from reveal.adapters.claude.analysis.messages import get_human_prompts
+        msg = {
+            'type': 'user',
+            'timestamp': '2026-01-01T00:00:00Z',
+            'message': {'content': [
+                {'type': 'text', 'text': 'also typed this'},
+                {'type': 'tool_result', 'tool_use_id': 'x', 'content': 'result'},
+            ]},
+        }
+        result = get_human_prompts([msg], 'sess', self._cb())
+        assert result['message_count'] == 1
+
+
+class TestPromptsRoute:
+
+    def _make_adapter(self, tmp_path, messages, resource_suffix):
+        jsonl = _write_session(tmp_path, 'test-sess', messages)
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter(f'session/test-sess', query=None)
+        adapter.conversation_path = jsonl
+        adapter.messages = messages
+        adapter.resource = f'session/test-sess/{resource_suffix}'
+        return adapter
+
+    def test_prompts_route_returns_human_prompts_type(self, tmp_path):
+        msgs = [_user_msg('real prompt'), _tool_result_msg('tu_1')]
+        adapter = self._make_adapter(tmp_path, msgs, 'prompts')
+        result = adapter._route_by_resource(msgs, '', adapter._get_contract_base())
+        assert result is not None
+        assert result.get('type') == 'claude_user_prompts'
+
+    def test_prompts_excludes_tool_results(self, tmp_path):
+        msgs = [_user_msg('real prompt'), _tool_result_msg('tu_1'), _tool_result_msg('tu_2')]
+        adapter = self._make_adapter(tmp_path, msgs, 'prompts')
+        result = adapter._route_by_resource(msgs, '', adapter._get_contract_base())
+        assert result['message_count'] == 1
+
+    def test_user_route_still_includes_tool_results(self, tmp_path):
+        # Existing /user behaviour must not change
+        msgs = [_user_msg('real prompt'), _tool_result_msg('tu_1')]
+        adapter = self._make_adapter(tmp_path, msgs, 'user')
+        result = adapter._route_by_resource(msgs, '', adapter._get_contract_base())
+        assert result['message_count'] == 2
+
+
+# ─── BACK-342: ?snippet=N for cross-session search ───────────────────────────
+
+class TestSnippetWindowParam:
+
+    def test_default_window_is_120(self, tmp_path):
+        from reveal.adapters.claude.analysis.search import _extract_first_snippet
+        long_text = 'x' * 50 + 'TARGET' + 'y' * 200
+        p = tmp_path / 'sess.jsonl'
+        p.write_text(json.dumps({
+            'type': 'user',
+            'message': {'content': long_text},
+        }) + '\n')
+        result = _extract_first_snippet(p, 'TARGET')
+        assert len(result['excerpt']) < 150  # ~120 chars of context
+
+    def test_larger_window_returns_more_context(self, tmp_path):
+        from reveal.adapters.claude.analysis.search import _extract_first_snippet
+        long_text = 'x' * 100 + 'TARGET' + 'y' * 300
+        p = tmp_path / 'sess.jsonl'
+        p.write_text(json.dumps({
+            'type': 'user',
+            'message': {'content': long_text},
+        }) + '\n')
+        default = _extract_first_snippet(p, 'TARGET', window_chars=120)
+        wider = _extract_first_snippet(p, 'TARGET', window_chars=300)
+        assert len(wider['excerpt']) > len(default['excerpt'])
+
+    def test_snippet_param_threads_through_search_sessions(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import search_sessions
+        long_text = 'a' * 100 + 'FINDME' + 'b' * 300
+        proj = tmp_path / 'proj'
+        proj.mkdir()
+        jsonl = proj / 'sess.jsonl'
+        jsonl.write_text(json.dumps({
+            'type': 'user',
+            'timestamp': '2026-06-01T00:00:00',
+            'message': {'content': long_text},
+        }) + '\n')
+        default_result = search_sessions(tmp_path, {'search': 'FINDME'})
+        wide_result = search_sessions(tmp_path, {'search': 'FINDME', 'snippet': '300'})
+        default_excerpt = default_result['matches'][0]['excerpt']
+        wide_excerpt = wide_result['matches'][0]['excerpt']
+        assert len(wide_excerpt) > len(default_excerpt)
+
+    def test_snippet_param_clamped_below_60(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import search_sessions
+        long_text = 'a' * 100 + 'FINDME' + 'b' * 300
+        proj = tmp_path / 'proj'
+        proj.mkdir()
+        jsonl = proj / 'sess.jsonl'
+        jsonl.write_text(json.dumps({
+            'type': 'user',
+            'timestamp': '2026-06-01T00:00:00',
+            'message': {'content': long_text},
+        }) + '\n')
+        # snippet=5 should clamp to 60
+        result = search_sessions(tmp_path, {'search': 'FINDME', 'snippet': '5'})
+        assert result['matches']  # no crash
+
+    def test_snippet_documented_in_schema(self):
+        from reveal.adapters.claude.adapter import _SCHEMA_QUERY_PARAMS
+        assert 'snippet' in _SCHEMA_QUERY_PARAMS

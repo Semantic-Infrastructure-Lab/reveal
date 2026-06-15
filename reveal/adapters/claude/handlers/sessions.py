@@ -1,6 +1,7 @@
 """Session-level resource handlers for the claude:// adapter."""
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime, date as _date
@@ -11,6 +12,7 @@ from ....utils.parallel import grep_files as _grep_files
 logger = logging.getLogger(__name__)
 
 _BOILERPLATE_PREFIXES = ('# Session Continuation Context',)
+_BADGE_RE = re.compile(r'session badge\s+"([^"]+)"')
 
 
 def _extract_text_from_content(content: Any) -> str:
@@ -50,19 +52,41 @@ def _parse_jsonl_line_for_title(line: str) -> Optional[str]:
     # Skip bare boot commands — the real task will be in a later message
     if candidate.lower() == 'boot':
         return None
+    # Skip very short single-word responses (e.g. "aye") — not meaningful titles
+    if len(candidate) < 5:
+        return None
     return candidate[:80] or None
 
 
 def _scan_jsonl_for_title(jsonl_path: Path) -> Optional[str]:
-    """Scan first 50 lines of JSONL file for a user text title."""
-    with open(jsonl_path, 'r', errors='replace') as fh:
-        for i, line in enumerate(fh):
-            if i > 50:
-                break
-            title = _parse_jsonl_line_for_title(line)
-            if title is not None:
-                return title
-    return None
+    """Scan first 50 lines of JSONL for a display title.
+
+    Priority: session badge (from assistant Bash calls) > first adequate user text.
+    """
+    text_fallback: Optional[str] = None
+    try:
+        with open(jsonl_path, 'r', errors='replace') as fh:
+            for i, line in enumerate(fh):
+                if i > 50:
+                    break
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                rec_type = rec.get('type')
+                if rec_type == 'assistant':
+                    for block in rec.get('message', {}).get('content', []):
+                        if isinstance(block, dict) and block.get('type') == 'tool_use' and block.get('name') == 'Bash':
+                            m = _BADGE_RE.search(block.get('input', {}).get('command', ''))
+                            if m:
+                                return m.group(1)
+                elif rec_type == 'user' and text_fallback is None:
+                    title = _parse_jsonl_line_for_title(line)
+                    if title is not None:
+                        text_fallback = title
+    except Exception:
+        pass
+    return text_fallback
 
 
 def _read_session_title(jsonl_path: Path) -> Optional[str]:
@@ -237,7 +261,8 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
         all_sessions = [s for s in all_sessions if s.get('modified', '') >= since]
 
     whole_word = 'word' in query_params
-    matches = search_sessions_for_term(all_sessions, term, whole_word=whole_word)
+    snippet_window = max(60, min(500, int(query_params.get('snippet', 120))))
+    matches = search_sessions_for_term(all_sessions, term, whole_word=whole_word, window_chars=snippet_window)
 
     return {
         'contract_version': '1.0',

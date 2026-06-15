@@ -10,7 +10,8 @@ from ....utils.parallel import grep_files
 from .messages import _content_to_blocks, _collect_block_matches
 
 
-def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = False) -> Dict[str, Any]:
+def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = False,
+                           window_chars: int = 120) -> Dict[str, Any]:
     """Scan a JSONL file line-by-line and return the first matching excerpt.
 
     Parses every valid JSON line to maintain an accurate ``message_index`` that
@@ -23,6 +24,7 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
         jsonl_path: Path to the session ``.jsonl`` file.
         term: Search term (case-insensitive).
         whole_word: If True, only match whole words (word-boundary semantics).
+        window_chars: Characters of context around the match (default 120).
 
     Returns:
         Dict with keys ``excerpt``, ``role``, ``timestamp``, ``message_index``.
@@ -45,7 +47,8 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
                     content = msg.get('message', {}).get('content', [])
                     blocks = _content_to_blocks(content)
                     ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
-                    matches = _collect_block_matches(blocks, lower, term, message_index, role, ts, whole_word=whole_word)
+                    matches = _collect_block_matches(blocks, lower, term, message_index, role, ts,
+                                                    whole_word=whole_word, window_chars=window_chars)
                     if matches:
                         return {
                             'excerpt': matches[0].get('excerpt', ''),
@@ -65,6 +68,7 @@ def search_sessions_for_term(
     *,
     workers: int = 8,
     whole_word: bool = False,
+    window_chars: int = 120,
 ) -> List[Dict[str, Any]]:
     """Search across multiple sessions for a term and return one snippet per match.
 
@@ -111,7 +115,7 @@ def search_sessions_for_term(
     results = []
     for path in matching_paths:
         session = path_to_session[path]
-        snippet = _extract_first_snippet(path, term, whole_word=whole_word)
+        snippet = _extract_first_snippet(path, term, whole_word=whole_word, window_chars=window_chars)
         if whole_word and not snippet['excerpt']:
             continue  # no word-boundary match found in this session
         results.append({

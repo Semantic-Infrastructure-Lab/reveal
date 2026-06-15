@@ -301,8 +301,6 @@ def _render_claude_cross_session_search(result: dict) -> None:
         jump = f'  → claude://session/{session}/message/{message_index}' if message_index is not None else ''
         print(f'{session}{project_tag}  {modified}{role_tag}{jump}')
         if excerpt:
-            if len(excerpt) > 200:
-                excerpt = excerpt[:200] + '...'
             print(f'  {excerpt}')
         print()
 
@@ -327,7 +325,6 @@ def _render_claude_search_results(result: dict) -> None:
 
         if len(excerpt) > 200:
             excerpt = excerpt[:200] + '...'
-
         excerpt = excerpt.replace('\n', ' ').strip()
 
         print(f"[{i:3}] msg {msg_idx} | {role} | {btype}  {ts}")
