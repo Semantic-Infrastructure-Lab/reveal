@@ -7,6 +7,15 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.99.0 — claude:// adapter quality pass (BACK-340–346)
+- ✅ **`/prompts` resource (BACK-340)** — human-typed prompts only; a session with 15 real prompts was showing 170 "user" messages because tool-result turns have `role: user`. New `get_human_prompts()` filters to messages with at least one `type: text` block. `/user` unchanged for back-compat. (risen-scepter-0614)
+- ✅ **Session title fixes (BACK-341)** — Harness-injected XML tags (`<local-command-caveat>`, `<command-name>`) and single-word acks (`aye`, `ok`) no longer appear as session titles. `session badge "..."` is now detected from assistant Bash calls in the listing path (matches detail view). (risen-scepter-0614)
+- ✅ **`?snippet=N` for cross-session search (BACK-342)** — Controls match context characters (default 120, clamped 60–500). Removed hard 200-char cap from cross-session renderer. (risen-scepter-0614)
+- ✅ **`/timeline` renderer (BACK-344)** — Was always falling back to key/value dump. Now shows `[idx] LABEL msg=N HH:MM preview` per event with distinct formatting per event type. (prairie-squall-0614)
+- ✅ **`/thinking` empty-block fix (BACK-345)** — Encrypted sessions emitted 141 lines of empty dividers. Now: all-empty → one summary line; mixed → skip empty blocks silently. (prairie-squall-0614)
+- ✅ **`/messages` discoverability (BACK-346)** — Added to `_SCHEMA_ELEMENTS`, schema example queries, and help examples. (prairie-squall-0614)
+- ✅ **+48 tests**. Suite: 8969 passed, 22 skipped. (risen-scepter-0614, prairie-squall-0614)
+
 ### v0.98.0 — Zig analyzer fixes + `reveal check`/`hotspots` hang fix (BACK-338)
 - ✅ **Zig: doubled function names fixed** — `_build_function_signature` now returns params only; display no longer produces `sinsin(value)`. (hehacapo-0613)
 - ✅ **Zig: named extraction fixed** — `reveal file.zig funcname` works via `ZigAnalyzer.extract_element` override walking `Decl` nodes. (hehacapo-0613)

@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.0] - 2026-06-14 (sessions risen-scepter-0614, prairie-squall-0614)
+
 ### Added
 - **`claude://session/<name>/prompts` — human-typed prompts only (BACK-340)** — `/user` encodes tool-result turns as `role: user`, so a session with ~15 real prompts shows ~170 "user" messages. The new `/prompts` resource filters to messages with at least one `type: text` block, excluding pure `tool_result` wrappers. New `get_human_prompts()` in `analysis/messages.py`, dedicated `_render_claude_user_prompts` renderer, `claude_user_prompts` output type in the schema. `/user` is unchanged for backward compatibility. (risen-scepter-0614)
 - **`?snippet=N` for cross-session search context (BACK-342)** — `reveal 'claude://sessions/?search=term&snippet=300'` controls the characters of context around each match (default 120, clamped 60–500). Threaded `window_chars` through `search_sessions()` → `search_sessions_for_term()` → `_extract_first_snippet()` → `_collect_block_matches()` → `_search_block()` → `_find_excerpt()`. Removed the hard 200-char cap in the cross-session renderer (within-session search renderer cap unchanged). (risen-scepter-0614)
