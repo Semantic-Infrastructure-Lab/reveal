@@ -171,6 +171,7 @@ _SCHEMA_OUTPUT_TYPES = [
         'errors': {'type': 'array'}, 'count': {'type': 'integer'}
     }),
     _make_output_type('claude_user_messages', 'User messages: initial prompt + tool-result turn summaries', {'messages': {'type': 'array'}}),
+    _make_output_type('claude_user_prompts', 'Human-typed prompts only — excludes tool-result wrapper messages (use /prompts)', {'messages': {'type': 'array'}}),
     _make_output_type('claude_assistant_messages', 'Assistant messages: text responses (thinking/tool blocks excluded)', {'messages': {'type': 'array'}}),
     _make_output_type('claude_thinking', 'All thinking blocks with content previews and token estimates', {
         'blocks': {'type': 'array'}, 'total_tokens': {'type': 'integer'}
@@ -912,6 +913,10 @@ class ClaudeAdapter(ResourceAdapter):
                 'description': 'Filter to specific tool calls'
             },
             {
+                'uri': 'claude://session/infernal-earth-0118/prompts',
+                'description': 'Human-typed prompts only (excludes tool-result wrapper messages)'
+            },
+            {
                 'uri': 'claude://session/infernal-earth-0118/user',
                 'description': 'User messages: initial prompt + tool-result turns'
             },
@@ -1044,7 +1049,7 @@ class ClaudeAdapter(ResourceAdapter):
                 'name': 'Read Session Content',
                 'scenario': 'Extract the prompt and findings from a session',
                 'steps': [
-                    'reveal claude://session/session-name/user',
+                    'reveal claude://session/session-name/prompts',
                     'reveal claude://session/session-name/assistant',
                     'reveal claude://session/session-name/thinking',
                 ]

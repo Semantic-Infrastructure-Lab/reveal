@@ -22,6 +22,7 @@ from .render_messages import (
     _render_claude_tool_summary,
     _render_claude_thinking,
     _render_claude_user_messages,
+    _render_claude_user_prompts,
     _render_claude_assistant_messages,
     _render_claude_message,
     _render_claude_message_range,
@@ -75,6 +76,7 @@ class ClaudeRenderer(TypeDispatchRenderer):
     _render_claude_tool_summary = staticmethod(_render_claude_tool_summary)
     _render_claude_thinking = staticmethod(_render_claude_thinking)
     _render_claude_user_messages = staticmethod(_render_claude_user_messages)
+    _render_claude_user_prompts = staticmethod(_render_claude_user_prompts)
     _render_claude_assistant_messages = staticmethod(_render_claude_assistant_messages)
     _render_claude_message = staticmethod(_render_claude_message)
     _render_claude_message_range = staticmethod(_render_claude_message_range)

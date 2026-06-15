@@ -278,6 +278,36 @@ def _render_claude_user_messages(result: dict) -> None:
         print()
 
 
+def _render_claude_user_prompts(result: dict) -> None:
+    """Render human-typed prompts only (tool-result wrapper messages excluded)."""
+    session = result.get('session', 'unknown')
+    count = result.get('message_count', 0)
+
+    print(f"User Prompts: {session} ({count} total)")
+    print()
+
+    for i, msg in enumerate(result.get('messages', [])):
+        msg_idx = msg.get('message_index', '?')
+        ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
+        blocks = msg.get('content', [])
+
+        text_parts = [b.get('text', '') for b in blocks
+                      if isinstance(b, dict) and b.get('type') == 'text']
+        text = '\n'.join(text_parts).strip()
+
+        print(f"[msg {msg_idx}] {ts}")
+        if text:
+            limit = 1200 if i == 0 else 300
+            if len(text) > limit:
+                print(text[:limit])
+                print(f"  ... ({len(text) - limit} more chars)")
+            else:
+                print(text)
+        else:
+            print("  [no text content]")
+        print()
+
+
 def _render_claude_assistant_messages(result: dict) -> None:
     """Render assistant messages: text blocks only (skip thinking/tool_use)."""
     session = result.get('session', 'unknown')
