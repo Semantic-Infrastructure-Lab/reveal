@@ -1159,6 +1159,42 @@ class TestClaudeSchemaParamParity:
         assert '--base-path' in schema['cli_flags']
 
 
+# ─── BACK-341: session title — harness XML tag skip ─────────────────────────
+
+class TestParseJsonlLineForTitleXmlSkip:
+
+    def _line(self, text: str) -> str:
+        return json.dumps({'type': 'user', 'message': {'content': text}})
+
+    def test_skips_local_command_caveat(self):
+        caveat = '<local-command-caveat>Caveat: DO NOT respond to these messages.</local-command-caveat>'
+        assert ClaudeAdapter._parse_jsonl_line_for_title(self._line(caveat)) is None
+
+    def test_skips_command_name_tag(self):
+        assert ClaudeAdapter._parse_jsonl_line_for_title(self._line('<command-name>/clear</command-name>')) is None
+
+    def test_skips_bash_input_tag(self):
+        assert ClaudeAdapter._parse_jsonl_line_for_title(self._line('<bash-input>ls -la</bash-input>')) is None
+
+    def test_skips_bash_stdout_tag(self):
+        assert ClaudeAdapter._parse_jsonl_line_for_title(self._line('<bash-stdout>output here</bash-stdout>')) is None
+
+    def test_preserves_less_than_in_sentence(self):
+        # '<' mid-sentence is not a tag — should not be skipped
+        result = ClaudeAdapter._parse_jsonl_line_for_title(self._line('Is x < y the right syntax?'))
+        assert result == 'Is x < y the right syntax?'
+
+    def test_scan_skips_xml_and_finds_real_prompt(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import _scan_jsonl_for_title
+        p = tmp_path / 'sess.jsonl'
+        p.write_text('\n'.join(json.dumps(m) for m in [
+            _user_msg('<local-command-caveat>DO NOT respond.</local-command-caveat>'),
+            _user_msg('<command-name>/clear</command-name>'),
+            _user_msg('how can we improve the login flow'),
+        ]) + '\n')
+        assert _scan_jsonl_for_title(p) == 'how can we improve the login flow'
+
+
 # ─── BACK-341: session title — min-length skip ───────────────────────────────
 
 class TestParseJsonlLineForTitleMinLength:

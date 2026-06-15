@@ -55,6 +55,9 @@ def _parse_jsonl_line_for_title(line: str) -> Optional[str]:
     # Skip very short single-word responses (e.g. "aye") — not meaningful titles
     if len(candidate) < 5:
         return None
+    # Skip harness-injected XML tags (<local-command-caveat>, <command-name>, <bash-input>, etc.)
+    if re.match(r'^<[a-z]', candidate):
+        return None
     return candidate[:80] or None
 
 
