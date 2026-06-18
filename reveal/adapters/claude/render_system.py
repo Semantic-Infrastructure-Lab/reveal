@@ -361,3 +361,55 @@ def _render_claude_hooks(result: dict) -> None:
         print(f'  {event:<25} {kind:<10} {mod}  {detail}')
     print()
     print("  reveal 'claude://hooks/<event>'  # read or list scripts for an event")
+
+
+def _render_claude_session_agents(result: dict) -> None:
+    """Render sub-agent calls within a session (claude://session/NAME/agents)."""
+    session = result.get('session', 'unknown')
+    total = result.get('total_agents', 0)
+    total_tokens = result.get('total_agent_tokens', 0)
+    total_ms = result.get('total_agent_duration_ms', 0)
+
+    print(f"Session Agents: {session}")
+    print(f"Total: {total} agent call{'s' if total != 1 else ''}", end='')
+    if total_tokens:
+        print(f" | {total_tokens:,} tokens", end='')
+    if total_ms:
+        mins, secs = divmod(total_ms // 1000, 60)
+        print(f" | {mins}m {secs}s total", end='')
+    print()
+    print()
+
+    agents = result.get('agents', [])
+    if not agents:
+        print('  (no Agent tool calls in this session)')
+        return
+
+    for a in agents:
+        step = a.get('step', '?')
+        agent_type = a.get('agent_type', 'unknown')
+        status = a.get('status', 'unknown')
+        duration_ms = a.get('duration_ms')
+        tokens = a.get('token_count')
+        prompt = a.get('prompt', '')
+        sub_path = a.get('sub_agent_path')
+
+        status_icon = '✓' if status == 'completed' else ('✗' if status == 'error' else '?')
+        meta = []
+        if duration_ms is not None:
+            m, s = divmod(duration_ms // 1000, 60)
+            meta.append(f"{m}m {s}s")
+        if tokens is not None:
+            meta.append(f"{tokens:,} tokens")
+        meta_str = ' | '.join(meta)
+        if meta_str:
+            meta_str = f"  [{meta_str}]"
+
+        print(f"[{step:3}] {status_icon} {agent_type}{meta_str}")
+        if prompt:
+            for line in prompt[:120].split('\n')[:2]:
+                if line.strip():
+                    print(f"      {line[:100]}")
+        if sub_path:
+            print(f"      → reveal '{sub_path}'")
+        print()

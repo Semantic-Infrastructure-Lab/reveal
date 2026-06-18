@@ -2,8 +2,8 @@
 
 
 def _render_claude_analytics(result: dict) -> None:
-    """Render detailed analytics summary (?summary view)."""
-    print(f"Analytics: {result.get('session', 'unknown')}")
+    """Render session summary — accomplishments first, then analytics."""
+    print(f"Summary: {result.get('session', 'unknown')}")
     title = result.get('title')
     if title:
         print(f"Title: {title}")
@@ -14,6 +14,25 @@ def _render_claude_analytics(result: dict) -> None:
           f"(user: {result.get('user_messages', 0)}, "
           f"assistant: {result.get('assistant_messages', 0)})")
     print()
+
+    files_touched = result.get('files_touched', [])
+    if files_touched:
+        print(f"Files Changed ({len(files_touched)}):")
+        for f in files_touched[:20]:
+            print(f"  {f}")
+        if len(files_touched) > 20:
+            print(f"  ... and {len(files_touched) - 20} more")
+        print()
+
+    last_snippet = result.get('last_assistant_snippet', '')
+    if last_snippet:
+        snippet = last_snippet[:200]
+        if len(last_snippet) > 200:
+            snippet += '...'
+        print(f"Ended with:")
+        for line in snippet.split('\n')[:5]:
+            print(f"  {line}")
+        print()
 
     tool_success_rate = result.get('tool_success_rate', {})
     if tool_success_rate:

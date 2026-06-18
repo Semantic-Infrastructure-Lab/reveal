@@ -40,6 +40,7 @@ from .render_system import (
     _render_claude_agents,
     _render_claude_agent,
     _render_claude_hooks,
+    _render_claude_session_agents,
 )
 from .render_analytics import (
     _render_claude_analytics,
@@ -95,6 +96,7 @@ class ClaudeRenderer(TypeDispatchRenderer):
     _render_claude_agents = staticmethod(_render_claude_agents)
     _render_claude_agent = staticmethod(_render_claude_agent)
     _render_claude_hooks = staticmethod(_render_claude_hooks)
+    _render_claude_session_agents = staticmethod(_render_claude_session_agents)
 
     # Analytics renderers
     _render_claude_analytics = staticmethod(_render_claude_analytics)

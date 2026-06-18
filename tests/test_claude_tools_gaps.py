@@ -673,7 +673,7 @@ class TestGetSessionAgents:
 
     def test_empty_messages_returns_empty_agents(self):
         result = get_session_agents([], 'session-1', self._BASE.copy())
-        assert result['type'] == 'claude_agents'
+        assert result['type'] == 'claude_session_agents'
         assert result['total_agents'] == 0
         assert result['agents'] == []
         assert result['total_agent_tokens'] == 0
@@ -743,3 +743,37 @@ class TestGetSessionAgents:
     def test_session_name_included(self):
         result = get_session_agents([], 'my-session', self._BASE.copy())
         assert result['session'] == 'my-session'
+
+    def test_type_is_claude_session_agents(self):
+        result = get_session_agents([], 'session-1', self._BASE.copy())
+        assert result['type'] == 'claude_session_agents'
+
+    def test_sub_agent_path_set_when_file_exists(self, tmp_path):
+        jsonl = tmp_path / 'parent.jsonl'
+        agent_jsonl = tmp_path / 'agent-ag001.jsonl'
+        agent_jsonl.write_text('{}')
+        tur = {'agentId': 'ag001', 'agentType': 'Explore', 'status': 'completed', 'totalTokens': 0}
+        msgs = [
+            _assistant_tool_use('tu_001', 'Agent', prompt='explore'),
+            _tur_msg('tu_001', tur),
+        ]
+        base = {**self._BASE, 'source': str(jsonl)}
+        result = get_session_agents(msgs, 'session-1', base)
+        assert result['agents'][0]['sub_agent_path'] == str(agent_jsonl)
+
+    def test_sub_agent_path_absent_when_file_missing(self, tmp_path):
+        jsonl = tmp_path / 'parent.jsonl'
+        tur = {'agentId': 'ag999', 'agentType': 'Explore', 'status': 'completed', 'totalTokens': 0}
+        msgs = [
+            _assistant_tool_use('tu_001', 'Agent', prompt='explore'),
+            _tur_msg('tu_001', tur),
+        ]
+        base = {**self._BASE, 'source': str(jsonl)}
+        result = get_session_agents(msgs, 'session-1', base)
+        assert 'sub_agent_path' not in result['agents'][0]
+
+    def test_sub_agent_path_absent_when_no_agent_id(self, tmp_path):
+        msgs = [_assistant_tool_use('tu_001', 'Agent', prompt='explore')]
+        base = {**self._BASE, 'source': str(tmp_path / 'parent.jsonl')}
+        result = get_session_agents(msgs, 'session-1', base)
+        assert 'sub_agent_path' not in result['agents'][0]

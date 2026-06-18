@@ -679,7 +679,8 @@ def get_session_agents(messages: List[Dict], session_name: str,
         Dictionary with type 'claude_agents', agent list, and aggregate stats.
     """
     base = contract_base.copy()
-    base['type'] = 'claude_agents'
+    base['type'] = 'claude_session_agents'
+    _conversation_path = base.get('source', '')
 
     tur_map = _build_tool_use_result_map(messages)
 
@@ -695,15 +696,21 @@ def get_session_agents(messages: List[Dict], session_name: str,
         inp = content.get('input', {})
 
         prompt = str(inp.get('prompt', ''))
+        agent_id = tur.get('agentId') if isinstance(tur, dict) else None
         entry: Dict[str, Any] = {
             'step': len(agents) + 1,
             'message_index': i,
-            'agent_id': tur.get('agentId') if isinstance(tur, dict) else None,
+            'agent_id': agent_id,
             'agent_type': (tur.get('agentType') if isinstance(tur, dict) else None) or 'unknown',
             'status': (tur.get('status') if isinstance(tur, dict) else None) or 'unknown',
             'prompt': prompt[:200],
             'timestamp': msg.get('timestamp'),
         }
+        if agent_id and _conversation_path:
+            from pathlib import Path as _Path
+            candidate = _Path(_conversation_path).parent / f'agent-{agent_id}.jsonl'
+            if candidate.exists():
+                entry['sub_agent_path'] = str(candidate)
 
         if isinstance(tur, dict):
             if tur.get('totalDurationMs') is not None:
