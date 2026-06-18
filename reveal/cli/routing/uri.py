@@ -29,6 +29,16 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
 
     scheme, resource = uri.split('://', 1)
 
+    # --grep is only implemented for file-path targets (routing/file.py).  Warn rather
+    # than silently ignoring so users know their filter didn't apply (BACK-351).
+    if getattr(args, 'grep', None):
+        pipe_uri = uri if '?' not in uri else f"'{uri}'"
+        print(
+            f"Note: --grep is not supported for URI schemes. "
+            f"Use: reveal {pipe_uri} | grep '{args.grep}'",
+            file=sys.stderr,
+        )
+
     # Inject --sort/--desc CLI flags into URI query string for adapters that support them.
     # Skip injection if URI already has an explicit sort= param — URI takes precedence.
     sort_field = getattr(args, 'sort', None)
@@ -255,7 +265,11 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
         args: CLI arguments
     """
     element_name = element if element else resource
-    result = adapter.get_element(element_name)
+    element_kwargs = {}
+    section = getattr(args, 'section', None)
+    if section:
+        element_kwargs['section'] = section
+    result = adapter.get_element(element_name, **element_kwargs)
 
     if result is None:
         print(f"Error: Element '{element_name}' not found", file=sys.stderr)
@@ -318,6 +332,19 @@ def _build_adapter_kwargs(adapter, args: 'Namespace', scheme: Optional[str] = No
             value = getattr(args, arg_name, None)
             if value is not None:
                 kwargs[param_name] = value
+
+    # Auto-discover: any get_structure() param whose name matches an args attribute
+    # and hasn't already been populated above — eliminates the need to hand-maintain
+    # param_mapping for every new CLI flag (BACK-354).
+    _skip = set(param_mapping.values()) | {'uri', 'self'}
+    for param_name, param in sig.parameters.items():
+        if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+            continue
+        if param_name in _skip or param_name in kwargs:
+            continue
+        value = getattr(args, param_name, None)
+        if value is not None:
+            kwargs[param_name] = value
 
     return kwargs
 

@@ -8,6 +8,39 @@ from pathlib import Path
 
 # Matches the adjective-noun-MMDD pattern used for named TIA/Claude sessions.
 _SESSION_NAME_RE = re.compile(r'^([a-z]+-[a-z]+-\d{4})(?:/|$)')
+# Matches UUID session names (Windows / standard Claude Code layout).
+_UUID_SESSION_RE = re.compile(r'^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:/|$)', re.IGNORECASE)
+# Matches the 8-char hex prefix shown in session listings (truncated UUID, BACK-350).
+_SHORT_UUID_RE = re.compile(r'^([0-9a-f]{8})(?:/|$)', re.IGNORECASE)
+
+
+def _parse_session_identifier(resource: str):
+    """Parse a session URI resource into (session_name, sub_path).
+
+    Single source of truth for all recognized session identifier shapes — keeps
+    _parse_session_name and _find_conversation in sync (BACK-358).
+
+    Recognized forms:
+    - 'session/NAME[/sub-path]'          explicit prefix
+    - 'adjective-noun-MMDD[/sub-path]'   named TIA/Claude session
+    - 'full-uuid[/sub-path]'             32-hex UUID (Windows layout)
+    - '8hexchars[/sub-path]'             truncated UUID prefix from listings
+
+    Returns:
+        (session_name, sub_path) — sub_path is '' when absent.
+    """
+    if resource.startswith('session/'):
+        parts = resource.split('/', 2)
+        name = parts[1] if len(parts) > 1 else ''
+        sub = parts[2] if len(parts) > 2 else ''
+        return name, sub
+    for regex in (_SESSION_NAME_RE, _UUID_SESSION_RE, _SHORT_UUID_RE):
+        m = regex.match(resource)
+        if m:
+            name = m.group(1)
+            sub = resource[len(name):].lstrip('/')
+            return name, sub
+    return resource, ''
 
 logger = logging.getLogger(__name__)
 from typing import Dict, List, Any, Optional
@@ -448,11 +481,18 @@ class ClaudeAdapter(ResourceAdapter):
             ValueError: If path looks like a session directory (contains .jsonl files
                 directly) rather than the projects directory.
         """
-        if path.exists() and next(path.glob('*.jsonl'), None) is not None:
-            raise ValueError(
-                f"--base-path looks like a session directory (contains .jsonl files directly).\n"
-                f"Try the parent directory instead: --base-path {path.parent}"
-            )
+        if path.exists():
+            # Auto-detect: if path is a .claude home (has a projects/ subdir), configure from there.
+            projects_subdir = path / 'projects'
+            if projects_subdir.is_dir():
+                path = projects_subdir
+            elif next(path.glob('*.jsonl'), None) is not None:
+                raise ValueError(
+                    f"--base-path looks like a session directory (contains .jsonl files directly).\n"
+                    f"If pointing to a .claude home, use REVEAL_CLAUDE_HOME instead:\n"
+                    f"  REVEAL_CLAUDE_HOME={path.parent} reveal 'claude://...'  # .claude home\n"
+                    f"  --base-path {path.parent}                               # projects/ parent"
+                )
         self.CONVERSATION_BASE = path
         self.CLAUDE_HOME = path.parent
         self.CLAUDE_JSON = path.parent.parent / '.claude.json'
@@ -479,24 +519,12 @@ class ClaudeAdapter(ResourceAdapter):
         }
 
     def _parse_session_name(self, resource: str) -> str:
-        """Extract session name from URI.
+        """Extract session name from URI resource string.
 
-        Handles both 'session/NAME[/sub-path]' and bare 'NAME[/sub-path]' forms
-        when NAME matches the adjective-noun-MMDD session pattern.
-
-        Args:
-            resource: Resource string (e.g., 'session/infernal-earth-0118')
-
-        Returns:
-            Session name (e.g., 'infernal-earth-0118')
+        Delegates to the module-level _parse_session_identifier so that all
+        recognized session shapes stay in one place (BACK-358).
         """
-        if resource.startswith('session/'):
-            parts = resource.split('/')
-            return parts[1] if len(parts) > 1 else ""
-        m = _SESSION_NAME_RE.match(resource)
-        if m:
-            return m.group(1)
-        return resource
+        return _parse_session_identifier(resource)[0]
 
     def _find_conversation(self) -> Optional[Path]:
         """Find conversation JSONL file for session.
@@ -532,6 +560,15 @@ class ClaudeAdapter(ResourceAdapter):
             for jsonl_file in project_dir.glob('*.jsonl'):
                 if jsonl_file.stem.endswith(self.session_name):
                     return jsonl_file
+
+        # Strategy 4: prefix match — truncated 8-char UUID appears at the START of full
+        # UUID filenames (e.g. 'c318161b' matches 'c318161b-xxxx-....jsonl').  Only applied
+        # when session_name looks like a short UUID to avoid over-broad matching (BACK-350).
+        if _SHORT_UUID_RE.fullmatch(self.session_name):
+            for project_dir in dirs:
+                for jsonl_file in project_dir.glob('*.jsonl'):
+                    if jsonl_file.stem.startswith(self.session_name):
+                        return jsonl_file
 
         return None
 
@@ -569,18 +606,25 @@ class ClaudeAdapter(ResourceAdapter):
     def _route_by_query(self, messages: List[Dict], conversation_path_str: str,
                         contract_base: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Route to handler by query parameter. Returns None if no query matches."""
-        if self.query == 'summary':
+        # Accept both bare-flag (?summary) and value forms (?summary=true / ?summary=1).
+        if self.query == 'summary' or self.query_params.get('summary') is not None:
             return get_summary(messages, self.session_name, conversation_path_str, contract_base)
-        if self.query == 'timeline':
+        if self.query == 'timeline' or self.query_params.get('timeline') is not None:
             return get_timeline(messages, self.session_name, contract_base)
-        if self.query == 'errors':
+        if self.query == 'errors' or self.query_params.get('errors') is not None:
             return get_errors(messages, self.session_name, contract_base)
-        if self.query == 'tokens':
+        if self.query == 'tokens' or self.query_params.get('tokens') is not None:
             return get_token_breakdown(messages, self.session_name, contract_base)
         if self.query and self.query.startswith('tools='):
             return get_tool_calls(messages, self.query.split('=')[1], self.session_name, contract_base)
         if self.query and self.query.startswith('search='):
             return search_messages(messages, self.query.split('=', 1)[1], self.session_name, contract_base)
+        role = self.query_params.get('role')
+        if role in ('user', 'assistant'):
+            result = filter_by_role(messages, role, self.session_name, contract_base)
+            if role == 'assistant':
+                result['full'] = 'full' in self.query_params
+            return result
         # ?tail=N or ?last=N — last N assistant turns; bare ?last — shorthand for ?tail=1
         tail_str = self.query_params.get('tail')
         last_val = self.query_params.get('last')

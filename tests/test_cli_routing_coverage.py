@@ -809,3 +809,88 @@ class TestHandleFilePathSectionOnMarkdown:
             mock_handle_file.assert_called_once()
             call_args = mock_handle_file.call_args[0]
             assert call_args[1] == 'Intro'  # element passed from args.section
+
+
+# ─── BACK-351: --grep warning on URI schemes ─────────────────────────────────
+
+class TestBack351GrepWarningOnUriSchemes:
+    """BACK-351: --grep is silently ignored on URI schemes; now emits a clear note."""
+
+    def _make_args(self, grep=None):
+        return Namespace(format='text', fields=None, max_items=None,
+                         max_snippet_chars=None, check=False, hotspots=False,
+                         grep=grep, sort=None, desc=False)
+
+    def test_grep_on_uri_emits_stderr_note(self, capsys):
+        args = self._make_args(grep='REVEAL_CLAUDE_HOME')
+        # get_adapter_class is imported inside handle_uri — patch at source
+        with patch('reveal.adapters.base.get_adapter_class', return_value=None):
+            with pytest.raises(SystemExit):
+                from reveal.cli.routing.uri import handle_uri
+                handle_uri('help://claude/full', None, args)
+        # Note is emitted before the scheme lookup, so it should appear even on bad scheme
+        captured = capsys.readouterr()
+        assert '--grep' in captured.err
+        assert 'not supported' in captured.err
+
+    def test_grep_none_emits_no_note(self, capsys):
+        args = self._make_args(grep=None)
+        with patch('reveal.adapters.base.get_adapter_class', return_value=None):
+            with pytest.raises(SystemExit):
+                from reveal.cli.routing.uri import handle_uri
+                handle_uri('help://claude/full', None, args)
+        captured = capsys.readouterr()
+        assert '--grep' not in captured.err
+
+    def test_grep_warning_includes_pipe_suggestion(self, capsys):
+        args = self._make_args(grep='mypattern')
+        with patch('reveal.adapters.base.get_adapter_class', return_value=None):
+            with pytest.raises(SystemExit):
+                from reveal.cli.routing.uri import handle_uri
+                handle_uri('env://', None, args)
+        captured = capsys.readouterr()
+        assert 'grep' in captured.err.lower()
+        assert 'mypattern' in captured.err
+
+
+# ─── BACK-354: _build_adapter_kwargs auto-discovery ──────────────────────────
+
+class TestBack354AdapterKwargsAutoDiscovery:
+    """BACK-354: _build_adapter_kwargs auto-discovers params not in the whitelist."""
+
+    def test_known_param_still_flows_via_whitelist(self):
+        """Existing whitelist params continue to work."""
+        class FakeAdapter:
+            def get_structure(self, hotspots=False):
+                pass
+        args = Namespace(hotspots=True, format='text')
+        result = _build_adapter_kwargs(FakeAdapter(), args)
+        assert result.get('hotspots') is True
+
+    def test_unknown_param_auto_discovered(self):
+        """A get_structure() param NOT in the whitelist is auto-wired from args."""
+        class FakeAdapter:
+            def get_structure(self, my_new_flag=None):
+                pass
+        args = Namespace(my_new_flag='hello', format='text')
+        result = _build_adapter_kwargs(FakeAdapter(), args)
+        assert result.get('my_new_flag') == 'hello'
+
+    def test_unknown_param_none_value_excluded(self):
+        """Auto-discovered params with None value are still excluded."""
+        class FakeAdapter:
+            def get_structure(self, my_new_flag=None):
+                pass
+        args = Namespace(my_new_flag=None, format='text')
+        result = _build_adapter_kwargs(FakeAdapter(), args)
+        assert 'my_new_flag' not in result
+
+    def test_var_keyword_params_not_auto_discovered(self):
+        """**kwargs in get_structure() signature is not auto-included."""
+        class FakeAdapter:
+            def get_structure(self, **kwargs):
+                pass
+        args = Namespace(some_flag='val', format='text')
+        result = _build_adapter_kwargs(FakeAdapter(), args)
+        # No explicit params — result should be empty (uri not set either)
+        assert result == {}

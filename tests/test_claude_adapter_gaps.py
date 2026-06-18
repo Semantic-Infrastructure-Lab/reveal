@@ -1618,3 +1618,154 @@ class TestBack346MessagesDiscoverable:
         from reveal.adapters.claude.adapter import _SCHEMA_OUTPUT_TYPES
         types = [ot.get('type') for ot in _SCHEMA_OUTPUT_TYPES]
         assert 'claude_messages' in types
+
+
+# ─── BACK-353: ?summary=true / ?errors=true / ?timeline=true ─────────────────
+
+class TestBack353ValueFormQueryParams:
+    """BACK-353: bare-flag check only matched ?summary; value form ?summary=true fell through."""
+
+    def _make_session(self, tmp_path, messages):
+        jsonl = _write_session(tmp_path, 'test-session', messages)
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('session/test-session')
+        adapter.conversation_path = jsonl
+        adapter.messages = messages
+        return adapter
+
+    def test_summary_bare_flag_still_works(self, tmp_path):
+        adapter = self._make_session(tmp_path, [_user_msg('hi'), _assistant_msg('hello')])
+        adapter.query = 'summary'
+        adapter.query_params = {}
+        result = adapter._route_by_query(adapter.messages, '', adapter._get_contract_base())
+        assert result is not None
+        assert result.get('type') == 'claude_analytics'
+
+    def test_summary_value_form_routes_correctly(self, tmp_path):
+        adapter = self._make_session(tmp_path, [_user_msg('hi'), _assistant_msg('hello')])
+        adapter.query = 'summary=true'
+        adapter.query_params = {'summary': 'true'}
+        result = adapter._route_by_query(adapter.messages, '', adapter._get_contract_base())
+        assert result is not None
+        assert result.get('type') == 'claude_analytics'
+
+    def test_summary_value_1_routes_correctly(self, tmp_path):
+        adapter = self._make_session(tmp_path, [_user_msg('hi'), _assistant_msg('hello')])
+        adapter.query = 'summary=1'
+        adapter.query_params = {'summary': '1'}
+        result = adapter._route_by_query(adapter.messages, '', adapter._get_contract_base())
+        assert result is not None
+        assert result.get('type') == 'claude_analytics'
+
+    def test_errors_value_form_routes_correctly(self, tmp_path):
+        msgs = [_tool_use_msg('Bash', tool_id='tu1', command='ls'),
+                _tool_result_msg('tu1', 'error output', is_error=True)]
+        adapter = self._make_session(tmp_path, msgs)
+        adapter.query = 'errors=true'
+        adapter.query_params = {'errors': 'true'}
+        result = adapter._route_by_query(adapter.messages, '', adapter._get_contract_base())
+        assert result is not None
+        assert result.get('type') == 'claude_errors'
+
+    def test_timeline_value_form_routes_correctly(self, tmp_path):
+        msgs = [_user_msg('hi'), _assistant_msg('hello')]
+        adapter = self._make_session(tmp_path, msgs)
+        adapter.query = 'timeline=true'
+        adapter.query_params = {'timeline': 'true'}
+        result = adapter._route_by_query(adapter.messages, '', adapter._get_contract_base())
+        assert result is not None
+        assert result.get('type') == 'claude_timeline'
+
+    def test_tokens_value_form_routes_correctly(self, tmp_path):
+        msgs = [_user_msg('hi'), _assistant_msg('hello')]
+        adapter = self._make_session(tmp_path, msgs)
+        adapter.query = 'tokens=true'
+        adapter.query_params = {'tokens': 'true'}
+        result = adapter._route_by_query(adapter.messages, '', adapter._get_contract_base())
+        assert result is not None
+        assert result.get('type') == 'claude_token_breakdown'
+
+
+# ─── BACK-350 + BACK-358: short UUID + shared identifier ─────────────────────
+
+class TestBack350ShortUuidSubPath:
+    """BACK-350: 'claude://c318161b/workflow' — truncated UUID + sub-path was broken.
+    BACK-358: _parse_session_identifier is now the single source of truth for all shapes.
+    """
+
+    def test_parse_session_identifier_named_session(self):
+        from reveal.adapters.claude.adapter import _parse_session_identifier
+        name, sub = _parse_session_identifier('burning-antimatter-0501')
+        assert name == 'burning-antimatter-0501'
+        assert sub == ''
+
+    def test_parse_session_identifier_named_session_with_subpath(self):
+        from reveal.adapters.claude.adapter import _parse_session_identifier
+        name, sub = _parse_session_identifier('burning-antimatter-0501/workflow')
+        assert name == 'burning-antimatter-0501'
+        assert sub == 'workflow'
+
+    def test_parse_session_identifier_full_uuid(self):
+        from reveal.adapters.claude.adapter import _parse_session_identifier
+        uuid = '12345678-1234-5678-1234-567812345678'
+        name, sub = _parse_session_identifier(uuid)
+        assert name == uuid
+        assert sub == ''
+
+    def test_parse_session_identifier_full_uuid_with_subpath(self):
+        from reveal.adapters.claude.adapter import _parse_session_identifier
+        uuid = '12345678-1234-5678-1234-567812345678'
+        name, sub = _parse_session_identifier(f'{uuid}/workflow')
+        assert name == uuid
+        assert sub == 'workflow'
+
+    def test_parse_session_identifier_short_uuid(self):
+        from reveal.adapters.claude.adapter import _parse_session_identifier
+        name, sub = _parse_session_identifier('c318161b')
+        assert name == 'c318161b'
+        assert sub == ''
+
+    def test_parse_session_identifier_short_uuid_with_subpath(self):
+        from reveal.adapters.claude.adapter import _parse_session_identifier
+        name, sub = _parse_session_identifier('c318161b/workflow')
+        assert name == 'c318161b'
+        assert sub == 'workflow'
+
+    def test_parse_session_name_short_uuid_extracts_prefix(self):
+        """_parse_session_name delegates to identifier and returns session name."""
+        adapter = ClaudeAdapter.__new__(ClaudeAdapter)
+        name = adapter._parse_session_name('c318161b/workflow')
+        assert name == 'c318161b'
+
+    def test_find_conversation_strategy4_short_uuid(self, tmp_path):
+        """Strategy 4: startswith match for 8-char UUID prefix (BACK-350)."""
+        full_uuid = 'c318161b-abcd-ef01-2345-678901234567'
+        project_dir = tmp_path / 'some-project-dir'
+        project_dir.mkdir()
+        jsonl = project_dir / f'{full_uuid}.jsonl'
+        jsonl.write_text(json.dumps(_user_msg('hi')) + '\n')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('c318161b/workflow')
+        assert adapter.conversation_path == jsonl
+
+    def test_find_conversation_strategy4_does_not_match_non_hex(self, tmp_path):
+        """Strategy 4 must only trigger for 8 hex chars — not generic 8-char strings.
+
+        'settings' is 8 chars but not hex — ensure the startswith strategy only fires
+        when session_name matches _SHORT_UUID_RE.
+        """
+        project_dir = tmp_path / 'some-project-dir'
+        project_dir.mkdir()
+        # Filename starts with 'settings' but is not 'settings.jsonl' exactly (avoids S2)
+        jsonl = project_dir / 'settings-full-uuid-extension.jsonl'
+        jsonl.write_text(json.dumps(_user_msg('hi')) + '\n')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('settings')
+        # 'settings' is not a short UUID hex — strategy 4 must not fire
+        assert adapter.conversation_path is None
+
+    def test_session_prefix_form_still_works(self):
+        from reveal.adapters.claude.adapter import _parse_session_identifier
+        name, sub = _parse_session_identifier('session/ancient-quasar-0501/message/3')
+        assert name == 'ancient-quasar-0501'
+        assert sub == 'message/3'
