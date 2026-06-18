@@ -2108,3 +2108,176 @@ class TestProceduralFileFallback(unittest.TestCase):
         msg = buf.getvalue()
         assert 'not found' in msg
         assert 'L<start>-L<end>' not in msg
+
+
+# ---------------------------------------------------------------------------
+# BACK-361: Unit tests for extracted get_file_blame helpers
+# ---------------------------------------------------------------------------
+
+class TestReadBlameIgnoreRevs(unittest.TestCase):
+    """_read_blame_ignore_revs reads SHAs from .git-blame-ignore-revs."""
+
+    def test_no_workdir_returns_empty(self):
+        from reveal.adapters.git.files import _read_blame_ignore_revs
+        assert _read_blame_ignore_revs(None) == []
+
+    def test_missing_file_returns_empty(self, tmp_path=None):
+        import tempfile, os
+        from reveal.adapters.git.files import _read_blame_ignore_revs
+        with tempfile.TemporaryDirectory() as d:
+            assert _read_blame_ignore_revs(d) == []
+
+    def test_reads_shas_skips_comments_and_blanks(self):
+        import tempfile, os
+        from reveal.adapters.git.files import _read_blame_ignore_revs
+        with tempfile.TemporaryDirectory() as d:
+            revs = os.path.join(d, '.git-blame-ignore-revs')
+            with open(revs, 'w') as f:
+                f.write('# comment\n')
+                f.write('abc1234def5 # inline comment\n')
+                f.write('\n')
+                f.write('deadbeef1234567890abcdef\n')
+            result = _read_blame_ignore_revs(d)
+        assert result == ['abc1234', 'deadbee']
+
+    def test_skips_shas_shorter_than_7(self):
+        import tempfile, os
+        from reveal.adapters.git.files import _read_blame_ignore_revs
+        with tempfile.TemporaryDirectory() as d:
+            revs = os.path.join(d, '.git-blame-ignore-revs')
+            with open(revs, 'w') as f:
+                f.write('abc123\n')     # 6 chars — too short
+                f.write('abc1234\n')    # exactly 7 — included
+            result = _read_blame_ignore_revs(d)
+        assert result == ['abc1234']
+
+
+class TestDetectNoiseCommits(unittest.TestCase):
+    """_detect_noise_commits returns SHAs matching noise pattern and >50% hunk ownership."""
+
+    def _make_hunk(self, sha: str, msg: str) -> dict:
+        return {'commit': {'hash': sha, 'message': msg}, 'lines': {'start': 1, 'count': 1}}
+
+    def test_empty_hunks_returns_empty(self):
+        from reveal.adapters.git.files import _detect_noise_commits
+        assert _detect_noise_commits([]) == []
+
+    def test_dominant_noise_commit_detected(self):
+        from reveal.adapters.git.files import _detect_noise_commits
+        hunks = [self._make_hunk('aaa1111', 'normalize whitespace')] * 9
+        hunks.append(self._make_hunk('bbb2222', 'real work'))
+        result = _detect_noise_commits(hunks)
+        assert 'aaa1111' in result
+        assert 'bbb2222' not in result
+
+    def test_minority_noise_commit_not_detected(self):
+        from reveal.adapters.git.files import _detect_noise_commits
+        real = [self._make_hunk('bbb2222', 'real work')] * 19
+        noise = [self._make_hunk('aaa1111', 'run black')]
+        result = _detect_noise_commits(real + noise)
+        assert result == []
+
+    def test_noise_pattern_variants(self):
+        from reveal.adapters.git.files import _detect_noise_commits
+        patterns = ['run prettier', 'apply eslint', 'run black', 'run isort',
+                    'clang-format pass', 'normalize line endings', 'format code']
+        for msg in patterns:
+            hunks = [self._make_hunk('aaa1111', msg)] * 3
+            result = _detect_noise_commits(hunks)
+            assert 'aaa1111' in result, f"pattern not detected: {msg!r}"
+
+    def test_benign_dominant_commit_not_flagged(self):
+        from reveal.adapters.git.files import _detect_noise_commits
+        hunks = [self._make_hunk('aaa1111', 'add feature X')] * 10
+        assert _detect_noise_commits(hunks) == []
+
+    def test_exactly_50_percent_not_detected(self):
+        from reveal.adapters.git.files import _detect_noise_commits
+        noise = [self._make_hunk('aaa1111', 'normalize whitespace')] * 5
+        real = [self._make_hunk('bbb2222', 'real')] * 5
+        result = _detect_noise_commits(noise + real)
+        assert 'aaa1111' not in result  # must be strictly > 50%
+
+
+@pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+class TestResolveBlamCommit:
+    """_resolve_blame_commit peels any ref type to a Commit."""
+
+    def test_branch_ref_resolves_to_commit(self, git_repo):
+        import pygit2
+        from reveal.adapters.git.files import _resolve_blame_commit
+        repo = pygit2.Repository(str(git_repo))
+        commit = _resolve_blame_commit(repo, 'master')
+        assert isinstance(commit, pygit2.Commit)
+
+    def test_head_ref_resolves_to_commit(self, git_repo):
+        import pygit2
+        from reveal.adapters.git.files import _resolve_blame_commit
+        repo = pygit2.Repository(str(git_repo))
+        commit = _resolve_blame_commit(repo, 'HEAD')
+        assert isinstance(commit, pygit2.Commit)
+
+    def test_sha_resolves_to_commit(self, git_repo):
+        import pygit2
+        from reveal.adapters.git.files import _resolve_blame_commit
+        repo = pygit2.Repository(str(git_repo))
+        head_sha = str(repo.head.target)
+        commit = _resolve_blame_commit(repo, head_sha)
+        assert isinstance(commit, pygit2.Commit)
+        assert str(commit.id) == head_sha
+
+
+@pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+class TestReadBlobLines:
+    """_read_blob_lines returns file lines from a commit's tree."""
+
+    def test_reads_file_lines(self, git_repo):
+        import pygit2
+        from reveal.adapters.git.files import _resolve_blame_commit, _read_blob_lines
+        repo = pygit2.Repository(str(git_repo))
+        commit = _resolve_blame_commit(repo, 'HEAD')
+        lines = _read_blob_lines(repo, commit, 'README.md')
+        assert isinstance(lines, list)
+        assert len(lines) > 0
+        assert any('Test Repository' in line for line in lines)
+
+    def test_missing_path_raises(self, git_repo):
+        import pygit2
+        from reveal.adapters.git.files import _resolve_blame_commit, _read_blob_lines
+        repo = pygit2.Repository(str(git_repo))
+        commit = _resolve_blame_commit(repo, 'HEAD')
+        with pytest.raises(KeyError):
+            _read_blob_lines(repo, commit, 'nonexistent.txt')
+
+
+@pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+class TestFormatBlameHunks:
+    """_format_blame_hunks returns well-formed hunk dicts."""
+
+    def test_returns_list_of_hunk_dicts(self, git_repo):
+        import pygit2
+        from reveal.adapters.git.files import _resolve_blame_commit, _format_blame_hunks
+        repo = pygit2.Repository(str(git_repo))
+        commit = _resolve_blame_commit(repo, 'HEAD')
+        blame = repo.blame('README.md', newest_commit=commit.id)
+        hunks = _format_blame_hunks(repo, blame)
+        assert isinstance(hunks, list)
+        assert len(hunks) > 0
+
+    def test_hunk_has_required_fields(self, git_repo):
+        import pygit2
+        from reveal.adapters.git.files import _resolve_blame_commit, _format_blame_hunks
+        repo = pygit2.Repository(str(git_repo))
+        commit = _resolve_blame_commit(repo, 'HEAD')
+        blame = repo.blame('README.md', newest_commit=commit.id)
+        hunks = _format_blame_hunks(repo, blame)
+        for h in hunks:
+            assert 'lines' in h
+            assert 'start' in h['lines']
+            assert 'count' in h['lines']
+            assert 'commit' in h
+            assert 'hash' in h['commit']
+            assert 'author' in h['commit']
+            assert 'date' in h['commit']
+            assert 'message' in h['commit']
+            assert len(h['commit']['hash']) == 7

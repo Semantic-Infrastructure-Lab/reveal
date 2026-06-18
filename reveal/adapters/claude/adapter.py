@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 # Matches the adjective-noun-MMDD pattern used for named TIA/Claude sessions.
@@ -1290,9 +1291,15 @@ class ClaudeAdapter(ResourceAdapter):
 
         if getattr(args, 'with_stats', False):
             result['with_stats'] = True
-            for s in sessions:
-                if s.get('path'):
-                    s.update(_read_session_stats(Path(s['path'])))
+            sessions_with_paths = [s for s in sessions if s.get('path')]
+            if sessions_with_paths:
+                with ThreadPoolExecutor(max_workers=min(8, len(sessions_with_paths))) as executor:
+                    future_to_session = {
+                        executor.submit(_read_session_stats, Path(s['path'])): s
+                        for s in sessions_with_paths
+                    }
+                    for future in as_completed(future_to_session):
+                        future_to_session[future].update(future.result())
 
     @staticmethod
     def _post_process_messages(result: Dict[str, Any], args: Any) -> None:

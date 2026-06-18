@@ -8,6 +8,12 @@ from typing import Dict, Any, List, Optional, cast, TYPE_CHECKING
 
 _LINE_RANGE_RE = re.compile(r'^[Ll](\d+)-[Ll]?(\d+)$')
 
+_BLAME_NOISE_RE = re.compile(
+    r'normalize|line.end|gitattributes|format|whitespace|prettier|eslint'
+    r'|black|isort|autopep8|clang.?format',
+    re.IGNORECASE,
+)
+
 if TYPE_CHECKING:
     import pygit2
 
@@ -406,6 +412,82 @@ def _apply_element_blame_filter(element_name, hunks, path, subpath, get_range_fu
     return element_info, filtered
 
 
+def _resolve_blame_commit(repo: 'pygit2.Repository', ref: str) -> 'pygit2.Commit':
+    """Peel a ref string to a Commit object."""
+    import pygit2
+    obj = repo.revparse_single(ref)
+    while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
+        obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
+    return cast('pygit2.Commit', obj)
+
+
+def _read_blob_lines(repo: 'pygit2.Repository', commit: 'pygit2.Commit', subpath: str) -> List[str]:
+    """Read file lines from a blob in the given commit's tree."""
+    import pygit2
+    tree = commit.tree
+    entry = tree[subpath]
+    blob = cast('pygit2.Blob', repo[entry.id])
+    return blob.data.decode('utf-8', errors='replace').splitlines()
+
+
+def _format_blame_hunks(repo: 'pygit2.Repository', blame: Any) -> List[Dict[str, Any]]:
+    """Convert pygit2 blame hunks to serializable dicts."""
+    import pygit2
+    hunks: List[Dict[str, Any]] = []
+    for hunk in blame:
+        commit_obj = cast('pygit2.Commit', repo[hunk.final_commit_id])
+        committer = hunk.final_committer
+        if not committer:
+            continue
+        hunks.append({
+            'lines': {
+                'start': hunk.final_start_line_number,
+                'count': hunk.lines_in_hunk,
+            },
+            'commit': {
+                'hash': str(hunk.final_commit_id)[:7],
+                'author': committer.name,
+                'email': committer.email,
+                'date': datetime.fromtimestamp(committer.time).strftime('%Y-%m-%d %H:%M:%S'),
+                'message': commit_obj.message.split('\n')[0],
+            },
+        })
+    return hunks
+
+
+def _read_blame_ignore_revs(workdir: Optional[str]) -> List[str]:
+    """Read short SHAs from .git-blame-ignore-revs if present in workdir."""
+    if not workdir:
+        return []
+    revs_path = os.path.join(workdir, '.git-blame-ignore-revs')
+    if not os.path.exists(revs_path):
+        return []
+    shas: List[str] = []
+    with open(revs_path) as f:
+        for line in f:
+            sha = line.split('#')[0].strip()
+            if sha and len(sha) >= 7:
+                shas.append(sha[:7])
+    return shas
+
+
+def _detect_noise_commits(hunks: List[Dict[str, Any]]) -> List[str]:
+    """Return hunk SHAs that match the noise pattern AND own >50% of hunks."""
+    total = len(hunks)
+    if total == 0:
+        return []
+    hunk_counts: Dict[str, int] = {}
+    hunk_msg: Dict[str, str] = {}
+    for h in hunks:
+        sha7 = h['commit']['hash']
+        hunk_counts[sha7] = hunk_counts.get(sha7, 0) + 1
+        hunk_msg[sha7] = h['commit']['message']
+    return [
+        sha7 for sha7, count in hunk_counts.items()
+        if count / total > 0.5 and _BLAME_NOISE_RE.search(hunk_msg[sha7])
+    ]
+
+
 def get_file_blame(
     repo: 'pygit2.Repository',
     ref: str,
@@ -418,44 +500,11 @@ def get_file_blame(
     import pygit2
 
     try:
-        # Resolve ref to commit
-        obj = repo.revparse_single(ref)
-        while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-            obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
-
-        commit = cast('pygit2.Commit', obj)
-
-        # Get blame for the file
+        commit = _resolve_blame_commit(repo, ref)
         blame = repo.blame(subpath, newest_commit=commit.id)
+        lines = _read_blob_lines(repo, commit, subpath)
+        hunks = _format_blame_hunks(repo, blame)
 
-        # Get file contents to include with blame
-        tree = commit.tree
-        entry = tree[subpath]
-        blob = cast('pygit2.Blob', repo[entry.id])
-        lines = blob.data.decode('utf-8', errors='replace').splitlines()
-
-        # Format blame hunks
-        hunks: List[Dict[str, Any]] = []
-        for hunk in blame:
-            commit_obj = cast('pygit2.Commit', repo[hunk.final_commit_id])
-            committer = hunk.final_committer
-            if not committer:
-                continue
-            hunks.append({
-                'lines': {
-                    'start': hunk.final_start_line_number,
-                    'count': hunk.lines_in_hunk,
-                },
-                'commit': {
-                    'hash': str(hunk.final_commit_id)[:7],
-                    'author': committer.name,
-                    'email': committer.email,
-                    'date': datetime.fromtimestamp(committer.time).strftime('%Y-%m-%d %H:%M:%S'),
-                    'message': commit_obj.message.split('\n')[0],
-                },
-            })
-
-        # Check if semantic blame (element-specific) is requested
         element_name = query.get('element')
         element_info = None
         if element_name:
@@ -463,13 +512,7 @@ def get_file_blame(
                 element_name, hunks, path, subpath, get_element_line_range_func
             )
 
-        # Build ignore list: explicit ?ignore=sha, .git-blame-ignore-revs, noise heuristic.
         # ?ignore=off disables all auto-ignore and shows raw blame.
-        _NOISE_RE = re.compile(
-            r'normalize|line.end|gitattributes|format|whitespace|prettier|eslint'
-            r'|black|isort|autopep8|clang.?format',
-            re.IGNORECASE,
-        )
         ignore_off = query.get('ignore', '').strip().lower() == 'off'
         explicit_shas: List[str] = []
         ignore_revs_shas: List[str] = []
@@ -477,30 +520,8 @@ def get_file_blame(
         if not ignore_off:
             ignore_raw = query.get('ignore', '')
             explicit_shas = [s.strip() for s in ignore_raw.split(',') if s.strip()] if ignore_raw else []
-
-            # Honor .git-blame-ignore-revs if present
-            workdir = getattr(repo, 'workdir', None)
-            if workdir:
-                revs_path = os.path.join(workdir, '.git-blame-ignore-revs')
-                if os.path.exists(revs_path):
-                    with open(revs_path) as revs_f:
-                        for revs_line in revs_f:
-                            sha = revs_line.split('#')[0].strip()
-                            if sha and len(sha) >= 7:
-                                ignore_revs_shas.append(sha[:7])
-
-            # Auto-detect noise commits: noise message pattern AND owns >50% of hunks
-            total_hunks = len(hunks)
-            if total_hunks > 0:
-                hunk_counts: Dict[str, int] = {}
-                hunk_msg: Dict[str, str] = {}
-                for h in hunks:
-                    sha7 = h['commit']['hash']
-                    hunk_counts[sha7] = hunk_counts.get(sha7, 0) + 1
-                    hunk_msg[sha7] = h['commit']['message']
-                for sha7, count in hunk_counts.items():
-                    if count / total_hunks > 0.5 and _NOISE_RE.search(hunk_msg[sha7]):
-                        auto_shas.append(sha7)
+            ignore_revs_shas = _read_blame_ignore_revs(getattr(repo, 'workdir', None))
+            auto_shas = _detect_noise_commits(hunks)
 
         all_ignore_shas = list(dict.fromkeys(explicit_shas + ignore_revs_shas + auto_shas))
         ignored_summary: List[Dict[str, Any]] = []
@@ -517,7 +538,6 @@ def get_file_blame(
                 else:
                     entry['source'] = 'auto-detect'
 
-        # Check if detail mode is requested
         detail_mode = query.get('detail') == 'full'
 
         result = {
