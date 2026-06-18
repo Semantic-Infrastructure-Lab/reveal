@@ -16,9 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **`--with-stats` for session listing (BACK-348)** — `reveal claude:// --with-stats` reads each displayed session's JSONL (the displayed set only, ≤20) and adds MSGS and DUR columns showing total message count and elapsed duration (`1h30m`, `45m`). Default listing is unchanged; a `--with-stats` hint appears in the count line. Also fixed a BACK-349 CLI gap: `--until` was missing from `parser.py` and `defaults.py` so the CLI flag had no effect (only `?until=` query param worked). +13 tests.
+- **`?until=DATE` date range filtering for `claude://` session listings (BACK-349)** — `?since=2026-06-10&until=2026-06-12` now scopes session listing results. `?until=today` normalizes to today's date. +2 tests.
+- **Sub-agent navigation from parent sessions (BACK-347)** — `reveal claude://session/<name>/agents` now resolves sub-agent JSOLs: shows step/status/type/duration/tokens/prompt and a `→ reveal <path>` navigation hint for each Agent tool invocation. +4 tests.
 
 ### Fixed
 - **"No structure available" dead end now shows fallback hints (BACK-336)** — All three sites in `display/structure.py` that print "No structure available" now follow up with `Hint: reveal <path> --grep 'pattern'  |  reveal <path> --show-ast` so users have a clear next step instead of a dead end. +3 test assertions.
+- **`claude://` `?summary` renderer reordered for usefulness (BACK-343)** — Files-changed list and final assistant snippet now lead the summary; tool success rates and message sizes are secondary. Renderer-only change.
+- **`--until today` was a silent no-op; microsecond boundary excluded valid files (BACK-364)** — `--until today` now normalizes to today's ISO date before comparison (was appending `T23:59:59` to the literal string `'today'`, making every file pass). Boundary changed from `T23:59:59` to `T23:59:59.999999` so files modified in the last second of the day are included. Fixed in both `adapter.py` and `sessions.py`. +7 tests.
+
+### Changed
+- **`--with-stats` JSONL reads parallelized (BACK-362)** — Session stats are now fetched concurrently via `ThreadPoolExecutor(max_workers=min(8, N))` instead of sequentially, improving `reveal claude:// --with-stats` speed on large session corpora.
+
+### Refactored
+- **`claude/adapter.py` split into focused modules (BACK-363)** — Extracted `schema.py` (all `_SCHEMA_*` constants, 261 lines) and `handlers/post_process.py` (all `_post_process_*` functions + `_slice_list`, 157 lines). `adapter.py` reduced from 1,383 → 1,011 lines (−27%).
+- **`get_file_blame` helpers extracted (BACK-361)** — Five sub-concerns extracted from a 137-line cx:30 zero-coverage function into independently testable helpers: `_resolve_blame_commit`, `_read_blob_lines`, `_format_blame_hunks`, `_read_blame_ignore_revs`, `_detect_noise_commits`. +17 tests.
 
 ## [0.99.1] - 2026-06-18 (session fluorescent-pigment-0618)
 
