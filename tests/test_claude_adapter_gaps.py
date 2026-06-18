@@ -25,6 +25,7 @@ from unittest.mock import patch
 import pytest
 
 from reveal.adapters.claude.adapter import ClaudeAdapter
+from reveal.adapters.claude.handlers.post_process import _normalize_date
 
 
 # ─── Fixtures / helpers ───────────────────────────────────────────────────────
@@ -672,6 +673,24 @@ class TestPostProcessWorkflow:
         result = {'type': 'claude_workflow', 'workflow': None}
         ClaudeAdapter._post_process_workflow(result, self._args())
         assert result['workflow'] is None
+
+
+# ─── _normalize_date ─────────────────────────────────────────────────────────
+
+class TestNormalizeDate:
+
+    def test_today_returns_todays_iso_date(self):
+        from datetime import date
+        assert _normalize_date('today') == date.today().isoformat()
+
+    def test_iso_date_passthrough(self):
+        assert _normalize_date('2026-01-15') == '2026-01-15'
+
+    def test_arbitrary_string_passthrough(self):
+        assert _normalize_date('2025-12-31') == '2025-12-31'
+
+    def test_empty_string_passthrough(self):
+        assert _normalize_date('') == ''
 
 
 # ─── _post_process_session_list ──────────────────────────────────────────────

@@ -5,6 +5,10 @@ import unittest
 
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.ast.nav_reveal_type import (
+    _infer_await_shape,
+    _infer_call_shape,
+    _infer_dict_shape,
+    _infer_shape,
     collect_type_evidence,
     render_type_evidence,
 )
@@ -345,6 +349,109 @@ def outer():
                     f.write(f"def func(trade: dict): pass\n")
             evs = _evidence(d, 'trade')
             self.assertEqual(len(evs), 3)
+
+
+# ─────────────────────────── _infer_shape unit tests ─────────────────────────
+
+class _FakeNode:
+    """Minimal tree-sitter node stub for unit testing _infer_shape helpers."""
+
+    def __init__(self, kind, text='', children=None, fields=None):
+        self._kind = kind
+        self._text = text
+        self._children = children or []
+        self._fields = fields or {}
+
+    def kind(self):
+        return self._kind
+
+    def child_by_field_name(self, name):
+        return self._fields.get(name)
+
+    def child(self, idx):
+        return self._children[idx] if idx < len(self._children) else None
+
+    def child_count(self):
+        return len(self._children)
+
+
+def _get_text(node):
+    return node._text
+
+
+class TestInferShape(unittest.TestCase):
+
+    def test_none_returns_empty(self):
+        self.assertEqual(_infer_shape(None, _get_text), '')
+
+    def test_list_literal(self):
+        self.assertEqual(_infer_shape(_FakeNode('list'), _get_text), 'list literal')
+
+    def test_tuple_literal(self):
+        self.assertEqual(_infer_shape(_FakeNode('tuple'), _get_text), 'tuple literal')
+
+    def test_set_literal(self):
+        self.assertEqual(_infer_shape(_FakeNode('set'), _get_text), 'set literal')
+
+    def test_subscript(self):
+        self.assertEqual(_infer_shape(_FakeNode('subscript'), _get_text), 'from subscript')
+
+    def test_conditional_expression(self):
+        self.assertEqual(_infer_shape(_FakeNode('conditional_expression'), _get_text), 'conditional expression')
+
+    def test_none_type_literal(self):
+        self.assertEqual(_infer_shape(_FakeNode('none'), _get_text), 'none literal')
+
+    def test_true_literal(self):
+        self.assertEqual(_infer_shape(_FakeNode('true'), _get_text), 'true literal')
+
+    def test_integer_literal(self):
+        self.assertEqual(_infer_shape(_FakeNode('integer'), _get_text), 'integer literal')
+
+    def test_string_literal(self):
+        self.assertEqual(_infer_shape(_FakeNode('string'), _get_text), 'string literal')
+
+    def test_identifier_from_text(self):
+        node = _FakeNode('identifier', 'my_var')
+        self.assertEqual(_infer_shape(node, _get_text), 'from my_var')
+
+    def test_attribute_from_text(self):
+        node = _FakeNode('attribute', 'obj.attr')
+        self.assertEqual(_infer_shape(node, _get_text), 'from obj.attr')
+
+    def test_call_with_function_field(self):
+        func = _FakeNode('identifier', 'get_trade')
+        node = _FakeNode('call', fields={'function': func})
+        self.assertEqual(_infer_shape(node, _get_text), 'return of get_trade()')
+
+    def test_call_without_function_field(self):
+        node = _FakeNode('call')
+        self.assertEqual(_infer_shape(node, _get_text), 'return of call()')
+
+    def test_dictionary_empty(self):
+        node = _FakeNode('dictionary')
+        self.assertEqual(_infer_shape(node, _get_text), 'dict literal {}')
+
+    def test_await_with_inner(self):
+        inner = _FakeNode('call', fields={'function': _FakeNode('identifier', 'fetch')})
+        node = _FakeNode('await', children=[inner])
+        result = _infer_shape(node, _get_text)
+        self.assertIn('await', result)
+
+    def test_await_no_children(self):
+        node = _FakeNode('await', children=[])
+        self.assertEqual(_infer_shape(node, _get_text), 'await expression')
+
+    def test_unknown_short_text(self):
+        node = _FakeNode('binary_operator', 'a + b')
+        self.assertEqual(_infer_shape(node, _get_text), 'a + b')
+
+    def test_unknown_long_text_truncated(self):
+        long_text = 'x' * 50
+        node = _FakeNode('binary_operator', long_text)
+        result = _infer_shape(node, _get_text)
+        self.assertTrue(result.endswith('…'))
+        self.assertLessEqual(len(result), 40)
 
 
 if __name__ == '__main__':

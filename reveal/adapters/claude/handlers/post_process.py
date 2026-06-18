@@ -87,6 +87,10 @@ def _post_process_history(result: Dict[str, Any], args: Any) -> None:
     result['displayed_count'] = len(entries)
 
 
+def _normalize_date(val: str) -> str:
+    return date.today().isoformat() if val == 'today' else val
+
+
 def _post_process_session_list(result: Dict[str, Any], args: Any) -> None:
     """Apply --name/--search, --since, --head/--all filters to claude_session_list results."""
     sessions = result.get('recent_sessions')
@@ -100,14 +104,12 @@ def _post_process_session_list(result: Dict[str, Any], args: Any) -> None:
 
     since = getattr(args, 'since', None)
     if since:
-        if since == 'today':
-            since = date.today().isoformat()
+        since = _normalize_date(since)
         sessions = [s for s in sessions if s.get('modified', '') >= since]
 
     until = getattr(args, 'until', None)
     if until:
-        if until == 'today':
-            until = date.today().isoformat()
+        until = _normalize_date(until)
         sessions = [s for s in sessions if s.get('modified', '') <= until + 'T23:59:59.999999']
 
     if not getattr(args, 'all', False):

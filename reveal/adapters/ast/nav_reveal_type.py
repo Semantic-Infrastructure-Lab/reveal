@@ -297,64 +297,65 @@ def _check_for(
 
 # ─────────────────────────── RHS shape inference ─────────────────────────────
 
+_SIMPLE_SHAPES: Dict[str, str] = {
+    'list': 'list literal',
+    'tuple': 'tuple literal',
+    'set': 'set literal',
+    'subscript': 'from subscript',
+    'conditional_expression': 'conditional expression',
+}
+_LITERAL_TYPES = frozenset({'none', 'true', 'false', 'integer', 'float', 'string'})
+_FROM_TEXT_TYPES = frozenset({'identifier', 'attribute'})
+
+
+def _infer_dict_shape(node: Any, get_text: Callable) -> str:
+    keys = []
+    for child in _children(node):
+        if child.kind() == 'pair':
+            key_node = child.child_by_field_name('key')
+            if key_node:
+                k = get_text(key_node).strip('"\'')
+                if len(k) <= 30:
+                    keys.append(k)
+    if keys:
+        key_str = ', '.join(keys[:6])
+        suffix = ', …' if len(keys) > 6 else ''
+        return f'dict literal {{{key_str}{suffix}}}'
+    return 'dict literal {}'
+
+
+def _infer_call_shape(node: Any, get_text: Callable) -> str:
+    func_node = node.child_by_field_name('function')
+    if func_node:
+        return f'return of {get_text(func_node)}()'
+    return 'return of call()'
+
+
+def _infer_await_shape(node: Any, get_text: Callable) -> str:
+    children = _children(node)
+    inner = children[-1] if children else None
+    inner_shape = _infer_shape(inner, get_text) if inner else ''
+    return f'await {inner_shape}' if inner_shape else 'await expression'
+
+
 def _infer_shape(node: Any, get_text: Callable) -> str:
     if node is None:
         return ''
     ntype = node.kind()
-
-    if ntype == 'dictionary':
-        keys = []
-        for child in _children(node):
-            if child.kind() == 'pair':
-                key_node = child.child_by_field_name('key')
-                if key_node:
-                    k = get_text(key_node).strip('"\'')
-                    if len(k) <= 30:
-                        keys.append(k)
-        if keys:
-            key_str = ', '.join(keys[:6])
-            suffix = ', …' if len(keys) > 6 else ''
-            return f'dict literal {{{key_str}{suffix}}}'
-        return 'dict literal {}'
-
-    elif ntype == 'list':
-        return 'list literal'
-
-    elif ntype == 'tuple':
-        return 'tuple literal'
-
-    elif ntype == 'set':
-        return 'set literal'
-
-    elif ntype == 'call':
-        func_node = node.child_by_field_name('function')
-        if func_node:
-            name = get_text(func_node)
-            return f'return of {name}()'
-        return 'return of call()'
-
-    elif ntype == 'identifier':
-        return f'from {get_text(node)}'
-
-    elif ntype == 'attribute':
-        return f'from {get_text(node)}'
-
-    elif ntype == 'subscript':
-        return f'from subscript'
-
-    elif ntype in ('none', 'true', 'false', 'integer', 'float', 'string'):
+    if ntype in _SIMPLE_SHAPES:
+        return _SIMPLE_SHAPES[ntype]
+    if ntype in _LITERAL_TYPES:
         return f'{ntype} literal'
-
-    elif ntype == 'conditional_expression':
-        return 'conditional expression'
-
-    elif ntype == 'await':
-        children = _children(node)
-        inner = children[-1] if children else None
-        inner_shape = _infer_shape(inner, get_text) if inner else ''
-        return f'await {inner_shape}' if inner_shape else 'await expression'
-
-    return get_text(node)[:40] if len(get_text(node)) <= 40 else get_text(node)[:37] + '…'
+    if ntype in _FROM_TEXT_TYPES:
+        return f'from {get_text(node)}'
+    if ntype == 'dictionary':
+        return _infer_dict_shape(node, get_text)
+    if ntype == 'call':
+        return _infer_call_shape(node, get_text)
+    if ntype == 'await':
+        return _infer_await_shape(node, get_text)
+    text = get_text(node)
+    return text[:40] if len(text) <= 40 else text[:37] + '…'
 
 
 # ─────────────────────────── renderer ────────────────────────────────────────

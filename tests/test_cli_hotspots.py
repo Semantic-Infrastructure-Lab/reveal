@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 from reveal.cli.commands.hotspots import (
     _build_test_name_index,
+    _is_covered,
     _render_file_hotspots,
     _render_function_hotspots,
     _render_report,
@@ -528,6 +529,49 @@ class TestRunHotspotsTestCoverage(unittest.TestCase):
                     with patch('sys.stdout', buf):
                         run_hotspots(args)
                     mock_idx.assert_not_called()
+
+
+class TestIsCovered(unittest.TestCase):
+    """Unit tests for _is_covered coverage heuristic."""
+
+    def test_exact_name_match(self):
+        self.assertTrue(_is_covered('my_fn', '', {'my_fn'}))
+
+    def test_bare_name_match_strips_leading_underscore(self):
+        self.assertTrue(_is_covered('_my_fn', '', {'my_fn'}))
+
+    def test_double_underscore_stripped(self):
+        self.assertTrue(_is_covered('__init', '', {'init'}))
+
+    def test_module_name_match(self):
+        self.assertTrue(_is_covered('some_fn', 'reveal/utils/helper.py', {'helper'}))
+
+    def test_test_index_starts_with_bare(self):
+        # test index has 'my_fn_extra' which starts with bare 'my_fn'
+        self.assertTrue(_is_covered('_my_fn', '', {'my_fn_extra'}))
+
+    def test_reverse_containment_endswith(self):
+        # bare='get_file_blame', index has 'file_blame' (len>=5)
+        self.assertTrue(_is_covered('get_file_blame', '', {'file_blame'}))
+
+    def test_reverse_containment_startswith(self):
+        self.assertTrue(_is_covered('file_blame_get', '', {'file_blame'}))
+
+    def test_reverse_containment_contains(self):
+        self.assertTrue(_is_covered('get_file_blame_fast', '', {'file_blame'}))
+
+    def test_no_match_returns_false(self):
+        self.assertFalse(_is_covered('obscure_fn', 'reveal/core.py', {'other_fn', 'helper'}))
+
+    def test_short_index_words_ignored_in_reverse(self):
+        # 'ab' is len<5, should not match via reverse rule
+        self.assertFalse(_is_covered('get_ab_fn', '', {'ab'}))
+
+    def test_empty_index_returns_false(self):
+        self.assertFalse(_is_covered('fn', 'file.py', set()))
+
+    def test_empty_loc_no_crash(self):
+        self.assertFalse(_is_covered('fn', '', {'other'}))
 
 
 if __name__ == '__main__':

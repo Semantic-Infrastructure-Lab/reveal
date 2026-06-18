@@ -191,6 +191,21 @@ def _render_file_hotspots(hotspots: List[Dict[str, Any]], top: int) -> None:
         print(f"      → reveal {name}")
 
 
+def _is_covered(name: str, loc: str, test_index: Set[str]) -> bool:
+    module_name = Path(loc).stem if loc else ''
+    bare = name.lstrip('_')
+    return (
+        name in test_index
+        or bare in test_index
+        or module_name in test_index
+        or any(s.startswith(bare) for s in test_index)
+        or any(  # reverse: bare contains an index word, e.g. get_file_blame ← file_blame
+            bare.endswith('_' + s) or bare.startswith(s + '_') or ('_' + s + '_') in bare
+            for s in test_index if len(s) >= 5
+        )
+    )
+
+
 def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Set[str]] = None) -> None:
     if not fns:
         return
@@ -205,7 +220,6 @@ def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Se
         line = fn.get('line', '')
         line_count = fn.get('line_count', '')
 
-        # Complexity indicator
         if isinstance(cx, int) and cx >= 20:
             icon = '❌'
         elif isinstance(cx, int) and cx >= 15:
@@ -213,21 +227,8 @@ def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Se
         else:
             icon = '💡'
 
-        # Test coverage heuristic
         if has_coverage_info:
-            module_name = Path(loc).stem if loc else ''
-            bare = name.lstrip('_')
-            covered = (
-                name in test_index  # type: ignore[operator]
-                or bare in test_index
-                or module_name in test_index
-                or any(s.startswith(bare) for s in test_index)
-                or any(  # reverse: bare contains an index word, e.g. get_file_blame ← file_blame
-                    bare.endswith('_' + s) or bare.startswith(s + '_') or ('_' + s + '_') in bare
-                    for s in test_index if len(s) >= 5
-                )
-            )
-            cov = '✅' if covered else '⚪'
+            cov = '✅' if _is_covered(name, loc, test_index)  else '⚪'  # type: ignore[arg-type]
             cov_str = f' {cov}'
         else:
             cov_str = ''
