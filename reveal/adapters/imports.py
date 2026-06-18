@@ -23,6 +23,11 @@ from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 
+def _module_label(path: str) -> str:
+    p = Path(path)
+    return '/'.join(p.parts[-2:]) if p.name == '__init__.py' else p.name
+
+
 _SCHEMA_QUERY_PARAMS = {
     'unused': {
         'type': 'flag',
@@ -335,28 +340,28 @@ class ImportsRenderer:
 
         if count == 0:
             print("  ✅ No circular dependencies found!\n")
-        else:
-            groups = result['cycles']
-            cycle_paths = result.get('cycle_paths', [])
-            shown_groups = groups if verbose else groups[:5]
-            shown_paths = cycle_paths[:len(shown_groups)] if cycle_paths else []
-            for i, group in enumerate(shown_groups, 1):
-                n = len(group)
-                labels = ['/'.join(Path(p).parts[-2:]) if Path(p).name == '__init__.py' else Path(p).name for p in group]
-                if verbose or n <= 4:
-                    label = ', '.join(labels)
-                else:
-                    label = ', '.join(labels[:3]) + f'  [+{n - 3} more files]'
-                print(f"  {i}. {n} file{'s' if n != 1 else ''}  {label}")
-                if verbose and i - 1 < len(shown_paths):
-                    path = shown_paths[i - 1]
-                    path_labels = ['/'.join(Path(p).parts[-2:]) if Path(p).name == '__init__.py' else Path(p).name for p in path]
-                    print(f"     cycle: {' → '.join(path_labels)}")
-            if not verbose and count > 5:
-                print(f"\n  ... and {count - 5} more groups")
-                print(f"  Run with --verbose to see all {count} groups\n")
-            if not verbose and cycle_paths:
-                print(f"\n  Tip: add &verbose to see cycle edge sequences (A→B→C→A)")
+            return
+
+        groups = result['cycles']
+        cycle_paths = result.get('cycle_paths', [])
+        shown_groups = groups if verbose else groups[:5]
+        shown_paths = cycle_paths[:len(shown_groups)] if cycle_paths else []
+        for i, group in enumerate(shown_groups, 1):
+            n = len(group)
+            labels = [_module_label(p) for p in group]
+            if verbose or n <= 4:
+                label = ', '.join(labels)
+            else:
+                label = ', '.join(labels[:3]) + f'  [+{n - 3} more files]'
+            print(f"  {i}. {n} file{'s' if n != 1 else ''}  {label}")
+            if verbose and i - 1 < len(shown_paths):
+                path_labels = [_module_label(p) for p in shown_paths[i - 1]]
+                print(f"     cycle: {' → '.join(path_labels)}")
+        if not verbose and count > 5:
+            print(f"\n  ... and {count - 5} more groups")
+            print(f"  Run with --verbose to see all {count} groups\n")
+        if not verbose and cycle_paths:
+            print(f"\n  Tip: add &verbose to see cycle edge sequences (A→B→C→A)")
 
     @staticmethod
     def _render_layer_violations(result: dict, verbose: bool) -> None:

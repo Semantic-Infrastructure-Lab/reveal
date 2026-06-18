@@ -1290,3 +1290,25 @@ class TestComponents:
         schema = ImportsAdapter.get_schema()
         assert 'components' in schema['query_params']
         assert 'components' in [t['type'] for t in schema['output_types']]
+
+
+# ─────────────────────────── _module_label ───────────────────────────────────
+
+class TestModuleLabel:
+    from reveal.adapters.imports import _module_label
+
+    def test_regular_file_returns_name(self):
+        from reveal.adapters.imports import _module_label
+        assert _module_label('/some/path/utils.py') == 'utils.py'
+
+    def test_init_file_returns_parent_and_name(self):
+        from reveal.adapters.imports import _module_label
+        assert _module_label('/some/path/pkg/__init__.py') == 'pkg/__init__.py'
+
+    def test_nested_init_uses_last_two_parts(self):
+        from reveal.adapters.imports import _module_label
+        assert _module_label('/a/b/c/sub/__init__.py') == 'sub/__init__.py'
+
+    def test_bare_filename_no_dir(self):
+        from reveal.adapters.imports import _module_label
+        assert _module_label('mymodule.py') == 'mymodule.py'

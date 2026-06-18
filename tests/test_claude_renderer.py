@@ -1570,5 +1570,97 @@ class TestClaudeMessageRangeRenderer:
         assert 'tool result' in out
 
 
+class TestRenderTruncatedText:
+    """Unit tests for _render_truncated_text."""
+
+    def test_short_text_printed_as_is(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_truncated_text
+        _render_truncated_text('hello', False, 0)
+        out = capsys.readouterr().out
+        assert 'hello' in out
+        assert 'more chars' not in out
+
+    def test_long_text_truncated_when_not_full(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_truncated_text
+        _render_truncated_text('x' * 700, False, 5)
+        out = capsys.readouterr().out
+        assert '100 more chars' in out
+        assert '/message/5' in out
+
+    def test_long_text_not_truncated_when_full(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_truncated_text
+        _render_truncated_text('x' * 700, True, 0)
+        out = capsys.readouterr().out
+        assert 'more chars' not in out
+        assert 'x' * 700 in out
+
+    def test_exactly_600_chars_not_truncated(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_truncated_text
+        _render_truncated_text('z' * 600, False, 0)
+        out = capsys.readouterr().out
+        assert 'more chars' not in out
+
+
+class TestRenderAssistantMessage:
+    """Unit tests for _render_assistant_message."""
+
+    def test_text_content_printed(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_assistant_message
+        content = [{'type': 'text', 'text': 'Here is my answer.'}]
+        _render_assistant_message(content, False, 1)
+        assert 'Here is my answer.' in capsys.readouterr().out
+
+    def test_thinking_meta_shown(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_assistant_message
+        content = [{'type': 'thinking', 'thinking': 'internal'}]
+        _render_assistant_message(content, False, 1)
+        assert 'thinking' in capsys.readouterr().out
+
+    def test_tool_names_in_meta(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_assistant_message
+        content = [{'type': 'tool_use', 'name': 'Bash', 'input': {'command': 'ls'}}]
+        _render_assistant_message(content, False, 1)
+        assert 'Bash' in capsys.readouterr().out
+
+    def test_no_text_shows_tool_summaries(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_assistant_message
+        content = [{'type': 'tool_use', 'name': 'Read', 'input': {'file_path': '/a'}}]
+        _render_assistant_message(content, False, 1)
+        out = capsys.readouterr().out
+        assert 'Read' in out
+
+
+class TestRenderUserMessage:
+    """Unit tests for _render_user_message."""
+
+    def test_text_content_printed(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_user_message
+        content = [{'type': 'text', 'text': 'hello from user'}]
+        _render_user_message(content, False, 0)
+        assert 'hello from user' in capsys.readouterr().out
+
+    def test_tool_result_count_shown(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_user_message
+        content = [{'type': 'tool_result'}, {'type': 'tool_result'}]
+        _render_user_message(content, False, 0)
+        assert '2 tool result' in capsys.readouterr().out
+
+    def test_empty_content_shows_no_text(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_user_message
+        _render_user_message([], False, 0)
+        assert 'no text content' in capsys.readouterr().out
+
+    def test_long_text_truncated(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_user_message
+        content = [{'type': 'text', 'text': 'a' * 700}]
+        _render_user_message(content, False, 3)
+        assert 'more chars' in capsys.readouterr().out
+
+    def test_non_dict_blocks_ignored(self, capsys):
+        from reveal.adapters.claude.render_messages import _render_user_message
+        _render_user_message(['not a dict', None], False, 0)
+        assert 'no text content' in capsys.readouterr().out
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

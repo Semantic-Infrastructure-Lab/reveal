@@ -17,6 +17,28 @@ _STATUS_ICON = {
 _IMPEDIMENT_SHORT = IMPEDIMENT_SHORT  # alias for local use
 
 
+def _truncate_col(s: str, width: int) -> str:
+    return s[:width - 1] + '…' if len(s) > width else s
+
+
+def _format_history_row(h: Dict[str, Any], ts_width: int, user_width: int) -> str:
+    ts = _truncate_col(h['run_timestamp'], ts_width)
+    user = _truncate_col(h.get('username', ''), user_width)
+
+    status = h.get('tls_status') or ('dcv_failed' if h.get('impediments') else 'unknown')
+    status_col = f"{_icon(status)} {status:<10}"
+
+    days = h.get('cert_expiry_days')
+    expiry_col = f"{days:+.0f}d".rjust(6) if days is not None else '      '
+
+    details = list(h.get('defect_codes', [])[:2])
+    for imp in h.get('impediments', [])[:1]:
+        details.append(_IMPEDIMENT_SHORT.get(imp['code'], imp['code']))
+    detail_col = ', '.join(details)[:40] if details else ''
+
+    return f"  {ts:<{ts_width}}  {user:<{user_width}}  {status_col}  {expiry_col}  {detail_col}"
+
+
 def _icon(status: str) -> str:
     return _STATUS_ICON.get(status, '⚫')
 
@@ -235,35 +257,7 @@ class AutosslRenderer:
         print("  " + "─" * (ts_width + user_width + 40))
 
         for h in history:
-            ts = h['run_timestamp']
-            if len(ts) > ts_width:
-                ts = ts[:ts_width - 1] + '…'
-            user = h.get('username', '')
-            if len(user) > user_width:
-                user = user[:user_width - 1] + '…'
-
-            status = h.get('tls_status') or (
-                'dcv_failed' if h.get('impediments') else 'unknown'
-            )
-            icon = _icon(status)
-            status_col = f"{icon} {status:<10}"
-
-            days = h.get('cert_expiry_days')
-            if days is not None:
-                expiry_col = f"{days:+.0f}d".rjust(6)
-            else:
-                expiry_col = "      "
-
-            details = []
-            codes = h.get('defect_codes', [])
-            if codes:
-                details.extend(codes[:2])
-            for imp in h.get('impediments', [])[:1]:
-                short = _IMPEDIMENT_SHORT.get(imp['code'], imp['code'])
-                details.append(short)
-            detail_col = ', '.join(details)[:40] if details else ''
-
-            print(f"  {ts:<{ts_width}}  {user:<{user_width}}  {status_col}  {expiry_col}  {detail_col}")
+            print(_format_history_row(h, ts_width, user_width))
 
         if truncated:
             hidden = run_count - len(history)

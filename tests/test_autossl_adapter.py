@@ -1215,3 +1215,80 @@ class TestAutosslGetHelp:
         assert 'ok' in tv
         assert 'incomplete' in tv
         assert 'defective' in tv
+
+
+# ─────────────────────────── _truncate_col / _format_history_row ─────────────
+
+class TestTruncateCol:
+    def test_short_string_unchanged(self):
+        from reveal.adapters.autossl.renderer import _truncate_col
+        assert _truncate_col('hello', 10) == 'hello'
+
+    def test_exact_width_unchanged(self):
+        from reveal.adapters.autossl.renderer import _truncate_col
+        assert _truncate_col('hello', 5) == 'hello'
+
+    def test_long_string_truncated_with_ellipsis(self):
+        from reveal.adapters.autossl.renderer import _truncate_col
+        result = _truncate_col('hello world', 7)
+        assert result.endswith('…')
+        assert len(result) == 7
+
+    def test_empty_string(self):
+        from reveal.adapters.autossl.renderer import _truncate_col
+        assert _truncate_col('', 5) == ''
+
+
+class TestFormatHistoryRow:
+    def _row(self, **kwargs):
+        defaults = {
+            'run_timestamp': '2026-01-01T10:00:00',
+            'username': 'alice',
+            'tls_status': 'ok',
+            'cert_expiry_days': 30,
+            'defect_codes': [],
+            'impediments': [],
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def test_ok_status_icon_in_row(self):
+        from reveal.adapters.autossl.renderer import _format_history_row
+        row = _format_history_row(self._row(tls_status='ok'), 25, 10)
+        assert '✅' in row
+
+    def test_defective_status_icon_in_row(self):
+        from reveal.adapters.autossl.renderer import _format_history_row
+        row = _format_history_row(self._row(tls_status='defective'), 25, 10)
+        assert '❌' in row
+
+    def test_expiry_days_shown(self):
+        from reveal.adapters.autossl.renderer import _format_history_row
+        row = _format_history_row(self._row(cert_expiry_days=45), 25, 10)
+        assert '45' in row
+
+    def test_no_expiry_shows_blank(self):
+        from reveal.adapters.autossl.renderer import _format_history_row
+        row = _format_history_row(self._row(cert_expiry_days=None), 25, 10)
+        assert '      ' in row
+
+    def test_defect_codes_shown(self):
+        from reveal.adapters.autossl.renderer import _format_history_row
+        row = _format_history_row(self._row(defect_codes=['E01', 'E02']), 25, 10)
+        assert 'E01' in row
+        assert 'E02' in row
+
+    def test_impediment_code_resolved(self):
+        from reveal.adapters.autossl.renderer import _format_history_row
+        row = _format_history_row(self._row(impediments=[{'code': 'CAA_BLOCK'}]), 25, 10)
+        assert row  # just confirms no crash; short label present
+
+    def test_fallback_status_when_no_tls_status(self):
+        from reveal.adapters.autossl.renderer import _format_history_row
+        row = _format_history_row(self._row(tls_status=None, impediments=[]), 25, 10)
+        assert 'unknown' in row
+
+    def test_dcv_failed_when_impediments_present(self):
+        from reveal.adapters.autossl.renderer import _format_history_row
+        row = _format_history_row(self._row(tls_status=None, impediments=[{'code': 'X'}]), 25, 10)
+        assert 'dcv_failed' in row

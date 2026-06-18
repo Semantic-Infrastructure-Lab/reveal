@@ -399,11 +399,54 @@ def _render_claude_message(result: dict) -> None:
         print(f"\nNote: {result['hint']}")
 
 
+def _render_truncated_text(text: str, full: bool, msg_idx: object) -> None:
+    if not full and len(text) > 600:
+        print(text[:600])
+        print(f"  ... ({len(text) - 600} more chars — use ?full or /message/{msg_idx} for full text)")
+    else:
+        print(text)
+
+
+def _render_assistant_message(content: list, full: bool, msg_idx: object) -> None:
+    text, tool_names, tool_summaries, has_thinking = _parse_assistant_blocks(content)
+    meta_parts = []
+    if has_thinking:
+        meta_parts.append('thinking')
+    if tool_names:
+        meta_parts.append(f"tools: {', '.join(tool_names)}")
+    if meta_parts:
+        print(f"  [{', '.join(meta_parts)}]")
+    if text:
+        _render_truncated_text(text, full, msg_idx)
+    elif tool_summaries:
+        for summary in tool_summaries:
+            print(f"  {summary}")
+
+
+def _render_user_message(content: list, full: bool, msg_idx: object) -> None:
+    text_parts = []
+    tool_result_count = 0
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        btype = block.get('type', '')
+        if btype == 'text':
+            text_parts.append(block.get('text', ''))
+        elif btype == 'tool_result':
+            tool_result_count += 1
+    text = '\n'.join(text_parts).strip()
+    if text:
+        _render_truncated_text(text, full, msg_idx)
+    if tool_result_count:
+        print(f"  [{tool_result_count} tool result(s)]")
+    if not text and not tool_result_count:
+        print("  [no text content]")
+
+
 def _render_claude_message_range(result: dict) -> None:
     """Render interleaved user+assistant messages (range slice)."""
     session = result.get('session', 'unknown')
     displayed = result.get('displayed', len(result.get('messages', [])))
-    total = result.get('total_messages', displayed)
     filtered_from = result.get('filtered_from')
     full = result.get('full', False) or result.get('_display', {}).get('verbose', False)
 
@@ -424,52 +467,11 @@ def _render_claude_message_range(result: dict) -> None:
         turn = msg.get('turn', '?')
         msg_idx = msg.get('message_index', '?')
         role = msg.get('role', '?')
-        ts = msg.get('timestamp', '')
-        content = msg.get('content', [])
-
-        print(f"[turn {turn} / msg {msg_idx} | {role} | {ts}]")
-
+        print(f"[turn {turn} / msg {msg_idx} | {role} | {msg.get('timestamp', '')}]")
         if role == 'assistant':
-            text, tool_names, tool_summaries, has_thinking = _parse_assistant_blocks(content)
-            meta_parts = []
-            if has_thinking:
-                meta_parts.append('thinking')
-            if tool_names:
-                meta_parts.append(f"tools: {', '.join(tool_names)}")
-            if meta_parts:
-                print(f"  [{', '.join(meta_parts)}]")
-            if text:
-                if not full and len(text) > 600:
-                    print(text[:600])
-                    print(f"  ... ({len(text) - 600} more chars — use ?full or /message/{msg_idx} for full text)")
-                else:
-                    print(text)
-            elif tool_summaries:
-                for summary in tool_summaries:
-                    print(f"  {summary}")
+            _render_assistant_message(msg.get('content', []), full, msg_idx)
         else:
-            text_parts = []
-            tool_result_count = 0
-            for block in content:
-                if not isinstance(block, dict):
-                    continue
-                btype = block.get('type', '')
-                if btype == 'text':
-                    text_parts.append(block.get('text', ''))
-                elif btype == 'tool_result':
-                    tool_result_count += 1
-            text = '\n'.join(text_parts).strip()
-            if text:
-                if not full and len(text) > 600:
-                    print(text[:600])
-                    print(f"  ... ({len(text) - 600} more chars — use ?full or /message/{msg_idx} for full text)")
-                else:
-                    print(text)
-            if tool_result_count:
-                print(f"  [{tool_result_count} tool result(s)]")
-            if not text and not tool_result_count:
-                print("  [no text content]")
-
+            _render_user_message(msg.get('content', []), full, msg_idx)
         print()
 
 
