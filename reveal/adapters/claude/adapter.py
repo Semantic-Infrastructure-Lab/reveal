@@ -646,6 +646,10 @@ class ClaudeAdapter(ResourceAdapter):
     def _route_by_resource(self, messages: List[Dict], conversation_path_str: str,
                            contract_base: Dict[str, Any]) -> Dict[str, Any]:
         """Route to handler by resource path segment."""
+        # Structural sub-resources: distinct data shapes, not overview filters.
+        # No query-param alias (?thinking, ?workflow, …) — by design (BACK-352).
+        # Contrast with /errors, /summary, /timeline, /tokens below, which ARE
+        # aliases for query-param views added in BACK-270.
         if '/thinking' in self.resource:
             return get_thinking_blocks(messages, self.session_name, contract_base)
         if '/tools' in self.resource:
@@ -659,6 +663,8 @@ class ClaudeAdapter(ResourceAdapter):
             return get_session_agents(messages, self.session_name, contract_base)
         if '/context' in self.resource:
             return get_context_changes(messages, self.session_name, contract_base)
+        if '/prompts' in self.resource:
+            return get_human_prompts(messages, self.session_name, contract_base)
         # Path aliases for query-routed views (BACK-270): /errors, /summary, /timeline, /tokens
         if '/errors' in self.resource:
             return get_errors(messages, self.session_name, contract_base)
@@ -668,8 +674,6 @@ class ClaudeAdapter(ResourceAdapter):
             return get_timeline(messages, self.session_name, contract_base)
         if '/tokens' in self.resource:
             return get_token_breakdown(messages, self.session_name, contract_base)
-        if '/prompts' in self.resource:
-            return get_human_prompts(messages, self.session_name, contract_base)
         if '/user' in self.resource:
             return filter_by_role(messages, 'user', self.session_name, contract_base)
         if '/assistant' in self.resource:

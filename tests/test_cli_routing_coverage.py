@@ -658,6 +658,74 @@ class TestRenderElement:
         _render_element(mock_adapter, mock_renderer, 'foo', None, args)
         mock_renderer.render_element.assert_called_once_with({'name': 'foo', 'body': 'x = 1'}, 'text')
 
+    # BACK-355 — --head/--tail applied to text-body content field
+
+    def test_head_slices_content_field(self):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {
+            'type': 'static_guide', 'content': 'line1\nline2\nline3\nline4\nline5'
+        }
+        mock_renderer = MagicMock()
+        args = _args(head=3)
+        _render_element(mock_adapter, mock_renderer, 'claude', None, args)
+        passed = mock_renderer.render_element.call_args[0][0]
+        assert passed['content'] == 'line1\nline2\nline3'
+
+    def test_tail_slices_content_field(self):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {
+            'type': 'static_guide', 'content': 'line1\nline2\nline3\nline4\nline5'
+        }
+        mock_renderer = MagicMock()
+        args = _args(tail=2)
+        _render_element(mock_adapter, mock_renderer, 'claude', None, args)
+        passed = mock_renderer.render_element.call_args[0][0]
+        assert passed['content'] == 'line4\nline5'
+
+    def test_head_slices_body_field(self):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'name': 'fn', 'body': 'a\nb\nc\nd'}
+        mock_renderer = MagicMock()
+        args = _args(head=2)
+        _render_element(mock_adapter, mock_renderer, 'fn', None, args)
+        passed = mock_renderer.render_element.call_args[0][0]
+        assert passed['body'] == 'a\nb'
+
+    def test_no_head_tail_leaves_result_unchanged(self):
+        from reveal.cli.routing import _render_element
+        original = {'type': 'static_guide', 'content': 'line1\nline2\nline3'}
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = original
+        mock_renderer = MagicMock()
+        args = _args()
+        _render_element(mock_adapter, mock_renderer, 'topic', None, args)
+        passed = mock_renderer.render_element.call_args[0][0]
+        assert passed['content'] == 'line1\nline2\nline3'
+
+    def test_head_larger_than_content_returns_all(self):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'content': 'a\nb'}
+        mock_renderer = MagicMock()
+        args = _args(head=100)
+        _render_element(mock_adapter, mock_renderer, 'x', None, args)
+        passed = mock_renderer.render_element.call_args[0][0]
+        assert passed['content'] == 'a\nb'
+
+    def test_no_text_field_leaves_result_unchanged(self):
+        from reveal.cli.routing import _render_element
+        original = {'type': 'items', 'results': [1, 2, 3]}
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = original
+        mock_renderer = MagicMock()
+        args = _args(head=1)
+        _render_element(mock_adapter, mock_renderer, 'x', None, args)
+        passed = mock_renderer.render_element.call_args[0][0]
+        assert passed == original
+
 
 # ─── _build_adapter_kwargs — uri param in signature (line 296) ───────────────
 

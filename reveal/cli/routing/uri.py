@@ -279,6 +279,21 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
             print(f"Available elements: {', '.join(elements)}", file=sys.stderr)
         sys.exit(1)
 
+    # Apply --head/--tail to text-body content (BACK-355).
+    # Probe canonical field names; first match wins.
+    head = getattr(args, 'head', None)
+    tail = getattr(args, 'tail', None)
+    if (head or tail) and isinstance(result, dict):
+        for field in ('content', 'body'):
+            if field in result and isinstance(result[field], str):
+                lines = result[field].splitlines()
+                if head:
+                    lines = lines[:head]
+                else:
+                    lines = lines[-tail:]
+                result = {**result, field: '\n'.join(lines)}
+                break
+
     renderer_class.render_element(result, args.format)
 
 
