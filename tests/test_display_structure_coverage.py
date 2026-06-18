@@ -440,6 +440,7 @@ class TestHandleOutlineMode:
         assert 'No structure' in out
         assert '100 lines' in out
         assert '--grep' in out
+        assert '--show-ast' in out
 
     def test_empty_structure_small_file_shows_content(self):
         analyzer = self._make_analyzer(line_count=10)
@@ -552,6 +553,7 @@ class TestRenderTypedStructureOutput:
                 out = _capture(_render_typed_structure_output, analyzer, {}, 'text')
         assert 'No structure available' in out
         assert '--grep' in out
+        assert '--show-ast' in out
 
     def test_with_category_filter_no_matches(self):
         """Lines 283-285: filter with no matches."""
@@ -770,6 +772,7 @@ class TestHandleStandardOutput:
         assert 'No structure available' in out
         assert '100 lines' in out
         assert '--grep' in out
+        assert '--show-ast' in out
 
     def test_empty_structure_small_file_shows_content(self):
         """Empty structure on small file (<=50 lines) → full file content displayed."""

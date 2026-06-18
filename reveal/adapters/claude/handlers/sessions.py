@@ -111,8 +111,8 @@ def _read_session_stats(jsonl_path: Path) -> Dict[str, Any]:
     """
     stats: Dict[str, Any] = {}
     try:
-        lines = [l for l in jsonl_path.read_text(encoding='utf-8', errors='replace').splitlines()
-                 if l.strip().startswith('{')]
+        lines = [line for line in jsonl_path.read_text(encoding='utf-8', errors='replace').splitlines()
+                 if line.strip().startswith('{')]
         if not lines:
             return stats
         stats['message_count'] = len(lines)
@@ -270,6 +270,8 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
 
     if since == 'today':
         since = _date.today().isoformat()
+    if until == 'today':
+        until = _date.today().isoformat()
 
     all_sessions: List[Dict[str, Any]] = []
     try:
@@ -292,10 +294,13 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
     if since:
         all_sessions = [s for s in all_sessions if s.get('modified', '') >= since]
     if until:
-        all_sessions = [s for s in all_sessions if s.get('modified', '') <= until + 'T23:59:59']
+        all_sessions = [s for s in all_sessions if s.get('modified', '') <= until + 'T23:59:59.999999']
 
     whole_word = 'word' in query_params
-    snippet_window = max(60, min(500, int(query_params.get('snippet', 120))))
+    try:
+        snippet_window = max(60, min(500, int(query_params.get('snippet', 120))))
+    except (ValueError, TypeError):
+        snippet_window = 120
     matches = search_sessions_for_term(all_sessions, term, whole_word=whole_word, window_chars=snippet_window)
 
     return {

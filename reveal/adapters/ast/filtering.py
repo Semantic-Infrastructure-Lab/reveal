@@ -309,7 +309,6 @@ def _matches_call_list(call_list: List[str], condition: Dict[str, Any]) -> bool:
                 if fnmatch(candidate, target):
                     return True
             elif op == '~=':
-                import re
                 if re.search(target, candidate):
                     return True
     return False

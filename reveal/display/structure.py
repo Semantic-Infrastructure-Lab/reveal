@@ -273,7 +273,7 @@ def _render_typed_structure_output(
 
     if not typed.elements:
         print("No structure available")
-        print(f"  Hint: reveal {file_path} --grep 'pattern'  |  reveal {file_path} --show-ast")
+        print(f"  Hint: reveal \"{file_path}\" --grep 'pattern'  |  reveal \"{file_path}\" --show-ast")
         return
 
     # Apply category filter if specified
@@ -581,7 +581,7 @@ def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[
             print(analyzer.format_with_lines(analyzer.content, 1))
         else:
             print(f"No structure available for this file type ({line_count} lines)")
-            print(f"  Hint: reveal {path} --grep 'pattern'  |  reveal {path} --show-ast")
+            print(f"  Hint: reveal \"{path}\" --grep 'pattern'  |  reveal \"{path}\" --show-ast")
         return
 
     hierarchy = _build_outline_hierarchy(structure)
@@ -625,7 +625,7 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
             print(analyzer.format_with_lines(analyzer.content, 1))
         else:
             print(f"No structure available for this file type ({line_count} lines)")
-            print(f"  Hint: reveal {path} --grep 'pattern'  |  reveal {path} --show-ast")
+            print(f"  Hint: reveal \"{path}\" --grep 'pattern'  |  reveal \"{path}\" --show-ast")
         return
 
     # Text output: show header, categories, and navigation hints

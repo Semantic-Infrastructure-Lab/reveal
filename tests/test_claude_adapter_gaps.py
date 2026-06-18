@@ -462,6 +462,29 @@ class TestSearchSessions:
         # No sessions modified after 2030-01-01
         assert result['sessions_scanned'] == 0
 
+    def test_until_filters_sessions(self, tmp_path):
+        _write_session(tmp_path, 'sess-recent', [_user_msg('some content')])
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('', query='search=some&until=2020-01-01')
+            result = adapter._search_sessions()
+        # Sessions created today are after 2020-01-01 upper bound
+        assert result['sessions_scanned'] == 0
+
+    def test_until_today_normalised(self, tmp_path):
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('', query='search=foo&until=today')
+            result = adapter._search_sessions()
+        # until='today' must not be passed through as literal string
+        assert result.get('until') != 'today'
+
+    def test_snippet_invalid_value_uses_default(self, tmp_path):
+        _write_session(tmp_path, 'sess-1', [_user_msg('hello world')])
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('', query='search=hello&snippet=notanint')
+            result = adapter._search_sessions()
+        # Should not raise — returns normal result with default snippet window
+        assert result['type'] == 'claude_cross_session_search'
+
 
 # ─── _track_file_sessions ────────────────────────────────────────────────────
 
@@ -713,6 +736,50 @@ class TestPostProcessSessionList:
         result = {'type': 'claude_session_list', 'recent_sessions': None}
         ClaudeAdapter._post_process_session_list(result, self._args())
         assert result['recent_sessions'] is None
+
+    def test_until_filters_by_modified_date(self):
+        sessions = [
+            {'session': 'old', 'modified': '2025-01-01T10:00:00', 'path': None},
+            {'session': 'new', 'modified': '2026-06-18T10:00:00', 'path': None},
+        ]
+        result = {'type': 'claude_session_list', 'recent_sessions': sessions}
+        ClaudeAdapter._post_process_session_list(result, self._args(until='2026-01-01', all=True))
+        names = [s['session'] for s in result['recent_sessions']]
+        assert names == ['old']
+
+    def test_until_includes_sessions_on_boundary_date(self):
+        sessions = [
+            {'session': 'boundary', 'modified': '2026-01-01T23:59:59.999999', 'path': None},
+            {'session': 'next-day', 'modified': '2026-01-02T00:00:00', 'path': None},
+        ]
+        result = {'type': 'claude_session_list', 'recent_sessions': sessions}
+        ClaudeAdapter._post_process_session_list(result, self._args(until='2026-01-01', all=True))
+        names = [s['session'] for s in result['recent_sessions']]
+        assert names == ['boundary']
+
+    def test_until_today_normalised(self):
+        from datetime import date
+        sessions = [
+            {'session': 'today-sess', 'modified': date.today().isoformat() + 'T12:00:00', 'path': None},
+            {'session': 'future', 'modified': '2099-12-31T00:00:00', 'path': None},
+        ]
+        result = {'type': 'claude_session_list', 'recent_sessions': sessions}
+        ClaudeAdapter._post_process_session_list(result, self._args(until='today', all=True))
+        names = [s['session'] for s in result['recent_sessions']]
+        assert names == ['today-sess']
+
+    def test_since_and_until_together(self):
+        sessions = [
+            {'session': 'before', 'modified': '2025-06-01T00:00:00', 'path': None},
+            {'session': 'in-range', 'modified': '2026-01-15T00:00:00', 'path': None},
+            {'session': 'after', 'modified': '2026-06-18T00:00:00', 'path': None},
+        ]
+        result = {'type': 'claude_session_list', 'recent_sessions': sessions}
+        ClaudeAdapter._post_process_session_list(
+            result, self._args(since='2026-01-01', until='2026-03-01', all=True)
+        )
+        names = [s['session'] for s in result['recent_sessions']]
+        assert names == ['in-range']
 
 
 # ─── BACK-348 --with-stats ────────────────────────────────────────────────────

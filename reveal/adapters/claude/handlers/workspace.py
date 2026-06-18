@@ -74,20 +74,18 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
         try:
             stat = plan_file.stat()
             modified = datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds')
+            content = plan_file.read_text(encoding='utf-8', errors='replace')
+            if search and search not in content.lower():
+                continue
             title = ''
-            with open(plan_file, 'r', encoding='utf-8', errors='replace') as fh:
-                for line in fh:
-                    stripped = line.strip()
-                    if stripped.startswith('#'):
-                        title = stripped.lstrip('#').strip()
-                        break
-                    elif stripped:
-                        title = stripped
-                        break
-            if search:
-                content = plan_file.read_text(encoding='utf-8', errors='replace')
-                if search not in content.lower():
-                    continue
+            for raw_line in content.splitlines():
+                stripped = raw_line.strip()
+                if stripped.startswith('#'):
+                    title = stripped.lstrip('#').strip()
+                    break
+                elif stripped:
+                    title = stripped
+                    break
             plans.append({
                 'name': plan_file.stem,
                 'modified': modified,

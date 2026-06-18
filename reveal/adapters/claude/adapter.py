@@ -1273,7 +1273,9 @@ class ClaudeAdapter(ResourceAdapter):
 
         until = getattr(args, 'until', None)
         if until:
-            sessions = [s for s in sessions if s.get('modified', '') <= until + 'T23:59:59']
+            if until == 'today':
+                until = date.today().isoformat()
+            sessions = [s for s in sessions if s.get('modified', '') <= until + 'T23:59:59.999999']
 
         if not getattr(args, 'all', False):
             head = getattr(args, 'head', None)

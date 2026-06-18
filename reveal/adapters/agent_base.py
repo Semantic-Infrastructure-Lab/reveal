@@ -1,6 +1,6 @@
 """Shared utilities for agent-style session adapters (claude://, codex://, etc.)."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 def pair_tool_calls(
