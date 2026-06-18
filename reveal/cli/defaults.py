@@ -38,6 +38,8 @@ def _default_args(**overrides) -> Namespace:
         type=None,
         all=False,
         since=None,
+        until=None,
+        with_stats=False,
         base_path=None,
         no_fallback=False,
         depth=3,

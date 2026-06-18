@@ -103,6 +103,34 @@ def _read_session_title(jsonl_path: Path) -> Optional[str]:
         return None
 
 
+def _read_session_stats(jsonl_path: Path) -> Dict[str, Any]:
+    """Read duration and message count from a JSONL session file.
+
+    Reads the full file to count entries and compute elapsed time from
+    first to last timestamp. Only called for displayed sessions (≤20).
+    """
+    stats: Dict[str, Any] = {}
+    try:
+        lines = [l for l in jsonl_path.read_text(encoding='utf-8', errors='replace').splitlines()
+                 if l.strip().startswith('{')]
+        if not lines:
+            return stats
+        stats['message_count'] = len(lines)
+        first_ts = json.loads(lines[0]).get('timestamp')
+        last_ts = json.loads(lines[-1]).get('timestamp')
+        if first_ts and last_ts:
+            t0 = datetime.fromisoformat(first_ts.replace('Z', '+00:00'))
+            t1 = datetime.fromisoformat(last_ts.replace('Z', '+00:00'))
+            secs = int((t1 - t0).total_seconds())
+            if secs > 0:
+                h, rem = divmod(secs, 3600)
+                m = rem // 60
+                stats['duration'] = f"{h}h{m:02d}m" if h else f"{m}m"
+    except Exception:
+        pass
+    return stats
+
+
 def _extract_project_from_dir(dir_name: str) -> str:
     """Derive a short project label from an encoded Claude project directory name.
 

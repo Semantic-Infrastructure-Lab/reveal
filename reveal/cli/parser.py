@@ -343,6 +343,10 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                         help='Show all results (no limit, e.g., reveal claude:// --all)')
     parser.add_argument('--since', type=str, metavar='DATE',
                         help='Filter results since date (YYYY-MM-DD, e.g., reveal claude:// --since 2026-02-27)')
+    parser.add_argument('--until', type=str, metavar='DATE',
+                        help='Filter results until date (YYYY-MM-DD, e.g., reveal claude:// --until 2026-06-18)')
+    parser.add_argument('--with-stats', dest='with_stats', action='store_true',
+                        help='Show duration and message count for each listed session (reads session files)')
     parser.add_argument('--base-path', dest='base_path', type=_strip_path_quotes, metavar='DIR',
                         help='Point claude:// at a different Claude install — pass the projects dir and all paths (history, config, plans) derive from it (e.g., --base-path /mnt/wsl/.claude/projects)')
 

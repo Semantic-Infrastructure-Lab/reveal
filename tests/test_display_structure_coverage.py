@@ -439,6 +439,7 @@ class TestHandleOutlineMode:
         out = _capture(_handle_outline_mode, analyzer, {}, Path('/fake/x.py'), False, None)
         assert 'No structure' in out
         assert '100 lines' in out
+        assert '--grep' in out
 
     def test_empty_structure_small_file_shows_content(self):
         analyzer = self._make_analyzer(line_count=10)
@@ -542,7 +543,7 @@ class TestRenderTypedStructureOutput:
         mock_json.assert_called_once()
 
     def test_empty_elements_prints_no_structure(self):
-        """Lines 273-275: no elements → 'No structure available'."""
+        """Lines 273-275: no elements → 'No structure available' + hint."""
         analyzer = self._make_analyzer()
         typed = _make_typed_mock(has_elements=False)
         with patch('reveal.structure.TypedStructure') as MockTS:
@@ -550,6 +551,7 @@ class TestRenderTypedStructureOutput:
             with patch('reveal.display.structure._print_file_header'):
                 out = _capture(_render_typed_structure_output, analyzer, {}, 'text')
         assert 'No structure available' in out
+        assert '--grep' in out
 
     def test_with_category_filter_no_matches(self):
         """Lines 283-285: filter with no matches."""
@@ -761,12 +763,13 @@ class TestHandleStandardOutput:
         mock_rt.assert_called_once_with(analyzer, structure, 'json')
 
     def test_empty_structure_large_file_prints_no_structure_message(self):
-        """Empty structure on large file (>50 lines) → 'No structure available (N lines)'."""
+        """Empty structure on large file (>50 lines) → 'No structure available (N lines)' + hint."""
         analyzer = self._make_analyzer(line_count=100)
         with patch('reveal.display.structure._print_file_header'):
             out = _capture(_handle_standard_output, analyzer, {}, 'text', False, None)
         assert 'No structure available' in out
         assert '100 lines' in out
+        assert '--grep' in out
 
     def test_empty_structure_small_file_shows_content(self):
         """Empty structure on small file (<=50 lines) → full file content displayed."""

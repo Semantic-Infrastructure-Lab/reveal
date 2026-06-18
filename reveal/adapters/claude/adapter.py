@@ -56,6 +56,7 @@ from .handlers.sessions import (
     track_file_sessions as _h_track_file_sessions,
     get_chain as _h_get_chain,
     _read_session_title,
+    _read_session_stats,
 )
 from .handlers.system import (
     get_history as _h_get_history,
@@ -1284,6 +1285,12 @@ class ClaudeAdapter(ResourceAdapter):
         for s in sessions:
             if 'title' not in s and s.get('path'):
                 s['title'] = _read_session_title(Path(s['path']))
+
+        if getattr(args, 'with_stats', False):
+            result['with_stats'] = True
+            for s in sessions:
+                if s.get('path'):
+                    s.update(_read_session_stats(Path(s['path'])))
 
     @staticmethod
     def _post_process_messages(result: Dict[str, Any], args: Any) -> None:

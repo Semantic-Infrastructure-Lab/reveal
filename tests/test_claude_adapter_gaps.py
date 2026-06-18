@@ -656,7 +656,8 @@ class TestPostProcessWorkflow:
 class TestPostProcessSessionList:
 
     def _args(self, **kwargs) -> Namespace:
-        defaults = dict(head=None, tail=None, range=None, name=None, since=None, all=False)
+        defaults = dict(head=None, tail=None, range=None, name=None, since=None, until=None,
+                        with_stats=False, all=False)
         defaults.update(kwargs)
         return Namespace(**defaults)
 
@@ -712,6 +713,157 @@ class TestPostProcessSessionList:
         result = {'type': 'claude_session_list', 'recent_sessions': None}
         ClaudeAdapter._post_process_session_list(result, self._args())
         assert result['recent_sessions'] is None
+
+
+# ─── BACK-348 --with-stats ────────────────────────────────────────────────────
+
+class TestReadSessionStats:
+
+    from reveal.adapters.claude.handlers.sessions import _read_session_stats
+
+    def _write_jsonl(self, path, lines):
+        path.write_text('\n'.join(json.dumps(l) for l in lines) + '\n')
+
+    def test_returns_message_count(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import _read_session_stats
+        f = tmp_path / 'sess.jsonl'
+        self._write_jsonl(f, [
+            {'type': 'user', 'timestamp': '2026-06-18T10:00:00Z'},
+            {'type': 'assistant', 'timestamp': '2026-06-18T10:01:00Z'},
+            {'type': 'user', 'timestamp': '2026-06-18T10:02:00Z'},
+        ])
+        stats = _read_session_stats(f)
+        assert stats['message_count'] == 3
+
+    def test_returns_duration(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import _read_session_stats
+        f = tmp_path / 'sess.jsonl'
+        self._write_jsonl(f, [
+            {'type': 'user', 'timestamp': '2026-06-18T10:00:00Z'},
+            {'type': 'assistant', 'timestamp': '2026-06-18T11:30:00Z'},
+        ])
+        stats = _read_session_stats(f)
+        assert stats['duration'] == '1h30m'
+
+    def test_duration_minutes_only(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import _read_session_stats
+        f = tmp_path / 'sess.jsonl'
+        self._write_jsonl(f, [
+            {'type': 'user', 'timestamp': '2026-06-18T10:00:00Z'},
+            {'type': 'assistant', 'timestamp': '2026-06-18T10:45:00Z'},
+        ])
+        stats = _read_session_stats(f)
+        assert stats['duration'] == '45m'
+
+    def test_missing_timestamp_no_duration(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import _read_session_stats
+        f = tmp_path / 'sess.jsonl'
+        self._write_jsonl(f, [{'type': 'user'}, {'type': 'assistant'}])
+        stats = _read_session_stats(f)
+        assert stats['message_count'] == 2
+        assert 'duration' not in stats
+
+    def test_empty_file_returns_empty(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import _read_session_stats
+        f = tmp_path / 'sess.jsonl'
+        f.write_text('')
+        stats = _read_session_stats(f)
+        assert stats == {}
+
+    def test_missing_file_returns_empty(self, tmp_path):
+        from reveal.adapters.claude.handlers.sessions import _read_session_stats
+        stats = _read_session_stats(tmp_path / 'missing.jsonl')
+        assert stats == {}
+
+
+class TestPostProcessSessionListWithStats:
+
+    def _args(self, **kwargs):
+        defaults = dict(head=None, name=None, since=None, until=None, with_stats=False, all=True)
+        defaults.update(kwargs)
+        return Namespace(**defaults)
+
+    def test_with_stats_false_no_stats_fields(self, tmp_path):
+        f = tmp_path / 'sess.jsonl'
+        f.write_text(json.dumps({'type': 'user', 'timestamp': '2026-06-18T10:00:00Z'}) + '\n')
+        sessions = [{'session': 's1', 'modified': '2026-06-18T10:00:00', 'path': str(f)}]
+        result = {'type': 'claude_session_list', 'recent_sessions': sessions}
+        ClaudeAdapter._post_process_session_list(result, self._args(with_stats=False))
+        assert 'message_count' not in result['recent_sessions'][0]
+        assert 'with_stats' not in result
+
+    def test_with_stats_true_adds_stats_to_sessions(self, tmp_path):
+        f = tmp_path / 'sess.jsonl'
+        f.write_text(
+            json.dumps({'type': 'user', 'timestamp': '2026-06-18T10:00:00Z'}) + '\n' +
+            json.dumps({'type': 'assistant', 'timestamp': '2026-06-18T10:30:00Z'}) + '\n'
+        )
+        sessions = [{'session': 's1', 'modified': '2026-06-18T10:00:00', 'path': str(f)}]
+        result = {'type': 'claude_session_list', 'recent_sessions': sessions}
+        ClaudeAdapter._post_process_session_list(result, self._args(with_stats=True))
+        s = result['recent_sessions'][0]
+        assert s['message_count'] == 2
+        assert s['duration'] == '30m'
+        assert result.get('with_stats') is True
+
+    def test_with_stats_none_path_skipped(self):
+        sessions = [{'session': 's1', 'modified': '2026-06-18T10:00:00', 'path': None}]
+        result = {'type': 'claude_session_list', 'recent_sessions': sessions}
+        ClaudeAdapter._post_process_session_list(result, self._args(with_stats=True))
+        assert 'message_count' not in result['recent_sessions'][0]
+
+
+class TestRenderSessionListWithStats:
+
+    def _result(self, sessions, with_stats=False):
+        return {
+            'type': 'claude_session_list',
+            'session_count': len(sessions),
+            'recent_sessions': sessions,
+            'displayed_count': len(sessions),
+            'with_stats': with_stats,
+            'usage': {},
+        }
+
+    def _capture(self, result):
+        from io import StringIO
+        import sys
+        buf = StringIO()
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            from reveal.adapters.claude.render_sessions import _render_claude_session_list
+            _render_claude_session_list(result)
+        finally:
+            sys.stdout = old
+        return buf.getvalue()
+
+    def test_default_shows_size_column(self):
+        sessions = [{'session': 'my-sess', 'modified': '2026-06-18T10:00:00',
+                     'size_kb': 42, 'readme_present': True, 'project': 'reveal', 'title': 'hi'}]
+        out = self._capture(self._result(sessions, with_stats=False))
+        assert 'SIZE' in out
+        assert '42kb' in out
+        assert 'MSGS' not in out
+
+    def test_with_stats_shows_msgs_and_duration(self):
+        sessions = [{'session': 'my-sess', 'modified': '2026-06-18T10:00:00',
+                     'readme_present': True, 'project': 'reveal', 'title': 'hi',
+                     'message_count': 120, 'duration': '45m'}]
+        out = self._capture(self._result(sessions, with_stats=True))
+        assert 'MSGS' in out
+        assert 'DUR' in out
+        assert '120' in out
+        assert '45m' in out
+        assert 'SIZE' not in out
+
+    def test_hint_shown_when_no_stats(self):
+        out = self._capture(self._result([], with_stats=False))
+        assert '--with-stats' in out
+
+    def test_hint_not_shown_when_stats_active(self):
+        out = self._capture(self._result([], with_stats=True))
+        assert '--with-stats' not in out
 
 
 # ─── _post_process_messages ───────────────────────────────────────────────────

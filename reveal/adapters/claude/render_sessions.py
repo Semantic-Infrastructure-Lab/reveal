@@ -6,27 +6,39 @@ def _render_claude_session_list(result: dict) -> None:
     total = result.get('session_count', 0)
     recent = result.get('recent_sessions', [])
     displayed = result.get('displayed_count', len(recent))
+    with_stats = result.get('with_stats', False)
 
     count_line = f"Claude Sessions: {total} total"
     if displayed < total:
         count_line += f" | showing {displayed}"
     count_line += " | --all to show all | --head N for more | --since/--until YYYY-MM-DD (or today)"
+    if not with_stats:
+        count_line += " | --with-stats for duration/message count"
     print(count_line)
     print()
-    print(f"  {'SESSION':<36} {'MODIFIED':<17} {'SIZE':>6}  {'R':<1}  {'PROJECT':<12}  TITLE")
-    print(f"  {'-'*36} {'-'*17} {'-'*6}  {'-':<1}  {'-'*12}  {'-'*25}")
+    if with_stats:
+        print(f"  {'SESSION':<36} {'MODIFIED':<17} {'MSGS':>5}  {'DUR':<7}  {'R':<1}  {'PROJECT':<12}  TITLE")
+        print(f"  {'-'*36} {'-'*17} {'-'*5}  {'-'*7}  {'-':<1}  {'-'*12}  {'-'*25}")
+    else:
+        print(f"  {'SESSION':<36} {'MODIFIED':<17} {'SIZE':>6}  {'R':<1}  {'PROJECT':<12}  TITLE")
+        print(f"  {'-'*36} {'-'*17} {'-'*6}  {'-':<1}  {'-'*12}  {'-'*25}")
     for s in recent:
         name = s.get('session', '?')
         if len(name) > 36:
             name = name[:33] + '...'
         mod = s.get('modified', '')[:16].replace('T', ' ')
-        kb = s.get('size_kb', 0)
         readme = '✓' if s.get('readme_present') else '✗'
         project = (s.get('project', '') or '')[:12]
         title = s.get('title', '') or ''
         if len(title) > 25:
             title = title[:22] + '...'
-        print(f"  {name:<36} {mod:<17} {kb:>4}kb  {readme:<1}  {project:<12}  {title}")
+        if with_stats:
+            msgs = s.get('message_count', '')
+            dur = s.get('duration', '')
+            print(f"  {name:<36} {mod:<17} {msgs!s:>5}  {dur:<7}  {readme:<1}  {project:<12}  {title}")
+        else:
+            kb = s.get('size_kb', 0)
+            print(f"  {name:<36} {mod:<17} {kb:>4}kb  {readme:<1}  {project:<12}  {title}")
     print()
     usage = result.get('usage', {})
     if usage:

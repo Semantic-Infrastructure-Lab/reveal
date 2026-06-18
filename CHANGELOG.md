@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`--with-stats` for session listing (BACK-348)** — `reveal claude:// --with-stats` reads each displayed session's JSONL (the displayed set only, ≤20) and adds MSGS and DUR columns showing total message count and elapsed duration (`1h30m`, `45m`). Default listing is unchanged; a `--with-stats` hint appears in the count line. Also fixed a BACK-349 CLI gap: `--until` was missing from `parser.py` and `defaults.py` so the CLI flag had no effect (only `?until=` query param worked). +13 tests.
+
+### Fixed
+- **"No structure available" dead end now shows fallback hints (BACK-336)** — All three sites in `display/structure.py` that print "No structure available" now follow up with `Hint: reveal <path> --grep 'pattern'  |  reveal <path> --show-ast` so users have a clear next step instead of a dead end. +3 test assertions.
+
 ## [0.99.1] - 2026-06-18 (session fluorescent-pigment-0618)
 
 ### Fixed
