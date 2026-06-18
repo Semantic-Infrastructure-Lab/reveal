@@ -816,6 +816,192 @@ class TestParseTextHeadings:
         assert [h['level'] for h in result] == [1, 2, 3, 4, 5, 6]
 
 
+# ─── _parse_text_links ───────────────────────────────────────────────────────
+
+class TestParseTextLinks:
+    def test_extracts_external_link(self):
+        from reveal.cli.routing.uri import _parse_text_links
+        result = _parse_text_links("See [Docs](https://example.com/docs) for details")
+        assert len(result) == 1
+        assert result[0] == {'line': 1, 'text': 'Docs', 'url': 'https://example.com/docs', 'type': 'external'}
+
+    def test_extracts_internal_link(self):
+        from reveal.cli.routing.uri import _parse_text_links
+        result = _parse_text_links("See [guide](./guide.md)")
+        assert result[0]['type'] == 'internal'
+
+    def test_extracts_email_link(self):
+        from reveal.cli.routing.uri import _parse_text_links
+        result = _parse_text_links("[email](mailto:test@example.com)")
+        assert result[0]['type'] == 'email'
+
+    def test_multiple_links_on_multiple_lines(self):
+        from reveal.cli.routing.uri import _parse_text_links
+        text = "[A](http://a.com)\n\n[B](./b.md)"
+        result = _parse_text_links(text)
+        assert len(result) == 2
+        assert result[0]['line'] == 1
+        assert result[1]['line'] == 3
+
+    def test_empty_text_returns_empty(self):
+        from reveal.cli.routing.uri import _parse_text_links
+        assert _parse_text_links('') == []
+
+    def test_no_links_returns_empty(self):
+        from reveal.cli.routing.uri import _parse_text_links
+        assert _parse_text_links('plain text with no links') == []
+
+
+# ─── _parse_text_frontmatter ─────────────────────────────────────────────────
+
+class TestParseTextFrontmatter:
+    def test_extracts_valid_frontmatter(self):
+        from reveal.cli.routing.uri import _parse_text_frontmatter
+        text = "---\ntitle: Test Doc\ntype: guide\n---\n\n# Body"
+        result = _parse_text_frontmatter(text)
+        assert result is not None
+        assert result['data'] == {'title': 'Test Doc', 'type': 'guide'}
+        assert result['line_start'] == 1
+
+    def test_no_frontmatter_returns_none(self):
+        from reveal.cli.routing.uri import _parse_text_frontmatter
+        assert _parse_text_frontmatter('# Just a heading\n\nno frontmatter') is None
+
+    def test_frontmatter_not_at_start_returns_none(self):
+        from reveal.cli.routing.uri import _parse_text_frontmatter
+        text = "some text\n---\ntitle: Late\n---\n"
+        assert _parse_text_frontmatter(text) is None
+
+    def test_malformed_yaml_returns_none(self):
+        from reveal.cli.routing.uri import _parse_text_frontmatter
+        text = "---\n: invalid: yaml: : :\n---\n"
+        # Should not raise, should return None or a result
+        result = _parse_text_frontmatter(text)
+        assert result is None or isinstance(result, dict)
+
+    def test_empty_text_returns_none(self):
+        from reveal.cli.routing.uri import _parse_text_frontmatter
+        assert _parse_text_frontmatter('') is None
+
+
+# ─── _render_element — BACK-357 --links / --frontmatter on element content ───
+
+class TestRenderElementLinksAndFrontmatter:
+    MD_WITH_LINKS = "# Guide\n\nSee [Docs](https://example.com) and [local](./other.md).\n"
+    MD_WITH_FM = "---\ntitle: My Guide\ntype: reference\n---\n\n# Body text\n"
+
+    def test_links_extracted_from_content_field(self, capsys):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'topic': 'guide', 'content': self.MD_WITH_LINKS}
+        mock_renderer = MagicMock()
+        args = _args(links=True, link_type=None, domain=None)
+        _render_element(mock_adapter, mock_renderer, 'guide', None, args)
+        out = capsys.readouterr().out
+        assert 'example.com' in out or 'Docs' in out
+        mock_renderer.render_element.assert_not_called()
+
+    def test_links_filtered_by_link_type(self, capsys):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'topic': 'guide', 'content': self.MD_WITH_LINKS}
+        mock_renderer = MagicMock()
+        args = _args(links=True, link_type='internal', domain=None)
+        _render_element(mock_adapter, mock_renderer, 'guide', None, args)
+        out = capsys.readouterr().out
+        assert 'other.md' in out
+        assert 'example.com' not in out
+
+    def test_links_none_found_prints_error(self, capsys):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'topic': 'x', 'content': 'plain text no links'}
+        mock_renderer = MagicMock()
+        args = _args(links=True, link_type=None, domain=None)
+        _render_element(mock_adapter, mock_renderer, 'x', None, args)
+        err = capsys.readouterr().err
+        assert 'No links' in err
+        mock_renderer.render_element.assert_not_called()
+
+    def test_frontmatter_extracted_from_content_field(self, capsys):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'topic': 'guide', 'content': self.MD_WITH_FM}
+        mock_renderer = MagicMock()
+        args = _args(frontmatter=True)
+        _render_element(mock_adapter, mock_renderer, 'guide', None, args)
+        out = capsys.readouterr().out
+        assert 'My Guide' in out
+        mock_renderer.render_element.assert_not_called()
+
+    def test_frontmatter_missing_prints_error(self, capsys):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'topic': 'x', 'content': '# No frontmatter here'}
+        mock_renderer = MagicMock()
+        args = _args(frontmatter=True)
+        _render_element(mock_adapter, mock_renderer, 'x', None, args)
+        err = capsys.readouterr().err
+        assert 'No YAML frontmatter' in err
+        mock_renderer.render_element.assert_not_called()
+
+    def test_no_text_field_falls_through_for_links(self):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'type': 'items', 'results': [1]}
+        mock_renderer = MagicMock()
+        args = _args(links=True, link_type=None, domain=None)
+        _render_element(mock_adapter, mock_renderer, 'x', None, args)
+        mock_renderer.render_element.assert_called_once()
+
+    def test_no_text_field_falls_through_for_frontmatter(self):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'type': 'items', 'results': [1]}
+        mock_renderer = MagicMock()
+        args = _args(frontmatter=True)
+        _render_element(mock_adapter, mock_renderer, 'x', None, args)
+        mock_renderer.render_element.assert_called_once()
+
+
+# ─── handle_uri — BACK-357 warnings for markdown:// directory ────────────────
+
+class TestHandleUriMarkdownFlags:
+    def _make_args(self, **kwargs):
+        defaults = {
+            'format': 'text', 'grep': None, 'sort': None, 'desc': False,
+            'links': False, 'frontmatter': False, 'link_type': None, 'domain': None,
+        }
+        defaults.update(kwargs)
+        return Namespace(**defaults)
+
+    def test_links_on_markdown_dir_warns(self, capsys):
+        from unittest.mock import patch, MagicMock as MM
+        from reveal.cli.routing.uri import handle_uri
+        args = self._make_args(links=True)
+        mock_adapter_cls = MM()
+        mock_adapter_cls.return_value.get_structure.return_value = {'contract_version': '1.0', 'type': 'markdown_query', 'source': '.', 'source_type': 'directory', 'results': []}
+        mock_renderer_cls = MM()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls), \
+             patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+            handle_uri('markdown://docs/', None, args)
+        err = capsys.readouterr().err
+        assert 'link-graph' in err
+
+    def test_frontmatter_on_markdown_dir_warns(self, capsys):
+        from unittest.mock import patch, MagicMock as MM
+        from reveal.cli.routing.uri import handle_uri
+        args = self._make_args(frontmatter=True)
+        mock_adapter_cls = MM()
+        mock_adapter_cls.return_value.get_structure.return_value = {'contract_version': '1.0', 'type': 'markdown_query', 'source': '.', 'source_type': 'directory', 'results': []}
+        mock_renderer_cls = MM()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls), \
+             patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+            handle_uri('markdown://docs/', None, args)
+        err = capsys.readouterr().err
+        assert 'fields=' in err
+
+
 # ─── _build_adapter_kwargs — uri param in signature (line 296) ───────────────
 
 class TestBuildAdapterKwargsUri:

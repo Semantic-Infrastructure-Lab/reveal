@@ -26,6 +26,42 @@ def _parse_text_headings(text: str) -> List[dict]:
     return headings
 
 
+def _parse_text_links(text: str) -> List[dict]:
+    """Extract markdown inline links [text](url) from a text string."""
+    links = []
+    for i, line in enumerate(text.splitlines(), 1):
+        for m in re.finditer(r'\[([^\]]+)\]\(([^)\s]+)[^)]*\)', line):
+            url = m.group(2).strip()
+            ltype = ('email' if url.startswith('mailto:')
+                     else 'external' if url.startswith(('http://', 'https://'))
+                     else 'internal')
+            links.append({'line': i, 'text': m.group(1), 'url': url, 'type': ltype})
+    return links
+
+
+def _parse_text_frontmatter(text: str) -> Optional[dict]:
+    """Extract YAML frontmatter (---...---) from a markdown text string.
+
+    Returns {'data': dict, 'line_start': int, 'line_end': int, 'raw': str}
+    or None if no valid frontmatter is present.
+    """
+    if not text.startswith('---'):
+        return None
+    end_match = re.search(r'\n---\s*\n', text[3:])
+    if not end_match:
+        return None
+    yaml_content = text[3:end_match.start() + 3]
+    try:
+        import yaml
+        data = yaml.safe_load(yaml_content)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    line_end = text[:end_match.start() + 3].count('\n') + 2
+    return {'data': data, 'line_start': 1, 'line_end': line_end, 'raw': yaml_content.strip()}
+
+
 def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
     """Handle URI-based resources (env://, ast://, etc.).
 
@@ -49,6 +85,24 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
             f"Use: reveal {pipe_uri} | grep '{args.grep}'",
             file=sys.stderr,
         )
+
+    # --links / --frontmatter apply to element retrieval (text-body content) only.
+    # On markdown:// directory queries these flags have no effect — warn with
+    # alternatives so users know their intent wasn't silently dropped (BACK-357).
+    if scheme == 'markdown' and not element:
+        if getattr(args, 'links', False):
+            print(
+                "Note: --links has no effect on markdown:// directory queries. "
+                "For cross-file link analysis use: reveal 'markdown://dir?link-graph'",
+                file=sys.stderr,
+            )
+        if getattr(args, 'frontmatter', False):
+            print(
+                "Note: --frontmatter has no effect on markdown:// directory queries "
+                "(frontmatter is already the primary output). "
+                "Use ?fields=field1,field2 to select specific frontmatter keys.",
+                file=sys.stderr,
+            )
 
     # Inject --sort/--desc CLI flags into URI query string for adapters that support them.
     # Skip injection if URI already has an explicit sort= param — URI takes precedence.
@@ -305,20 +359,50 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
                 result = {**result, field: '\n'.join(lines)}
                 break
 
-    # --outline: render heading hierarchy from text-body content (BACK-356).
-    if getattr(args, 'outline', False) and isinstance(result, dict):
-        for field in ('content', 'body'):
-            if field in result and isinstance(result[field], str):
-                from pathlib import Path as _Path
-                from reveal.display.outline import build_heading_hierarchy, render_outline
-                headings = _parse_text_headings(result[field])
-                hierarchy = build_heading_hierarchy(headings)
-                label = result.get('topic') or result.get('source') or result.get('name') or field
-                if hierarchy:
-                    render_outline(hierarchy, _Path(str(label)))
-                else:
-                    print(f"No headings found in {label}", file=sys.stderr)
-                return
+    # --outline / --links / --frontmatter: alternate rendering modes on text-body
+    # content (BACK-356, BACK-357). All three intercept before render_element and
+    # return early; only the first matching flag fires (they're mutually exclusive).
+    if isinstance(result, dict):
+        _text_field = next(
+            (f for f in ('content', 'body') if f in result and isinstance(result[f], str)),
+            None,
+        )
+        _label = result.get('topic') or result.get('source') or result.get('name') or _text_field
+
+        if getattr(args, 'outline', False) and _text_field:
+            from pathlib import Path as _Path
+            from reveal.display.outline import build_heading_hierarchy, render_outline
+            hierarchy = build_heading_hierarchy(_parse_text_headings(result[_text_field]))
+            if hierarchy:
+                render_outline(hierarchy, _Path(str(_label)))
+            else:
+                print(f"No headings found in {_label}", file=sys.stderr)
+            return
+
+        if getattr(args, 'links', False) and _text_field:
+            from pathlib import Path as _Path
+            from reveal.display.formatting import _format_links
+            links = _parse_text_links(result[_text_field])
+            link_type = getattr(args, 'link_type', None)
+            if link_type:
+                links = [lnk for lnk in links if lnk['type'] == link_type]
+            domain = getattr(args, 'domain', None)
+            if domain:
+                links = [lnk for lnk in links if domain.lower() in lnk.get('url', '').lower()]
+            if links:
+                _format_links(links, _Path(str(_label)), getattr(args, 'format', 'text'))
+            else:
+                print(f"No links found in {_label}", file=sys.stderr)
+            return
+
+        if getattr(args, 'frontmatter', False) and _text_field:
+            from reveal.display.formatting import _format_frontmatter
+            fm = _parse_text_frontmatter(result[_text_field])
+            if fm is not None:
+                _format_frontmatter(fm)
+            else:
+                print(f"No YAML frontmatter found in {_label}", file=sys.stderr)
+            return
 
     renderer_class.render_element(result, args.format)
 
