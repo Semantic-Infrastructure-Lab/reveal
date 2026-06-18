@@ -6,13 +6,24 @@ to the appropriate adapter + renderer pair.
 
 import logging
 import os
+import re
 import sys
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from argparse import Namespace
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_text_headings(text: str) -> List[dict]:
+    """Extract ATX headings from a markdown text string."""
+    headings = []
+    for i, line in enumerate(text.splitlines(), 1):
+        m = re.match(r'^(#{1,6})\s+(.+)$', line)
+        if m:
+            headings.append({'line': i, 'level': len(m.group(1)), 'name': m.group(2).strip()})
+    return headings
 
 
 def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
@@ -293,6 +304,21 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
                     lines = lines[-tail:]
                 result = {**result, field: '\n'.join(lines)}
                 break
+
+    # --outline: render heading hierarchy from text-body content (BACK-356).
+    if getattr(args, 'outline', False) and isinstance(result, dict):
+        for field in ('content', 'body'):
+            if field in result and isinstance(result[field], str):
+                from pathlib import Path as _Path
+                from reveal.display.outline import build_heading_hierarchy, render_outline
+                headings = _parse_text_headings(result[field])
+                hierarchy = build_heading_hierarchy(headings)
+                label = result.get('topic') or result.get('source') or result.get('name') or field
+                if hierarchy:
+                    render_outline(hierarchy, _Path(str(label)))
+                else:
+                    print(f"No headings found in {label}", file=sys.stderr)
+                return
 
     renderer_class.render_element(result, args.format)
 

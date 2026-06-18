@@ -726,6 +726,95 @@ class TestRenderElement:
         passed = mock_renderer.render_element.call_args[0][0]
         assert passed == original
 
+    # BACK-356 — --outline renders heading hierarchy from text-body content
+
+    def test_outline_renders_headings_from_content(self, capsys):
+        from reveal.cli.routing import _render_element
+        md = "# Title\n\nsome text\n\n## Section\n\nmore text\n\n### Sub\n\ndetail"
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'type': 'static_guide', 'topic': 'test', 'content': md}
+        mock_renderer = MagicMock()
+        args = _args(outline=True)
+        _render_element(mock_adapter, mock_renderer, 'test', None, args)
+        out = capsys.readouterr().out
+        assert 'Title' in out
+        assert 'Section' in out
+        assert 'Sub' in out
+        mock_renderer.render_element.assert_not_called()
+
+    def test_outline_renders_headings_from_body_field(self, capsys):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'name': 'fn', 'body': '# Intro\n## Details'}
+        mock_renderer = MagicMock()
+        args = _args(outline=True)
+        _render_element(mock_adapter, mock_renderer, 'fn', None, args)
+        out = capsys.readouterr().out
+        assert 'Intro' in out
+        assert 'Details' in out
+        mock_renderer.render_element.assert_not_called()
+
+    def test_outline_no_headings_prints_error(self, capsys):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'topic': 'x', 'content': 'plain text, no headings'}
+        mock_renderer = MagicMock()
+        args = _args(outline=True)
+        _render_element(mock_adapter, mock_renderer, 'x', None, args)
+        err = capsys.readouterr().err
+        assert 'No headings' in err
+        mock_renderer.render_element.assert_not_called()
+
+    def test_outline_no_text_field_falls_through_to_render(self, capsys):
+        from reveal.cli.routing import _render_element
+        original = {'type': 'items', 'results': [1, 2]}
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = original
+        mock_renderer = MagicMock()
+        args = _args(outline=True)
+        _render_element(mock_adapter, mock_renderer, 'x', None, args)
+        mock_renderer.render_element.assert_called_once()
+
+    def test_outline_false_does_not_intercept(self):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'topic': 'x', 'content': '# Title\ntext'}
+        mock_renderer = MagicMock()
+        args = _args(outline=False)
+        _render_element(mock_adapter, mock_renderer, 'x', None, args)
+        mock_renderer.render_element.assert_called_once()
+
+
+# ─── _parse_text_headings ─────────────────────────────────────────────────────
+
+class TestParseTextHeadings:
+    def test_extracts_atx_headings(self):
+        from reveal.cli.routing.uri import _parse_text_headings
+        text = "# H1\n\nsome text\n\n## H2\n\n### H3"
+        result = _parse_text_headings(text)
+        assert len(result) == 3
+        assert result[0] == {'line': 1, 'level': 1, 'name': 'H1'}
+        assert result[1] == {'line': 5, 'level': 2, 'name': 'H2'}
+        assert result[2] == {'line': 7, 'level': 3, 'name': 'H3'}
+
+    def test_ignores_non_heading_lines(self):
+        from reveal.cli.routing.uri import _parse_text_headings
+        text = "plain text\n#nospace\n# Valid"
+        result = _parse_text_headings(text)
+        assert len(result) == 1
+        assert result[0]['name'] == 'Valid'
+
+    def test_empty_text_returns_empty(self):
+        from reveal.cli.routing.uri import _parse_text_headings
+        assert _parse_text_headings('') == []
+
+    def test_all_six_heading_levels(self):
+        from reveal.cli.routing.uri import _parse_text_headings
+        text = '\n'.join(f"{'#' * i} Level {i}" for i in range(1, 7))
+        result = _parse_text_headings(text)
+        assert len(result) == 6
+        assert [h['level'] for h in result] == [1, 2, 3, 4, 5, 6]
+
 
 # ─── _build_adapter_kwargs — uri param in signature (line 296) ───────────────
 
