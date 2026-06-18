@@ -7,6 +7,14 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.99.1 — claude:// remote-session fixes + URI routing correctness (BACK-B1–B5, arch audit BACK-350–358)
+- ✅ **UUID sub-routes fixed (B4)** — `reveal 'claude://UUID/workflow'` previously failed with "Conversation not found". `_parse_session_name` now recognises full UUID format with trailing sub-path via `_UUID_SESSION_RE`. (fluorescent-pigment-0618)
+- ✅ **`--base-path` auto-detects `.claude` home (B1/B2)** — Passing a `.claude` home dir no longer triggers a false-positive `.jsonl` detection (caused by `history.jsonl`). `reconfigure_base_path` auto-detects the home (has `projects/` subdir) and re-roots automatically. Error message now names `REVEAL_CLAUDE_HOME` explicitly. (fluorescent-pigment-0618)
+- ✅ **`--section` works on `help://` URIs (B3)** — `reveal help://claude/full --section "Install Introspection Resources"` previously returned the full 2767-line doc silently. `_render_element` now passes `section=` from CLI args; `_load_static_help` gained `_extract_markdown_section` for case-insensitive heading filter. Missing headings return a clear error. (fluorescent-pigment-0618)
+- ✅ **`?role=user` routes to `filter_by_role` (B5)** — Was silently returning overview. Now routes in `_route_by_query` for both `user` and `assistant`. (fluorescent-pigment-0618)
+- ✅ **Architecture gap audit filed (BACK-350–358)** — Two-path routing divergence, bare-flag vs value form query routing, `_build_adapter_kwargs` whitelist fragility, parse/find coupling. See `internal-docs/design/ARCHITECTURE_GAPS_2026-06-18.md`. (fluorescent-pigment-0618)
+- ✅ **+17 tests**. Suite: 8943 passed, 22 skipped. (fluorescent-pigment-0618)
+
 ### v0.99.0 — claude:// adapter quality pass (BACK-340–346)
 - ✅ **`/prompts` resource (BACK-340)** — human-typed prompts only; a session with 15 real prompts was showing 170 "user" messages because tool-result turns have `role: user`. New `get_human_prompts()` filters to messages with at least one `type: text` block. `/user` unchanged for back-compat. (risen-scepter-0614)
 - ✅ **Session title fixes (BACK-341)** — Harness-injected XML tags (`<local-command-caveat>`, `<command-name>`) and single-word acks (`aye`, `ok`) no longer appear as session titles. `session badge "..."` is now detected from assistant Bash calls in the listing path (matches detail view). (risen-scepter-0614)

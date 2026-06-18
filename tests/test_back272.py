@@ -149,5 +149,5 @@ class TestEnvVarIntegration:
         (session_dir / 'my-sess.jsonl').write_text('')
 
         adapter = ClaudeAdapter('session/my-sess')
-        with pytest.raises(ValueError, match="Try the parent directory instead"):
+        with pytest.raises(ValueError, match="REVEAL_CLAUDE_HOME"):
             adapter.reconfigure_base_path(session_dir)

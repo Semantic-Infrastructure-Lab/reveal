@@ -557,6 +557,53 @@ class TestSessionListing:
         assert 'agent-abc1234' not in names
         assert result['session_count'] == 1
 
+    def test_list_sessions_until_filters_upper_bound(self, tmp_path):
+        """?until=DATE excludes sessions modified after that date."""
+        class _MockArgs:
+            name = None
+            since = None
+            until = '2026-03-20'
+            all = False
+            head = None
+
+        result = {
+            'type': 'claude_session_list',
+            'session_count': 3,
+            'recent_sessions': [
+                {'session': 'old-session', 'modified': '2026-01-10T12:00:00', 'path': ''},
+                {'session': 'mid-session', 'modified': '2026-03-15T09:00:00', 'path': ''},
+                {'session': 'new-session', 'modified': '2026-06-01T08:00:00', 'path': ''},
+            ],
+        }
+        ClaudeAdapter._post_process_session_list(result, _MockArgs())
+
+        names = [s['session'] for s in result['recent_sessions']]
+        assert 'new-session' not in names
+        assert 'old-session' in names
+        assert 'mid-session' in names
+
+    def test_search_sessions_until_filters_corpus(self, tmp_path):
+        """?until= in search_sessions excludes sessions modified after the date."""
+        from reveal.adapters.claude.handlers.sessions import search_sessions
+
+        base = tmp_path / 'projects'
+        base.mkdir()
+        for name, modified_iso in [('old-session', '2026-01-10'), ('new-session', '2026-06-01')]:
+            d = base / f'-home-user-src-tia-sessions-{name}'
+            d.mkdir()
+            jsonl = d / 'conv.jsonl'
+            jsonl.write_text('{"type":"user","message":{"role":"user","content":"hello"}}\n')
+            # Set mtime to match modified_iso — use datetime to compute epoch
+            from datetime import datetime
+            ts = datetime.fromisoformat(modified_iso).timestamp()
+            import os
+            os.utime(jsonl, (ts, ts))
+
+        result = search_sessions(base, {'search': 'hello', 'until': '2026-03-01'})
+        session_names = [m['session'] for m in result['matches']]
+        # new-session (2026-06-01) should be excluded; old-session (2026-01-10) kept
+        assert 'new-session' not in session_names
+
 
 class TestSearchSubcommand:
     """Tests for claude://search routing — now a real content search."""
@@ -2260,6 +2307,92 @@ class TestRenderRawBlock:
         out = capsys.readouterr().out
         assert '[tool_result]' in out
         assert '800 more chars' in out
+
+
+# --- Feedback 2026-06-18: remote-session devops archaeology fixes ---
+
+class TestUUIDSessionNameParsing:
+    """B4: Bare UUID sub-routes must extract the UUID, not include the sub-path."""
+
+    def test_bare_uuid_session_name_no_subpath(self):
+        """Bare UUID is parsed as the session name."""
+        uuid = '6b7f43f0-29fe-47bf-8b03-e430f7ed7e9b'
+        a = ClaudeAdapter(uuid)
+        assert a.session_name == uuid
+
+    def test_bare_uuid_with_workflow_subpath(self):
+        """UUID/workflow extracts only the UUID."""
+        uuid = '6b7f43f0-29fe-47bf-8b03-e430f7ed7e9b'
+        a = ClaudeAdapter(f'{uuid}/workflow')
+        assert a.session_name == uuid
+
+    def test_bare_uuid_with_files_subpath(self):
+        """UUID/files extracts only the UUID."""
+        uuid = 'c318161b-7fbb-47d4-a7c2-47af487f233f'
+        a = ClaudeAdapter(f'{uuid}/files')
+        assert a.session_name == uuid
+
+    def test_bare_uuid_uppercase_tolerated(self):
+        """UUID matching is case-insensitive."""
+        uuid = 'C318161B-7FBB-47D4-A7C2-47AF487F233F'
+        a = ClaudeAdapter(f'{uuid}/errors')
+        assert a.session_name == uuid
+
+
+class TestReconfigureBasePathAutoDetect:
+    """B1/B2: reconfigure_base_path auto-detects .claude home and improves error messages."""
+
+    def test_projects_subdir_auto_used(self, tmp_path):
+        """Passing a .claude home (has projects/) auto-sets CONVERSATION_BASE to projects/."""
+        claude_home = tmp_path / '.claude'
+        projects = claude_home / 'projects'
+        projects.mkdir(parents=True)
+        (claude_home / 'history.jsonl').write_text('{}')  # history.jsonl at home level
+
+        adapter = ClaudeAdapter('')
+        adapter.reconfigure_base_path(claude_home)
+        assert adapter.CONVERSATION_BASE == projects
+
+    def test_session_dir_still_raises(self, tmp_path):
+        """Passing a session dir (bare .jsonl files, no projects/ subdir) raises ValueError."""
+        session_dir = tmp_path / '-root-proj'
+        session_dir.mkdir()
+        (session_dir / 'abc123.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('')
+        with pytest.raises(ValueError, match='REVEAL_CLAUDE_HOME'):
+            adapter.reconfigure_base_path(session_dir)
+
+    def test_error_message_mentions_reveal_claude_home(self, tmp_path):
+        """Error message must mention REVEAL_CLAUDE_HOME as the alternative."""
+        session_dir = tmp_path / 'session-proj'
+        session_dir.mkdir()
+        (session_dir / 'conv.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('')
+        with pytest.raises(ValueError) as exc_info:
+            adapter.reconfigure_base_path(session_dir)
+        assert 'REVEAL_CLAUDE_HOME' in str(exc_info.value)
+
+
+class TestRoleQueryParam:
+    """B5: ?role=user routes to filter_by_role instead of silently returning overview."""
+
+    @patch.object(ClaudeAdapter, '_find_conversation')
+    def test_role_user_query_param(self, mock_find):
+        """?role=user returns filtered user messages, not an overview."""
+        mock_find.return_value = TEST_CONVERSATION
+        adapter = ClaudeAdapter('session/test-session-123', query='role=user')
+        result = adapter.get_structure()
+        assert result['type'] != 'claude_overview'
+
+    @patch.object(ClaudeAdapter, '_find_conversation')
+    def test_role_assistant_query_param(self, mock_find):
+        """?role=assistant returns filtered assistant messages."""
+        mock_find.return_value = TEST_CONVERSATION
+        adapter = ClaudeAdapter('session/test-session-123', query='role=assistant')
+        result = adapter.get_structure()
+        assert result['type'] != 'claude_overview'
 
 
 # Run tests with pytest

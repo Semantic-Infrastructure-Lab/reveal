@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.99.1] - 2026-06-18 (session fluorescent-pigment-0618)
+
+### Fixed
+- **`claude://` bare UUID sub-routes now work (B4)** — `reveal 'claude://UUID/workflow'` previously failed ("Conversation not found") because `_parse_session_name` didn't recognise UUID format with a trailing sub-path. Added `_UUID_SESSION_RE` pattern alongside `_SESSION_NAME_RE`; UUID sub-routes now extract the UUID exactly like named sessions do.
+- **`--base-path` auto-detects `.claude` home directory (B1/B2)** — Passing a `.claude` home to `--base-path` used to trigger a false-positive `history.jsonl` detection and suggested `--base-path /tmp` (nonsense). `reconfigure_base_path` now auto-detects a `.claude` home (path has `projects/` subdir) and re-roots to `projects/` automatically. The remaining error message for actual session-dir paths now explicitly names `REVEAL_CLAUDE_HOME` as the correct alternative.
+- **`--section` filter works on `help://` URIs (B3)** — `reveal help://claude/full --section "Install Introspection Resources"` previously returned the full 2767-line document with no error. `_render_element` now passes `section=` from CLI args to `get_element`, and `HelpAdapter._load_static_help` filters the markdown to the requested heading range. Missing headings return a clear error dict ("Section not found") instead of silently returning everything.
+- **`?role=user` query param routes to `filter_by_role` (B5)** — `reveal 'claude://session/NAME?role=user'` previously ignored the param and returned the full overview. Now routes to `filter_by_role` (matching the `/user` path-segment route) for both `user` and `assistant`.
+
+### Tests
+- **+17 tests** — `TestUUIDSessionNameParsing` (4), `TestReconfigureBasePathAutoDetect` (3), `TestRoleQueryParam` (2) in `test_claude_adapter.py`; `TestHelpAdapterSectionFilter` (6) in `test_adapter_integration.py`; updated `test_back272.py` assertion to match new error text. Full suite: 8943 passed, 22 skipped.
+
 ## [0.99.0] - 2026-06-14 (sessions risen-scepter-0614, prairie-squall-0614)
 
 ### Added

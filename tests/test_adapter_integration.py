@@ -815,5 +815,81 @@ class TestRevealAdapterIntegration(unittest.TestCase):
         )
 
 
+class TestHelpAdapterSectionFilter:
+    """B3: --section must filter help:// static guides, not silently return the full doc."""
+
+    def _make_adapter(self):
+        from reveal.adapters.help import HelpAdapter
+        return HelpAdapter()
+
+    def test_extract_markdown_section_found(self):
+        """_extract_markdown_section returns the matched heading and its body."""
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter()
+        lines = [
+            '# Top Level',
+            'intro text',
+            '## Target Section',
+            'line one',
+            'line two',
+            '## Next Section',
+            'not included',
+        ]
+        result = adapter._extract_markdown_section(lines, 'Target Section', 'test')
+        assert result is not None
+        assert '## Target Section' in result
+        assert 'line one' in result
+        assert 'line two' in result
+        assert '## Next Section' not in result
+
+    def test_extract_markdown_section_case_insensitive(self):
+        """Section matching is case-insensitive."""
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter()
+        lines = ['## Install Introspection Resources', 'env var docs']
+        result = adapter._extract_markdown_section(lines, 'install introspection', 'test')
+        assert result is not None
+        assert 'env var docs' in result
+
+    def test_extract_markdown_section_not_found_returns_none(self):
+        """Returns None when heading is not found."""
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter()
+        lines = ['## Some Section', 'content']
+        result = adapter._extract_markdown_section(lines, 'Nonexistent Heading', 'test')
+        assert result is None
+
+    def test_get_element_section_not_found_returns_error_dict(self):
+        """get_element returns error dict (not None) when section heading is not found."""
+        adapter = self._make_adapter()
+        # 'ux' is a static guide topic routed through _load_static_help
+        result = adapter.get_element('ux', section='NoSuchHeadingXYZ_UNIQUE_9999')
+        # Should return an error dict, not None (so the caller sees a message, not a crash)
+        assert result is not None
+        assert result.get('error') == 'Section not found'
+
+    def test_get_element_full_with_section_filters(self):
+        """get_element for topic/full with section= kwarg returns filtered content."""
+        adapter = self._make_adapter()
+        # Find any static guide topic that has multiple headings
+        if 'agent' not in adapter.help_topics:
+            return  # skip if topic not registered
+        full_result = adapter.get_element('agent/full')
+        if not full_result or 'content' not in full_result:
+            return
+        # Pick the first heading in the content
+        for line in full_result['content'].splitlines():
+            if line.startswith('#'):
+                heading_text = line.lstrip('#').strip()
+                break
+        else:
+            return  # No headings found, skip
+
+        filtered = adapter.get_element('agent/full', section=heading_text)
+        assert filtered is not None
+        if 'error' not in filtered:
+            assert len(filtered['content']) < len(full_result['content'])
+
+
 if __name__ == '__main__':
     unittest.main()

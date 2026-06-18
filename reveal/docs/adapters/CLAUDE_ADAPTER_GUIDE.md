@@ -2283,7 +2283,7 @@ These resources inspect your **Claude Code installation** — they are independe
 | `claude://agents` | Custom agent definitions | `~/.claude/agents/` |
 | `claude://hooks` | Hook scripts by event type | `~/.claude/hooks/` |
 
-> **Pointing at a different install** (SSH, WSL, multi-user): Pass `--base-path /path/to/.claude/projects` and all paths — history, config, plans, hooks, sessions — derive from it automatically. For persistent overrides, set `REVEAL_CLAUDE_HOME` (all paths derive from it) or `REVEAL_CLAUDE_JSON` for non-standard `.claude.json` locations. Check resolved paths with `claude://info`.
+> **Pointing at a different install** (SSH, WSL, multi-user): Use `REVEAL_CLAUDE_HOME=/path/to/.claude` — all paths (history, config, plans, hooks, sessions) derive from it automatically. You can also pass `--base-path /path/to/.claude` (the home dir) or `--base-path /path/to/.claude/projects` (the projects subdir) — both forms are accepted. For non-standard `.claude.json` locations, set `REVEAL_CLAUDE_JSON`. Check resolved paths with `claude://info`.
 
 ---
 

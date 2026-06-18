@@ -238,6 +238,7 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
     """
     term = query_params.get('search', '')
     since = query_params.get('since', '')
+    until = query_params.get('until', '')
 
     if since == 'today':
         since = _date.today().isoformat()
@@ -262,6 +263,8 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
 
     if since:
         all_sessions = [s for s in all_sessions if s.get('modified', '') >= since]
+    if until:
+        all_sessions = [s for s in all_sessions if s.get('modified', '') <= until + 'T23:59:59']
 
     whole_word = 'word' in query_params
     snippet_window = max(60, min(500, int(query_params.get('snippet', 120))))
@@ -274,6 +277,7 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
         'source_type': 'directory',
         'term': term,
         'since': since or None,
+        'until': until or None,
         'whole_word': whole_word,
         'sessions_scanned': len(all_sessions),
         'match_count': len(matches),

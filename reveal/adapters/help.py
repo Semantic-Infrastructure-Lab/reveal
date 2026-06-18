@@ -519,11 +519,12 @@ class HelpAdapter(ResourceAdapter):
 
         # Check for section extraction: help://ast/workflows or help://ast/full
         if '/' in topic:
-            adapter_name, section = topic.split('/', 1)
+            adapter_name, uri_section = topic.split('/', 1)
             # Static guides support /full to bypass progressive disclosure
             if adapter_name in self.help_topics:
-                if section == 'full':
-                    result = self._load_static_help(adapter_name, full=True)
+                if uri_section == 'full':
+                    heading_filter = kwargs.get('section')
+                    result = self._load_static_help(adapter_name, full=True, section=heading_filter)
                     if result and 'error' not in result:
                         result['topic'] = f'{adapter_name}/full'
                     return result
@@ -532,7 +533,7 @@ class HelpAdapter(ResourceAdapter):
             # returning None here gives a clean "not found" rather than a misleading
             # "Unknown section" error when the base topic doesn't exist at all.
             if adapter_name in _ADAPTER_REGISTRY:
-                return self._get_adapter_section(adapter_name, section)
+                return self._get_adapter_section(adapter_name, uri_section)
             return None
 
         # Quick-start orientation cheat sheet
@@ -549,7 +550,7 @@ class HelpAdapter(ResourceAdapter):
 
         # Check if it's a static guide (includes auto-discovered + manual)
         if topic in self.help_topics:
-            return self._load_static_help(topic)
+            return self._load_static_help(topic, section=kwargs.get('section'))
 
         # Check if it's 'adapters' (list all)
         if topic == 'adapters':
@@ -1055,12 +1056,14 @@ class HelpAdapter(ResourceAdapter):
     # bootstrap from, or aliased sections where truncation serves the wrong content.
     _FULL_ONLY_TOPICS = frozenset({'agent'})
 
-    def _load_static_help(self, topic: str, full: bool = False) -> Optional[Dict[str, Any]]:
+    def _load_static_help(self, topic: str, full: bool = False,
+                          section: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Load help from static markdown file.
 
         Args:
             topic: Topic name ('agent', 'quick-start', 'tricks', etc.)
             full: If True, bypass progressive disclosure and return the complete file.
+            section: If provided, filter content to just the named heading and its body.
 
         Returns:
             Help content dict or None if file not found
@@ -1079,7 +1082,19 @@ class HelpAdapter(ResourceAdapter):
 
             lines = content.splitlines()
 
-            if (not full and topic not in self._FULL_ONLY_TOPICS
+            if section:
+                content = self._extract_markdown_section(lines, section, topic)
+                if content is None:
+                    return {
+                        'type': 'static_guide',
+                        'topic': topic,
+                        'error': 'Section not found',
+                        'message': (
+                            f"Section '{section}' not found in {filename}.\n"
+                            f"Tip: reveal help://{topic}/full | grep -i '<keyword>' to locate headings."
+                        )
+                    }
+            elif (not full and topic not in self._FULL_ONLY_TOPICS
                     and len(lines) > self._PROGRESSIVE_DISCLOSURE_THRESHOLD):
                 content = self._truncate_to_first_section(topic, lines)
 
@@ -1103,6 +1118,38 @@ class HelpAdapter(ResourceAdapter):
                 'error': 'Load failed',
                 'message': str(e)
             }
+
+    def _extract_markdown_section(self, lines: list[str], section: str, topic: str) -> Optional[str]:
+        """Extract a heading and its body from markdown lines.
+
+        Case-insensitive substring match on heading text. Returns the matched heading
+        line through the line before the next heading of equal or lesser depth, or EOF.
+        Returns None if no matching heading is found.
+        """
+        import re as _re
+        heading_re = _re.compile(r'^(#{1,6})\s+(.*)')
+        needle = section.lower()
+
+        match_start: Optional[int] = None
+        match_level: int = 0
+
+        for i, line in enumerate(lines):
+            m = heading_re.match(line)
+            if m:
+                level = len(m.group(1))
+                text = m.group(2).strip()
+                if match_start is None:
+                    if needle in text.lower():
+                        match_start = i
+                        match_level = level
+                else:
+                    # End of section: same or higher level heading
+                    if level <= match_level:
+                        return '\n'.join(lines[match_start:i])
+
+        if match_start is not None:
+            return '\n'.join(lines[match_start:])
+        return None
 
     def _truncate_to_first_section(self, topic: str, lines: list[str]) -> str:
         """Return header + first meaningful content + section breadcrumb for large guides.

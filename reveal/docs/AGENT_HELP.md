@@ -2436,6 +2436,22 @@ reveal claude://session/my-session-0302/workflow
 reveal claude://session/my-session-0302/files
 ```
 
+**Inspecting sessions from a remote machine or another user:**
+```bash
+# 1. Sync the remote .claude dir locally
+rsync -a devops:/home/dev/.claude/ /tmp/devops-claude/
+
+# 2. Point reveal at it — REVEAL_CLAUDE_HOME is the cleanest form
+REVEAL_CLAUDE_HOME=/tmp/devops-claude reveal 'claude://sessions/' --all
+
+# 3. Drill into a session by UUID (full UUID or the 8-char prefix from the listing)
+REVEAL_CLAUDE_HOME=/tmp/devops-claude reveal 'claude://session/<UUID>'
+REVEAL_CLAUDE_HOME=/tmp/devops-claude reveal 'claude://session/<UUID>/workflow'
+
+# --base-path also accepts the .claude home dir directly (auto-detects projects/ subdir)
+reveal 'claude://session/<UUID>/workflow' --base-path /tmp/devops-claude
+```
+
 ---
 
 ### Task: "Analyze Codex CLI sessions (codex://)"

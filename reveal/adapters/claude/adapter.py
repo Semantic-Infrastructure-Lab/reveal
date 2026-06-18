@@ -109,6 +109,11 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'Filter by date — ISO 8601 date string or "today". On sessions/: narrows corpus before scanning. On history: filters by prompt timestamp.',
         'examples': ['?since=2026-03-01', '?since=today']
     },
+    'until': {
+        'type': 'string',
+        'description': 'Upper bound date filter — ISO 8601 date string. Pairs with ?since= for date range queries. Applies to session listings and cross-session search.',
+        'examples': ['?since=2026-06-10&until=2026-06-12', '?until=2026-06-01']
+    },
     'word': {
         'type': 'flag',
         'description': 'Whole-word match for ?search= (cross-session search only). Prevents substring matches.',
@@ -1264,6 +1269,10 @@ class ClaudeAdapter(ResourceAdapter):
             if since == 'today':
                 since = date.today().isoformat()
             sessions = [s for s in sessions if s.get('modified', '') >= since]
+
+        until = getattr(args, 'until', None)
+        if until:
+            sessions = [s for s in sessions if s.get('modified', '') <= until + 'T23:59:59']
 
         if not getattr(args, 'all', False):
             head = getattr(args, 'head', None)

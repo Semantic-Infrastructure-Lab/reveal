@@ -10,7 +10,7 @@ def _render_claude_session_list(result: dict) -> None:
     count_line = f"Claude Sessions: {total} total"
     if displayed < total:
         count_line += f" | showing {displayed}"
-    count_line += " | --all to show all | --head N for more | --since YYYY-MM-DD (or today)"
+    count_line += " | --all to show all | --head N for more | --since/--until YYYY-MM-DD (or today)"
     print(count_line)
     print()
     print(f"  {'SESSION':<36} {'MODIFIED':<17} {'SIZE':>6}  {'R':<1}  {'PROJECT':<12}  TITLE")
