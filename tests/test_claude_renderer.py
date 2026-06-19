@@ -1570,6 +1570,65 @@ class TestClaudeMessageRangeRenderer:
         assert 'tool result' in out
 
 
+class TestRenderClaudeHooksHelpers:
+    """Unit tests for _render_hook_file, _render_hook_directory, _hook_detail."""
+
+    def test_hook_file_prints_event(self, capsys):
+        from reveal.adapters.claude.render_system import _render_hook_file
+        _render_hook_file({'event': 'PreToolUse', 'executable': False, 'path': '/a/b.sh',
+                           'modified': '', 'content': '#!/bin/bash'})
+        out = capsys.readouterr().out
+        assert 'PreToolUse' in out
+        assert '/a/b.sh' in out
+        assert '#!/bin/bash' in out
+
+    def test_hook_file_exec_flag(self, capsys):
+        from reveal.adapters.claude.render_system import _render_hook_file
+        _render_hook_file({'event': 'PostToolUse', 'executable': True, 'path': '/x.sh',
+                           'modified': '2026-01-01', 'content': ''})
+        out = capsys.readouterr().out
+        assert 'executable' in out
+        assert 'Modified' in out
+
+    def test_hook_directory_script_count(self, capsys):
+        from reveal.adapters.claude.render_system import _render_hook_directory
+        scripts = [{'name': 'check.sh', 'executable': True, 'modified': '2026-01-01', 'size_bytes': 512}]
+        _render_hook_directory({'event': 'PreToolUse', 'scripts': scripts})
+        out = capsys.readouterr().out
+        assert '1 script' in out
+        assert 'check.sh' in out
+
+    def test_hook_directory_plural(self, capsys):
+        from reveal.adapters.claude.render_system import _render_hook_directory
+        scripts = [{'name': 'a.sh', 'executable': False, 'modified': '', 'size_bytes': 0},
+                   {'name': 'b.sh', 'executable': False, 'modified': '', 'size_bytes': 0}]
+        _render_hook_directory({'event': 'Stop', 'scripts': scripts})
+        out = capsys.readouterr().out
+        assert '2 scripts' in out
+
+    def test_hook_detail_file_kind(self):
+        from reveal.adapters.claude.render_system import _hook_detail
+        h = {'kind': 'file', 'size_bytes': 256, 'executable': False}
+        assert '256B' in _hook_detail(h)
+        assert 'exec' not in _hook_detail(h)
+
+    def test_hook_detail_file_exec(self):
+        from reveal.adapters.claude.render_system import _hook_detail
+        h = {'kind': 'file', 'size_bytes': 100, 'executable': True}
+        assert 'exec' in _hook_detail(h)
+
+    def test_hook_detail_directory_kind(self):
+        from reveal.adapters.claude.render_system import _hook_detail
+        h = {'kind': 'directory', 'script_count': 3}
+        assert '3 scripts' in _hook_detail(h)
+
+    def test_hook_detail_directory_singular(self):
+        from reveal.adapters.claude.render_system import _hook_detail
+        h = {'kind': 'directory', 'script_count': 1}
+        assert '1 script' in _hook_detail(h)
+        assert '1 scripts' not in _hook_detail(h)
+
+
 class TestRenderTruncatedText:
     """Unit tests for _render_truncated_text."""
 

@@ -369,17 +369,26 @@ class ClaudeAdapter(ResourceAdapter):
         self.messages = messages
         return messages
 
+    def _has_query_flag(self, name: str) -> bool:
+        """True when query is bare ?name or has ?name=value."""
+        return self.query == name or self.query_params.get(name) is not None
+
+    def _resolve_tail_count(self) -> int:
+        last_val = self.query_params.get('last')
+        if last_val is not None:
+            return int(last_val) if last_val else 1
+        return int(self.query_params['tail'])
+
     def _route_by_query(self, messages: List[Dict], conversation_path_str: str,
                         contract_base: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Route to handler by query parameter. Returns None if no query matches."""
-        # Accept both bare-flag (?summary) and value forms (?summary=true / ?summary=1).
-        if self.query == 'summary' or self.query_params.get('summary') is not None:
+        if self._has_query_flag('summary'):
             return get_summary(messages, self.session_name, conversation_path_str, contract_base)
-        if self.query == 'timeline' or self.query_params.get('timeline') is not None:
+        if self._has_query_flag('timeline'):
             return get_timeline(messages, self.session_name, contract_base)
-        if self.query == 'errors' or self.query_params.get('errors') is not None:
+        if self._has_query_flag('errors'):
             return get_errors(messages, self.session_name, contract_base)
-        if self.query == 'tokens' or self.query_params.get('tokens') is not None:
+        if self._has_query_flag('tokens'):
             return get_token_breakdown(messages, self.session_name, contract_base)
         if self.query and self.query.startswith('tools='):
             return get_tool_calls(messages, self.query.split('=')[1], self.session_name, contract_base)
@@ -391,14 +400,9 @@ class ClaudeAdapter(ResourceAdapter):
             if role == 'assistant':
                 result['full'] = 'full' in self.query_params
             return result
-        # ?tail=N or ?last=N — last N assistant turns; bare ?last — shorthand for ?tail=1
-        tail_str = self.query_params.get('tail')
-        last_val = self.query_params.get('last')
-        if tail_str is not None or last_val is not None:
-            if last_val is not None:
-                tail = int(last_val) if last_val else 1
-            else:
-                tail = int(tail_str)
+        # ?tail=N or ?last=N — last N turns; bare ?last — shorthand for ?tail=1
+        if self.query_params.get('tail') is not None or self.query_params.get('last') is not None:
+            tail = self._resolve_tail_count()
             result = get_messages(messages, self.session_name, contract_base)
             turns = result.get('messages', [])
             total = len(turns)

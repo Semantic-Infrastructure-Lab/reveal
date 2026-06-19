@@ -2007,3 +2007,61 @@ class TestBack350ShortUuidSubPath:
         name, sub = _parse_session_identifier('session/ancient-quasar-0501/message/3')
         assert name == 'ancient-quasar-0501'
         assert sub == 'message/3'
+
+
+# ─── _has_query_flag / _resolve_tail_count ────────────────────────────────────
+
+class TestHasQueryFlag:
+    """Unit tests for ClaudeAdapter._has_query_flag."""
+
+    def _adapter(self, query='', params=None):
+        from argparse import Namespace
+        from unittest.mock import patch
+        with patch.object(ClaudeAdapter, '_load_messages', return_value=[]):
+            with patch.object(ClaudeAdapter, '_find_conversation', return_value=None):
+                a = ClaudeAdapter.__new__(ClaudeAdapter)
+                a.query = query
+                a.query_params = params or {}
+                return a
+
+    def test_bare_flag_name_match(self):
+        a = self._adapter(query='summary')
+        assert a._has_query_flag('summary') is True
+
+    def test_param_with_value_match(self):
+        a = self._adapter(params={'summary': 'true'})
+        assert a._has_query_flag('summary') is True
+
+    def test_param_empty_string_match(self):
+        a = self._adapter(params={'summary': ''})
+        assert a._has_query_flag('summary') is True
+
+    def test_no_match(self):
+        a = self._adapter(query='timeline', params={})
+        assert a._has_query_flag('summary') is False
+
+    def test_different_flag_no_cross_match(self):
+        a = self._adapter(query='errors')
+        assert a._has_query_flag('tokens') is False
+
+
+class TestResolveTailCount:
+    """Unit tests for ClaudeAdapter._resolve_tail_count."""
+
+    def _adapter(self, params):
+        a = ClaudeAdapter.__new__(ClaudeAdapter)
+        a.query = ''
+        a.query_params = params
+        return a
+
+    def test_last_with_value(self):
+        a = self._adapter({'last': '3'})
+        assert a._resolve_tail_count() == 3
+
+    def test_last_bare_resolves_to_1(self):
+        a = self._adapter({'last': ''})
+        assert a._resolve_tail_count() == 1
+
+    def test_tail_with_value(self):
+        a = self._adapter({'tail': '5'})
+        assert a._resolve_tail_count() == 5

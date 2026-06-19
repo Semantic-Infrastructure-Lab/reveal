@@ -305,6 +305,33 @@ def _render_claude_agent(result: dict) -> None:
     print(content)
 
 
+def _render_hook_file(result: dict) -> None:
+    exec_flag = ' (executable)' if result.get('executable') else ''
+    print(f'Hook: {result.get("event", "")}{exec_flag}')
+    print(f'File: {result.get("path", "")}')
+    if result.get('modified'):
+        print(f'Modified: {result["modified"]}')
+    print()
+    print(result.get('content', ''))
+
+
+def _render_hook_directory(result: dict) -> None:
+    scripts = result.get('scripts', [])
+    print(f'Hook event: {result.get("event", "")}  ({len(scripts)} script{"s" if len(scripts) != 1 else ""})')
+    for s in scripts:
+        is_exec = ' *' if s.get('executable') else ''
+        mod = (s.get('modified', '') or '')[:16].replace('T', ' ')
+        print(f'  {s.get("name", "?"):<40} {mod}  {s.get("size_bytes", 0)}B{is_exec}')
+
+
+def _hook_detail(h: dict) -> str:
+    if h.get('kind') == 'file':
+        is_exec = ' (exec)' if h.get('executable') else ''
+        return f'{h.get("size_bytes", 0)}B{is_exec}'
+    count = h.get('script_count', 0)
+    return f'{count} script{"s" if count != 1 else ""}'
+
+
 def _render_claude_hooks(result: dict) -> None:
     """Render hook event types and scripts."""
     error = result.get('error')
@@ -312,30 +339,11 @@ def _render_claude_hooks(result: dict) -> None:
         print(f'Error: {error}')
 
     if 'event' in result and result.get('kind') == 'file':
-        event = result.get('event', '')
-        path = result.get('path', '')
-        is_exec = result.get('executable', False)
-        modified = result.get('modified', '')
-        content = result.get('content', '')
-        exec_flag = ' (executable)' if is_exec else ''
-        print(f'Hook: {event}{exec_flag}')
-        print(f'File: {path}')
-        if modified:
-            print(f'Modified: {modified}')
-        print()
-        print(content)
+        _render_hook_file(result)
         return
 
     if 'event' in result and result.get('kind') == 'directory':
-        event = result.get('event', '')
-        scripts = result.get('scripts', [])
-        print(f'Hook event: {event}  ({len(scripts)} script{"s" if len(scripts) != 1 else ""})')
-        for s in scripts:
-            name = s.get('name', '?')
-            is_exec = ' *' if s.get('executable') else ''
-            mod = (s.get('modified', '') or '')[:16].replace('T', ' ')
-            size = s.get('size_bytes', 0)
-            print(f'  {name:<40} {mod}  {size}B{is_exec}')
+        _render_hook_directory(result)
         return
 
     hooks = result.get('hooks', [])
@@ -348,17 +356,8 @@ def _render_claude_hooks(result: dict) -> None:
     print(f"  {'EVENT':<25} {'KIND':<10} {'MODIFIED':<17}  DETAIL")
     print(f"  {'-'*25} {'-'*10} {'-'*17}  {'-'*20}")
     for h in hooks:
-        event = h.get('event', '?')
-        kind = h.get('kind', '?')
         mod = (h.get('modified', '') or '')[:16].replace('T', ' ')
-        if kind == 'file':
-            size = h.get('size_bytes', 0)
-            is_exec = ' (exec)' if h.get('executable') else ''
-            detail = f'{size}B{is_exec}'
-        else:
-            count = h.get('script_count', 0)
-            detail = f'{count} script{"s" if count != 1 else ""}'
-        print(f'  {event:<25} {kind:<10} {mod}  {detail}')
+        print(f'  {h.get("event", "?"):<25} {h.get("kind", "?"):<10} {mod}  {_hook_detail(h)}')
     print()
     print("  reveal 'claude://hooks/<event>'  # read or list scripts for an event")
 
