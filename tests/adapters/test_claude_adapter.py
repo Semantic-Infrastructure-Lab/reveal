@@ -1867,18 +1867,29 @@ class TestClaudeConfig:
         finally:
             ClaudeAdapter.CLAUDE_JSON = original
 
-    def test_config_masks_secrets(self, tmp_path):
+    def test_config_does_not_leak_secrets(self, tmp_path):
+        """Default config view surfaces only curated fields, never raw secret values.
+
+        _get_config() returns a curated summary (projects, MCP server names,
+        allowed-tools, an allowlist of operational flags) — it does not echo
+        arbitrary top-level config values, so a stray top-level secret never
+        appears in the output. (This replaces an older test that exercised a
+        dead _mask_secrets helper in isolation; claude config masking was never
+        wired up because the handler summarizes rather than dumps — unlike codex.)
+        """
+        secret = 'sk-ant-very-secret-key-here'
         p = self._make_claude_json(tmp_path, {
-            'api_key': 'sk-ant-very-secret-key-here',
+            'api_key': secret,
             'installMethod': 'native',
         })
         original = ClaudeAdapter.CLAUDE_JSON
         ClaudeAdapter.CLAUDE_JSON = p
         try:
             adapter = ClaudeAdapter('config')
-            result = adapter._mask_secrets({'api_key': 'sk-ant-very-secret-key-here'})
-            assert result['api_key'].endswith('***')
-            assert not result['api_key'].startswith('sk-ant-very')
+            result = adapter._get_config()
+            # Curated fields present, raw secret absent anywhere in the output.
+            assert result['flags'].get('installMethod') == 'native'
+            assert secret not in repr(result)
         finally:
             ClaudeAdapter.CLAUDE_JSON = original
 

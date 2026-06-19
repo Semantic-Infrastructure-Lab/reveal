@@ -613,25 +613,6 @@ class ClaudeAdapter(ResourceAdapter):
     def _get_plans(self) -> Dict[str, Any]:
         return _h_get_plans(self.PLANS_DIR, self.resource, self.query_params)
 
-    _SECRET_PATTERNS = ('api_key', 'apikey', 'api-key', 'secret', 'token', 'password', 'credential', 'auth')
-
-    def _mask_secrets(self, obj: Any, depth: int = 0) -> Any:
-        """Recursively mask secret-looking string values in a config dict."""
-        if depth > 6:
-            return obj
-        if isinstance(obj, dict):
-            result = {}
-            for k, v in obj.items():
-                k_lower = k.lower()
-                if any(p in k_lower for p in self._SECRET_PATTERNS) and isinstance(v, str) and len(v) > 8:
-                    result[k] = v[:4] + '***'
-                else:
-                    result[k] = self._mask_secrets(v, depth + 1)
-            return result
-        if isinstance(obj, list):
-            return [self._mask_secrets(i, depth + 1) for i in obj]
-        return obj
-
     def _get_config(self) -> Dict[str, Any]:
         return _h_get_config(self.CLAUDE_JSON, self.query_params)
 

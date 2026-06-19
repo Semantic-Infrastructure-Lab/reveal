@@ -5,26 +5,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from datetime import date as _date
 
-_SECRET_PATTERNS = ('api_key', 'apikey', 'api-key', 'secret', 'token', 'password', 'credential', 'auth')
-
-
-def _mask_secrets(obj: Any, depth: int = 0) -> Any:
-    """Recursively mask secret-looking string values in a config dict."""
-    if depth > 6:
-        return obj
-    if isinstance(obj, dict):
-        result = {}
-        for k, v in obj.items():
-            k_lower = k.lower()
-            if any(p in k_lower for p in _SECRET_PATTERNS) and isinstance(v, str) and len(v) > 8:
-                result[k] = v[:4] + '***'
-            else:
-                result[k] = _mask_secrets(v, depth + 1)
-        return result
-    if isinstance(obj, list):
-        return [_mask_secrets(i, depth + 1) for i in obj]
-    return obj
-
 
 def _path_info(p: Path) -> Dict[str, Any]:
     if not p.exists():
