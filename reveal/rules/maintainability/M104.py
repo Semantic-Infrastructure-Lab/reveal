@@ -38,6 +38,11 @@ class M104(BaseRule, ASTParsingMixin):
     # Lower threshold for dict values (these are often lookup tables)
     MIN_DICT_VALUE_SIZE = 3
 
+    # Builtins that wrap a collection literal, e.g. frozenset({...}), set([...]).
+    # Without unwrapping these, set/frozenset-based extension and skip-dir lists
+    # (the most common form for de-duped lookup data) slip through undetected.
+    _COLLECTION_BUILTINS = {'frozenset', 'set', 'tuple', 'list'}
+
     # Known stable lists that should be suppressed (lowercase patterns)
     STABLE_PATTERNS = {
         # Output formats are contract-bound
@@ -58,19 +63,57 @@ class M104(BaseRule, ASTParsingMixin):
         'pattern': 'Patterns may need updates for new cases',
     }
 
+    # Risk reason per classification (drives the suggestion text)
+    CLASSIFICATION_RISK = {
+        'FILE_EXTENSIONS': 'File extension lists may become stale',
+        'DIRECTORIES': 'Directory skip-lists drift between modules; centralize them',
+        'TREESITTER_NODES': 'Tree-sitter node types change with grammar updates',
+        'ENTITY_TYPES': 'Entity-type lists should derive from registered analyzers',
+    }
+
+    # Name fragments that signal a directory/skip list rather than extensions
+    _DIR_NAME_HINTS = ('dir', 'skip', 'exclud', 'ignore')
+
+    def _resolve_collection_node(self, value: ast.AST) -> Optional[tuple]:
+        """Resolve an assignment value to a ``(collection_node, kind)`` pair.
+
+        Handles list/set/tuple literals directly, plus single-argument calls to
+        the frozenset/set/tuple/list builtins that wrap a collection literal
+        (e.g. ``frozenset({...})``). Returns ``None`` for anything that is not a
+        flat collection literal. The returned node always exposes ``.elts``.
+        """
+        if isinstance(value, ast.List):
+            return value, 'list'
+        if isinstance(value, ast.Set):
+            return value, 'set'
+        if isinstance(value, ast.Tuple):
+            return value, 'tuple'
+        if (isinstance(value, ast.Call)
+                and isinstance(value.func, ast.Name)
+                and value.func.id in self._COLLECTION_BUILTINS
+                and len(value.args) == 1
+                and isinstance(value.args[0], (ast.List, ast.Set, ast.Tuple))):
+            return value.args[0], value.func.id
+        return None
+
+    def _is_sized_collection_value(self, val: ast.AST) -> bool:
+        """True if a dict value is a list/set/tuple literal meeting the threshold."""
+        return (isinstance(val, (ast.List, ast.Set, ast.Tuple))
+                and len(val.elts) >= self.MIN_DICT_VALUE_SIZE)
+
     def _count_dict_list_values(self, node: ast.Dict) -> int:
-        """Count number of list values in dict that meet size threshold."""
+        """Count number of collection values in dict that meet size threshold."""
         list_value_count = 0
         for key, val in zip(node.keys, node.values):
-            if isinstance(val, ast.List) and len(val.elts) >= self.MIN_DICT_VALUE_SIZE:
+            if self._is_sized_collection_value(val):
                 list_value_count += 1
         return list_value_count
 
     def _extract_dict_sample_keys(self, node: ast.Dict, max_samples: int = 3) -> List[str]:
-        """Extract sample keys from dict with list values."""
+        """Extract sample keys from dict with collection values."""
         sample_keys = []
         for key, val in zip(node.keys, node.values):
-            if isinstance(val, ast.List) and len(val.elts) >= self.MIN_DICT_VALUE_SIZE:
+            if self._is_sized_collection_value(val):
                 key_name = key.value if isinstance(key, ast.Constant) else '?'
                 sample_keys.append(str(key_name))
                 if len(sample_keys) >= max_samples:
@@ -101,12 +144,18 @@ class M104(BaseRule, ASTParsingMixin):
         return None
 
     def _check_assign_node(self, node: ast.Assign, file_path: str) -> List[Detection]:
-        """Check a single ast.Assign node for hardcoded list targets."""
+        """Check a single ast.Assign node for hardcoded collection targets."""
         results = []
+        resolved = self._resolve_collection_node(node.value)
+        if resolved is None:
+            return results
+        collection_node, kind = resolved
         for target in node.targets:
-            if not (isinstance(target, ast.Name) and isinstance(node.value, ast.List)):
+            if not isinstance(target, ast.Name):
                 continue
-            detection = self._check_list_assignment(file_path, target.id, node.value, node.lineno)
+            detection = self._check_list_assignment(
+                file_path, target.id, collection_node, node.lineno, kind
+            )
             if detection:
                 results.append(detection)
         return results
@@ -139,32 +188,26 @@ class M104(BaseRule, ASTParsingMixin):
         return any(pattern in name_lower for pattern in self.STABLE_PATTERNS)
 
     def _detect_list_risk_factors(self, name: str, values: list, classification: str) -> tuple:
-        """Detect risk factors and refine classification.
+        """Derive a risk reason for an already-classified collection.
+
+        Classification is authoritative (see ``_classify_list``); this only
+        attaches a human-readable reason. A specific classification maps to a
+        canonical reason; an ``OTHER`` collection earns one only if its name
+        matches a high-staleness pattern.
 
         Returns:
-            (risk_reason, final_classification) tuple
+            (risk_reason, classification) tuple
         """
-        name_lower = name.lower()
-        risk_reason = None
-        final_classification = classification
+        risk_reason = self.CLASSIFICATION_RISK.get(classification)
+        if risk_reason:
+            return risk_reason, classification
 
-        # Check for high-staleness-risk patterns
+        name_lower = name.lower()
         for pattern, reason in self.HIGH_RISK_PATTERNS.items():
             if pattern in name_lower:
-                risk_reason = reason
-                break
+                return reason, classification
 
-        # Also flag lists with file extensions
-        if any(str(v).startswith('.') and len(str(v)) <= 6 for v in values[:5]):
-            risk_reason = 'File extension lists may become stale'
-            final_classification = 'FILE_EXTENSIONS'
-
-        # Flag tree-sitter node types
-        if any('_definition' in str(v) or '_declaration' in str(v) for v in values):
-            risk_reason = 'Tree-sitter node types change with grammar updates'
-            final_classification = 'TREESITTER_NODES'
-
-        return risk_reason, final_classification
+        return None, classification
 
     def _format_list_sample(self, values: list) -> str:
         """Format sample of list values for detection context."""
@@ -174,9 +217,10 @@ class M104(BaseRule, ASTParsingMixin):
         return f"[{sample}]"
 
     def _check_list_assignment(self, file_path: str, name: str,
-                               list_node: ast.List, line: int) -> Optional[Detection]:
-        """Check a named list assignment."""
-        # Early exit for small lists or stable patterns
+                               list_node: ast.AST, line: int,
+                               kind: str = 'list') -> Optional[Detection]:
+        """Check a named collection assignment (list/set/tuple/frozenset)."""
+        # Early exit for small collections or stable patterns
         if self._should_skip_list(name, list_node):
             return None
 
@@ -198,7 +242,7 @@ class M104(BaseRule, ASTParsingMixin):
         return self.create_detection(
             file_path=file_path,
             line=line,
-            message=f"Hardcoded list '{name}' ({classification})",
+            message=f"Hardcoded {kind} '{name}' ({classification})",
             suggestion=f"Consider extracting to a constant or deriving dynamically. {risk_reason or ''}",
             context=self._format_list_sample(values)
         )
@@ -231,10 +275,36 @@ class M104(BaseRule, ASTParsingMixin):
                 values.append(elt.value)
         return values
 
+    def _looks_like_directory_list(self, name: str, str_values: List[str]) -> bool:
+        """True if the collection is a directory/skip list, not file extensions.
+
+        Two signals: a name like ``_SKIP_DIRS``/``excluded_dirs``, or a mix of
+        dotfiles (``.git``) with bare directory names (``node_modules``, ``venv``)
+        — the shape every real skip-dir set has, which a pure extension list lacks.
+        """
+        name_lower = name.lower()
+        if any(hint in name_lower for hint in self._DIR_NAME_HINTS):
+            return True
+        has_dotfile = any(v.startswith('.') and '/' not in v for v in str_values)
+        has_bareword = any(
+            v and not v.startswith('.') and '.' not in v
+            and v.replace('_', '').replace('-', '').isalnum()
+            for v in str_values
+        )
+        return has_dotfile and has_bareword
+
     def _classify_list(self, name: str, values: List[Any]) -> str:
         """Classify what kind of hardcoded list this is."""
         if not values:
             return 'OTHER'
+
+        str_values = [str(v) for v in values]
+
+        # Directory / skip lists — checked before extensions because dotfile
+        # entries (.git, .venv) otherwise look like extensions.
+        if any(v.startswith('.') and len(v) <= 6 for v in str_values[:5]) \
+                and self._looks_like_directory_list(name, str_values):
+            return 'DIRECTORIES'
 
         # File extensions
         if any(str(v).startswith('.') and len(str(v)) <= 6 for v in values[:5]):

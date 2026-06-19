@@ -456,5 +456,103 @@ class TestM104Helpers(unittest.TestCase):
         self.assertIn('key2', keys)
 
 
+class TestM104CollectionTypes(unittest.TestCase):
+    """M104 must see sets/tuples/frozensets, not just list literals.
+
+    Regression guard: set/frozenset-based extension and skip-dir lists are the
+    most common de-duped lookup form, and previously slipped through because the
+    detector only walked ``ast.List`` nodes.
+    """
+
+    def setUp(self):
+        self.rule = M104()
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def create_temp_file(self, content: str, filename: str = "test.py") -> str:
+        path = os.path.join(self.temp_dir, filename)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    def test_set_literal_flagged(self):
+        """A set of file extensions should be flagged (was previously missed)."""
+        content = "CODE_EXTS = {'.py', '.js', '.ts', '.go', '.rs', '.rb'}\n"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('CODE_EXTS', detections[0].message)
+        self.assertIn('set', detections[0].message.lower())
+
+    def test_frozenset_call_flagged(self):
+        """frozenset({...}) wrapping a literal should be unwrapped and flagged."""
+        content = "EXTS = frozenset({'.py', '.js', '.ts', '.go', '.rs', '.rb'})\n"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('frozenset', detections[0].message.lower())
+
+    def test_tuple_literal_flagged(self):
+        """A tuple of file extensions should be flagged."""
+        content = "EXTENSIONS = ('.py', '.js', '.ts', '.go', '.rs', '.rb')\n"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('tuple', detections[0].message.lower())
+
+    def test_set_call_flagged(self):
+        """set([...]) wrapping a literal should be unwrapped and flagged."""
+        content = "EXTS = set(['.py', '.js', '.ts', '.go', '.rs', '.rb'])\n"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('set', detections[0].message.lower())
+
+    def test_small_set_not_flagged(self):
+        """Sets below the size threshold stay quiet, like lists."""
+        content = "SMALL = {'.py', '.js', '.ts'}\n"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_skip_dir_set_classified_as_directories(self):
+        """A skip-dir set must read as DIRECTORIES, not FILE_EXTENSIONS."""
+        content = "_SKIP_DIRS = {'.git', '.venv', 'venv', 'node_modules', 'build', 'dist'}\n"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('DIRECTORIES', detections[0].message)
+
+    def test_real_extension_set_still_file_extensions(self):
+        """A genuine extension set (all dotfiles, no dir-naming) stays FILE_EXTENSIONS."""
+        content = "code_exts = {'.py', '.js', '.ts', '.go', '.rs', '.rb'}\n"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('FILE_EXTENSIONS', detections[0].message)
+
+    def test_dict_with_set_values_flagged(self):
+        """Lookup-table dicts whose values are sets count toward the table threshold."""
+        content = (
+            "TABLE = {\n"
+            "    'a': {'function', 'class', 'method'},\n"
+            "    'b': {'function', 'class', 'method'},\n"
+            "    'c': {'function', 'class', 'method'},\n"
+            "    'd': {'function', 'class', 'method'},\n"
+            "    'e': {'function', 'class', 'method'},\n"
+            "}\n"
+        )
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertTrue(
+            any('lookup table' in d.message.lower() for d in detections),
+            "Dict of set values should trigger the lookup-table detection",
+        )
+
+
 if __name__ == '__main__':
     unittest.main()
