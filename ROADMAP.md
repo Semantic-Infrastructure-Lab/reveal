@@ -7,6 +7,16 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.100.0 — data-driven audit (BACK-366–369), D005 cross-file duplication, help system overhaul
+- ✅ **BACK-369: registry-derived `is_code_file`** — `CATEGORY` attribute on every registered analyzer (`code`/`data`/`doc`/`config`); `get_code_extensions()` replaces the 35-entry hardcoded set. Drops ~12 un-analyzable extensions, adds ~20 real ones (.mjs, .bat, .sv, .mm, .r, etc). +9 tests. (xopekone-0618)
+- ✅ **D005: cross-file literal cluster detection** — New rule catches the same list/set/tuple literal duplicated across ≥3 files (thresholds: ≥5 items). Scan-once-per-root strategy (mirrors I002). Ceiling env-configurable via `REVEAL_D005_MAX_FILES`. Dogfooding found and removed dead `_mask_secrets` duplication (2 of 3 copies never called). +21 tests + 5 ceiling tests. (xopekone-0618)
+- ✅ **BACK-366: M104 detects set/tuple/frozenset** — Previously walked only `ast.List`; now resolves all collection types and `frozenset()`/`set()`/`tuple()`/`list()` call-wrappers; adds `DIRECTORIES` classification for skip-dir lists. +8 tests. (electric-nightmare-0618)
+- ✅ **BACK-367: skip-list centralized into `reveal.defaults`** — Was redefined with drifting contents in 9 modules. Single canonical `SKIP_DIRECTORIES` frozenset; M104 guards against reintroduction. (electric-nightmare-0618)
+- ✅ **BACK-368: cyclic GC off-thread noise fixed** — tree-sitter `Node` finalized on ThreadPoolExecutor workers emitted `RuntimeError: unsendable`. New `main_thread_gc` context manager keeps cyclic collection on main thread during pools. +4 tests, zero warnings. (electric-nightmare-0618)
+- ✅ **Zig + missing language extensions in `is_code_file`** — .zig, .lua, .dart, .ps1, .gd, .sql added to code extension set; Zig AST queries now return results. +15 tests. (magical-valley-0618)
+- ✅ **Help system overhaul** — Every `help://<topic>` guide leaked its raw YAML front-matter block; stripped in `_load_static_help`. Dead `schemas` STATIC_HELP entry removed (dynamic handler intercepted it, showing wrong description in guide index). AGENT_HELP "Find duplicate code" task updated with D005. +5 tests. (xopekone-0618, hidden-supernova-0618)
+- ✅ **9,263 tests passed**, 22 skipped, 0 warnings. (hidden-supernova-0618)
+
 ### v0.99.1 — claude:// remote-session fixes + URI routing correctness (BACK-B1–B5, arch audit BACK-350–358)
 - ✅ **UUID sub-routes fixed (B4)** — `reveal 'claude://UUID/workflow'` previously failed with "Conversation not found". `_parse_session_name` now recognises full UUID format with trailing sub-path via `_UUID_SESSION_RE`. (fluorescent-pigment-0618)
 - ✅ **`--base-path` auto-detects `.claude` home (B1/B2)** — Passing a `.claude` home dir no longer triggers a false-positive `.jsonl` detection (caused by `history.jsonl`). `reconfigure_base_path` auto-detects the home (has `projects/` subdir) and re-roots automatically. Error message now names `REVEAL_CLAUDE_HOME` explicitly. (fluorescent-pigment-0618)

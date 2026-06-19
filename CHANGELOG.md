@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.100.0] - 2026-06-18 (sessions magical-valley-0618, electric-nightmare-0618, xopekone-0618, hidden-supernova-0618)
+
 ### Added
 - **D005: cross-file hardcoded literal cluster detection** — New duplication rule catching the same list/set/tuple literal duplicated across multiple files — the pattern M104 (per-file) structurally cannot see. On first check per project it scans all `.py` files under the project root, indexes each literal by its order-independent value set, and flags clusters spanning 3+ distinct files (thresholds: literal ≥5 items, ≥3 files; stable names like `__all__`/`*_format`/fixtures exempt). Reuses I002's scan-once-cache-per-root strategy. Dogfooding reveal's own tree surfaced a real 3-file `_SECRET_PATTERNS` duplication that turned out to be dead code (see Refactored). +21 tests.
 - **`--with-stats` for session listing (BACK-348)** — `reveal claude:// --with-stats` reads each displayed session's JSONL (the displayed set only, ≤20) and adds MSGS and DUR columns showing total message count and elapsed duration (`1h30m`, `45m`). Default listing is unchanged; a `--with-stats` hint appears in the count line. Also fixed a BACK-349 CLI gap: `--until` was missing from `parser.py` and `defaults.py` so the CLI flag had no effect (only `?until=` query param worked). +13 tests.
