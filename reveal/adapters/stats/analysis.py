@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Iterator, cast
 
+from ...defaults import SKIP_DIRECTORIES
 from ...registry import get_analyzer
 
 
@@ -25,12 +26,8 @@ def _is_large_json(file_path: Path) -> bool:
         return False
 
 
-_ALWAYS_SKIP_DIRS = {
-    '.git', '__pycache__', 'node_modules', '.venv', 'venv',
-    'dist', 'build', '.pytest_cache', '.mypy_cache',
-    'htmlcov', '.benchmarks', '.deepeval', '.tox', '.ruff_cache',
-    'sdist', '.eggs',
-}
+# Canonical skip set lives in reveal.defaults (shared by every directory walk).
+_ALWAYS_SKIP_DIRS = SKIP_DIRECTORIES
 
 
 def find_analyzable_files(

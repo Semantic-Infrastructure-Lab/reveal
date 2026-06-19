@@ -14,6 +14,8 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Optional, List, TYPE_CHECKING
 
+from ..defaults import SKIP_DIRECTORIES
+
 if TYPE_CHECKING:
     from argparse import Namespace
 
@@ -278,11 +280,7 @@ def collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> Li
     from ..registry import get_analyzer
 
     files_to_check = []
-    excluded_dirs = {
-        '.git', '__pycache__', 'node_modules', '.venv', 'venv', 'build', 'dist',
-        '.pytest_cache', '.tox', '.eggs', 'env', '.benchmarks', '.deepeval',
-        '.mypy_cache', '.ruff_cache', '.cache', '.hypothesis',
-    }
+    excluded_dirs = SKIP_DIRECTORIES
 
     for root, dirs, files in os.walk(directory):
         # Filter out excluded directories and *.egg-info build artifacts

@@ -13,15 +13,14 @@ from pathlib import Path
 from argparse import Namespace
 from typing import Any, Dict, List, Optional
 
+from .defaults import SKIP_DIRECTORIES
 from .utils import safe_json_dumps
 
 _BINARY_EXTENSIONS = frozenset({
     '.pyc', '.pyo', '.pyd', '.so', '.dylib', '.dll', '.exe', '.bin', '.o', '.a',
 })
-_SKIP_DIRS = frozenset({
-    '__pycache__', 'node_modules', '.tox', '.venv', 'venv',
-    '.mypy_cache', '.ruff_cache', '.benchmarks', '.deepeval',
-})
+# Canonical skip set lives in reveal.defaults (shared by every directory walk).
+_SKIP_DIRS = SKIP_DIRECTORIES
 
 
 def handle_grep(path: str, pattern: str, args: Namespace) -> None:

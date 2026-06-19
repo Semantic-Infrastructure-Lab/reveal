@@ -10,11 +10,11 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
+from ..defaults import SKIP_DIRECTORIES
 
-_SKIP_DIRS = {
-    '.git', '__pycache__', '.pytest_cache', '.tox', '.venv', 'venv', 'env',
-    'node_modules', 'build', 'dist', '.eggs',
-}
+
+# Canonical skip set lives in reveal.defaults (shared by every directory walk).
+_SKIP_DIRS = SKIP_DIRECTORIES
 
 # I/O handles that are always noisy — patching them says nothing about production design.
 # Suppressed by default in group_patches; pass suppress=False to include them.

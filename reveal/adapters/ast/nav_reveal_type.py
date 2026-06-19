@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ...core import suppress_treesitter_warnings  # noqa: F401 — called at scan time
 from ...core import node_children as _children
+from ...defaults import SKIP_DIRECTORIES
 
 
 # ─────────────────────────── public entry point ──────────────────────────────
@@ -33,10 +34,7 @@ def collect_type_evidence(path: str, var_name: str) -> List[Dict[str, Any]]:
     path_obj = Path(path)
     evidence: List[Dict[str, Any]] = []
 
-    _SKIP_DIRS = {
-        '.git', '__pycache__', 'node_modules', '.tox', '.venv', 'venv',
-        '.mypy_cache', '.pytest_cache', 'dist', 'build', '.eggs',
-    }
+    _SKIP_DIRS = SKIP_DIRECTORIES
 
     if path_obj.is_file():
         _scan_file(str(path_obj), var_name, evidence)

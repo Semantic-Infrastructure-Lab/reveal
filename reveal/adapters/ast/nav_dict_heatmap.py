@@ -22,11 +22,11 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
+from ...defaults import SKIP_DIRECTORIES
+
 _BARE_DICT_NAMES = frozenset({'dict', 'Dict'})
-_SKIP_DIRS = {
-    '.git', '__pycache__', 'node_modules', '.tox', '.venv', 'venv',
-    '.mypy_cache', '.pytest_cache', 'dist', 'build', '.eggs',
-}
+# Canonical skip set lives in reveal.defaults (shared by every directory walk).
+_SKIP_DIRS = SKIP_DIRECTORIES
 
 
 # ─────────────────────────── public entry point ──────────────────────────────

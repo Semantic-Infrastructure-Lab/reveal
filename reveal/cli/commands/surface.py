@@ -8,10 +8,10 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any, Dict, List
 
-_SKIP_DIRS: frozenset = frozenset({
-    '__pycache__', '.git', '.tox', '.venv', 'venv', 'env',
-    'node_modules', '.mypy_cache', '.pytest_cache', 'dist', 'build',
-})
+from ...defaults import SKIP_DIRECTORIES
+
+# Canonical skip set lives in reveal.defaults (shared by every directory walk).
+_SKIP_DIRS: frozenset = SKIP_DIRECTORIES
 
 _SURFACE_LABELS = {
     'cli': 'CLI commands / arguments',

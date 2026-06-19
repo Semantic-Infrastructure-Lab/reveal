@@ -9,6 +9,8 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Dict, Any, Generator, List, Optional, Set, Tuple
 
+from ...defaults import SKIP_DIRECTORIES
+
 
 # Entry point filename patterns (highest priority)
 _ENTRY_POINT_PATTERNS = {
@@ -485,8 +487,7 @@ def _apply_budget(
 
 def _walk_files(path: Path) -> Generator[Path, None, None]:
     """Yield code/config files under *path* (respects common ignores)."""
-    _SKIP_DIRS = {'.git', '__pycache__', 'node_modules', '.venv', 'venv',
-                  '.mypy_cache', '.pytest_cache', 'dist', 'build', '.tox'}
+    _SKIP_DIRS = SKIP_DIRECTORIES
     _CODE_EXTENSIONS = {
         '.py', '.js', '.ts', '.jsx', '.tsx', '.rb', '.go', '.rs', '.java',
         '.c', '.cpp', '.h', '.cs', '.php', '.swift', '.kt', '.scala',

@@ -10,6 +10,32 @@ Usage:
 """
 
 
+# Canonical set of directories that directory walks skip by default.
+#
+# Single source of truth: previously this set was redefined (with drifting
+# contents) in 9+ modules — ast/stats/surface/grep/pack/file_checker/patches —
+# so one walker would skip `.ruff_cache`/`htmlcov` while another descended into
+# it. This is the superset; every caller either tests membership directly or
+# combines it with a `startswith('.')` guard, both of which a superset satisfies.
+SKIP_DIRECTORIES = frozenset({
+    # Version control
+    '.git',
+    # Python caches / build
+    '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache',
+    '.cache', '.hypothesis',
+    # Virtual environments
+    '.venv', 'venv', '.env', 'env',
+    # Installed packages
+    'node_modules', 'site-packages', 'dist-packages',
+    # Test/CI runners
+    '.tox', '.nox', 'htmlcov',
+    # Build / packaging artifacts
+    '.eggs', 'sdist', 'dist', 'build',
+    # Benchmark / eval tooling
+    '.benchmarks', '.deepeval',
+})
+
+
 class RuleDefaults:
     """Default thresholds for quality rules.
 

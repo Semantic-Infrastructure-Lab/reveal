@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+from ...defaults import SKIP_DIRECTORIES
 from .call_graph import build_symbol_map, resolve_callees
 
 # All public names in the Python builtins module — used to filter noise from
@@ -18,16 +19,8 @@ PYTHON_BUILTINS: frozenset = frozenset(
 )
 
 # Directories to skip when recursively collecting code files.
-# These are virtual-env, package, and VCS directories that are never
-# part of a project's own source and can contain thousands of files.
-_SKIP_DIRS = {
-    '.venv', 'venv', '.env', 'env',
-    'node_modules', '.git',
-    'site-packages', 'dist-packages',
-    '.tox', '.nox', '.pytest_cache', '.mypy_cache',
-    '__pycache__', '.eggs',
-    'dist', 'build',
-}
+# Canonical set lives in reveal.defaults (shared by every directory walk).
+_SKIP_DIRS = SKIP_DIRECTORIES
 
 
 def try_add_file_structure(file_path: str, structures: List[Dict[str, Any]]) -> None:
