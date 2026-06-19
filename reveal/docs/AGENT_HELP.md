@@ -488,7 +488,7 @@ reveal check Dockerfile                # Docker best practices (S701)
 **Available rule categories:**
 - **B** (bugs) - Common code bugs and anti-patterns (B001-B006)
 - **C** (complexity) - Code complexity metrics (C901, C902, C905)
-- **D** (duplicates) - Duplicate code detection (D001; D002 exists but is disabled by default — enable with `--select D002`)
+- **D** (duplicates) - Duplicate code detection (D001 exact functions; D005 cross-file literal clusters; D002 similar functions exists but is disabled by default — enable with `--select D002`)
 - **E** (errors) - Line length and formatting (E501)
 - **F** (frontmatter) - Markdown front matter validation (F001-F005)
 - **I** (imports) - Import analysis and dependencies (I001-I006)

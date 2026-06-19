@@ -2,14 +2,14 @@
 title: Duplicate Code Detection in Reveal
 category: guide
 help_topic: duplicates
-help_description: "Duplicate code detection (D001/D002 rules, workflows, limitations)"
+help_description: "Duplicate code detection (D001/D002 functions per-file, D005 cross-file literals, workflows)"
 help_category: feature_guides
 help_token_estimate: "~5,500"
 ---
 # Duplicate Code Detection in Reveal
 
 **Version:** 0.30.0
-**Status:** Partial implementation (single-file only)
+**Status:** D001/D002 single-file (functions); D005 cross-file (literal clusters)
 **Last Updated:** 2026-01-03
 
 ---
