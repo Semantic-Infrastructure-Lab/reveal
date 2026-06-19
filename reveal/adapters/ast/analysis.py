@@ -77,11 +77,21 @@ def is_code_file(path: Path) -> bool:
     Returns:
         True if file has a code extension
     """
-    # Common code extensions
+    # Code extensions with language-specific analyzers (sync with reveal --languages).
+    # Data/doc formats (.md, .json, .yaml, .toml, .csv) intentionally excluded —
+    # ast:// is for code structure, not data.
     code_exts = {
+        # Tier-1: explicit language analyzers
         '.py', '.js', '.ts', '.jsx', '.tsx', '.rs', '.go',
         '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.rb',
-        '.php', '.swift', '.kt', '.scala', '.sh', '.bash'
+        '.php', '.swift', '.kt', '.kts', '.scala', '.sh', '.bash',
+        '.zig', '.lua', '.dart', '.ps1', '.psm1', '.psd1', '.gd', '.sql',
+        # Tree-sitter fallback: basic function/class extraction
+        '.cr', '.ex', '.exs', '.elm', '.erl', '.hrl',
+        '.glsl', '.vert', '.frag', '.hs', '.lhs',
+        '.jl', '.nim', '.nix', '.ml', '.mli',
+        '.pl', '.pm', '.scm', '.ss',
+        '.thrift', '.v', '.vh', '.vhd', '.vhdl',
     }
     return path.suffix.lower() in code_exts
 
@@ -134,7 +144,7 @@ def create_element_dict(
     if category in ('functions', 'methods'):
         # Use complexity from item if available (tree-sitter calculated)
         # Otherwise calculate with heuristic
-        element['complexity'] = item.get('complexity') or calculate_complexity(item, analyzer)
+        element['complexity'] = item.get('complexity') or calculate_complexity(element, analyzer)
         element['depth'] = item.get('depth', 0)
         # Propagate call graph fields (Phase 1 data from tree-sitter)
         calls = item.get('calls', [])

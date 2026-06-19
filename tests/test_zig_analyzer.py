@@ -663,5 +663,34 @@ pub fn divide(a: i32, b: i32) i32 {
             os.unlink(temp_path)
 
 
+    def test_function_has_line_end(self):
+        """Function dicts should include line_end for complexity heuristic."""
+        code = '''pub fn short() void {}
+
+pub fn longer(a: i32, b: i32) i32 {
+    const x = a + b;
+    const y = x * 2;
+    return y;
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.zig', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = ZigAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            funcs = {f['name']: f for f in structure.get('functions', [])}
+
+            self.assertIn('line_end', funcs['short'], "function dict must have 'line_end'")
+            self.assertIn('line_end', funcs['longer'])
+            # line_end >= line (single-line function: end == start)
+            self.assertGreaterEqual(funcs['short']['line_end'], funcs['short']['line'])
+            self.assertGreater(funcs['longer']['line_end'], funcs['longer']['line'])
+        finally:
+            os.unlink(temp_path)
+
+
 if __name__ == '__main__':
     unittest.main()

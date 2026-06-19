@@ -96,6 +96,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         """Build function information dictionary."""
         func_info = {
             'line': decl_node.start_position().row + 1,
+            'line_end': decl_node.end_position().row + 1,
             'name': fn_name,
             'signature': signature,
         }

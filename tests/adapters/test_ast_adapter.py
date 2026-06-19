@@ -360,5 +360,83 @@ class TestAstAdapterEdgeCases(unittest.TestCase):
             self.assertIn('Hello World', names)
 
 
+class TestIsCodeFile(unittest.TestCase):
+    """is_code_file should match code languages and reject doc/data formats."""
+
+    def _f(self, ext):
+        from reveal.adapters.ast.analysis import is_code_file
+        return is_code_file(Path(f'test{ext}'))
+
+    def test_python_accepted(self):
+        self.assertTrue(self._f('.py'))
+
+    def test_typescript_accepted(self):
+        self.assertTrue(self._f('.ts'))
+
+    def test_zig_accepted(self):
+        self.assertTrue(self._f('.zig'))
+
+    def test_lua_accepted(self):
+        self.assertTrue(self._f('.lua'))
+
+    def test_dart_accepted(self):
+        self.assertTrue(self._f('.dart'))
+
+    def test_gdscript_accepted(self):
+        self.assertTrue(self._f('.gd'))
+
+    def test_sql_accepted(self):
+        self.assertTrue(self._f('.sql'))
+
+    def test_elixir_accepted(self):
+        self.assertTrue(self._f('.ex'))
+
+    def test_haskell_accepted(self):
+        self.assertTrue(self._f('.hs'))
+
+    def test_markdown_rejected(self):
+        self.assertFalse(self._f('.md'))
+
+    def test_json_rejected(self):
+        self.assertFalse(self._f('.json'))
+
+    def test_yaml_rejected(self):
+        self.assertFalse(self._f('.yaml'))
+
+    def test_toml_rejected(self):
+        self.assertFalse(self._f('.toml'))
+
+
+class TestZigAstComplexity(unittest.TestCase):
+    """ast:// should produce non-trivial complexity scores for large Zig functions."""
+
+    def test_zig_function_complexity_scales_with_size(self):
+        """A large Zig function should have complexity > 1 (not stuck at heuristic floor)."""
+        import textwrap as _tw
+        # 50-line function body
+        body = 'const x = 0;\n' * 48
+        code = _tw.dedent(f'''\
+            pub fn bigFn() void {{
+            {body}}}
+            pub fn smallFn() void {{}}
+        ''')
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.zig', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            from reveal.adapters.ast.analysis import analyze_file
+            result = analyze_file(temp_path)
+            self.assertIsNotNone(result)
+            elements = {e['name']: e for e in result.get('elements', [])}
+            self.assertIn('bigFn', elements)
+            self.assertIn('smallFn', elements)
+            self.assertGreater(elements['bigFn']['complexity'], elements['smallFn']['complexity'],
+                               "large Zig function should have higher complexity than small one")
+        finally:
+            os.unlink(temp_path)
+
+
 if __name__ == '__main__':
     unittest.main()
