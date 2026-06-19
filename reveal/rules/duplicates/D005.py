@@ -24,6 +24,7 @@ every file in a cluster is reported, not just the N-th one seen.
 import ast
 import hashlib
 import logging
+import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 
@@ -50,8 +51,24 @@ _PROJECT_MARKERS = (
     'pyproject.toml', 'setup.py', 'package.json', 'go.mod', 'Cargo.toml',
 )
 
-# Safety ceiling: skip projects that would scan too many files.
-_MAX_PROJECT_FILES = 5000
+# Safety ceiling: cross-file detection scans every .py under the project root
+# on first check, so a huge tree is skipped (with a logged warning) rather than
+# stalling an interactive --check. Override with REVEAL_D005_MAX_FILES for large
+# monorepos that genuinely want the scan. Mirrors I002's REVEAL_I002_MAX_FILES.
+_DEFAULT_MAX_PROJECT_FILES = 5000
+
+
+def _max_project_files() -> int:
+    """Read the scan ceiling, honoring REVEAL_D005_MAX_FILES."""
+    raw = os.environ.get('REVEAL_D005_MAX_FILES')
+    if raw:
+        try:
+            value = int(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            logger.debug("Invalid REVEAL_D005_MAX_FILES=%r, using default", raw)
+    return _DEFAULT_MAX_PROJECT_FILES
 
 
 # ── Helpers (module-level, no self) ──────────────────────────────────────────
@@ -225,18 +242,26 @@ class D005(BaseRule, ASTParsingMixin):
 def _build_index(
     project_root: Path, rule: D005
 ) -> Dict[str, List[Tuple[str, int, str]]]:
-    """Scan all .py files under project_root and build the cross-file literal index."""
-    py_files = [
-        p for p in project_root.rglob('*.py')
-        if not _should_skip_path(p)
-    ]
+    """Scan all .py files under project_root and build the cross-file literal index.
 
-    if len(py_files) > _MAX_PROJECT_FILES:
-        logger.warning(
-            "D005: project has %d .py files (ceiling %d); skipping cross-file scan",
-            len(py_files), _MAX_PROJECT_FILES,
-        )
-        return {}
+    Collects paths lazily and aborts as soon as the file count crosses the
+    ceiling — a huge tree (e.g. a marker-less parent that aggregates many
+    projects) is skipped without materializing the full list or parsing a
+    single file, so an interactive --check never stalls.
+    """
+    ceiling = _max_project_files()
+    py_files: List[Path] = []
+    for p in project_root.rglob('*.py'):
+        if _should_skip_path(p):
+            continue
+        py_files.append(p)
+        if len(py_files) > ceiling:
+            logger.warning(
+                "D005: project root %s exceeds %d .py files; skipping cross-file "
+                "scan (set REVEAL_D005_MAX_FILES to raise the ceiling)",
+                project_root, ceiling,
+            )
+            return {}
 
     index: Dict[str, List[Tuple[str, int, str]]] = {}
 

@@ -112,6 +112,14 @@ Thresholds: `MIN_LITERAL_SIZE = 5` (items in the literal), `MIN_CLUSTER_FILES = 
 fixtures) are exempt. The cross-file index is cached per project root for the
 duration of the process (same strategy as I002).
 
+**Scope and ceiling:** the project root is the nearest ancestor with a marker
+file (`pyproject.toml`, `setup.py`, `package.json`, `go.mod`, `Cargo.toml`). A
+tree exceeding **5,000 `.py` files** is skipped with a logged warning rather
+than stalling an interactive `--check` — raise the bar with
+`REVEAL_D005_MAX_FILES=N` for large monorepos. A marker-less project scopes to
+each sub-directory that *does* have a marker, so cross-directory duplication
+between marker-less siblings is not detected; add a root marker to widen scope.
+
 ### Function-body duplication (D001/D002)
 
 **Status:** 🚧 Per-file only

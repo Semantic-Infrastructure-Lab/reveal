@@ -1,11 +1,16 @@
 """Tests for D005: Cross-file hardcoded literal cluster detection."""
 
+import os
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from reveal.rules.duplicates.D005 import D005, _clear_index, _canonical_key, _find_project_root
+from reveal.rules.duplicates.D005 import (
+    D005, _clear_index, _canonical_key, _find_project_root,
+    _max_project_files, _build_index, _DEFAULT_MAX_PROJECT_FILES,
+)
 
 
 def _write(directory: str, name: str, content: str) -> str:
@@ -233,6 +238,54 @@ class TestD005FindProjectRoot(unittest.TestCase):
             f.write_text('')
             found = _find_project_root(f)
             self.assertEqual(found, Path(tmpdir))
+
+
+class TestD005Ceiling(unittest.TestCase):
+    """Tests for the file-count ceiling and REVEAL_D005_MAX_FILES override."""
+
+    def setUp(self):
+        _clear_index()
+        self.rule = D005()
+        self._tmpdir = tempfile.mkdtemp()
+        Path(self._tmpdir, 'pyproject.toml').write_text('[project]\nname="t"')
+
+    def tearDown(self):
+        _clear_index()
+
+    def test_default_ceiling(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('REVEAL_D005_MAX_FILES', None)
+            self.assertEqual(_max_project_files(), _DEFAULT_MAX_PROJECT_FILES)
+
+    def test_env_override(self):
+        with mock.patch.dict(os.environ, {'REVEAL_D005_MAX_FILES': '99'}):
+            self.assertEqual(_max_project_files(), 99)
+
+    def test_invalid_env_falls_back_to_default(self):
+        with mock.patch.dict(os.environ, {'REVEAL_D005_MAX_FILES': 'not-a-number'}):
+            self.assertEqual(_max_project_files(), _DEFAULT_MAX_PROJECT_FILES)
+
+    def test_build_index_bails_over_ceiling(self):
+        """A tree exceeding the ceiling returns an empty index without parsing."""
+        # 6 files, ceiling forced to 3 → bail, empty index.
+        code = "EXTS = ['.py', '.js', '.ts', '.rs', '.go']\n"
+        for i in range(6):
+            _write(self._tmpdir, f'mod{i}.py', code)
+        with mock.patch.dict(os.environ, {'REVEAL_D005_MAX_FILES': '3'}):
+            index = _build_index(Path(self._tmpdir), self.rule)
+        self.assertEqual(index, {})
+
+    def test_under_ceiling_scans_normally(self):
+        """Below the ceiling, the index is built as usual."""
+        code = "EXTS = ['.py', '.js', '.ts', '.rs', '.go']\n"
+        for i in range(4):
+            _write(self._tmpdir, f'mod{i}.py', code)
+        with mock.patch.dict(os.environ, {'REVEAL_D005_MAX_FILES': '100'}):
+            index = _build_index(Path(self._tmpdir), self.rule)
+        # One literal key shared by 4 files
+        self.assertEqual(len(index), 1)
+        only = next(iter(index.values()))
+        self.assertEqual(len({fp for fp, _, _ in only}), 4)
 
 
 if __name__ == '__main__':
