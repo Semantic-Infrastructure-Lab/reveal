@@ -70,23 +70,12 @@ def is_code_file(path: Path) -> bool:
     Returns:
         True if file has a code extension
     """
-    # Code extensions with language-specific analyzers (sync with reveal --languages).
-    # Data/doc formats (.md, .json, .yaml, .toml, .csv) intentionally excluded —
-    # ast:// is for code structure, not data.
-    code_exts = {
-        # Tier-1: explicit language analyzers
-        '.py', '.js', '.ts', '.jsx', '.tsx', '.rs', '.go',
-        '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.rb',
-        '.php', '.swift', '.kt', '.kts', '.scala', '.sh', '.bash',
-        '.zig', '.lua', '.dart', '.ps1', '.psm1', '.psd1', '.gd', '.sql',
-        # Tree-sitter fallback: basic function/class extraction
-        '.cr', '.ex', '.exs', '.elm', '.erl', '.hrl',
-        '.glsl', '.vert', '.frag', '.hs', '.lhs',
-        '.jl', '.nim', '.nix', '.ml', '.mli',
-        '.pl', '.pm', '.scm', '.ss',
-        '.thrift', '.v', '.vh', '.vhd', '.vhdl',
-    }
-    return path.suffix.lower() in code_exts
+    # Derived from the analyzer registry — extensions whose CATEGORY == 'code'
+    # plus all TREESITTER_EXTENSION_MAP keys (always programming languages).
+    # Data/doc/config formats (.md, .json, .yaml, .toml, .csv, etc.) are
+    # intentionally excluded — ast:// is for code structure, not data.
+    from ...registry import get_code_extensions
+    return path.suffix.lower() in get_code_extensions()
 
 
 def create_element_dict(

@@ -15,7 +15,7 @@ from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 
 
-@register('.yaml', '.yml', name='YAML', icon='')
+@register('.yaml', '.yml', name='YAML', icon='', category='data')
 class YamlAnalyzer(TreeSitterAnalyzer):
     """YAML file analyzer using tree-sitter for robust parsing.
 
@@ -132,7 +132,7 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         return super().extract_element(element_type, name)
 
 
-@register('.json', name='JSON', icon='')
+@register('.json', name='JSON', icon='', category='data')
 class JsonAnalyzer(TreeSitterAnalyzer):
     """JSON file analyzer using tree-sitter for robust parsing.
 

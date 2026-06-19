@@ -13,8 +13,8 @@ from ..registry import register
 logger = logging.getLogger(__name__)
 
 
-@register('.csv', name='CSV', icon='📊')
-@register('.tsv', name='TSV', icon='📊')
+@register('.csv', name='CSV', icon='📊', category='data')
+@register('.tsv', name='TSV', icon='📊', category='data')
 class CsvAnalyzer(FileAnalyzer):
     """CSV/TSV file analyzer.
 

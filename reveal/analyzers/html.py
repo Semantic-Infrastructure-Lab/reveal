@@ -15,7 +15,7 @@ except ImportError:
     BS4_AVAILABLE = False
 
 
-@register('.html', '.htm', name='HTML', icon='')
+@register('.html', '.htm', name='HTML', icon='', category='doc')
 class HTMLAnalyzer(FileAnalyzer):
     """HTML file analyzer with progressive disclosure.
 

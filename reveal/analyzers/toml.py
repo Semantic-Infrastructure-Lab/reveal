@@ -15,7 +15,7 @@ from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 
 
-@register('.toml', name='TOML', icon='')
+@register('.toml', name='TOML', icon='', category='config')
 class TomlAnalyzer(TreeSitterAnalyzer):
     """TOML file analyzer using tree-sitter for robust parsing.
 

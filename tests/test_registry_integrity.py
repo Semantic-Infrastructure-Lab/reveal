@@ -363,5 +363,93 @@ class TestDocumentationAccuracy(unittest.TestCase):
             )
 
 
+class TestAnalyzerCategoryAttribute(unittest.TestCase):
+    """Tests for BACK-369: CATEGORY attribute and get_code_extensions()."""
+
+    def setUp(self):
+        import reveal.analyzers  # noqa: F401 — trigger registration
+        from reveal.registry import get_code_extensions, get_all_analyzers
+        self.get_code_extensions = get_code_extensions
+        self.get_all_analyzers = get_all_analyzers
+
+    def test_all_registered_analyzers_have_category(self):
+        """Every registered analyzer class must carry a CATEGORY attribute."""
+        analyzers = self.get_all_analyzers()
+        missing = [
+            ext for ext, info in analyzers.items()
+            if not hasattr(info['class'], 'CATEGORY')
+        ]
+        self.assertEqual(
+            missing, [],
+            f"Analyzers missing CATEGORY attribute: {missing}"
+        )
+
+    def test_category_values_are_valid(self):
+        """CATEGORY must be one of the four allowed values."""
+        valid = {'code', 'data', 'doc', 'config'}
+        analyzers = self.get_all_analyzers()
+        bad = [
+            (ext, info['class'].CATEGORY)
+            for ext, info in analyzers.items()
+            if getattr(info['class'], 'CATEGORY', None) not in valid
+        ]
+        self.assertEqual(bad, [], f"Invalid CATEGORY values: {bad}")
+
+    def test_get_all_analyzers_exposes_category_key(self):
+        """get_all_analyzers() metadata dict must include 'category' key."""
+        analyzers = self.get_all_analyzers()
+        for ext, info in analyzers.items():
+            self.assertIn('category', info, f"Missing 'category' key for {ext}")
+
+    def test_known_code_extensions_are_code(self):
+        """Core code extensions must be in get_code_extensions()."""
+        code = self.get_code_extensions()
+        for ext in ['.py', '.js', '.ts', '.rs', '.go', '.java', '.zig',
+                    '.lua', '.dart', '.mjs', '.cjs', '.bat', '.ex', '.hs', '.v']:
+            self.assertIn(ext, code, f"{ext} should be in code extensions")
+
+    def test_data_doc_config_extensions_excluded(self):
+        """Data/doc/config extensions must not appear in get_code_extensions()."""
+        code = self.get_code_extensions()
+        for ext in ['.md', '.json', '.yaml', '.yml', '.csv', '.tsv',
+                    '.xml', '.toml', '.html', '.htm', '.docx', '.xlsx',
+                    '.pptx', '.odt', '.ods', '.odp', '.ini', '.cfg',
+                    '.conf', '.properties', '.tf', '.hcl']:
+            self.assertNotIn(ext, code, f"{ext} should NOT be in code extensions")
+
+    def test_get_code_extensions_is_frozenset(self):
+        """get_code_extensions() must return a frozenset."""
+        result = self.get_code_extensions()
+        self.assertIsInstance(result, frozenset)
+
+    def test_get_code_extensions_is_cached(self):
+        """Repeated calls must return the same object (lru_cache)."""
+        s1 = self.get_code_extensions()
+        s2 = self.get_code_extensions()
+        self.assertIs(s1, s2)
+
+    def test_is_code_file_uses_registry(self):
+        """is_code_file() must agree with get_code_extensions() for all extensions."""
+        import reveal.analyzers  # noqa: F401
+        from pathlib import Path
+        from reveal.adapters.ast.analysis import is_code_file
+        code = self.get_code_extensions()
+
+        for ext in ['.py', '.zig', '.rs', '.md', '.json', '.yaml', '.csv', '.html']:
+            expected = ext in code
+            result = is_code_file(Path('test' + ext))
+            self.assertEqual(
+                result, expected,
+                f"is_code_file('{ext}') = {result}, but get_code_extensions() says {expected}"
+            )
+
+    def test_treesitter_fallback_extensions_are_code(self):
+        """All TREESITTER_EXTENSION_MAP keys must appear in get_code_extensions()."""
+        from reveal.registry import TREESITTER_EXTENSION_MAP
+        code = self.get_code_extensions()
+        missing = [ext for ext in TREESITTER_EXTENSION_MAP if ext not in code]
+        self.assertEqual(missing, [], f"Tree-sitter extensions missing from code set: {missing}")
+
+
 if __name__ == '__main__':
     unittest.main()

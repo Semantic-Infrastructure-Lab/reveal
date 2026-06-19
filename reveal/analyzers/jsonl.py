@@ -12,7 +12,7 @@ from ..registry import register
 logger = logging.getLogger(__name__)
 
 
-@register('.jsonl', name='JSONL', icon='📜')
+@register('.jsonl', name='JSONL', icon='📜', category='data')
 class JsonlAnalyzer(FileAnalyzer):
     """JSONL file analyzer.
 

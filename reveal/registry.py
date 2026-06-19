@@ -12,9 +12,10 @@ Design:
     including shebang detection and TreeSitter fallback.
 """
 
+import functools
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import FrozenSet, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ def _reset_plugin_discovery() -> None:
     _plugins_loaded = False
 
 
-def register(*extensions, name: str = '', icon: str = ''):
+def register(*extensions, name: str = '', icon: str = '', category: str = 'code'):
     """Decorator to register an analyzer for file extensions.
 
     Usage:
@@ -121,6 +122,7 @@ def register(*extensions, name: str = '', icon: str = ''):
         extensions: File extensions to register (e.g., '.py', '.rs')
         name: Display name for this file type
         icon: Emoji icon for this file type
+        category: Content category — 'code', 'data', 'doc', or 'config' (default 'code')
     """
     def decorator(cls):
         for ext in extensions:
@@ -129,6 +131,7 @@ def register(*extensions, name: str = '', icon: str = ''):
         # Store metadata on class
         cls.type_name = name or cls.__name__.replace('Analyzer', '')
         cls.icon = icon
+        cls.CATEGORY = category
 
         return cls
 
@@ -351,6 +354,7 @@ def _try_treesitter_fallback(ext: str) -> Optional[type]:
                 'is_fallback': True,
                 'fallback_language': language,
                 'fallback_quality': 'basic',  # Tree-sitter basic analysis (functions, classes, imports)
+                'CATEGORY': 'code',
             }
         )
 
@@ -382,6 +386,7 @@ def get_all_analyzers() -> Dict[str, Dict[str, Any]]:
             'name': getattr(cls, 'type_name', cls.__name__.replace('Analyzer', '')),
             'icon': getattr(cls, 'icon', ''),
             'class': cls,
+            'category': getattr(cls, 'CATEGORY', 'code'),
             'is_fallback': getattr(cls, 'is_fallback', False),
             'fallback_quality': getattr(cls, 'fallback_quality', None),
             'fallback_language': getattr(cls, 'fallback_language', None),
@@ -397,3 +402,24 @@ def get_analyzer_mapping() -> Dict[str, type]:
         e.g., {'.py': PythonAnalyzer, '.rs': RustAnalyzer}
     """
     return _ANALYZER_REGISTRY.copy()
+
+
+@functools.lru_cache(maxsize=None)
+def get_code_extensions() -> FrozenSet[str]:
+    """Return all extensions that represent code files.
+
+    Combines extensions from explicitly registered 'code'-category analyzers
+    with all keys in TREESITTER_EXTENSION_MAP (those are always programming
+    languages). Must be called after analyzers have been imported — in normal
+    usage this is guaranteed because reveal's adapter layer imports analyzers
+    before any path-scanning function runs.
+
+    Returns:
+        Frozenset of lowercase extensions (e.g. {'.py', '.rs', '.zig', ...})
+    """
+    explicit = frozenset(
+        ext for ext, cls in _ANALYZER_REGISTRY.items()
+        if getattr(cls, 'CATEGORY', 'code') == 'code'
+    )
+    treesitter = frozenset(TREESITTER_EXTENSION_MAP.keys())
+    return explicit | treesitter

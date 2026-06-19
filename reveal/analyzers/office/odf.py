@@ -77,7 +77,7 @@ class OdfAnalyzer(ZipXMLAnalyzer):
         return None
 
 
-@register('.odt', name='Writer Document', icon='📝')
+@register('.odt', name='Writer Document', icon='📝', category='doc')
 class OdtAnalyzer(OdfAnalyzer):
     """Analyzer for LibreOffice/OpenOffice Writer documents (.odt)."""
 
@@ -290,7 +290,7 @@ class OdtAnalyzer(OdfAnalyzer):
         return None
 
 
-@register('.ods', name='Calc Spreadsheet', icon='📈')
+@register('.ods', name='Calc Spreadsheet', icon='📈', category='doc')
 class OdsAnalyzer(OdfAnalyzer):
     """Analyzer for LibreOffice/OpenOffice Calc spreadsheets (.ods)."""
 
@@ -439,7 +439,7 @@ class OdsAnalyzer(OdfAnalyzer):
         return preview
 
 
-@register('.odp', name='Impress Presentation', icon='🎞️')
+@register('.odp', name='Impress Presentation', icon='🎞️', category='doc')
 class OdpAnalyzer(OdfAnalyzer):
     """Analyzer for LibreOffice/OpenOffice Impress presentations (.odp)."""
 

@@ -5,7 +5,7 @@ from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 
 
-@register('.tf', '.tfvars', '.hcl', name='HCL', icon='🏗️')
+@register('.tf', '.tfvars', '.hcl', name='HCL', icon='🏗️', category='config')
 class HCLAnalyzer(TreeSitterAnalyzer):
     """HCL/Terraform language analyzer.
 

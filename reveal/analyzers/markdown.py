@@ -45,7 +45,7 @@ class RelatedTracker:
         return False
 
 
-@register('.md', '.markdown', name='Markdown', icon='')
+@register('.md', '.markdown', name='Markdown', icon='', category='doc')
 class MarkdownAnalyzer(TreeSitterAnalyzer):
     """Markdown file analyzer using tree-sitter.
 

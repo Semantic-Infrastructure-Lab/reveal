@@ -12,10 +12,10 @@ from ..registry import register
 logger = logging.getLogger(__name__)
 
 
-@register('.ini', name='INI', icon='⚙️')
-@register('.cfg', name='Config', icon='⚙️')
-@register('.conf', name='Config', icon='⚙️')
-@register('.properties', name='Properties', icon='⚙️')
+@register('.ini', name='INI', icon='⚙️', category='config')
+@register('.cfg', name='Config', icon='⚙️', category='config')
+@register('.conf', name='Config', icon='⚙️', category='config')
+@register('.properties', name='Properties', icon='⚙️', category='config')
 class IniAnalyzer(FileAnalyzer):
     """INI/Properties file analyzer.
 

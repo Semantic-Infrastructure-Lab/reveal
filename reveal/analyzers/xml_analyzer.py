@@ -33,7 +33,7 @@ def _filter_xml_children(
     return children
 
 
-@register('.xml', name='XML', icon='📄')
+@register('.xml', name='XML', icon='📄', category='data')
 class XmlAnalyzer(FileAnalyzer):
     """XML file analyzer.
 

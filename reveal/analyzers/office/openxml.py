@@ -28,7 +28,7 @@ OPENXML_NS = {
 }
 
 
-@register('.docx', name='Word Document', icon='📄')
+@register('.docx', name='Word Document', icon='📄', category='doc')
 class DocxAnalyzer(ZipXMLAnalyzer):
     """Analyzer for Microsoft Word documents (.docx)."""
 
@@ -223,7 +223,7 @@ class DocxAnalyzer(ZipXMLAnalyzer):
         return None
 
 
-@register('.xlsx', name='Excel Spreadsheet', icon='📊')
+@register('.xlsx', name='Excel Spreadsheet', icon='📊', category='doc')
 class XlsxAnalyzer(ZipXMLAnalyzer):
     """Analyzer for Microsoft Excel spreadsheets (.xlsx)."""
 
@@ -502,7 +502,7 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
         return results
 
 
-@register('.pptx', name='PowerPoint Presentation', icon='📽️')
+@register('.pptx', name='PowerPoint Presentation', icon='📽️', category='doc')
 class PptxAnalyzer(ZipXMLAnalyzer):
     """Analyzer for Microsoft PowerPoint presentations (.pptx)."""
 
