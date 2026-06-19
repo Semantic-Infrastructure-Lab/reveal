@@ -47,6 +47,27 @@ def _read_help_frontmatter(path: Path) -> Dict[str, str]:
     }
 
 
+def _strip_frontmatter(content: str) -> str:
+    """Remove a leading YAML front-matter block (``---`` … ``---``) from text.
+
+    Guides start with front matter consumed by the topic registry; it must not
+    appear in rendered help. Returns *content* unchanged if it does not open
+    with a front-matter fence.
+    """
+    if not content.startswith('---'):
+        return content
+    lines = content.splitlines()
+    # First line is the opening fence; find the closing fence.
+    for i in range(1, len(lines)):
+        if lines[i].strip() == '---':
+            # Drop fences + body, plus a single trailing blank line if present.
+            rest = lines[i + 1:]
+            if rest and rest[0].strip() == '':
+                rest = rest[1:]
+            return '\n'.join(rest)
+    return content  # No closing fence — leave content untouched.
+
+
 @dataclass(frozen=True)
 class GuideEntry:
     """Registered help topic with metadata sourced from guide frontmatter.
@@ -1080,6 +1101,9 @@ class HelpAdapter(ResourceAdapter):
             with open(help_path, 'r', encoding='utf-8') as f:
                 content = f.read()
 
+            # Guides carry YAML front matter (title, help_* fields) consumed by
+            # the topic registry; strip it so it never leaks into rendered help.
+            content = _strip_frontmatter(content)
             lines = content.splitlines()
 
             if section:

@@ -405,5 +405,41 @@ class TestCliHelpOutput(unittest.TestCase):
                       '--help must note that --search is deprecated')
 
 
+class TestStripFrontmatter(unittest.TestCase):
+    """YAML front matter must never leak into rendered help guides."""
+
+    def test_strips_leading_frontmatter(self):
+        from reveal.adapters.help import _strip_frontmatter
+        content = "---\ntitle: X\nhelp_topic: y\n---\n# Heading\n\nBody"
+        result = _strip_frontmatter(content)
+        self.assertTrue(result.startswith('# Heading'))
+        self.assertNotIn('help_topic', result)
+
+    def test_no_frontmatter_unchanged(self):
+        from reveal.adapters.help import _strip_frontmatter
+        content = "# Heading\n\nNo front matter here."
+        self.assertEqual(_strip_frontmatter(content), content)
+
+    def test_unterminated_frontmatter_unchanged(self):
+        from reveal.adapters.help import _strip_frontmatter
+        content = "---\ntitle: X\nno closing fence\n# Heading"
+        self.assertEqual(_strip_frontmatter(content), content)
+
+    def test_horizontal_rule_not_treated_as_frontmatter(self):
+        """A doc starting with body text then a --- rule is left intact."""
+        from reveal.adapters.help import _strip_frontmatter
+        content = "# Title\n\nIntro\n\n---\n\nMore"
+        self.assertEqual(_strip_frontmatter(content), content)
+
+    def test_rendered_guide_has_no_frontmatter_keys(self):
+        """End-to-end: a real guide rendered through help:// shows no help_* keys."""
+        adapter = HelpAdapter('duplicates')
+        result = adapter._load_static_help('duplicates', full=True)
+        self.assertIsNotNone(result)
+        content = result.get('content', '')
+        for key in ('help_topic:', 'help_category:', 'help_token_estimate:', 'help_description:'):
+            self.assertNotIn(key, content, f"{key} leaked into rendered guide")
+
+
 if __name__ == '__main__':
     unittest.main()
