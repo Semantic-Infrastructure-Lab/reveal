@@ -320,7 +320,9 @@ class HelpAdapter(ResourceAdapter):
         'recipes': 'guides/RECIPES.md',
         'review': 'guides/SUBCOMMANDS_GUIDE.md',
         'schema': 'guides/SCHEMA_VALIDATION_HELP.md',
-        'schemas': 'guides/SCHEMA_VALIDATION_HELP.md',
+        # Note: 'schemas' is intentionally NOT in STATIC_HELP — the dynamic handler
+        # at render_element intercepts help://schemas to list adapter schemas (machine-readable).
+        # Use help://schema (singular) to reach SCHEMA_VALIDATION_HELP.md.
         'testability': 'guides/TESTABILITY_GUIDE.md',
         'tricks': 'guides/RECIPES.md',   # Merged into RECIPES.md (task-based workflows)
         'ux': 'guides/UX_GUIDE.md',

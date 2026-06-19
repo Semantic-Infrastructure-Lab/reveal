@@ -1571,16 +1571,22 @@ reveal 'diff://config.yaml:config_new.yaml'    # Works on any analyzer-supported
 
 **Pattern:**
 ```bash
-# Run duplicate detection (within single file only)
+# Within-file: exact function duplicates (all languages)
 reveal file.py --check --select D001
 
+# Cross-file: hardcoded literal clusters shared across 3+ files (Python)
+reveal src/ --check --select D005
+
 # D001: Exact duplicates (hash-based, reliable) ✅
-# D002: Similar code (experimental, high false positives) ⚠️
+# D005: Cross-file literal clusters (≥5 items, ≥3 files) ✅
+# D002: Similar code (experimental, high false positives) ⚠️ — disabled by default
 ```
 
-**IMPORTANT:** Cross-file duplicate detection is not yet implemented. D001 and D002 only find duplicates within a single file.
+**Scope:**
+- **D001** — single file, all languages (exact function body match)
+- **D005** — cross-file, Python only; scoped to project root (pyproject.toml/setup.cfg/etc.); 5000-file ceiling (env: `REVEAL_D005_MAX_FILES`)
 
-**Example output:**
+**Example output (D001):**
 ```
 File: src/handler.py (456 lines, Python)
 
@@ -1595,22 +1601,18 @@ Quality Issues (2):
     Suggestion: Extract to shared function
 ```
 
-**Finding duplicates across files (workaround):**
-```bash
-# 1. Find functions with similar names across files
-reveal 'ast://./src?name=*parse*'
-reveal 'ast://./src?name=*validate*'
+**Example output (D005):**
+```
+File: reveal/rules/duplicates/D005.py
 
-# 2. Find complex functions (duplication candidates)
-reveal 'ast://./src?complexity>10&lines>50'
+Quality Issues (1):
 
-# 3. Check each file individually
-find src/ -name "*.py" | while read f; do
-    reveal "$f" --check --select D001
-done
+  D005: Hardcoded literal cluster across 3 files (line 14)
+    Value set appears in: rules/D001.py, rules/D002.py, rules/D005.py
+    Suggestion: Extract to a shared constant or config
 ```
 
-**See also:** `reveal/DUPLICATE_DETECTION_GUIDE.md` for comprehensive workflows and limitations.
+**See also:** `reveal help://duplicates` for full workflows, scope limits, and D001/D002 status.
 
 ---
 
@@ -3563,6 +3565,11 @@ def process():
 - Similar but not identical code
 - **Disabled by default** (high false positive rate) — enable explicitly with `--select D002`
 - Use D001 for reliable duplicate detection
+
+**D005: Cross-file literal cluster**
+- Hardcoded literal set (≥5 items) appearing in ≥3 distinct Python files
+- Scoped to project root (pyproject.toml / setup.cfg / etc.); ceiling: 5000 files (`REVEAL_D005_MAX_FILES`)
+- **Opt-in**: `--select D005` or `--profile maintenance`
 
 ---
 
