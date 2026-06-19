@@ -90,29 +90,42 @@ app.py:430:1 ℹ️  D002 Potential duplicate candidate: 'extract_markdown_secti
 
 ---
 
-## What's NOT Implemented (Yet)
+## Cross-File Detection
 
-### Cross-File Detection
+### Literal clusters (D005)
 
-**Status:** 🚧 Planned, not implemented
-**Architecture:** Fully designed (see base framework in `reveal/rules/duplicates/`)
+**Status:** ✅ Implemented
 
-**Current limitation:**
+D005 detects the same hardcoded list/set/tuple literal duplicated across
+multiple files — the pattern M104 (per-file) structurally cannot see. On the
+first check in a project it scans every `.py` file under the project root,
+indexes each qualifying literal by its order-independent value set, and flags
+any cluster that spans `MIN_CLUSTER_FILES` (default 3) distinct files.
+
 ```bash
-# ❌ This only checks WITHIN each file, not ACROSS files
+# ✅ Flags literals duplicated across ≥3 files
+reveal ./src --check --select D005
+```
+
+Thresholds: `MIN_LITERAL_SIZE = 5` (items in the literal), `MIN_CLUSTER_FILES = 3`
+(distinct files). Names matching stable patterns (`__all__`, `*_format`, test
+fixtures) are exempt. The cross-file index is cached per project root for the
+duration of the process (same strategy as I002).
+
+### Function-body duplication (D001/D002)
+
+**Status:** 🚧 Per-file only
+
+D001 (exact) and D002 (similar) function detection still analyze each file
+independently — duplicates between `file_a.py` and `file_b.py` are not detected.
+
+```bash
+# ❌ Per-file only — cross-file function duplicates not detected
 find src/ -name "*.py" | xargs -I {} reveal {} --check --select D001
-
-# Each file is analyzed independently
-# Duplicates between file_a.py and file_b.py are NOT detected
 ```
 
-**Future capability:**
-```bash
-# 🚧 Not yet available
-reveal ./src --check --select D001  # Would scan all files, find cross-file duplicates
-```
-
-**Why not implemented:** Requires caching layer to store function hashes across file scans.
+**Why not implemented:** Requires a caching layer to store function-body hashes
+across file scans. D005's index pattern is the template if/when this lands.
 
 ### Configuration System
 
@@ -148,7 +161,8 @@ Suggested threshold: 0.75 (Current is optimal)
 
 ### Finding Duplicates Across a Codebase
 
-Since cross-file detection isn't implemented, combine reveal with standard tools:
+D005 covers cross-file *literal* duplication directly. For cross-file *function*
+duplicates (not yet automated), combine reveal with standard tools:
 
 **1. Find candidate functions by naming patterns:**
 ```bash
