@@ -13,6 +13,7 @@ from urllib.error import URLError, HTTPError
 import socket
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ...utils.threadsafe import main_thread_gc
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +75,11 @@ class L002(BaseRule):
         if not external_links:
             return detections
 
-        # Check all external links concurrently
-        with ThreadPoolExecutor(max_workers=min(10, len(external_links))) as executor:
+        # Check all external links concurrently. main_thread_gc keeps cyclic
+        # collection on the main thread so a worker thread can't finalize a
+        # lingering tree-sitter Node off-thread (see utils.threadsafe).
+        with main_thread_gc(), \
+                ThreadPoolExecutor(max_workers=min(10, len(external_links))) as executor:
             future_to_link = {
                 executor.submit(self._is_broken_link, url): (text, url, line_num)
                 for text, url, line_num in external_links

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 
 from .sessions import _read_session_title, _read_session_stats
+from ....utils.threadsafe import main_thread_gc
 
 
 def _slice_list(items: list, args: Any) -> list:
@@ -127,7 +128,10 @@ def _post_process_session_list(result: Dict[str, Any], args: Any) -> None:
         result['with_stats'] = True
         sessions_with_paths = [s for s in sessions if s.get('path')]
         if sessions_with_paths:
-            with ThreadPoolExecutor(max_workers=min(8, len(sessions_with_paths))) as executor:
+            # main_thread_gc keeps cyclic collection on the main thread so a
+            # worker can't finalize a lingering unsendable object off-thread.
+            with main_thread_gc(), \
+                    ThreadPoolExecutor(max_workers=min(8, len(sessions_with_paths))) as executor:
                 future_to_session = {
                     executor.submit(_read_session_stats, Path(s['path'])): s
                     for s in sessions_with_paths
