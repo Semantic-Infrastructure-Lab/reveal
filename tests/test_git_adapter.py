@@ -2281,3 +2281,142 @@ class TestFormatBlameHunks:
             assert 'date' in h['commit']
             assert 'message' in h['commit']
             assert len(h['commit']['hash']) == 7
+
+
+# ─────────────────────────── blame renderer helpers ──────────────────────────
+
+class TestBuildContributors(unittest.TestCase):
+
+    def _hunk(self, author, lines, date='2026-01-01', clipped=None):
+        h = {'commit': {'author': author, 'date': date}, 'lines': {'count': lines}}
+        if clipped is not None:
+            h['clipped_lines'] = clipped
+        return h
+
+    def test_single_author(self):
+        from reveal.adapters.git.renderer import GitRenderer
+        hunks = [self._hunk('alice', 10), self._hunk('alice', 5)]
+        c = GitRenderer._build_contributors(hunks)
+        self.assertEqual(c['alice']['lines'], 15)
+        self.assertEqual(c['alice']['hunks'], 2)
+
+    def test_multiple_authors(self):
+        from reveal.adapters.git.renderer import GitRenderer
+        hunks = [self._hunk('alice', 10), self._hunk('bob', 3)]
+        c = GitRenderer._build_contributors(hunks)
+        self.assertIn('alice', c)
+        self.assertIn('bob', c)
+
+    def test_latest_date_tracked(self):
+        from reveal.adapters.git.renderer import GitRenderer
+        hunks = [self._hunk('alice', 5, '2026-01-01'), self._hunk('alice', 5, '2026-06-01')]
+        c = GitRenderer._build_contributors(hunks)
+        self.assertEqual(c['alice']['latest_date'], '2026-06-01')
+
+    def test_clipped_lines_used_over_count(self):
+        from reveal.adapters.git.renderer import GitRenderer
+        hunks = [self._hunk('alice', 100, clipped=10)]
+        c = GitRenderer._build_contributors(hunks)
+        self.assertEqual(c['alice']['lines'], 10)
+
+    def test_empty_hunks(self):
+        from reveal.adapters.git.renderer import GitRenderer
+        self.assertEqual(GitRenderer._build_contributors([]), {})
+
+
+class TestRenderContributors(unittest.TestCase):
+
+    def _capture(self, sorted_contributors, total_lines):
+        from reveal.adapters.git.renderer import GitRenderer
+        from io import StringIO
+        from unittest.mock import patch
+        buf = StringIO()
+        with patch('sys.stdout', buf):
+            GitRenderer._render_contributors(sorted_contributors, total_lines)
+        return buf.getvalue()
+
+    def test_shows_author_and_lines(self):
+        out = self._capture([('alice', {'lines': 80, 'hunks': 2, 'latest_date': '2026-01-01'})], 100)
+        self.assertIn('alice', out)
+        self.assertIn('80', out)
+
+    def test_percentage_calculated(self):
+        out = self._capture([('alice', {'lines': 50, 'hunks': 1, 'latest_date': '2026-01-01'})], 100)
+        self.assertIn('50.0', out)
+
+    def test_overflow_contributors_noted(self):
+        contributors = [(f'author{i}', {'lines': 10, 'hunks': 1, 'latest_date': '2026-01-01'}) for i in range(7)]
+        out = self._capture(contributors, 70)
+        self.assertIn('2 more', out)
+
+    def test_zero_total_lines_no_crash(self):
+        out = self._capture([('alice', {'lines': 5, 'hunks': 1, 'latest_date': '2026-01-01'})], 0)
+        self.assertIn('alice', out)
+
+
+class TestRenderIgnoredCommits(unittest.TestCase):
+
+    def _capture(self, ignored):
+        from reveal.adapters.git.renderer import GitRenderer
+        from io import StringIO
+        from unittest.mock import patch
+        buf = StringIO()
+        with patch('sys.stdout', buf):
+            GitRenderer._render_ignored_commits(ignored)
+        return buf.getvalue()
+
+    def test_auto_ignored_shown(self):
+        ignored = [{'source': 'auto-detect', 'hash': 'abc1234', 'lines': 10, 'message': 'chore: fmt'}]
+        out = self._capture(ignored)
+        self.assertIn('Auto-ignored', out)
+        self.assertIn('abc1234', out)
+
+    def test_ignore_revs_source_label(self):
+        ignored = [{'source': 'ignore-revs', 'hash': 'def5678', 'lines': 5, 'message': 'style'}]
+        out = self._capture(ignored)
+        self.assertIn('.git-blame-ignore-revs', out)
+
+    def test_explicit_ignored_shown(self):
+        ignored = [{'source': 'user', 'hash': 'ghi9012', 'lines': 20, 'message': 'reformat'}]
+        out = self._capture(ignored)
+        self.assertIn('Suppressed', out)
+        self.assertIn('ghi9012', out)
+
+    def test_empty_ignored_no_output(self):
+        self.assertEqual(self._capture([]), '')
+
+
+class TestRenderKeyHunks(unittest.TestCase):
+
+    def _capture(self, hunks):
+        from reveal.adapters.git.renderer import GitRenderer
+        from io import StringIO
+        from unittest.mock import patch
+        buf = StringIO()
+        with patch('sys.stdout', buf):
+            GitRenderer._render_key_hunks(hunks)
+        return buf.getvalue()
+
+    def _hunk(self, start, count, author='alice', message='fix: something'):
+        return {
+            'lines': {'start': start, 'count': count},
+            'commit': {'hash': 'abc1234', 'date': '2026-01-01', 'author': author, 'message': message},
+        }
+
+    def test_shows_line_range(self):
+        out = self._capture([self._hunk(10, 5)])
+        self.assertIn('10', out)
+        self.assertIn('14', out)
+
+    def test_shows_commit_hash(self):
+        out = self._capture([self._hunk(1, 1)])
+        self.assertIn('abc1234', out)
+
+    def test_top_5_only(self):
+        hunks = [self._hunk(i * 10, i + 1) for i in range(8)]
+        out = self._capture(hunks)
+        self.assertEqual(out.count('abc1234'), 5)
+
+    def test_empty_hunks(self):
+        out = self._capture([])
+        self.assertIn('Key hunks', out)

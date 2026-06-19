@@ -139,67 +139,49 @@ class GitRenderer:
             GitRenderer._render_file_blame_summary(result)
 
     @staticmethod
-    def _render_file_blame_summary(result: dict) -> None:
-        """Render blame summary (default view)."""
-        # Check if this is semantic blame (element-specific)
-        element = result.get('element')
-        if element:
-            print(f"Element Blame: {result['path']} → {element['name']}")
-            print(f"Lines {element['line_start']}-{element['line_end']} ({len(result['hunks'])} hunks)")
-        else:
-            print(f"File Blame Summary: {result['path']} ({result['lines']} lines, {len(result['hunks'])} hunks)")
-        print()
-
-        # Calculate contributor stats
-        contributors = {}
-        for hunk in result['hunks']:
+    def _build_contributors(hunks: list) -> dict:
+        contributors: dict = {}
+        for hunk in hunks:
             author = hunk['commit']['author']
             lines = hunk.get('clipped_lines', hunk['lines']['count'])
             if author not in contributors:
                 contributors[author] = {'lines': 0, 'hunks': 0, 'latest_date': hunk['commit']['date']}
             contributors[author]['lines'] += lines
             contributors[author]['hunks'] += 1
-            # Track latest commit date
             if hunk['commit']['date'] > contributors[author]['latest_date']:
                 contributors[author]['latest_date'] = hunk['commit']['date']
+        return contributors
 
-        # Sort by lines contributed (descending)
-        sorted_contributors = sorted(contributors.items(), key=lambda x: x[1]['lines'], reverse=True)
-
+    @staticmethod
+    def _render_contributors(sorted_contributors: list, total_lines: int) -> None:
         print("Contributors (by lines owned):")
-        if element:
-            total_lines = element['line_end'] - element['line_start'] + 1
-        else:
-            total_lines = result['lines']
-        for author, stats in sorted_contributors[:5]:  # Top 5 contributors
+        for author, stats in sorted_contributors[:5]:
             pct = (stats['lines'] / total_lines * 100) if total_lines > 0 else 0
             print(f"  {author:30} {stats['lines']:4} lines ({pct:5.1f}%)  Last: {stats['latest_date']}")
-
         if len(sorted_contributors) > 5:
             print(f"  ... and {len(sorted_contributors) - 5} more contributors")
         print()
 
-        # Show suppressed/auto-ignored commits if any
-        ignored = result.get('ignored')
-        if ignored:
-            auto_ignored = [e for e in ignored if e.get('source') in ('auto-detect', 'ignore-revs')]
-            explicit_ignored = [e for e in ignored if e.get('source') not in ('auto-detect', 'ignore-revs')]
-            if auto_ignored:
-                print(f"Auto-ignored {len(auto_ignored)} noise commit(s) — use ?ignore=off to include:")
-                for entry in auto_ignored:
-                    src = '.git-blame-ignore-revs' if entry.get('source') == 'ignore-revs' else 'noise heuristic'
-                    print(f"  {entry['hash']}  {entry['lines']:4} lines  {entry['message'][:55]}  [{src}]")
-                print()
-            if explicit_ignored:
-                total_lines = sum(e['lines'] for e in explicit_ignored)
-                print(f"Suppressed ({len(explicit_ignored)} user-specified commit(s), {total_lines} lines excluded):")
-                for entry in explicit_ignored:
-                    print(f"  {entry['hash']}  {entry['lines']:4} lines  {entry['message'][:60]}")
-                print()
+    @staticmethod
+    def _render_ignored_commits(ignored: list) -> None:
+        auto_ignored = [e for e in ignored if e.get('source') in ('auto-detect', 'ignore-revs')]
+        explicit_ignored = [e for e in ignored if e.get('source') not in ('auto-detect', 'ignore-revs')]
+        if auto_ignored:
+            print(f"Auto-ignored {len(auto_ignored)} noise commit(s) — use ?ignore=off to include:")
+            for entry in auto_ignored:
+                src = '.git-blame-ignore-revs' if entry.get('source') == 'ignore-revs' else 'noise heuristic'
+                print(f"  {entry['hash']}  {entry['lines']:4} lines  {entry['message'][:55]}  [{src}]")
+            print()
+        if explicit_ignored:
+            total_lines = sum(e['lines'] for e in explicit_ignored)
+            print(f"Suppressed ({len(explicit_ignored)} user-specified commit(s), {total_lines} lines excluded):")
+            for entry in explicit_ignored:
+                print(f"  {entry['hash']}  {entry['lines']:4} lines  {entry['message'][:60]}")
+            print()
 
-        # Find key hunks (largest continuous blocks)
-        key_hunks = sorted(result['hunks'], key=lambda h: h['lines']['count'], reverse=True)[:5]
-
+    @staticmethod
+    def _render_key_hunks(hunks: list) -> None:
+        key_hunks = sorted(hunks, key=lambda h: h['lines']['count'], reverse=True)[:5]
         print("Key hunks (largest continuous blocks):")
         for hunk in key_hunks:
             lines_info = hunk['lines']
@@ -210,6 +192,27 @@ class GitRenderer:
             print(f"    {commit_info['message'][:70]}")
         print()
 
+    @staticmethod
+    def _render_file_blame_summary(result: dict) -> None:
+        """Render blame summary (default view)."""
+        element = result.get('element')
+        if element:
+            print(f"Element Blame: {result['path']} → {element['name']}")
+            print(f"Lines {element['line_start']}-{element['line_end']} ({len(result['hunks'])} hunks)")
+        else:
+            print(f"File Blame Summary: {result['path']} ({result['lines']} lines, {len(result['hunks'])} hunks)")
+        print()
+
+        contributors = GitRenderer._build_contributors(result['hunks'])
+        sorted_contributors = sorted(contributors.items(), key=lambda x: x[1]['lines'], reverse=True)
+        total_lines = (element['line_end'] - element['line_start'] + 1) if element else result['lines']
+        GitRenderer._render_contributors(sorted_contributors, total_lines)
+
+        ignored = result.get('ignored')
+        if ignored:
+            GitRenderer._render_ignored_commits(ignored)
+
+        GitRenderer._render_key_hunks(result['hunks'])
         print(f"Use: reveal git://{result['path']}?type=blame&detail=full for line-by-line view")
 
     @staticmethod
