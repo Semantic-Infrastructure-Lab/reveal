@@ -585,6 +585,32 @@ def _build_tool_result_content_map(messages: List[Dict]) -> Dict[str, Dict]:
     return result
 
 
+def _derive_step_outcome(tool_name: str, tur: Optional[Dict], result_content: Optional[Any]) -> Optional[str]:
+    outcome = None
+    if tur and isinstance(tur, dict):
+        if tool_name == 'Bash':
+            rci = tur.get('returnCodeInterpretation')
+            if rci:
+                outcome = 'success' if rci == 'success' else 'error'
+        elif tool_name == 'Agent':
+            status = tur.get('status')
+            if status:
+                outcome = 'success' if status == 'completed' else 'error'
+    if outcome is None and result_content is not None:
+        outcome = 'error' if is_tool_error(result_content, tur) else 'success'
+    return outcome
+
+
+def _enrich_agent_step(step: Dict[str, Any], tur: Dict) -> None:
+    step['agent_type'] = tur.get('agentType') or 'unknown'
+    if tur.get('totalDurationMs') is not None:
+        step['duration_ms'] = tur['totalDurationMs']
+    if tur.get('totalTokens') is not None:
+        step['token_count'] = tur['totalTokens']
+    if tur.get('totalToolUseCount') is not None:
+        step['tool_count'] = tur['totalToolUseCount']
+
+
 def get_workflow(messages: List[Dict], session_name: str,
                  contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Get chronological sequence of tool operations.
@@ -621,31 +647,12 @@ def get_workflow(messages: List[Dict], session_name: str,
             'detail': _extract_tool_detail(tool_name, content.get('input', {})),
             'timestamp': msg.get('timestamp'),
         }
-        # Derive outcome using tool-specific TUR signals first, fallback to is_tool_error
-        outcome = None
-        if tur and isinstance(tur, dict):
-            if tool_name == 'Bash':
-                rci = tur.get('returnCodeInterpretation')
-                if rci:
-                    outcome = 'success' if rci == 'success' else 'error'
-            elif tool_name == 'Agent':
-                status = tur.get('status')
-                if status:
-                    outcome = 'success' if status == 'completed' else 'error'
-        if outcome is None and result_content is not None:
-            outcome = 'error' if is_tool_error(result_content, tur) else 'success'
+        outcome = _derive_step_outcome(tool_name, tur, result_content)
         if outcome is not None:
             step['outcome'] = outcome
 
-        # Agent-specific telemetry fields
         if tool_name == 'Agent' and tur and isinstance(tur, dict):
-            step['agent_type'] = tur.get('agentType') or 'unknown'
-            if tur.get('totalDurationMs') is not None:
-                step['duration_ms'] = tur['totalDurationMs']
-            if tur.get('totalTokens') is not None:
-                step['token_count'] = tur['totalTokens']
-            if tur.get('totalToolUseCount') is not None:
-                step['tool_count'] = tur['totalToolUseCount']
+            _enrich_agent_step(step, tur)
 
         if tur and isinstance(tur, dict) and tur.get('backgroundTaskId'):
             step['backgrounded'] = True

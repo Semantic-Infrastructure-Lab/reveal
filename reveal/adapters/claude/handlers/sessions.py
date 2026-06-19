@@ -318,6 +318,34 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
     }
 
 
+def _extract_session_ops(session: Dict[str, Any], file_path: str) -> Optional[Dict[str, Any]]:
+    messages: List[Dict] = []
+    with open(session['path'], 'r', encoding='utf-8') as fh:
+        for line in fh:
+            try:
+                messages.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    contract_base = {'contract_version': '1.0', 'source': session['path'], 'source_type': 'file'}
+    files_result = get_files_touched(messages, session['session'], contract_base)
+
+    ops_for_file: Dict[str, int] = {}
+    for op, files_dict in files_result.get('by_operation', {}).items():
+        count = sum(v for k, v in files_dict.items() if file_path in k)
+        if count:
+            ops_for_file[op] = count
+
+    if not ops_for_file:
+        return None
+    return {
+        'session': session['session'],
+        'project': session.get('project', ''),
+        'modified': session['modified'],
+        'ops': ops_for_file,
+        'total_ops': sum(ops_for_file.values()),
+    }
+
+
 def track_file_sessions(conversation_base: Path, resource: str, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """Cross-session file tracking using ``claude://files/<path>``.
 
@@ -369,35 +397,9 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
     results = []
     for session in candidates:
         try:
-            messages: List[Dict] = []
-            with open(session['path'], 'r', encoding='utf-8') as fh:
-                for line in fh:
-                    try:
-                        messages.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        continue
-            contract_base = {
-                'contract_version': '1.0',
-                'source': session['path'],
-                'source_type': 'file',
-            }
-            files_result = get_files_touched(messages, session['session'], contract_base)
-
-            # Partial path match across all ops.
-            ops_for_file: Dict[str, int] = {}
-            for op, files_dict in files_result.get('by_operation', {}).items():
-                count = sum(v for k, v in files_dict.items() if file_path in k)
-                if count:
-                    ops_for_file[op] = count
-
-            if ops_for_file:
-                results.append({
-                    'session': session['session'],
-                    'project': session.get('project', ''),
-                    'modified': session['modified'],
-                    'ops': ops_for_file,
-                    'total_ops': sum(ops_for_file.values()),
-                })
+            entry = _extract_session_ops(session, file_path)
+            if entry:
+                results.append(entry)
         except Exception as e:
             logger.debug("session parse failed for %s: %s", session.get('path'), e)
             continue

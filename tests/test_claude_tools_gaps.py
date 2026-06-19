@@ -777,3 +777,90 @@ class TestGetSessionAgents:
         base = {**self._BASE, 'source': str(tmp_path / 'parent.jsonl')}
         result = get_session_agents(msgs, 'session-1', base)
         assert 'sub_agent_path' not in result['agents'][0]
+
+
+# ─── _derive_step_outcome / _enrich_agent_step ────────────────────────────────
+
+class TestDeriveStepOutcome:
+    from reveal.adapters.claude.analysis.tools import _derive_step_outcome
+
+    def test_bash_success_via_rci(self):
+        from reveal.adapters.claude.analysis.tools import _derive_step_outcome
+        tur = {'returnCodeInterpretation': 'success'}
+        assert _derive_step_outcome('Bash', tur, None) == 'success'
+
+    def test_bash_error_via_rci(self):
+        from reveal.adapters.claude.analysis.tools import _derive_step_outcome
+        tur = {'returnCodeInterpretation': 'failure'}
+        assert _derive_step_outcome('Bash', tur, None) == 'error'
+
+    def test_bash_no_rci_falls_through(self):
+        from reveal.adapters.claude.analysis.tools import _derive_step_outcome
+        assert _derive_step_outcome('Bash', {}, None) is None
+
+    def test_agent_completed_success(self):
+        from reveal.adapters.claude.analysis.tools import _derive_step_outcome
+        tur = {'status': 'completed'}
+        assert _derive_step_outcome('Agent', tur, None) == 'success'
+
+    def test_agent_failed_error(self):
+        from reveal.adapters.claude.analysis.tools import _derive_step_outcome
+        tur = {'status': 'failed'}
+        assert _derive_step_outcome('Agent', tur, None) == 'error'
+
+    def test_fallback_to_is_tool_error(self):
+        from reveal.adapters.claude.analysis.tools import _derive_step_outcome
+        result_content = {'type': 'tool_result', 'is_error': True}
+        assert _derive_step_outcome('Read', None, result_content) == 'error'
+
+    def test_fallback_success(self):
+        from reveal.adapters.claude.analysis.tools import _derive_step_outcome
+        result_content = {'type': 'tool_result', 'is_error': False}
+        assert _derive_step_outcome('Read', None, result_content) == 'success'
+
+    def test_no_tur_no_result_returns_none(self):
+        from reveal.adapters.claude.analysis.tools import _derive_step_outcome
+        assert _derive_step_outcome('Bash', None, None) is None
+
+    def test_tur_not_dict_skipped(self):
+        from reveal.adapters.claude.analysis.tools import _derive_step_outcome
+        assert _derive_step_outcome('Bash', 'not-a-dict', None) is None
+
+
+class TestEnrichAgentStep:
+
+    def test_agent_type_set(self):
+        from reveal.adapters.claude.analysis.tools import _enrich_agent_step
+        step: dict = {}
+        _enrich_agent_step(step, {'agentType': 'Explore'})
+        assert step['agent_type'] == 'Explore'
+
+    def test_unknown_agent_type_fallback(self):
+        from reveal.adapters.claude.analysis.tools import _enrich_agent_step
+        step: dict = {}
+        _enrich_agent_step(step, {})
+        assert step['agent_type'] == 'unknown'
+
+    def test_duration_set_when_present(self):
+        from reveal.adapters.claude.analysis.tools import _enrich_agent_step
+        step: dict = {}
+        _enrich_agent_step(step, {'totalDurationMs': 1234})
+        assert step['duration_ms'] == 1234
+
+    def test_duration_absent_when_none(self):
+        from reveal.adapters.claude.analysis.tools import _enrich_agent_step
+        step: dict = {}
+        _enrich_agent_step(step, {'totalDurationMs': None})
+        assert 'duration_ms' not in step
+
+    def test_token_count_set(self):
+        from reveal.adapters.claude.analysis.tools import _enrich_agent_step
+        step: dict = {}
+        _enrich_agent_step(step, {'totalTokens': 500})
+        assert step['token_count'] == 500
+
+    def test_tool_count_set(self):
+        from reveal.adapters.claude.analysis.tools import _enrich_agent_step
+        step: dict = {}
+        _enrich_agent_step(step, {'totalToolUseCount': 7})
+        assert step['tool_count'] == 7
