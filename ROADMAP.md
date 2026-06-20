@@ -1,11 +1,14 @@
 # Reveal Roadmap
-> **Last updated**: 2026-05-24 (xerothermic-maelstrom-0524 — v0.97.0 shipped: `codex://` adapter + agent discoverability)
+> **Last updated**: 2026-06-19 (spectral-armor-0619 — v0.100.1 shipped: TypeScript class method extraction fix)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.100.1 — TypeScript class method extraction fix (spectral-armor-0619)
+- ✅ **TypeScript/TSX class methods now extractable by name** — `reveal file.ts methodName` was silently failing for all class methods. `_get_node_name` priority-2 lookup didn't include `property_identifier`; TS `method_definition` nodes use that for the method name. One-word fix to `treesitter.py`. +2 tests. (spectral-armor-0619)
 
 ### v0.100.0 — data-driven audit (BACK-366–369), D005 cross-file duplication, help system overhaul
 - ✅ **BACK-369: registry-derived `is_code_file`** — `CATEGORY` attribute on every registered analyzer (`code`/`data`/`doc`/`config`); `get_code_extensions()` replaces the 35-entry hardcoded set. Drops ~12 un-analyzable extensions, adds ~20 real ones (.mjs, .bat, .sv, .mm, .r, etc). +9 tests. (xopekone-0618)

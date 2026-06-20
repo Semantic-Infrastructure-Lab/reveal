@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.100.1] - 2026-06-19 (session spectral-armor-0619)
+
+### Fixed
+- **TypeScript class methods not extractable by name** — `reveal file.ts methodName` always failed with "Element not found" for class methods. `_get_node_name` didn't include `property_identifier` in its direct-child name lookup; TypeScript `method_definition` nodes use `property_identifier` for the method name (vs plain `identifier` for standalone functions). One-word fix; `method_definition` was already in `FUNCTION_NODE_TYPES`. +2 tests (TS + TSX).
+
 ## [0.100.0] - 2026-06-18 (sessions magical-valley-0618, electric-nightmare-0618, xopekone-0618, hidden-supernova-0618)
 
 ### Added
