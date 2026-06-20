@@ -296,6 +296,34 @@ class TestBack334TestCallbacks:
         names = [fn['name'] for fn in structure.get('functions', [])]
         assert any('beforeEach' in n for n in names)
 
+    def test_class_methods_extracted_from_ts(self, tmp_path):
+        """Class methods (method_definition nodes) must be extractable by name."""
+        f = tmp_path / 'GameService.ts'
+        f.write_text(
+            "class GameService {\n"
+            "  async createGame(payload) { return {}; }\n"
+            "  getGame(id) { return null; }\n"
+            "}\n"
+        )
+        structure = TypeScriptAnalyzer(str(f)).get_structure()
+        names = [fn['name'] for fn in structure.get('functions', [])]
+        assert 'createGame' in names
+        assert 'getGame' in names
+
+    def test_class_methods_extracted_from_tsx(self, tmp_path):
+        """TSX class methods are also extracted."""
+        f = tmp_path / 'Component.tsx'
+        f.write_text(
+            "class MyComponent {\n"
+            "  render() { return null; }\n"
+            "  handleClick() {}\n"
+            "}\n"
+        )
+        structure = TSXAnalyzer(str(f)).get_structure()
+        names = [fn['name'] for fn in structure.get('functions', [])]
+        assert 'render' in names
+        assert 'handleClick' in names
+
 
 # ─── BACK-335: Type-annotation-only imports not flagged as unused ─────────────
 

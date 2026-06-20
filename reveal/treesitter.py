@@ -703,7 +703,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         # PRIORITY 2: Direct identifier/name children (most languages)
         for child in _children(node):
-            if child.kind() in ('identifier', 'name', 'constant', 'simple_identifier'):
+            if child.kind() in ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier'):
                 return self._get_node_text(child)
 
         # PRIORITY 3: type_identifier (fallback for structs, classes)
