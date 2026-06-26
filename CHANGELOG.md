@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.100.2] - 2026-06-26 (sessions revealed-telescope-0624, burning-plasma-0626)
+
+### Added
+- **Confidence/limitation metadata on inference-heavy outputs (BACK-330)** — `calls://?uncalled`, `depends://`, and `surface` now carry explicit confidence caveats. `?uncalled` text output gains a "⚠ Static only — runtime dispatch may create hidden callers" line; `depends://` adds a `_meta` dict (`analysis_kind`, `confidence`, `known_limits`) and bumps `contract_version` to `1.1`; `surface` adds `_meta` to JSON + a text caveat. AGENT_HELP "Interpreting absence of evidence" notes added.
+- **`contracts` for TypeScript (BACK-372)** — `reveal contracts` now classifies TypeScript files: `interface` → contract (Protocol/ABC analog), `abstract class` → abstract class analog, `type` alias → TypedDict analog, `class … implements I` → implementation edge. Upstream analyzer fixes reusable by all consumers: `_extract_class_bases` reads `class_heritage` → `extends_clause` + `implements_clause`; `abstract_class_declaration` added to `CLASS_NODE_TYPES`; interface `extends` captured via `extends_type_clause`. TS-flavored group labels in renderer. Dogfood: 94 contracts found in tia-chess. +11 tests.
+- **`surface` for TypeScript (BACK-373)** — `reveal surface` now scans `.ts`/`.tsx` files for hidden dependencies. New `nav_surface_ts.py` tree-sitter walker detects 8 categories: `network` (axios/fetch/got/…), `db` (pg/prisma/knex/…), `sdk` (@anthropic-ai/sdk/openai/stripe/…), `env` (process.env.*), `fs` (fs.writeFile*/Bun.write/Deno.writeTextFile), `http` (express/fastify/koa route registrations), `subprocess` (child_process.*/execa — new category), `cli` (yargs/commander .command()/.option()). Python and TS results merged into one report. Dogfood: 116 surface entries on tia-chess. +23 tests.
+- **`patches://` for Jest/Vitest (BACK-374)** — `patches://` and the testability patch-pressure signal now work on TypeScript. New `scan_patches_ts()` detects `jest.mock`/`vi.mock` (module path), `jest.spyOn`/`vi.spyOn` (object+method), `jest.fn`/`vi.fn`, and `jest.replaceProperty`/`vi.replaceProperty`. `iter_python_test_files` generalized to `iter_test_files` (dispatches by extension; backward-compat alias preserved). Dogfood: 31 vi.fn uses detected in tia-chess. +8 tests.
+
+### Fixed
+- **`surface` TypeScript supertest false positives (BACK-375)** — HTTP-route detection no longer counts supertest `request(app).get(...)` calls as routes. New `_callee_obj_is_call()` helper in `nav_surface_ts.py` skips nodes whose callee object is itself a call expression. tia-chess: 39 → 29 HTTP routes (10 false positives removed). +1 test.
+- **`letsencrypt://` false "certs will expire" on snap-installed certbot (BACK-376)** — `_check_renewal_timer()` previously probed a fixed 5-path list that missed snap's unit (`/etc/systemd/system/snap.certbot.renew.timer`); since snap is certbot's official install method, this false-alarmed on most modern hosts. Replaced the fixed list with a glob scan of the standard systemd unit dirs (`*certbot*.timer`) and cron dirs (`*certbot*`) — catches snap (labelled `kind: snap`), apt (`certbot.timer`), and the `certbot-renew.timer` variant, still no-subprocess. Warning reworded to clarify it reflects a renewal *file*'s presence, not active state. +5 tests.
+
 ## [0.100.1] - 2026-06-19 (session spectral-armor-0619)
 
 ### Fixed

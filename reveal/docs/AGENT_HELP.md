@@ -7,7 +7,7 @@ help_category: ai_guides
 help_token_estimate: "~12,000"
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.100.1
+**Version:** 0.100.2
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -211,9 +211,9 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal architecture [path]` | Architectural brief: entry points, core abstractions, risks | `reveal architecture --help` |
 | `reveal deps [path]` | Dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
 | `reveal hotspots [path]` | High-complexity files and functions that need attention | `reveal hotspots --help` |
-| `reveal contracts [path]` | Architectural seams: ABCs, Protocols, TypedDicts, dataclasses | `reveal contracts --help` |
-| `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes | `reveal surface --help` |
-| `reveal testability [path]` | Test patch pressure joined with production boundary fan-out | `reveal testability --help` |
+| `reveal contracts [path]` | Architectural seams: ABCs, Protocols, TypedDicts, dataclasses *(Python only — BACK-372)* | `reveal contracts --help` |
+| `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes *(Python only — BACK-373)* | `reveal surface --help` |
+| `reveal testability [path]` | Test patch pressure joined with production boundary fan-out *(patch half Python only — BACK-374)* | `reveal testability --help` |
 | `reveal trace --from FUNC` | Walk call graph from a named entry point; depth-indented narrative with side-effect classification | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
 | `reveal review <path>` | Assess quality + structural changes before a PR merge | `reveal review --help` |
@@ -585,7 +585,7 @@ reveal testability src --tests tests --top 20
 reveal testability src --tests tests --format json
 ```
 
-**Why this works:** Patch-heavy tests often point at production code that mixes runtime boundaries with decision logic. `patches://` shows what tests patch. `reveal testability` joins that pressure with production functions that touch network clients, persistence, filesystem state, notifications, clocks, environment/config, global state, or mutation.
+**Why this works:** Patch-heavy tests often point at production code that mixes runtime boundaries with decision logic. `patches://` shows what tests patch. `reveal testability` joins that pressure with production functions that touch network clients, persistence, filesystem state, notifications, clocks, environment/config, global state, or mutation. *(Supports Python (`unittest.mock`/`pytest`) and TypeScript/JavaScript (Jest/Vitest: `jest.mock`, `vi.mock`, `jest.spyOn`, `vi.spyOn`, `jest.fn`, `vi.fn`, `jest.replaceProperty`). Boundary fan-out half works for all languages.)*
 
 **How to interpret it:** This is advisory. Mocking an external API, clock, certificate probe, or filesystem boundary can be correct. High signal comes from repeated private/internal patches or patch pressure that overlaps with high boundary fan-out.
 
@@ -1285,6 +1285,8 @@ reveal 'calls://src/?uncalled&top=20'          # Top 20 most-recently-added unca
 
 **Limitations:** Static analysis only — functions called via `getattr`, `importlib`, or string dispatch are not tracked and appear as uncalled. Private (`_prefix`) functions are flagged separately. `__dunder__` methods, `@property`, `@classmethod`, and `@staticmethod` are excluded automatically.
 
+**Interpreting absence of evidence:** "No callers found" means no *static* callers were detected in the scanned path. It does not mean the function is dead — runtime dispatch (callbacks, plugin loaders, framework hooks, `getattr`-based dispatch) may call it without leaving a static trace. Treat `?uncalled` output as *candidates for review*, not confirmed dead code.
+
 ---
 
 ### Task: "Find what depends on a module (reverse import graph)"
@@ -1348,6 +1350,8 @@ Output: one line per violation with file, line, and direction. Clean output = �
 **Scan root tip**: scan from the project root (not a subdirectory) when imports use absolute package paths (e.g. `from myapp.utils import x`). Scanning too deep causes the resolver to miss edges, producing false fan-in=0 entries.
 
 **Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked (same as `imports://`). Results are conservative — false negatives possible, never false positives.
+
+**Interpreting absence of evidence:** `count: 0` from `depends://` means no *static* importer was found in the scanned path. Dynamic imports (plugin loaders, `importlib.import_module`, conditional lazy imports) are not tracked and will not appear here. Confirm a module is truly unused before deleting it if the codebase uses runtime import patterns.
 
 ---
 
@@ -1462,9 +1466,11 @@ reveal surface src/ --type env     # Filter to env-var reads only
 reveal surface . --format json     # Machine-readable, for diffing across versions
 ```
 
-**What it finds:** CLI entry points (Click/argparse), HTTP routes (Flask/FastAPI/Django decorators), environment variable reads, network egress (requests, urllib, sockets), filesystem writes (open with `'w'`/`'a'`, `Path.write_*`, `shutil.*`), subprocess calls.
+**What it finds:** CLI entry points (Click/argparse), HTTP routes (Flask/FastAPI/Django decorators), environment variable reads, network egress (requests, urllib, sockets), filesystem writes (open with `'w'`/`'a'`, `Path.write_*`, `shutil.*`), subprocess calls. *(Python only — TypeScript support tracked in BACK-373; returns an explicit note on non-Python paths rather than a silent zero.)*
 
 **Use case:** Pre-deploy boundary audit, security review, or "what does this service expose / depend on?" When a config value, env var, or external endpoint changes, `reveal surface` tells you which code paths participate.
+
+**Interpreting absence of evidence:** Detection is taxonomy-based — only libraries in the built-in taxonomy (requests, boto3, flask, etc.) are recognised. Project-specific HTTP clients, custom I/O wrappers, or in-house SDK abstractions are not detected and will not appear. A zero count means "nothing in the known taxonomy found" — not "no external effects".
 
 ---
 
@@ -1526,7 +1532,7 @@ reveal contracts src/ --format=json        # Machine-readable, for diffing acros
 reveal contracts src/services/             # Scope to a subsystem
 ```
 
-**What it finds:** Abstract base classes (ABC, ABCMeta), `typing.Protocol` definitions, `TypedDict` schemas, `@dataclass` declarations, NamedTuple classes — the structural contracts a codebase exposes between modules.
+**What it finds:** Abstract base classes (ABC, ABCMeta), `typing.Protocol` definitions, `TypedDict` schemas, `@dataclass` declarations, NamedTuple classes — the structural contracts a codebase exposes between modules. *(Python only — TypeScript support tracked in BACK-372; returns an explicit note on non-Python paths rather than a silent zero.)*
 
 **Use case:** Before refactoring or extending a module, see the *interfaces* it ships rather than the implementation. Pairs well with `reveal architecture` (entry points + abstractions) and `reveal surface` (external boundaries) to build a 3-pass mental model: **architecture** → **contracts** → **surface**.
 
