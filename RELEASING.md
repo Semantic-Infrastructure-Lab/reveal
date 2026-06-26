@@ -333,9 +333,9 @@ Bumping mid-session causes the doc validation test (`test_agent_help_is_current_
 - [ ] `pip install --upgrade reveal-cli` works
 - [ ] `reveal --version` shows correct version
 
-**Windows signed binary** (once SignPath Foundation is set up — see [`WINDOWS_SIGNING.md`](reveal/docs/development/WINDOWS_SIGNING.md)):
-- [ ] GitHub Actions `build-windows.yml` attached signed `reveal.exe` to the GitHub Release
-- [ ] Download and run the binary to confirm it launches without ACP warnings
+**Windows signed binary** (see [`WINDOWS_TRUST_AND_DISTRIBUTION.md`](internal-docs/releasing/WINDOWS_TRUST_AND_DISTRIBUTION.md)):
+- [ ] `windows-binary.yml` ran on release publish — `reveal-vX.Y.Z-windows-x64.zip` attached to GitHub Release (automatic once enrolled in Azure Artifact Signing)
+- [ ] Download the zip, run `reveal.exe --version`, confirm it launches without SmartScreen warning
 
 ---
 

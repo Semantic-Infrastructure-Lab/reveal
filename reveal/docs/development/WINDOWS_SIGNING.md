@@ -1,6 +1,8 @@
 ---
 title: "Windows Code Signing — SignPath Foundation Plan"
 type: architecture
+status: superseded
+superseded_by: internal-docs/releasing/WINDOWS_TRUST_AND_DISTRIBUTION.md
 beth_topics:
   - reveal
   - windows
@@ -9,6 +11,14 @@ beth_topics:
   - signpath
   - packaging
 ---
+
+> **Superseded (2026-06-22).** The current Windows trust playbook is at
+> [`internal-docs/releasing/WINDOWS_TRUST_AND_DISTRIBUTION.md`](../../../internal-docs/releasing/WINDOWS_TRUST_AND_DISTRIBUTION.md).
+> Two things in this doc are now known to be wrong:
+> - **PyInstaller `--onefile`** (Phase 3) — this extracts Python to a temp dir at launch, which is an AV heuristic. A signed `--onefile` binary had its signing certificate suspended (Nuitka #3842). Use **Nuitka `--standalone`** instead.
+> - **"Azure Trusted Signing is ~$10/mo — not chosen"** — this is now the recommended path; the active CI workflow uses it. SignPath Foundation remains a valid free-OSS alternative (see below) but requires manual approval per release.
+>
+> The **Phase 2 `__main__.py` workaround** and **SignPath Foundation** notes below are still accurate and worth keeping as reference.
 
 # Windows Code Signing — SignPath Foundation Plan
 
