@@ -3,8 +3,39 @@
 Consolidates common patterns for searching up directory trees.
 """
 
+import os
 from pathlib import Path
-from typing import Callable, Optional, List
+from typing import Callable, Dict, Optional, List
+
+from ..defaults import SKIP_DIRECTORIES
+
+_SKIP_DIRS: frozenset = SKIP_DIRECTORIES
+
+# Extension → human-readable language label for non-Python source files.
+_NON_PYTHON_LANG_EXTS: Dict[str, str] = {
+    '.ts': 'TypeScript', '.tsx': 'TypeScript',
+    '.js': 'JavaScript', '.jsx': 'JavaScript', '.mjs': 'JavaScript',
+    '.go': 'Go', '.rs': 'Rust', '.rb': 'Ruby', '.java': 'Java', '.cs': 'C#',
+}
+
+
+def detect_non_python_language(path: Path) -> str:
+    """Return dominant non-Python source language for path, or '' if Python/unknown.
+
+    Walks the directory counting source files by extension and returns the most
+    common non-Python language found.  Used to emit actionable "not yet supported"
+    notes instead of silent empty results.
+    """
+    if path.is_file():
+        return _NON_PYTHON_LANG_EXTS.get(path.suffix.lower(), '')
+    counts: Dict[str, int] = {}
+    for root, dirs, filenames in os.walk(str(path)):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+        for fname in filenames:
+            lang = _NON_PYTHON_LANG_EXTS.get(Path(fname).suffix.lower(), '')
+            if lang:
+                counts[lang] = counts.get(lang, 0) + 1
+    return max(counts, key=counts.__getitem__) if counts else ''
 
 # Paths that should never be considered project roots (stray .git / pyproject.toml
 # at filesystem boundaries produces false positives in temp-dir tests and CI).

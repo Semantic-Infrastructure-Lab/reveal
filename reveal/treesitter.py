@@ -55,12 +55,13 @@ FUNCTION_NODE_TYPES = (
 
 # Node types for class extraction
 CLASS_NODE_TYPES = (
-    'class_definition',      # Python
-    'class_declaration',     # Java, C#, JavaScript, PHP
-    'class_specifier',       # C++
-    'struct_item',           # Rust (treated as class)
-    'class',                 # Ruby
-    'anonymous_class',       # PHP: new class(...) extends Foo { ... }
+    'class_definition',           # Python
+    'class_declaration',          # Java, C#, JavaScript, PHP
+    'abstract_class_declaration', # TypeScript: abstract class Foo { ... }
+    'class_specifier',            # C++
+    'struct_item',                # Rust (treated as class)
+    'class',                      # Ruby
+    'anonymous_class',            # PHP: new class(...) extends Foo { ... }
 )
 
 # Node types for struct extraction
@@ -538,12 +539,66 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return classes
 
     def _extract_class_bases(self, node) -> List[str]:
-        """Extract base class names from a class node's argument_list child.
+        """Extract base class names from a class node.
 
-        Handles simple identifiers (ABC) and dotted attributes (abc.ABC).
+        Handles:
+        - Python: argument_list with identifiers/attributes (ABC, abc.ABC)
+        - TypeScript class/abstract_class: class_heritage → extends_clause + implements_clause
+        - TypeScript interface: extends_type_clause with type_identifier(s)
+
         Skips punctuation and keyword arguments (metaclass=...).
-        Returns an empty list for classes with no bases or non-Python nodes.
+        Returns an empty list for classes with no bases.
         """
+        node_type = node.kind()
+
+        # TypeScript class_declaration / abstract_class_declaration:
+        # class Foo extends Bar implements IBaz, IQux { ... }
+        if node_type in ('class_declaration', 'abstract_class_declaration'):
+            for child in _children(node):
+                if child.kind() == 'class_heritage':
+                    bases = []
+                    for heritage_child in _children(child):
+                        if heritage_child.kind() == 'extends_clause':
+                            # extends_clause: "extends <identifier>"
+                            for item in _children(heritage_child):
+                                if item.kind() in ('identifier', 'type_identifier'):
+                                    text = self._get_node_text(item).strip()
+                                    if text:
+                                        bases.append(text)
+                        elif heritage_child.kind() == 'implements_clause':
+                            # implements_clause: "implements TypeA, TypeB, ..."
+                            for item in _children(heritage_child):
+                                if item.kind() in ('type_identifier', 'identifier',
+                                                   'generic_type'):
+                                    if item.kind() == 'generic_type':
+                                        # e.g. implements IFoo<T> — extract base name
+                                        for gchild in _children(item):
+                                            if gchild.kind() == 'type_identifier':
+                                                text = self._get_node_text(gchild).strip()
+                                                if text:
+                                                    bases.append(text)
+                                                break
+                                    else:
+                                        text = self._get_node_text(item).strip()
+                                        if text:
+                                            bases.append(text)
+                    return bases
+
+        # TypeScript interface_declaration:
+        # interface IFoo extends IBar, IBaz { ... }
+        if node_type == 'interface_declaration':
+            for child in _children(node):
+                if child.kind() == 'extends_type_clause':
+                    bases = []
+                    for item in _children(child):
+                        if item.kind() in ('type_identifier', 'identifier'):
+                            text = self._get_node_text(item).strip()
+                            if text:
+                                bases.append(text)
+                    return bases
+            return []
+
+        # Python: class Foo(ABC, abc.Meta, metaclass=ABCMeta): ...
         for child in _children(node):
             if child.kind() != 'argument_list':
                 continue
@@ -571,13 +626,18 @@ class TreeSitterAnalyzer(FileAnalyzer):
         line_start = bounds_node.start_position().row + 1
         line_end = bounds_node.end_position().row + 1
 
-        return {
+        result: Dict[str, Any] = {
             'line': line_start,
             'line_end': line_end,
             'name': name,
             'decorators': decorators,
             'bases': self._extract_class_bases(node),
         }
+        # TypeScript abstract classes use a distinct node type — flag them so
+        # consumers (e.g. contracts command) can distinguish from concrete classes.
+        if node.kind() == 'abstract_class_declaration':
+            result['is_abstract'] = True
+        return result
 
     def _extract_structs(self) -> List[Dict[str, Any]]:
         """Extract struct definitions (for languages that have them)."""

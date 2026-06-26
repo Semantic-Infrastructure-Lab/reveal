@@ -72,7 +72,7 @@ class TestDependsAdapterFileTarget:
         from reveal.adapters.depends import DependsAdapter
         a = DependsAdapter(str(simple_pkg / 'pkg' / 'utils.py'))
         r = a.get_structure()
-        assert r['contract_version'] == '1.0'
+        assert r['contract_version'] == '1.1'
 
     def test_utils_has_two_importers(self, simple_pkg):
         """utils.py is imported by models.py and api.py — cli.py does not import it."""

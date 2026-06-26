@@ -360,5 +360,166 @@ class TestRunContracts(unittest.TestCase):
             self.assertEqual(len(data['abcs']), 1)
 
 
+class TestScanContractsTypeScript(unittest.TestCase):
+    """Tests for TypeScript contract detection."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write_ts(self, filename: str, content: str) -> str:
+        return _write(self.tmp, filename, content)
+
+    def test_interface_classified_as_protocol(self):
+        """TypeScript interfaces go into the 'protocols' bucket."""
+        self._write_ts('contracts.ts', '''\
+            interface IReader {
+              read(): string;
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertTrue(report.get('_ts_mode'))
+        self.assertEqual(len(report['protocols']), 1)
+        self.assertEqual(report['protocols'][0]['name'], 'IReader')
+
+    def test_interface_with_extends_has_bases(self):
+        """Interface extends clause populates bases."""
+        self._write_ts('contracts.ts', '''\
+            interface IBase {
+              base(): void;
+            }
+            interface IDerived extends IBase {
+              extra(): void;
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        derived = next(p for p in report['protocols'] if p['name'] == 'IDerived')
+        self.assertIn('IBase', derived['bases'])
+
+    def test_abstract_class_classified_as_abc(self):
+        """TypeScript abstract classes go into the 'abcs' bucket."""
+        self._write_ts('base.ts', '''\
+            abstract class AbstractService {
+              abstract execute(): void;
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertTrue(report.get('_ts_mode'))
+        self.assertEqual(len(report['abcs']), 1)
+        self.assertEqual(report['abcs'][0]['name'], 'AbstractService')
+
+    def test_type_alias_classified_as_typeddict(self):
+        """TypeScript type aliases go into the 'typeddicts' bucket."""
+        self._write_ts('types.ts', '''\
+            type Config = {
+              host: string;
+              port: number;
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['typeddicts']), 1)
+        self.assertEqual(report['typeddicts'][0]['name'], 'Config')
+
+    def test_implementing_class_classified_as_dataclass(self):
+        """Concrete class with bases goes into 'dataclasses' (implementing classes)."""
+        self._write_ts('service.ts', '''\
+            interface IService {
+              run(): void;
+            }
+            class ConcreteService implements IService {
+              run() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl_names = [c['name'] for c in report['dataclasses']]
+        self.assertIn('ConcreteService', impl_names)
+
+    def test_implementations_populated_for_interface(self):
+        """Classes implementing an interface appear in that interface's implementations."""
+        self._write_ts('service.ts', '''\
+            interface IService {
+              run(): void;
+            }
+            class ConcreteService implements IService {
+              run() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        iface = next(p for p in report['protocols'] if p['name'] == 'IService')
+        impl_names = [i['name'] for i in iface['implementations']]
+        self.assertIn('ConcreteService', impl_names)
+
+    def test_implementations_populated_for_abstract_class(self):
+        """Classes extending an abstract class appear in its implementations."""
+        self._write_ts('base.ts', '''\
+            abstract class Base {
+              abstract run(): void;
+            }
+            class Concrete extends Base {
+              run() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        abstract = next(a for a in report['abcs'] if a['name'] == 'Base')
+        impl_names = [i['name'] for i in abstract['implementations']]
+        self.assertIn('Concrete', impl_names)
+
+    def test_abstract_only_skips_type_aliases(self):
+        """--abstract-only hides type aliases (typeddicts) and implementing classes."""
+        self._write_ts('mixed.ts', '''\
+            interface IFoo {
+              foo(): void;
+            }
+            type Bar = { x: number };
+            abstract class Baz {
+              abstract foo(): void;
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp), abstract_only=True)
+        self.assertEqual(len(report['typeddicts']), 0)
+        self.assertEqual(len(report['protocols']), 1)
+        self.assertEqual(len(report['abcs']), 1)
+
+    def test_total_contracts_count_ts(self):
+        """total_contracts sums interfaces + abstract classes + type aliases."""
+        self._write_ts('all.ts', '''\
+            interface IFoo { foo(): void; }
+            abstract class Bar { abstract bar(): void; }
+            type Baz = { x: string };
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        # 1 interface + 1 abstract class + 1 type alias = 3
+        self.assertEqual(report['total_contracts'], 3)
+
+    def test_no_implementations_when_disabled(self):
+        """show_implementations=False leaves all implementations lists empty."""
+        self._write_ts('service.ts', '''\
+            interface IService { run(): void; }
+            class ConcreteService implements IService { run() {} }
+        ''')
+        report = _scan_contracts(Path(self.tmp), show_implementations=False)
+        for iface in report['protocols']:
+            self.assertEqual(iface['implementations'], [])
+
+    def test_render_uses_ts_labels(self):
+        """TypeScript mode renders 'Interfaces' and 'Abstract Classes' labels."""
+        self._write_ts('contracts.ts', '''\
+            interface IFoo { foo(): void; }
+            abstract class Bar { abstract bar(): void; }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        buf = StringIO()
+        with patch('sys.stdout', buf):
+            _render_report(report)
+        out = buf.getvalue()
+        self.assertIn('Interfaces', out)
+        self.assertIn('Abstract Classes', out)
+        self.assertNotIn('Abstract Base Classes', out)
+        self.assertNotIn('Protocols', out)
+
+
 if __name__ == '__main__':
     unittest.main()

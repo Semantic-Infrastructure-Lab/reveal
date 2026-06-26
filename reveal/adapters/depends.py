@@ -157,6 +157,7 @@ class DependsRenderer:
         if not dependents:
             print("  No dependents found (nothing imports this module)")
             print()
+            print("ℹ Import-graph analysis — dynamic imports not followed.")
             return
 
         print(f"  {count} file(s) import this module:\n")
@@ -183,6 +184,8 @@ class DependsRenderer:
         if not verbose:
             print(f"  Tip: reveal depends://{target} --verbose  for full import detail")
             print()
+        print("ℹ Import-graph analysis — dynamic imports not followed.")
+        print()
 
     @staticmethod
     def _render_summary(result: dict, verbose: bool, resource: str) -> None:
@@ -196,6 +199,7 @@ class DependsRenderer:
         if not modules:
             print("  No internal imports found.")
             print()
+            print("ℹ Import-graph analysis — dynamic imports not followed.")
             return
 
         total = sum(m['dependent_count'] for m in modules)
@@ -212,6 +216,8 @@ class DependsRenderer:
 
         print()
         print(f"  Tip: reveal depends://<module>  for full importer list")
+        print()
+        print("ℹ Import-graph analysis — dynamic imports not followed.")
         print()
 
     @staticmethod
@@ -378,7 +384,7 @@ class DependsAdapter(ResourceAdapter):
                 dependents.append({'file': str(importer), 'line': 0, 'module': '', 'names': [], 'type': 'unknown', 'is_relative': False, 'alias': None})
 
         return {
-            'contract_version': '1.0',
+            'contract_version': '1.1',
             'type': 'module_dependents',
             'source': str(self._target_path),
             'source_type': 'file',
@@ -386,6 +392,15 @@ class DependsAdapter(ResourceAdapter):
             'dependents': dependents,
             'count': len(dependents),
             'metadata': self.get_metadata(),
+            '_meta': {
+                'analysis_kind': 'import-graph',
+                'confidence': 'high',
+                'known_limits': [
+                    'dynamic imports (importlib, __import__) not followed',
+                    'conditional imports may not reflect runtime state',
+                    'TYPE_CHECKING-only imports are excluded',
+                ],
+            },
         }
 
     def _format_directory_summary(self, directory: Path, top_n: Optional[int], fmt: str) -> Dict[str, Any]:
@@ -410,13 +425,22 @@ class DependsAdapter(ResourceAdapter):
             modules = modules[:top_n]
 
         result = {
-            'contract_version': '1.0',
+            'contract_version': '1.1',
             'type': 'dependency_summary',
             'source': str(self._target_path),
             'source_type': 'directory',
             '_format': fmt,
             'modules': modules,
             'metadata': self.get_metadata(),
+            '_meta': {
+                'analysis_kind': 'import-graph',
+                'confidence': 'high',
+                'known_limits': [
+                    'dynamic imports (importlib, __import__) not followed',
+                    'conditional imports may not reflect runtime state',
+                    'TYPE_CHECKING-only imports are excluded',
+                ],
+            },
         }
         return result
 

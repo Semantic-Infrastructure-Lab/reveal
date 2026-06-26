@@ -73,6 +73,8 @@ def _render_text(data: Dict[str, Any]) -> None:
         hint = data.get('hint')
         if hint:
             print(f"\n  Hint: {hint}")
+        print()
+        print("⚠ Static only — runtime dispatch (callbacks, getattr, dynamic calls) may create hidden callers.")
         return
 
     for lvl in levels:
@@ -169,6 +171,8 @@ def _render_uncalled_text(data: Dict[str, Any]) -> None:
 
     if not entries:
         print("  No uncalled functions found.")
+        print()
+        print("⚠ Static only — runtime dispatch (callbacks, getattr, dynamic calls) may create hidden callers.")
         return
 
     for entry in entries:
@@ -179,6 +183,9 @@ def _render_uncalled_text(data: Dict[str, Any]) -> None:
         kind = 'method' if category == 'methods' else 'function'
         private_tag = ', private' if entry.get('is_private') else ''
         print(f"  {file_path}:{line}  {name}  ({kind}{private_tag})")
+
+    print()
+    print("⚠ Static only — runtime dispatch (callbacks, getattr, dynamic calls) may create hidden callers.")
 
 
 def _render_callees_recursive_text(data: Dict[str, Any]) -> None:

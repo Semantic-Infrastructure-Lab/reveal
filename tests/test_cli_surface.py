@@ -336,5 +336,164 @@ class TestRunSurface(unittest.TestCase):
             self.assertIn('env', data['surfaces'])
 
 
+class TestNavSurfaceTS(unittest.TestCase):
+    """Unit tests for the TypeScript surface scanner (nav_surface_ts)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _scan_ts(self, filename: str, content: str):
+        from reveal.adapters.ast.nav_surface_ts import scan_file_surface_ts
+        path = _write(self.tmp, filename, content)
+        return scan_file_surface_ts(path)
+
+    def test_ts_network_import_axios(self):
+        result = self._scan_ts('client.ts', 'import axios from "axios";\n')
+        names = [e['name'] for e in result['network']]
+        self.assertIn('axios', names)
+
+    def test_ts_db_import_prisma(self):
+        result = self._scan_ts('db.ts', 'import { PrismaClient } from "@prisma/client";\n')
+        names = [e['name'] for e in result['db']]
+        self.assertIn('@prisma/client', names)
+
+    def test_ts_sdk_import_anthropic(self):
+        result = self._scan_ts('ai.ts', 'import Anthropic from "@anthropic-ai/sdk";\n')
+        names = [e['name'] for e in result['sdk']]
+        self.assertIn('@anthropic-ai/sdk', names)
+
+    def test_ts_env_member_expression(self):
+        result = self._scan_ts('config.ts', 'const k = process.env.API_KEY;\n')
+        names = [e['name'] for e in result['env']]
+        self.assertIn('API_KEY', names)
+
+    def test_ts_env_subscript_expression(self):
+        result = self._scan_ts('config.ts', 'const k = process.env["SECRET"];\n')
+        names = [e['name'] for e in result['env']]
+        self.assertIn('SECRET', names)
+
+    def test_ts_fs_write(self):
+        result = self._scan_ts('writer.ts', 'fs.writeFile("out.txt", data);\n')
+        names = [e['name'] for e in result['fs']]
+        self.assertIn('fs.writeFile', names)
+
+    def test_ts_fs_bun_write(self):
+        result = self._scan_ts('writer.ts', 'Bun.write("out.txt", data);\n')
+        names = [e['name'] for e in result['fs']]
+        self.assertIn('Bun.write', names)
+
+    def test_ts_http_route_get(self):
+        result = self._scan_ts('routes.ts', 'app.get("/health", handler);\n')
+        entries = result['http']
+        self.assertGreater(len(entries), 0)
+        paths = [e['path'] for e in entries]
+        self.assertIn('/health', paths)
+
+    def test_ts_http_route_post(self):
+        result = self._scan_ts('routes.ts', 'router.post("/users", createUser);\n')
+        entries = result['http']
+        self.assertGreater(len(entries), 0)
+        methods = [e['methods'] for e in entries]
+        self.assertIn('POST', methods)
+
+    def test_ts_subprocess_child_process(self):
+        result = self._scan_ts('spawn.ts', 'child_process.exec("ls");\n')
+        names = [e['name'] for e in result['subprocess']]
+        self.assertIn('child_process.exec', names)
+
+    def test_ts_subprocess_execa(self):
+        result = self._scan_ts('spawn.ts', 'execa("git", ["status"]);\n')
+        names = [e['name'] for e in result['subprocess']]
+        self.assertIn('execa', names)
+
+    def test_ts_cli_command(self):
+        result = self._scan_ts('cli.ts', 'yargs.command("serve", "Start server");\n')
+        names = [e['name'] for e in result['cli']]
+        self.assertIn('serve', names)
+
+    def test_ts_cli_option(self):
+        result = self._scan_ts('cli.ts', 'yargs.option("port", { type: "number" });\n')
+        names = [e['name'] for e in result['cli']]
+        self.assertIn('port', names)
+
+    def test_ts_tsx_file_scanned(self):
+        result = self._scan_ts('app.tsx', 'import axios from "axios";\n')
+        names = [e['name'] for e in result['network']]
+        self.assertIn('axios', names)
+
+    def test_ts_supertest_not_flagged_as_http_route(self):
+        # request(app).get('/path') is a supertest assertion, not a route registration
+        result = self._scan_ts('routes.test.ts', 'request(app).get("/health");\n')
+        self.assertEqual(result['http'], [], "supertest calls should not be detected as HTTP routes")
+
+    def test_ts_invalid_file_returns_empty(self):
+        from reveal.adapters.ast.nav_surface_ts import scan_file_surface_ts
+        result = scan_file_surface_ts('/nonexistent/path/file.ts')
+        self.assertEqual(result['network'], [])
+        self.assertEqual(result['env'], [])
+
+    def test_ts_sdk_import_openai(self):
+        result = self._scan_ts('ai.ts', 'import OpenAI from "openai";\n')
+        names = [e['name'] for e in result['sdk']]
+        self.assertIn('openai', names)
+
+    def test_ts_db_import_ioredis(self):
+        result = self._scan_ts('cache.ts', 'import Redis from "ioredis";\n')
+        names = [e['name'] for e in result['db']]
+        self.assertIn('ioredis', names)
+
+
+class TestScanSurfaceTS(unittest.TestCase):
+    """Integration tests: _scan_surface picks up .ts/.tsx files."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def test_ts_files_included_in_scan(self):
+        _write(self.tmp, 'server.ts', 'import axios from "axios";\n')
+        report = _scan_surface(Path(self.tmp))
+        names = [e['name'] for e in report['surfaces']['network']]
+        self.assertIn('axios', names)
+
+    def test_tsx_files_included_in_scan(self):
+        _write(self.tmp, 'App.tsx', 'import axios from "axios";\n')
+        report = _scan_surface(Path(self.tmp))
+        names = [e['name'] for e in report['surfaces']['network']]
+        self.assertIn('axios', names)
+
+    def test_subprocess_category_present_in_report(self):
+        _write(self.tmp, 'run.ts', 'child_process.exec("ls");\n')
+        report = _scan_surface(Path(self.tmp))
+        self.assertIn('subprocess', report['surfaces'])
+        names = [e['name'] for e in report['surfaces']['subprocess']]
+        self.assertIn('child_process.exec', names)
+
+    def test_mixed_py_and_ts(self):
+        _write(self.tmp, 'app.py', 'import requests\n')
+        _write(self.tmp, 'client.ts', 'import axios from "axios";\n')
+        report = _scan_surface(Path(self.tmp))
+        net_names = [e['name'] for e in report['surfaces']['network']]
+        self.assertIn('requests', net_names)
+        self.assertIn('axios', net_names)
+
+    def test_ts_env_vars_detected(self):
+        _write(self.tmp, 'config.ts', 'const key = process.env.API_KEY;\n')
+        report = _scan_surface(Path(self.tmp))
+        env_names = [e['name'] for e in report['surfaces']['env']]
+        self.assertIn('API_KEY', env_names)
+
+    def test_subprocess_label_in_surface_labels(self):
+        from reveal.cli.commands.surface import _SURFACE_LABELS
+        self.assertIn('subprocess', _SURFACE_LABELS)
+
+
 if __name__ == '__main__':
     unittest.main()

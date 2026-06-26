@@ -305,7 +305,11 @@ class CallsAdapter(ResourceAdapter):
         if rank == 'callers':
             top = int(self.query_params.get('top', 10))
             include_builtins = bool(self.query_params.get('builtins', False))
-            result_data = rank_by_callers(self.path, top=top, include_builtins=include_builtins)
+            include_test_framework = bool(self.query_params.get('test-framework', False))
+            result_data = rank_by_callers(
+                self.path, top=top, include_builtins=include_builtins,
+                include_test_framework=include_test_framework,
+            )
             result_data['path'] = self.path
             return ResultBuilder.create(
                 result_type='calls_ranking',

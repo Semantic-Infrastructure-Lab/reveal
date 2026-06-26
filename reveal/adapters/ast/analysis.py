@@ -121,6 +121,9 @@ def create_element_dict(
         'decorators': item.get('decorators', []),
         'bases': item.get('bases', []),
     }
+    # Propagate optional flags from the analyzer (e.g. TypeScript abstract classes).
+    if item.get('is_abstract'):
+        element['is_abstract'] = True
 
     # Add complexity for functions/methods
     if category in ('functions', 'methods'):

@@ -78,6 +78,7 @@ def run_testability(args: Namespace) -> None:
         sys.exit(1)
 
     from reveal.testability.report import build_testability_report
+    from reveal.utils.path_utils import detect_non_python_language
 
     report = build_testability_report(
         str(path),
@@ -87,6 +88,16 @@ def run_testability(args: Namespace) -> None:
         min_categories=max(1, int(args.min_categories)),
         include_unresolved=bool(getattr(args, 'include_unresolved', False)),
     )
+
+    # When no patches were found, check whether the test suite is non-Python
+    # (patch pressure is Python-only) so the renderer can explain the silence.
+    if report.get('summary', {}).get('total_patch_uses', 0) == 0:
+        lang = detect_non_python_language(test_paths[0])
+        if lang:
+            report['_patch_note'] = (
+                f'patch pressure unavailable for {lang} test suites '
+                '(Python only) — Jest/Vitest support tracked in BACK-374'
+            )
 
     if args.format == 'json':
         print(json.dumps(report, indent=2, default=str))
@@ -127,7 +138,7 @@ def _render_report(report: Dict[str, Any]) -> None:
     )
     print()
 
-    _render_patch_hotspots(report.get('patch_hotspots', []))
+    _render_patch_hotspots(report.get('patch_hotspots', []), note=report.get('_patch_note', ''))
     _render_boundary_hotspots(report.get('boundary_hotspots', []))
 
     print("Summary")
@@ -135,10 +146,13 @@ def _render_report(report: Dict[str, Any]) -> None:
     print(f"  {summary.get('boundary_profiles_reported', 0)} boundary hotspot(s) reported")
 
 
-def _render_patch_hotspots(rows: List[Dict[str, Any]]) -> None:
+def _render_patch_hotspots(rows: List[Dict[str, Any]], note: str = '') -> None:
     print("Production Patch Hotspots")
     if not rows:
-        print("  none above threshold")
+        if note:
+            print(f"  {note}")
+        else:
+            print("  none above threshold")
         print()
         return
     for row in rows:

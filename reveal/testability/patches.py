@@ -1,8 +1,9 @@
-"""Patch pressure scanner for Python tests."""
+"""Patch pressure scanner for Python and TypeScript/JavaScript tests."""
 
 from __future__ import annotations
 
 import ast
+import logging
 import os
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
@@ -10,7 +11,12 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
+from ..core.treesitter_compat import suppress_treesitter_warnings
 from ..defaults import SKIP_DIRECTORIES
+
+suppress_treesitter_warnings()
+
+logger = logging.getLogger(__name__)
 
 
 # Canonical skip set lives in reveal.defaults (shared by every directory walk).
@@ -67,27 +73,295 @@ class PatchGroup:
 
 
 def iter_python_test_files(paths: Sequence[str | Path]) -> List[Path]:
-    """Return Python test files under the given paths."""
+    """Return Python test files under the given paths (backward-compat alias)."""
+    return iter_test_files(paths, extensions=('.py',))
+
+
+_TS_TEST_EXTENSIONS = frozenset({'.ts', '.tsx', '.js', '.jsx'})
+_TS_TEST_SUFFIXES = ('.spec.ts', '.test.ts', '.spec.tsx', '.test.tsx',
+                     '.spec.js', '.test.js', '.spec.jsx', '.test.jsx')
+
+
+def _is_ts_test_file(p: Path) -> bool:
+    """Return True if the path looks like a TypeScript/JavaScript test file."""
+    name = p.name
+    return (
+        any(name.endswith(s) for s in _TS_TEST_SUFFIXES)
+        or ('__tests__' in p.parts and p.suffix in _TS_TEST_EXTENSIONS)
+    )
+
+
+def iter_test_files(
+    paths: Sequence[str | Path],
+    extensions: Optional[Sequence[str]] = None,
+) -> List[Path]:
+    """Return test files under the given paths, dispatching by extension.
+
+    When *extensions* is given only files with those suffixes are returned.
+    The default (None) returns both Python and TypeScript/JavaScript test files.
+    """
     files: List[Path] = []
     for raw in paths:
         path = Path(raw).expanduser()
-        if path.is_file() and path.suffix == '.py':
-            files.append(path)
+        if path.is_file():
+            if _file_matches(path, extensions):
+                files.append(path)
         elif path.is_dir():
             for root, dirs, names in os.walk(path):
                 dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
                 for name in names:
-                    if name.endswith('.py'):
-                        files.append(Path(root) / name)
+                    fp = Path(root) / name
+                    if _file_matches(fp, extensions):
+                        files.append(fp)
     return sorted(set(files))
 
 
+def _file_matches(path: Path, extensions: Optional[Sequence[str]]) -> bool:
+    """Return True if path is a scannable test file given the extension filter."""
+    if extensions is not None:
+        if path.suffix not in extensions:
+            return False
+        # For TS extensions, still filter to test files only
+        if path.suffix in _TS_TEST_EXTENSIONS:
+            return _is_ts_test_file(path)
+        return True  # .py with no further restriction
+    # Default: Python always, TS only if it looks like a test file
+    if path.suffix == '.py':
+        return True
+    return _is_ts_test_file(path)
+
+
 def scan_patches(paths: Sequence[str | Path]) -> List[PatchUse]:
-    """Scan Python test files for patch-like calls."""
+    """Scan Python and TypeScript test files for patch-like calls."""
     uses: List[PatchUse] = []
-    for file_path in iter_python_test_files(paths):
-        uses.extend(_scan_file(file_path))
+    for file_path in iter_test_files(paths):
+        if file_path.suffix == '.py':
+            uses.extend(_scan_file(file_path))
+        elif file_path.suffix in _TS_TEST_EXTENSIONS:
+            uses.extend(_scan_file_ts(file_path))
     return uses
+
+
+# ---------------------------------------------------------------------------
+# TypeScript / JavaScript scanner (tree-sitter)
+# ---------------------------------------------------------------------------
+
+# Callee patterns we recognise: (namespace, method) → patch_kind
+_TS_CALLEE_KINDS: Dict[tuple, str] = {
+    ('jest', 'mock'): 'jest.mock',
+    ('vi', 'mock'): 'vi.mock',
+    ('jest', 'spyOn'): 'jest.spyOn',
+    ('vi', 'spyOn'): 'vi.spyOn',
+    ('jest', 'fn'): 'jest.fn',
+    ('vi', 'fn'): 'vi.fn',
+    ('jest', 'replaceProperty'): 'jest.replaceProperty',
+    ('vi', 'replaceProperty'): 'vi.replaceProperty',
+}
+
+# Kinds that have (obj, symbol, ...) argument shape (like patch.object)
+_SPY_KINDS = frozenset({'jest.spyOn', 'vi.spyOn', 'jest.replaceProperty', 'vi.replaceProperty'})
+# Kinds that have (module_path, ...) argument shape (like patch)
+_MOCK_MODULE_KINDS = frozenset({'jest.mock', 'vi.mock'})
+
+
+def _ts_node_text(node, src_bytes: bytes) -> str:
+    return src_bytes[node.start_byte():node.end_byte()].decode('utf-8', errors='replace')
+
+
+
+_TEST_CALLEE_NAMES = frozenset({'describe', 'it', 'test', 'fit', 'xit', 'xtest'})
+
+
+def _ts_enclosing_test_name(node, src_bytes: bytes) -> str:
+    """Walk up the tree via parent() to find the innermost test/it/describe label."""
+    current = node.parent()
+    while current is not None:
+        if current.kind() == 'call_expression':
+            callee = current.child(0)
+            if callee is not None:
+                callee_text = _ts_node_text(callee, src_bytes)
+                if callee_text in _TEST_CALLEE_NAMES:
+                    for i in range(current.child_count()):
+                        ch = current.child(i)
+                        if ch.kind() == 'arguments':
+                            for j in range(ch.child_count()):
+                                arg = ch.child(j)
+                                if arg.kind() == 'string':
+                                    val = _ts_get_string_value(arg, src_bytes)
+                                    if val:
+                                        return val
+                            break
+        current = current.parent()
+    return '<module>'
+
+
+
+def _ts_get_string_value(string_node, src_bytes: bytes) -> Optional[str]:
+    """Return the string content of a tree-sitter string literal node."""
+    for i in range(string_node.child_count()):
+        ch = string_node.child(i)
+        if ch.kind() == 'string_fragment':
+            return _ts_node_text(ch, src_bytes)
+    # Fallback: strip surrounding quotes from raw text
+    raw = _ts_node_text(string_node, src_bytes)
+    if len(raw) >= 2 and raw[0] in ('"', "'", '`') and raw[-1] == raw[0]:
+        return raw[1:-1]
+    return raw
+
+
+def _ts_args_list(call_node) -> List[Any]:
+    """Return the argument nodes of a call_expression (excluding punctuation)."""
+    for i in range(call_node.child_count()):
+        ch = call_node.child(i)
+        if ch.kind() == 'arguments':
+            return [
+                ch.child(j)
+                for j in range(ch.child_count())
+                if ch.child(j).kind() not in ('(', ')', ',')
+            ]
+    return []
+
+
+def _ts_parse_callee(call_node, src_bytes: bytes) -> Optional[tuple]:
+    """Return (namespace, method) if callee is a member_expression like jest.mock."""
+    callee = call_node.child(0)
+    if callee is None or callee.kind() != 'member_expression':
+        return None
+    # children: identifier, '.', property_identifier
+    obj_node = prop_node = None
+    for i in range(callee.child_count()):
+        ch = callee.child(i)
+        if ch.kind() == 'identifier' and obj_node is None:
+            obj_node = ch
+        elif ch.kind() == 'property_identifier':
+            prop_node = ch
+    if obj_node is None or prop_node is None:
+        return None
+    ns = _ts_node_text(obj_node, src_bytes)
+    method = _ts_node_text(prop_node, src_bytes)
+    return (ns, method)
+
+
+def scan_patches_ts(paths: Sequence[str | Path]) -> List[PatchUse]:
+    """Scan TypeScript/JavaScript test files for jest/vi mock calls.
+
+    Recognises:
+      jest.mock('./module') / vi.mock('./module')  → kind='jest.mock' / 'vi.mock'
+      jest.spyOn(obj, 'method') / vi.spyOn(...)   → kind='jest.spyOn' / 'vi.spyOn'
+      jest.fn() / vi.fn()                          → kind='jest.fn' / 'vi.fn'
+      jest.replaceProperty(obj, 'prop', val)       → kind='jest.replaceProperty' / ...
+    """
+    try:
+        from tree_sitter_language_pack import get_parser
+    except ImportError:
+        logger.warning('tree_sitter_language_pack not installed; TypeScript patch scanning skipped')
+        return []
+
+    uses: List[PatchUse] = []
+    for file_path in iter_test_files(paths, extensions=list(_TS_TEST_EXTENSIONS)):
+        uses.extend(_scan_file_ts(file_path))
+    return uses
+
+
+def _scan_file_ts(file_path: Path) -> List[PatchUse]:
+    """Scan a single TypeScript/JS file for jest/vi mock calls (iterative DFS)."""
+    try:
+        from tree_sitter_language_pack import get_parser
+    except ImportError:
+        return []
+
+    try:
+        source = file_path.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return []
+
+    src_bytes = source.encode('utf-8', errors='replace')
+    lang = 'tsx' if file_path.suffix in ('.tsx', '.jsx') else 'typescript'
+    try:
+        parser = get_parser(lang)
+        tree = parser.parse(source)
+        root = tree.root_node()
+    except Exception as exc:
+        logger.debug('tree-sitter parse failed for %s: %s', file_path, exc)
+        return []
+
+    uses: List[PatchUse] = []
+    # Iterative DFS to avoid Python recursion-limit issues on large files
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if node.kind() == 'call_expression':
+            callee_key = _ts_parse_callee(node, src_bytes)
+            if callee_key is not None:
+                patch_kind = _TS_CALLEE_KINDS.get(callee_key)
+                if patch_kind is not None:
+                    use = _ts_build_patch_use(node, patch_kind, src_bytes, str(file_path))
+                    if use is not None:
+                        uses.append(use)
+        # Push children in reverse order to maintain document order
+        for i in range(node.child_count() - 1, -1, -1):
+            stack.append(node.child(i))
+    return uses
+
+
+def _ts_build_patch_use(
+    node,
+    patch_kind: str,
+    src_bytes: bytes,
+    file_path: str,
+) -> Optional[PatchUse]:
+    """Build a PatchUse from a matched call_expression node."""
+    args = _ts_args_list(node)
+    target_raw: str = '<unknown>'
+    target_module: Optional[str] = None
+    target_symbol: Optional[str] = None
+    target_qualname: Optional[str] = None
+
+    if patch_kind in _MOCK_MODULE_KINDS:
+        if args and args[0].kind() == 'string':
+            mod = _ts_get_string_value(args[0], src_bytes)
+            if mod:
+                target_raw = mod
+                target_module = mod
+                target_qualname = mod
+        elif args:
+            target_raw = _ts_node_text(args[0], src_bytes)
+
+    elif patch_kind in _SPY_KINDS:
+        if len(args) >= 2:
+            obj_text = _ts_node_text(args[0], src_bytes)
+            if args[1].kind() == 'string':
+                sym: Optional[str] = _ts_get_string_value(args[1], src_bytes)
+            else:
+                sym = _ts_node_text(args[1], src_bytes)
+            if sym:
+                target_raw = f'{obj_text}.{sym}'
+                target_module = obj_text
+                target_symbol = sym
+                target_qualname = target_raw
+            else:
+                target_raw = obj_text
+                target_module = obj_text
+        elif args:
+            target_raw = _ts_node_text(args[0], src_bytes)
+    # jest.fn() / vi.fn() — no meaningful target; target_raw stays '<unknown>'
+
+    test_name = _ts_enclosing_test_name(node, src_bytes)
+    line = node.start_position().row + 1  # rows are 0-indexed
+
+    return PatchUse(
+        test_file=file_path,
+        test_name=test_name,
+        line=line,
+        patch_kind=patch_kind,
+        target_raw=target_raw,
+        target_module=target_module,
+        target_symbol=target_symbol,
+        target_qualname=target_qualname,
+        is_private_target=_is_private_symbol(target_symbol),
+        context_depth=0,
+        confidence=1.0 if target_raw != '<unknown>' else 0.4,
+    )
 
 
 def group_patches(

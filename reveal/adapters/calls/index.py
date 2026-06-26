@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..ast.analysis import collect_structures, is_code_file, PYTHON_BUILTINS
 from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
+from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
 
 # Module-level LRU cache: directory → (cache_key, index)
 # cache_key is a tuple of (abspath_str, mtime_ns) pairs so it's hashable.
@@ -538,6 +539,7 @@ def rank_by_callers(
     path: str,
     top: int = 10,
     include_builtins: bool = False,
+    include_test_framework: bool = False,
 ) -> Dict[str, Any]:
     """Rank all callable symbols by how many unique callers they have.
 
@@ -547,6 +549,9 @@ def rank_by_callers(
         path: Root directory (or file) to analyse.
         top: Maximum number of entries to return (default 10, capped at 100).
         include_builtins: If False (default), skip Python builtins from the ranking.
+        include_test_framework: If False (default), suppress test-framework symbols
+            (expect, describe, it, vi, jest, cy, etc.) that dominate TS rankings
+            with fake in-degree.  Pass ``?test-framework=true`` in the URI to opt in.
 
     Returns:
         Dict with ``path``, ``top``, ``total_unique_callees``, and ``entries``
@@ -570,6 +575,8 @@ def rank_by_callers(
     entries = []
     for callee_name, caller_records in index.items():
         if not include_builtins and callee_name.split('.')[-1] in PYTHON_BUILTINS:
+            continue
+        if not include_test_framework and callee_name.split('.')[-1] in TEST_FRAMEWORK_CALLEE_NAMES:
             continue
         # Deduplicate caller records by (file, caller) to count unique callers
         seen: Set[Tuple[str, str]] = set()

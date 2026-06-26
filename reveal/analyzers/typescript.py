@@ -111,12 +111,15 @@ class _TypeScriptBase(TreeSitterAnalyzer):
                     continue
                 line_start = node.start_position().row + 1
                 line_end = node.end_position().row + 1
-                bucket.append({
+                entry: Dict[str, Any] = {
                     'line': line_start,
                     'line_end': line_end,
                     'name': name,
                     'line_count': line_end - line_start + 1,
-                })
+                    'decorators': [],
+                    'bases': self._extract_class_bases(node),
+                }
+                bucket.append(entry)
 
         return {'interfaces': interfaces, 'types': types, 'enums': enums}
 

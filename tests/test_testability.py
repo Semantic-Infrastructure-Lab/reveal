@@ -10,7 +10,12 @@ from unittest.mock import patch
 from reveal.adapters.patches.adapter import PatchesAdapter
 from reveal.cli.commands.testability import create_testability_parser, run_testability
 from reveal.testability.boundaries import collect_boundary_profiles
-from reveal.testability.patches import group_patches, scan_patches
+from reveal.testability.patches import (
+    group_patches,
+    iter_test_files,
+    scan_patches,
+    scan_patches_ts,
+)
 from reveal.testability.report import build_testability_report
 
 
@@ -108,7 +113,7 @@ def test_one():
     assert result['type'] == 'patches_scan'
     assert result['total_uses'] == 1
     assert result['groups'][0]['key'] == 'app.service.fetch_price'
-    assert result['meta']['parse_mode'] == 'python_ast'
+    assert result['meta']['parse_mode'] == 'python_ast+tree_sitter'
 
 
 def test_build_testability_report_joins_patch_pressure_to_boundaries(tmp_path):
@@ -281,3 +286,142 @@ def test_two():
     assert 'sys.stdout' in keys_all
     # total_uses is always the full scan count
     assert result_default['total_uses'] == result_all['total_uses'] == 2
+
+
+# ---------------------------------------------------------------------------
+# TypeScript / Jest / Vitest scanner tests (BACK-374)
+# ---------------------------------------------------------------------------
+
+_TS_FIXTURE = '''\
+import { jest } from '@jest/globals';
+import { vi } from 'vitest';
+
+describe('UserService', () => {
+  it('mocks the module', () => {
+    jest.mock('./user-service');
+    vi.mock('../lib/http');
+  });
+
+  it('spies on a method', () => {
+    jest.spyOn(UserService, 'create');
+    vi.spyOn(db, 'query');
+  });
+
+  test('uses jest.fn', () => {
+    const fn = jest.fn();
+    const vifn = vi.fn();
+  });
+
+  it('replaces a property', () => {
+    jest.replaceProperty(config, 'timeout', 0);
+    vi.replaceProperty(config, 'retries', 1);
+  });
+});
+'''
+
+
+def test_scan_patches_ts_detects_jest_mock(tmp_path):
+    test_file = _write(tmp_path / 'src' / '__tests__' / 'user.test.ts', _TS_FIXTURE)
+
+    uses = scan_patches_ts([tmp_path])
+
+    kinds = {u.patch_kind for u in uses}
+    assert 'jest.mock' in kinds
+    assert 'vi.mock' in kinds
+
+
+def test_scan_patches_ts_detects_spy_on(tmp_path):
+    test_file = _write(tmp_path / 'src' / '__tests__' / 'user.test.ts', _TS_FIXTURE)
+
+    uses = scan_patches_ts([tmp_path])
+
+    spy_uses = [u for u in uses if u.patch_kind in ('jest.spyOn', 'vi.spyOn')]
+    assert len(spy_uses) >= 2
+    # spyOn maps obj.method as target_qualname
+    qualnames = {u.target_qualname for u in spy_uses}
+    assert 'UserService.create' in qualnames
+    assert 'db.query' in qualnames
+
+
+def test_scan_patches_ts_detects_fn_and_replace(tmp_path):
+    test_file = _write(tmp_path / 'src' / '__tests__' / 'user.test.ts', _TS_FIXTURE)
+
+    uses = scan_patches_ts([tmp_path])
+
+    kinds = {u.patch_kind for u in uses}
+    assert 'jest.fn' in kinds
+    assert 'vi.fn' in kinds
+    assert 'jest.replaceProperty' in kinds
+    assert 'vi.replaceProperty' in kinds
+
+
+def test_scan_patches_ts_extracts_test_name(tmp_path):
+    test_file = _write(tmp_path / '__tests__' / 'svc.spec.ts', _TS_FIXTURE)
+
+    uses = scan_patches_ts([tmp_path])
+
+    test_names = {u.test_name for u in uses}
+    assert 'mocks the module' in test_names
+    assert 'spies on a method' in test_names
+
+
+def test_scan_patches_ts_module_path_as_target(tmp_path):
+    fixture = "jest.mock('./user-service');"
+    test_file = _write(tmp_path / 'svc.test.ts', fixture)
+
+    uses = scan_patches_ts([test_file])
+
+    assert len(uses) == 1
+    assert uses[0].target_raw == './user-service'
+    assert uses[0].target_module == './user-service'
+    assert uses[0].patch_kind == 'jest.mock'
+
+
+def test_iter_test_files_finds_py_and_ts(tmp_path):
+    py_file = _write(tmp_path / 'tests' / 'test_foo.py', '# py test')
+    ts_file = _write(tmp_path / '__tests__' / 'foo.test.ts', '// ts test')
+    tsx_file = _write(tmp_path / '__tests__' / 'bar.spec.tsx', '// tsx test')
+    # A non-test TS file (should NOT be returned by default)
+    _write(tmp_path / 'src' / 'foo.ts', '// source')
+
+    found = iter_test_files([tmp_path])
+    found_names = {p.name for p in found}
+
+    assert 'test_foo.py' in found_names
+    assert 'foo.test.ts' in found_names
+    assert 'bar.spec.tsx' in found_names
+    assert 'foo.ts' not in found_names
+
+
+def test_scan_patches_finds_both_py_and_ts(tmp_path):
+    _write(tmp_path / 'tests' / 'test_service.py', '''\
+from unittest.mock import patch
+
+def test_py():
+    with patch("app.service.fetch"):
+        pass
+''')
+    _write(tmp_path / '__tests__' / 'service.test.ts', '''\
+jest.mock('./service');
+''')
+
+    uses = scan_patches([tmp_path])
+
+    kinds = {u.patch_kind for u in uses}
+    assert 'patch' in kinds        # Python
+    assert 'jest.mock' in kinds    # TypeScript
+
+
+def test_patches_adapter_ts_project(tmp_path):
+    _write(tmp_path / '__tests__' / 'auth.test.ts', '''\
+jest.mock('./auth');
+jest.spyOn(AuthService, 'login');
+vi.fn();
+''')
+
+    result = PatchesAdapter(str(tmp_path), 'group=target').get_structure()
+
+    assert result['total_uses'] == 3
+    targets = {g['key'] for g in result['groups']}
+    assert './auth' in targets
+    assert 'AuthService.login' in targets

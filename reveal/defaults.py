@@ -17,6 +17,28 @@ Usage:
 # so one walker would skip `.ruff_cache`/`htmlcov` while another descended into
 # it. This is the superset; every caller either tests membership directly or
 # combines it with a `startswith('.')` guard, both of which a superset satisfies.
+# Symbols that dominate `calls://?rank=callers` on TypeScript codebases but carry
+# no architectural signal — test-framework lifecycle hooks, assertion helpers, and
+# mock APIs.  Suppressed by default in rank_by_callers; opt back in via
+# ?test-framework=true.
+TEST_FRAMEWORK_CALLEE_NAMES = frozenset({
+    # Test structure hooks (Jest / Vitest / Jasmine / Cypress)
+    'describe', 'it', 'test',
+    'beforeEach', 'afterEach', 'beforeAll', 'afterAll',
+    'fdescribe', 'fit', 'xdescribe', 'xit', 'xtest',
+    # Assertion entry point and mock APIs
+    'expect', 'mock', 'spyOn', 'vi', 'jest', 'cy',
+    # Jest / Vitest matchers (chained on expect() — appear as standalone callees)
+    'toBe', 'toEqual', 'toStrictEqual', 'toBeNull', 'toBeUndefined',
+    'toBeDefined', 'toBeTruthy', 'toBeFalsy', 'toBeNaN', 'toBeCloseTo',
+    'toContain', 'toContainEqual', 'toHaveLength', 'toHaveProperty',
+    'toHaveBeenCalled', 'toHaveBeenCalledWith', 'toHaveBeenCalledTimes',
+    'toHaveBeenLastCalledWith', 'toHaveBeenNthCalledWith',
+    'toHaveReturnedWith', 'toHaveReturnedTimes',
+    'toThrow', 'toThrowError', 'toMatchSnapshot', 'toMatchInlineSnapshot',
+    'toMatchObject', 'resolves', 'rejects', 'not',
+})
+
 SKIP_DIRECTORIES = frozenset({
     # Version control
     '.git',

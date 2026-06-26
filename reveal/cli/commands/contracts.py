@@ -2,15 +2,46 @@
 
 import argparse
 import json
+import os
 import sys
 from argparse import Namespace
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
+from ...defaults import SKIP_DIRECTORIES
+from ...utils.path_utils import detect_non_python_language
+
+_SKIP_DIRS: frozenset = SKIP_DIRECTORIES
+
 _CONTRACT_PATH_HINTS: frozenset = frozenset({
     'base', 'schema', 'contract', 'protocol', 'interface',
     'types', 'models', 'dto', 'abstract', 'abc',
 })
+
+
+_TS_EXTENSIONS: frozenset = frozenset({'.ts', '.tsx'})
+
+
+def _has_python_files(path: Path) -> bool:
+    if path.is_file():
+        return path.suffix == '.py'
+    for root, dirs, filenames in os.walk(str(path)):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+        for fname in filenames:
+            if fname.endswith('.py'):
+                return True
+    return False
+
+
+def _has_typescript_files(path: Path) -> bool:
+    if path.is_file():
+        return path.suffix.lower() in _TS_EXTENSIONS
+    for root, dirs, filenames in os.walk(str(path)):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+        for fname in filenames:
+            if Path(fname).suffix.lower() in _TS_EXTENSIONS:
+                return True
+    return False
 
 
 def create_contracts_parser() -> argparse.ArgumentParser:
@@ -72,7 +103,17 @@ def _scan_contracts(
 ) -> Dict[str, Any]:
     from reveal.adapters.ast.analysis import collect_structures
 
+    unsupported_language = ''
+    is_typescript = _has_typescript_files(path)
+
+    if not _has_python_files(path) and not is_typescript:
+        unsupported_language = detect_non_python_language(path)
+
     structures = collect_structures(str(path))
+
+    if is_typescript:
+        return _scan_contracts_ts(path, structures, abstract_only, show_implementations)
+
     all_classes = _extract_all_classes(structures)
 
     # Classify contracts
@@ -129,6 +170,122 @@ def _scan_contracts(
         'dataclasses': dataclasses_,
         'basemodels': basemodels,
         'path_heuristic': path_heuristic,
+        'unsupported_language': unsupported_language,
+    }
+
+
+def _classify_ts(element: Dict[str, Any]) -> str:
+    """Classify a TypeScript element into a contract category.
+
+    Returns one of: 'contract', 'abstract_class', 'typed_dict', 'implementation', or ''.
+    - 'contract'       → interface declarations (TS's native contract form)
+    - 'abstract_class' → abstract class declarations
+    - 'typed_dict'     → type alias declarations (object-shape types)
+    - 'implementation' → concrete class that extends/implements something
+    - ''               → concrete class with no bases (not a contract)
+    """
+    category = element.get('category', '')
+    name = element.get('name', '')
+    bases = element.get('bases', [])
+
+    if category == 'interfaces':
+        return 'contract'
+    if category == 'types':
+        return 'typed_dict'
+    if category == 'classes':
+        # Detect abstract class by checking element name matches abstract_class_declaration
+        # The node_type is embedded in the file; we detect via a naming convention or
+        # by inspecting the raw source. Instead, we check if the class has an
+        # 'abstract' flag set. Since collect_structures doesn't pass node_type through,
+        # we detect abstract classes by presence of 'abstract_methods' with no bases
+        # OR by checking if the file element has an 'is_abstract' field.
+        # The most reliable approach: abstract_class_declaration produces elements
+        # that appear in the 'classes' category. We flag them via the element's
+        # 'is_abstract' field if present (added below), or fall back to no bases + name.
+        if element.get('is_abstract'):
+            return 'abstract_class'
+        if bases:
+            return 'implementation'
+    return ''
+
+
+def _extract_ts_elements(structures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Extract TypeScript contract elements from collect_structures output.
+
+    Collects elements of categories: 'interfaces', 'types', and 'classes'.
+    For 'classes' in TypeScript files, also marks abstract classes.
+    """
+    elements = []
+    for file_struct in structures:
+        file_path = file_struct.get('file', '')
+        if Path(file_path).suffix.lower() not in _TS_EXTENSIONS:
+            continue
+        for elem in file_struct.get('elements', []):
+            cat = elem.get('category', '')
+            if cat not in ('interfaces', 'types', 'classes'):
+                continue
+            elements.append({
+                'name': elem['name'],
+                'file': file_path,
+                'line': elem.get('line', 0),
+                'bases': elem.get('bases', []),
+                'decorators': elem.get('decorators', []),
+                'abstract_methods': [],
+                'implementations': [],
+                'category': cat,
+                'is_abstract': elem.get('is_abstract', False),
+            })
+    return elements
+
+
+def _scan_contracts_ts(
+    path: Path,
+    structures: List[Dict[str, Any]],
+    abstract_only: bool,
+    show_implementations: bool,
+) -> Dict[str, Any]:
+    """TypeScript-specific contract scanner."""
+    all_elements = _extract_ts_elements(structures)
+
+    # TS contract groups — mapped to the Python group names for render compatibility
+    contracts: List[Dict[str, Any]] = []       # interfaces  → shown as "Protocols" slot
+    abstract_classes: List[Dict[str, Any]] = [] # abstract class
+    typed_dicts: List[Dict[str, Any]] = []      # type alias
+    implementations: List[Dict[str, Any]] = []  # concrete class with bases
+
+    contract_names: Set[str] = set()
+
+    for elem in all_elements:
+        kind = _classify_ts(elem)
+        if kind == 'contract':
+            contracts.append(elem)
+            contract_names.add(elem['name'])
+        elif kind == 'abstract_class':
+            abstract_classes.append(elem)
+            contract_names.add(elem['name'])
+        elif kind == 'typed_dict' and not abstract_only:
+            typed_dicts.append(elem)
+            contract_names.add(elem['name'])
+        elif kind == 'implementation' and not abstract_only:
+            implementations.append(elem)
+
+    if show_implementations:
+        _add_implementations(all_elements, contract_names, contracts + abstract_classes)
+
+    total = len(contracts) + len(abstract_classes) + len(typed_dicts)
+
+    return {
+        'path': str(path),
+        'total_contracts': total,
+        # Map to the Python group keys contracts.py renders understand
+        'abcs': abstract_classes,
+        'protocols': contracts,
+        'typeddicts': typed_dicts,
+        'dataclasses': implementations,
+        'basemodels': [],
+        'path_heuristic': [],
+        'unsupported_language': '',
+        '_ts_mode': True,
     }
 
 
@@ -245,6 +402,7 @@ def _add_implementations(
 def _render_report(report: Dict[str, Any]) -> None:
     path = report['path']
     total = report['total_contracts']
+    ts_mode = report.get('_ts_mode', False)
 
     print()
     print(f"Contracts: {path}")
@@ -253,17 +411,31 @@ def _render_report(report: Dict[str, Any]) -> None:
     print()
 
     if total == 0:
-        print("  No contracts or seams found.")
-        print("  Try widening the path or checking imports for ABC/Protocol usage.")
+        lang = report.get('unsupported_language', '')
+        if lang:
+            print(f"  reveal contracts currently supports Python and TypeScript.")
+            print(f"  No supported files found — detected {lang}.")
+        else:
+            print("  No contracts or seams found.")
+            if ts_mode:
+                print("  Try widening the path or checking for interface/abstract class usage.")
+            else:
+                print("  Try widening the path or checking imports for ABC/Protocol usage.")
         print()
         return
 
-    _render_group("Abstract Base Classes", report['abcs'], show_methods=True, show_impls=True)
-    _render_group("Protocols", report['protocols'], show_methods=True, show_impls=True)
-    _render_group("TypedDicts", report['typeddicts'], show_methods=False, show_impls=False)
-    _render_group("Dataclasses", report['dataclasses'], show_methods=False, show_impls=False)
-    _render_group("Pydantic BaseModels", report['basemodels'], show_methods=False, show_impls=False)
-    _render_group("Path-heuristic bases", report['path_heuristic'], show_methods=True, show_impls=True)
+    if ts_mode:
+        _render_group("Abstract Classes", report['abcs'], show_methods=False, show_impls=True)
+        _render_group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
+        _render_group("Type Aliases", report['typeddicts'], show_methods=False, show_impls=False)
+        _render_group("Implementing Classes", report['dataclasses'], show_methods=False, show_impls=False)
+    else:
+        _render_group("Abstract Base Classes", report['abcs'], show_methods=True, show_impls=True)
+        _render_group("Protocols", report['protocols'], show_methods=True, show_impls=True)
+        _render_group("TypedDicts", report['typeddicts'], show_methods=False, show_impls=False)
+        _render_group("Dataclasses", report['dataclasses'], show_methods=False, show_impls=False)
+        _render_group("Pydantic BaseModels", report['basemodels'], show_methods=False, show_impls=False)
+        _render_group("Path-heuristic bases", report['path_heuristic'], show_methods=True, show_impls=True)
 
 
 def _render_group(

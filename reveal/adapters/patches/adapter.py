@@ -15,7 +15,7 @@ from .renderer import PatchesRenderer
 @register_adapter('patches')
 @register_renderer(PatchesRenderer)
 class PatchesAdapter(ResourceAdapter):
-    """Adapter for exploring patch pressure in Python tests."""
+    """Adapter for exploring patch pressure in Python and TypeScript tests."""
 
     BUDGET_LIST_FIELD = 'groups'
 
@@ -27,7 +27,7 @@ class PatchesAdapter(ResourceAdapter):
     def get_help() -> Dict[str, Any]:
         return {
             'name': 'patches',
-            'description': 'Scan Python tests for mock/monkeypatch pressure grouped by target.',
+            'description': 'Scan Python and TypeScript/JavaScript tests for mock/patch pressure grouped by target.',
             'syntax': 'patches://<tests-path>[?group=target|test|file&limit=N&min=N]',
             'examples': [
                 {'uri': 'patches://tests', 'description': 'Summarize patch pressure in tests/'},
@@ -37,14 +37,15 @@ class PatchesAdapter(ResourceAdapter):
                 {'uri': 'patches://tests?private=true', 'description': 'Show patches of private/internal targets'},
             ],
             'features': [
-                'Detects unittest.mock.patch decorators and context managers',
-                'Detects patch.object and pytest monkeypatch.setattr',
+                'Detects unittest.mock.patch decorators and context managers (Python)',
+                'Detects patch.object and pytest monkeypatch.setattr (Python)',
+                'Detects jest.mock, vi.mock, jest.spyOn, vi.spyOn, jest.fn, vi.fn, jest.replaceProperty (TypeScript/JS)',
                 'Groups by target, test function, or test file',
                 'Preserves unresolved dynamic targets instead of dropping them',
                 'JSON output for agents and dashboards',
             ],
             'notes': [
-                'Python tests are the initial supported language.',
+                'Supports Python (unittest.mock/pytest) and TypeScript/JavaScript (Jest/Vitest).',
                 'Patch pressure is advisory. Mocking external boundaries can be normal and correct.',
                 'Use reveal testability <src> --tests <tests> to join patch pressure with production boundary fan-out.',
             ],
@@ -60,7 +61,7 @@ class PatchesAdapter(ResourceAdapter):
     def get_schema() -> Dict[str, Any]:
         return {
             'adapter': 'patches',
-            'description': 'Patch pressure scanner for Python tests',
+            'description': 'Patch pressure scanner for Python and TypeScript/JavaScript tests',
             'uri_syntax': 'patches://<tests-path>?group=target&limit=20',
             'query_params': {
                 'group': {'type': 'string', 'description': 'Grouping mode: target, test, or file', 'examples': ['group=target']},
@@ -93,7 +94,8 @@ class PatchesAdapter(ResourceAdapter):
                 {'uri': 'patches://tests?group=test&min=3', 'description': 'Find patch-heavy tests', 'output_type': 'patches_scan'},
             ],
             'notes': [
-                'Uses Python AST parsing, not regex text matching.',
+                'Uses Python AST parsing for .py files, tree-sitter for .ts/.tsx/.js/.jsx files.',
+                'TypeScript: recognises jest.mock, vi.mock, jest.spyOn, vi.spyOn, jest.fn, vi.fn, jest.replaceProperty.',
                 'Dynamic patch targets are retained with lower confidence.',
             ],
         }
@@ -121,6 +123,11 @@ class PatchesAdapter(ResourceAdapter):
         )
         targets = {p.target_qualname or p.target_raw for p in patches}
 
+        warnings = [{
+            'code': 'W-PATCHES-1',
+            'message': 'Patch pressure is advisory; mocking external boundaries can be correct.',
+        }]
+
         return {
             'contract_version': '1.1',
             'type': 'patches_scan',
@@ -140,12 +147,9 @@ class PatchesAdapter(ResourceAdapter):
             'groups': [g.to_dict() for g in groups],
             'uses': [p.to_dict() for p in patches],
             'meta': self.create_meta(
-                parse_mode='python_ast',
+                parse_mode='python_ast+tree_sitter',
                 confidence=0.9,
-                warnings=[{
-                    'code': 'W-PATCHES-1',
-                    'message': 'Patch pressure is advisory; mocking external boundaries can be correct.',
-                }],
+                warnings=warnings,
                 errors=[],
             ),
         }

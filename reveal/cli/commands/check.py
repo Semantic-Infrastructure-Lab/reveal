@@ -130,8 +130,18 @@ def run_check(args: Namespace) -> None:
     profile_name = getattr(args, 'profile', None)
     if profile_name:
         from reveal.rules.profiles import resolve_profile
+        from reveal.config import RevealConfig
+
+        # Load project profiles from .reveal.yaml (if any) before resolving
+        path_for_config = getattr(args, 'path', None) or '.'
         try:
-            resolved = resolve_profile(profile_name)
+            cfg = RevealConfig.get(start_path=Path(path_for_config))
+            project_profiles = cfg._config.get('profiles') or None
+        except Exception:
+            project_profiles = None
+
+        try:
+            resolved = resolve_profile(profile_name, user_profiles=project_profiles)
         except KeyError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)

@@ -94,6 +94,78 @@ class TestHandleRulesList(unittest.TestCase):
         )
         mock_exit.assert_called_once_with(0)
 
+    @patch('sys.exit')
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_handle_rules_list_shows_disabled_opt_in(self, mock_stdout, mock_exit):
+        """Test --rules shows disabled/opt-in rules with ○ icon and [opt-in] tag (BACK-324)."""
+        handle_rules_list(version="0.36.1")
+
+        output = mock_stdout.getvalue()
+        # D002 and L002 are known opt-in rules; at least one should appear
+        self.assertIn('○', output, "Should show ○ for disabled/opt-in rules")
+        self.assertIn('[opt-in]', output, "Should show [opt-in] tag for disabled rules")
+        # Specific known opt-in rule
+        self.assertIn('D002', output, "D002 is an opt-in rule and should appear in listing")
+        mock_exit.assert_called_once_with(0)
+
+    @patch('sys.exit')
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_handle_rules_list_totals_include_opt_in_count(self, mock_stdout, mock_exit):
+        """Test totals line reports opt-in count and enable instructions (BACK-324)."""
+        handle_rules_list(version="0.36.1")
+
+        output = mock_stdout.getvalue()
+        # Totals must mention opt-in count and how to enable
+        self.assertRegex(
+            output,
+            r'Total: \d+ rules \(\d+ opt-in, enable via --select <code>\)',
+            "Totals line must follow format: N rules (M opt-in, enable via --select <code>)"
+        )
+        mock_exit.assert_called_once_with(0)
+
+    @patch('sys.exit')
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_handle_rules_list_enabled_rules_not_tagged_opt_in(self, mock_stdout, mock_exit):
+        """Test enabled rules show ✓ and no [opt-in] tag (BACK-324)."""
+        handle_rules_list(version="0.36.1")
+
+        output = mock_stdout.getvalue()
+        lines = output.splitlines()
+        for line in lines:
+            # Lines with ✓ (enabled) should not have [opt-in]
+            if '✓' in line:
+                self.assertNotIn('[opt-in]', line,
+                    f"Enabled rule line should not have [opt-in]: {line!r}")
+            # Lines with ○ (disabled) should always have [opt-in]
+            if '○' in line and line.strip().startswith('○'):
+                self.assertIn('[opt-in]', line,
+                    f"Disabled rule line should have [opt-in]: {line!r}")
+        mock_exit.assert_called_once_with(0)
+
+    def test_list_rules_includes_disabled_by_default(self):
+        """Test list_rules() returns disabled rules by default (BACK-324)."""
+        rules = RuleRegistry.list_rules()
+        disabled = [r for r in rules if not r['enabled']]
+        self.assertGreater(len(disabled), 0,
+            "list_rules() should include disabled/opt-in rules by default")
+
+    def test_list_rules_exclude_disabled_when_requested(self):
+        """Test list_rules(include_disabled=False) omits disabled rules."""
+        all_rules = RuleRegistry.list_rules(include_disabled=True)
+        enabled_only = RuleRegistry.list_rules(include_disabled=False)
+        disabled = [r for r in all_rules if not r['enabled']]
+        if disabled:
+            self.assertLess(
+                len(enabled_only), len(all_rules),
+                "include_disabled=False should return fewer rules than include_disabled=True"
+            )
+            disabled_codes = {r['code'] for r in disabled}
+            enabled_only_codes = {r['code'] for r in enabled_only}
+            self.assertTrue(
+                disabled_codes.isdisjoint(enabled_only_codes),
+                "include_disabled=False should not include any disabled rule codes"
+            )
+
 
 class TestHandleExplainRule(unittest.TestCase):
     """Tests for handle_explain_rule function."""
