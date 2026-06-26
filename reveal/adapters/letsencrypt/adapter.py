@@ -9,6 +9,7 @@ Usage:
     reveal letsencrypt:// --check-duplicates # Certs with identical SANs
 """
 
+import glob
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -125,34 +126,53 @@ def _find_duplicates(certs: List[Dict]) -> List[List[Dict]]:
     return [group for group in groups.values() if len(group) > 1]
 
 
-_RENEWAL_TIMER_PATHS = [
-    # systemd units (distro-specific locations)
-    '/etc/systemd/system/certbot.timer',
-    '/lib/systemd/system/certbot.timer',
-    '/usr/lib/systemd/system/certbot.timer',
-    # cron-based renewal
-    '/etc/cron.d/certbot',
-    '/etc/cron.daily/certbot',
+# Standard dirs a certbot renewal unit / cron job can live in. Scanned by glob so
+# every naming variant is caught without a subprocess: certbot.timer (apt),
+# snap.certbot.renew.timer (snap — certbot's official install method),
+# certbot-renew.timer (seen in the wild). See BACK-376.
+_SYSTEMD_UNIT_DIRS = [
+    '/etc/systemd/system',
+    '/lib/systemd/system',
+    '/usr/lib/systemd/system',
+    '/run/systemd/system',
+]
+_CRON_DIRS = [
+    '/etc/cron.d',
+    '/etc/cron.daily',
+    '/etc/cron.hourly',
+    '/etc/cron.weekly',
 ]
 
 
 def _check_renewal_timer() -> Dict[str, Any]:
-    """Return renewal automation status by probing well-known timer/cron paths.
+    """Return renewal automation status by globbing well-known timer/cron dirs.
 
-    No subprocess execution — filesystem presence only.  A missing timer means
-    certs will expire silently even though certbot is installed.
+    No subprocess execution — filesystem presence only.  Reports the presence of a
+    renewal unit/cron *file*; this does not prove the timer is enabled/active (only
+    ``systemctl list-timers`` could, which this adapter deliberately avoids).
     """
-    found = []
-    for path in _RENEWAL_TIMER_PATHS:
-        if Path(path).exists():
-            kind = 'systemd' if 'systemd' in path else 'cron'
+    found: List[Dict[str, str]] = []
+    seen = set()
+    for unit_dir in _SYSTEMD_UNIT_DIRS:
+        for path in sorted(glob.glob(f'{unit_dir}/*certbot*.timer')):
+            if path in seen:
+                continue
+            seen.add(path)
+            kind = 'snap' if Path(path).name.startswith('snap.') else 'systemd'
             found.append({'path': path, 'kind': kind})
+    for cron_dir in _CRON_DIRS:
+        for path in sorted(glob.glob(f'{cron_dir}/*certbot*')):
+            if path in seen:
+                continue
+            seen.add(path)
+            found.append({'path': path, 'kind': 'cron'})
     return {
         'configured': bool(found),
         'mechanisms': found,
         'warning': None if found else (
-            'No certbot renewal timer or cron job found — '
-            'certs will expire without automatic renewal'
+            'No certbot renewal timer or cron file found — certs may expire without '
+            'automatic renewal (checked systemd unit and cron dirs; run '
+            '`systemctl list-timers` to confirm)'
         ),
     }
 

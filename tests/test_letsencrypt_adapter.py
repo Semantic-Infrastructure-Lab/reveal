@@ -347,50 +347,76 @@ class TestLetsEncryptAdapter(unittest.TestCase):
 
 class TestCheckRenewalTimer(unittest.TestCase):
 
+    def _scan_with_dirs(self, systemd_files=(), cron_files=()):
+        """Run _check_renewal_timer against temp systemd/cron dirs (glob-based)."""
+        from reveal.adapters.letsencrypt import adapter as le_mod
+        with tempfile.TemporaryDirectory() as sysdir, \
+                tempfile.TemporaryDirectory() as crondir:
+            for name in systemd_files:
+                Path(sysdir, name).touch()
+            for name in cron_files:
+                Path(crondir, name).touch()
+            orig_sys, orig_cron = le_mod._SYSTEMD_UNIT_DIRS, le_mod._CRON_DIRS
+            le_mod._SYSTEMD_UNIT_DIRS = [sysdir]
+            le_mod._CRON_DIRS = [crondir]
+            try:
+                return _check_renewal_timer()
+            finally:
+                le_mod._SYSTEMD_UNIT_DIRS = orig_sys
+                le_mod._CRON_DIRS = orig_cron
+
     def test_returns_unconfigured_when_no_paths_exist(self):
-        """Should report not configured when no timer/cron paths are found."""
-        with patch('reveal.adapters.letsencrypt.adapter.Path') as MockPath:
-            MockPath.return_value.exists.return_value = False
-            result = _check_renewal_timer()
+        """Should report not configured when no timer/cron files are found."""
+        result = self._scan_with_dirs()
         self.assertFalse(result['configured'])
         self.assertEqual(result['mechanisms'], [])
         self.assertIsNotNone(result['warning'])
         self.assertIn('renewal timer', result['warning'])
 
     def test_detects_systemd_timer(self):
-        """Should report configured when a systemd certbot.timer file exists."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            timer_path = os.path.join(tmpdir, 'certbot.timer')
-            Path(timer_path).touch()
-
-            from reveal.adapters.letsencrypt import adapter as le_mod
-            original_paths = le_mod._RENEWAL_TIMER_PATHS
-            le_mod._RENEWAL_TIMER_PATHS = [timer_path]
-            try:
-                result = _check_renewal_timer()
-            finally:
-                le_mod._RENEWAL_TIMER_PATHS = original_paths
-
+        """Should report configured when an apt-style certbot.timer file exists."""
+        result = self._scan_with_dirs(systemd_files=['certbot.timer'])
         self.assertTrue(result['configured'])
         self.assertEqual(len(result['mechanisms']), 1)
+        self.assertEqual(result['mechanisms'][0]['kind'], 'systemd')
         self.assertIsNone(result['warning'])
+
+    def test_detects_snap_timer(self):
+        """BACK-376: snap-installed certbot's timer must be detected and labelled 'snap'."""
+        result = self._scan_with_dirs(systemd_files=['snap.certbot.renew.timer'])
+        self.assertTrue(result['configured'])
+        self.assertEqual(result['mechanisms'][0]['kind'], 'snap')
+        self.assertIsNone(result['warning'])
+
+    def test_detects_naming_variant_timer(self):
+        """A non-standard certbot-renew.timer name is still caught by the glob."""
+        result = self._scan_with_dirs(systemd_files=['certbot-renew.timer'])
+        self.assertTrue(result['configured'])
+        self.assertEqual(result['mechanisms'][0]['kind'], 'systemd')
 
     def test_detects_cron_timer(self):
         """Should detect cron-based renewal and label kind as 'cron'."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cron_path = os.path.join(tmpdir, 'certbot')
-            Path(cron_path).touch()
-
-            from reveal.adapters.letsencrypt import adapter as le_mod
-            original_paths = le_mod._RENEWAL_TIMER_PATHS
-            le_mod._RENEWAL_TIMER_PATHS = [cron_path]
-            try:
-                result = _check_renewal_timer()
-            finally:
-                le_mod._RENEWAL_TIMER_PATHS = original_paths
-
+        result = self._scan_with_dirs(cron_files=['certbot'])
         self.assertTrue(result['configured'])
         self.assertEqual(result['mechanisms'][0]['kind'], 'cron')
+
+    def test_ignores_unrelated_units(self):
+        """Non-certbot units/cron files must not be mistaken for renewal."""
+        result = self._scan_with_dirs(
+            systemd_files=['nginx.service', 'logrotate.timer'],
+            cron_files=['logrotate'],
+        )
+        self.assertFalse(result['configured'])
+
+    def test_snap_and_cron_both_reported(self):
+        """Multiple mechanisms across dirs are all reported."""
+        result = self._scan_with_dirs(
+            systemd_files=['snap.certbot.renew.timer'],
+            cron_files=['certbot'],
+        )
+        self.assertTrue(result['configured'])
+        kinds = {m['kind'] for m in result['mechanisms']}
+        self.assertEqual(kinds, {'snap', 'cron'})
 
     def test_renewal_timer_included_in_get_structure(self):
         """get_structure() should always include renewal_timer key."""
