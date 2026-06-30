@@ -9,15 +9,16 @@ This document outlines reveal's development priorities and future direction. For
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
 
-### v0.100.2 — TypeScript-aware `contracts`/`surface`/`patches://`, confidence metadata, letsencrypt snap fix
-- ✅ `contracts`/`surface`/`patches://` now work on TypeScript (BACK-372/373/374), with supertest false-positives removed (BACK-375).
-- ✅ Confidence/limitation metadata on inference-heavy outputs — `calls://?uncalled`, `depends://`, `surface` (BACK-330).
-- ✅ `letsencrypt://` no longer false-warns on snap-installed certbot — glob-based renewal-timer detection (BACK-376).
+### v0.101.0 — Commit-share ownership queries + production-only surface scan
+- ✅ `git://<path>?type=ownership` — commit-share authorship for file / directory / whole repo: primary author, per-author %, contributor count, last-touch date. Foundation for bus-factor / key-person reads; scope extends to directories and the whole repo (subtree oid comparison). `?merges=1`, `?limit=N`, shallow-clone warning (BACK-383).
+- ✅ `reveal surface --source-only` — excludes test files and directories from surface scans so DD/security reads see only production surface. Prunes `tests/`, `__tests__/`, `test_*.py`, `*.test.ts`, etc. Dogfood: 2248 → 286 entries (BACK-380).
+- ✅ Bug fixes: `mock.patch` decorators no longer misclassified as HTTP PATCH routes (BACK-377); `imports://` flood on committed `venv/` fixed via `os.walk` + `SKIP_DIRECTORIES` (BACK-378); shallow-clone warning for `?type=blame` (BACK-379).
 
 Earlier highlights (newest first):
 
 | Version | Headline |
 |---------|----------|
+| v0.100.2 | TypeScript-aware `contracts`/`surface`/`patches://`, confidence metadata, letsencrypt snap fix |
 | v0.100.1 | TypeScript/TSX class method extraction by name |
 | v0.100.0 | Data-driven audit (BACK-366–369), D005 cross-file literal duplication, help-system overhaul |
 | v0.99.1  | `claude://` remote-session fixes + URI routing correctness |
@@ -37,7 +38,7 @@ Earlier releases (v0.33–v0.91) and full per-item notes: [CHANGELOG.md](CHANGEL
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: **9,342 passing** (v0.100.x) — 22 skipped (intentional: PowerPivot fixtures, network adapters)
+- Test count: **9,400 passing** (v0.101.0) — 22 skipped (intentional: PowerPivot fixtures, network adapters)
 - Coverage: **~68%** — target 90%+
 - UX query/navigation surface: complete (query operators, field selection, element discovery, `--outline`/`--scope`/`--varflow`/`--calls` range)
 

@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.101.0] - 2026-06-30 (session electric-zenith-0630)
 
 ### Added
 - **`surface --source-only` flag (BACK-380)** — excludes test files and directories from the surface scan so DD / security reads see only production surface. Prunes test dirs (names starting with `test`/`spec`, plus `__tests__`) and test files (`test_*.py`, `*_test.py`, `conftest.py`, `*.test.ts`, `*.spec.ts`, `*.test.tsx`, `*.spec.tsx`) during file collection. Single-file invocations are unaffected; `_meta.known_limits` records the exclusion. Dogfood: 2242 → 286 surface entries on reveal's own tree. +11 tests.
