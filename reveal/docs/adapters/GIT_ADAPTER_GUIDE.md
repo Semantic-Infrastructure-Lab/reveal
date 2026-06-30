@@ -639,16 +639,71 @@ Next Steps:
 
 ---
 
+## Ownership (Commit-Share)
+
+`?type=ownership` aggregates **git-log authorship** over a file, a directory, or
+the whole repository — the input to a bus-factor / key-person read. Where blame
+answers "who wrote these surviving *lines*," ownership answers "who has
+*committed* most to this scope," and it works on directories where per-line
+blame can't.
+
+```bash
+reveal 'git://src/app.py?type=ownership'    # one file
+reveal 'git://src/?type=ownership'          # directory aggregate
+reveal 'git://.?type=ownership'             # whole repository
+```
+
+**Output** (per target): primary author, per-author commit-share %, contributor
+count, and last-touch date.
+
+```
+Ownership (File): src/app.py @ HEAD
+Commits: 3  ·  Contributors: 2  ·  Last touch: 2026-06-18
+
+Authors (by commit-share):
+  Alice                          2 commits ( 66.7%)  Last: 2026-06-18
+  Bob                            1 commits ( 33.3%)  Last: 2026-06-12
+
+ℹ Commit-share (not surviving-line ownership) — use ?type=blame for line-level attribution.
+```
+
+**Modifiers**:
+- `?merges=1` — include merge commits (excluded by default; merges rarely represent authorship).
+- `?limit=N` — cap the number of commits walked. Ownership uses full history by default; on very large repos cap the walk or scope to a subdirectory.
+
+**How it works**: a directory path resolves to a *subtree oid*, so one
+comparison of the commit's subtree against its parent's detects any change
+beneath it — the same primitive serves files, directories, and the repo root.
+Author identity is `name+email`; aliases or multiple emails count as distinct
+contributors.
+
+**Blame vs. ownership**:
+| | `?type=blame` | `?type=ownership` |
+|---|---|---|
+| Granularity | per surviving line | per commit |
+| Scope | single file | file / directory / repo |
+| Answers | "who wrote this code?" | "who works here?" |
+
+**Bus-factor recipe**: ownership surfaces the shares; the consumer ranks modules
+by fan-in (`calls://` / `imports://`) and applies the key-person verdict. Reveal
+does not compute the risk ranking — that judgment is the consumer's.
+
+**Shallow clone warning**: on a `--depth 1` clone, ownership prints a warning
+that shares are limited to the fetched history. Run `git fetch --unshallow` first.
+
+---
+
 ## Query Parameters
 
 ### Operational Parameters
 
 | Parameter | Type | Values | Description |
 |-----------|------|--------|-------------|
-| `type` | string | `history`, `blame` | Operation type for files |
+| `type` | string | `history`, `blame`, `ownership` | Operation type for files/directories |
 | `detail` | string | `full`, `summary` | Blame detail level (default: summary) |
 | `element` | string | function/class name | Semantic blame target |
 | `ref` | string | branch/tag/commit | Override the starting ref — alias for `@ref` in the URI (e.g., `?ref=v0.63.0`) |
+| `merges` | string | `1` | Include merge commits in ownership walk (default: excluded) |
 
 ### Filter Parameters
 
@@ -972,6 +1027,44 @@ reveal git://.?message~=bug&limit=100&sort=date
   ]
 }
 ```
+
+### 6. git_ownership
+
+**Use case**: Commit-share ownership for a file, directory, or whole repository
+
+**Schema**:
+```json
+{
+  "contract_version": "1.0",
+  "type": "git_ownership",
+  "source": "src/app.py@HEAD",
+  "source_type": "file",
+  "path": "src/app.py",
+  "ref": "HEAD",
+  "total_commits": 12,
+  "contributor_count": 3,
+  "primary_author": {
+    "name": "Alice", "email": "alice@example.com",
+    "commits": 8, "share": 0.6667, "last_touch": "2026-06-18"
+  },
+  "last_touch": "2026-06-18",
+  "authors": [
+    {"name": "Alice", "email": "alice@example.com", "commits": 8, "share": 0.6667, "last_touch": "2026-06-18"},
+    {"name": "Bob",   "email": "bob@example.com",   "commits": 4, "share": 0.3333, "last_touch": "2026-06-12"}
+  ],
+  "_meta": {
+    "analysis_kind": "commit-ownership",
+    "confidence": "high",
+    "known_limits": [
+      "commit-share, not line-ownership — use ?type=blame for surviving-line attribution",
+      "merge commits excluded by default (use ?merges=1 to include)",
+      "author identity is name+email — aliases / multiple emails count as distinct contributors"
+    ]
+  }
+}
+```
+
+`source_type` is `"file"`, `"directory"`, or `"repository"` depending on the path. The `shallow_clone: true` key is added when the repository is a shallow clone.
 
 ---
 
@@ -1864,8 +1957,9 @@ reveal git://.@main?limit=1000 --format=json | \
 
 ## Version History
 
+- **v0.101.0**: `git://?type=ownership` — commit-share ownership for file / directory / whole repo (`git_ownership` output type). `?merges=1` to include merge commits; `?limit=N` caps the history walk. Shallow-clone warning carried from blame.
 - **v1.0** (2025-02-14): Initial comprehensive guide
-  - All 5 output types documented
+  - 5 output types documented (git_repository, git_ref, git_file, git_file_history, git_file_blame)
   - Progressive disclosure pattern
   - Semantic blame for Python
   - Commit filtering with operators

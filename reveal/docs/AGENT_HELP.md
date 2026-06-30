@@ -1124,14 +1124,26 @@ reveal 'git://src/auth.py?type=blame&ignore=69b0093,f5fcac0'    # multiple expli
 
 # The motivating combined pattern: who really changed this function, ignoring formatting?
 reveal 'git://src/auth.py?type=blame&element=process_payment&ignore=off'
+
+# Ownership — commit-share over a file, directory, or whole repo (v0.101.0+)
+reveal 'git://src/auth.py?type=ownership'                        # primary author, contributor count, last touch
+reveal 'git://src/?type=ownership'                              # aggregate ownership of a directory
+reveal 'git://.?type=ownership'                                # whole-repo ownership
+reveal 'git://src/auth.py?type=ownership&merges=1'             # include merge commits (excluded by default)
+reveal 'git://.?type=ownership&limit=500'                      # cap the history walk on huge repos
 ```
 
 **When to use each mode:**
 - `?type=diff` — "what exactly did this commit change?" (replaces `git show`)
 - `?type=history&element=func` — "when was this function changed and by whom?" (replaces file history + manual grep)
 - `?type=history&content~=X` — "which commits introduced or removed this string?" (pickaxe search)
-- `?type=blame` — "who really owns these lines?" (noise commits auto-suppressed; use `?ignore=off` for raw)
+- `?type=blame` — "who really owns these *lines*?" (surviving-line attribution; noise commits auto-suppressed; use `?ignore=off` for raw)
+- `?type=ownership` — "who owns this file/dir/repo by *commit-share*?" (primary author, contributor count, last touch — the input to a bus-factor / key-person read)
 - `?element=L128-L162` — blame for a procedural file or specific line range (no named element needed)
+
+**Blame vs. ownership:** `?type=blame` is line-level (who wrote the *surviving lines* of one file). `?type=ownership` is commit-level and aggregates across a directory or repo (who has *committed* most). For a bus-factor map, compose `?type=ownership` per critical module — the fan-in ranking and key-person verdict are the consumer's call, reveal just surfaces the shares.
+
+**Shallow clone warning:** On a `--depth 1` clone (common for CI and DD scans), `?type=blame` and `?type=ownership` print `⚠ Shallow clone detected — attribution is limited to the fetched history`. Run `git fetch --unshallow` first to get accurate key-person / bus-factor data.
 
 **Performance note:** `?type=history&element=func` runs the analyzer once per commit per file. Use `?limit=10` or `?limit=20` for large file histories.
 
@@ -1460,13 +1472,17 @@ reveal deps . --format json        # Machine-readable for CI
 
 **Pattern:**
 ```bash
-reveal surface .                   # CLI commands, HTTP routes, env vars, network calls, FS writes
-reveal surface src/ --type http    # Filter to HTTP routes only
-reveal surface src/ --type env     # Filter to env-var reads only
-reveal surface . --format json     # Machine-readable, for diffing across versions
+reveal surface .                        # CLI commands, HTTP routes, env vars, network calls, FS writes
+reveal surface src/ --type http         # Filter to HTTP routes only
+reveal surface src/ --type env          # Filter to env-var reads only
+reveal surface . --format json          # Machine-readable, for diffing across versions
+reveal surface . --source-only          # Production surface only — excludes test files/dirs (v0.101.0+)
+reveal surface src/ --source-only --type sdk  # SDK egress, production code only (DD / security read)
 ```
 
 **What it finds:** CLI entry points (Click/argparse), HTTP routes (Flask/FastAPI/Django decorators), environment variable reads, network egress (requests, urllib, sockets), filesystem writes (open with `'w'`/`'a'`, `Path.write_*`, `shutil.*`), subprocess calls. *(Python only — TypeScript support tracked in BACK-373; returns an explicit note on non-Python paths rather than a silent zero.)*
+
+**`--source-only` (v0.101.0+):** Prunes test directories (`tests/`, `test/`, `spec/`, `__tests__/`, any dir starting with `test` or `spec`) and test files (`test_*.py`, `*_test.py`, `conftest.py`, `*.test.ts`, `*.spec.ts`, etc.) before scanning. Useful for DD/security reviews where test scaffolding adds noise. `_meta.known_limits` in JSON output records the exclusion.
 
 **Use case:** Pre-deploy boundary audit, security review, or "what does this service expose / depend on?" When a config value, env var, or external endpoint changes, `reveal surface` tells you which code paths participate.
 
@@ -4172,6 +4188,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
+- **v0.101.0** - `git://?type=ownership` — commit-share ownership for a file, directory, or whole repo (primary author, per-author %, contributor count, last-touch date; `?merges=1` includes merges, `?limit=N` caps history walk). `surface --source-only` — excludes test files/dirs from surface scans (production-only read for DD/security). Both carry the shallow-clone warning.
 - **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `stats://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `stats://` complexity no longer stuck at 1.00
 - **v0.96.0** - `reveal check --profile NAME` (built-in presets: `maintenance`, `security`, `ci-strict`; project-defined via `.reveal.yaml`); S001 hardcoded secrets rule (opt-in — `sk-proj-`/`ghp_`/`AKIA*` + secret-named vars); PHP `calls://` OO support (`$obj->method()`, `new ClassName()` callers indexed cross-file); `reveal --rules` shows opt-in rules with `○` icon; I002 false positives 143→0 (TYPE_CHECKING + function-body imports excluded from cycle graph); I005 TYPE_CHECKING false positive fixed; `reveal hotspots`/`testability` perf: 74s→10.5s / 3min→9s via gitignore pruning + ProcessPoolExecutor + lru_cache; V025 relationship drift rule (`reveal:// --check`); L001 resolves directory links to index file, L003 ignores local citations.
 - **v0.95.0** - tree-sitter-language-pack 1.x migration: 305 languages (was ~165), single abi3 wheel for Python 3.10–3.14+. **Breaking**: glibc floor raised to manylinux_2_34 (Ubuntu 22.04+, Debian 12+); Alpine/musl and Ubuntu 20.04 no longer supported. `reveal/core/treesitter_compat.py` for 1.x API shims.

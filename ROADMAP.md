@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-06-26 (burning-plasma-0626 — doc cleanup: collapsed shipped release history and shipped design specs into CHANGELOG pointers so the roadmap reads forward-looking)
+> **Last updated**: 2026-06-29 (flux-carnage-0629 — added Scope Test; reframed the DD feature batch around data primitives, not consumer verdicts)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -170,14 +170,105 @@ reveal/adapters/codex/
 
 ---
 
+### BACK-297: `xlsx://` — pivot table inspection (`?pivots=list/schema`)
+
+**Status**: Open
+**Value**: High | **Lift**: Medium
+**Filed**: infinite-antimatter-0628 (2026-06-28)
+
+Add `?pivots=list` and `?pivots=schema` query params to the xlsx adapter. Discovered need while analysing BMD thin workbooks — 8 pivot tables in a single thin had to be extracted by manually unzipping and parsing `xl/pivotTables/*.xml` and `xl/pivotCache/pivotCacheDefinition*.xml`. This is the core of understanding how any thin workbook wires to a Power Pivot / SSAS model.
+
+**What it enables:**
+```bash
+reveal "xlsx:///path/thin.xlsx?pivots=list"    # names, sheet locations, cache ids
+reveal "xlsx:///path/thin.xlsx?pivots=schema"  # full field breakdown per pivot
+```
+
+**Expected output (`?pivots=schema`):**
+```
+Pivot Tables (8):
+  pivotTable1  →  cache 1  (Daily Flash, A8:Y267)
+    Rows:    [Warehouses].[Division], [Warehouses].[Desc FIN Whs]
+    Cols:    [Measures].[Sales SEL], [Budgeted Sales], [GM Pct SEL] ...
+    Filters: [Periods].[Period with Current]
+
+  pivotTable2  →  cache 2  (As of Current Date, B7:D10)
+    Rows:    [Periods].[Period with Current]
+    Cols:    [Measures].[Current As Of Date], [Workdays SEL] ...
+```
+
+**Implementation sources:**
+- `xl/pivotTables/pivotTable*.xml` — `<pivotField>` with `axis=axisRow/axisCol/axisPage`; field names resolved via cache index
+- `xl/pivotCache/pivotCacheDefinition*.xml` — `<cacheField name="[Measures].[Sales SEL]">` — the MDX field references
+- `xl/workbook.xml` — `<pivotCache cacheId>` links pivot table → cache definition
+
+---
+
+### BACK-298: `xlsx://` — expose full OLAP connection string in `?connections=show`
+
+**Status**: Open
+**Value**: High | **Lift**: Low
+**Filed**: infinite-antimatter-0628 (2026-06-28)
+
+`?connections=show` currently returns name and type but silently drops the actual connection string from `dbPr/@connection`. For OLAP-connected workbooks (type 5, MSOLAP.5) this is the essential fact — it identifies which model and instance the file queries.
+
+**Fix:** Surface the full `dbPr/@connection` string and `dbPr/@command` in `?connections=show` output. Also surface `olapPr` attributes (sendLocale, rowDrillCount).
+
+**Example of what's currently missing:**
+```
+Provider=MSOLAP.5;Integrated Security=SSPI;
+Initial Catalog=BMD_Core_<guid>_SSPM;
+Data Source=https://bmdbi.portalfront.com/Shared%20Documents/Cores/BMD_Core.xlsx;
+MDX Compatibility=1;Safety Options=2;command=Sandbox
+```
+
+Discovered by having to read `xl/connections.xml` raw to find which core model a thin was pointed at.
+
+---
+
+### BACK-299: `xlsx://` — explain empty Power Pivot schema on OLAP-connected thin files
+
+**Status**: Open
+**Value**: Medium | **Lift**: Low
+**Filed**: infinite-antimatter-0628 (2026-06-28)
+
+When `?powerpivot=schema` is run on an OLAP-connected thin (no embedded `xl/model`), the adapter returns `Tables (0)` with no explanation. This is confusing — the workbook clearly has a Power Pivot connection but the model lives externally.
+
+**Fix:** Detect the "thin" pattern — MSOLAP external connection + no embedded xl/model — and return a diagnostic instead:
+
+```
+⚡ Power Pivot model: externally connected (no embedded tables)
+   OLAP source: BMD_Core_<guid>_SSPM
+   Data Source: https://bmdbi.portalfront.com/.../BMD_Core.xlsx
+   → Run ?pivots=schema to see what this file queries from the model
+   → Run ?connections=show for full connection string
+```
+
+Detection heuristic: `xl/customData/item1.data` present (Power Pivot flag) + `xl/connections.xml` has a type-5 (OLAP) connection + `Tables (0)` after parsing.
+
+---
+
 ### Additional Subcommands
 
 Eight subcommands (`check`, `review`, `pack`, `health`, `dev`, `hotspots`, `overview`, `deps`) shipped. Remaining subcommand ideas:
 
 ```bash
 reveal onboarding            # First-day guide for unfamiliar codebases
-reveal audit                 # Security/compliance focus (S, B, N rules)
 ```
+*(`reveal audit` was listed here — dropped: "audit" names the consumer's activity, not data (see [Scope Test](#scope-test-what-belongs-in-reveal)), and it's already `check --profile security` from BACK-321.)*
+
+#### Structural Egress & Ownership Queries (field notes: yenifada-0629; reframed flux-carnage-0629)
+
+Field-validated on 6 real codebases (Saleor ~909K LOC, LiteLLM ~4.6K py files, 4 internal repos) during a due-diligence engagement. Source: `internal-docs/feedback/DD_FIRST_PASS_REVEAL_FEEDBACK_2026-06-29.md`. The DD use-case validated cleanly **on the primitives reveal already has** (`overview`, `architecture`, `surface`, `git://blame`). These items extend those primitives with new *data categories* — they do not add verdicts. The interpretive layer (AI-washing call, exposure verdict, debt valuation, DD playbook) lives in the **consumer's** tooling, not reveal — see [Scope Test](#scope-test-what-belongs-in-reveal).
+
+| Item | BACK | Pri | Data revealed (reveal's half) | Judgment (consumer's half) |
+|------|------|-----|-------------------------------|----------------------------|
+| `surface --source-only` | BACK-380 | ✅ | Scope flag: drop test files/dirs in one pass | — (pure scoping) |
+| `git://?type=ownership` | BACK-383 | ✅ | Per-file/dir/repo commit-share ownership: primary author, commit-share %, contributor count, last-touch | "bus-factor risk" ranking + key-person call |
+
+This whole track is now shipped or closed. `git://?type=ownership` (commit-share, file/dir/repo) builds on the BACK-379 shallow-clone detection. The bus-factor ranking is a consumer recipe composing it with `imports://`/`calls://` fan-in.
+
+`reveal dd`, `reveal debt --rate`, vendor-specific `surface` sub-categories (BACK-381/382), and other consumer workflows are **out of charter** — moved to [Explicitly Not Planned](#explicitly-not-planned).
 
 ### Relationship Queries (Call Graphs)
 - ✅ **`calls://` shipped v0.62.0** — `?target=fn`, `?callees=fn`, `?depth=N`, `?rank=callers`, `?format=dot`. See [CALLS_ADAPTER_GUIDE.md](reveal/docs/adapters/CALLS_ADAPTER_GUIDE.md).
@@ -302,13 +393,34 @@ Helpers consolidated in `reveal/core/treesitter_compat.py`. Two new regression t
 
 ---
 
+## Scope Test (What Belongs in Reveal)
+
+Reveal exposes **structural data**; the consumer applies **judgment**. Run every proposed feature through this test before filing it. Requests captured during a specific engagement drift toward that engagement's use-case — name and scope by the *data*, not the *verdict*.
+
+A feature belongs in reveal when **all** of these hold:
+
+1. **It reveals data that structurally exists** in the artifact (imports, calls, blame, complexity, cert dates) — not a derived opinion.
+2. **It's named after the data, not the consumer's activity.** `imports`, `surface`, `ownership` name data; `audit`, `dd`, `debt-in-dollars` name what the consumer concludes. If the name describes a verdict or a workflow, stop.
+3. **It applies no domain or business judgment.** Deterministic, domain-agnostic rules (complexity > N, circular imports, hardcoded-secret patterns) are fine — those are universal code properties. "Is this AI real," "is this a DD red flag," "what's the debt in dollars" are not.
+4. **It extends an existing primitive** (`surface` category, `calls://` / `git://` query) where it can, rather than adding a top-level subcommand named after a use-case.
+5. **It's a single reveal, not an orchestrated playbook.** Pipes compose; reveal does not run named multi-step sequences on the consumer's behalf.
+
+**Smell words in a proposed name:** *audit, assess, score, grade, verdict, rate, `*-in-dollars`*, or any consumer's process name (`dd`, `onboarding-review`). When you see them, the feature is usually a *consumer* of reveal's output and belongs in that consumer's tooling. Reframe to the data primitive it would have to read, and ship that instead.
+
+This is the positive form of the list below.
+
+---
+
 ## Explicitly Not Planned
 
-These violate reveal's mission ("reveal reveals, doesn't modify") or have unclear value:
+These violate reveal's mission ("reveal reveals, doesn't modify") or fail the [Scope Test](#scope-test-what-belongs-in-reveal):
 
 | Feature | Why Not |
 |---------|---------|
 | `--fix` auto-fix | Mission violation. Use Ruff/Black for formatting/fixes. |
+| `reveal dd` & other consumer-workflow composites | Named after a consumer's process, not the data; orchestrates a named multi-step playbook. Reveal composes via pipes — it doesn't run playbooks. Build the DD first-pass in consumer tooling (TechDNA CLI / tia task) over the existing primitives (`overview`→`architecture`→`surface`→`hotspots`→`git://blame`→`pack`). Decision: flux-carnage-0629 (BACK-384). |
+| `reveal debt --rate N` / debt-in-dollars scoring | A business opinion (dollar rate) layered on structural metrics. The inputs (`hotspots`/`circular`/`check`/`overview` counts) are already JSON-exportable; compute the valuation in the consumer's script. Decision: flux-carnage-0629 (BACK-385). |
+| Vendor-specific `surface` sub-categories (`ai-provider`, `agent-framework`, etc.) | A curated vendor list names the *vendor identity*, not the *coupling type* — breaking the pattern of every other category (`network`, `db`, `sdk`, `env`). The data is already in `surface --type sdk`; the list would be stale the week a new framework ships. Use `reveal surface . --type sdk \| grep -E 'openai\|anthropic\|litellm'`. Decision: poxinuku-0629 (BACK-381/382). |
 | `--no-fail` / `--exit-zero` | `\|\| true` is the Unix idiom. The flag conflates "checking" with "what to do about findings" — callers decide that, not the tool. Documented in AGENT_HELP under "Exit code 2 is breaking my pipeline." |
 | `semantic://` embedding search | Requires ML infrastructure; over-engineered |
 | `trace://` execution traces | Wrong domain (debugging tools) |

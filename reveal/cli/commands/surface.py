@@ -14,6 +14,14 @@ from ...utils.path_utils import detect_non_python_language
 # Canonical skip set lives in reveal.defaults (shared by every directory walk).
 _SKIP_DIRS: frozenset = SKIP_DIRECTORIES
 
+# Test directory names pruned by --source-only (prefix-match covers tests/, testing/, etc.)
+_TEST_DIR_PREFIX = 'test'
+_TEST_DIR_NAMES: frozenset = frozenset({'__tests__', 'spec', 'specs'})
+
+# Test file patterns pruned by --source-only
+_TEST_FILE_PY_NAMES: frozenset = frozenset({'conftest.py'})
+_TEST_FILE_TS_INFIX = ('.test.', '.spec.')
+
 _SURFACE_LABELS = {
     'cli': 'CLI commands / arguments',
     'http': 'HTTP routes',
@@ -36,11 +44,13 @@ def create_surface_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  reveal surface ./src          # All surfaces in src/\n"
-            "  reveal surface .              # Entire project\n"
-            "  reveal surface . --top 20     # Top 20 entries per category\n"
+            "  reveal surface ./src                    # All surfaces in src/\n"
+            "  reveal surface .                        # Entire project\n"
+            "  reveal surface . --top 20               # Top 20 entries per category\n"
             "  reveal surface . --format json\n"
-            "  reveal surface . --type env   # Only env vars\n"
+            "  reveal surface . --type env             # Only env vars\n"
+            "  reveal surface . --source-only          # Production code only (exclude tests)\n"
+            "  reveal surface . --source-only --type sdk  # SDK egress, production only\n"
         )
     )
     parser.add_argument(
@@ -62,6 +72,12 @@ def create_surface_parser() -> argparse.ArgumentParser:
         default=None,
         help='Show only the top N entries per surface type (default: all)'
     )
+    parser.add_argument(
+        '--source-only',
+        action='store_true',
+        default=False,
+        help='Exclude test files and directories from the scan (test_*.py, *_test.py, conftest.py, tests/, __tests__/, *.test.ts, *.spec.ts, etc.)'
+    )
     return parser
 
 
@@ -73,7 +89,8 @@ def run_surface(args: Namespace) -> None:
 
     type_filter = getattr(args, 'type', '')
     top = getattr(args, 'top', None)
-    report = _scan_surface(path, type_filter=type_filter)
+    source_only = getattr(args, 'source_only', False)
+    report = _scan_surface(path, type_filter=type_filter, source_only=source_only)
 
     if args.format == 'json':
         print(json.dumps(report, indent=2, default=str))
@@ -82,10 +99,10 @@ def run_surface(args: Namespace) -> None:
     _render_report(report, top=top)
 
 
-def _scan_surface(path: Path, type_filter: str = '') -> Dict[str, Any]:
+def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) -> Dict[str, Any]:
     from reveal.adapters.ast.nav_surface import scan_file_surface
     from reveal.adapters.ast.nav_surface_ts import scan_file_surface_ts
-    py_files, ts_files = _collect_source_files(path)
+    py_files, ts_files = _collect_source_files(path, source_only=source_only)
     surfaces: Dict[str, List[Dict[str, Any]]] = {
         k: [] for k in ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
     }
@@ -117,12 +134,28 @@ def _scan_surface(path: Path, type_filter: str = '') -> Dict[str, Any]:
             'known_limits': [
                 'taxonomy covers common libraries only — project-specific clients not detected',
                 'dynamic surface registrations (e.g. plugin-loaded routes) not tracked',
+                *(['test files excluded (--source-only)'] if source_only else []),
             ],
         },
     }
 
 
-def _collect_source_files(path: Path):
+def _is_test_dir(name: str) -> bool:
+    return name.startswith(_TEST_DIR_PREFIX) or name in _TEST_DIR_NAMES
+
+
+def _is_test_file(fpath: Path) -> bool:
+    name = fpath.name
+    stem = fpath.stem
+    suffix = fpath.suffix
+    if suffix == '.py':
+        return name.startswith('test_') or stem.endswith('_test') or name in _TEST_FILE_PY_NAMES
+    if suffix in ('.ts', '.tsx', '.js', '.jsx'):
+        return any(infix in name for infix in _TEST_FILE_TS_INFIX)
+    return False
+
+
+def _collect_source_files(path: Path, source_only: bool = False):
     """Return (py_files, ts_files) lists for the given path."""
     _PY_EXTS = frozenset({'.py'})
     _TS_EXTS = frozenset({'.ts', '.tsx'})
@@ -137,9 +170,15 @@ def _collect_source_files(path: Path):
     py_files: List[Path] = []
     ts_files: List[Path] = []
     for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+        dirs[:] = [
+            d for d in dirs
+            if d not in _SKIP_DIRS and not d.startswith('.')
+            and not (source_only and _is_test_dir(d))
+        ]
         for fname in filenames:
             fpath = Path(os.path.join(root, fname))
+            if source_only and _is_test_file(fpath):
+                continue
             if fpath.suffix in _PY_EXTS:
                 py_files.append(fpath)
             elif fpath.suffix in _TS_EXTS:

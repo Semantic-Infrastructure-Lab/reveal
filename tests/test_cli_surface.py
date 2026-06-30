@@ -16,6 +16,7 @@ from reveal.adapters.ast.nav_surface import (
     _is_env_access,
     _is_fs_write,
     _is_http_route,
+    _is_mock_patch_decorator,
     _is_mcp_tool,
 )
 from reveal.cli.commands.surface import (
@@ -71,6 +72,33 @@ class TestClassifiers(unittest.TestCase):
 
     def test_is_http_route_false(self):
         self.assertFalse(_is_http_route("app.command('deploy')"))
+
+    def test_is_http_route_mock_patch_not_route(self):
+        self.assertFalse(_is_http_route("mock.patch('payment.tasks.send_email')"))
+
+    def test_is_http_route_mocker_patch_not_route(self):
+        self.assertFalse(_is_http_route("mocker.patch('some.module.Class')"))
+
+    def test_is_http_route_unittest_mock_patch_not_route(self):
+        self.assertFalse(_is_http_route("unittest.mock.patch('package.module')"))
+
+    def test_is_http_route_real_patch_endpoint(self):
+        self.assertTrue(_is_http_route("app.patch('/items/{id}')"))
+
+    def test_is_mock_patch_decorator_mock(self):
+        self.assertTrue(_is_mock_patch_decorator("mock.patch('module.Class')"))
+
+    def test_is_mock_patch_decorator_mocker(self):
+        self.assertTrue(_is_mock_patch_decorator("mocker.patch('module.func')"))
+
+    def test_is_mock_patch_decorator_unittest(self):
+        self.assertTrue(_is_mock_patch_decorator("unittest.mock.patch('mod.fn')"))
+
+    def test_is_mock_patch_decorator_bare_patch(self):
+        self.assertTrue(_is_mock_patch_decorator("patch('module.func')"))
+
+    def test_is_mock_patch_decorator_real_route_false(self):
+        self.assertFalse(_is_mock_patch_decorator("app.patch('/endpoint')"))
 
     def test_is_cli_command_click(self):
         self.assertTrue(_is_cli_command("click.command()"))
@@ -238,6 +266,35 @@ class TestScanSurface(unittest.TestCase):
         _write(self.tmp, 'bad.py', 'def broken(\n')
         report = _scan_surface(Path(self.tmp))
         self.assertEqual(report['total'], 0)
+
+    def test_mock_patch_decorator_not_counted_as_http_route(self):
+        _write(self.tmp, 'test_tasks.py', '''\
+            import unittest
+            from unittest.mock import patch
+            class TestPayment(unittest.TestCase):
+                @patch('payment.tasks.send_email')
+                @patch('payment.gateway.charge')
+                def test_process(self, mock_charge, mock_email):
+                    pass
+                @patch('payment.tasks.refund')
+                def test_refund(self, mock_refund):
+                    pass
+        ''')
+        report = _scan_surface(Path(self.tmp))
+        http = report['surfaces']['http']
+        self.assertEqual(http, [], f"Expected no HTTP routes but got: {http}")
+
+    def test_vendor_dir_excluded_from_surface(self):
+        _write(self.tmp, 'app.py', 'import os\nDB = os.getenv("REAL_KEY")\n')
+        _write(self.tmp, 'venv/lib/site-packages/some_lib/client.py',
+               'import os\nX = os.getenv("VENV_KEY")\n')
+        _write(self.tmp, 'site-packages/dep/utils.py',
+               'import os\nY = os.getenv("SITE_PACKAGES_KEY")\n')
+        report = _scan_surface(Path(self.tmp))
+        env_names = [e['name'] for e in report['surfaces']['env']]
+        self.assertIn('REAL_KEY', env_names)
+        self.assertNotIn('VENV_KEY', env_names)
+        self.assertNotIn('SITE_PACKAGES_KEY', env_names)
 
 
 class TestRenderReport(unittest.TestCase):
@@ -493,6 +550,93 @@ class TestScanSurfaceTS(unittest.TestCase):
     def test_subprocess_label_in_surface_labels(self):
         from reveal.cli.commands.surface import _SURFACE_LABELS
         self.assertIn('subprocess', _SURFACE_LABELS)
+
+
+class TestSourceOnly(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def test_source_only_flag_in_parser(self):
+        parser = create_surface_parser()
+        args = parser.parse_args(['.', '--source-only'])
+        self.assertTrue(args.source_only)
+
+    def test_source_only_default_false(self):
+        parser = create_surface_parser()
+        args = parser.parse_args(['.'])
+        self.assertFalse(args.source_only)
+
+    def test_source_only_excludes_tests_dir(self):
+        _write(self.tmp, 'app.py', 'import os\nDB = os.getenv("PROD_KEY")\n')
+        _write(self.tmp, 'tests/test_app.py', 'import os\nX = os.getenv("TEST_KEY")\n')
+        report = _scan_surface(Path(self.tmp), source_only=True)
+        env_names = [e['name'] for e in report['surfaces']['env']]
+        self.assertIn('PROD_KEY', env_names)
+        self.assertNotIn('TEST_KEY', env_names)
+
+    def test_source_only_excludes_test_prefix_file(self):
+        _write(self.tmp, 'app.py', 'import os\nDB = os.getenv("PROD_KEY")\n')
+        _write(self.tmp, 'test_app.py', 'import os\nX = os.getenv("TEST_KEY")\n')
+        report = _scan_surface(Path(self.tmp), source_only=True)
+        env_names = [e['name'] for e in report['surfaces']['env']]
+        self.assertIn('PROD_KEY', env_names)
+        self.assertNotIn('TEST_KEY', env_names)
+
+    def test_source_only_excludes_test_suffix_file(self):
+        _write(self.tmp, 'app.py', 'import os\nDB = os.getenv("PROD_KEY")\n')
+        _write(self.tmp, 'app_test.py', 'import os\nX = os.getenv("TEST_KEY")\n')
+        report = _scan_surface(Path(self.tmp), source_only=True)
+        env_names = [e['name'] for e in report['surfaces']['env']]
+        self.assertIn('PROD_KEY', env_names)
+        self.assertNotIn('TEST_KEY', env_names)
+
+    def test_source_only_excludes_conftest(self):
+        _write(self.tmp, 'app.py', 'import os\nDB = os.getenv("PROD_KEY")\n')
+        _write(self.tmp, 'conftest.py', 'import os\nX = os.getenv("CONFTEST_KEY")\n')
+        report = _scan_surface(Path(self.tmp), source_only=True)
+        env_names = [e['name'] for e in report['surfaces']['env']]
+        self.assertNotIn('CONFTEST_KEY', env_names)
+
+    def test_source_only_excludes_ts_test_file(self):
+        _write(self.tmp, 'app.ts', 'const k = process.env.PROD_KEY;\n')
+        _write(self.tmp, 'app.test.ts', 'const k = process.env.TEST_KEY;\n')
+        report = _scan_surface(Path(self.tmp), source_only=True)
+        env_names = [e['name'] for e in report['surfaces']['env']]
+        self.assertIn('PROD_KEY', env_names)
+        self.assertNotIn('TEST_KEY', env_names)
+
+    def test_source_only_excludes_ts_spec_file(self):
+        _write(self.tmp, 'app.ts', 'const k = process.env.PROD_KEY;\n')
+        _write(self.tmp, 'app.spec.tsx', 'const k = process.env.SPEC_KEY;\n')
+        report = _scan_surface(Path(self.tmp), source_only=True)
+        env_names = [e['name'] for e in report['surfaces']['env']]
+        self.assertNotIn('SPEC_KEY', env_names)
+
+    def test_without_source_only_test_files_included(self):
+        _write(self.tmp, 'app.py', 'import os\nDB = os.getenv("PROD_KEY")\n')
+        _write(self.tmp, 'test_app.py', 'import os\nX = os.getenv("TEST_KEY")\n')
+        report = _scan_surface(Path(self.tmp), source_only=False)
+        env_names = [e['name'] for e in report['surfaces']['env']]
+        self.assertIn('PROD_KEY', env_names)
+        self.assertIn('TEST_KEY', env_names)
+
+    def test_source_only_meta_limit_recorded(self):
+        report = _scan_surface(Path(self.tmp), source_only=True)
+        limits = report['_meta']['known_limits']
+        self.assertTrue(any('source-only' in lim for lim in limits))
+
+    def test_source_only_excludes_nested_tests_dir(self):
+        _write(self.tmp, 'src/core.py', 'import os\nDB = os.getenv("CORE_KEY")\n')
+        _write(self.tmp, 'src/tests/test_core.py', 'import os\nX = os.getenv("NESTED_TEST_KEY")\n')
+        report = _scan_surface(Path(self.tmp), source_only=True)
+        env_names = [e['name'] for e in report['surfaces']['env']]
+        self.assertIn('CORE_KEY', env_names)
+        self.assertNotIn('NESTED_TEST_KEY', env_names)
 
 
 if __name__ == '__main__':

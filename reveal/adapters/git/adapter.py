@@ -20,7 +20,8 @@ from .renderer import GitRenderer
 from . import refs, commits, files, queries
 
 _SCHEMA_QUERY_PARAMS = {
-    'type': {'type': 'string', 'description': 'Query type for file operations', 'values': ['history', 'blame'], 'examples': ['?type=history', '?type=blame']},
+    'type': {'type': 'string', 'description': 'Query type for file operations', 'values': ['history', 'blame', 'diff', 'ownership'], 'examples': ['?type=history', '?type=blame', '?type=ownership']},
+    'merges': {'type': 'string', 'description': 'For ownership: "1" includes merge commits (excluded by default)', 'examples': ['?type=ownership&merges=1']},
     'detail': {'type': 'string', 'description': 'Detail level for blame', 'values': ['full', 'summary'], 'examples': ['?type=blame&detail=full']},
     'element': {'type': 'string', 'description': 'Semantic element for blame (function/class name)', 'examples': ['?type=blame&element=load_config']},
     'author': {'type': 'string', 'description': 'Filter commits by author name (case-insensitive)', 'examples': ['?author=John', '?author~=john']},
@@ -63,6 +64,13 @@ _SCHEMA_OUTPUT_TYPES = [
         'lines': {'type': 'integer'}, 'element': {'type': ['string', 'null']},
         'contributors': {'type': 'array'}, 'hunks': {'type': 'array'}
     }),
+    _git_output_type('git_ownership', 'Commit-share ownership for a file, directory, or repository', {
+        'source_type': {'type': 'string', 'enum': ['file', 'directory', 'repository']},
+        'path': {'type': 'string'}, 'ref': {'type': 'string'},
+        'total_commits': {'type': 'integer'}, 'contributor_count': {'type': 'integer'},
+        'primary_author': {'type': ['object', 'null']}, 'last_touch': {'type': ['string', 'null']},
+        'authors': {'type': 'array'}
+    }),
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
@@ -74,6 +82,8 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'git://src/app.py?type=blame', 'description': 'File blame summary (contributors + key hunks)', 'query_param': '?type=blame', 'output_type': 'git_file_blame'},
     {'uri': 'git://src/app.py?type=blame&detail=full', 'description': 'File blame detailed (line-by-line)', 'query_param': '?type=blame&detail=full', 'output_type': 'git_file_blame'},
     {'uri': 'git://src/app.py?type=blame&element=load_config', 'description': 'Semantic blame (who wrote this function)', 'query_param': '?type=blame&element=load_config', 'output_type': 'git_file_blame'},
+    {'uri': 'git://src/app.py?type=ownership', 'description': 'Commit-share ownership of a file (primary author, contributors, last touch)', 'query_param': '?type=ownership', 'output_type': 'git_ownership'},
+    {'uri': 'git://src/?type=ownership', 'description': 'Commit-share ownership of a directory', 'query_param': '?type=ownership', 'output_type': 'git_ownership'},
 ]
 
 _SCHEMA_NOTES = [
@@ -380,6 +390,19 @@ class GitAdapter(ResourceAdapter):
                 raise ValueError(f"Failed to open repository: {self.path}") from e
         return self.repo
 
+    def _repo_relative_subpath(self, repo: 'pygit2.Repository') -> str:
+        """Convert self.subpath (CWD-relative) to a repo-root-relative path.
+
+        pygit2 tree/blame APIs require repo-root-relative paths. Returns the
+        subpath unchanged for bare repos (no workdir).
+        """
+        git_subpath = self.subpath
+        if repo.workdir:
+            abs_file = os.path.abspath(os.path.join(self.path, self.subpath))
+            repo_root = os.path.abspath(repo.workdir.rstrip('/\\'))
+            git_subpath = os.path.relpath(abs_file, repo_root).replace(os.sep, '/')
+        return git_subpath
+
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """
         Get repository structure using progressive disclosure.
@@ -396,16 +419,20 @@ class GitAdapter(ResourceAdapter):
         no_merges = self.query.get('no_merges') in ('1', 'true', 'yes')
         content_pattern = self.query.get('content~') or self.query.get('content') or None
 
+        # Ownership works on a file, a directory, or the whole repo, so it is
+        # routed before the subpath/ref branching below.
+        if query_type == 'ownership':
+            git_subpath = self._repo_relative_subpath(repo) if self.subpath else None
+            return files.get_ownership(
+                repo, self.ref, git_subpath, self.query, self.result_control
+            )
+
         if self.subpath:
             # Normalize subpath to be relative to the repo root, not CWD.
             # pygit2 tree/blame APIs require repo-root-relative paths.
             # self.path and self.subpath remain CWD-relative for filesystem ops
             # (e.g. get_element_line_range reads the actual file on disk).
-            git_subpath = self.subpath
-            if repo.workdir:
-                abs_file = os.path.abspath(os.path.join(self.path, self.subpath))
-                repo_root = os.path.abspath(repo.workdir.rstrip('/\\'))
-                git_subpath = os.path.relpath(abs_file, repo_root).replace(os.sep, '/')
+            git_subpath = self._repo_relative_subpath(repo)
 
             if query_type == 'history':
                 element_name = self.query.get('element')
@@ -543,6 +570,10 @@ class GitAdapter(ResourceAdapter):
                 {'uri': 'git://src/app.py?type=blame&element=load_config', 'description': 'Semantic blame (who wrote this function)'},
                 {'uri': 'git://src/app.py?type=blame&ignore=69b0093,f5fcac0', 'description': 'Blame suppressing noise commits (e.g. mass-formatting)'},
                 {'uri': 'git://src/app.py?type=blame&element=process_payment&ignore=69b0093', 'description': 'Who really wrote this function, excluding a mass-format commit'},
+                {'uri': 'git://src/app.py?type=ownership', 'description': 'Commit-share ownership of a file (primary author, contributor count, last touch)'},
+                {'uri': 'git://src/?type=ownership', 'description': 'Commit-share ownership of a directory (aggregate over all files beneath it)'},
+                {'uri': 'git://.?type=ownership', 'description': 'Commit-share ownership of the whole repository'},
+                {'uri': 'git://src/app.py?type=ownership&merges=1', 'description': 'Ownership including merge commits (excluded by default)'},
                 {'uri': 'git://.?author=John', 'description': 'Filter commits by author name'},
                 {'uri': 'git://.?message~=bug', 'description': 'Filter commits with "bug" in message (regex)'},
                 {'uri': 'git://.?author=John&message~=fix', 'description': 'Filter by author AND message'},
@@ -555,7 +586,8 @@ class GitAdapter(ResourceAdapter):
                 {'uri': 'git://.@main?no_merges=1', 'description': 'Branch history without merge noise'},
             ],
             'query_parameters': {
-                'type': 'Operation type: history, blame, or diff. Default (no type): structural view of file at ref.',
+                'type': 'Operation type: history, blame, diff, or ownership. Default (no type): structural view of file at ref.',
+                'merges': 'For ownership: "1" includes merge commits (excluded by default, since merges rarely represent authorship).',
                 'raw': 'For file-at-ref: "1" returns raw file contents instead of structural view',
                 'detail': 'For blame: "full" shows line-by-line (default is summary)',
                 'element': 'For blame/diff/history: function/class name to scope output to that element. For ?type=history, runs the analyzer at each commit — use ?limit=N on files with deep history.',

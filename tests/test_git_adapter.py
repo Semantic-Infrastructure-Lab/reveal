@@ -2420,3 +2420,184 @@ class TestRenderKeyHunks(unittest.TestCase):
     def test_empty_hunks(self):
         out = self._capture([])
         self.assertIn('Key hunks', out)
+
+
+@pytest.fixture
+def git_repo_ownership(tmp_path):
+    """Git repo with two authors and a subdirectory for ownership tests.
+
+    Commits (chronological, with explicit increasing times):
+      1. Alice  — README.md                  (repo only)
+      2. Alice  — src/app.py  (v1)
+      3. Bob    — src/app.py  (v2)
+      4. Alice  — src/app.py  (v3)
+      5. Bob    — src/util.py (v1)
+
+    Expectations:
+      src/app.py : Alice 2 / Bob 1  (3 commits, primary=Alice)
+      src/       : Alice 2 / Bob 2  (4 commits)
+      repo       : Alice 3 / Bob 2  (5 commits)
+    """
+    if not PYGIT2_AVAILABLE:
+        pytest.skip("pygit2 not available")
+
+    repo_path = tmp_path / "own_repo"
+    repo_path.mkdir()
+    repo = pygit2.init_repository(str(repo_path))
+
+    def sig(name, email, t):
+        return pygit2.Signature(name, email, time=t, offset=0)
+
+    alice = lambda t: sig("Alice", "alice@example.com", t)
+    bob = lambda t: sig("Bob", "bob@example.com", t)
+    idx = repo.index
+    base = 1_700_000_000
+
+    def commit(author_sig, msg, parent_refs):
+        idx.write()
+        tree = idx.write_tree()
+        ref = "refs/heads/master" if not parent_refs else "HEAD"
+        repo.create_commit(ref, author_sig, author_sig, msg, tree, parent_refs)
+        if not parent_refs:
+            repo.set_head("refs/heads/master")
+
+    # 1. Alice — README
+    (repo_path / "README.md").write_text("# Project\n")
+    idx.add("README.md")
+    commit(alice(base + 1), "init", [])
+
+    # 2. Alice — src/app.py v1
+    (repo_path / "src").mkdir()
+    (repo_path / "src" / "app.py").write_text("def app():\n    return 1\n")
+    idx.add("src/app.py")
+    commit(alice(base + 2), "add app", [repo.head.target])
+
+    # 3. Bob — src/app.py v2
+    (repo_path / "src" / "app.py").write_text("def app():\n    return 2\n")
+    idx.add("src/app.py")
+    commit(bob(base + 3), "tweak app", [repo.head.target])
+
+    # 4. Alice — src/app.py v3
+    (repo_path / "src" / "app.py").write_text("def app():\n    return 3\n")
+    idx.add("src/app.py")
+    commit(alice(base + 4), "more app", [repo.head.target])
+
+    # 5. Bob — src/util.py v1
+    (repo_path / "src" / "util.py").write_text("def util():\n    return 0\n")
+    idx.add("src/util.py")
+    commit(bob(base + 5), "add util", [repo.head.target])
+
+    yield repo_path
+    shutil.rmtree(repo_path, ignore_errors=True)
+
+
+class TestOwnership:
+    """Test git://<path>?type=ownership commit-share aggregation (BACK-383)."""
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_file_ownership(self, git_repo_ownership):
+        adapter = GitAdapter(path=str(git_repo_ownership), subpath='src/app.py',
+                             query={'type': 'ownership'})
+        r = adapter.get_structure()
+        assert r['type'] == 'git_ownership'
+        assert r['contract_version'] == '1.0'
+        assert r['source_type'] == 'file'
+        assert r['path'] == 'src/app.py'
+        assert r['total_commits'] == 3
+        assert r['contributor_count'] == 2
+        assert r['primary_author']['name'] == 'Alice'
+        assert r['primary_author']['commits'] == 2
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_file_ownership_shares(self, git_repo_ownership):
+        adapter = GitAdapter(path=str(git_repo_ownership), subpath='src/app.py',
+                             query={'type': 'ownership'})
+        r = adapter.get_structure()
+        shares = {a['name']: a['share'] for a in r['authors']}
+        assert round(shares['Alice'], 2) == 0.67
+        assert round(shares['Bob'], 2) == 0.33
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_directory_ownership(self, git_repo_ownership):
+        adapter = GitAdapter(path=str(git_repo_ownership), subpath='src/',
+                             query={'type': 'ownership'})
+        r = adapter.get_structure()
+        assert r['source_type'] == 'directory'
+        assert r['total_commits'] == 4  # 3 app + 1 util; README excluded
+        assert r['contributor_count'] == 2
+        shares = {a['name']: a['commits'] for a in r['authors']}
+        assert shares['Alice'] == 2
+        assert shares['Bob'] == 2
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_repository_ownership(self, git_repo_ownership):
+        adapter = GitAdapter(path=str(git_repo_ownership), query={'type': 'ownership'})
+        r = adapter.get_structure()
+        assert r['source_type'] == 'repository'
+        assert r['path'] == '.'
+        assert r['total_commits'] == 5  # all commits touch the repo
+        assert r['contributor_count'] == 2
+        shares = {a['name']: a['commits'] for a in r['authors']}
+        assert shares['Alice'] == 3
+        assert shares['Bob'] == 2
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_last_touch_is_most_recent(self, git_repo_ownership):
+        adapter = GitAdapter(path=str(git_repo_ownership), subpath='src/util.py',
+                             query={'type': 'ownership'})
+        r = adapter.get_structure()
+        # util.py touched only by Bob in the final commit
+        assert r['contributor_count'] == 1
+        assert r['primary_author']['name'] == 'Bob'
+        assert r['last_touch'] == r['primary_author']['last_touch']
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_authors_sorted_by_share_desc(self, git_repo_ownership):
+        adapter = GitAdapter(path=str(git_repo_ownership), query={'type': 'ownership'})
+        r = adapter.get_structure()
+        commits = [a['commits'] for a in r['authors']]
+        assert commits == sorted(commits, reverse=True)
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_limit_caps_history_walk(self, git_repo_ownership):
+        # limit=1 walks only the newest commit (touches src/util.py, by Bob)
+        adapter = GitAdapter(path=str(git_repo_ownership),
+                             query={'type': 'ownership', 'limit': '1'})
+        r = adapter.get_structure()
+        assert r['total_commits'] == 1
+        assert r['contributor_count'] == 1
+        assert r['primary_author']['name'] == 'Bob'
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_nonexistent_path_raises(self, git_repo_ownership):
+        adapter = GitAdapter(path=str(git_repo_ownership), subpath='does/not/exist.py',
+                             query={'type': 'ownership'})
+        with pytest.raises(ValueError):
+            adapter.get_structure()
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_meta_records_commit_share_semantics(self, git_repo_ownership):
+        adapter = GitAdapter(path=str(git_repo_ownership), subpath='src/app.py',
+                             query={'type': 'ownership'})
+        r = adapter.get_structure()
+        limits = r['_meta']['known_limits']
+        assert any('commit-share' in lim for lim in limits)
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_ownership_renders_text(self, git_repo_ownership):
+        from io import StringIO
+        from reveal.adapters.git.renderer import GitRenderer
+        adapter = GitAdapter(path=str(git_repo_ownership), subpath='src/app.py',
+                             query={'type': 'ownership'})
+        r = adapter.get_structure()
+        buf = StringIO()
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            GitRenderer.render_structure(r, format='text')
+        finally:
+            sys.stdout = old
+        out = buf.getvalue()
+        assert 'Ownership' in out
+        assert 'Alice' in out
+        assert 'commit-share' in out.lower()

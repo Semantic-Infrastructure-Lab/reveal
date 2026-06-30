@@ -36,6 +36,8 @@ class GitRenderer:
             GitRenderer._render_file_history(result)
         elif result_type in ('file_blame', 'git_file_blame'):
             GitRenderer._render_file_blame(result)
+        elif result_type == 'git_ownership':
+            GitRenderer._render_ownership(result)
         else:
             print(json.dumps(result, indent=2))
 
@@ -118,7 +120,11 @@ class GitRenderer:
     @staticmethod
     def _render_file_blame(result: dict) -> None:
         """Render file blame with progressive disclosure."""
-        # Check if detail mode is requested
+        if result.get('shallow_clone'):
+            print("⚠ Shallow clone detected — blame attribution is limited to the fetched history.")
+            print("  Run `git fetch --unshallow` for complete bus-factor / key-person data.")
+            print()
+
         detail_mode = result.get('detail', False)
 
         if detail_mode:
@@ -214,6 +220,34 @@ class GitRenderer:
 
         GitRenderer._render_key_hunks(result['hunks'])
         print(f"Use: reveal git://{result['path']}?type=blame&detail=full for line-by-line view")
+
+    @staticmethod
+    def _render_ownership(result: dict) -> None:
+        """Render commit-share ownership for a file, directory, or repository."""
+        if result.get('shallow_clone'):
+            print("⚠ Shallow clone detected — ownership shares are limited to the fetched history.")
+            print("  Run `git fetch --unshallow` for complete bus-factor / key-person data.")
+            print()
+
+        label = result['source_type'].capitalize()
+        print(f"Ownership ({label}): {result['path']} @ {result['ref']}")
+        print(f"Commits: {result['total_commits']}  ·  Contributors: {result['contributor_count']}  ·  Last touch: {result['last_touch'] or '—'}")
+        print()
+
+        authors = result['authors']
+        if not authors:
+            print("  (no commits touch this path in the walked history)")
+            print()
+            return
+
+        print("Authors (by commit-share):")
+        for a in authors[:10]:
+            pct = a['share'] * 100
+            print(f"  {a['name'][:28]:28} {a['commits']:5} commits ({pct:5.1f}%)  Last: {a['last_touch']}")
+        if len(authors) > 10:
+            print(f"  ... and {len(authors) - 10} more contributors")
+        print()
+        print("ℹ Commit-share (not surviving-line ownership) — use ?type=blame for line-level attribution.")
 
     @staticmethod
     def _render_file_structure(result: dict) -> None:

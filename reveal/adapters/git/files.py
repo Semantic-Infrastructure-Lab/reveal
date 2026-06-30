@@ -554,6 +554,9 @@ def get_file_blame(
             'detail': detail_mode,
         }
 
+        if getattr(repo, 'is_shallow', False):
+            result['shallow_clone'] = True
+
         if element_info:
             result['element'] = element_info
         if ignored_summary:
@@ -563,6 +566,128 @@ def get_file_blame(
 
     except (KeyError, pygit2.GitError) as e:
         raise ValueError(f"Failed to get file blame: {subpath}") from e
+
+
+def _aggregate_commit_authors(
+    repo: 'pygit2.Repository',
+    start_commit: 'pygit2.Commit',
+    git_subpath: Optional[str],
+    include_merges: bool,
+    limit: Optional[int],
+) -> tuple:
+    """Walk history from start_commit, attributing touching commits to authors.
+
+    Returns (author_list, total) where author_list is sorted by commit count
+    descending and each entry carries name, email, commits, share, last_touch.
+    """
+    import pygit2
+
+    authors: Dict[tuple, Dict[str, Any]] = {}
+    total = 0
+    walked = 0
+
+    walker = repo.walk(start_commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
+    for c in walker:
+        if not include_merges and len(c.parents) > 1:
+            continue
+        walked += 1
+        if limit and walked > limit:
+            break
+        if not commit_touches_path(repo, c, git_subpath):
+            continue
+        total += 1
+        key = (c.author.name, c.author.email)
+        rec = authors.get(key)
+        if rec is None:
+            authors[key] = {
+                'name': c.author.name,
+                'email': c.author.email,
+                'commits': 1,
+                '_ts': c.commit_time,
+            }
+        else:
+            rec['commits'] += 1
+            if c.commit_time > rec['_ts']:
+                rec['_ts'] = c.commit_time
+
+    author_list = sorted(authors.values(), key=lambda a: a['commits'], reverse=True)
+    for a in author_list:
+        a['share'] = round(a['commits'] / total, 4) if total else 0.0
+        a['last_touch'] = datetime.fromtimestamp(a.pop('_ts')).strftime('%Y-%m-%d')
+
+    return author_list, total
+
+
+def get_ownership(
+    repo: 'pygit2.Repository',
+    ref: str,
+    git_subpath: Optional[str],
+    query: Dict[str, str],
+    result_control,
+) -> Dict[str, Any]:
+    """Aggregate git-log authorship over a file, directory, or whole repo.
+
+    Returns commit-share ownership: primary author, per-author commit share,
+    contributor count, and last-touch date. This is straight commit-log
+    aggregation (commit-share, NOT line-ownership — use ?type=blame for
+    surviving-line attribution). The consumer applies the bus-factor /
+    key-person judgment over this data.
+
+    git_subpath is repo-root-relative; None means the whole repository.
+    """
+    import pygit2
+
+    try:
+        commit = _resolve_blame_commit(repo, ref)
+    except (KeyError, pygit2.GitError) as e:
+        raise ValueError(f"Failed to resolve ref for ownership: {ref}") from e
+
+    # Classify the target (file / directory / repository) from the tree entry.
+    if git_subpath is None:
+        source_type = 'repository'
+    else:
+        try:
+            entry = commit.tree[git_subpath]
+        except KeyError as e:
+            raise ValueError(
+                f"Path not found at {ref}: {git_subpath}"
+            ) from e
+        source_type = 'directory' if isinstance(repo[entry.id], pygit2.Tree) else 'file'
+
+    include_merges = query.get('merges') in ('1', 'true', 'yes')
+    limit = getattr(result_control, 'limit', None) if result_control else None
+
+    author_list, total = _aggregate_commit_authors(
+        repo, commit, git_subpath, include_merges, limit
+    )
+
+    result: Dict[str, Any] = {
+        'contract_version': '1.0',
+        'type': 'git_ownership',
+        'source': f"{git_subpath or '.'}@{ref}",
+        'source_type': source_type,
+        'path': git_subpath or '.',
+        'ref': ref,
+        'total_commits': total,
+        'contributor_count': len(author_list),
+        'primary_author': author_list[0] if author_list else None,
+        'last_touch': max((a['last_touch'] for a in author_list), default=None),
+        'authors': author_list,
+        '_meta': {
+            'analysis_kind': 'commit-ownership',
+            'confidence': 'high',
+            'known_limits': [
+                'commit-share, not line-ownership — use ?type=blame for surviving-line attribution',
+                'merge commits excluded by default (use ?merges=1 to include)',
+                'author identity is name+email — aliases / multiple emails count as distinct contributors',
+            ],
+        },
+    }
+
+    if getattr(repo, 'is_shallow', False):
+        result['shallow_clone'] = True
+
+    return result
 
 
 def get_element_line_range(element_name: str, path: str, subpath: str) -> Optional[Dict[str, int]]:
@@ -642,6 +767,27 @@ def _parent_has_different_file(parent, filepath: str, current_oid) -> bool:
         return current_oid != parent_entry.id
     except KeyError:
         return True
+
+
+def commit_touches_path(
+    repo: 'pygit2.Repository',
+    commit: 'pygit2.Commit',
+    path: Optional[str]
+) -> bool:
+    """Check if a commit changed the tree entry at `path` (file OR directory).
+
+    A directory path resolves to a tree entry whose id is the subtree oid, so
+    comparing it against the parent's subtree oid detects any change beneath it.
+    `path` of None/'' means the whole repository (any change vs parent).
+    """
+    try:
+        if not path:
+            if not commit.parents:
+                return True
+            return any(commit.tree.id != p.tree.id for p in commit.parents)
+        return commit_touches_file(repo, commit, path)
+    except Exception:
+        return False
 
 
 def _get_element_content_at_commit(
