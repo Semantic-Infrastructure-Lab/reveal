@@ -27,6 +27,11 @@ _WRITE_MODES: frozenset = frozenset({'w', 'wb', 'a', 'ab', 'x', 'xb'})
 
 _EMPTY: Dict[str, List] = {k: [] for k in ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs')}
 
+# mock.patch / mocker.patch / unittest.mock.patch decorators contain ".patch("
+# which would otherwise be mistaken for an HTTP PATCH route.
+_MOCK_PATCH_PREFIXES: tuple = ('mock.patch(', 'mocker.patch(', 'patch(')
+_MOCK_PATCH_SUBSTRINGS: tuple = ('unittest.mock.patch(',)
+
 
 def scan_file_surface(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     """Parse one Python file and return categorised surface entries."""
@@ -180,7 +185,17 @@ def _process_call(
             })
 
 
+def _is_mock_patch_decorator(deco: str) -> bool:
+    deco_lower = deco.lower()
+    return (
+        any(deco_lower.startswith(p) for p in _MOCK_PATCH_PREFIXES)
+        or any(s in deco_lower for s in _MOCK_PATCH_SUBSTRINGS)
+    )
+
+
 def _is_http_route(deco: str) -> bool:
+    if _is_mock_patch_decorator(deco):
+        return False
     deco_lower = deco.lower()
     for method in ('.route(', '.get(', '.post(', '.put(', '.delete(', '.patch(', '.head(', '.options('):
         if method in deco_lower:

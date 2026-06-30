@@ -12,6 +12,7 @@ Usage:
     reveal 'imports://src?circular'          # Find cycles
 """
 
+import os
 import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -22,6 +23,9 @@ from ..utils import safe_json_dumps
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
+from ..defaults import SKIP_DIRECTORIES
+
+_SKIP_DIRS = SKIP_DIRECTORIES
 
 def _module_label(path: str) -> str:
     p = Path(path)
@@ -756,9 +760,14 @@ class ImportsAdapter(ResourceAdapter):
         if target_path.is_file():
             files = [target_path]
         else:
-            # Single walk filtered by extension — avoids one rglob per extension (~100 walks).
             supported_exts = frozenset(get_all_extensions())
-            files = [f for f in target_path.rglob('*') if f.is_file() and f.suffix in supported_exts]
+            files = []
+            for root, dirs, filenames in os.walk(str(target_path)):
+                dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+                for fname in filenames:
+                    fp = Path(root) / fname
+                    if fp.suffix in supported_exts:
+                        files.append(fp)
 
         self._scanned_files = set(files)
 
