@@ -318,6 +318,64 @@ def _handle_rendering(adapter, renderer_class: type[Any], scheme: str,
         _render_structure(adapter, renderer_class, args, scheme=scheme, resource=resource)
 
 
+def _handle_outline_mode(result: dict, args: 'Namespace', text_field: Optional[str], label: Any) -> bool:
+    """--outline: render heading hierarchy in place of normal output (BACK-356)."""
+    if not (getattr(args, 'outline', False) and text_field):
+        return False
+    from pathlib import Path as _Path
+    from reveal.display.outline import build_heading_hierarchy, render_outline
+    hierarchy = build_heading_hierarchy(_parse_text_headings(result[text_field]))
+    if hierarchy:
+        render_outline(hierarchy, _Path(str(label)))
+    else:
+        print(f"No headings found in {label}", file=sys.stderr)
+    return True
+
+
+def _handle_links_mode(result: dict, args: 'Namespace', text_field: Optional[str], label: Any) -> bool:
+    """--links: render extracted links in place of normal output (BACK-357)."""
+    if not (getattr(args, 'links', False) and text_field):
+        return False
+    from pathlib import Path as _Path
+    from reveal.display.formatting import _format_links
+    links = _parse_text_links(result[text_field])
+    link_type = getattr(args, 'link_type', None)
+    if link_type:
+        links = [lnk for lnk in links if lnk['type'] == link_type]
+    domain = getattr(args, 'domain', None)
+    if domain:
+        links = [lnk for lnk in links if domain.lower() in lnk.get('url', '').lower()]
+    if links:
+        _format_links(links, _Path(str(label)), getattr(args, 'format', 'text'))
+    else:
+        print(f"No links found in {label}", file=sys.stderr)
+    return True
+
+
+def _handle_frontmatter_mode(result: dict, args: 'Namespace', text_field: Optional[str], label: Any) -> bool:
+    """--frontmatter: render parsed YAML frontmatter in place of normal output (BACK-357)."""
+    if not (getattr(args, 'frontmatter', False) and text_field):
+        return False
+    from reveal.display.formatting import _format_frontmatter
+    fm = _parse_text_frontmatter(result[text_field])
+    if fm is not None:
+        _format_frontmatter(fm)
+    else:
+        print(f"No YAML frontmatter found in {label}", file=sys.stderr)
+    return True
+
+
+# Registry of alternate element-rendering modes (BACK-360). Each handler inspects
+# its own args flag and returns True if it rendered output (caller should stop),
+# False to fall through to the next handler / normal rendering. Order matters only
+# in that the flags are mutually exclusive in the CLI parser, so at most one fires.
+_ELEMENT_RENDER_MODES = [
+    _handle_outline_mode,
+    _handle_links_mode,
+    _handle_frontmatter_mode,
+]
+
+
 def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
                     resource: str, args: 'Namespace') -> None:
     """Render a specific element from adapter.
@@ -360,8 +418,9 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
                 break
 
     # --outline / --links / --frontmatter: alternate rendering modes on text-body
-    # content (BACK-356, BACK-357). All three intercept before render_element and
-    # return early; only the first matching flag fires (they're mutually exclusive).
+    # content (BACK-356, BACK-357), dispatched via the _ELEMENT_RENDER_MODES
+    # registry (BACK-360). At most one fires since the CLI flags are mutually
+    # exclusive.
     if isinstance(result, dict):
         _text_field = next(
             (f for f in ('content', 'body') if f in result and isinstance(result[f], str)),
@@ -369,40 +428,9 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
         )
         _label = result.get('topic') or result.get('source') or result.get('name') or _text_field
 
-        if getattr(args, 'outline', False) and _text_field:
-            from pathlib import Path as _Path
-            from reveal.display.outline import build_heading_hierarchy, render_outline
-            hierarchy = build_heading_hierarchy(_parse_text_headings(result[_text_field]))
-            if hierarchy:
-                render_outline(hierarchy, _Path(str(_label)))
-            else:
-                print(f"No headings found in {_label}", file=sys.stderr)
-            return
-
-        if getattr(args, 'links', False) and _text_field:
-            from pathlib import Path as _Path
-            from reveal.display.formatting import _format_links
-            links = _parse_text_links(result[_text_field])
-            link_type = getattr(args, 'link_type', None)
-            if link_type:
-                links = [lnk for lnk in links if lnk['type'] == link_type]
-            domain = getattr(args, 'domain', None)
-            if domain:
-                links = [lnk for lnk in links if domain.lower() in lnk.get('url', '').lower()]
-            if links:
-                _format_links(links, _Path(str(_label)), getattr(args, 'format', 'text'))
-            else:
-                print(f"No links found in {_label}", file=sys.stderr)
-            return
-
-        if getattr(args, 'frontmatter', False) and _text_field:
-            from reveal.display.formatting import _format_frontmatter
-            fm = _parse_text_frontmatter(result[_text_field])
-            if fm is not None:
-                _format_frontmatter(fm)
-            else:
-                print(f"No YAML frontmatter found in {_label}", file=sys.stderr)
-            return
+        for _mode in _ELEMENT_RENDER_MODES:
+            if _mode(result, args, _text_field, _label):
+                return
 
     renderer_class.render_element(result, args.format)
 
