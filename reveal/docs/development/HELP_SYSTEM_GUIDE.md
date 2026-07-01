@@ -51,7 +51,7 @@ reveal --help
 
 **Usage:**
 ```bash
-reveal --agent-help           # Complete guide (~12,000 tokens)
+reveal --agent-help           # Complete guide (~40,000 tokens)
 ```
 
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -130,7 +130,7 @@ reveal help://anti-patterns      # Common mistakes
 ### For AI Agents:
 ```bash
 # Bootstrap understanding
-reveal --agent-help              # Get complete agent guide (~12,000 tokens)
+reveal --agent-help              # Get complete agent guide (~40,000 tokens)
 
 # Discover adapter capabilities programmatically
 reveal help://schemas            # List all adapters with schemas
@@ -159,7 +159,7 @@ reveal/docs/
 │   ├── CALLS_ADAPTER_GUIDE.md
 │   ├── DEPENDS_ADAPTER_GUIDE.md
 │   ├── NGINX_GUIDE.md
-│   └── ...  (22 adapter guides total)
+│   └── ...  (25 adapter guides total)
 ├── guides/                                # Feature and workflow guides
 │   ├── RECIPES.md                         # help://recipes
 │   ├── CONFIGURATION_GUIDE.md

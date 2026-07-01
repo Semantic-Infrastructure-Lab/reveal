@@ -219,7 +219,7 @@ def _render_navigation_section() -> None:
     print()
     print("**Bootstrap (AI agents):**")
     print("  reveal help://quick        # Compact intent router (~300 tokens, start here)")
-    print("  reveal --agent-help        # Complete reference guide (~12,000 tokens)")
+    print("  reveal --agent-help        # Complete reference guide (~40,000 tokens)")
     print()
     print("**Discover adapters:**")
     print("  reveal help://adapters       # Summary of all URI adapters")

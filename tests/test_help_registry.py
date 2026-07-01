@@ -252,7 +252,7 @@ class TestHelpFrontmatterMetadata(unittest.TestCase):
         """Categorized guides should declare help_token_estimate.
 
         Missing values fall back to '~2,000' which is misleading for large
-        guides (e.g. AGENT_HELP.md is ~12,000).
+        guides (e.g. AGENT_HELP.md is ~40,000).
         """
         entries = self._all_guide_entries()
         missing = []

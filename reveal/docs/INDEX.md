@@ -6,17 +6,17 @@ category: reference
 
 **Complete catalog of all user-facing documentation**
 
-**Last Updated**: 2026-04-26
-**Total**: 48 markdown files, ~41,000 lines
+**Last Updated**: 2026-06-30
+**Total**: 56 markdown files, ~46,000 lines
 
 ---
 
 ## Quick Navigation
 
 - **New users** → [QUICK_START.md](QUICK_START.md) → [RECIPES.md](guides/RECIPES.md)
-- **Adapters** → See [Adapter Guides](#adapter-guides-20-files) below
+- **Adapters** → See [Adapter Guides](#adapter-guides-22-files) below
 - **nginx / cPanel operator** → [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md)
-- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (3,265 lines)
+- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (4,233 lines)
 - **Developers** → [Development Guides](#development-guides-4-files)
 
 ---
@@ -37,15 +37,17 @@ category: reference
 
 ---
 
-## Adapter Guides (20 files)
+## Adapter Guides (22 files)
 
 Complete guides for all URI protocol adapters.
 
 | File | Lines | Purpose |
 |------|-------|---------|
 | [AST_ADAPTER_GUIDE.md](adapters/AST_ADAPTER_GUIDE.md) | 1329 | AST-based code analysis with complexity/size filtering |
+| [AUTOSSL_ADAPTER_GUIDE.md](adapters/AUTOSSL_ADAPTER_GUIDE.md) | 255 | cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures |
 | [CALLS_ADAPTER_GUIDE.md](adapters/CALLS_ADAPTER_GUIDE.md) | 622 | Cross-file call graph queries (calls://) |
 | [CLAUDE_ADAPTER_GUIDE.md](adapters/CLAUDE_ADAPTER_GUIDE.md) | 2321 | Claude CLI session analysis and tool usage tracking |
+| [CODEX_ADAPTER_GUIDE.md](adapters/CODEX_ADAPTER_GUIDE.md) | 326 | OpenAI Codex CLI session analysis — SQLite index + per-session JSONL |
 | [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md) | 328 | cPanel user environment: domains, SSL, ACL health |
 | [DEPENDS_ADAPTER_GUIDE.md](adapters/DEPENDS_ADAPTER_GUIDE.md) | — | Reverse module dependency graph — who imports this module? |
 | [DIFF_ADAPTER_GUIDE.md](adapters/DIFF_ADAPTER_GUIDE.md) | 1948 | Git diff analysis and structure comparison |
@@ -65,7 +67,6 @@ Complete guides for all URI protocol adapters.
 | [PATCHES_ADAPTER_GUIDE.md](adapters/PATCHES_ADAPTER_GUIDE.md) | — | Test patch pressure: repeated mocks, private patches, patch-heavy tests |
 
 **Adapters without dedicated guides** (covered elsewhere or minimal):
-- `autossl://` — see [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) (cPanel AutoSSL logs)
 - `markdown://` — see [MARKDOWN_GUIDE.md](adapters/MARKDOWN_GUIDE.md) under Analyzer Guides
 - `nginx://` — see [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md)
 - `demo://` — scaffolding template only; not registered by default (see [SCAFFOLDING_GUIDE.md](development/SCAFFOLDING_GUIDE.md))
@@ -143,27 +144,26 @@ Complete reference for AI agent integration:
 
 | File | Lines | Description |
 |------|-------|-------------|
-| [AGENT_HELP.md](AGENT_HELP.md) | 3265 | Complete AI agent reference (~104KB) |
+| [AGENT_HELP.md](AGENT_HELP.md) | 4233 | Complete AI agent reference (~160KB) |
 
-**Total**: 3,265 lines
+**Total**: 4,233 lines
 
 ---
 
 ## Documentation Statistics
 
 **By Category**:
-- Adapter Guides: 22 files, ~23,300 lines (57%)
-- Reference: 10 files, ~5,800 lines (14%)
-- User Guides: 8 files, ~4,100 lines (10%)
-- AI Agent: 1 file, ~3,265 lines (7%)
-- Analyzer Guides: 5 files, ~2,800 lines (7%)
-- Development: 4 files, ~1,600 lines (4%)
-- Subcommand Guides: 1 file, ~500 lines (1%)
-- Internal/WIP: 2 files (UX_ISSUES.md, REVIEW_VALIDATION_AND_IMPROVEMENTS.md — maintainer reference)
+- Adapter Guides: 22 files, ~23,300 lines
+- Reference: 10 files, ~5,800 lines
+- User Guides: 8 files, ~4,100 lines
+- AI Agent: 1 file, ~4,233 lines
+- Analyzer Guides: 5 files, ~2,800 lines
+- Development: 4 files, ~1,600 lines
+- Subcommand Guides: 2 files, ~1,000 lines
 
-**Total**: 49 files (47 user-facing + 2 maintainer reference)
+**Total**: 56 markdown files
 
-**Last Updated**: 2026-04-26 (v0.87.0 release)
+**Last Updated**: 2026-06-30 (v0.101.0 release)
 
 ---
 
@@ -174,14 +174,14 @@ Complete reference for AI agent integration:
 - "What is Reveal good for?" → [WHAT_IS_REVEAL_GOOD_FOR.md](guides/WHAT_IS_REVEAL_GOOD_FOR.md)
 - "What makes Reveal different?" → [WHY_REVEAL.md](WHY_REVEAL.md)
 - "What can Reveal do?" → [RECIPES.md](guides/RECIPES.md)
-- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-20-files)
+- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-22-files)
 - "How do queries work?" → [QUERY_SYNTAX_GUIDE.md](guides/QUERY_SYNTAX_GUIDE.md)
 - "For AI agents?" → [AGENT_HELP.md](AGENT_HELP.md)
 - "How does Reveal work internally?" → [ARCHITECTURE.md](../../ARCHITECTURE.md)
 - "Create custom adapter?" → [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md)
 
 **By Adapter**:
-Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-20-files) above.
+Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-22-files) above.
 
 ---
 
@@ -192,5 +192,5 @@ Internal maintainer documentation (planning, research, architecture) is maintain
 
 ---
 
-**Last Updated**: 2026-04-26 (v0.87.0 release)
+**Last Updated**: 2026-06-30 (v0.101.0 release)
 **Navigation**: [README](README.md) | [Project Root](../../README.md)

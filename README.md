@@ -2,7 +2,7 @@
 
 **Reveal is how AI agents understand codebases without wasting tokens.**
 
-A local-first, adapter-driven semantic inspection layer — progressive disclosure enforced by design. One CLI, 25 URI adapters, 305+ languages. Structure before content, always. Engineers and AI systems use the same tool, the same syntax, the same progressive drill-down.
+A local-first, adapter-driven semantic inspection layer — progressive disclosure enforced by design. One CLI, 25 URI adapters, 84 languages. Structure before content, always. Engineers and AI systems use the same tool, the same syntax, the same progressive drill-down.
 
 ```bash
 reveal src/auth.py validate_token           # What does this function do?
@@ -40,7 +40,7 @@ reveal 'calls://src/?rank=callers&top=20'  # most architecturally coupled functi
 reveal 'calls://src/?uncalled'             # functions with no callers — rough check, verify results
 ```
 
-**Deep-dive code navigation (works on Python, PHP, and 35+ tree-sitter languages):**
+**Deep-dive code navigation (works on Python, PHP, and 80+ other tree-sitter languages):**
 ```bash
 reveal app.py process_batch --boundary       # inputs read, outputs/effects produced
 reveal app.py process_batch --sideeffects    # DB / HTTP / FS / logging calls, classified
@@ -160,11 +160,11 @@ reveal surface src/            # external boundary map: CLI args, routes, env va
 reveal dev new-adapter <name>  # scaffold new adapters/rules
 ```
 
-## Adapters (24 built-in)
+## Adapters (25 built-in)
 
 | Adapter | What it queries |
 |---------|-----------------|
-| `ast://` | Functions, classes, complexity, decorators — 185+ languages |
+| `ast://` | Functions, classes, complexity, decorators — 84 languages |
 | `calls://` | Cross-file call graph: callers, callees, coupling metrics, dead code |
 | `depends://` | Inverse module dependency graph: who imports this module |
 | `diff://` | Structural diff between branches or commits (with per-function complexity delta) |
@@ -186,6 +186,7 @@ reveal dev new-adapter <name>  # scaffold new adapters/rules
 | `patches://` | Test patch pressure: repeated mocks, private patches, patch-heavy tests |
 | `xlsx://` | Excel data extraction and analysis |
 | `claude://` | AI session history, tool usage, file access patterns |
+| `codex://` | OpenAI Codex CLI session history, tool usage, per-session analysis |
 | `reveal://` | Reveal introspects itself: adapters, rules, config |
 | `help://` | Built-in documentation, searchable from the CLI |
 

@@ -24,7 +24,7 @@ Comprehensive guides for users, developers, and AI agents.
 
 1. [AGENT_HELP.md](AGENT_HELP.md) - Complete reference (~104KB)
 
-**For CLI:** `reveal help://quick` loads a compact intent router (~300 tokens). `reveal --agent-help` loads the complete reference (~12,000 tokens).
+**For CLI:** `reveal help://quick` loads a compact intent router (~300 tokens). `reveal --agent-help` loads the complete reference (~40,000 tokens).
 
 ---
 
@@ -132,7 +132,7 @@ Complete guides for all URI adapters:
 ```bash
 reveal --help                    # CLI reference
 reveal help://quick              # AI agent compact intent router (~300 tokens)
-reveal --agent-help              # AI agent complete reference (~12,000 tokens)
+reveal --agent-help              # AI agent complete reference (~40,000 tokens)
 reveal help://                   # List all help topics
 reveal help://ast                # Adapter-specific help
 ```
@@ -147,6 +147,6 @@ Internal maintainer documentation (planning, research, architecture) is maintain
 
 ---
 
-**Last updated:** 2026-03-02
+**Last updated:** 2026-06-30
 
 [← Project README](../../README.md)

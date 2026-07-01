@@ -4,12 +4,12 @@ category: guide
 help_topic: agent
 help_description: Complete agent guide (task-based patterns, all adapters, troubleshooting)
 help_category: ai_guides
-help_token_estimate: "~12,000"
+help_token_estimate: "~40,000"
 ---
 # Reveal - AI Agent Reference (Complete)
 **Version:** 0.101.0
 **Purpose:** Comprehensive guide for AI code assistants
-**Token Cost:** ~12,000 tokens
+**Token Cost:** ~40,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
 
 ---
@@ -39,7 +39,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 
 ## Before You Read This
 
-**This is a reference guide (~12,000 tokens). You do not need to read it upfront.**
+**This is a reference guide (~40,000 tokens). You do not need to read it upfront.**
 
 Start with `reveal help://quick` (~300 tokens) — it routes you to the right adapter for your task. Load sections of this guide only when you need deep reference on a specific adapter or pattern.
 
@@ -79,7 +79,7 @@ reveal help://schemas/<adapter>  # Machine-readable adapter schema (preferred fo
 reveal help://examples/<task>    # Canonical query recipes per task category
 
 # This guide — comprehensive reference
-reveal --agent-help              # Same content as this file (~12K tokens)
+reveal --agent-help              # Same content as this file (~40K tokens)
 
 # Raw flag/subcommand listing (different surface — argparse-generated)
 reveal --help                    # Every flag, every subcommand, with one-liners
@@ -4083,7 +4083,7 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 ## Help System Overview
 
 **For AI agents (you):**
-- **Complete guide** (`reveal --agent-help`) - This file (~12,000 tokens)
+- **Complete guide** (`reveal --agent-help`) - This file (~40,000 tokens)
 - **Progressive help** (`reveal help://topic`) - Low-token per-topic exploration
 
 **For humans:**
@@ -4191,7 +4191,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **v0.101.0** - `git://?type=ownership` — commit-share ownership for a file, directory, or whole repo (primary author, per-author %, contributor count, last-touch date; `?merges=1` includes merges, `?limit=N` caps history walk). `surface --source-only` — excludes test files/dirs from surface scans (production-only read for DD/security). Both carry the shallow-clone warning.
 - **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `stats://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `stats://` complexity no longer stuck at 1.00
 - **v0.96.0** - `reveal check --profile NAME` (built-in presets: `maintenance`, `security`, `ci-strict`; project-defined via `.reveal.yaml`); S001 hardcoded secrets rule (opt-in — `sk-proj-`/`ghp_`/`AKIA*` + secret-named vars); PHP `calls://` OO support (`$obj->method()`, `new ClassName()` callers indexed cross-file); `reveal --rules` shows opt-in rules with `○` icon; I002 false positives 143→0 (TYPE_CHECKING + function-body imports excluded from cycle graph); I005 TYPE_CHECKING false positive fixed; `reveal hotspots`/`testability` perf: 74s→10.5s / 3min→9s via gitignore pruning + ProcessPoolExecutor + lru_cache; V025 relationship drift rule (`reveal:// --check`); L001 resolves directory links to index file, L003 ignores local citations.
-- **v0.95.0** - tree-sitter-language-pack 1.x migration: 305 languages (was ~165), single abi3 wheel for Python 3.10–3.14+. **Breaking**: glibc floor raised to manylinux_2_34 (Ubuntu 22.04+, Debian 12+); Alpine/musl and Ubuntu 20.04 no longer supported. `reveal/core/treesitter_compat.py` for 1.x API shims.
+- **v0.95.0** - tree-sitter-language-pack 1.x migration: 300+ grammars available in the pack (was ~165), single abi3 wheel for Python 3.10–3.14+. (reveal wires up analyzers/fallback for 84 of these — see `reveal --languages`.) **Breaking**: glibc floor raised to manylinux_2_34 (Ubuntu 22.04+, Debian 12+); Alpine/musl and Ubuntu 20.04 no longer supported. `reveal/core/treesitter_compat.py` for 1.x API shims.
 - **v0.94.0** - `reveal testability` subcommand: per-target patch pressure joined with production fan-out (which seams look contained in tests but are fan-out hubs in production). `patches://tests?group=target` URI adapter. Frontmatter-driven help metadata (`help_topic`, `help_category`, `help_token_estimate` fields replace parallel Python dicts).
 - **v0.93.0** - `--grep PATTERN` text search with structural context: hits grouped by enclosing function/heading, `--ignore-case`, directory mode. `--name` canonical flag (`--search` kept as alias).
 - **v0.92.0** - Architecture hardening: `adapters/base.py` split into `factory.py`/`registry.py`/ABC; nav handlers extracted to `nav_handlers.py`; ast↔calls circular import broken; `_default_args` centralized in `cli/defaults.py`. All changes backward-compatible.

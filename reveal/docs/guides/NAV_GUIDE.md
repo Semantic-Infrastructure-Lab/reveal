@@ -10,7 +10,7 @@ help_token_estimate: "~2,000"
 
 **One-line summary:** Pinpoint inspection inside a function or line range — control flow, data flow, side effects, and refactor pre-flight, all without reading the file top-to-bottom.
 
-Nav flags work on Python, PHP, and 35+ tree-sitter languages. Most flags accept `:LINE-RANGE` and work on flat procedural files (no function wrapper required).
+Nav flags work on Python, PHP, and 80+ other tree-sitter languages. Most flags accept `:LINE-RANGE` and work on flat procedural files (no function wrapper required).
 
 For the full reference with output samples, see [`AGENT_HELP.md`](../AGENT_HELP.md) — search for "Navigate inside a function".
 

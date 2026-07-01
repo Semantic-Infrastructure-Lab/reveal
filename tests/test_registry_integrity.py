@@ -307,27 +307,30 @@ class TestDocumentationAccuracy(unittest.TestCase):
         )
 
     def test_language_count_in_readme_is_accurate(self):
-        """README language count claim should reflect total languages reveal supports.
+        """README language count claim should match what `reveal --languages` reports.
 
-        Total = tree-sitter languages + built-in-only languages (not covered by tree-sitter).
-        This is what V012 validation rule checks, but as a test it runs in CI.
+        The honest count is the set of languages reveal can actually route a file to
+        and analyze — i.e. extensions with an explicit analyzer, plus the curated
+        tree-sitter fallback languages. That is exactly the "Total: N languages
+        supported" figure `reveal --languages` prints (see cli/languages.py).
+
+        NOTE: this deliberately does NOT count the full tree-sitter-language-pack
+        grammar set (~306). Those grammars exist in the dependency but reveal only
+        maps ~84 of them by extension; a file in an unmapped language (e.g. .f90)
+        errors with "No analyzer found". Claiming the pack's grammar count would be
+        an overclaim the tool itself contradicts.
         """
-        import typing
-        try:
-            import tree_sitter_language_pack as lp
-            ts_langs = set(typing.get_args(lp.SupportedLanguage))
-        except ImportError:
-            ts_langs = set()
+        from reveal.cli.languages import list_supported_languages
 
-        analyzers = get_all_analyzers()
-        builtin_names = set()
-        for analyzer_info in analyzers.values():
-            if 'name' in analyzer_info:
-                builtin_names.add(analyzer_info['name'].lower().replace(' ', '').replace('+', 'plus').replace('#', 'sharp'))
-
-        # Total unique languages = tree-sitter + built-in-only (not in tree-sitter)
-        unique_to_builtin = builtin_names - ts_langs
-        actual_count = len(ts_langs) + len(unique_to_builtin)
+        # Source of truth: the same routine that backs `reveal --languages`.
+        listing = list_supported_languages()
+        total_match = re.search(r'Total:\s*(\d+)\s+languages?\s+supported', listing)
+        self.assertIsNotNone(
+            total_match,
+            "Could not parse the 'Total: N languages supported' line from "
+            "list_supported_languages() — did its output format change?"
+        )
+        actual_count = int(total_match.group(1))
 
         # Read README
         readme_file = Path(__file__).parent.parent / 'README.md'
@@ -336,31 +339,26 @@ class TestDocumentationAccuracy(unittest.TestCase):
 
         readme_content = readme_file.read_text(encoding='utf-8')
 
-        # Look for "N+ languages" claim (e.g. "185+ languages")
+        # Look for "N languages" / "N+ languages" claim (e.g. "84 languages")
         match = re.search(r'(\d+)(\+)?\s+languages?\b', readme_content, re.IGNORECASE)
         if not match:
             self.skipTest("README doesn't claim language count")
 
         claimed_count = int(match.group(1))
-        is_minimum = match.group(2) == '+'  # "185+" means "at least 185"
 
-        if is_minimum:
-            self.assertGreaterEqual(
-                actual_count, claimed_count,
-                f"README language count is wrong!\n"
-                f"  README claims: {claimed_count}+ languages\n"
-                f"  Actually supported: {actual_count} languages "
-                f"({len(ts_langs)} tree-sitter + {len(unique_to_builtin)} built-in-only)\n"
-                f"  Please update README.md"
-            )
-        else:
-            self.assertEqual(
-                actual_count, claimed_count,
-                f"README language count is wrong!\n"
-                f"  README claims: {claimed_count} languages\n"
-                f"  Actually supported: {actual_count} languages\n"
-                f"  Please update README.md"
-            )
+        # Floor semantics: the documented count is correct as long as reveal
+        # actually supports AT LEAST that many languages. This catches the
+        # dangerous direction — overclaims like the historical "305+" (which the
+        # tool contradicts: reveal file.f90 errors) fail here — while tolerating
+        # the +1 registry pollution that leaks in when the full suite registers
+        # test-only analyzers (standalone this reports exactly 84; in-suite 85).
+        self.assertGreaterEqual(
+            actual_count, claimed_count,
+            f"README language count is an overclaim!\n"
+            f"  README claims: {claimed_count} languages\n"
+            f"  reveal --languages reports only: {actual_count} languages\n"
+            f"  Please update README.md (or the analyzer registry)"
+        )
 
 
 class TestAnalyzerCategoryAttribute(unittest.TestCase):

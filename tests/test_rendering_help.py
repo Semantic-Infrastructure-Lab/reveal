@@ -93,7 +93,7 @@ class TestSelectIndexEntries(unittest.TestCase):
 
     def test_groups_by_category(self):
         entries = [
-            {'topic': 'agent', 'file': 'AGENT_HELP.md', 'description': 'd', 'category': 'ai_guides', 'token_estimate': '~12,000'},
+            {'topic': 'agent', 'file': 'AGENT_HELP.md', 'description': 'd', 'category': 'ai_guides', 'token_estimate': '~40,000'},
             {'topic': 'ux', 'file': 'guides/UX_GUIDE.md', 'description': 'd', 'category': 'best_practices', 'token_estimate': '~3,000'},
         ]
         grouped = _select_index_entries(entries)
@@ -165,20 +165,20 @@ class TestRenderHelpListMode(unittest.TestCase):
             'static_guides': [
                 {'topic': 'agent', 'file': 'AGENT_HELP.md',
                  'description': 'Complete agent guide', 'category': 'ai_guides',
-                 'token_estimate': '~12,000'},
+                 'token_estimate': '~40,000'},
                 {'topic': 'python-guide', 'file': 'adapters/PYTHON_ADAPTER_GUIDE.md',
                  'description': 'Python adapter deep dive', 'category': 'feature_guides',
                  'token_estimate': '~2,500'},
                 {'topic': 'anti-patterns', 'file': 'AGENT_HELP.md',
                  'description': 'Common mistakes', 'category': 'best_practices',
-                 'token_estimate': '~12,000'},
+                 'token_estimate': '~40,000'},
             ]
         }
         output = capture_stdout(_render_help_list_mode, data)
         self.assertIn('STATIC GUIDES', output)
         self.assertIn('For AI Agents', output)
         self.assertIn('agent', output)
-        self.assertIn('~12,000', output)
+        self.assertIn('~40,000', output)
         self.assertIn('--agent-help flag', output)  # _TOPIC_ANNOTATIONS for 'agent'
         self.assertIn('Feature Guides', output)
         self.assertIn('python-guide', output)

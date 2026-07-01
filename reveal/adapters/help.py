@@ -376,7 +376,7 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'uri': 'help://agent',
-                    'description': 'Comprehensive agent reference (~12K tokens, task-pattern recipes)'
+                    'description': 'Comprehensive agent reference (~40K tokens, task-pattern recipes)'
                 },
                 {
                     'uri': 'help://tricks',
@@ -392,11 +392,11 @@ class HelpAdapter(ResourceAdapter):
                 ),
                 (
                     'For agents: --agent-help dumps the full reference '
-                    '(~12K tokens, task-pattern recipes)'
+                    '(~40K tokens, task-pattern recipes)'
                 )
             ],
             'see_also': [
-                'reveal --agent-help - Comprehensive agent reference (~12K tokens)',
+                'reveal --agent-help - Comprehensive agent reference (~40K tokens)',
                 'reveal --help - Raw flag and subcommand listing',
                 'reveal --list-supported - Supported file types'
             ]

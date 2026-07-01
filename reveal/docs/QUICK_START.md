@@ -304,7 +304,7 @@ reveal 'ast://./src?complexity>10'
 
 ## Advanced: URI Adapters
 
-Reveal has **23 URI adapters** for specialized queries:
+Reveal has **25 URI adapters** for specialized queries:
 
 ```bash
 # Query code structure
@@ -356,7 +356,7 @@ reveal help://ssl        # Learn about ssl:// adapter
 ```bash
 reveal --help                    # CLI help
 reveal help://quick              # AI agent compact intent router (~300 tokens)
-reveal --agent-help              # AI agent complete reference (~12,000 tokens)
+reveal --agent-help              # AI agent complete reference (~40,000 tokens)
 reveal help://                   # List all help topics
 reveal help://markdown           # Markdown analysis guide
 reveal help://tricks             # Power user workflows
@@ -371,7 +371,7 @@ reveal help://anti-patterns      # What NOT to do
 2. **Progressive disclosure** - Directory → File → Element
 3. **Token efficiency** - 10-150x fewer tokens than cat/grep
 4. **Line numbers** - All output is `file:line` format (vim compatible)
-5. **Zero config** - Works out of the box on 185+ languages via tree-sitter
+5. **Zero config** - Works out of the box on 84 languages via tree-sitter
 
 ---
 

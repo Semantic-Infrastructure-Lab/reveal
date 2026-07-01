@@ -70,7 +70,7 @@ reveal 'calls://src/?uncalled&type=function&top=20'  # verify results: entry poi
 
 ### 2. Deep-Dive Code Navigation (Nav Flags)
 
-A family of flags for inspecting one function or line range without reading the whole file. Works on Python, PHP, and 35+ tree-sitter languages — including flat procedural files.
+A family of flags for inspecting one function or line range without reading the whole file. Works on Python, PHP, and 80+ other tree-sitter languages — including flat procedural files.
 
 ```bash
 # Boundary contract for an unfamiliar code range — single highest-value flag
@@ -257,7 +257,7 @@ reveal 'claude://sessions/?search=validate_token'
 
 ## The Day-to-Day Core
 
-The most-used pattern. Works across 80 languages with zero configuration.
+The most-used pattern. Works across 84 languages with zero configuration.
 
 ```bash
 # What's in this directory?
@@ -333,7 +333,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 | Adapter | What it queries |
 |---|---|
-| `ast://` | Functions, classes, complexity, decorators — 80 languages |
+| `ast://` | Functions, classes, complexity, decorators — 84 languages |
 | `calls://` | Cross-file call graph with coupling metrics |
 | `stats://` | Codebase quality scores, hotspots, duplication |
 | `imports://` | Dependency graph, circular imports, unused imports |

@@ -1422,7 +1422,7 @@ reveal main.go           # Go
 reveal lib.rs            # Rust
 ```
 
-### Tree-sitter fallback (37+ languages)
+### Tree-sitter support (84 languages)
 
 ```bash
 # C, C++, Java, Ruby, PHP, Scala, Haskell, OCaml, Lua...
