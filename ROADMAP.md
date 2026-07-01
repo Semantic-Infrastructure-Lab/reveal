@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-06-29 (flux-carnage-0629 — added Scope Test; reframed the DD feature batch around data primitives, not consumer verdicts)
+> **Last updated**: 2026-06-30 (coral-sunset-0630 — BACK-360 render-mode registry, BACK-387 heading collapse, docs/help honesty pass)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,12 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.102.0 — Render-mode registry refactor + doc/help count corrections
+- ✅ `ElementRenderMode` registry replaces the 87-line render-mode if/elif chain in `_render_element` (BACK-360). No behavior change.
+- ✅ Heading-aware markdown outline collapse in default text mode — indents by level, auto-collapses past 25 headings (BACK-387).
+- ✅ E501 no longer false-flags data/doc files (BACK-386).
+- ✅ Doc/help honesty pass: corrected adapter count (→25), language count (→84), AGENT_HELP token estimate (→~40K) across 13 docs + 3 code files; rewrote the language-count integrity test to assert against `reveal --languages` instead of the raw tree-sitter pack. Filed BACK-388 to generate these counts instead of hand-typing them.
 
 ### v0.101.0 — Commit-share ownership queries + production-only surface scan
 - ✅ `git://<path>?type=ownership` — commit-share authorship for file / directory / whole repo: primary author, per-author %, contributor count, last-touch date. Foundation for bus-factor / key-person reads; scope extends to directories and the whole repo (subtree oid comparison). `?merges=1`, `?limit=N`, shallow-clone warning (BACK-383).

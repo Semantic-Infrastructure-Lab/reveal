@@ -12,6 +12,16 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.102.0] - 2026-06-30 (sessions zowefe-0630, coral-sunset-0630)
+
+### Added
+- **`ElementRenderMode` registry replaces render-mode if/elif chain (BACK-360)** — `_render_element` in `reveal/cli/routing/uri.py` dispatched `--outline`/`--links`/`--frontmatter` through an 87-line if/elif chain; replaced with an `_ELEMENT_RENDER_MODES` registry of `_handle_*_mode(result, args, text_field, label) -> bool` handlers and a 5-line dispatch loop. No behavior change.
+- **Heading-aware markdown outline collapse in default text mode (BACK-387)** — markdown heading outlines now indent by level (H2/H3 visually distinct, was flush-left) and auto-collapse past 25 headings to the shallowest discriminating level with `(+N subheadings)` counts, deterministic via `_discriminating_level()`. `--depth N` doubles as an explicit collapse override. New `_format_markdown_headings()`/`_discriminating_level()` in `display/formatting.py`. Verified against 9 real docs (e.g. `AGENT_HELP.md` 107→24 lines); JSON and `--outline` modes unaffected. +9 tests.
+
+### Fixed
+- **E501 false-flags data/doc files (BACK-386)** — long-line rule now skips data/doc file categories via category-aware `BaseRule.skip_categories`.
+- **Doc/help counts corrected across 13 docs + 3 code files** — README and friends claimed "305+ languages"; a passing integrity test enforced it, but reveal only routes/analyzes **84** languages by extension (305 is the underlying tree-sitter-language-pack grammar count, mostly unmapped). Corrected adapter count (22/23/24 → **25**), language count (35/37/50/80/185/305 → **84**), and AGENT_HELP token-cost estimate (~12K → **~40K**) everywhere they were hardcoded, including CLI `--help` and `help://` output. Rewrote `test_registry_integrity.py::test_language_count_in_readme_is_accurate` to assert against `reveal --languages` (the real gate) instead of the raw tree-sitter pack, with floor semantics (`actual >= claimed`) to tolerate benign registry-pollution leaks from test ordering. Filed BACK-388 to generate/lint these counts from the live registry instead of hand-typing them.
+
 ## [0.101.0] - 2026-06-30 (session electric-zenith-0630)
 
 ### Added
