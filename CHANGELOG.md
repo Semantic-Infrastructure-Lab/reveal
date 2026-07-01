@@ -12,6 +12,11 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **`--agent-help` / `help://agent` now obey progressive disclosure (BACK-389)** — `_FULL_ONLY_TOPICS` no longer exempts `agent`, so `help://agent` truncates to a ~500-token preview + `help://agent/full` footer like every other guide. The CLI flag `--agent-help` was a second, separate implementation that bypassed `HelpAdapter` entirely (direct file read); rewired to go through the same code path so both doors behave identically. `--help` epilog now points to `help://quick`/`--agent-help` (previously zero pointer). Stale `~40K tokens` descriptions corrected across `AGENT_HELP.md`, `README.md`, `QUICK_START.md`, `HELP_SYSTEM_GUIDE.md`, `DUPLICATE_DETECTION_GUIDE.md`.
+
 ## [0.102.0] - 2026-06-30 (sessions zowefe-0630, coral-sunset-0630)
 
 ### Added

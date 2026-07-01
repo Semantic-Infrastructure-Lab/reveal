@@ -139,15 +139,21 @@ def handle_language_info(language: str):
 
 
 def handle_agent_help():
-    """Handle --agent-help flag."""
-    agent_help_path = Path(__file__).parent.parent.parent / 'docs' / 'AGENT_HELP.md'
-    try:
-        with open(agent_help_path, 'r', encoding='utf-8') as f:
-            print(f.read())
-    except FileNotFoundError:
+    """Handle --agent-help flag.
+
+    Delegates to the same progressive-disclosure path as `help://agent`
+    (HelpAdapter._load_static_help) instead of dumping the raw file, so the
+    two doors to the agent guide behave identically.
+    """
+    from ...adapters.help import HelpAdapter
+
+    result = HelpAdapter().get_element('agent')
+    if not result or 'error' in result:
+        agent_help_path = Path(__file__).parent.parent.parent / 'docs' / 'AGENT_HELP.md'
         print(f"Error: AGENT_HELP.md not found at {agent_help_path}", file=sys.stderr)
         print("This is a bug - please report it at https://github.com/Semantic-Infrastructure-Lab/reveal/issues", file=sys.stderr)
         sys.exit(1)
+    print(result['content'])
     sys.exit(0)
 
 

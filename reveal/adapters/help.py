@@ -1075,9 +1075,11 @@ class HelpAdapter(ResourceAdapter):
         return all_help
 
     _PROGRESSIVE_DISCLOSURE_THRESHOLD = 200
-    # These topics are intentionally loaded in full — they are mega-docs that agents
-    # bootstrap from, or aliased sections where truncation serves the wrong content.
-    _FULL_ONLY_TOPICS = frozenset({'agent'})
+    # Topics intentionally loaded in full go here. Empty by design: '--agent-help'
+    # used to be exempted, dumping ~40K tokens against the tool's own progressive-
+    # disclosure thesis; it now truncates like every other guide (reveal help://agent/full
+    # for the complete manual).
+    _FULL_ONLY_TOPICS: frozenset = frozenset()
 
     def _load_static_help(self, topic: str, full: bool = False,
                           section: Optional[str] = None) -> Optional[Dict[str, Any]]:

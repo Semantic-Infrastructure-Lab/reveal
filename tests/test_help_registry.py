@@ -154,15 +154,27 @@ class TestHelpRegistry(unittest.TestCase):
         self.assertNotIn('Full guide:', content,
                          'Short guides must not have a truncation footer')
 
-    def test_agent_topic_never_truncated(self):
-        """help://agent always returns the complete guide — it is a bootstrap mega-doc."""
+    def test_agent_topic_progressively_disclosed(self):
+        """help://agent follows the same progressive disclosure as every other guide."""
         adapter = HelpAdapter()
         result = adapter.get_element('agent')
         self.assertIsNotNone(result, 'help://agent must resolve')
         content = result['content']
-        self.assertNotIn('── Full guide:', content, 'help://agent must never be truncated')
+        self.assertIn('── Full guide: reveal help://agent/full', content,
+                      'help://agent must truncate with a pointer to the full guide')
+        self.assertLess(len(content.splitlines()), 200,
+                        'help://agent preview must be bounded like other guides')
+
+    def test_agent_full_topic_returns_complete_guide(self):
+        """help://agent/full bypasses truncation and returns the complete guide."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('agent/full')
+        self.assertIsNotNone(result, 'help://agent/full must resolve')
+        content = result['content']
+        self.assertNotIn('── Full guide:', content,
+                         'help://agent/full must not itself be truncated')
         self.assertGreater(len(content.splitlines()), 200,
-                           'help://agent must return full content')
+                           'help://agent/full must return full content')
 
     def test_anti_patterns_bounded_section(self):
         """help://anti-patterns returns a focused excerpt, not the full 4K-line guide."""
@@ -346,13 +358,13 @@ class TestHelpContentCurrency(unittest.TestCase):
 
     def test_agent_guide_uses_name_flag(self):
         """help://agent must mention --name (the canonical structural filter flag)."""
-        content = self._get_content('agent')
+        content = self._get_content('agent/full')
         self.assertIn('--name', content,
                       'Agent guide must document --name flag')
 
     def test_agent_guide_documents_grep_flag(self):
         """help://agent must mention --grep for text search."""
-        content = self._get_content('agent')
+        content = self._get_content('agent/full')
         self.assertIn('--grep', content,
                       'Agent guide must document --grep flag')
 

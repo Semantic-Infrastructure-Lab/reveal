@@ -153,7 +153,9 @@ Discovery (find what reveal can do):
   reveal --discover           Dump full adapter registry as JSON (schemas, params)
   reveal help://              List help topics
   reveal help://<topic>       Read a topic (e.g. help://ast, help://schemas/ast)
-  reveal --agent-help         Comprehensive agent reference (~40K tokens)
+  reveal --agent-help         Agent orientation (~500 tokens; reveal help://agent/full for all)
+
+Agents: reveal --agent-help  ·  Task routing: reveal help://quick
 '''
 
 
@@ -226,7 +228,7 @@ def _add_discovery_options(group) -> None:
     group.add_argument('--language-info', type=str, metavar='LANG',
                        help='Show detailed information about a language (e.g., --language-info python or --language-info .py)')
     group.add_argument('--agent-help', action='store_true',
-                       help='Show comprehensive agent reference (~40K tokens, task-pattern recipes for AI agents). Complements --help (raw flag listing).')
+                       help='Agent orientation (~500 tokens; reveal help://agent/full for the complete task-pattern reference). Complements --help (raw flag listing).')
     group.add_argument('--discover', action='store_true',
                        help='Dump full adapter registry as JSON (schemas, output types, query params — for programmatic discovery)')
 

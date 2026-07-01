@@ -51,7 +51,7 @@ reveal --help
 
 **Usage:**
 ```bash
-reveal --agent-help           # Complete guide (~40,000 tokens)
+reveal --agent-help           # Orientation section (~500 tokens); reveal help://agent/full for the complete guide (~40,000 tokens)
 ```
 
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -130,7 +130,7 @@ reveal help://anti-patterns      # Common mistakes
 ### For AI Agents:
 ```bash
 # Bootstrap understanding
-reveal --agent-help              # Get complete agent guide (~40,000 tokens)
+reveal --agent-help              # Get agent orientation (~500 tokens; help://agent/full for the complete guide)
 
 # Discover adapter capabilities programmatically
 reveal help://schemas            # List all adapters with schemas
