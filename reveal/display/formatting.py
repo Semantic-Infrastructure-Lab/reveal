@@ -10,6 +10,9 @@ from reveal.base import FileAnalyzer
 LIST_FIELD_NAMES = ['results', 'items', 'checks', 'commits', 'files', 'records']
 METADATA_FIELD_NAMES = ['contract_version', 'type', 'meta', 'source', 'source_type']
 
+# BACK-387: above this many headings, the flat text outline auto-collapses
+HEADING_COLLAPSE_THRESHOLD = 25
+
 
 def set_nested(d: Dict[str, Any], keys: List[str], value: Any) -> None:
     """Set a value in a nested dictionary using a list of keys.
@@ -677,6 +680,73 @@ def _format_standard_items(
             path=path,
             output_format=output_format,
         )
+
+
+def _discriminating_level(items: List[Dict[str, Any]]) -> int:
+    """Pick the shallowest heading level with more than one entry.
+
+    A lone H1 title is not a useful collapse point, so we skip past any
+    level that has exactly one heading until we find one that actually
+    discriminates between sections. Falls back to the shallowest level
+    present if no level has more than one entry.
+    """
+    levels_present = sorted({item.get('level', 1) for item in items})
+    counts = {lvl: sum(1 for item in items if item.get('level', 1) == lvl) for lvl in levels_present}
+    for lvl in levels_present:
+        if counts[lvl] > 1:
+            return lvl
+    return levels_present[0]
+
+
+def _print_heading_line(item: Dict[str, Any], indent: str, suffix: str, path: Path, output_format: str) -> None:
+    """Print a single heading line, indented by level, with an optional suffix."""
+    line = item.get('line', '?')
+    name = item.get('name', '')
+    if output_format == 'grep':
+        print(f"{path}:{line}:{name}{suffix}")
+    else:
+        print(f"  {indent}:{line:<6} {name}{suffix}")
+
+
+def _format_markdown_headings(
+    items: List[Dict[str, Any]], path: Path, output_format: str, depth_override: Optional[int] = None
+) -> None:
+    """Format markdown headings, indented by level.
+
+    Above HEADING_COLLAPSE_THRESHOLD headings, collapses to the shallowest
+    discriminating level (see _discriminating_level) and shows a
+    "(+N subheadings)" count on each collapsed entry, unless depth_override
+    (from --depth) pins the collapse level explicitly. Below the threshold,
+    every heading is shown, indented by its level.
+    """
+    if not items:
+        return
+
+    min_level = min(item.get('level', 1) for item in items)
+
+    if depth_override is not None:
+        collapse_level = min_level + depth_override
+    elif len(items) > HEADING_COLLAPSE_THRESHOLD:
+        collapse_level = _discriminating_level(items)
+    else:
+        collapse_level = None
+
+    if collapse_level is None:
+        for item in items:
+            level = item.get('level', 1)
+            indent = '  ' * (level - min_level)
+            _print_heading_line(item, indent, '', path, output_format)
+        return
+
+    visible = [(idx, item) for idx, item in enumerate(items) if item.get('level', 1) <= collapse_level]
+    for i, (idx, item) in enumerate(visible):
+        next_idx = visible[i + 1][0] if i + 1 < len(visible) else len(items)
+        hidden_count = next_idx - idx - 1
+        suffix = f" (+{hidden_count} subheadings)" if hidden_count > 0 else ''
+
+        level = item.get('level', 1)
+        indent = '  ' * (level - min_level)
+        _print_heading_line(item, indent, suffix, path, output_format)
 
 
 def _format_csv_schema(items: List[Dict[str, Any]]) -> None:

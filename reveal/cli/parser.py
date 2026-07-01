@@ -252,7 +252,9 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
     """Add display and visualization options."""
     parser.add_argument('--no-fallback', action='store_true',
                         help='Disable TreeSitter fallback for unknown file types')
-    parser.add_argument('--depth', type=int, default=3, help='Directory tree depth (default: 3)')
+    parser.add_argument('--depth', type=int, default=None,
+                        help='Directory tree depth (default: 3); also overrides the markdown '
+                             'heading outline collapse level (BACK-387) when set')
     parser.add_argument('--max-entries', type=int, default=200,
                         help='Maximum entries to show in directory tree (default: 200, 0=unlimited)')
     parser.add_argument('--dir-limit', type=int, default=50,

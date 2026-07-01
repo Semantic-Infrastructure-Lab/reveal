@@ -320,7 +320,7 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
                              include_extensions=include_extensions))
     else:
         sort_desc = getattr(args, 'desc', False)
-        print(show_directory_tree(str(path), depth=args.depth,
+        print(show_directory_tree(str(path), depth=args.depth if args.depth is not None else 3,
                                   max_entries=args.max_entries, fast=args.fast,
                                   respect_gitignore=args.respect_gitignore,
                                   exclude_patterns=args.exclude,

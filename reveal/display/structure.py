@@ -19,6 +19,7 @@ from .formatting import (
     _format_standard_items,
     _format_csv_schema,
     _format_xml_children,
+    _format_markdown_headings,
     _build_analyzer_kwargs,
 )
 
@@ -486,7 +487,8 @@ _CATEGORY_FORMATTERS = {
 }
 
 
-def _render_single_category(category: str, items: Any, path: Path, output_format: str) -> None:
+def _render_single_category(category: str, items: Any, path: Path, output_format: str,
+                             heading_depth: Optional[int] = None) -> None:
     """Render a single category."""
     # Handle dict-type metadata specially (HTML metadata as dict, not list)
     if category == 'metadata' and isinstance(items, dict):
@@ -517,19 +519,22 @@ def _render_single_category(category: str, items: Any, path: Path, output_format
 
     print(f"{category.capitalize()} ({count}):")
 
-    formatter = _CATEGORY_FORMATTERS.get(category, _format_standard_items)
-    formatter(items, path, output_format)
+    if category == 'headings':
+        _format_markdown_headings(items, path, output_format, depth_override=heading_depth)
+    else:
+        formatter = _CATEGORY_FORMATTERS.get(category, _format_standard_items)
+        formatter(items, path, output_format)
 
     print()
 
 
 def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
-                            path: Path, output_format: str) -> None:
+                            path: Path, output_format: str, heading_depth: Optional[int] = None) -> None:
     """Render each category in text format."""
     for category, items in structure.items():
         if _should_skip_category(category, items):
             continue
-        _render_single_category(category, items, path, output_format)
+        _render_single_category(category, items, path, output_format, heading_depth=heading_depth)
 
 
 def _build_outline_hierarchy(structure: Dict[str, List[Dict[str, Any]]]):
@@ -594,7 +599,8 @@ def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[
 
 
 def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]],
-                            output_format: str, is_fallback: bool, fallback_lang: str, config=None) -> None:
+                            output_format: str, is_fallback: bool, fallback_lang: str, config=None,
+                            heading_depth: Optional[int] = None) -> None:
     """Handle standard JSON or text output.
 
     Args:
@@ -603,6 +609,7 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
         output_format: 'json' or 'text'
         is_fallback: Whether using fallback analyzer
         fallback_lang: Fallback language if applicable
+        heading_depth: Explicit --depth override for markdown heading collapse (BACK-387)
     """
     path = analyzer.path
 
@@ -630,7 +637,7 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
 
     # Text output: show header, categories, and navigation hints
     _print_file_header(path, is_fallback, fallback_lang)
-    _render_text_categories(structure, path, output_format)
+    _render_text_categories(structure, path, output_format, heading_depth=heading_depth)
 
     # Navigation hints
     if output_format == 'text':
@@ -694,4 +701,6 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
         return
 
     # Handle standard output (JSON or text)
-    _handle_standard_output(analyzer, structure, output_format, is_fallback, fallback_lang, config=config)  # type: ignore[arg-type]
+    heading_depth = getattr(args, 'depth', None) if args else None
+    _handle_standard_output(analyzer, structure, output_format, is_fallback, fallback_lang, config=config,  # type: ignore[arg-type]
+                            heading_depth=heading_depth)

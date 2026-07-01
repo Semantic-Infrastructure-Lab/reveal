@@ -46,7 +46,7 @@ def run_trace(args: Namespace) -> None:
         print(f"reveal trace: path not found: {path}", file=sys.stderr)
         sys.exit(1)
 
-    depth = max(1, min(args.depth, 5))
+    depth = max(1, min(args.depth if args.depth is not None else 3, 5))
     report = _build_trace(str(path), args.root, depth)
 
     if report['frames'] and not report['frames'][0]['resolved']:

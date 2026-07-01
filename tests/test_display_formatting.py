@@ -1404,5 +1404,90 @@ class TestBuildAnalyzerKwargsRelated:
         assert kwargs.get('related_limit') == 25
 
 
+class TestDiscriminatingLevel:
+    """BACK-387: shallowest heading level with more than one entry."""
+
+    def test_single_h1_skips_to_h2(self):
+        from reveal.display.formatting import _discriminating_level
+        headings = [{'level': 1}, {'level': 2}, {'level': 2}, {'level': 3}, {'level': 3}]
+        assert _discriminating_level(headings) == 2
+
+    def test_multiple_h1_stays_at_h1(self):
+        from reveal.display.formatting import _discriminating_level
+        headings = [{'level': 1}, {'level': 1}, {'level': 2}]
+        assert _discriminating_level(headings) == 1
+
+    def test_all_levels_singleton_falls_back_to_shallowest(self):
+        from reveal.display.formatting import _discriminating_level
+        headings = [{'level': 1}, {'level': 2}, {'level': 3}]
+        assert _discriminating_level(headings) == 1
+
+
+class TestFormatMarkdownHeadings:
+    """BACK-387: level-aware indentation and adaptive collapse for markdown headings."""
+
+    def _headings(self, n_h2, sub_per_h2):
+        items = [{'line': 1, 'level': 1, 'name': 'Title'}]
+        line = 2
+        for i in range(n_h2):
+            items.append({'line': line, 'level': 2, 'name': f'Section {i}'})
+            line += 1
+            for j in range(sub_per_h2):
+                items.append({'line': line, 'level': 3, 'name': f'Sub {i}.{j}'})
+                line += 1
+        return items
+
+    def test_below_threshold_shows_every_heading_indented_by_level(self, capsys):
+        from reveal.display.formatting import _format_markdown_headings
+        items = self._headings(n_h2=3, sub_per_h2=1)  # 1 + 3 + 3 = 7, below threshold
+        _format_markdown_headings(items, Path('x.md'), 'text')
+        out = capsys.readouterr().out
+        lines = out.splitlines()
+        assert len(lines) == len(items)
+        assert not lines[0].startswith('    ')  # H1: base indent only
+        assert lines[1].startswith('    ')      # H2: one extra level of indent
+        assert lines[2].startswith('      ')    # H3: two extra levels of indent
+        assert 'subheadings' not in out
+
+    def test_above_threshold_collapses_to_discriminating_level(self, capsys):
+        from reveal.display.formatting import _format_markdown_headings
+        items = self._headings(n_h2=16, sub_per_h2=4)  # 1 + 16 + 64 = 81, above threshold
+        _format_markdown_headings(items, Path('x.md'), 'text')
+        out = capsys.readouterr().out
+        lines = out.splitlines()
+        assert len(lines) == 17  # H1 + 16 H2s, H3s collapsed
+        assert '(+4 subheadings)' in out
+        assert 'Sub 0.0' not in out
+
+    def test_depth_override_forces_expansion_regardless_of_threshold(self, capsys):
+        from reveal.display.formatting import _format_markdown_headings
+        items = self._headings(n_h2=16, sub_per_h2=4)
+        _format_markdown_headings(items, Path('x.md'), 'text', depth_override=2)
+        out = capsys.readouterr().out
+        assert 'Sub 0.0' in out
+        assert 'subheadings' not in out
+
+    def test_depth_override_zero_collapses_to_h1_only(self, capsys):
+        from reveal.display.formatting import _format_markdown_headings
+        items = self._headings(n_h2=3, sub_per_h2=1)  # below threshold, but override forces collapse
+        _format_markdown_headings(items, Path('x.md'), 'text', depth_override=0)
+        out = capsys.readouterr().out
+        lines = out.splitlines()
+        assert len(lines) == 1
+        assert '(+6 subheadings)' in out
+
+    def test_empty_items_prints_nothing(self, capsys):
+        from reveal.display.formatting import _format_markdown_headings
+        _format_markdown_headings([], Path('x.md'), 'text')
+        assert capsys.readouterr().out == ''
+
+    def test_grep_format_uses_path_colon_line(self, capsys):
+        from reveal.display.formatting import _format_markdown_headings
+        items = self._headings(n_h2=2, sub_per_h2=1)
+        _format_markdown_headings(items, Path('x.md'), 'grep')
+        out = capsys.readouterr().out
+        assert 'x.md:1:Title' in out
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
