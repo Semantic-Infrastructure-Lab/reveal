@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Breadcrumbs teach the outline≠content mental model, not just mechanics (BACK-389 M1)** — `reveal doc.md` now frames its "Next:" hint honestly (`Outline only — headings show where, not what.`) and suggests `--section '<first heading>'` with the real heading name, the doc equivalent of the `Class.method` hint code files already get (`_suggest_doc_section_extraction`, `reveal/utils/breadcrumbs.py`). The once-per-install stderr nudge (`_show_breadcrumb_hint_once`) now leads with `New here? reveal --agent-help` instead of only advertising how to disable breadcrumbs — this is the one channel with ~100% agent exposure, so it's the best place to land the orientation lesson at first use. +7 tests.
+
 ### Fixed
 - **`--agent-help` / `help://agent` now obey progressive disclosure (BACK-389)** — `_FULL_ONLY_TOPICS` no longer exempts `agent`, so `help://agent` truncates to a ~500-token preview + `help://agent/full` footer like every other guide. The CLI flag `--agent-help` was a second, separate implementation that bypassed `HelpAdapter` entirely (direct file read); rewired to go through the same code path so both doors behave identically. `--help` epilog now points to `help://quick`/`--agent-help` (previously zero pointer). Stale `~40K tokens` descriptions corrected across `AGENT_HELP.md`, `README.md`, `QUICK_START.md`, `HELP_SYSTEM_GUIDE.md`, `DUPLICATE_DETECTION_GUIDE.md`.
 

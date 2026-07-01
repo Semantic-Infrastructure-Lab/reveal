@@ -9,6 +9,7 @@ from reveal.utils.breadcrumbs import (
     get_element_placeholder,
     get_file_type_from_analyzer,
     print_breadcrumbs,
+    _show_breadcrumb_hint_once,
 )
 
 
@@ -222,6 +223,49 @@ def capture_breadcrumbs(context, path, file_type=None, config=None, **kwargs):
 
 
 # ==============================================================================
+# _show_breadcrumb_hint_once Tests
+# ==============================================================================
+
+class TestShowBreadcrumbHintOnce:
+    """Tests for the once-per-install orientation nudge."""
+
+    def test_first_call_points_to_agent_help(self):
+        """First call in an install points new agents to --agent-help."""
+        mock_hint_file = Mock()
+        mock_hint_file.exists.return_value = False
+
+        with patch('reveal.config.get_data_path', return_value=mock_hint_file):
+            old_stderr = sys.stderr
+            sys.stderr = StringIO()
+            try:
+                _show_breadcrumb_hint_once()
+                output = sys.stderr.getvalue()
+            finally:
+                sys.stderr = old_stderr
+
+        assert '--agent-help' in output
+        assert '--disable-breadcrumbs' in output
+        mock_hint_file.touch.assert_called_once()
+
+    def test_subsequent_call_is_silent(self):
+        """Once the hint file exists, nothing is printed."""
+        mock_hint_file = Mock()
+        mock_hint_file.exists.return_value = True
+
+        with patch('reveal.config.get_data_path', return_value=mock_hint_file):
+            old_stderr = sys.stderr
+            sys.stderr = StringIO()
+            try:
+                _show_breadcrumb_hint_once()
+                output = sys.stderr.getvalue()
+            finally:
+                sys.stderr = old_stderr
+
+        assert output == ''
+        mock_hint_file.touch.assert_not_called()
+
+
+# ==============================================================================
 # print_breadcrumbs Tests - Config Handling
 # ==============================================================================
 
@@ -333,6 +377,23 @@ class TestPrintBreadcrumbsStructure:
         assert '--section' in output
         assert '--links' in output
         assert '--code' in output
+
+    def test_structure_markdown_frames_outline_as_not_content(self):
+        """Markdown structure states the outline≠content mental model, not just mechanics."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs('structure', 'README.md', 'markdown', config=mock_config)
+        assert 'Outline only' in output
+        assert 'headings show where, not what' in output
+
+    def test_structure_python_does_not_frame_outline_as_not_content(self):
+        """Code files don't get the doc-oriented outline≠content framing."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs('structure', 'test.py', 'python', config=mock_config)
+        assert 'Outline only' not in output
 
     def test_structure_html_shows_check_and_links(self):
         """HTML structure suggests --check and --links."""
@@ -507,6 +568,53 @@ class TestPrintBreadcrumbsHierarchical:
             config=mock_config, structure=structure
         )
         assert ".method" not in output
+
+    def test_markdown_headings_suggest_section_extraction(self):
+        """Markdown files with headings suggest --section '<first heading>' (doc equivalent of Class.method)."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        structure = {
+            'headings': [{'name': 'Introduction'}, {'name': 'Usage'}],
+        }
+
+        output = capture_breadcrumbs(
+            'structure', 'guide.md', 'markdown',
+            config=mock_config, structure=structure
+        )
+        assert "--section 'Introduction'" in output
+        assert "# Extract this section" in output
+
+    def test_markdown_no_headings_no_section_extraction_hint(self):
+        """Markdown files without headings don't show the specific section hint."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        structure = {
+            'headings': [],
+        }
+
+        output = capture_breadcrumbs(
+            'structure', 'guide.md', 'markdown',
+            config=mock_config, structure=structure
+        )
+        assert "# Extract this section" not in output
+
+    def test_section_extraction_hint_not_shown_for_code(self):
+        """Doc section suggester doesn't apply to code files, even with a 'headings' key."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        structure = {
+            'headings': [{'name': 'Introduction'}],
+            'functions': [{'name': 'foo'}],
+        }
+
+        output = capture_breadcrumbs(
+            'structure', 'test.py', 'python',
+            config=mock_config, structure=structure
+        )
+        assert "# Extract this section" not in output
 
     def test_many_elements_suggest_ordinal_extraction(self):
         """Files with >5 elements suggest ordinal (@N) extraction."""

@@ -142,7 +142,7 @@ def _get_config_for_path(path):
 
 
 def _show_breadcrumb_hint_once() -> None:
-    """Show a one-time hint about disabling breadcrumbs (stderr, no pipe interference)."""
+    """Show a one-time orientation nudge toward --agent-help (stderr, no pipe interference)."""
     import sys
     from reveal.config import get_data_path
     hint_file = get_data_path('seen_breadcrumb_hint')
@@ -153,6 +153,7 @@ def _show_breadcrumb_hint_once() -> None:
     except OSError:
         return
     print(
+        "New here? reveal --agent-help  (~500 tokens: how to use reveal well)\n"
         "Tip: Permanently disable navigation hints with: reveal --disable-breadcrumbs",
         file=sys.stderr,
     )
@@ -164,7 +165,6 @@ def _print_type_specific_hints(path, file_type):
         print(f"      reveal {path} --check      # Check code quality")
         print(f"      reveal {path} --outline    # Nested structure")
     elif file_type == 'markdown':
-        print(f"      reveal {path} --section 'Name'  # Extract section by heading")
         print(f"      reveal {path} --links      # Extract links")
         print(f"      reveal {path} --code       # Extract code blocks")
     elif file_type == 'html':
@@ -217,6 +217,9 @@ def _handle_structure(path, file_type, **kwargs):
     element_placeholder = get_element_placeholder(file_type)
     print(f"Next: reveal {path} {element_placeholder}   # Extract by name")
 
+    if file_type == 'markdown':
+        print(f"      Outline only — headings show where, not what. Read a section: reveal {path} --section 'X'")
+
     structure = kwargs.get('structure', {})
     if not structure:
         _print_type_specific_hints(path, file_type)
@@ -225,6 +228,7 @@ def _handle_structure(path, file_type, **kwargs):
     # Try various suggestion strategies
     hints_shown = 0
     hints_shown += _suggest_hierarchical_extraction(path, file_type, structure)
+    hints_shown += _suggest_doc_section_extraction(path, file_type, structure)
     hints_shown += _suggest_line_extraction(path, file_type, structure, hints_shown)
     hints_shown += _suggest_ordinal_extraction(path, structure, hints_shown)
     _suggest_imports_analysis(path, file_type, structure)
@@ -255,6 +259,32 @@ def _suggest_hierarchical_extraction(path, file_type, structure):
         if cls_name:
             print(f"      reveal {path} {cls_name}.method  # Hierarchical extraction")
             return 1
+
+    return 0
+
+
+def _suggest_doc_section_extraction(path, file_type, structure):
+    """Suggest section extraction for the first heading in a doc.
+
+    Doc equivalent of _suggest_hierarchical_extraction: gives markdown files
+    the same "here's a concrete next command" treatment code files get from
+    their first class.
+
+    Returns:
+        Number of hints shown (0 or 1)
+    """
+    if file_type != 'markdown':
+        return 0
+
+    headings = structure.get('headings', [])
+    if not headings:
+        return 0
+
+    first = headings[0]
+    name = first.get('name', '') if isinstance(first, dict) else str(first)
+    if name:
+        print(f"      reveal {path} --section '{name}'  # Extract this section")
+        return 1
 
     return 0
 
