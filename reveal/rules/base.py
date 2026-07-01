@@ -227,6 +227,10 @@ class BaseRule(ABC):
     severity: Severity = Severity.MEDIUM
     file_patterns: List[str] = ["*"]  # ['.py'] or ['*'] for universal
     uri_patterns: List[str] = []    # Optional URI regex patterns
+    # Optional: content categories to skip even when file_patterns is universal.
+    # Categories come from the analyzer registry: 'code', 'data', 'doc', 'config'.
+    # e.g. {'data', 'doc'} to skip YAML/JSON/CSV/office docs and Markdown/HTML.
+    skip_categories: Optional[set] = None
     version: str = "1.0.0"
     enabled: bool = True
     # Optional: thresholds exposed via --explain (key → default value)
@@ -389,6 +393,8 @@ class BaseRule(ABC):
 
         # Check file patterns
         if cls.file_patterns == ['*']:
+            if cls.skip_categories and cls._target_category_skipped(target):
+                return False
             return True
 
         # Handle both string paths and Path objects
@@ -411,6 +417,47 @@ class BaseRule(ABC):
                 return True
 
         return False
+
+    @classmethod
+    def _target_category_skipped(cls, target: str) -> bool:
+        """Check whether target's analyzer content category is in skip_categories.
+
+        Category comes from the analyzer registry (@register(..., category=...)):
+        'code', 'data', 'doc', or 'config'. Falls back to False (don't skip) if
+        the category can't be determined — e.g. URIs, or files with no
+        registered analyzer, or a broken/absent registry lookup.
+
+        Per-project override: .reveal.yaml can replace the effective
+        skip set via `rules.<CODE>.skip_categories: [data]` (e.g. `[]` to
+        disable skipping entirely, or a narrower list to skip less).
+        """
+        try:
+            effective_skip = cls._effective_skip_categories()
+            if not effective_skip:
+                return False
+
+            from reveal.registry import get_analyzer
+            analyzer = get_analyzer(target, allow_fallback=False)
+            if analyzer is None:
+                return False
+            category = getattr(analyzer, 'CATEGORY', 'code')
+            return category in effective_skip
+        except Exception as e:
+            logger.debug(f"Category lookup failed for {target}: {e}")
+            return False
+
+    @classmethod
+    def _effective_skip_categories(cls) -> set:
+        """skip_categories, overridden by rules.<CODE>.skip_categories in .reveal.yaml."""
+        try:
+            from reveal.config import RevealConfig
+            config = RevealConfig.get()
+            override = config.get_rule_config(cls.code, 'skip_categories', None)
+            if override is not None:
+                return set(override)
+        except Exception:
+            pass
+        return cls.skip_categories or set()
 
     def get_description(self) -> str:
         """Get full rule description."""

@@ -20,7 +20,12 @@ class E501(BaseRule):
     category = RulePrefix.E
     severity = Severity.LOW
     file_patterns = ['*']  # Universal: works on any file
-    version = "1.0.0"
+    # Skip data/doc files by default — a long line in a YAML description or a
+    # Markdown paragraph isn't a readability smell the way a long code line is.
+    # Still fires on 'code' and 'config' (TOML/INI/HCL) files.
+    # Override per-project: .reveal.yaml -> rules.E501.skip_categories: []
+    skip_categories = {'data', 'doc'}
+    version = "1.0.1"
 
     # Default maximum line length (100 is pragmatic for modern development)
     # PEP 8 = 79, Black = 88, but many codebases use 100-120

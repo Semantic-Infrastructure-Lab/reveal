@@ -339,6 +339,93 @@ class TestBaseRule:
         assert "90 characters" in detections[1].message
 
 
+class TestSkipCategories:
+    """matches_target() honors skip_categories against the analyzer registry."""
+
+    def test_universal_rule_without_skip_categories_matches_everything(self):
+        class TestRule(BaseRule):
+            code = "T900"
+            message = "Test"
+            file_patterns = ['*']
+
+            def check(self, file_path, structure, content):
+                return []
+
+        assert TestRule.matches_target("foo.yaml")
+        assert TestRule.matches_target("foo.py")
+        assert TestRule.matches_target("foo.md")
+
+    def test_skip_categories_excludes_data_files(self):
+        class TestRule(BaseRule):
+            code = "T901"
+            message = "Test"
+            file_patterns = ['*']
+            skip_categories = {'data', 'doc'}
+
+            def check(self, file_path, structure, content):
+                return []
+
+        assert not TestRule.matches_target("config.yaml")
+        assert not TestRule.matches_target("data.json")
+        assert not TestRule.matches_target("README.md")
+
+    def test_skip_categories_still_matches_code_and_config(self):
+        class TestRule(BaseRule):
+            code = "T902"
+            message = "Test"
+            file_patterns = ['*']
+            skip_categories = {'data', 'doc'}
+
+            def check(self, file_path, structure, content):
+                return []
+
+        assert TestRule.matches_target("foo.py")
+        assert TestRule.matches_target("pyproject.toml")
+
+    def test_skip_categories_ignored_for_non_universal_file_patterns(self):
+        """skip_categories only applies when file_patterns == ['*']."""
+
+        class TestRule(BaseRule):
+            code = "T903"
+            message = "Test"
+            file_patterns = ['.yaml']
+            skip_categories = {'data'}
+
+            def check(self, file_path, structure, content):
+                return []
+
+        # Extension-scoped rules bypass category filtering entirely.
+        assert TestRule.matches_target("config.yaml")
+
+    def test_e501_skips_yaml_but_checks_python(self):
+        from reveal.rules.errors.E501 import E501
+
+        assert not E501.matches_target("/home/scottsen/.tia/projects/scooter-bot.yaml")
+        assert E501.matches_target("main.py")
+
+    def test_reveal_yaml_can_override_skip_categories(self):
+        """rules.<CODE>.skip_categories in .reveal.yaml overrides the class default."""
+        from unittest.mock import patch, MagicMock
+
+        class TestRule(BaseRule):
+            code = "T904"
+            message = "Test"
+            file_patterns = ['*']
+            skip_categories = {'data', 'doc'}
+
+            def check(self, file_path, structure, content):
+                return []
+
+        fake_config = MagicMock()
+        fake_config.get_rule_config.side_effect = (
+            lambda code, key, default=None: [] if key == 'skip_categories' else default
+        )
+
+        with patch('reveal.config.RevealConfig.get', return_value=fake_config):
+            # Empty override list disables skipping entirely.
+            assert TestRule.matches_target("config.yaml")
+
+
 # ---------------------------------------------------------------------------
 # CFG-01: _ALLOWED_RULE_CONFIG_KEYS completeness
 # ---------------------------------------------------------------------------
