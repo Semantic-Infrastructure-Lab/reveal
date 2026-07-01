@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`help://quick` derived from the adapter registry instead of hand-maintained (BACK-391 M4)** — the top command block used to be a static list skewed toward infra adapters (6 of 10 entries were ssl/domain/nginx/cpanel/check) and could never include project-local plugins. New `_get_quick_commands()` (`adapters/help.py`) iterates the live adapter registry, pulling each adapter's own `get_help()` description + first example URI, so the block can't drift from reality and automatically surfaces plugins. A `_QUICK_RANK` dict controls priority only (not content) to keep code/session/quality adapters ahead of the infra niche. This was the strategy doc's last open item — the M1–M4 onboarding sprint is complete. +4 tests.
 - **Breadcrumbs teach the outline≠content mental model, not just mechanics (BACK-389 M1)** — `reveal doc.md` now frames its "Next:" hint honestly (`Outline only — headings show where, not what.`) and suggests `--section '<first heading>'` with the real heading name, the doc equivalent of the `Class.method` hint code files already get (`_suggest_doc_section_extraction`, `reveal/utils/breadcrumbs.py`). The once-per-install stderr nudge (`_show_breadcrumb_hint_once`) now leads with `New here? reveal --agent-help` instead of only advertising how to disable breadcrumbs — this is the one channel with ~100% agent exposure, so it's the best place to land the orientation lesson at first use. +7 tests.
 
 ### Fixed

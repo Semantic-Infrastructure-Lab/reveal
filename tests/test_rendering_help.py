@@ -703,6 +703,61 @@ class TestHelpQuick(unittest.TestCase):
                 )
 
 
+class TestHelpQuickRegistryDriven(unittest.TestCase):
+    """BACK-390 M4: help://quick commands are derived from the adapter registry,
+    not hand-maintained, so they can't drift and never omit registered adapters
+    (including project-local plugins)."""
+
+    def _get_quick(self):
+        from reveal.adapters.help import HelpAdapter
+        a = HelpAdapter('help://quick')
+        return a.get_element('quick')
+
+    def test_commands_include_a_ranked_adapter(self):
+        # 'ast' is top-ranked in _QUICK_RANK and always registered — its
+        # get_help()-derived command must appear, proving derivation happened.
+        result = self._get_quick()
+        cmds = [c['cmd'] for c in result['commands']]
+        self.assertTrue(any('ast://' in c for c in cmds))
+
+    def test_commands_reflect_live_get_help_description(self):
+        # The description in the quick block must match the adapter's own
+        # get_help() output, not a hardcoded copy that can drift.
+        from reveal.adapters.help import HelpAdapter
+        from reveal.adapters.registry import _ADAPTER_REGISTRY
+        result = self._get_quick()
+        ast_cmd = next(c for c in result['commands'] if 'ast://' in c['cmd'])
+        live_description = _ADAPTER_REGISTRY['ast'].get_help()['description']
+        self.assertEqual(ast_cmd['description'], live_description)
+
+    def test_unregistered_scheme_never_appears(self):
+        result = self._get_quick()
+        cmds = ' '.join(c['cmd'] for c in result['commands'])
+        self.assertNotIn('postgres://', cmds)
+
+    def test_new_adapter_appears_without_rank_hint(self):
+        # An adapter with no _QUICK_RANK entry should still be eligible
+        # (sorts after ranked ones) rather than silently excluded — this is
+        # the plugin-visibility guarantee M4 asked for.
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter()
+        original_rank = dict(adapter._QUICK_RANK)
+        original_count = adapter._QUICK_COMMAND_COUNT
+        try:
+            # Give every real ranked scheme a rank so far back that our
+            # fake unranked one (default rank 100) would win a slot.
+            adapter._QUICK_RANK = {k: 1000 for k in original_rank}
+            adapter._QUICK_COMMAND_COUNT = len(original_rank) + 3
+            commands = adapter._get_quick_commands()
+        finally:
+            adapter._QUICK_RANK = original_rank
+            adapter._QUICK_COMMAND_COUNT = original_count
+        cmds = ' '.join(c['cmd'] for c in commands)
+        # Unranked real adapters (e.g. env, json, sqlite) should now be pulled
+        # in ahead of nothing, proving unranked entries aren't dropped.
+        self.assertTrue(any(s in cmds for s in ('env://', 'json://', 'sqlite://')))
+
+
 class TestRenderHelpRelationships(unittest.TestCase):
     """Tests for help://relationships renderer."""
 

@@ -829,53 +829,78 @@ class HelpAdapter(ResourceAdapter):
                 'message': str(e)
             }
 
+    # Rank hints for help://quick's top command block. Lower sorts first;
+    # unranked adapters (including project-local plugins) default to 100 and
+    # sort alphabetically after every ranked one. This is the "intent contract"
+    # M4 in AGENT_CLI_ONBOARDING_STRATEGY_2026-07-01.md asked for: adapters
+    # already carry a one-line description + starter query via get_help(),
+    # this dict only decides *priority*, not content — so the command list
+    # can't drift from the registry, and new adapters are never missing.
+    _QUICK_RANK: Dict[str, int] = {
+        'ast': 0,
+        'calls': 1,
+        'stats': 2,
+        'claude': 3,
+        'git': 4,
+        'ssl': 5,
+        'domain': 6,
+        'nginx': 7,
+        'sqlite': 8,
+        'cpanel': 9,
+    }
+    _QUICK_COMMAND_COUNT = 10
+
+    def _get_quick_commands(self) -> List[Dict[str, str]]:
+        """Derive the top command block from the adapter registry.
+
+        Two synthetic file-navigation entries lead (reveal isn't only URI
+        adapters) followed by the highest-ranked registered adapters, each
+        represented by its own get_help() description + first example.
+        """
+        commands = [
+            {
+                'cmd': 'reveal <file.py>',
+                'description': 'Outline a Python/JS/Go/etc. file — functions, classes, imports',
+            },
+            {
+                'cmd': 'reveal <dir/>',
+                'description': 'Directory tree with file sizes and types',
+            },
+        ]
+
+        candidates = []
+        for scheme, adapter_class in _ADAPTER_REGISTRY.items():
+            if scheme in self._INTERNAL_ADAPTERS or scheme == 'help':
+                continue
+            help_data = self._get_adapter_help(scheme)
+            if not help_data or 'error' in help_data:
+                continue
+            examples = help_data.get('examples') or []
+            uri = examples[0].get('uri', '') if examples else ''
+            description = help_data.get('description', '')
+            if not uri or not description:
+                continue
+            rank = self._QUICK_RANK.get(scheme, 100)
+            candidates.append((rank, scheme, uri, description))
+
+        candidates.sort(key=lambda c: (c[0], c[1]))
+        # -1 reserves a slot for the trailing help://adapters pointer below.
+        slots = max(self._QUICK_COMMAND_COUNT - len(commands) - 1, 0)
+        for _rank, _scheme, uri, description in candidates[:slots]:
+            commands.append({'cmd': f'reveal {uri}', 'description': description})
+
+        commands.append({
+            'cmd': 'reveal help://adapters',
+            'description': 'List all adapters with syntax and examples',
+        })
+        return commands
+
     def _get_quick_help(self) -> Dict[str, Any]:
         """Return a concise orientation cheat-sheet (help://quick)."""
         return {
             'type': 'help_quick',
             'title': 'Reveal — Quick Reference',
-            'commands': [
-                {
-                    'cmd': 'reveal <file.py>',
-                    'description': 'Outline a Python/JS/Go/etc. file — functions, classes, imports',
-                },
-                {
-                    'cmd': 'reveal <dir/>',
-                    'description': 'Directory tree with file sizes and types',
-                },
-                {
-                    'cmd': 'reveal ssl://DOMAIN --check',
-                    'description': 'TLS cert health check — expiry, chain, algo (exit 1/2 on issues)',
-                },
-                {
-                    'cmd': 'reveal domain://DOMAIN',
-                    'description': 'DNS + WHOIS + HTTP redirect + email DNS in one pass',
-                },
-                {
-                    'cmd': 'reveal nginx://DOMAIN',
-                    'description': 'nginx vhost summary — SSL, ports, upstreams, ACL',
-                },
-                {
-                    'cmd': 'reveal cpanel://USER/ssl --only-failures',
-                    'description': 'Disk cert status for all domains on a cPanel user (failures only)',
-                },
-                {
-                    'cmd': 'reveal <file.py> --check',
-                    'description': 'Static quality rules — complexity, unused imports, long functions',
-                },
-                {
-                    'cmd': "reveal 'patches://tests?group=target&limit=10'",
-                    'description': 'Test coverage pressure — which functions are most frequently patched in tests',
-                },
-                {
-                    'cmd': 'find src/ -name "*.py" | reveal --stdin --check',
-                    'description': 'Batch check all Python files via stdin pipeline',
-                },
-                {
-                    'cmd': 'reveal help://adapters',
-                    'description': 'List all adapters with syntax and examples',
-                },
-            ],
+            'commands': self._get_quick_commands(),
             'decision_tree': [
                 {'want': 'understand code structure (functions, classes, complexity)',
                  'use': 'ast://', 'example': "reveal ast://src/?complexity>10"},
