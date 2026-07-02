@@ -12,8 +12,8 @@ beth_topics:
   - packaging
 ---
 
-> **Superseded (2026-06-22).** The current Windows trust playbook is at
-> [`internal-docs/releasing/WINDOWS_TRUST_AND_DISTRIBUTION.md`](../../../internal-docs/releasing/WINDOWS_TRUST_AND_DISTRIBUTION.md).
+> **Superseded (2026-06-22).** The current Windows trust playbook lives in the maintainers'
+> internal docs (not published in this repo).
 > Two things in this doc are now known to be wrong:
 > - **PyInstaller `--onefile`** (Phase 3) — this extracts Python to a temp dir at launch, which is an AV heuristic. A signed `--onefile` binary had its signing certificate suspended (Nuitka #3842). Use **Nuitka `--standalone`** instead.
 > - **"Azure Trusted Signing is ~$10/mo — not chosen"** — this is now the recommended path; the active CI workflow uses it. SignPath Foundation remains a valid free-OSS alternative (see below) but requires manual approval per release.
@@ -31,7 +31,7 @@ Reveal is distributed via pip, which generates a `reveal.exe` console script wra
 
 These are structurally unsolvable through pip alone. The community consensus for CLI tools that need to work on strict Windows environments: **distribute a signed binary outside pip**.
 
-Observed concretely on Zack's Windows machine (cyberpower, 2026-05-25): upgrading `reveal-cli` from 0.90.1 → 0.97.0 via pip broke the tool entirely. Rolled back to 0.90.1 and left it there.
+Observed concretely on a user's Windows machine (2026-05-25): upgrading `reveal-cli` from 0.90.1 → 0.97.0 via pip broke the tool entirely. Rolled back to 0.90.1 and left it there.
 
 ---
 

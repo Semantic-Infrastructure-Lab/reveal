@@ -37,7 +37,7 @@ _SCHEMA_QUERY_PARAMS = {
     'filter': {
         'type': 'string',
         'description': 'Filter session list by name substring (claude://sessions/ list mode). Alias of ?search= for list filtering.',
-        'examples': ['?filter=peyton']
+        'examples': ['?filter=auth-refactor']
     },
     'project': {
         'type': 'string',
@@ -203,7 +203,7 @@ _SCHEMA_OUTPUT_TYPES = [
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
-    {'uri': 'claude://session/infernal-earth-0118', 'description': 'Session overview (messages, tools, duration)', 'output_type': 'claude_overview'},
+    {'uri': 'claude://session/2627362f-6f72-45e1-b7bb-d5a61519a388', 'description': 'Session overview (messages, tools, duration) — session name is the UUID directory name, or a friendly name if using a session-naming layer', 'output_type': 'claude_overview'},
     {'uri': 'claude://session/infernal-earth-0118/workflow', 'description': 'Chronological sequence of tool operations', 'element': 'workflow', 'output_type': 'claude_workflow'},
     {'uri': 'claude://session/infernal-earth-0118/files', 'description': 'All files read, written, or edited', 'element': 'files', 'output_type': 'claude_files'},
     {'uri': 'claude://session/infernal-earth-0118/tools', 'description': 'All tool usage with success rates', 'element': 'tools', 'output_type': 'claude_tools'},

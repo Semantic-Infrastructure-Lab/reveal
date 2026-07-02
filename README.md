@@ -116,8 +116,8 @@ code, but for sessions, git history, documents, data stores, and runtime state.
 | Call relationships | `calls://` | `reveal 'calls://src/?target=my_fn'` |
 | Imports / change impact | `imports://` `depends://` | `reveal imports://src/` |
 | Git history / diffs | `git://` `diff://` | `reveal 'git://.?message~=fix'` |
-| Claude sessions / prompts | `claude://` | `reveal 'claude://sessions/?search=peyton'` |
-| Codex CLI sessions | `codex://` | `reveal 'codex://sessions/?search=peyton'` |
+| Claude sessions / prompts | `claude://` | `reveal 'claude://sessions/?search=auth-refactor'` |
+| Codex CLI sessions | `codex://` | `reveal 'codex://sessions/?search=auth-refactor'` |
 | Markdown / docs | `markdown://` | `reveal docs/ --grep 'decision'` |
 | Databases / workbooks | `sqlite://` `mysql://` `xlsx://` | `reveal sqlite:///app.db` |
 | Environment / runtime | `env://` `python://` | `reveal env://` |

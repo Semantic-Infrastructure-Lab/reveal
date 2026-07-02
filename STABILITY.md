@@ -345,4 +345,4 @@ reveal reveal://schema  # (Coming in Output Contract Specification)
 ---
 
 **Next review:** Q2 2026 (before v1.0 release)
-**Owner:** Scott (with TIA)
+**Owner:** Semantic Infrastructure Lab

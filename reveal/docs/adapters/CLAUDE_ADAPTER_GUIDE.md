@@ -89,6 +89,8 @@ Get high-level session summary (messages, tools, duration):
 reveal claude://session/infernal-earth-0118
 ```
 
+> `infernal-earth-0118` is a placeholder session name. Your actual session directories are most likely UUIDs (e.g. `reveal claude://session/2627362f-6f72-45e1-b7bb-d5a61519a388`, or the short form `reveal claude://session/2627362`) unless you use a friendly-naming layer. See [Error: "Invalid session name"](#error-invalid-session-name) for both formats.
+
 **Returns**: Session name, message count, tool calls, duration, tool summary, next steps
 
 ### 2. Session Summary
@@ -1835,7 +1837,9 @@ reveal 'claude://sessions/?search=auth&word'
 **Meaning**: Session name format not recognized
 
 **Solutions**:
-- Use exact session name from directory (e.g., "infernal-earth-0118")
+- Use the exact session directory name. Two formats are supported:
+  - **UUID** (standard Claude Code layout): `2627362f-6f72-45e1-b7bb-d5a61519a388`, or just the first 7+ hex characters (`2627362`)
+  - **Friendly name** (used by session-naming layers like TIA): `infernal-earth-0118`
 - Check for typos
 - Ensure session name matches directory name pattern
 

@@ -434,7 +434,7 @@ class CodexAdapter(ResourceAdapter):
             ),
             'examples': [
                 {'uri': 'codex://', 'description': 'List all sessions (newest first)'},
-                {'uri': 'codex://sessions/?search=peyton', 'description': 'Find sessions mentioning peyton (SQLite metadata)'},
+                {'uri': 'codex://sessions/?search=auth-refactor', 'description': 'Find sessions mentioning auth-refactor (SQLite metadata)'},
                 {'uri': 'codex://sessions/?content=authentication', 'description': 'Full-text search across all session JSONL files'},
                 {'uri': 'codex://019e5cc5', 'description': 'Session overview: turns, tool calls, tokens, duration'},
                 {'uri': 'codex://019e5cc5?last', 'description': 'Last agent message only — fast recovery pattern'},

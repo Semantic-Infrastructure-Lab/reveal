@@ -4,7 +4,6 @@ category: guide
 ---
 # Stats Adapter Guide
 
-**Author**: TIA (The Intelligent Agent)
 **Created**: 2025-02-14
 **Adapter**: `stats://`
 **Purpose**: Codebase metrics, quality analysis, and hotspot detection

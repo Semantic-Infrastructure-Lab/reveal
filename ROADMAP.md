@@ -17,7 +17,7 @@ Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
 
 ### v0.101.0 — Commit-share ownership queries + production-only surface scan
 - ✅ `git://<path>?type=ownership` — commit-share authorship for file / directory / whole repo: primary author, per-author %, contributor count, last-touch date. Foundation for bus-factor / key-person reads; scope extends to directories and the whole repo (subtree oid comparison). `?merges=1`, `?limit=N`, shallow-clone warning (BACK-383).
-- ✅ `reveal surface --source-only` — excludes test files and directories from surface scans so DD/security reads see only production surface. Prunes `tests/`, `__tests__/`, `test_*.py`, `*.test.ts`, etc. Dogfood: 2248 → 286 entries (BACK-380).
+- ✅ `reveal surface --source-only` — excludes test files and directories from surface scans so security reviews see only production surface. Prunes `tests/`, `__tests__/`, `test_*.py`, `*.test.ts`, etc. Dogfood: 2248 → 286 entries (BACK-380).
 - ✅ Bug fixes: `mock.patch` decorators no longer misclassified as HTTP PATCH routes (BACK-377); `imports://` flood on committed `venv/` fixed via `os.walk` + `SKIP_DIRECTORIES` (BACK-378); shallow-clone warning for `?type=blame` (BACK-379).
 
 Earlier highlights (newest first):
@@ -116,7 +116,7 @@ A peer adapter to `claude://` for navigating [OpenAI Codex CLI](https://github.c
 
 ```bash
 reveal 'codex://'                            # list sessions from SQLite threads table
-reveal 'codex://sessions/?search=peyton'     # fast metadata search (SQLite)
+reveal 'codex://sessions/?search=auth-refactor'     # fast metadata search (SQLite)
 reveal 'codex://019e5cc5'                    # session overview (turns, tools, tokens, duration)
 reveal 'codex://019e5cc5?last'               # last agent message — recovery pattern
 reveal 'codex://info'                        # resolved paths, DB stats
@@ -266,7 +266,7 @@ reveal onboarding            # First-day guide for unfamiliar codebases
 
 #### Structural Egress & Ownership Queries (field notes: yenifada-0629; reframed flux-carnage-0629)
 
-Field-validated on 6 real codebases (Saleor ~909K LOC, LiteLLM ~4.6K py files, 4 internal repos) during a due-diligence engagement. Source: `internal-docs/feedback/DD_FIRST_PASS_REVEAL_FEEDBACK_2026-06-29.md`. The DD use-case validated cleanly **on the primitives reveal already has** (`overview`, `architecture`, `surface`, `git://blame`). These items extend those primitives with new *data categories* — they do not add verdicts. The interpretive layer (AI-washing call, exposure verdict, debt valuation, DD playbook) lives in the **consumer's** tooling, not reveal — see [Scope Test](#scope-test-what-belongs-in-reveal).
+Field-validated on 6 real codebases (Saleor ~909K LOC, LiteLLM ~4.6K py files, 4 internal repos) during a security/architecture review. The use-case validated cleanly **on the primitives reveal already has** (`overview`, `architecture`, `surface`, `git://blame`). These items extend those primitives with new *data categories* — they do not add verdicts. The interpretive layer (AI-washing call, exposure verdict, debt valuation, review playbook) lives in the **consumer's** tooling, not reveal — see [Scope Test](#scope-test-what-belongs-in-reveal).
 
 | Item | BACK | Pri | Data revealed (reveal's half) | Judgment (consumer's half) |
 |------|------|-----|-------------------------------|----------------------------|
@@ -425,7 +425,7 @@ These violate reveal's mission ("reveal reveals, doesn't modify") or fail the [S
 | Feature | Why Not |
 |---------|---------|
 | `--fix` auto-fix | Mission violation. Use Ruff/Black for formatting/fixes. |
-| `reveal dd` & other consumer-workflow composites | Named after a consumer's process, not the data; orchestrates a named multi-step playbook. Reveal composes via pipes — it doesn't run playbooks. Build the DD first-pass in consumer tooling (TechDNA CLI / tia task) over the existing primitives (`overview`→`architecture`→`surface`→`hotspots`→`git://blame`→`pack`). Decision: flux-carnage-0629 (BACK-384). |
+| `reveal dd` & other consumer-workflow composites | Named after a consumer's process, not the data; orchestrates a named multi-step playbook. Reveal composes via pipes — it doesn't run playbooks. Build the DD first-pass in consumer tooling over the existing primitives (`overview`→`architecture`→`surface`→`hotspots`→`git://blame`→`pack`). Decision: flux-carnage-0629 (BACK-384). |
 | `reveal debt --rate N` / debt-in-dollars scoring | A business opinion (dollar rate) layered on structural metrics. The inputs (`hotspots`/`circular`/`check`/`overview` counts) are already JSON-exportable; compute the valuation in the consumer's script. Decision: flux-carnage-0629 (BACK-385). |
 | Vendor-specific `surface` sub-categories (`ai-provider`, `agent-framework`, etc.) | A curated vendor list names the *vendor identity*, not the *coupling type* — breaking the pattern of every other category (`network`, `db`, `sdk`, `env`). The data is already in `surface --type sdk`; the list would be stale the week a new framework ships. Use `reveal surface . --type sdk \| grep -E 'openai\|anthropic\|litellm'`. Decision: poxinuku-0629 (BACK-381/382). |
 | `--no-fail` / `--exit-zero` | `\|\| true` is the Unix idiom. The flag conflates "checking" with "what to do about findings" — callers decide that, not the tool. Documented in AGENT_HELP under "Exit code 2 is breaking my pipeline." |

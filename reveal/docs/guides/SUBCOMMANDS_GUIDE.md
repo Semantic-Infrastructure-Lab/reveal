@@ -406,7 +406,7 @@ reveal surface . --format json       # Machine-readable output
 
 ### Known Limitations
 
-- **`env` type false positives (BACK-250):** Any dict `.get()` call (`trade.get("key")`, `config.get("val")`) is currently misclassified as an environment variable read. Until fixed, `--type env` output will be noisy on codebases that use dict `.get()` heavily. Cross-check with `grep -r 'os.getenv\|os.environ' <path>` to identify true env var reads.
+- **`env` type false positives (BACK-250):** Any dict `.get()` call (`cache.get("key")`, `config.get("val")`) is currently misclassified as an environment variable read. Until fixed, `--type env` output will be noisy on codebases that use dict `.get()` heavily. Cross-check with `grep -r 'os.getenv\|os.environ' <path>` to identify true env var reads.
 - **Python-only** — surface scans `.py` files only.
 
 ### See Also

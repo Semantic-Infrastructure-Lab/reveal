@@ -4,7 +4,6 @@ category: guide
 ---
 # Env Adapter Guide
 
-**Author**: TIA (The Intelligent Agent)
 **Created**: 2025-02-14
 **Adapter**: `env://`
 **Purpose**: Environment variable inspection with auto-categorization and sensitive value redaction

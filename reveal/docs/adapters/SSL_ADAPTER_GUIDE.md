@@ -4,7 +4,6 @@ category: guide
 ---
 # SSL Adapter Guide
 
-**Author**: TIA (The Intelligent Agent)
 **Created**: 2025-02-14
 **Updated**: 2026-02-27 (v0.54.0 — on-disk certs, batch failure detail, expiry dates)
 **Adapter**: `ssl://`

@@ -33,7 +33,7 @@ The **codex://** adapter navigates and analyzes [OpenAI Codex CLI](https://githu
 reveal 'codex://'
 
 # Find sessions by title/first-message
-reveal 'codex://sessions/?search=peyton'
+reveal 'codex://sessions/?search=auth-refactor'
 
 # Full-text search across all session content
 reveal 'codex://sessions/?content=authentication'
@@ -126,13 +126,13 @@ reveal 'codex://memories/pipeline'
 reveal 'codex://019d9da3/workflow'
 # Codex Workflow: 299 action(s)
 #
-#   [✓] tool  exec_command({"cmd":"find /home/scottsen/src/projects -maxdepth 2...)  [2026-04-17T22:51:18]
+#   [✓] tool  exec_command({"cmd":"find /home/user/projects -maxdepth 2...)  [2026-04-17T22:51:18]
 #       → Chunk ID: f1427c
 #
-#   [✓] shell $ find /home/scottsen/src/projects -maxdepth 2 -type d -iname '*reveal*'  [2026-04-17T22:51:18]
+#   [✓] shell $ find /home/user/projects -maxdepth 2 -type d -iname '*reveal*'  [2026-04-17T22:51:18]
 #       → exit=0
 #
-#   [✓] tool  exec_command({"cmd":"ls -la /home/scottsen/src/projects/reveal"...})  [2026-04-17T22:51:24]
+#   [✓] tool  exec_command({"cmd":"ls -la /home/user/projects/reveal"...})  [2026-04-17T22:51:24]
 #       → Chunk ID: 9e60cd
 ```
 
@@ -155,10 +155,10 @@ reveal 'codex://019e5cc8/timeline'
 #   2026-05-25T01:38:35  [session_meta                  ]  session  model=?
 #   2026-05-25T01:38:35  [event_msg/task_started        ]  task started
 #   2026-05-25T01:38:35  [response_item/message         ]  <permissions instructions>
-#   2026-05-25T01:38:35  [turn_context                  ]  cwd=/home/scottsen/src/projects/zack/topstep
-#   2026-05-25T01:38:35  [event_msg/user_message        ]  which/where !tia-launcher  ? read that script
-#   2026-05-25T01:38:40  [event_msg/agent_message       ]  I'll locate `tia-launcher` on the active PATH...
-#   2026-05-25T01:38:40  [response_item/function_call   ]  exec_command({"cmd":"command -V tia-launcher"...})
+#   2026-05-25T01:38:35  [turn_context                  ]  cwd=/home/user/projects/acme-app
+#   2026-05-25T01:38:35  [event_msg/user_message        ]  which/where !deploy.sh  ? read that script
+#   2026-05-25T01:38:40  [event_msg/agent_message       ]  I'll locate `deploy.sh` on the active PATH...
+#   2026-05-25T01:38:40  [response_item/function_call   ]  exec_command({"cmd":"command -V deploy.sh"...})
 #   2026-05-25T01:38:40  [response_item/function_call_output]  → Chunk ID: 9f6153
 #   2026-05-25T01:38:40  [event_msg/token_count         ]  tokens total=16548
 ```
@@ -207,13 +207,13 @@ Codex tracks native shell execution via `exec_command_end` events (no separate b
 reveal 'codex://019d9da3/shell'
 # Codex Shell Calls: 143
 #
-#   $ find /home/scottsen/src/projects -maxdepth 2 -type d -iname '*reveal*'  [2026-04-17T22:51:18]
+#   $ find /home/user/projects -maxdepth 2 -type d -iname '*reveal*'  [2026-04-17T22:51:18]
 #     → exit=0
-#     /home/scottsen/src/projects/reveal
+#     /home/user/projects/reveal
 #
-#   $ rg --files /home/scottsen/src/projects | rg '/(package.json|Cargo.toml|...)'  [2026-04-17T22:51:18]
+#   $ rg --files /home/user/projects | rg '/(package.json|Cargo.toml|...)'  [2026-04-17T22:51:18]
 #     → exit=0
-#     /home/scottsen/src/projects/decision-gate/README.md
+#     /home/user/projects/billing-service/README.md
 ```
 
 See also: `exec_command` tool calls appear in `/tools` and `/workflow`. In recent Codex sessions most shell execution goes through the `exec_command` function_call tool rather than native `exec_command_end` events.
@@ -323,4 +323,3 @@ This is a full-file scan — use `?search=` first for fast SQLite metadata filte
 
 - `reveal help://adapters` — All adapters
 - [Claude Adapter Guide](CLAUDE_ADAPTER_GUIDE.md) — Sister adapter for Claude Code sessions
-- [CODEX_ADAPTER_DESIGN_2026-05-24.md](../../internal-docs/design/CODEX_ADAPTER_DESIGN_2026-05-24.md) — Design doc with JSONL format details

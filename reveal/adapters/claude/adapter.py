@@ -701,8 +701,8 @@ class ClaudeAdapter(ResourceAdapter):
         """Get example URIs for help documentation."""
         return [
             {
-                'uri': 'claude://session/infernal-earth-0118',
-                'description': 'Session overview (messages, tools, duration)'
+                'uri': 'claude://session/2627362f-6f72-45e1-b7bb-d5a61519a388',
+                'description': 'Session overview (messages, tools, duration) — session name is the UUID directory name under ~/.claude/projects/<project>/ (or a friendly name if using a session-naming layer)'
             },
             {
                 'uri': 'claude://session/infernal-earth-0118/workflow',
