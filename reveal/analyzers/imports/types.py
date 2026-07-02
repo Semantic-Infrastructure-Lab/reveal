@@ -27,6 +27,8 @@ class ImportStatement:
     is_in_function: bool = False  # True if inside a function/method body
     source_line: str = ""  # Full source line (for noqa comment detection)
     level: int = 0  # Relative import level: 0=absolute, 1='.', 2='..', etc.
+    skip_unused: bool = False  # True when unused-detection is unreliable for this
+                               # import (e.g. C/C++ #include, namespace/require imports)
 
 
 @dataclass
@@ -199,7 +201,8 @@ class ImportGraph:
     def _should_skip_import(stmt: 'ImportStatement') -> bool:
         """Return True for imports that should never be flagged as unused."""
         return (
-            '# noqa' in stmt.source_line
+            stmt.skip_unused  # language lacks reliable symbol-usage semantics
+            or '# noqa' in stmt.source_line
             or '# type: ignore' in stmt.source_line
             or stmt.is_type_checking
             or stmt.import_type == 'star_import'  # can't reliably detect

@@ -537,18 +537,35 @@ imports:// supports multiple programming languages:
 
 ### Supported Languages
 
-| Language | Extensions | Status | Features |
-|----------|-----------|--------|----------|
-| Python | `.py` | ✅ Full | Imports, symbols, exports, TYPE_CHECKING |
-| JavaScript | `.js`, `.mjs` | ✅ Full | require, import/export |
+Support comes in tiers — be aware of which query modes actually work per language:
+
+- **✅ Full** — listing, cross-file resolution (`?circular`, `rank=fan-in`), and
+  unused-import detection (`?unused`).
+- **📦 Listing + graph** — imports listed and resolved to files (`?circular`,
+  `rank=fan-in` work); `?unused` is **not** reported (textual `#include` has no
+  reliable per-symbol usage semantics).
+- **📝 Listing only** — imports listed (counts, per-file view); cross-file
+  resolution and `?unused` are not claimed (would need classpath/namespace
+  resolution). `?circular`/fan-in will show no edges for these.
+
+| Language | Extensions | Status | Notes |
+|----------|-----------|--------|-------|
+| Python | `.py`, `.pyi` | ✅ Full | Imports, symbols, exports, TYPE_CHECKING |
+| JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` | ✅ Full | require, import/export |
 | TypeScript | `.ts`, `.tsx` | ✅ Full | import/export, type imports |
 | Go | `.go` | ✅ Full | import statements |
 | Rust | `.rs` | ✅ Full | use statements |
-| Java | `.java` | ✅ Full | import statements |
-| C++ | `.cpp`, `.cc`, `.h`, `.hpp` | ✅ Full | #include directives |
-| C# | `.cs` | ✅ Full | using statements |
-| Ruby | `.rb` | ✅ Full | require statements |
-| PHP | `.php` | ✅ Full | use, require, include |
+| C | `.c`, `.h` | 📦 Listing + graph | `#include` (quoted resolves to files; `<system>` listed, not resolved) |
+| C++ | `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hxx` | 📦 Listing + graph | `#include` directives (same resolution rules as C) |
+| Java | `.java` | 📝 Listing only | `import` / `import static` statements |
+| C# | `.cs` | 📝 Listing only | `using` directives (incl. `global using`, `using X = Y` aliases) |
+| PHP | `.php` | 📝 Listing only | `use`, `require`/`require_once`, `include`/`include_once` |
+| Ruby | `.rb` | 📝 Listing only | `require`, `require_relative`, `load` |
+
+> **Note on the long tail:** other tree-sitter-parseable code files (Swift, Scala,
+> Lua, Kotlin, …) have no import extractor yet. Rather than silently reporting
+> zero imports for them, `imports://` prints a "code file(s) skipped — no import
+> support for: …" note so a low count is never mistaken for a clean result.
 
 ### Language-Specific Examples
 

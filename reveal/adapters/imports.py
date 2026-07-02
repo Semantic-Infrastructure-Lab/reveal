@@ -24,6 +24,7 @@ from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..defaults import SKIP_DIRECTORIES
+from ..registry import get_code_extensions
 
 _SKIP_DIRS = SKIP_DIRECTORIES
 
@@ -418,6 +419,17 @@ class ImportsRenderer:
         else:
             print(f"  Cycles Found:  {'❌ Yes' if has_cycles else '✅ No'}")
         print()
+
+        # Honesty note: recognized code files whose language has no import
+        # extractor were scanned but contribute nothing — say so instead of
+        # letting a low/zero count read as "clean".
+        unsupported = metadata.get('unsupported_extensions') or {}
+        if unsupported:
+            skipped_total = sum(unsupported.values())
+            exts = ', '.join(f"{ext} ({n})" for ext, n in unsupported.items())
+            print(f"  ⚠️  {skipped_total} code file(s) skipped — no import support for: {exts}")
+            print("      (these are not counted above; import graph excludes them)")
+            print()
         print("Query options:")
         print(f"  reveal 'imports://{resource}?unused'       - Find unused imports")
         print(f"  reveal 'imports://{resource}?circular'     - Detect circular deps")
@@ -617,6 +629,7 @@ class ImportsAdapter(ResourceAdapter):
         self._graph: Optional[ImportGraph] = None
         self._symbols_by_file: Dict[Path, set] = {}
         self._scanned_files: set = set()
+        self._unsupported_extensions: Dict[str, int] = {}
         # Handle both absolute and relative paths:
         # - netloc component from URI parsing (imports://relative/path → 'relative/path')
         # - absolute path (imports:///absolute/path → '/absolute/path')
@@ -697,7 +710,9 @@ class ImportsAdapter(ResourceAdapter):
             'total_imports': self._graph.get_import_count(),
             'total_files': self._graph.get_file_count(),
             'has_cycles': len(self._graph.find_cycle_groups()) > 0,
-            'analyzer': 'imports'
+            'analyzer': 'imports',
+            # Recognized code files whose language has no import extractor yet.
+            'unsupported_extensions': dict(sorted(self._unsupported_extensions.items())),
         }
 
     @staticmethod
@@ -757,10 +772,18 @@ class ImportsAdapter(ResourceAdapter):
         Args:
             target_path: Directory or file to analyze
         """
+        supported_exts = frozenset(get_all_extensions())
+        # Recognized-code extensions that lack an import extractor — used to warn
+        # honestly (instead of a silent 0) when a scan hits, e.g., Swift or Scala.
+        code_exts = get_code_extensions()
+        unextractable: Dict[str, int] = {}
+
         if target_path.is_file():
             files = [target_path]
+            ext = target_path.suffix.lower()
+            if ext not in supported_exts and ext in code_exts:
+                unextractable[ext] = unextractable.get(ext, 0) + 1
         else:
-            supported_exts = frozenset(get_all_extensions())
             files = []
             for root, dirs, filenames in os.walk(str(target_path)):
                 dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
@@ -768,8 +791,13 @@ class ImportsAdapter(ResourceAdapter):
                     fp = Path(root) / fname
                     if fp.suffix in supported_exts:
                         files.append(fp)
+                    else:
+                        ext = fp.suffix.lower()
+                        if ext in code_exts:
+                            unextractable[ext] = unextractable.get(ext, 0) + 1
 
         self._scanned_files = set(files)
+        self._unsupported_extensions = unextractable
 
         # Extract imports from all files using appropriate extractor
         all_imports = []

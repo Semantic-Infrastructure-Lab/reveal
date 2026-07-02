@@ -21,6 +21,15 @@ from .python import PythonExtractor, extract_python_imports, extract_python_symb
 from .javascript import JavaScriptExtractor, extract_js_imports
 from .go import GoExtractor, extract_go_imports
 from .rust import RustExtractor, extract_rust_imports
+# Data-driven tree-sitter extractors (C, C++, Java, C#, PHP, Ruby)
+from .generic import (
+    CImportExtractor,
+    CppImportExtractor,
+    JavaImportExtractor,
+    CSharpImportExtractor,
+    PhpImportExtractor,
+    RubyImportExtractor,
+)
 
 # Import base registry functions
 from .base import (
@@ -49,6 +58,13 @@ __all__ = [
     'JavaScriptExtractor',
     'GoExtractor',
     'RustExtractor',
+    # Data-driven tree-sitter extractors
+    'CImportExtractor',
+    'CppImportExtractor',
+    'JavaImportExtractor',
+    'CSharpImportExtractor',
+    'PhpImportExtractor',
+    'RubyImportExtractor',
     # Deprecated function-based API (backward compatibility)
     'extract_python_imports',
     'extract_python_symbols',
