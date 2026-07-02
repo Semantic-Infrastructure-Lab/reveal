@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.103.0] - 2026-07-01 (sessions cloudy-haze-0701, expanding-planet-0701, indigo-spectrum-0701)
 
 ### Added
 - **`help://quick` derived from the adapter registry instead of hand-maintained (BACK-391 M4)** — the top command block used to be a static list skewed toward infra adapters (6 of 10 entries were ssl/domain/nginx/cpanel/check) and could never include project-local plugins. New `_get_quick_commands()` (`adapters/help.py`) iterates the live adapter registry, pulling each adapter's own `get_help()` description + first example URI, so the block can't drift from reality and automatically surfaces plugins. A `_QUICK_RANK` dict controls priority only (not content) to keep code/session/quality adapters ahead of the infra niche. This was the strategy doc's last open item — the M1–M4 onboarding sprint is complete. +4 tests.

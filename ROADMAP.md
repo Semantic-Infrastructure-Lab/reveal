@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-06-30 (coral-sunset-0630 — BACK-360 render-mode registry, BACK-387 heading collapse, docs/help honesty pass)
+> **Last updated**: 2026-07-01 (indigo-spectrum-0701 — BACK-391 help://quick registry-driven, BACK-390 breadcrumb outline≠content lesson, BACK-389 agent-help progressive disclosure)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,11 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.103.0 — Agent onboarding sprint complete (M1–M4)
+- ✅ `help://quick` command block now derived live from the adapter registry instead of hand-maintained, fixing drift risk and surfacing project-local plugin adapters for the first time (BACK-391, M4 — last open item of the onboarding strategy).
+- ✅ Breadcrumbs teach the outline≠content mental model, not just extraction mechanics — markdown output now frames its "Next:" hint honestly and suggests `--section '<first heading>'` by name (BACK-390, M1).
+- ✅ `--agent-help` / `help://agent` now obey progressive disclosure instead of dumping the full ~40K-token guide regardless of need; the CLI flag and `help://` adapter now share one code path (BACK-389).
 
 ### v0.102.0 — Render-mode registry refactor + doc/help count corrections
 - ✅ `ElementRenderMode` registry replaces the 87-line render-mode if/elif chain in `_render_element` (BACK-360). No behavior change.
