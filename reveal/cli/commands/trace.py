@@ -69,13 +69,19 @@ def run_trace(args: Namespace) -> None:
 
 def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
     """Build a trace report: BFS call tree augmented with per-function info."""
-    from reveal.adapters.calls.index import find_callees_recursive
+    from reveal.adapters.calls.index import _lang_family, find_callees_recursive
 
     bfs = find_callees_recursive(path, root, depth=depth)
     func_index = _collect_function_index(path)
 
     # children map: name → ordered list of callee names
     children: Dict[str, List[str]] = {}
+    # BACK-405: only trust a bare-name lookup in func_index for a callee that
+    # the (language-scoped) BFS actually resolved, and only against the
+    # language family(ies) it resolved through — otherwise a same-named
+    # definition in an unrelated language (e.g. a Python `def write` next to
+    # a C `write()` syscall) renders as if it were the real target.
+    resolved_families: Dict[str, Set[str]] = {}
     for lvl in bfs.get('levels', []):
         for entry in lvl['callees']:
             caller = entry['caller']
@@ -83,6 +89,10 @@ def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
             children.setdefault(caller, [])
             if callee not in children[caller]:
                 children[caller].append(callee)
+            if entry['resolved']:
+                resolved_families.setdefault(callee, set()).add(
+                    _lang_family(entry['caller_file'])
+                )
 
     # BFS visit order so frames render root-first, then level 1, level 2 …
     visited_order: List[str] = [root]
@@ -96,7 +106,15 @@ def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
 
     frames = []
     for name in visited_order:
-        info = func_index.get(name, {})
+        candidates = func_index.get(name, [])
+        if name == root:
+            info = candidates[0] if candidates else {}
+        else:
+            families = resolved_families.get(name)
+            info = (
+                next((c for c in candidates if _lang_family(c['file']) in families), {})
+                if families else {}
+            )
         level = _bfs_depth(name, root, bfs)
         frame: Dict[str, Any] = {
             'name': name,
@@ -130,13 +148,18 @@ def _bfs_depth(name: str, root: str, bfs: Dict[str, Any]) -> int:
     return -1
 
 
-def _collect_function_index(path: str) -> Dict[str, Dict[str, Any]]:
-    """Scan all files under *path* via collect_structures and return name → info dict."""
+def _collect_function_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
+    """Scan all files under *path* via collect_structures and return name → [info, ...].
+
+    Returns every same-named definition (not just the first) so callers can
+    disambiguate by language family (BACK-405) instead of silently picking
+    whichever definition happened to be scanned first.
+    """
     from reveal.adapters.ast.analysis import collect_structures
     from reveal.adapters.ast.nav_effects import classify_call
 
     structures = collect_structures(path)
-    index: Dict[str, Dict[str, Any]] = {}
+    index: Dict[str, List[Dict[str, Any]]] = {}
 
     for file_struct in structures:
         file_path = file_struct.get('file', '')
@@ -144,14 +167,14 @@ def _collect_function_index(path: str) -> Dict[str, Dict[str, Any]]:
             if elem.get('category') not in ('functions', 'methods'):
                 continue
             name = elem.get('name', '')
-            if not name or name in index:
+            if not name:
                 continue
-            index[name] = {
+            index.setdefault(name, []).append({
                 'file': file_path,
                 'line': elem.get('line', 0),
                 'params': _params_from_signature(elem.get('signature', ''), name),
                 'effects': _effects_from_calls(elem.get('calls', []), classify_call),
-            }
+            })
 
     return index
 

@@ -18,7 +18,10 @@ from .nav_calls import range_calls
 #
 # Order matters — first match wins.
 _TAXONOMY: List[Tuple[str, List[str]]] = [
-    ('hard_stop', ['die', 'exit', 'abort', 'sys.exit', 'os._exit', 'halt']),
+    ('hard_stop', [
+        'die', 'exit', 'abort', 'sys.exit', 'os._exit', 'halt',
+        'std::process::exit',
+    ]),
     ('db', [
         'mysql_query', 'mysql_fetch', 'mysqli_query', 'mysqli_fetch',
         'pg_query', 'pg_fetch', 'sqlite_query',
@@ -59,8 +62,19 @@ _TAXONOMY: List[Tuple[str, List[str]]] = [
         'readfile', 'tmpfile',
         'open(', 'os.rename', 'os.unlink', 'os.mkdir', 'shutil.',
         'pathlib', 'Path(',
+        # Go stdlib (BACK-401): os.Open/os.Create/os.Remove/os.MkdirAll,
+        # ioutil.ReadFile/WriteFile — 'os.getenv' below is checked separately
+        # so it doesn't collide with these (first-match-wins, this list first).
+        'os.open', 'os.create', 'os.remove', 'os.mkdirall',
+        'ioutil.readfile', 'ioutil.writefile',
+        # Rust stdlib (BACK-401)
+        'std::fs',
     ]),
-    ('env', ['getenv', 'putenv', 'os.environ', 'os.getenv']),
+    ('env', [
+        'getenv', 'putenv', 'os.environ', 'os.getenv',
+        'system.getenv',  # Java (BACK-401)
+        'std::env',        # Rust (BACK-401)
+    ]),
     ('log', [
         'error_log', 'syslog', 'write_log', 'trigger_error',
         'logger.', 'logging.', 'log.', 'app.logger',
@@ -105,8 +119,13 @@ _COMPILED_TAXONOMY: List[Tuple[str, List[List[str]]]] = [
 _RECEIVER_TAXONOMY: List[Tuple[str, List[str]]] = [
     ('db', ['cursor', 'conn', 'connection', 'session', 'db', 'engine']),
     ('cache', ['cache', 'redis', 'memcache']),
-    ('log', ['logger', '_log', 'log']),
-    ('http', ['httpx', 'aiohttp', 'requests']),
+    ('log', ['logger', '_log', 'log', '_logger', 'ilogger', 'slf4j']),
+    ('http', ['httpx', 'aiohttp', 'requests', 'httpclient', '_httpclient']),
+    # BACK-401: .NET BCL / JVM stdlib receivers for File/Directory/Path-style
+    # I/O and env access — safe as non-final-only receiver matches (see
+    # module docstring caution on why these aren't bare _TAXONOMY patterns).
+    ('file', ['file', 'directory', 'path', 'files', 'paths']),
+    ('env', ['environment']),
 ]
 
 

@@ -30,11 +30,13 @@ Verified node kinds against tree-sitter-language-pack 1.8.x real parses
 """
 
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, FrozenSet, List, Optional, Set
 
 from ...core import node_children as _children
+from ...defaults import SKIP_DIRECTORIES
 from ...registry import get_analyzer
 from .base import LanguageExtractor, register_extractor
 from .types import ImportStatement
@@ -261,18 +263,39 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         if candidate.is_file():
             return candidate
 
-        # 2. Under each project search path (root, then by basename one level).
-        basename = Path(target).name
+        # 2. Under each project search path (root, then full-suffix path match).
+        target_parts = Path(target).parts
+        n = len(target_parts)
         for root in search_paths or []:
             candidate = (root / target).resolve()
             if candidate.is_file():
                 return candidate
-            # Bounded basename match to avoid deep recursive scans on huge trees.
-            for child in root.iterdir() if root.is_dir() else []:
-                if child.is_dir():
-                    sub = (child / basename).resolve()
-                    if sub.is_file():
-                        return sub
+            if not root.is_dir():
+                continue
+            if n == 1:
+                # Bare basename target (no qualifying directory) — bounded
+                # one-level match, same as before (BACK-398).
+                basename = target_parts[0]
+                for child in root.iterdir():
+                    if child.is_dir():
+                        sub = (child / basename).resolve()
+                        if sub.is_file():
+                            return sub
+                continue
+            # BACK-404: match the candidate's full trailing path against every
+            # directory component of the quoted target (e.g. "jemalloc/internal/
+            # util.h"), not just its basename — a basename-only match collides
+            # across vendored subtrees that happen to share a common header
+            # name (util.h, config.h, types.h, ...).
+            for dirpath, dirnames, filenames in os.walk(root):
+                dirnames[:] = [
+                    d for d in dirnames
+                    if d not in SKIP_DIRECTORIES and not d.startswith('.')
+                ]
+                for fname in filenames:
+                    candidate = Path(dirpath) / fname
+                    if candidate.parts[-n:] == target_parts:
+                        return candidate.resolve()
         return None
 
 

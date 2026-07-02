@@ -6,8 +6,52 @@ from reveal.utils.path_utils import (
     find_file_in_parents,
     search_parents,
     find_project_root,
-    get_relative_to_root
+    get_relative_to_root,
+    detect_non_python_language,
 )
+
+
+class TestDetectNonPythonLanguage:
+    """Test detect_non_python_language() — BACK-403 extension coverage."""
+
+    def test_single_c_file(self, tmp_path):
+        f = tmp_path / "util.c"
+        f.write_text("")
+        assert detect_non_python_language(f) == 'C'
+
+    def test_single_header_file(self, tmp_path):
+        f = tmp_path / "util.h"
+        f.write_text("")
+        assert detect_non_python_language(f) == 'C'
+
+    def test_single_cpp_file(self, tmp_path):
+        f = tmp_path / "widget.cpp"
+        f.write_text("")
+        assert detect_non_python_language(f) == 'C++'
+
+    def test_dominant_language_in_directory(self, tmp_path):
+        for name in ["a.c", "b.c", "c.c", "d.h"]:
+            (tmp_path / name).write_text("")
+        (tmp_path / "helper.rb").write_text("")
+        assert detect_non_python_language(tmp_path) == 'C'
+
+    def test_no_false_positive_from_minority_file(self, tmp_path):
+        # Regression: a single .rb file should not win against a majority
+        # of .c/.h files just because .c/.h were previously unmapped.
+        for name in [f"f{i}.c" for i in range(5)] + ["g.h"]:
+            (tmp_path / name).write_text("")
+        (tmp_path / "helper.rb").write_text("")
+        assert detect_non_python_language(tmp_path) == 'C'
+
+    def test_unknown_extension_returns_empty(self, tmp_path):
+        f = tmp_path / "readme.txt"
+        f.write_text("")
+        assert detect_non_python_language(f) == ''
+
+    def test_python_file_returns_empty(self, tmp_path):
+        f = tmp_path / "main.py"
+        f.write_text("")
+        assert detect_non_python_language(f) == ''
 
 
 class TestFindFileInParents:

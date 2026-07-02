@@ -242,14 +242,56 @@ def render_var_flow(
     return '\n'.join(lines)
 
 
+# Member/scoped-access node kinds where only the leftmost (base object) child
+# is a real variable reference — the rightmost child is an attribute/field/
+# member name, not an independent identifier. BACK-402.
+_MEMBER_ACCESS_KINDS = frozenset({
+    'attribute',                  # Python: obj.attr
+    'member_access_expression',   # C#: obj.Member
+    'field_expression',           # C, Rust: obj.field
+    'member_expression',          # JS/TS: obj.prop
+    'selector_expression',        # Go: obj.Field
+    'scoped_identifier',          # Rust: path::segment
+})
+
+
+def _declared_name_node(scope_node: Any) -> Optional[Any]:
+    """Return the identifier node for scope_node's own declared name, if any.
+
+    Most languages expose it directly via the 'name' field. C wraps it inside
+    a chain of 'declarator' fields (function_declarator -> identifier).
+    """
+    name = scope_node.child_by_field_name('name')
+    if name is not None:
+        return name
+    node = scope_node.child_by_field_name('declarator')
+    for _ in range(10):
+        if node is None:
+            return None
+        if node.kind() in ('identifier', 'variable_name'):
+            return node
+        node = node.child_by_field_name('declarator') or node.child_by_field_name('name')
+    return None
+
+
 def _collect_identifier_names(
     scope_node: Any,
     from_line: int,
     to_line: int,
     get_text: Callable,
 ) -> frozenset:
-    """Return the set of identifier names that appear in a line range."""
+    """Return the set of identifier names that appear in a line range.
+
+    Excludes the enclosing scope's own declared name and the non-base segment
+    of member/scoped-access expressions (BACK-402) — neither is a real
+    external variable reference.
+    """
     names: set = set()
+    name_node = _declared_name_node(scope_node)
+    skip_pos = (
+        (name_node.start_position().row, name_node.start_position().column)
+        if name_node is not None else None
+    )
     stack = list(reversed(_children(scope_node)))
     while stack:
         node = stack.pop()
@@ -257,9 +299,16 @@ def _collect_identifier_names(
         if node.end_position().row + 1 < from_line or line > to_line:
             continue
         if node.kind() in ('identifier', 'variable_name') and from_line <= line <= to_line:
-            text = get_text(node)
-            if text:
-                names.add(text)
+            pos = (node.start_position().row, node.start_position().column)
+            if pos != skip_pos:
+                text = get_text(node)
+                if text:
+                    names.add(text)
+        if node.kind() in _MEMBER_ACCESS_KINDS:
+            children = _children(node)
+            if children:
+                stack.append(children[0])
+            continue
         stack.extend(reversed(_children(node)))
     return frozenset(names)
 

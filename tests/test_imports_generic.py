@@ -166,3 +166,41 @@ class TestResolution:
         extractor = get_extractor(tmp_path / 'a.c')
         imports = extractor.extract_imports(tmp_path / 'a.c')
         assert extractor.resolve_import(imports[0], base_path=tmp_path) is None
+
+    def test_c_qualified_include_full_suffix_match_not_basename(self, tmp_path):
+        """BACK-404: a qualified #include (e.g. "jemalloc/internal/util.h")
+        must resolve to the file whose full trailing path matches — not
+        collide with an unrelated top-level file sharing the same basename.
+        """
+        (tmp_path / 'src').mkdir()
+        (tmp_path / 'src' / 'util.h').write_text('void redis_util(void);\n')
+
+        vendor_dir = tmp_path / 'deps' / 'jemalloc' / 'include' / 'jemalloc' / 'internal'
+        vendor_dir.mkdir(parents=True)
+        (vendor_dir / 'util.h').write_text('void jemalloc_util(void);\n')
+        including_file = vendor_dir / 'assert.h'
+        including_file.write_text('#include "jemalloc/internal/util.h"\n')
+
+        extractor = get_extractor(including_file)
+        imports = extractor.extract_imports(including_file)
+        assert len(imports) == 1
+        resolved = extractor.resolve_import(
+            imports[0], base_path=including_file.parent, search_paths=[tmp_path]
+        )
+        assert resolved == (vendor_dir / 'util.h').resolve()
+        assert resolved != (tmp_path / 'src' / 'util.h').resolve()
+
+    def test_c_bare_basename_include_still_resolves(self, tmp_path):
+        """Unqualified #include "util.h" (no subdirectory) keeps the bounded
+        one-level basename fallback (unchanged from BACK-398/pre-BACK-404).
+        """
+        (tmp_path / 'lib').mkdir()
+        (tmp_path / 'lib' / 'util.h').write_text('void f(void);\n')
+        (tmp_path / 'a.c').write_text('#include "util.h"\n')
+
+        extractor = get_extractor(tmp_path / 'a.c')
+        imports = extractor.extract_imports(tmp_path / 'a.c')
+        resolved = extractor.resolve_import(
+            imports[0], base_path=tmp_path, search_paths=[tmp_path]
+        )
+        assert resolved == (tmp_path / 'lib' / 'util.h').resolve()

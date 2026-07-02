@@ -167,7 +167,7 @@ class TestCollectFunctionIndex(unittest.TestCase):
         """)
         index = _collect_function_index(self.tmpdir)
         self.assertIn('greet', index)
-        self.assertEqual(index['greet']['params'], ['name', 'greeting'])
+        self.assertEqual(index['greet'][0]['params'], ['name', 'greeting'])
 
     def test_self_stripped_from_params(self):
         _write(self.tmpdir, 'b.py', """\
@@ -177,7 +177,7 @@ class TestCollectFunctionIndex(unittest.TestCase):
         """)
         index = _collect_function_index(self.tmpdir)
         self.assertIn('bar', index)
-        self.assertNotIn('self', index['bar']['params'])
+        self.assertNotIn('self', index['bar'][0]['params'])
 
     def test_file_path_recorded(self):
         path = _write(self.tmpdir, 'c.py', """\
@@ -185,7 +185,7 @@ class TestCollectFunctionIndex(unittest.TestCase):
                 pass
         """)
         index = _collect_function_index(self.tmpdir)
-        self.assertEqual(index['my_func']['file'], path)
+        self.assertEqual(index['my_func'][0]['file'], path)
 
     def test_effects_captured(self):
         _write(self.tmpdir, 'd.py', """\
@@ -195,7 +195,15 @@ class TestCollectFunctionIndex(unittest.TestCase):
         """)
         index = _collect_function_index(self.tmpdir)
         self.assertIn('writer', index)
-        self.assertTrue(any('file' in e for e in index['writer']['effects']))
+        self.assertTrue(any('file' in e for e in index['writer'][0]['effects']))
+
+    def test_multiple_definitions_all_indexed(self):
+        # BACK-405: every same-named definition is kept (not just the first)
+        # so callers can disambiguate by language family.
+        _write(self.tmpdir, 'e.py', "def dup(): pass\n")
+        _write(self.tmpdir, 'sub/f.py', "def dup(): pass\n")
+        index = _collect_function_index(self.tmpdir)
+        self.assertEqual(len(index['dup']), 2)
 
     def test_syntax_error_file_skipped(self):
         _write(self.tmpdir, 'bad.py', "def (:\n  pass\n")

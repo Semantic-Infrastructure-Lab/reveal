@@ -458,6 +458,49 @@ class TestCollectDeps(unittest.TestCase):
         self.assertLessEqual(len(narrow_deps), len(all_deps))
 
 
+class TestCollectDepsBack402(unittest.TestCase):
+    """BACK-402: own name and dotted-attribute segments must not appear as deps."""
+
+    def _deps_for(self, code, func_name):
+        _, root, get_text, _ = _parse_python(code)
+        func = _find_func(root, get_text, func_name)
+        from reveal.adapters.ast.nav import collect_deps
+        return collect_deps(func, 1, 999, get_text)
+
+    def test_own_name_excluded(self):
+        code = """
+        def pick(n):
+            if n > 0:
+                return Color.RED
+            return Color.BLUE
+        """
+        names = [d['var'] for d in self._deps_for(code, 'pick')]
+        self.assertNotIn('pick', names)
+
+    def test_dotted_attribute_segment_excluded(self):
+        """Only the base object of Color.RED/Color.BLUE is a dep, not RED/BLUE."""
+        code = """
+        def pick(n):
+            if n > 0:
+                return Color.RED
+            return Color.BLUE
+        """
+        names = [d['var'] for d in self._deps_for(code, 'pick')]
+        self.assertIn('Color', names)
+        self.assertNotIn('RED', names)
+        self.assertNotIn('BLUE', names)
+
+    def test_nested_attribute_chain_only_base_object(self):
+        code = """
+        def f():
+            return a.b.c
+        """
+        names = [d['var'] for d in self._deps_for(code, 'f')]
+        self.assertIn('a', names)
+        self.assertNotIn('b', names)
+        self.assertNotIn('c', names)
+
+
 # ===========================================================================
 # collect_mutations
 # ===========================================================================
@@ -1087,6 +1130,112 @@ class TestClassifyCallReceiver(unittest.TestCase):
     def test_rules_engine_evaluate_unclassified(self):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertIsNone(classify_call('rules_engine.evaluate'))
+
+    # BACK-401: per-language stdlib receiver/pattern coverage (.NET BCL,
+    # JVM stdlib, Go stdlib, Rust std) — previously silently unclassified.
+
+    def test_csharp_file_exists_classifies_as_file(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('File.Exists'), 'file')
+
+    def test_csharp_directory_createdirectory_classifies_as_file(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('Directory.CreateDirectory'), 'file')
+
+    def test_csharp_environment_getenvironmentvariable_classifies_as_env(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(
+            classify_call('Environment.GetEnvironmentVariable'), 'env'
+        )
+
+    def test_csharp_underscore_logger_classifies_as_log(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('_logger.LogInformation'), 'log')
+
+    def test_csharp_httpclient_classifies_as_http(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('_httpClient.GetAsync'), 'http')
+
+    def test_java_files_exists_classifies_as_file(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('Files.exists'), 'file')
+
+    def test_java_system_getenv_classifies_as_env(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('System.getenv'), 'env')
+
+    def test_java_slf4j_classifies_as_log(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('slf4j.info'), 'log')
+
+    def test_go_os_open_classifies_as_file(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('os.Open'), 'file')
+
+    def test_go_ioutil_readfile_classifies_as_file(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('ioutil.ReadFile'), 'file')
+
+    def test_go_os_getenv_classifies_as_env(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('os.Getenv'), 'env')
+
+    def test_rust_std_fs_read_classifies_as_file(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('std::fs::read'), 'file')
+
+    def test_rust_std_env_var_classifies_as_env(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('std::env::var'), 'env')
+
+    def test_rust_std_process_exit_classifies_as_hard_stop(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('std::process::exit'), 'hard_stop')
+
+    def test_python_file_object_receiver_still_classifies(self):
+        # 'file' as a bare receiver is intentional — the caution in the
+        # taxonomy docstring is about full-pattern (not receiver-scoped)
+        # matching being too broad; receiver-only matching is safe.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('file.read'), 'file')
+
+
+class TestCollectEffectsCSharpBack401(unittest.TestCase):
+    """BACK-401 end-to-end: collect_effects must see C# invocation_expression
+    call sites (the CALL_NODE_TYPES entry was also wrong: 'invocation' vs
+    the real tree-sitter-c-sharp node kind 'invocation_expression')."""
+
+    def setUp(self):
+        code = """
+        class C {
+            string M(string renderNodePath) {
+                var x = File.Exists(renderNodePath) ? renderNodePath : "";
+                return x;
+            }
+        }
+        """
+        from tree_sitter_language_pack import get_parser
+        parser = get_parser('c_sharp')
+        tree = parser.parse(code)
+        self._root = tree.root_node()
+        lines = code.split('\n')
+
+        def get_text(node):
+            sr, sc = node.start_position().row, node.start_position().column
+            er, ec = node.end_position().row, node.end_position().column
+            if sr == er:
+                return lines[sr][sc:ec]
+            parts = [lines[sr][sc:]]
+            parts.extend(lines[sr + 1:er])
+            parts.append(lines[er][:ec])
+            return '\n'.join(parts)
+        self._get_text = get_text
+
+    def test_file_exists_call_detected_and_classified(self):
+        from reveal.adapters.ast.nav_effects import collect_effects
+        effects = collect_effects(self._root, 1, 999, self._get_text)
+        kinds = [e['kind'] for e in effects]
+        self.assertIn('file', kinds)
 
 
 class TestCollectEffects(unittest.TestCase):

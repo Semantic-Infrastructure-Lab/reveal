@@ -29,6 +29,35 @@ _INDEX_CACHE_MAX = 8
 # never appear as explicit call expressions in source code.
 _IMPLICIT_DECORATORS: frozenset = frozenset({'property', 'classmethod', 'staticmethod'})
 
+# Extension → coarse language family, for scoping callee resolution to the
+# caller's language (BACK-405). C/C++ share one family since headers (.h)
+# are ambiguous between the two and both target the same symbol namespace.
+# Deliberately coarse — the goal is only to stop bare-name collisions across
+# unrelated languages (e.g. a C `write()` resolving to a Python `def write`),
+# not to build a precise per-language classifier.
+_LANG_FAMILY_EXTS: Dict[str, str] = {
+    '.c': 'c', '.h': 'c',
+    '.cpp': 'c', '.cc': 'c', '.cxx': 'c', '.hpp': 'c', '.hh': 'c', '.h++': 'c', '.hxx': 'c',
+    '.py': 'python',
+    '.js': 'js', '.jsx': 'js', '.mjs': 'js', '.cjs': 'js', '.ts': 'js', '.tsx': 'js',
+    '.go': 'go',
+    '.rs': 'rust',
+    '.java': 'java',
+    '.cs': 'csharp',
+    '.rb': 'ruby',
+    '.php': 'php',
+    '.kt': 'kotlin', '.kts': 'kotlin',
+    '.swift': 'swift',
+    '.scala': 'scala',
+    '.lua': 'lua',
+    '.dart': 'dart',
+}
+
+
+def _lang_family(file_path: str) -> str:
+    """Return the coarse language family for a file path, or '' if unknown."""
+    return _LANG_FAMILY_EXTS.get(Path(file_path).suffix.lower(), '')
+
 
 def _get_decorator_names(elem: Dict[str, Any]) -> Set[str]:
     """Return the bare decorator names for *elem* (strips leading '@' and module prefix)."""
@@ -285,28 +314,50 @@ def _build_forward_index(
 
 
 def _collect_level_entries(
-    current_names: Set[str],
+    current_names: Set[Tuple[str, str]],
     forward: Dict[str, List[Dict[str, Any]]],
     visited: Set[str],
-) -> Tuple[List[Dict[str, Any]], Set[str]]:
+) -> Tuple[List[Dict[str, Any]], Set[Tuple[str, str]]]:
     """Collect callee entries for one BFS level; return (entries, next_names).
 
-    Updates *visited* in-place to track seen callees across levels.
+    *current_names*/*next_names* are (name, language_family) pairs — family is
+    '' for the root (unscoped) or an unrecognized-extension caller. BACK-405:
+    propagating the family across levels (not just the first hop) keeps a
+    resolved name's *own* forward-index lookup scoped too, so a same-named
+    definition in an unrelated language doesn't leak into what that node
+    "calls" once it becomes a source for the next level.
+
+    *visited* stays name-only (not (name, family)) to preserve the original
+    cycle-prevention guarantee — a name, once visited via any language, is
+    never re-expanded, regardless of which family resolved it.
     """
     level_entries: List[Dict[str, Any]] = []
-    next_names: Set[str] = set()
+    next_names: Set[Tuple[str, str]] = set()
 
-    for source_name in sorted(current_names):
+    for source_name, source_family in sorted(current_names):
         seen_this_source: Set[str] = set()
-        for defn in forward.get(source_name, []):
+        defs = forward.get(source_name, [])
+        if source_family:
+            defs = [d for d in defs if _lang_family(d['file']) == source_family]
+        for defn in defs:
+            caller_family = source_family or _lang_family(defn['file'])
             for callee in defn['calls']:
                 tail = callee.split('.')[-1]
-                resolved_name = tail if tail in forward else callee
+                # BACK-405: scope resolution to the caller's language family
+                # before accepting a bare-name match — a flat, language-blind
+                # index lets a same-named definition in an unrelated language
+                # win over the correct "unresolved/external" fallback (e.g. a
+                # C write() syscall resolving to an unrelated Python def write).
+                candidates = forward.get(tail, [])
+                if caller_family:
+                    candidates = [c for c in candidates if _lang_family(c['file']) == caller_family]
+                resolved = bool(candidates)
+                resolved_name = tail if resolved else callee
+                resolved_family = caller_family if resolved else ''
                 if resolved_name in seen_this_source or resolved_name in visited:
                     continue
                 seen_this_source.add(resolved_name)
                 visited.add(resolved_name)
-                resolved = resolved_name in forward
                 level_entries.append({
                     'caller': source_name,
                     'callee': resolved_name,
@@ -315,7 +366,7 @@ def _collect_level_entries(
                     'caller_line': defn['line'],
                 })
                 if resolved:
-                    next_names.add(resolved_name)
+                    next_names.add((resolved_name, resolved_family))
 
     return level_entries, next_names
 
@@ -345,8 +396,9 @@ def find_callees_recursive(
     structures = collect_structures(str(directory))
     forward = _build_forward_index(structures, include_builtins)
 
+    # '' family = unscoped: root has no caller edge to inherit a language from.
     visited: Set[str] = {root}
-    current_names: Set[str] = {root}
+    current_names: Set[Tuple[str, str]] = {(root, '')}
     levels: List[Dict[str, Any]] = []
 
     for level_num in range(1, depth + 1):

@@ -1738,6 +1738,39 @@ class TestFindCalleesRecursive(unittest.TestCase):
         self.assertTrue(entries['local_helper']['resolved'])
         self.assertFalse(entries.get('third_party_func', {}).get('resolved', True))
 
+    def test_cross_language_bare_name_collision_stays_unresolved(self):
+        # BACK-405: a C caller's `write()` syscall must not resolve to an
+        # unrelated same-named Python `def write` elsewhere in the project —
+        # the flat, language-blind index used to let it win.
+        from reveal.adapters.calls.index import find_callees_recursive
+        self._write('server.c', '''\
+            void log_raw(void) {
+                write(1, "x", 1);
+            }
+        ''')
+        self._write('helper.py', '''\
+            def write(f):
+                pass
+        ''')
+        result = find_callees_recursive(self.tmp, 'log_raw', depth=1)
+        entries = {e['callee']: e for e in result['levels'][0]['callees']}
+        self.assertIn('write', entries)
+        self.assertFalse(entries['write']['resolved'])
+
+    def test_same_language_bare_name_still_resolves(self):
+        # Same-language resolution must be unaffected by the language-family
+        # scoping added for BACK-405.
+        from reveal.adapters.calls.index import find_callees_recursive
+        self._write('app.py', '''\
+            def entry():
+                helper()
+            def helper():
+                pass
+        ''')
+        result = find_callees_recursive(self.tmp, 'entry', depth=1)
+        entries = {e['callee']: e for e in result['levels'][0]['callees']}
+        self.assertTrue(entries['helper']['resolved'])
+
     def test_empty_project_returns_no_levels(self):
         from reveal.adapters.calls.index import find_callees_recursive
         self._write('app.py', 'def entry():\n    pass\n')

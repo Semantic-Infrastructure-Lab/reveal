@@ -12,10 +12,18 @@ from ..defaults import SKIP_DIRECTORIES
 _SKIP_DIRS: frozenset = SKIP_DIRECTORIES
 
 # Extension → human-readable language label for non-Python source files.
+# Kept in sync with registered code-category analyzers (reveal/analyzers/*.py)
+# and TREESITTER_EXTENSION_MAP (reveal/registry.py) — see BACK-403.
 _NON_PYTHON_LANG_EXTS: Dict[str, str] = {
     '.ts': 'TypeScript', '.tsx': 'TypeScript',
-    '.js': 'JavaScript', '.jsx': 'JavaScript', '.mjs': 'JavaScript',
+    '.js': 'JavaScript', '.jsx': 'JavaScript', '.mjs': 'JavaScript', '.cjs': 'JavaScript',
     '.go': 'Go', '.rs': 'Rust', '.rb': 'Ruby', '.java': 'Java', '.cs': 'C#',
+    '.c': 'C', '.h': 'C',
+    '.cpp': 'C++', '.cc': 'C++', '.cxx': 'C++', '.hpp': 'C++', '.hh': 'C++', '.h++': 'C++',
+    '.php': 'PHP', '.swift': 'Swift', '.scala': 'Scala', '.lua': 'Lua',
+    '.kt': 'Kotlin', '.kts': 'Kotlin', '.dart': 'Dart', '.gd': 'GDScript',
+    '.ex': 'Elixir', '.exs': 'Elixir', '.zig': 'Zig',
+    '.m': 'Objective-C', '.mm': 'Objective-C',
 }
 
 

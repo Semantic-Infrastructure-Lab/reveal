@@ -97,7 +97,7 @@ CALL_NODE_TYPES = {
     'object_creation_expression', # PHP new ClassName()
     'method_call',             # Ruby, Rust (method syntax)
     'method_call_expression',  # Rust
-    'invocation',              # C#
+    'invocation_expression',   # C#
     'function_call',           # Lua, Bash
     'method_invocation',       # Java
 }
