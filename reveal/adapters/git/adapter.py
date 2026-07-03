@@ -356,8 +356,18 @@ class GitAdapter(ResourceAdapter):
                 path = '.'
                 subpath = resource[2:]
             elif resource.startswith('/') or os.path.isabs(resource):
-                path = resource
-                subpath = None
+                # An absolute *directory* is a repo root (bare overview). An
+                # absolute *file* path must be split into repo-dir + subpath, or
+                # it silently falls through to a repo overview with the file and
+                # @ref ignored — which then cascades into a bogus diff:// showing
+                # every function removed (BACK-417). _repo_relative_subpath
+                # converts the absolute subpath back to repo-root-relative.
+                if os.path.isdir(resource):
+                    path = resource
+                    subpath = None
+                else:
+                    path = os.path.dirname(resource) or os.sep
+                    subpath = resource
             else:
                 # Resource looks like a file path, not a repo path
                 path = '.'

@@ -298,10 +298,17 @@ class RustExtractor(LanguageExtractor):
         # Skip definition contexts
         # Note: 'function_signature_item' removed - it was filtering return types as definitions
         # Parameter names are still filtered by 'parameters' and 'parameter'
+        # Note: 'field_declaration' is deliberately NOT skipped. A struct
+        # field's *type* identifier (`pub user_provided: RoaringBitmap`) has
+        # field_declaration as its parent, and that type is a real usage of the
+        # imported name (BACK-420). The field *name* is a separate 'field_identifier'
+        # node (still skipped below), and extract_symbols only walks
+        # identifier/type_identifier, so dropping field_declaration cannot let a
+        # field name leak in as a false usage.
         if parent_type in ('function_item', 'struct_item', 'enum_item', 'trait_item',
                           'type_item', 'impl_item', 'mod_item',
                           'parameters', 'parameter',
-                          'field_declaration', 'field_identifier'):
+                          'field_identifier'):
             return False
 
         # For let bindings (let x = ...)

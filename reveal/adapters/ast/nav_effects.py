@@ -61,7 +61,11 @@ _TAXONOMY: List[Tuple[str, List[str]]] = [
         'rename', 'unlink', 'mkdir', 'rmdir', 'copy',
         'readfile', 'tmpfile',
         'open(', 'os.rename', 'os.unlink', 'os.mkdir', 'shutil.',
-        'pathlib', 'Path(',
+        # Note: 'pathlib' (module) stays; the bare 'Path(' constructor pattern
+        # was removed (BACK-416) — it tokenizes to just ['path'] and so matched
+        # any segment named `path` (e.g. a local var in `path.resolveIndex()`),
+        # and constructing a Path is not itself a filesystem side effect anyway.
+        'pathlib',
         # Go stdlib (BACK-401): os.Open/os.Create/os.Remove/os.MkdirAll,
         # ioutil.ReadFile/WriteFile — 'os.getenv' below is checked separately
         # so it doesn't collide with these (first-match-wins, this list first).
@@ -124,7 +128,14 @@ _RECEIVER_TAXONOMY: List[Tuple[str, List[str]]] = [
     # BACK-401: .NET BCL / JVM stdlib receivers for File/Directory/Path-style
     # I/O and env access — safe as non-final-only receiver matches (see
     # module docstring caution on why these aren't bare _TAXONOMY patterns).
-    ('file', ['file', 'directory', 'path', 'files', 'paths']),
+    # 'path' (singular) removed BACK-416: it's an extremely common local-var
+    # name and a Path object's methods (`path.resolveIndex()`, `path.getParent()`,
+    # C# `Path.Combine`) are string/path manipulation, not I/O — real filesystem
+    # work goes through the File/Directory/Files/Paths static classes (kept).
+    # 'fs' added BACK-416: Node's filesystem module (`fs.writeFileSync`,
+    # `fs.readFileSync`, `fs.promises.writeFile`) and Rust's aliased `fs::read`
+    # — both were previously unclassified despite being clear file I/O.
+    ('file', ['file', 'directory', 'files', 'paths', 'fs']),
     ('env', ['environment']),
 ]
 

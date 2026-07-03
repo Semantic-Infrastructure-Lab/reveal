@@ -501,6 +501,114 @@ class TestCollectDepsBack402(unittest.TestCase):
         self.assertNotIn('c', names)
 
 
+class TestVarFlowBack411(unittest.TestCase):
+    """BACK-411: declaration-with-initializer must classify as WRITE, not READ,
+    across languages whose grammar uses a distinct declarator/declaration node
+    shape instead of Python's plain `assignment` (C#, Java, Go, Rust, TS/JS).
+    Also covers compound-assignment (+=) READ+WRITE pairing where the grammar
+    unifies `=`/`+=`/etc. into one node kind (C#, Go)."""
+
+    @staticmethod
+    def _parse(code: str, lang: str):
+        parser = ts.get_parser(lang)
+        src = textwrap.dedent(code).lstrip('\n')
+        content_bytes = src.encode('utf-8')
+        tree = parser.parse(src)
+        root = tree.root_node()
+
+        def get_text(node):
+            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+        return root, get_text
+
+    def _kinds_for(self, code, lang, var_name):
+        from reveal.adapters.ast.nav_varflow import var_flow
+        root, get_text = self._parse(code, lang)
+        events = var_flow(root, var_name, 1, 999, get_text)
+        return [(e['kind'], e['line']) for e in events]
+
+    def test_csharp_declaration_is_write(self):
+        code = """
+        class C {
+            void M() {
+                var x = Foo();
+                x += Bar();
+                Console.WriteLine(x);
+            }
+        }
+        """
+        kinds = self._kinds_for(code, 'c_sharp', 'x')
+        self.assertEqual(kinds[0][0], 'WRITE')  # declaration
+        self.assertIn(('READ', kinds[1][1]), kinds)  # += reads before writing
+        self.assertIn(('WRITE', kinds[1][1]), kinds)
+
+    def test_csharp_plain_assignment_still_write(self):
+        code = """
+        class C {
+            void M() {
+                y = Baz();
+            }
+        }
+        """
+        kinds = self._kinds_for(code, 'c_sharp', 'y')
+        self.assertEqual(kinds, [('WRITE', 3)])
+
+    def test_java_declaration_is_write(self):
+        code = """
+        class C {
+            void m() {
+                int x = foo();
+                x += bar();
+            }
+        }
+        """
+        kinds = self._kinds_for(code, 'java', 'x')
+        self.assertEqual(kinds[0][0], 'WRITE')
+        self.assertIn(('READ', kinds[1][1]), kinds)
+        self.assertIn(('WRITE', kinds[1][1]), kinds)
+
+    def test_go_short_var_declaration_is_write(self):
+        code = """
+        package main
+        func m() {
+            x := foo()
+            x += bar()
+            y = baz()
+        }
+        """
+        x_kinds = self._kinds_for(code, 'go', 'x')
+        self.assertEqual(x_kinds[0][0], 'WRITE')  # x := foo()
+        self.assertIn(('READ', x_kinds[1][1]), x_kinds)  # x += bar()
+        self.assertIn(('WRITE', x_kinds[1][1]), x_kinds)
+
+        y_kinds = self._kinds_for(code, 'go', 'y')
+        self.assertEqual(y_kinds, [('WRITE', y_kinds[0][1])])  # plain y = baz()
+
+    def test_rust_let_declaration_is_write(self):
+        code = """
+        fn m() {
+            let x = foo();
+            x += bar();
+        }
+        """
+        kinds = self._kinds_for(code, 'rust', 'x')
+        self.assertEqual(kinds[0][0], 'WRITE')
+        self.assertIn(('READ', kinds[1][1]), kinds)
+        self.assertIn(('WRITE', kinds[1][1]), kinds)
+
+    def test_typescript_lexical_declaration_is_write(self):
+        code = """
+        function m() {
+            let x = foo();
+            x += bar();
+        }
+        """
+        kinds = self._kinds_for(code, 'typescript', 'x')
+        self.assertEqual(kinds[0][0], 'WRITE')
+        self.assertIn(('READ', kinds[1][1]), kinds)
+        self.assertIn(('WRITE', kinds[1][1]), kinds)
+
+
 # ===========================================================================
 # collect_mutations
 # ===========================================================================
@@ -1236,6 +1344,86 @@ class TestCollectEffectsCSharpBack401(unittest.TestCase):
         effects = collect_effects(self._root, 1, 999, self._get_text)
         kinds = [e['kind'] for e in effects]
         self.assertIn('file', kinds)
+
+
+class TestJavaEffectsBack416(unittest.TestCase):
+    """BACK-416: Java method_invocation dropped the method name, so the effect
+    taxonomy misattributed a filesystem write. `Files.createDirectories()` (real
+    write) was seen as bare "Files" and missed; `path.resolveIndex()` (no I/O)
+    was seen as bare "path" and falsely classified `file`. After the fix the
+    callee is receiver-qualified and only the real write is classified."""
+
+    def _collect(self, code, fname):
+        from tree_sitter_language_pack import get_parser
+        from reveal.adapters.ast.nav_effects import collect_effects
+        parser = get_parser('java')
+        cb = code.encode()
+        root = parser.parse(code).root_node()
+
+        def get_text(node):
+            return cb[node.start_byte():node.end_byte()].decode('utf-8')
+
+        stack = [root]
+        func = None
+        while stack:
+            n = stack.pop()
+            if n.kind() == 'method_declaration' and fname in get_text(n):
+                func = n
+                break
+            stack.extend(n.child(i) for i in range(n.child_count()))
+        return collect_effects(func, 1, 999, get_text)
+
+    CODE = (
+        "public class Fs {\n"
+        "  public Directory newDirectory(IndexSettings s, ShardPath path) {\n"
+        "    final Path location = path.resolveIndex();\n"
+        "    Files.createDirectories(location);\n"
+        "    return newFSDirectory(location);\n"
+        "  }\n"
+        "}\n"
+    )
+
+    def test_real_fs_write_classified_on_files_call(self):
+        effects = self._collect(self.CODE, 'newDirectory')
+        file_effects = [e for e in effects if e['kind'] == 'file']
+        self.assertEqual(len(file_effects), 1)
+        self.assertIn('createDirectories', file_effects[0]['callee'])
+
+    def test_path_method_not_falsely_classified(self):
+        effects = self._collect(self.CODE, 'newDirectory')
+        # path.resolveIndex() is not I/O — it must not be a file effect.
+        path_effects = [
+            e for e in effects
+            if e['kind'] == 'file' and 'resolveIndex' in (e['callee'] or '')
+        ]
+        self.assertEqual(path_effects, [])
+
+    def test_java_method_invocation_callee_is_receiver_qualified(self):
+        from tree_sitter_language_pack import get_parser
+        from reveal.adapters.ast.nav_calls import range_calls
+        parser = get_parser('java')
+        cb = self.CODE.encode()
+        root = parser.parse(self.CODE).root_node()
+        gt = lambda n: cb[n.start_byte():n.end_byte()].decode()
+        stack = [root]
+        func = None
+        while stack:
+            n = stack.pop()
+            if n.kind() == 'method_declaration':
+                func = n
+                break
+            stack.extend(n.child(i) for i in range(n.child_count()))
+        callees = [c['callee'] for c in range_calls(func, 1, 999, gt)]
+        self.assertIn('Files.createDirectories', callees)
+        self.assertIn('path.resolveIndex', callees)
+
+    def test_classify_regression_matrix(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('Files.createDirectories'), 'file')
+        self.assertIsNone(classify_call('path.resolveIndex'))
+        self.assertIsNone(classify_call('Path.Combine'))
+        self.assertEqual(classify_call('file.read'), 'file')  # lowercase kept
+        self.assertEqual(classify_call('fs.writeFileSync'), 'file')  # Node fs
 
 
 class TestCollectEffects(unittest.TestCase):

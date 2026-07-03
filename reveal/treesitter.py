@@ -162,6 +162,14 @@ def build_callers_index(functions: List[Dict[str, Any]]) -> Dict[str, List[str]]
     return callers
 
 
+# Node kinds used to pair a function/method's real name with its argument
+# list (BACK-413) — shared between _get_node_name and _get_signature so both
+# agree on which parameter_list is the actual signature vs. a receiver
+# (Go) or which identifier is the name vs. a bare return type (C#).
+_NAME_KINDS = ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier', 'field_identifier')
+_PARAM_LIST_KINDS = ('parameters', 'parameter_list', 'formal_parameters')
+
+
 class TreeSitterAnalyzer(FileAnalyzer):
     """Base class for tree-sitter based analyzers.
 
@@ -751,29 +759,47 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         We must search declarators BEFORE looking at type_identifier to avoid
         extracting the return type instead of the function name.
+
+        CRITICAL (BACK-413): some grammars put more than one name-shaped node
+        among a method's direct children — a bare non-generic return type
+        (C# `Task Close()`) or a receiver (Go `func (s *T) Name()`) parses as
+        an `identifier`/`field_identifier` sibling of the real name. Picking
+        the first match (old behavior) grabs the return type/receiver instead
+        of the name. The real name is always the one immediately preceding
+        the parameter list, so that pairing is checked first.
         """
+        kids = _children(node)
+
         # PRIORITY 1: For C/C++ functions, look inside declarators FIRST
         # These contain the actual function/variable name, not the type
-        for child in _children(node):
+        for child in kids:
             if child.kind() in ('function_declarator', 'pointer_declarator', 'declarator'):
                 # Recursively search for identifier (may be nested deep)
                 name = self._find_identifier_in_tree(child)
                 if name:
                     return name
 
-        # PRIORITY 2: Direct identifier/name children (most languages)
-        for child in _children(node):
+        # PRIORITY 2: name-kind child immediately preceding a parameter list —
+        # the node actually attached to the argument list, not an unrelated
+        # identifier-shaped sibling (return type, receiver, etc.)
+        for i, child in enumerate(kids):
+            if child.kind() in _PARAM_LIST_KINDS and i > 0 and kids[i - 1].kind() in _NAME_KINDS:
+                return self._get_node_text(kids[i - 1])
+
+        # PRIORITY 2b: no adjacent parameter list — first identifier/name child
+        # (classes, fields, variables; excludes field_identifier, see PRIORITY 4)
+        for child in kids:
             if child.kind() in ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier'):
                 return self._get_node_text(child)
 
         # PRIORITY 3: type_identifier (fallback for structs, classes)
         # Only use this if we haven't found a name in declarators
-        for child in _children(node):
+        for child in kids:
             if child.kind() == 'type_identifier':
                 return self._get_node_text(child)
 
         # PRIORITY 4: field_identifier (for struct fields)
-        for child in _children(node):
+        for child in kids:
             if child.kind() == 'field_identifier':
                 return self._get_node_text(child)
 
@@ -802,15 +828,36 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return None
 
     def _get_signature(self, node) -> str:
-        """Get function signature (parameters and return type only)."""
-        # Look for parameters node to extract just signature part
+        """Get function signature (parameters and return type only).
+
+        CRITICAL (BACK-413): some grammars attach more than one parameter_list
+        to a single method node — Go methods carry a receiver parameter_list
+        before the name AND, for multi-value returns, a tuple-shaped
+        parameter_list after the real params (`func (s *T) F() (int, error)`).
+        Blindly taking the last parameter_list child (old behavior) grabs the
+        tuple-return list instead of the actual arguments. The real params are
+        always the parameter_list immediately after the name (see
+        _get_node_name), so that pairing is used here too.
+        """
+        kids = _children(node)
         params_text = ''
         return_type = ''
 
-        for child in _children(node):
-            if child.kind() in ('parameters', 'parameter_list', 'formal_parameters'):
+        for i, child in enumerate(kids):
+            if child.kind() in _PARAM_LIST_KINDS and i > 0 and kids[i - 1].kind() in _NAME_KINDS:
                 params_text = self._get_node_text(child)
-            elif child.kind() in ('return_type', 'type'):
+                break
+
+        if not params_text:
+            # No name-adjacent parameter list found (e.g. anonymous
+            # functions/lambdas) — fall back to the first one present.
+            for child in kids:
+                if child.kind() in _PARAM_LIST_KINDS:
+                    params_text = self._get_node_text(child)
+                    break
+
+        for child in kids:
+            if child.kind() in ('return_type', 'type'):
                 return_type = ' -> ' + self._get_node_text(child).strip(': ')
 
         if params_text:

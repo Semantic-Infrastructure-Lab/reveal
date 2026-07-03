@@ -183,6 +183,23 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             stack.extend(reversed(_children(cur)))
         return None
 
+    @staticmethod
+    def _extract_include_target(remainder: str) -> Optional[str]:
+        """Return the include target between the first `<..>` or `"..."` pair.
+
+        Truncates at the first closing delimiter so a trailing comment
+        (`<math.h> /* ... */`, `"x.h" // ...`) can't leak into the module name.
+        Returns None if no delimited target is present (caller falls back).
+        """
+        for open_ch, close_ch in (('<', '>'), ('"', '"')):
+            start = remainder.find(open_ch)
+            if start == -1:
+                continue
+            end = remainder.find(close_ch, start + 1)
+            if end != -1:
+                return remainder[start + 1:end].strip()
+        return None
+
     def _build(self, raw: str, node, file_path: Path) -> Optional[ImportStatement]:
         """Parse cleaned source text into an ImportStatement (data-driven)."""
         source_line = raw.strip()
@@ -212,12 +229,21 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             alias = left.strip()
             remainder = right.strip()
 
-        # Strip surrounding quotes always; strip angle brackets only for C/C++
-        # includes (avoid mangling e.g. C# `using X = List<int>` generics).
-        strip_chars = '"\' '
-        if self.spec.resolve_includes:
-            strip_chars += '<>'
-        module_name = remainder.strip(strip_chars)
+        # For a C/C++ include, extract exactly what's between the delimiters —
+        # `<...>` for a system include or `"..."` for a local one — up to the
+        # *first* closing delimiter. A blanket .strip() can't do this: it only
+        # trims matching chars from the ends, so a trailing comment after the
+        # close (e.g. Redis's `#include <math.h> /* isnan() */` or
+        # `#include "x.h" // note`) leaves the interior delimiter and the comment
+        # intact → module_name `math.h> /* isnan() */` (BACK-417).
+        module_name = self._extract_include_target(remainder) if self.spec.resolve_includes else None
+        if module_name is None:
+            # Non-include (import/using) or a malformed include: strip surrounding
+            # quotes (angle brackets too for includes) as before.
+            strip_chars = '"\' '
+            if self.spec.resolve_includes:
+                strip_chars += '<>'
+            module_name = remainder.strip(strip_chars)
         if not module_name:
             return None
 

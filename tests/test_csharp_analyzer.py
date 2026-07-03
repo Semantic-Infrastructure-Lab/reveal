@@ -369,6 +369,48 @@ public class LinqExample
         finally:
             os.unlink(temp_path)
 
+    def test_bare_reference_type_return_name_not_corrupted(self):
+        """BACK-413: bare non-generic return types (Task, Stream) must not
+        overwrite the method name — `Task Close()` is named 'Close', not
+        'Task'."""
+        code = '''public class Connection
+{
+    public Task Close()
+    {
+        return Task.CompletedTask;
+    }
+
+    public async Task<Stream> GetStream()
+    {
+        return null;
+    }
+
+    public bool IsOpen()
+    {
+        return true;
+    }
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cs', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CSharpAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            func_names = [f['name'] for f in structure.get('functions', [])]
+            self.assertIn('Close', func_names)
+            self.assertIn('GetStream', func_names)
+            self.assertIn('IsOpen', func_names)
+            self.assertNotIn('Task', func_names)
+            self.assertNotIn('Stream', func_names)
+            self.assertNotIn('bool', func_names)
+
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()

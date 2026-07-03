@@ -278,6 +278,67 @@ func main() {
         finally:
             os.unlink(temp_path)
 
+    def test_scalar_return_type_name_not_corrupted(self):
+        """BACK-413: a method's single scalar return type (bool, string) must
+        not overwrite the method name — `func (s *T) IsOpen() bool` is named
+        'IsOpen', not 'bool'."""
+        code = '''package main
+
+func (s *Scheduler) IsOpen() bool {
+    return true
+}
+
+func (s *Scheduler) GetName() string {
+    return ""
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.go', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = GoAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            func_names = [f['name'] for f in structure['functions']]
+            self.assertIn('IsOpen', func_names)
+            self.assertIn('GetName', func_names)
+            self.assertNotIn('bool', func_names)
+            self.assertNotIn('string', func_names)
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_tuple_return_signature_not_corrupted(self):
+        """BACK-413: a multi-return method's tuple return type must not
+        overwrite the extracted parameter list — `func (s *T) DoThing(x int)
+        (int, error)` must report params `(x int)`, not `(int, error)`."""
+        code = '''package main
+
+func (s *Scheduler) DoThing(x int) (int, error) {
+    return x, nil
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.go', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = GoAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            func_names = [f['name'] for f in structure['functions']]
+            self.assertIn('DoThing', func_names)
+
+            do_thing = next(f for f in structure['functions'] if f['name'] == 'DoThing')
+            self.assertIn('x int', do_thing.get('signature', ''))
+            self.assertNotIn('(int, error)', do_thing.get('signature', ''))
+
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()

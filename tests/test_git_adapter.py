@@ -964,6 +964,26 @@ class TestGitAdapterBugFixes:
             assert parsed['path'] == resource
             assert parsed['subpath'] is None
 
+    def test_absolute_file_path_splits_into_repo_dir_and_subpath(self):
+        """BACK-417: an absolute path to a *file* must become repo-dir + subpath,
+        not path=<file>/subpath=None which silently routes to a repo overview
+        (and cascades into a bogus diff:// showing every function removed)."""
+        from reveal.adapters.git.adapter import GitAdapter
+        # This test file itself is a real absolute file path.
+        abs_file = os.path.abspath(__file__)
+        parsed = GitAdapter._parse_resource_string(f'{abs_file}@HEAD')
+        assert parsed['subpath'] == abs_file
+        assert parsed['path'] == os.path.dirname(abs_file)
+        assert parsed['ref'] == 'HEAD'
+
+    def test_absolute_directory_still_means_repo_overview(self):
+        """An absolute *directory* must still route to a repo overview."""
+        from reveal.adapters.git.adapter import GitAdapter
+        abs_dir = os.path.dirname(os.path.abspath(__file__))
+        parsed = GitAdapter._parse_resource_string(abs_dir)
+        assert parsed['path'] == abs_dir
+        assert parsed['subpath'] is None
+
 
 class TestApplyElementBlameFilter(unittest.TestCase):
     """Unit tests for _apply_element_blame_filter clipped_lines computation."""

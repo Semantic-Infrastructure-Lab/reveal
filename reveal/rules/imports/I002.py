@@ -209,24 +209,30 @@ class I002(BaseRule):
     def _collect_raw_imports(self, directory: Path) -> list:
         """Phase 1: Walk directory and extract raw import statements from all files.
 
-        Aborts to an empty list if the number of supported source files exceeds
-        the configured ceiling (REVEAL_I002_MAX_FILES). That only happens when
-        project-root detection has gone wrong and pointed the scan at a tree far
-        larger than any single project (BACK-338); bailing keeps the failure a
-        logged skip rather than a multi-minute hang.
+        Two passes on purpose. Pass A only *counts* supported source files (a
+        cheap directory walk, no parsing); if the count exceeds the configured
+        ceiling (REVEAL_I002_MAX_FILES) we bail before parsing a single file.
+        That ceiling only trips when project-root detection has gone wrong and
+        pointed the scan at a tree far larger than any single project (BACK-338).
+        Counting *before* parsing is the point: parsing is the expensive step
+        (tree-sitter per file), so counting-as-we-parse — the old behavior —
+        still parsed ~ceiling large real-world files before aborting, a
+        multi-minute hang on big non-Python trees where the tell (BACK-418) was a
+        5-file subdir under a marker root taking >100s to check. Pass B does the
+        actual parsing only once the tree is known to be a sane size.
         """
-        all_imports = []
         supported_extensions = get_all_extensions()
         max_files = _max_graph_files()
-        scanned = 0
 
+        # Pass A: cheap count-only walk — abort before any parsing if over ceiling.
+        source_files = []
         for file_path in directory.rglob("*"):
-            if not file_path.is_file():
-                continue
             if file_path.suffix not in supported_extensions:
                 continue
-            scanned += 1
-            if scanned > max_files:
+            if not file_path.is_file():
+                continue
+            source_files.append(file_path)
+            if len(source_files) > max_files:
                 logger.warning(
                     "I002: import-graph scan of %s exceeded %d source files; "
                     "skipping circular-dependency analysis (likely a project-root "
@@ -234,6 +240,10 @@ class I002(BaseRule):
                     directory, max_files,
                 )
                 return []
+
+        # Pass B: parse the (now bounded) set of files.
+        all_imports = []
+        for file_path in source_files:
             extractor = get_extractor(file_path)
             if not extractor:
                 continue

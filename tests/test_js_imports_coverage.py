@@ -520,3 +520,46 @@ class TestResolveRelativeJs:
         e = JavaScriptExtractor()
         result = e._resolve_relative_js('./nope', tmp_path)
         assert result is None
+
+    def test_js_extension_falls_back_to_ts(self, tmp_path):
+        """BACK-410: TS ESM idiom — `import './position.js'` resolves to position.ts."""
+        f = tmp_path / 'position.ts'
+        f.write_text('export const x = 1;')
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('./position.js', tmp_path)
+        assert result == f.resolve()
+
+    def test_js_extension_falls_back_to_tsx(self, tmp_path):
+        f = tmp_path / 'App.tsx'
+        f.write_text('export const App = () => <div />;')
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('./App.js', tmp_path)
+        assert result == f.resolve()
+
+    def test_jsx_extension_falls_back_to_tsx(self, tmp_path):
+        f = tmp_path / 'Button.tsx'
+        f.write_text('export const Button = () => {};')
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('./Button.jsx', tmp_path)
+        assert result == f.resolve()
+
+    def test_mjs_extension_falls_back_to_mts(self, tmp_path):
+        f = tmp_path / 'module.mts'
+        f.write_text('export const x = 1;')
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('./module.mjs', tmp_path)
+        assert result == f.resolve()
+
+    def test_js_extension_prefers_literal_js_over_ts_fallback(self, tmp_path):
+        js_file = tmp_path / 'position.js'
+        js_file.write_text('export const x = 1;')
+        ts_file = tmp_path / 'position.ts'
+        ts_file.write_text('export const x = 2;')
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('./position.js', tmp_path)
+        assert result == js_file.resolve()
+
+    def test_js_extension_no_ts_file_returns_none(self, tmp_path):
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('./missing.js', tmp_path)
+        assert result is None

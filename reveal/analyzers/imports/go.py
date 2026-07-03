@@ -112,6 +112,16 @@ class GoExtractor(LanguageExtractor):
                 if root:
                     symbols.add(root)
 
+        # Handle qualified types (pkg.Type in type position -> track 'pkg').
+        # tree-sitter-go represents `sync.WaitGroup` as
+        # qualified_type(package_identifier, type_identifier), NOT a
+        # selector_expression, and the package part is a 'package_identifier'
+        # node — so the identifier walk above never sees it and a package used
+        # only for a type is falsely reported unused (BACK-420).
+        for qt in analyzer._find_nodes_by_type('qualified_type'):
+            if qt.child_count() > 0 and qt.child(0).kind() == 'package_identifier':
+                symbols.add(analyzer._get_node_text(qt.child(0)))
+
         return symbols
 
     def _parse_import_spec(self, spec_node, file_path: Path, analyzer) -> ImportStatement | None:
@@ -180,10 +190,19 @@ class GoExtractor(LanguageExtractor):
         # Internal packages start with module name, external from domain
         is_relative = False
 
-        # Extract package name from path for imported_names
-        # e.g., "github.com/user/pkg" → "pkg"
+        # Determine the local name the package is referenced by — this is what
+        # I001 compares against the used-symbol set. For an aliased import
+        # (`utilruntime "k8s.io/.../runtime"`) the code uses the *alias*, not the
+        # path basename, so imported_names must be the alias or the import reads
+        # as falsely unused (BACK-420). Blank imports ('_') bind no name; dot
+        # imports ('.') pull names into scope directly (skipped by I001 anyway).
         package_name = package_path.split('/')[-1]
-        imported_names = [package_name] if not alias == '_' else []
+        if alias == '_':
+            imported_names = []
+        elif alias and alias not in ('.', '_'):
+            imported_names = [alias]
+        else:
+            imported_names = [package_name]
 
         return ImportStatement(
             file_path=file_path,

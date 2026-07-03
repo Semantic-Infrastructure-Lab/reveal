@@ -97,6 +97,25 @@ def _uncalled_entry_mtime(entry: Dict[str, Any]) -> float:
         return 0.0
 
 
+def _bare_callee_name(callee: str) -> str:
+    """Strip a qualified callee down to its final bare segment.
+
+    Handles PHP `$this->validate` -> `validate`, dotted `obj.method` /
+    `pkg.Func` -> `method`/`Func`, and C++ `ClassName::get_singleton` ->
+    `get_singleton` (BACK-414: `::` was never handled, so the overwhelming
+    majority of real-world C++ call sites — which use scope-qualified static
+    calls like `Engine::get_singleton()` — were never indexed under the bare
+    name callers/callees actually search for). Whichever separator occurs
+    last in the string wins, so mixed forms resolve to the final segment.
+    """
+    idx = max(callee.rfind('->'), callee.rfind('.'), callee.rfind('::'))
+    if idx == -1:
+        return callee
+    if callee[idx:idx + 2] in ('->', '::'):
+        return callee[idx + 2:]
+    return callee[idx + 1:]
+
+
 def _index_callee(
     index: Dict[str, List[Dict[str, Any]]],
     callee: str,
@@ -104,13 +123,7 @@ def _index_callee(
     alias_map: Dict[str, str],
 ) -> None:
     """Add *record* to *index* under the bare name, dotted/arrow form, and canonical alias."""
-    # Split on '.' (Python/JS) or '->' (PHP method calls like '$this->validate')
-    if '->' in callee:
-        bare = callee.split('->')[-1]
-    elif '.' in callee:
-        bare = callee.split('.')[-1]
-    else:
-        bare = callee
+    bare = _bare_callee_name(callee)
     index.setdefault(bare, []).append(record)
     if bare != callee:
         index.setdefault(callee, []).append(record)
@@ -342,7 +355,7 @@ def _collect_level_entries(
         for defn in defs:
             caller_family = source_family or _lang_family(defn['file'])
             for callee in defn['calls']:
-                tail = callee.split('.')[-1]
+                tail = _bare_callee_name(callee)
                 # BACK-405: scope resolution to the caller's language family
                 # before accepting a bare-name match — a flat, language-blind
                 # index lets a same-named definition in an unrelated language
@@ -464,7 +477,7 @@ def find_callers(
 
     if total == 0:
         parent = str(Path(path).parent)
-        if parent != path and os.path.isdir(parent):
+        if parent != path and os.path.isdir(parent) and _parent_hint_scan_is_cheap(parent):
             parent_index = build_callers_index(parent)
             potential = len(parent_index.get(target, []))
             if potential:
@@ -475,6 +488,40 @@ def find_callers(
                 )
 
     return result
+
+
+# The "try widening the path" hint (above) builds a full call index over the
+# *parent* directory — an implicit scan the user never asked for. It must never
+# become an unbounded parse of a huge or system-level tree; that's the exact
+# unbounded-scan footgun BACK-418 fixed for I002/hotspots. Skip the hint when the
+# parent is a well-known system/home root, or when a cheap parse-free count of
+# its code files exceeds this ceiling.
+_HINT_SCAN_SYSTEM_ROOTS = frozenset({
+    '/', '/tmp', '/var', '/var/tmp', '/usr', '/usr/local', '/home',
+    '/opt', '/etc', '/root', '/mnt',
+})
+_HINT_SCAN_MAX_FILES = 2000
+
+
+def _parent_hint_scan_is_cheap(parent: str) -> bool:
+    """True if scanning *parent* for the widen-the-path hint is bounded and safe.
+
+    A parse-free directory walk that aborts as soon as the code-file count
+    crosses the ceiling, so it stays fast even when the answer is "no". Also
+    refuses outright on system/home roots (e.g. a tempdir whose parent is /tmp).
+    """
+    from ..ast.analysis import _SKIP_DIRS
+    if os.path.realpath(parent) in _HINT_SCAN_SYSTEM_ROOTS:
+        return False
+    count = 0
+    for root, dirs, files in os.walk(parent):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.endswith('.egg-info')]
+        for name in files:
+            if is_code_file(Path(name)):
+                count += 1
+                if count > _HINT_SCAN_MAX_FILES:
+                    return False
+    return True
 
 
 def _has_noqa_uncalled(

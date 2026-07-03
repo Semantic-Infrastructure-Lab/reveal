@@ -14,6 +14,7 @@ Design:
 
 import functools
 import logging
+import re
 from pathlib import Path
 from typing import FrozenSet, Optional, Dict, Any
 
@@ -191,6 +192,55 @@ def _try_conf_detection(path: str, file_path: Path, ext: str) -> Optional[type]:
     return None
 
 
+# C++-only constructs, none of which are valid C. Their presence in a `.h`
+# header means it is a C++ header, not a C one. Matched as a pragmatic
+# substring/regex sniff (same spirit as _is_nginx_content) — a comment or string
+# containing one of these is a rare, low-cost false positive; the alternative
+# (routing every `.h` to the C grammar, BACK-421) hides C++ classes declared in
+# headers, which is the overwhelmingly common real-world C++ layout.
+_CPP_HEADER_MARKERS = (
+    re.compile(r'\btemplate\s*<'),          # template<...>
+    re.compile(r'\bnamespace\s+\w'),        # namespace Foo
+    re.compile(r'\bnamespace\s*\{'),        # anonymous namespace
+    re.compile(r'\bclass\s+\w'),            # class Foo  (not a C keyword)
+    re.compile(r'\bpublic\s*:'),            # access specifiers
+    re.compile(r'\bprivate\s*:'),
+    re.compile(r'\bprotected\s*:'),
+    re.compile(r'\bvirtual\b'),             # virtual methods
+    re.compile(r'\boperator\b'),            # operator overloads
+    re.compile(r'::'),                       # scope resolution
+    re.compile(r'\bstd::'),                 # std namespace usage
+    re.compile(r'\btypename\b'),
+    re.compile(r'\bnullptr\b'),
+    re.compile(r'extern\s+"C"'),            # C++ wrapping C — only legal in C++
+)
+
+
+def _is_cpp_header_content(path: str) -> bool:
+    """Detect a C++ header (`.h`) by C++-only content markers.
+
+    `.h` is ambiguous between C and C++; the extension table routes it to C,
+    which hides header-declared C++ classes/templates/namespaces entirely
+    (BACK-421). Sniff the file for constructs that are illegal in C, and if any
+    are present route the header to the C++ grammar instead.
+    """
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read(8192)
+    except (IOError, OSError):
+        return False
+    return any(marker.search(content) for marker in _CPP_HEADER_MARKERS)
+
+
+def _try_c_header_detection(path: str, file_path: Path, ext: str) -> Optional[type]:
+    """Route a `.h` header to the C++ analyzer when it holds C++-only constructs."""
+    if ext != '.h':
+        return None
+    if _is_cpp_header_content(path):
+        return _ANALYZER_REGISTRY.get('.cpp')
+    return None
+
+
 def _try_extension_lookup(ext: str) -> Optional[type]:
     """Try to find analyzer by file extension."""
     if ext and ext in _ANALYZER_REGISTRY:
@@ -249,6 +299,7 @@ def get_analyzer(path: str, allow_fallback: bool = True) -> Optional[type]:
     # Try detection strategies in order
     strategies = [
         lambda: _try_conf_detection(path, file_path, ext),
+        lambda: _try_c_header_detection(path, file_path, ext),
         lambda: _try_extension_lookup(ext),
         lambda: _try_filename_lookup(file_path),
         lambda: _try_nginx_path_detection(file_path),

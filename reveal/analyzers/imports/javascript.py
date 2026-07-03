@@ -471,18 +471,27 @@ class JavaScriptExtractor(LanguageExtractor):
         # Resolve relative imports
         return self._resolve_relative_js(module_path, base_path)
 
+    # TS ESM idiom: source imports use the compiled-output extension
+    # (e.g. `./foo.js`) while the source file on disk is `.ts`/`.tsx`/`.mts`.
+    _TS_ESM_EXTENSION_FALLBACKS = {
+        '.js': ['.ts', '.tsx'],
+        '.jsx': ['.tsx'],
+        '.mjs': ['.mts'],
+    }
+
     def _resolve_relative_js(self, module_path: str, base_path: Path) -> Optional[Path]:
         """Resolve relative JavaScript import to file path.
 
         Try in order:
         1. Exact path (if includes extension)
-        2. With .js extension
-        3. With .ts extension
-        4. With .jsx extension
-        5. With .tsx extension
-        6. With .mjs extension
-        7. As directory with index.js
-        8. As directory with index.ts
+        2. If extension is .js/.jsx/.mjs, TS-ESM fallback (.ts/.tsx/.mts)
+        3. With .js extension
+        4. With .ts extension
+        5. With .jsx extension
+        6. With .tsx extension
+        7. With .mjs extension
+        8. As directory with index.js
+        9. As directory with index.ts
         """
         # Clean up the path (remove leading ./)
         clean_path = module_path.lstrip('./')
@@ -494,6 +503,16 @@ class JavaScriptExtractor(LanguageExtractor):
         if '.' in clean_path.split('/')[-1]:
             if target.exists() and target.is_file():
                 return target.resolve()
+
+            # TS ESM idiom: `import './foo.js'` resolving to `foo.ts` on disk
+            suffix = target.suffix
+            if suffix in self._TS_ESM_EXTENSION_FALLBACKS:
+                stem_path = target.with_suffix('')
+                for fallback_ext in self._TS_ESM_EXTENSION_FALLBACKS[suffix]:
+                    fallback_path = stem_path.with_suffix(fallback_ext)
+                    if fallback_path.exists() and fallback_path.is_file():
+                        return fallback_path.resolve()
+
             return None
 
         # Try with common JavaScript extensions

@@ -449,6 +449,79 @@ class TestRangeCalls(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# BACK-415: chained/fluent calls must not fold the whole chain into one callee
+# ---------------------------------------------------------------------------
+
+def _parse_lang(lang: str, code: str):
+    """Parse *code* in *lang* and return (root, get_text_fn)."""
+    parser = ts.get_parser(lang)
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return tree.root_node(), get_text
+
+
+def _find_any_func(root, get_text, name: str):
+    stack = [root.child(i) for i in range(root.child_count())]
+    while stack:
+        node = stack.pop()
+        if ('function' in node.kind() or 'method' in node.kind()) and name in get_text(node):
+            return node
+        stack.extend(node.child(i) for i in range(node.child_count()))
+    return None
+
+
+class TestChainedCallCallee(unittest.TestCase):
+    """A call on a call result (`f(x).then(...)`) must collapse the outer callee
+    to `.then`, not fold the entire (possibly multi-line) chain into one bogus
+    name — while the inner call is still captured as its own edge, and plain
+    receiver-qualified calls (`obj.method`) keep their receiver for the taxonomy.
+    """
+
+    def _callees(self, lang, code, fname):
+        from reveal.adapters.ast.nav import range_calls
+        root, get_text = _parse_lang(lang, code)
+        func = _find_any_func(root, get_text, fname)
+        return [c['callee'] for c in range_calls(func, 1, 999, get_text)]
+
+    def test_ts_promise_chain_not_folded(self):
+        callees = self._callees('typescript', '''
+        export function run(url, moveToPath) {
+          rimrafUnlink(moveToPath).catch(() => {});
+          fetch(url).then(r => r.json()).catch(handleError);
+          obj.method(b);
+          plain(a);
+        }
+        ''', 'run')
+        # The chained methods collapse to the bare property, no folded chain.
+        self.assertIn('.catch', callees)
+        self.assertIn('.then', callees)
+        self.assertNotIn('rimrafUnlink(moveToPath).catch', callees)
+        self.assertFalse(any('.then(' in (c or '') for c in callees),
+                         f"chain folded into a callee: {callees}")
+        # Inner calls are still captured as their own edges.
+        self.assertIn('rimrafUnlink', callees)
+        self.assertIn('fetch', callees)
+        # Non-chained member call keeps its receiver (taxonomy needs it).
+        self.assertIn('obj.method', callees)
+        self.assertIn('plain', callees)
+
+    def test_python_chained_call_collapses_but_receiver_call_kept(self):
+        callees = self._callees('python', '''
+        def process():
+            get_thing().do_stuff()
+            File.read(path)
+        ''', 'process')
+        self.assertIn('.do_stuff', callees)      # chained on a call result
+        self.assertIn('get_thing', callees)      # inner call captured
+        self.assertIn('File.read', callees)      # plain receiver kept
+
+
+# ---------------------------------------------------------------------------
 # render_* tests
 # ---------------------------------------------------------------------------
 

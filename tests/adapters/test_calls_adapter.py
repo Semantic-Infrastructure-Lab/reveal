@@ -22,7 +22,7 @@ from typing import Any, Dict
 
 from reveal.adapters.ast.call_graph import build_symbol_map, resolve_callees, build_alias_map
 from reveal.adapters.ast.adapter import AstAdapter
-from reveal.adapters.calls.index import build_callers_index, find_callers, find_callees, rank_by_callers
+from reveal.adapters.calls.index import build_callers_index, find_callers, find_callees, rank_by_callers, _bare_callee_name
 from reveal.adapters.calls.adapter import CallsAdapter, CallsRenderer
 from reveal.adapters.calls.renderer import render_calls_structure
 
@@ -297,6 +297,35 @@ def run_job(x):
         self.assertEqual(result['total_callers'], 0)
         self.assertEqual(result['levels'], [])
 
+    def test_zero_caller_hint_does_not_scan_system_root_parent(self):
+        """BACK-418 class: the 'try widening the path' hint builds a call index
+        over the *parent* directory. When that parent is a system/home root (a
+        tempdir under /tmp, a checkout under $HOME), the implicit scan must be
+        refused rather than parsing thousands of unrelated files — which
+        previously hung this very test for minutes on a busy /tmp. The guard is
+        parse-free, so this must return promptly with no hint.
+        """
+        from reveal.adapters.calls.index import _parent_hint_scan_is_cheap
+        # A tempdir's parent is /tmp — a system root — so the hint scan is refused.
+        self.assertFalse(_parent_hint_scan_is_cheap(str(Path(self.tmpdir).parent)))
+        result = find_callers(self.tmpdir, 'nonexistent_function', depth=1)
+        self.assertEqual(result['total_callers'], 0)
+        self.assertNotIn('hint', result)
+
+    def test_zero_caller_hint_still_fires_for_small_parent(self):
+        """The guard must not suppress the hint for a normal small project: a
+        subdir with no caller, whose immediate parent (the controlled small
+        tmpdir) does hold a caller of the target.
+        """
+        sub = Path(self.tmpdir) / 'inner'
+        sub.mkdir()
+        _write(str(sub), 'leaf.py', 'def leaf_only():\n    return 1\n')
+        # `sub` has no caller of validate_item; its parent (tmpdir/app.py) does.
+        result = find_callers(str(sub), 'validate_item', depth=1)
+        self.assertEqual(result['total_callers'], 0)
+        self.assertIn('hint', result)
+        self.assertIn('widening', result['hint'])
+
     def test_depth_two_transitive(self):
         """Depth=2 should also find callers-of-callers."""
         # validate_item ← process ← (no one calls process in our fixture)
@@ -338,6 +367,60 @@ def sticker_update(job_id):
                           f"sticker_update uses *_job_oob() but was not found. Got: {caller_names}")
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# BACK-414: C++ '::' scope-qualified calls (Engine::get_singleton()) never
+# indexed under the bare callee name
+# ---------------------------------------------------------------------------
+
+class TestBareCalleeName(unittest.TestCase):
+
+    def test_cpp_scope_resolution_stripped(self):
+        self.assertEqual(_bare_callee_name('Engine::get_singleton'), 'get_singleton')
+
+    def test_bare_name_unchanged(self):
+        self.assertEqual(_bare_callee_name('get_singleton'), 'get_singleton')
+
+    def test_dotted_attribute_still_stripped(self):
+        self.assertEqual(_bare_callee_name('self.bar'), 'bar')
+
+    def test_php_arrow_still_stripped(self):
+        self.assertEqual(_bare_callee_name('$this->validate'), 'validate')
+
+    def test_last_separator_wins_for_mixed_forms(self):
+        self.assertEqual(_bare_callee_name('a.b::c'), 'c')
+
+
+class TestCppScopeResolutionCallers(unittest.TestCase):
+    """BACK-414: `ClassName::method()` — Godot's `Engine::get_singleton()`
+    idiom — must be indexed under the bare method name, not just the fully
+    scoped form. Without this, calls:// missed 599/602 real call sites for
+    get_singleton() in Godot: nearly every real-world call site is
+    scope-qualified like this."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        _write(self.tmpdir, 'main.cpp', '''
+void foo() {
+    Engine::get_singleton()->is_editor_hint();
+}
+
+void bar() {
+    Engine::get_singleton()->is_editor_hint();
+}
+''')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_scope_qualified_call_site_found(self):
+        result = find_callers(self.tmpdir, 'get_singleton', depth=1)
+        caller_names = {r['caller'] for r in result['levels'][0]['callers']} if result['levels'] else set()
+        self.assertIn('foo', caller_names)
+        self.assertIn('bar', caller_names)
+        self.assertEqual(result['total_callers'], 2)
 
 
 # ---------------------------------------------------------------------------

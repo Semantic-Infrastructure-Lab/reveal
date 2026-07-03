@@ -81,12 +81,20 @@ class I001(BaseRule):
         Returns:
             True if import should be skipped (star import, TYPE_CHECKING, or has noqa)
         """
-        # Skip star imports (can't reliably detect usage)
-        if stmt.import_type == 'star_import':
+        # Skip star/glob imports (can't reliably detect usage) — the label
+        # varies by language extractor: 'star_import' (Python/JS wildcard),
+        # 'glob_use' (Rust `use X::*`), 'dot_import' (Go `. "pkg"`). All three
+        # pull names into scope without a bindable local name, so usage of any
+        # imported item never appears as the import's own name (BACK-420).
+        if stmt.import_type in ('star_import', 'glob_use', 'dot_import'):
             return True
 
         # Skip TYPE_CHECKING imports (used only in type hints)
         if stmt.is_type_checking:
+            return True
+
+        # Skip languages where usage detection is unreliable (generic extractor)
+        if getattr(stmt, 'skip_unused', False):
             return True
 
         # Skip imports with # noqa comments

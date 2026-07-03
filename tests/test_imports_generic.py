@@ -57,6 +57,18 @@ class TestC:
         assert len(imports) == 1
         assert imports[0].line_number == 3
 
+    def test_trailing_comment_not_folded_into_module_name(self):
+        """BACK-417: a trailing comment after the include target must not leak
+        into the module name — .strip('<>') can't truncate the interior."""
+        code = (
+            '#include <math.h> /* isnan(), isinf() */\n'
+            '#include "local.h"  // a note\n'
+            '#include <stdio.h>\n'
+        )
+        imports, _ = _extract(code, '.c')
+        by_mod = {i.module_name for i in imports}
+        assert by_mod == {'math.h', 'local.h', 'stdio.h'}
+
 
 class TestCpp:
     def test_includes(self):

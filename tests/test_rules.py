@@ -713,6 +713,98 @@ def main():
         finally:
             self.teardown_file(path)
 
+    def create_temp_file(self, content: str, ext: str) -> str:
+        """Helper: Create temp file with a given extension."""
+        temp_dir = tempfile.mkdtemp()
+        path = os.path.join(temp_dir, f"test{ext}")
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def test_skip_unused_flag_suppresses_generic_extractor_languages(self):
+        """BACK-412: generic-extractor languages (C#, C, Java, ...) set
+        skip_unused=True because usage detection is unreliable for them —
+        I001 must honor that flag instead of flagging every import."""
+        content = """
+using System;
+using System.IO;
+
+class C {
+    void M() { Console.WriteLine("hi"); }
+}
+"""
+        path = self.create_temp_file(content, ".cs")
+        try:
+            rule = I001()
+            detections = rule.check(path, None, content)
+            self.assertEqual(len(detections), 0)
+        finally:
+            self.teardown_file(path)
+
+    # ── BACK-420: Rust/Go I001 false positives ────────────────────────────────
+
+    def _i001_codes(self, content: str, ext: str):
+        path = self.create_temp_file(content, ext)
+        try:
+            return I001().check(path, None, content)
+        finally:
+            self.teardown_file(path)
+
+    def test_rust_glob_use_not_flagged_unused(self):
+        """BACK-420: `use X::*` (import_type 'glob_use') can't be usage-checked
+        and must be skipped, not flagged as unused for the literal name '*'."""
+        content = (
+            "use std::collections::*;\n"
+            "fn f() -> HashMap<u32, u32> { HashMap::new() }\n"
+        )
+        self.assertEqual(len(self._i001_codes(content, ".rs")), 0)
+
+    def test_rust_type_position_usage_not_flagged(self):
+        """BACK-420: a name used only as a struct field *type* is a real usage —
+        field_declaration must not be treated as a definition context."""
+        content = (
+            "use roaring::RoaringBitmap;\n"
+            "pub struct S { pub used: RoaringBitmap }\n"
+        )
+        self.assertEqual(len(self._i001_codes(content, ".rs")), 0)
+
+    def test_rust_genuinely_unused_still_flagged(self):
+        content = (
+            "use roaring::RoaringBitmap;\n"
+            "fn f() -> i32 { 1 }\n"
+        )
+        codes = self._i001_codes(content, ".rs")
+        self.assertEqual(len(codes), 1)
+
+    def test_go_aliased_import_used_not_flagged(self):
+        """BACK-420: an aliased import is referenced by its *alias*, not the
+        package path basename — imported_names must be the alias."""
+        content = (
+            "package m\n\n"
+            'import util "k8s.io/apimachinery/pkg/util/runtime"\n\n'
+            "func run() { util.HandleError(nil) }\n"
+        )
+        self.assertEqual(len(self._i001_codes(content, ".go")), 0)
+
+    def test_go_qualified_type_usage_not_flagged(self):
+        """BACK-420: a package used only for a type (`sync.WaitGroup`, a
+        qualified_type node) is a real usage the symbol walk must capture."""
+        content = (
+            "package m\n\n"
+            'import "sync"\n\n'
+            "type S struct { mu sync.WaitGroup }\n"
+        )
+        self.assertEqual(len(self._i001_codes(content, ".go")), 0)
+
+    def test_go_genuinely_unused_alias_still_flagged(self):
+        content = (
+            "package m\n\n"
+            'import (\n\t"fmt"\n\tunused "k8s.io/apimachinery/pkg/util/runtime"\n)\n\n'
+            'func run() { fmt.Println("hi") }\n'
+        )
+        codes = self._i001_codes(content, ".go")
+        self.assertEqual(len(codes), 1)
+
 
 class TestI002CircularDependencies(unittest.TestCase):
     """Tests for I002 circular dependency detection rule."""
@@ -1269,6 +1361,36 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
             imports = I002()._collect_raw_imports(self.tmp)
         self.assertEqual(imports, [],
                          "scan should abort to empty list when ceiling exceeded")
+
+    def test_ceiling_aborts_before_parsing_any_file(self):
+        """BACK-418: over-ceiling trees must abort *before* parsing, not after.
+
+        The old loop counted files as it parsed them, so it still ran tree-sitter
+        on ~ceiling large real-world files before bailing — a multi-minute hang on
+        big non-Python trees (a 5-file subdir under a marker root took >100s). The
+        fix counts in a cheap first pass and bails before any extractor runs, so
+        no import extraction happens at all when the ceiling is blown.
+        """
+        import os
+        from unittest import mock
+        from reveal.rules.imports import I002 as i002_mod
+        from reveal.rules.imports.I002 import I002, _graph_cache
+        for i in range(6):
+            (self.tmp / f'm{i}.py').write_text('import os\n')
+        _graph_cache.clear()
+        real_get_extractor = i002_mod.get_extractor
+        parsed = []
+
+        def _tracking_get_extractor(path):
+            parsed.append(path)
+            return real_get_extractor(path)
+
+        with mock.patch.dict(os.environ, {'REVEAL_I002_MAX_FILES': '3'}), \
+                mock.patch.object(i002_mod, 'get_extractor', _tracking_get_extractor):
+            imports = I002()._collect_raw_imports(self.tmp)
+        self.assertEqual(imports, [], "over-ceiling scan should return empty")
+        self.assertEqual(parsed, [],
+                         "no file should be parsed once the ceiling is exceeded")
 
     def test_ceiling_env_override_invalid_falls_back_to_default(self):
         """A non-integer REVEAL_I002_MAX_FILES falls back to the default ceiling."""

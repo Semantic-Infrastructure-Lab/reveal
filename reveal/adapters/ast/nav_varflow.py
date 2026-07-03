@@ -34,10 +34,19 @@ class VarFlowWalker:
             return
 
         if ntype in ('assignment', 'augmented_assignment',
-                     'assignment_expression', 'augmented_assignment_expression'):
+                     'assignment_expression', 'augmented_assignment_expression',
+                     'assignment_statement', 'compound_assignment_expr'):
             self._walk_assignment(n, ntype, c)
         elif ntype == 'named_expression':
             self._walk_named_expression(n)
+        elif ntype == 'variable_declarator':
+            # C#/Java/JS/TS declaration-with-initializer: `var x = f();`,
+            # `let x = f();`, `final int x = f();` (BACK-411).
+            self._walk_declarator(n)
+        elif ntype in ('short_var_declaration', 'let_declaration'):
+            # Go `x := f()` / Rust `let x = f();` (BACK-411).
+            left_field = 'left' if ntype == 'short_var_declaration' else 'pattern'
+            self._walk_decl_pair(n, left_field, 'right' if ntype == 'short_var_declaration' else 'value')
         elif ntype in ('for_statement', 'foreach_statement'):
             self._walk_for(n, c)
         elif ntype == 'with_statement':
@@ -53,8 +62,20 @@ class VarFlowWalker:
     def _walk_assignment(self, n: Any, ntype: str, c: str) -> None:
         left = n.child_by_field_name('left')
         right = n.child_by_field_name('right')
+        is_augmented = ntype in ('augmented_assignment', 'augmented_assignment_expression',
+                                  'compound_assignment_expr')
+        if not is_augmented:
+            # Some grammars (e.g. C#) unify `=`/`+=`/etc. into one node kind
+            # and expose the operator as a field instead; detect it there.
+            op = n.child_by_field_name('operator')
+            if op is not None:
+                is_augmented = self.get_text(op) != '='
+            elif n.child_count() == 3 and not n.child(1).is_named() and n.child(1).kind() != '=':
+                # Go's assignment_statement has no 'operator' field at all —
+                # the operator is just the unnamed middle child token.
+                is_augmented = True
         if left:
-            if ntype in ('augmented_assignment', 'augmented_assignment_expression'):
+            if is_augmented:
                 self.walk(left, 'READ')
             self.walk(left, 'WRITE')
         if right:
@@ -66,6 +87,48 @@ class VarFlowWalker:
         for child in _children(n):
             if (child.start_byte(), child.end_byte()) not in processed:
                 self.walk(child, c)
+
+    def _walk_declarator(self, n: Any) -> None:
+        """Declaration-with-initializer: declared name is a WRITE, initializer is a READ."""
+        name = n.child_by_field_name('name')
+        value = n.child_by_field_name('value')
+        if value is None:
+            # C#'s variable_declarator has no 'value' field — the initializer
+            # is just the last named child that isn't the name (after '=').
+            name_range = (name.start_byte(), name.end_byte()) if name else None
+            for child in _children(n):
+                if not child.is_named():
+                    continue
+                if name_range is not None and (child.start_byte(), child.end_byte()) == name_range:
+                    continue
+                value = child
+        processed = {
+            (name.start_byte(), name.end_byte()) if name else None,
+            (value.start_byte(), value.end_byte()) if value else None,
+        }
+        if name:
+            self.walk(name, 'WRITE')
+        if value:
+            self.walk(value, 'READ')
+        for child in _children(n):
+            if (child.start_byte(), child.end_byte()) not in processed:
+                self.walk(child, 'READ')
+
+    def _walk_decl_pair(self, n: Any, left_field: str, right_field: str) -> None:
+        """Go `short_var_declaration` (left/right) / Rust `let_declaration` (pattern/value)."""
+        left = n.child_by_field_name(left_field)
+        right = n.child_by_field_name(right_field)
+        processed = {
+            (left.start_byte(), left.end_byte()) if left else None,
+            (right.start_byte(), right.end_byte()) if right else None,
+        }
+        if left:
+            self.walk(left, 'WRITE')
+        if right:
+            self.walk(right, 'READ')
+        for child in _children(n):
+            if (child.start_byte(), child.end_byte()) not in processed:
+                self.walk(child, 'READ')
 
     def _walk_named_expression(self, n: Any) -> None:
         if _children(n):
