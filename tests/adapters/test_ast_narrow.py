@@ -1,10 +1,10 @@
 """Tests for nav_narrow.py — type-narrowing path display (BACK-226)."""
 
 import os
-import subprocess
 import tempfile
 import unittest
 
+from conftest import _run_reveal_direct
 from reveal.analyzers.python import PythonAnalyzer
 from reveal.adapters.ast.nav_narrow import (
     collect_narrowing,
@@ -56,10 +56,7 @@ def _render(path: str, func_name: str, var_name: str) -> str:
 
 
 def _cli(path: str, func: str, var: str) -> str:
-    out = subprocess.run(
-        ['reveal', path, func, '--narrow', var],
-        capture_output=True, text=True, encoding='utf-8',
-    )
+    out = _run_reveal_direct(path, func, '--narrow', var)
     return out.stdout
 
 
@@ -434,10 +431,7 @@ def process(x: Optional[str]) -> None:
         os.unlink(self.path)
 
     def test_cli_zero_exit(self):
-        out = subprocess.run(
-            ['reveal', self.path, 'process', '--narrow', 'x'],
-            capture_output=True, text=True,
-        )
+        out = _run_reveal_direct(self.path, 'process', '--narrow', 'x')
         self.assertEqual(out.returncode, 0)
 
     def test_cli_shows_entry(self):
@@ -456,37 +450,25 @@ def process(x: Optional[str]) -> None:
         src = "def f(x): pass\n"
         path = _write_py(src)
         try:
-            out = subprocess.run(
-                ['reveal', path, 'f', '--narrow', 'x'],
-                capture_output=True, text=True,
-            )
+            out = _run_reveal_direct(path, 'f', '--narrow', 'x')
             self.assertEqual(out.returncode, 0)
             self.assertIn('No annotation', out.stdout)
         finally:
             os.unlink(path)
 
     def test_cli_json_zero_exit(self):
-        out = subprocess.run(
-            ['reveal', self.path, 'process', '--narrow', 'x', '--format', 'json'],
-            capture_output=True, text=True,
-        )
+        out = _run_reveal_direct(self.path, 'process', '--narrow', 'x', '--format', 'json')
         self.assertEqual(out.returncode, 0, out.stderr)
 
     def test_cli_json_valid_json(self):
         import json
-        out = subprocess.run(
-            ['reveal', self.path, 'process', '--narrow', 'x', '--format', 'json'],
-            capture_output=True, text=True,
-        )
+        out = _run_reveal_direct(self.path, 'process', '--narrow', 'x', '--format', 'json')
         data = json.loads(out.stdout)
         self.assertEqual(data['meta']['flag'], 'narrow')
 
     def test_cli_json_findings_structure(self):
         import json
-        out = subprocess.run(
-            ['reveal', self.path, 'process', '--narrow', 'x', '--format', 'json'],
-            capture_output=True, text=True,
-        )
+        out = _run_reveal_direct(self.path, 'process', '--narrow', 'x', '--format', 'json')
         data = json.loads(out.stdout)
         self.assertIn('findings', data)
         self.assertTrue(len(data['findings']) > 0)

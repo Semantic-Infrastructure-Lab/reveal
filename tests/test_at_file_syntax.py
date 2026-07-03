@@ -6,10 +6,7 @@ Tests reading URIs/paths from a file using @filename syntax:
 
 import unittest
 import tempfile
-import subprocess
-import sys
 import os
-from pathlib import Path
 from conftest import _run_reveal_direct
 
 
@@ -17,15 +14,8 @@ class TestAtFileSyntax(unittest.TestCase):
     """Test @file syntax for reading URIs from files."""
 
     def run_reveal(self, *args):
-        """Run reveal command and return result."""
-        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
-        return result
+        """Run reveal in-process (no subprocess overhead)."""
+        return _run_reveal_direct(*args)
 
     def test_at_file_with_paths(self):
         """@file should process file paths from file."""
@@ -258,10 +248,8 @@ class TestAtFileBatchEquivalence(unittest.TestCase):
     """Tests for BACK-062: @file --batch produces same aggregated output as --stdin --batch."""
 
     def run_reveal(self, *args):
-        """Run reveal command and return result."""
-        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
-        return result
+        """Run reveal in-process (no subprocess overhead)."""
+        return _run_reveal_direct(*args)
 
     def test_at_file_batch_shows_batch_results_header(self):
         """@file --batch should produce BATCH CHECK RESULTS header."""

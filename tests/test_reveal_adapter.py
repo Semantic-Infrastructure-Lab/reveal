@@ -7,6 +7,7 @@ discover analyzers, rules, and adapters.
 import json
 import pytest
 from pathlib import Path
+from conftest import _run_reveal_direct
 from reveal.adapters.reveal import RevealAdapter
 
 
@@ -562,14 +563,7 @@ class TestRevealAdapterCLIIntegration:
     
     def test_reveal_config_via_cli(self):
         """Test reveal reveal://config routes correctly."""
-        import subprocess
-        
-        result = subprocess.run(
-            ['reveal', 'reveal://config'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        result = _run_reveal_direct('reveal://config')
         
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
         assert 'Reveal Configuration' in result.stdout
@@ -579,14 +573,7 @@ class TestRevealAdapterCLIIntegration:
     
     def test_reveal_analyzers_via_cli(self):
         """Test reveal reveal://analyzers routes correctly."""
-        import subprocess
-        
-        result = subprocess.run(
-            ['reveal', 'reveal://analyzers'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        result = _run_reveal_direct('reveal://analyzers')
         
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
         assert 'Analyzers' in result.stdout
@@ -596,14 +583,7 @@ class TestRevealAdapterCLIIntegration:
     
     def test_reveal_adapters_via_cli(self):
         """Test reveal reveal://adapters routes correctly."""
-        import subprocess
-        
-        result = subprocess.run(
-            ['reveal', 'reveal://adapters'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        result = _run_reveal_direct('reveal://adapters')
         
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
         assert 'Adapters' in result.stdout
@@ -614,14 +594,7 @@ class TestRevealAdapterCLIIntegration:
     
     def test_reveal_rules_via_cli(self):
         """Test reveal reveal://rules routes correctly."""
-        import subprocess
-        
-        result = subprocess.run(
-            ['reveal', 'reveal://rules'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        result = _run_reveal_direct('reveal://rules')
         
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
         assert 'Rules' in result.stdout
@@ -630,14 +603,7 @@ class TestRevealAdapterCLIIntegration:
     
     def test_reveal_default_via_cli(self):
         """Test reveal reveal:// (no component) shows all sections."""
-        import subprocess
-        
-        result = subprocess.run(
-            ['reveal', 'reveal://'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        result = _run_reveal_direct('reveal://')
         
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
         # Should show all three main sections
@@ -647,15 +613,8 @@ class TestRevealAdapterCLIIntegration:
     
     def test_reveal_config_json_format(self):
         """Test reveal reveal://config --format json."""
-        import subprocess
         import json
-        
-        result = subprocess.run(
-            ['reveal', 'reveal://config', '--format', 'json'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        result = _run_reveal_direct('reveal://config', '--format', 'json')
         
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
         
@@ -668,26 +627,14 @@ class TestRevealAdapterCLIIntegration:
     
     def test_component_case_insensitive_via_cli(self):
         """Test that component names are case-insensitive via CLI."""
-        import subprocess
-        
         # Test CONFIG (uppercase)
-        result = subprocess.run(
-            ['reveal', 'reveal://CONFIG'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        result = _run_reveal_direct('reveal://CONFIG')
         
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
         assert 'Reveal Configuration' in result.stdout
         
         # Test Config (mixed case)
-        result = subprocess.run(
-            ['reveal', 'reveal://Config'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        result = _run_reveal_direct('reveal://Config')
         
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
         assert 'Reveal Configuration' in result.stdout

@@ -25,15 +25,19 @@ def _run_reveal_direct(*args):
     """
     from reveal.main import main
 
+    old_argv = sys.argv
     sys.argv = ['reveal'] + [str(a) for a in args]
     buf_out = StringIO()
     buf_err = StringIO()
     rc = 0
-    with redirect_stdout(buf_out), redirect_stderr(buf_err):
-        try:
-            main()
-        except SystemExit as e:
-            rc = e.code if isinstance(e.code, int) else 0
+    try:
+        with redirect_stdout(buf_out), redirect_stderr(buf_err):
+            try:
+                main()
+            except SystemExit as e:
+                rc = e.code if isinstance(e.code, int) else 0
+    finally:
+        sys.argv = old_argv
 
     class _Result:
         __slots__ = ('returncode', 'stdout', 'stderr')

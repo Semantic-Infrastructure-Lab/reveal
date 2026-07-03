@@ -4,6 +4,7 @@ import pytest
 import tempfile
 import os
 from pathlib import Path
+from conftest import _run_reveal_direct
 
 
 class TestB002StaticmethodWithSelf:
@@ -337,14 +338,7 @@ class Example:
         return self._value
 ''')
 
-        # Run decorator stats via CLI - use reveal command directly
-        import subprocess
-        result = subprocess.run(
-            ['reveal', str(tmp_path), '--decorator-stats'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
+        result = _run_reveal_direct(str(tmp_path), '--decorator-stats')
 
         assert '@property' in result.stdout
         assert '@staticmethod' in result.stdout

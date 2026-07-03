@@ -34,6 +34,8 @@ _PROJECT_MARKERS = (
     'Cargo.toml',      # Rust
 )
 
+_SYSTEM_ROOTS = frozenset({Path('/'), Path('/tmp'), Path('/var'), Path('/var/tmp')})
+
 # Safety ceiling on the import-graph scan. A correctly-detected project root
 # almost never exceeds this; blowing past it means root detection went wrong
 # (BACK-338). When tripped we log and return an empty graph — a logged skip, not
@@ -85,8 +87,7 @@ def _find_project_root(path: Path) -> Path:
         current = parent
 
     # .git is a strong project root signal even without a marker file
-    _system_roots = frozenset({Path('/'), Path('/tmp'), Path('/var'), Path('/var/tmp')})
-    if git_root is not None and git_root not in _system_roots:
+    if git_root is not None and git_root not in _SYSTEM_ROOTS:
         return git_root
 
     # Pass 2: contiguous __init__.py chain from the target's own package upward.
@@ -150,6 +151,12 @@ class I002(BaseRule):
             # 1. The cache hits for every file in the same project (not per-subdir)
             # 2. Cross-package cycles are detected (subdir scan misses them)
             scan_root = _find_project_root(target_path)
+            if scan_root in _SYSTEM_ROOTS:
+                logger.debug(
+                    "I002: skipping circular-dependency scan for standalone file under %s",
+                    scan_root,
+                )
+                return detections
             graph = self._build_import_graph(scan_root)
 
             # Find all cycles in the graph

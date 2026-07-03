@@ -1421,6 +1421,25 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
         # The cached scan root must be the local project, never the stray ancestor
         self.assertNotIn(stray.resolve(), _graph_cache)
 
+    def test_standalone_tmp_file_does_not_scan_system_tmp_root(self):
+        """A direct /tmp file must not make I002 scan every source file under /tmp."""
+        import tempfile
+        from unittest import mock
+        from reveal.rules.imports.I002 import I002, _graph_cache
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write('import os\n')
+            target = Path(f.name)
+
+        try:
+            _graph_cache.clear()
+            with mock.patch.object(I002, '_build_import_graph') as build_graph:
+                detections = I002().check(str(target), None, target.read_text())
+            self.assertEqual(detections, [])
+            build_graph.assert_not_called()
+        finally:
+            target.unlink(missing_ok=True)
+
 
 class TestI001EdgeCases(unittest.TestCase):
     """Additional edge case tests for I001."""

@@ -14,12 +14,15 @@ internal-docs/planning/BACK-422-conformance-matrix-design.md.
 """
 
 import json
+import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 import yaml
+from conftest import _run_reveal_direct
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "conformance"
 EXPECTED = yaml.safe_load((FIXTURES_DIR / "expected.yaml").read_text())
@@ -33,9 +36,7 @@ LANGUAGES = sorted(EXPECTED.keys())
 
 
 def _run(*args: str) -> str:
-    result = subprocess.run(
-        ["reveal", *args], capture_output=True, text=True, timeout=30
-    )
+    result = _run_reveal_direct(*args)
     return result.stdout
 
 
@@ -323,10 +324,13 @@ def test_check_and_hotspots_complete_quickly(lang):
     class: an unbounded scan that only shows up on a real-sized tree). Fixture
     directories are tiny, so this is a smoke bound, not a scale repro — the
     scale repro itself lives in test_rules.py's I002 ceiling tests."""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path(__file__).parents[1])
+    env["REVEAL_I002_MAX_FILES"] = "3"
     for flag in ("--check", "--hotspots"):
         result = subprocess.run(
-            ["reveal", str(_lang_dir(lang)), flag],
-            capture_output=True, text=True, timeout=10,
+            [sys.executable, "-m", "reveal.main", str(_lang_dir(lang)), flag],
+            capture_output=True, text=True, timeout=10, env=env,
         )
         assert result.returncode in (0, 1), (
             f"{lang} {flag}: unexpected crash (rc={result.returncode}): {result.stderr}"

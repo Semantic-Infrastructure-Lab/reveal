@@ -1,9 +1,9 @@
 """Tests for BACK-220: --varflow --cross-calls cross-function variable trace."""
 import os
-import subprocess
 import tempfile
 import unittest
 
+from conftest import _run_reveal_direct
 from reveal.analyzers.python import PythonAnalyzer
 from reveal.adapters.ast.nav_cross_varflow import (
     cross_var_flow,
@@ -39,10 +39,7 @@ def _cross(path: str, func_name: str, var_name: str, max_depth: int = 3):
 
 
 def _cli(path: str, func: str, var: str) -> str:
-    out = subprocess.run(
-        ['reveal', path, func, '--varflow', var, '--cross-calls'],
-        capture_output=True, text=True,
-    )
+    out = _run_reveal_direct(path, func, '--varflow', var, '--cross-calls')
     return out.stdout
 
 
@@ -356,10 +353,7 @@ def validate(val):
         os.unlink(self.path)
 
     def test_cli_runs_without_error(self):
-        out = subprocess.run(
-            ['reveal', self.path, 'process', '--varflow', 'data', '--cross-calls'],
-            capture_output=True, text=True,
-        )
+        out = _run_reveal_direct(self.path, 'process', '--varflow', 'data', '--cross-calls')
         self.assertEqual(out.returncode, 0)
 
     def test_cli_root_frame_in_output(self):
@@ -373,10 +367,7 @@ def validate(val):
 
     def test_cli_plain_varflow_unaffected(self):
         """--varflow without --cross-calls still works normally."""
-        out = subprocess.run(
-            ['reveal', self.path, 'process', '--varflow', 'data'],
-            capture_output=True, text=True,
-        )
+        out = _run_reveal_direct(self.path, 'process', '--varflow', 'data')
         self.assertEqual(out.returncode, 0)
         self.assertIn('data', out.stdout)
         self.assertNotIn('↳', out.stdout)
