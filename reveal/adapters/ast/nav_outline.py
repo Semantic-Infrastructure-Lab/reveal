@@ -18,9 +18,11 @@ SCOPE_NODES: frozenset = frozenset({
     'do_statement', 'switch_statement',
     'catch_clause',
     'if', 'for', 'while', 'try', 'switch',
-    # Rust is expression-oriented — `if`/`while` produce `_expression` nodes,
-    # not `_statement` (BACK-427); `else_clause` is already shared with Python.
-    'if_expression',
+    # Rust is expression-oriented — `if`/`while`/`for`/`loop`/`match` all
+    # produce `_expression` nodes, not `_statement` (BACK-427); `else_clause`
+    # and `match_arm`→CASE (below) are already shared with Python/other langs.
+    'if_expression', 'while_expression', 'for_expression',
+    'loop_expression', 'match_expression', 'match_arm',
 })
 
 ALTERNATIVE_NODES: frozenset = frozenset({
@@ -47,14 +49,15 @@ KEYWORD_LABEL: Dict[str, str] = {
     'if_statement': 'IF', 'if': 'IF', 'if_expression': 'IF',
     'elif_clause': 'ELIF',
     'else_clause': 'ELSE', 'else': 'ELSE',
-    'for_statement': 'FOR', 'for': 'FOR',
-    'while_statement': 'WHILE', 'while': 'WHILE',
+    'for_statement': 'FOR', 'for': 'FOR', 'for_expression': 'FOR',
+    'while_statement': 'WHILE', 'while': 'WHILE', 'while_expression': 'WHILE',
+    'loop_expression': 'LOOP',
     'try_statement': 'TRY', 'try': 'TRY',
     'except_clause': 'EXCEPT',
     'finally_clause': 'FINALLY', 'finally': 'FINALLY',
     'with_statement': 'WITH', 'with': 'WITH',
-    'match_statement': 'MATCH',
-    'case_clause': 'CASE',
+    'match_statement': 'MATCH', 'match_expression': 'MATCH',
+    'case_clause': 'CASE', 'match_arm': 'CASE',
     'do_statement': 'DO',
     'switch_statement': 'SWITCH', 'switch': 'SWITCH',
     'catch_clause': 'CATCH', 'catch': 'CATCH',

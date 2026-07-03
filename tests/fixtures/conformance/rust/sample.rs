@@ -22,3 +22,21 @@ fn process_order(order: i32) -> Result<i32, io::Error> {
 fn run(order: i32) -> Result<i32, io::Error> {
     process_order(order)
 }
+
+// BACK-427 (remaining part): Rust's while/for/match are `_expression` nodes,
+// not `_statement` — not exercised by process_order above, so kept as a
+// separate function rather than reshuffling process_order's line-numbered
+// assertions.
+fn count_down(mut n: i32) -> i32 {
+    while n > 0 {
+        n = n - 1;
+    }
+    for i in 0..3 {
+        n = n + i;
+    }
+    match n {
+        0 => n = 1,
+        _ => n = 2,
+    }
+    n
+}

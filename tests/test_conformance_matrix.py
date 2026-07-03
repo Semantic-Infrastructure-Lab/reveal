@@ -275,6 +275,25 @@ def test_mutations_finds_read_after_write(lang):
     )
 
 
+# ───────────────────── BACK-427 (remaining): Rust loop/match ──────────────────
+
+def test_rust_outline_recognizes_expression_oriented_control_flow():
+    """Not parametrized across `lang` — this closes the part of BACK-427 left
+    open when `if_expression` was fixed: Rust's `while`/`for`/`match` are also
+    `_expression` nodes (`while_expression`/`for_expression`/
+    `match_expression`/`match_arm`), not `_statement`/`_clause`, and were
+    completely invisible to --outline (a Rust function with a while/for/match
+    showed nothing but its own signature). Uses a dedicated `count_down`
+    function in the rust fixture rather than process_order, so the line
+    numbers backing every other rust assertion in this file don't shift."""
+    out = _run(str(_sample_path("rust")), "count_down", "--outline", "--format", "json")
+    data = json.loads(out)
+    keywords = [f["keyword"] for f in data["findings"]]
+    assert keywords == ["WHILE", "FOR", "MATCH", "CASE", "CASE"], (
+        f"rust: count_down outline keywords mismatch\n{out}"
+    )
+
+
 # ───────────────────────── check/hotspots bounded-scan guard ──────────────────
 
 def test_check_and_hotspots_complete_quickly(lang):
