@@ -129,6 +129,80 @@ def test_sideeffects_classifies_file_write(lang):
     assert findings == EXPECTED[lang]["sideeffects"], f"{lang}: sideeffects mismatch\n{out}"
 
 
+# ─────────────────────────────────── --exits ──────────────────────────────────
+
+def test_exits_finds_all_returns(lang):
+    """--exits must list every return/exit node in entry_function, for every
+    language — Tier 2 (BACK-422). Ground truth reflects *current* behavior,
+    including two documented, un-fixed gaps found by this test on first
+    contact: cpp's macro-hidden return (BACK-421 part 3) and rust's implicit
+    `?`/tail-expression returns (BACK-428) are deliberately absent from the
+    expected list, not silently passed over."""
+    entry_fn = EXPECTED[lang]["entry_function"]
+    out = _run(str(_sample_path(lang)), entry_fn, "--exits", "--format", "json")
+    data = json.loads(out)
+    findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
+    assert findings == EXPECTED[lang]["exits"], f"{lang}: exits mismatch\n{out}"
+
+
+# ─────────────────────────────────── --ifmap ──────────────────────────────────
+
+def test_ifmap_finds_if_branches(lang):
+    """--ifmap must list every if/elif/else branch in entry_function — or,
+    where the fixture's entry_function genuinely has no bare if (it uses
+    try/catch instead), assert the documented not-supported shape rather than
+    silently passing on an empty list (BACK-398 precedent)."""
+    entry_fn = EXPECTED[lang]["entry_function"]
+    out = _run(str(_sample_path(lang)), entry_fn, "--ifmap", "--format", "json")
+    data = json.loads(out)
+    expected = EXPECTED[lang]["ifmap"]
+    if isinstance(expected, dict) and expected.get("not_supported"):
+        assert data["findings"] == [], (
+            f"{lang}: expected no bare-if branches, got {data['findings']}"
+        )
+    else:
+        findings = [{"keyword": f["keyword"], "line_start": f["line_start"]} for f in data["findings"]]
+        assert findings == expected, f"{lang}: ifmap mismatch\n{out}"
+
+
+# ────────────────────────────────── --catchmap ─────────────────────────────────
+
+def test_catchmap_finds_try_catch(lang):
+    """--catchmap must list every try/catch/except branch in entry_function —
+    or, where the language genuinely has no try/catch construct (c/cpp/go/
+    rust use return-code or Result-based error handling), assert the
+    documented not-supported shape."""
+    entry_fn = EXPECTED[lang]["entry_function"]
+    out = _run(str(_sample_path(lang)), entry_fn, "--catchmap", "--format", "json")
+    data = json.loads(out)
+    expected = EXPECTED[lang]["catchmap"]
+    if isinstance(expected, dict) and expected.get("not_supported"):
+        assert data["findings"] == [], (
+            f"{lang}: expected no try/catch branches, got {data['findings']}"
+        )
+    else:
+        findings = [{"keyword": f["keyword"], "line_start": f["line_start"]} for f in data["findings"]]
+        assert findings == expected, f"{lang}: catchmap mismatch\n{out}"
+
+
+# ────────────────────────────────── --mutations ────────────────────────────────
+
+def test_mutations_finds_read_after_write(lang):
+    """--mutations is range-scoped: it flags a variable written inside the
+    given range and read after the range ends (a potential return value).
+    Passing a whole function is always empty by design (nothing is "after"
+    the function) — so this probes a single-line range at the fixture's
+    `result = validate(...)` write and checks the flagged next-read line."""
+    probe = EXPECTED[lang]["mutations_probe"]
+    out = _run(str(_sample_path(lang)), f":{probe['range']}", "--mutations", "--format", "json")
+    data = json.loads(out)
+    match = next((m for m in data["findings"] if m["var"] == probe["var"]), None)
+    assert match is not None, f"{lang}: no mutation found for {probe['var']}\n{out}"
+    assert match["next_read_line"] == probe["next_read_line"], (
+        f"{lang}: mutations next_read_line mismatch\n{out}"
+    )
+
+
 # ───────────────────────── check/hotspots bounded-scan guard ──────────────────
 
 def test_check_and_hotspots_complete_quickly(lang):

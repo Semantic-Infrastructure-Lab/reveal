@@ -18,6 +18,9 @@ SCOPE_NODES: frozenset = frozenset({
     'do_statement', 'switch_statement',
     'catch_clause',
     'if', 'for', 'while', 'try', 'switch',
+    # Rust is expression-oriented — `if`/`while` produce `_expression` nodes,
+    # not `_statement` (BACK-427); `else_clause` is already shared with Python.
+    'if_expression',
 })
 
 ALTERNATIVE_NODES: frozenset = frozenset({
@@ -41,7 +44,7 @@ EXIT_NODES: frozenset = frozenset({
 })
 
 KEYWORD_LABEL: Dict[str, str] = {
-    'if_statement': 'IF', 'if': 'IF',
+    'if_statement': 'IF', 'if': 'IF', 'if_expression': 'IF',
     'elif_clause': 'ELIF',
     'else_clause': 'ELSE', 'else': 'ELSE',
     'for_statement': 'FOR', 'for': 'FOR',

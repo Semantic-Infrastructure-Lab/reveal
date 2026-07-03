@@ -56,7 +56,9 @@ class VarFlowWalker:
             self._walk_for(n, c)
         elif ntype == 'with_statement':
             self._walk_with(n, c)
-        elif ntype in ('if_statement', 'elif_clause', 'while_statement'):
+        elif ntype in ('if_statement', 'elif_clause', 'while_statement', 'if_expression'):
+            # Rust's `if`/`if let` produce `if_expression`, not `if_statement`
+            # (BACK-427) — the grammar is expression-oriented throughout.
             self._walk_if_while(n, c)
         elif ntype == 'call':
             self._walk_call(n, c)
