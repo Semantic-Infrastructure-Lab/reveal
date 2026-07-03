@@ -23,72 +23,79 @@ python:
   entry_function: process_order
   outline_functions: [validate, process_order, run]
   calls_validate_callers:
-    - {line: 12, function: process_order}
+  - {line: 12, function: process_order}
   imports_unused: [sys]
   varflow_result:
-    - {kind: WRITE, line: 13}
-    - {kind: READ, line: 17}
-    - {kind: WRITE, line: 20}
-    - {kind: READ, line: 20}
-    - {kind: READ, line: 21}
+  - {kind: WRITE, line: 13}
+  - {kind: READ, line: 17}
+  - {kind: WRITE, line: 20}
+  - {kind: READ, line: 20}
+  - {kind: READ, line: 21}
   sideeffects:
-    - {line: 16, kind: file}
+  - {line: 16, kind: file}
   exits:
-    - {kind: RETURN, line: 19}
-    - {kind: RETURN, line: 21}
+  - {kind: RETURN, line: 19}
+  - {kind: RETURN, line: 21}
   ifmap:
     not_supported: true  # entry_function uses try/except, no bare if
   catchmap:
-    - {keyword: TRY, line_start: 14}
-    - {keyword: EXCEPT, line_start: 18}
+  - {keyword: TRY, line_start: 14}
+  - {keyword: EXCEPT, line_start: 18}
   mutations_probe: {range: "13-13", var: result, next_read_line: 17}
+  returns:
+  - {line: 19, gate_lines: []}
+  - {line: 21, gate_lines: []}
 
 c:
   entry_function: process_order
   outline_functions: [validate, process_order, run]
   calls_validate_callers:
-    - {line: 12, function: process_order}
+  - {line: 12, function: process_order}
   imports_unused:
     not_supported: true  # C generic import analyzer doesn't do unused-#include detection
   varflow_result:
-    - {kind: WRITE, line: 13}
-    - {kind: "READ/COND", line: 14}   # variable used as a branch condition
-    - {kind: READ, line: 21}
-    - {kind: WRITE, line: 23}
-    - {kind: READ, line: 23}
-    - {kind: READ, line: 24}
+  - {kind: WRITE, line: 13}
+  - {kind: "READ/COND", line: 14}     # variable used as a branch condition
+  - {kind: READ, line: 21}
+  - {kind: WRITE, line: 23}
+  - {kind: READ, line: 23}
+  - {kind: READ, line: 24}
   sideeffects:
-    - {line: 17, kind: file}
-    - {line: 22, kind: file}
+  - {line: 17, kind: file}
+  - {line: 22, kind: file}
   exits:
-    - {kind: RETURN, line: 15}
-    - {kind: RETURN, line: 19}
-    - {kind: RETURN, line: 24}
+  - {kind: RETURN, line: 15}
+  - {kind: RETURN, line: 19}
+  - {kind: RETURN, line: 24}
   ifmap:
-    - {keyword: IF, line_start: 14}
-    - {keyword: IF, line_start: 18}
+  - {keyword: IF, line_start: 14}
+  - {keyword: IF, line_start: 18}
   catchmap:
     not_supported: true  # C has no try/catch
   mutations_probe: {range: "13-13", var: result, next_read_line: 14}
+  returns:
+  - {line: 15, gate_lines: [14]}
+  - {line: 19, gate_lines: [18]}
+  - {line: 24, gate_lines: []}
 
 cpp:
   entry_function: process_order
   outline_functions: [validate, process_order, run]
   calls_validate_callers:
-    - {line: 15, function: process_order}
+  - {line: 15, function: process_order}
   imports_unused:
     not_supported: true  # C/C++ generic import analyzer doesn't do unused-#include detection
   varflow_result:
-    - {kind: WRITE, line: 16}
-    - {kind: "READ/COND", line: 17}
-    - {kind: READ, line: 20}   # inside CHECK_OR_RETURN(...) macro invocation (BACK-421 part 3)
-    - {kind: READ, line: 25}
-    - {kind: WRITE, line: 27}
-    - {kind: READ, line: 27}
-    - {kind: READ, line: 28}
+  - {kind: WRITE, line: 16}
+  - {kind: "READ/COND", line: 17}
+  - {kind: READ, line: 20}     # inside CHECK_OR_RETURN(...) macro invocation (BACK-421 part 3)
+  - {kind: READ, line: 25}
+  - {kind: WRITE, line: 27}
+  - {kind: READ, line: 27}
+  - {kind: READ, line: 28}
   sideeffects:
-    - {line: 21, kind: file}
-    - {line: 26, kind: file}
+  - {line: 21, kind: file}
+  - {line: 26, kind: file}
   # Tier 2 (BACK-422/BACK-421): macro-hidden early return, line 20
   # (`CHECK_OR_RETURN(result < 1000, -1)` expands to `if (!(cond)) return (val)`)
   # is invisible to --exits/--returns/--ifmap — tree-sitter parses the raw
@@ -97,106 +104,119 @@ cpp:
   # BACK-421 part 3, confirmed on this minimal repro; fix needs macro-name
   # heuristics, not just node-kind matching — left open, not fixed this session.
   exits:
-    - {kind: RETURN, line: 18}
-    - {kind: RETURN, line: 23}
-    - {kind: RETURN, line: 28}
+  - {kind: RETURN, line: 18}
+  - {kind: RETURN, line: 23}
+  - {kind: RETURN, line: 28}
   ifmap:
-    - {keyword: IF, line_start: 17}
-    - {keyword: IF, line_start: 22}
+  - {keyword: IF, line_start: 17}
+  - {keyword: IF, line_start: 22}
   catchmap:
     not_supported: true  # C++ fixture uses return-code error handling, no try/catch
   mutations_probe: {range: "16-16", var: result, next_read_line: 17}
+  returns:
+  - {line: 18, gate_lines: [17]}
+  - {line: 23, gate_lines: [22]}
+  - {line: 28, gate_lines: []}
 
 csharp:
   entry_function: ProcessOrder
   validate_function: Validate  # PascalCase — C# method-naming convention
   outline_functions: [Validate, ProcessOrder, Run]
   calls_validate_callers:
-    - {line: 19, function: ProcessOrder}
+  - {line: 19, function: ProcessOrder}
   imports_unused:
     not_supported: true  # generic import extractor intentionally skips unused-detection (BACK-398)
   varflow_result:
-    - {kind: WRITE, line: 21}
-    - {kind: READ, line: 24}
-    - {kind: WRITE, line: 30}
-    - {kind: READ, line: 30}
-    - {kind: READ, line: 31}
+  - {kind: WRITE, line: 21}
+  - {kind: READ, line: 24}
+  - {kind: WRITE, line: 30}
+  - {kind: READ, line: 30}
+  - {kind: READ, line: 31}
   sideeffects:
-    - {line: 24, kind: file}
+  - {line: 24, kind: file}
   exits:
-    - {kind: RETURN, line: 28}
-    - {kind: RETURN, line: 31}
+  - {kind: RETURN, line: 28}
+  - {kind: RETURN, line: 31}
   ifmap:
     not_supported: true  # entry_function uses try/catch, no bare if
   catchmap:
-    - {keyword: TRY, line_start: 22}
-    - {keyword: CATCH, line_start: 26}
+  - {keyword: TRY, line_start: 22}
+  - {keyword: CATCH, line_start: 26}
   mutations_probe: {range: "21-21", var: result, next_read_line: 24}
+  returns:
+  - {line: 28, gate_lines: []}
+  - {line: 31, gate_lines: []}
 
 java:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run]
   calls_validate_callers:
-    - {line: 17, function: processOrder}
+  - {line: 17, function: processOrder}
   imports_unused:
     not_supported: true  # generic import extractor intentionally skips unused-detection (BACK-398)
   varflow_result:
-    - {kind: WRITE, line: 18}
-    - {kind: READ, line: 20}
-    - {kind: WRITE, line: 24}
-    - {kind: READ, line: 24}
-    - {kind: READ, line: 25}
+  - {kind: WRITE, line: 18}
+  - {kind: READ, line: 20}
+  - {kind: WRITE, line: 24}
+  - {kind: READ, line: 24}
+  - {kind: READ, line: 25}
   sideeffects:
-    - {line: 20, kind: file}
-    - {line: 20, kind: file}
+  - {line: 20, kind: file}
+  - {line: 20, kind: file}
   exits:
-    - {kind: RETURN, line: 22}
-    - {kind: RETURN, line: 25}
+  - {kind: RETURN, line: 22}
+  - {kind: RETURN, line: 25}
   ifmap:
     not_supported: true  # entry_function uses try/catch, no bare if
   catchmap:
-    - {keyword: TRY, line_start: 19}
-    - {keyword: CATCH, line_start: 21}
+  - {keyword: TRY, line_start: 19}
+  - {keyword: CATCH, line_start: 21}
   mutations_probe: {range: "18-18", var: result, next_read_line: 20}
+  returns:
+  - {line: 22, gate_lines: []}
+  - {line: 25, gate_lines: []}
 
 javascript:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run]
   calls_validate_callers:
-    - {line: 13, function: processOrder}
+  - {line: 13, function: processOrder}
   imports_unused: [util]
   varflow_result:
-    - {kind: WRITE, line: 14}
-    - {kind: READ, line: 16}
-    - {kind: WRITE, line: 20}
-    - {kind: READ, line: 20}
-    - {kind: READ, line: 21}
+  - {kind: WRITE, line: 14}
+  - {kind: READ, line: 16}
+  - {kind: WRITE, line: 20}
+  - {kind: READ, line: 20}
+  - {kind: READ, line: 21}
   sideeffects:
-    - {line: 16, kind: file}
+  - {line: 16, kind: file}
   exits:
-    - {kind: RETURN, line: 18}
-    - {kind: RETURN, line: 21}
+  - {kind: RETURN, line: 18}
+  - {kind: RETURN, line: 21}
   ifmap:
     not_supported: true  # entry_function uses try/catch, no bare if
   catchmap:
-    - {keyword: TRY, line_start: 15}
-    - {keyword: CATCH, line_start: 17}
+  - {keyword: TRY, line_start: 15}
+  - {keyword: CATCH, line_start: 17}
   mutations_probe: {range: "14-14", var: result, next_read_line: 16}
+  returns:
+  - {line: 18, gate_lines: []}
+  - {line: 21, gate_lines: []}
 
 rust:
   entry_function: process_order
   outline_functions: [validate, process_order, run]
   calls_validate_callers:
-    - {line: 13, function: process_order}
+  - {line: 13, function: process_order}
   imports_unused: ["std::collections::HashMap"]
   varflow_result:
-    - {kind: WRITE, line: 14}
-    - {kind: "READ/COND", line: 15}  # inside `if let Err(e) = ...` condition (BACK-427)
-    - {kind: WRITE, line: 18}
-    - {kind: READ, line: 18}
-    - {kind: READ, line: 19}
+  - {kind: WRITE, line: 14}
+  - {kind: "READ/COND", line: 15}    # inside `if let Err(e) = ...` condition (BACK-427)
+  - {kind: WRITE, line: 18}
+  - {kind: READ, line: 18}
+  - {kind: READ, line: 19}
   sideeffects:
-    - {line: 15, kind: file}
+  - {line: 15, kind: file}
   # BACK-428 (found this session, not fixed): --exits only sees the one
   # explicit `return Err(e)` (line 16). It misses both of Rust's implicit
   # exit idioms: the `?` operator on line 14 (`validate(order)?` returns
@@ -210,58 +230,67 @@ rust:
   # function" semantics per idiom, not just a node-kind-set extension like
   # BACK-427's if_expression fix was. Left open.
   exits:
-    - {kind: RETURN, line: 16}
+  - {kind: RETURN, line: 16}
   ifmap:
-    - {keyword: IF, line_start: 15}
+  - {keyword: IF, line_start: 15}
   catchmap:
     not_supported: true  # Rust has no try/catch (uses Result/? instead)
   mutations_probe: {range: "14-14", var: result, next_read_line: 15}
+  returns:
+  - {line: 16, gate_lines: []}
 
 typescript:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run]
   calls_validate_callers:
-    - {line: 13, function: processOrder}
+  - {line: 13, function: processOrder}
   imports_unused: [util]
   varflow_result:
-    - {kind: WRITE, line: 14}
-    - {kind: READ, line: 16}
-    - {kind: WRITE, line: 20}
-    - {kind: READ, line: 20}
-    - {kind: READ, line: 21}
+  - {kind: WRITE, line: 14}
+  - {kind: READ, line: 16}
+  - {kind: WRITE, line: 20}
+  - {kind: READ, line: 20}
+  - {kind: READ, line: 21}
   sideeffects:
-    - {line: 16, kind: file}
+  - {line: 16, kind: file}
   exits:
-    - {kind: RETURN, line: 18}
-    - {kind: RETURN, line: 21}
+  - {kind: RETURN, line: 18}
+  - {kind: RETURN, line: 21}
   ifmap:
     not_supported: true  # entry_function uses try/catch, no bare if
   catchmap:
-    - {keyword: TRY, line_start: 15}
-    - {keyword: CATCH, line_start: 17}
+  - {keyword: TRY, line_start: 15}
+  - {keyword: CATCH, line_start: 17}
   mutations_probe: {range: "14-14", var: result, next_read_line: 16}
+  returns:
+  - {line: 18, gate_lines: []}
+  - {line: 21, gate_lines: []}
 
 go:
   entry_function: processOrder
   outline_functions: [validate, processOrder, Run]
   calls_validate_callers:
-    - {line: 19, function: processOrder}
+  - {line: 19, function: processOrder}
   imports_unused: [strconv]
   varflow_result:
-    - {kind: WRITE, line: 20}
-    - {kind: READ, line: 29}
-    - {kind: WRITE, line: 30}
-    - {kind: READ, line: 30}
-    - {kind: READ, line: 31}
+  - {kind: WRITE, line: 20}
+  - {kind: READ, line: 29}
+  - {kind: WRITE, line: 30}
+  - {kind: READ, line: 30}
+  - {kind: READ, line: 31}
   sideeffects:
-    - {line: 24, kind: file}
+  - {line: 24, kind: file}
   exits:
-    - {kind: RETURN, line: 22}
-    - {kind: RETURN, line: 26}
-    - {kind: RETURN, line: 31}
+  - {kind: RETURN, line: 22}
+  - {kind: RETURN, line: 26}
+  - {kind: RETURN, line: 31}
   ifmap:
-    - {keyword: IF, line_start: 21}
-    - {keyword: IF, line_start: 25}
+  - {keyword: IF, line_start: 21}
+  - {keyword: IF, line_start: 25}
   catchmap:
     not_supported: true  # Go has no try/catch (uses if err != nil instead)
   mutations_probe: {range: "20-20", var: result, next_read_line: 29}
+  returns:
+  - {line: 22, gate_lines: [21]}
+  - {line: 26, gate_lines: [25]}
+  - {line: 31, gate_lines: []}

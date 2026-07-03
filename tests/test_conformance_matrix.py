@@ -145,6 +145,78 @@ def test_exits_finds_all_returns(lang):
     assert findings == EXPECTED[lang]["exits"], f"{lang}: exits mismatch\n{out}"
 
 
+# ─────────────────────────────────── --returns ─────────────────────────────────
+
+def test_returns_finds_gate_chains(lang):
+    """--returns must list every return with its enclosing if-condition gate
+    chain, for every language — Tier 2 (BACK-422). A return inside a
+    try/catch (not an if) correctly has an empty gate chain; only c/cpp/go's
+    if-gated early returns have non-empty gates."""
+    entry_fn = EXPECTED[lang]["entry_function"]
+    out = _run(str(_sample_path(lang)), entry_fn, "--returns", "--format", "json")
+    data = json.loads(out)
+    findings = [
+        {"line": f["line"], "gate_lines": [g["line"] for g in f["gates"]]}
+        for f in data["findings"]
+    ]
+    assert findings == EXPECTED[lang]["returns"], f"{lang}: returns mismatch\n{out}"
+
+
+# ──────────────────────────────────── --deps ───────────────────────────────────
+
+def test_deps_finds_parameter_flowing_in(lang):
+    """--deps must list every variable whose first event in entry_function is
+    a READ (i.e. it flows in from outside) — every fixture's `order` parameter
+    qualifies in every language, since it's read before ever being written."""
+    entry_fn = EXPECTED[lang]["entry_function"]
+    out = _run(str(_sample_path(lang)), entry_fn, "--deps", "--format", "json")
+    data = json.loads(out)
+    dep_vars = {f["var"] for f in data["findings"]}
+    assert "order" in dep_vars, f"{lang}: 'order' param not found as a dep\n{out}"
+
+
+# ─────────────────────────────────── --flowto ──────────────────────────────────
+
+def test_flowto_reachability_verdict(lang):
+    """--flowto reports exit nodes reachable within a line range — feeding it
+    a range ending exactly on a known exit line must surface that exit
+    (BLOCKED-equivalent); a range ending before any exit must be empty
+    (CLEAR-equivalent). Reuses the exits ground truth as the range boundary,
+    since flowto's JSON findings are exits-within-range, and the text-mode
+    verdict is a rendering of exactly that."""
+    entry_fn = EXPECTED[lang]["entry_function"]
+    first_exit_line = EXPECTED[lang]["exits"][0]["line"]
+    out = _run(
+        str(_sample_path(lang)), entry_fn, "--flowto",
+        "--range", f"1-{first_exit_line}", "--format", "json",
+    )
+    data = json.loads(out)
+    lines_found = [f["line"] for f in data["findings"]]
+    assert first_exit_line in lines_found, (
+        f"{lang}: flowto range ending on exit line {first_exit_line} found no exit\n{out}"
+    )
+
+
+# ─────────────────────────────── --cross-calls (BACK-429) ─────────────────────
+
+def test_cross_calls_varflow_json_does_not_crash(lang):
+    """--varflow VAR --cross-calls --format json must not crash (BACK-429:
+    cross_var_flow's frame events carried a raw tree-sitter Node object that
+    was never stripped before JSON serialization, unlike the plain --varflow
+    path — every language crashed with `TypeError: Object of type Node is not
+    JSON serializable`). The root frame's events must match the plain
+    --varflow result exactly."""
+    entry_fn = EXPECTED[lang]["entry_function"]
+    out = _run(
+        str(_sample_path(lang)), entry_fn, "--varflow", "result",
+        "--cross-calls", "--format", "json",
+    )
+    data = json.loads(out)  # raises if BACK-429 regresses
+    root_frame = data["findings"][0]
+    events = [{"kind": e["kind"], "line": e["line"]} for e in root_frame["events"]]
+    assert events == EXPECTED[lang]["varflow_result"], f"{lang}: cross-calls root frame mismatch\n{out}"
+
+
 # ─────────────────────────────────── --ifmap ──────────────────────────────────
 
 def test_ifmap_finds_if_branches(lang):

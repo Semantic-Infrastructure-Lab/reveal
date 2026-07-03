@@ -100,7 +100,14 @@ def _nav_varflow(ctx: _NavCtx) -> None:
     if getattr(ctx.args, 'cross_calls', False):
         frames = cross_var_flow(ctx.analyzer, ctx.func_node, var_name, from_line, to_line, ctx.get_text)
         if ctx.as_json:
-            _nav_json('cross_varflow', ctx.analyzer.path, ctx.element, from_line, to_line, frames,
+            # Each frame's 'events' carries var_flow's internal tree-sitter
+            # Node objects (needed for column-sort/dedup) — strip them before
+            # serializing, same as the plain --varflow path below (BACK-429).
+            json_frames = [
+                {**frame, 'events': [{'kind': e['kind'], 'line': e['line']} for e in frame['events']]}
+                for frame in frames
+            ]
+            _nav_json('cross_varflow', ctx.analyzer.path, ctx.element, from_line, to_line, json_frames,
                       extra_meta={'var': var_name})
         else:
             print(render_cross_var_flow(var_name, frames, ctx.analyzer.content.splitlines()))
