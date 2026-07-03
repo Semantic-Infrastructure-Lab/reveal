@@ -43,6 +43,103 @@ c:
     - {line: 17, kind: file}
     - {line: 22, kind: file}
 
+cpp:
+  entry_function: process_order
+  outline_functions: [validate, process_order, run]
+  calls_validate_callers:
+    - {line: 13, function: process_order}
+  imports_unused:
+    not_supported: true  # C/C++ generic import analyzer doesn't do unused-#include detection
+  varflow_result:
+    - {kind: WRITE, line: 14}
+    - {kind: "READ/COND", line: 15}
+    - {kind: READ, line: 22}
+    - {kind: WRITE, line: 24}
+    - {kind: READ, line: 24}
+    - {kind: READ, line: 25}
+  sideeffects:
+    - {line: 18, kind: file}
+    - {line: 23, kind: file}
+
+csharp:
+  entry_function: ProcessOrder
+  validate_function: Validate  # PascalCase — C# method-naming convention
+  outline_functions: [Validate, ProcessOrder, Run]
+  calls_validate_callers:
+    - {line: 19, function: ProcessOrder}
+  imports_unused:
+    not_supported: true  # generic import extractor intentionally skips unused-detection (BACK-398)
+  varflow_result:
+    - {kind: WRITE, line: 21}
+    - {kind: READ, line: 24}
+    - {kind: WRITE, line: 30}
+    - {kind: READ, line: 30}
+    - {kind: READ, line: 31}
+  sideeffects:
+    - {line: 24, kind: file}
+
+java:
+  entry_function: processOrder
+  outline_functions: [validate, processOrder, run]
+  calls_validate_callers:
+    - {line: 17, function: processOrder}
+  imports_unused:
+    not_supported: true  # generic import extractor intentionally skips unused-detection (BACK-398)
+  varflow_result:
+    - {kind: WRITE, line: 18}
+    - {kind: READ, line: 20}
+    - {kind: WRITE, line: 24}
+    - {kind: READ, line: 24}
+    - {kind: READ, line: 25}
+  sideeffects:
+    - {line: 20, kind: file}
+    - {line: 20, kind: file}
+
+javascript:
+  entry_function: processOrder
+  outline_functions: [validate, processOrder, run]
+  calls_validate_callers:
+    - {line: 13, function: processOrder}
+  imports_unused: [util]
+  varflow_result:
+    - {kind: WRITE, line: 14}
+    - {kind: READ, line: 16}
+    - {kind: WRITE, line: 20}
+    - {kind: READ, line: 20}
+    - {kind: READ, line: 21}
+  sideeffects:
+    - {line: 16, kind: file}
+
+rust:
+  entry_function: process_order
+  outline_functions: [validate, process_order, run]
+  calls_validate_callers:
+    - {line: 13, function: process_order}
+  imports_unused: ["std::collections::HashMap"]
+  varflow_result:
+    - {kind: WRITE, line: 14}
+    - {kind: READ, line: 15}
+    - {kind: WRITE, line: 18}
+    - {kind: READ, line: 18}
+    - {kind: READ, line: 19}
+  sideeffects:
+    - {line: 15, kind: file}
+
+typescript:
+  entry_function: processOrder
+  outline_functions: [validate, processOrder, run]
+  calls_validate_callers:
+    - {line: 13, function: processOrder}
+  imports_unused: [util]
+  varflow_result:
+    - {kind: WRITE, line: 14}
+    - {kind: READ, line: 16}
+    - {kind: WRITE, line: 20}
+    - {kind: READ, line: 20}
+    - {kind: READ, line: 21}
+  sideeffects:
+    - {line: 16, kind: file}
+
 go:
   entry_function: processOrder
   outline_functions: [validate, processOrder, Run]

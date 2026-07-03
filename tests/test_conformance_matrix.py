@@ -8,9 +8,8 @@ supported language and asserts against tests/fixtures/conformance/expected.yaml.
 Ships regression-proofing for exactly the class of bug the dogfood sweep found
 one at a time (BACK-410/411/413/414/415/416/418/420): reveal was built
 Python-first, and Python-shaped assumptions leak into code paths that are
-supposed to be language-agnostic. Pilot language set (python/c/go) validates
-the fixture shape before paying the authoring cost across all languages in
-the corpus (cpp/csharp/java/javascript/rust/typescript) — see
+supposed to be language-agnostic. Full Tier 1 language set (python, c, cpp,
+csharp, go, java, javascript, rust, typescript) — see
 internal-docs/planning/BACK-422-conformance-matrix-design.md.
 """
 
@@ -25,7 +24,10 @@ import yaml
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "conformance"
 EXPECTED = yaml.safe_load((FIXTURES_DIR / "expected.yaml").read_text())
 
-EXTENSIONS = {"python": "py", "c": "c", "go": "go"}
+EXTENSIONS = {
+    "python": "py", "c": "c", "cpp": "cpp", "csharp": "cs", "go": "go",
+    "java": "java", "javascript": "js", "rust": "rs", "typescript": "ts",
+}
 
 LANGUAGES = sorted(EXPECTED.keys())
 
@@ -55,7 +57,9 @@ def lang(request) -> str:
 def test_outline_lists_all_functions(lang):
     """--outline must list every function in the fixture, for every language."""
     out = _run(str(_sample_path(lang)), "--outline")
-    found = set(re.findall(r"^(\w+)\([^)]*\)\s*\{?\s*\[\d+ lines", out, re.MULTILINE))
+    # Class-bearing languages (java, csharp) nest methods under the class with
+    # tree-drawing prefixes (`├─ `/`└─ `); flat-function languages don't.
+    found = set(re.findall(r"^(?:[│├└─\s]*)(\w+)\([^)]*\)\s*\{?\s*\[\d+ lines", out, re.MULTILINE))
     expected_functions = set(EXPECTED[lang]["outline_functions"])
     assert expected_functions <= found, (
         f"{lang}: expected functions {expected_functions} not all found in outline: {found}\n{out}"
@@ -66,7 +70,8 @@ def test_outline_lists_all_functions(lang):
 
 def test_calls_finds_cross_function_callers(lang):
     """calls://?target=validate must find the in-file caller, for every language."""
-    out = _run(f"calls://{_lang_dir(lang)}/?target=validate", "--format", "json")
+    target = EXPECTED[lang].get("validate_function", "validate")
+    out = _run(f"calls://{_lang_dir(lang)}/?target={target}", "--format", "json")
     data = json.loads(out)
     callers = [
         {"line": c["line"], "function": c["caller"]}

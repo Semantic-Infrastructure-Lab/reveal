@@ -219,6 +219,10 @@ class ImportGraph:
 
     def _is_import_used(self, stmt: 'ImportStatement', symbols_used: Set[str]) -> bool:
         """Return True if at least one name from *stmt* appears in *symbols_used*."""
+        if stmt.import_type == 'namespace_import':
+            # `import * as foo from 'module'` — imported_names is the literal
+            # placeholder ['*'], not a real symbol; the usable name is the alias.
+            return (stmt.alias or '') in symbols_used
         if stmt.imported_names:
             # from X import Y, Z — check Y or Z (or their aliases)
             return any(
