@@ -69,7 +69,7 @@ _TAXONOMY: List[Tuple[str, List[str]]] = [
         # Go stdlib (BACK-401): os.Open/os.Create/os.Remove/os.MkdirAll,
         # ioutil.ReadFile/WriteFile — 'os.getenv' below is checked separately
         # so it doesn't collide with these (first-match-wins, this list first).
-        'os.open', 'os.create', 'os.remove', 'os.mkdirall',
+        'os.open', 'os.openfile', 'os.create', 'os.remove', 'os.mkdirall',
         'ioutil.readfile', 'ioutil.writefile',
         # Rust stdlib (BACK-401)
         'std::fs',

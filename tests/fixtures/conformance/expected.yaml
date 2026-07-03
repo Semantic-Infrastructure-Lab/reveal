@@ -1,0 +1,59 @@
+# BACK-422 Tier 1 conformance matrix — ground truth per language.
+#
+# Each fixture is tests/fixtures/conformance/<lang>/sample.<ext>, hand-written
+# to exercise the same shape in every language: a validate() helper called by
+# process_order()/processOrder(), a used + an unused import, one file-effect
+# call, and a variable (`result`) that is declared-with-initializer, read,
+# reassigned, and read again.
+#
+# `not_supported: true` on a block means the language genuinely doesn't have
+# the feature yet (an honest gap, per the BACK-403 precedent) — the test
+# asserts the documented "not supported" shape, not a false clean pass.
+
+python:
+  entry_function: process_order
+  outline_functions: [validate, process_order, run]
+  calls_validate_callers:
+    - {line: 12, function: process_order}
+  imports_unused: [sys]
+  varflow_result:
+    - {kind: WRITE, line: 13}
+    - {kind: READ, line: 17}
+    - {kind: WRITE, line: 20}
+    - {kind: READ, line: 20}
+    - {kind: READ, line: 21}
+  sideeffects:
+    - {line: 16, kind: file}
+
+c:
+  entry_function: process_order
+  outline_functions: [validate, process_order, run]
+  calls_validate_callers:
+    - {line: 12, function: process_order}
+  imports_unused:
+    not_supported: true  # C generic import analyzer doesn't do unused-#include detection
+  varflow_result:
+    - {kind: WRITE, line: 13}
+    - {kind: "READ/COND", line: 14}   # variable used as a branch condition
+    - {kind: READ, line: 21}
+    - {kind: WRITE, line: 23}
+    - {kind: READ, line: 23}
+    - {kind: READ, line: 24}
+  sideeffects:
+    - {line: 17, kind: file}
+    - {line: 22, kind: file}
+
+go:
+  entry_function: processOrder
+  outline_functions: [validate, processOrder, Run]
+  calls_validate_callers:
+    - {line: 19, function: processOrder}
+  imports_unused: [strconv]
+  varflow_result:
+    - {kind: WRITE, line: 20}
+    - {kind: READ, line: 29}
+    - {kind: WRITE, line: 30}
+    - {kind: READ, line: 30}
+    - {kind: READ, line: 31}
+  sideeffects:
+    - {line: 24, kind: file}

@@ -47,6 +47,11 @@ class VarFlowWalker:
             # Go `x := f()` / Rust `let x = f();` (BACK-411).
             left_field = 'left' if ntype == 'short_var_declaration' else 'pattern'
             self._walk_decl_pair(n, left_field, 'right' if ntype == 'short_var_declaration' else 'value')
+        elif ntype == 'init_declarator':
+            # C/C++ `int x = f();` — declarator/value fields (found via BACK-422
+            # conformance-matrix pilot fixture; BACK-411 covered C#/Java/JS/TS/Go/Rust
+            # but missed the C-family grammar shape entirely).
+            self._walk_decl_pair(n, 'declarator', 'value')
         elif ntype in ('for_statement', 'foreach_statement'):
             self._walk_for(n, c)
         elif ntype == 'with_statement':
