@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 from ...core import node_children as _children
+from .node_taxonomy import (
+    FOR_NODES, FOR_EXPRESSION_NODES, FOR_EACH_NAME_VALUE_NODES,
+    IF_WHILE_NODES, MATCH_EXPRESSION_NODES,
+)
 
 
 @dataclass
@@ -52,14 +56,30 @@ class VarFlowWalker:
             # conformance-matrix pilot fixture; BACK-411 covered C#/Java/JS/TS/Go/Rust
             # but missed the C-family grammar shape entirely).
             self._walk_decl_pair(n, 'declarator', 'value')
-        elif ntype in ('for_statement', 'foreach_statement'):
-            self._walk_for(n, c)
+        elif ntype in FOR_NODES:
+            # for_statement / C#/PHP foreach_statement / JS-TS for_in_statement —
+            # all share the 'left'/'right' field shape (BACK-431).
+            self._walk_for(n, c, 'left', 'right')
+        elif ntype in FOR_EXPRESSION_NODES:
+            # Rust `for x in y { }` uses pattern/value fields, not left/right
+            # (BACK-430) — same shape as for_statement, different field names.
+            self._walk_for(n, c, 'pattern', 'value')
+        elif ntype in FOR_EACH_NAME_VALUE_NODES:
+            # Java `for (T x : items)` — loop var is the 'name' field, iterable
+            # is 'value' (BACK-431).
+            self._walk_for(n, c, 'name', 'value')
         elif ntype == 'with_statement':
             self._walk_with(n, c)
-        elif ntype in ('if_statement', 'elif_clause', 'while_statement', 'if_expression'):
-            # Rust's `if`/`if let` produce `if_expression`, not `if_statement`
-            # (BACK-427) — the grammar is expression-oriented throughout.
+        elif ntype in IF_WHILE_NODES:
+            # Rust's `if`/`if let`/`while` produce `if_expression`/
+            # `while_expression`, not `if_statement`/`while_statement`
+            # (BACK-427, BACK-430) — the grammar is expression-oriented
+            # throughout, but both use the same 'condition'/'body' fields.
             self._walk_if_while(n, c)
+        elif ntype in MATCH_EXPRESSION_NODES:
+            # Rust `match x { ... }` (BACK-430) — the scrutinee is a READ,
+            # the arms (body) walk normally like any other block.
+            self._walk_match(n, c)
         elif ntype == 'call':
             self._walk_call(n, c)
         else:
@@ -143,9 +163,9 @@ class VarFlowWalker:
             for child in _children(n)[1:]:
                 self.walk(child, 'READ')
 
-    def _walk_for(self, n: Any, c: str) -> None:
-        left = n.child_by_field_name('left')
-        right = n.child_by_field_name('right')
+    def _walk_for(self, n: Any, c: str, left_field: str = 'left', right_field: str = 'right') -> None:
+        left = n.child_by_field_name(left_field)
+        right = n.child_by_field_name(right_field)
         body = n.child_by_field_name('body')
         processed: set = set()
         if left:
@@ -189,6 +209,16 @@ class VarFlowWalker:
         if cond:
             processed.add((cond.start_byte(), cond.end_byte()))
             self.walk(cond, 'READ/COND')
+        for child in _children(n):
+            if (child.start_byte(), child.end_byte()) not in processed:
+                self.walk(child, c)
+
+    def _walk_match(self, n: Any, c: str) -> None:
+        value = n.child_by_field_name('value')
+        processed: set = set()
+        if value:
+            processed.add((value.start_byte(), value.end_byte()))
+            self.walk(value, 'READ')
         for child in _children(n):
             if (child.start_byte(), child.end_byte()) not in processed:
                 self.walk(child, c)

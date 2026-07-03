@@ -237,7 +237,7 @@ rust:
     not_supported: true  # Rust has no try/catch (uses Result/? instead)
   mutations_probe: {range: "14-14", var: result, next_read_line: 15}
   returns:
-  - {line: 16, gate_lines: []}
+  - {line: 16, gate_lines: [15]}
 
 typescript:
   entry_function: processOrder

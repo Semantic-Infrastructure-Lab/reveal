@@ -6,21 +6,18 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .nav_calls import _extract_callee
 from .nav_varflow import all_var_flow
+from .node_taxonomy import EXIT_NODES, GATE_NODES, KEYWORD_LABEL
 from ...core import node_children as _children
 
 
 # Language-construct names treated as hard exits even when represented as calls
 _EXIT_CALL_NAMES: frozenset = frozenset({'die', 'exit'})
 
-# Mapping from exit node type to kind label
-_EXIT_KIND: Dict[str, str] = {
-    'return_statement': 'RETURN', 'return': 'RETURN',
-    'raise_statement': 'RAISE',   'raise': 'RAISE',
-    'throw_statement': 'THROW',
-    'yield_statement': 'YIELD',   'yield': 'YIELD',
-    'break_statement': 'BREAK',   'break': 'BREAK',
-    'continue_statement': 'CONTINUE', 'continue': 'CONTINUE',
-}
+# Mapping from exit node type to kind label — derived from the shared
+# taxonomy (node_taxonomy.py) so it can't drift from EXIT_NODES/KEYWORD_LABEL
+# the way BACK-431 found it had (bare 'break'/'continue' were hand-added
+# here but missing from nav_outline.py's EXIT_NODES).
+_EXIT_KIND: Dict[str, str] = {k: KEYWORD_LABEL[k] for k in EXIT_NODES}
 
 _HARD_EXIT_KINDS: frozenset = frozenset({'RETURN', 'RAISE', 'THROW', 'EXIT'})
 
@@ -208,11 +205,8 @@ def render_mutations(
 # BACK-200: --returns gate-chain walker
 # ---------------------------------------------------------------------------
 
-_GATE_NODE_TYPES: frozenset = frozenset({
-    'if_statement', 'elif_clause', 'elseif_clause',
-    'while_statement', 'for_statement', 'foreach_statement', 'do_statement',
-    'with_statement',
-})
+# See node_taxonomy.GATE_NODES for the definition and per-kind field-shape notes.
+_GATE_NODE_TYPES: frozenset = GATE_NODES
 
 
 def _get_condition(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]:

@@ -4,78 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List
 from ...core import node_children as _children
-
-
-# ---------------------------------------------------------------------------
-# Node type constants — used by outline and scope traversals
-# ---------------------------------------------------------------------------
-
-SCOPE_NODES: frozenset = frozenset({
-    'if_statement', 'for_statement', 'while_statement',
-    'try_statement', 'with_statement',
-    'match_statement', 'case_clause',
-    'elif_clause', 'else_clause', 'except_clause', 'finally_clause',
-    'do_statement', 'switch_statement',
-    'catch_clause',
-    'if', 'for', 'while', 'try', 'switch',
-    # Rust is expression-oriented — `if`/`while`/`for`/`loop`/`match` all
-    # produce `_expression` nodes, not `_statement` (BACK-427); `else_clause`
-    # and `match_arm`→CASE (below) are already shared with Python/other langs.
-    'if_expression', 'while_expression', 'for_expression',
-    'loop_expression', 'match_expression', 'match_arm',
-})
-
-ALTERNATIVE_NODES: frozenset = frozenset({
-    'elif_clause', 'else_clause',
-    'except_clause', 'finally_clause',
-    'else', 'catch_clause', 'catch', 'finally',
-    'switch_default', 'default',
-})
-
-FUNCTION_TYPES: frozenset = frozenset({
-    'function_definition', 'function_declaration', 'function_item',
-    'method_definition', 'method_declaration', 'function',
-    'class_definition', 'class_declaration', 'class',
-    'arrow_function', 'lambda',
-})
-
-EXIT_NODES: frozenset = frozenset({
-    'return_statement', 'raise_statement', 'yield_statement',
-    'return', 'raise', 'throw_statement', 'yield',
-    'break_statement', 'continue_statement',
-})
-
-KEYWORD_LABEL: Dict[str, str] = {
-    'if_statement': 'IF', 'if': 'IF', 'if_expression': 'IF',
-    'elif_clause': 'ELIF',
-    'else_clause': 'ELSE', 'else': 'ELSE',
-    'for_statement': 'FOR', 'for': 'FOR', 'for_expression': 'FOR',
-    'while_statement': 'WHILE', 'while': 'WHILE', 'while_expression': 'WHILE',
-    'loop_expression': 'LOOP',
-    'try_statement': 'TRY', 'try': 'TRY',
-    'except_clause': 'EXCEPT',
-    'finally_clause': 'FINALLY', 'finally': 'FINALLY',
-    'with_statement': 'WITH', 'with': 'WITH',
-    'match_statement': 'MATCH', 'match_expression': 'MATCH',
-    'case_clause': 'CASE', 'match_arm': 'CASE',
-    'do_statement': 'DO',
-    'switch_statement': 'SWITCH', 'switch': 'SWITCH',
-    'catch_clause': 'CATCH', 'catch': 'CATCH',
-    'switch_case': 'CASE',
-    'switch_default': 'DEFAULT', 'default': 'DEFAULT',
-    'function_definition': 'DEF', 'function_declaration': 'DEF',
-    'function_item': 'DEF', 'function': 'DEF',
-    'method_definition': 'DEF', 'method_declaration': 'DEF',
-    'arrow_function': 'DEF',
-    'lambda': 'LAMBDA',
-    'class_definition': 'CLASS', 'class_declaration': 'CLASS', 'class': 'CLASS',
-    'return_statement': 'RETURN', 'return': 'RETURN',
-    'raise_statement': 'RAISE', 'raise': 'RAISE',
-    'throw_statement': 'THROW',
-    'yield_statement': 'YIELD', 'yield': 'YIELD',
-    'break_statement': 'BREAK', 'break': 'BREAK',
-    'continue_statement': 'CONTINUE', 'continue': 'CONTINUE',
-}
+from .node_taxonomy import (  # noqa: F401 — re-exported for nav.py/back-compat
+    SCOPE_NODES,
+    ALTERNATIVE_NODES,
+    FUNCTION_TYPES,
+    EXIT_NODES,
+    KEYWORD_LABEL,
+)
 
 
 # ---------------------------------------------------------------------------

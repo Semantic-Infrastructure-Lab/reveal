@@ -294,6 +294,28 @@ def test_rust_outline_recognizes_expression_oriented_control_flow():
     )
 
 
+# ─────────────────── BACK-430: Rust loop/match varflow + gates ────────────────
+
+def test_rust_varflow_classifies_expression_loop_conditions_as_cond():
+    """Regression-pin for BACK-430 bug 1: the matrix's --outline coverage of
+    count_down's while/for/match (test above) does NOT exercise --varflow,
+    which has its own separate node-kind dispatch (nav_varflow.py) and had
+    drifted independently — `while_expression`'s condition classified as
+    plain READ instead of READ/COND, and `for_expression`'s loop variable
+    wasn't recognized as a WRITE at all (different field names than Go's
+    for_statement: pattern/value, not left/right)."""
+    out = _run(str(_sample_path("rust")), "count_down", "--varflow", "n", "--format", "json")
+    data = json.loads(out)
+    events = [(f["kind"], f["line"]) for f in data["findings"]]
+    assert ("READ/COND", 31) in events, f"rust: count_down `while n > 0` not READ/COND\n{out}"
+    assert ("READ", 37) in events, f"rust: count_down `match n` scrutinee not READ\n{out}"
+
+    out_i = _run(str(_sample_path("rust")), "count_down", "--varflow", "i", "--format", "json")
+    data_i = json.loads(out_i)
+    events_i = [(f["kind"], f["line"]) for f in data_i["findings"]]
+    assert ("WRITE", 34) in events_i, f"rust: count_down `for i in 0..3` binding not WRITE\n{out_i}"
+
+
 # ───────────────────────── check/hotspots bounded-scan guard ──────────────────
 
 def test_check_and_hotspots_complete_quickly(lang):
