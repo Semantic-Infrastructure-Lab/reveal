@@ -1655,6 +1655,190 @@ function process($data) {
 
 
 # ---------------------------------------------------------------------------
+# BACK-431 Issue G smoke-tier audit: Swift varflow — simple_identifier /
+# property_declaration node-shape fix
+# ---------------------------------------------------------------------------
+
+def _parse_swift(code: str):
+    """Parse Swift code and return (tree, root, get_text, content_bytes)."""
+    parser = ts.get_parser('swift')
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+    root = tree.root_node()
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return tree, root, get_text, content_bytes
+
+
+class TestSwiftVarflow(unittest.TestCase):
+    """Swift identifiers parse as `simple_identifier`, not `identifier`/
+    `variable_name` — nav_varflow.py's read/write matcher never recognized
+    that node kind, so --varflow found zero references for every Swift
+    variable (silent, not a crash). Its `var`/`let` declarations also use a
+    `property_declaration` node whose 'name' field wraps the identifier in
+    an extra `pattern` node, a shape none of the declarator dispatch cases
+    matched. Found via the BACK-431 Issue G smoke-tier audit."""
+
+    def setUp(self):
+        code = """\
+        func run(order: String?) -> String? {
+            var upper = order
+            while upper != nil {
+                upper = nil
+            }
+            return upper
+        }
+        """
+        self._tree, self._root, self._get_text, _ = _parse_swift(code)
+
+    def test_collect_identifier_names_finds_swift_vars(self):
+        from reveal.adapters.ast.nav import _collect_identifier_names
+        names = _collect_identifier_names(self._root, 1, 999, self._get_text)
+        self.assertIn('upper', names)
+        self.assertIn('order', names)
+
+    def test_var_flow_tracks_swift_declaration_write(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, 'upper', 1, 999, self._get_text)
+        kinds = [e['kind'] for e in events]
+        self.assertIn('WRITE', kinds)
+
+    def test_var_flow_tracks_swift_read(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, 'upper', 1, 999, self._get_text)
+        kinds = [e['kind'] for e in events]
+        self.assertIn('READ', kinds)
+
+    def test_var_flow_not_empty_for_swift(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, 'upper', 1, 999, self._get_text)
+        self.assertGreater(len(events), 0)
+
+
+# ---------------------------------------------------------------------------
+# BACK-431 Issue G smoke-tier audit: Kotlin varflow — property_declaration
+# with no exposed fields (`val x = f()` mislabeled READ instead of WRITE)
+# ---------------------------------------------------------------------------
+
+def _parse_kotlin(code: str):
+    """Parse Kotlin code and return (tree, root, get_text, content_bytes)."""
+    parser = ts.get_parser('kotlin')
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+    root = tree.root_node()
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return tree, root, get_text, content_bytes
+
+
+class TestKotlinVarflow(unittest.TestCase):
+    """Kotlin's `property_declaration` (`val x = f()`) exposes no 'name'/
+    'value' fields at all (unlike Swift's node of the same name) — the
+    declared identifier is a positional `variable_declaration` child. Without
+    recognizing that shape, the name fell through to the generic
+    "unprocessed children are READ" branch and every Kotlin declaration was
+    silently mislabeled as a read instead of a write. Found via the BACK-431
+    Issue G smoke-tier audit."""
+
+    def setUp(self):
+        code = """\
+        fun run(order: String?): String? {
+            val result = order
+            return result
+        }
+        """
+        self._tree, self._root, self._get_text, _ = _parse_kotlin(code)
+
+    def test_var_flow_tracks_kotlin_declaration_write(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, 'result', 1, 999, self._get_text)
+        kinds = [e['kind'] for e in events]
+        self.assertIn('WRITE', kinds)
+
+    def test_var_flow_write_before_read_kotlin(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, 'result', 1, 999, self._get_text)
+        write_lines = [e['line'] for e in events if e['kind'] == 'WRITE']
+        read_lines = [e['line'] for e in events if e['kind'] == 'READ']
+        self.assertTrue(write_lines and read_lines)
+        self.assertTrue(min(write_lines) < max(read_lines))
+
+
+# ---------------------------------------------------------------------------
+# BACK-431 Issue G smoke-tier audit: Scala varflow (val_definition/
+# var_definition) and --exits/--returns (throw_expression)
+# ---------------------------------------------------------------------------
+
+def _parse_scala(code: str):
+    """Parse Scala code and return (tree, root, get_text, content_bytes)."""
+    parser = ts.get_parser('scala')
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+    root = tree.root_node()
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return tree, root, get_text, content_bytes
+
+
+class TestScalaVarflow(unittest.TestCase):
+    """Scala's `val_definition`/`var_definition` ('pattern'/'value' fields,
+    the same shape as Rust's `let_declaration`) had no dispatch case at all —
+    every Scala declaration fell into the same silent WRITE-as-READ
+    mislabeling Kotlin's property_declaration had. Found via the BACK-431
+    Issue G smoke-tier audit."""
+
+    def setUp(self):
+        code = """\
+        object Sample {
+          def run(order: String): String = {
+            val result = order
+            result
+          }
+        }
+        """
+        self._tree, self._root, self._get_text, _ = _parse_scala(code)
+
+    def test_var_flow_tracks_scala_declaration_write(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, 'result', 1, 999, self._get_text)
+        kinds = [e['kind'] for e in events]
+        self.assertIn('WRITE', kinds)
+
+
+class TestScalaThrowExpression(unittest.TestCase):
+    """Scala's grammar is expression-oriented like Rust's: `throw` parses as
+    `throw_expression`, not `throw_statement` — absent from THROW_NODES it
+    was totally invisible to --exits/--returns (BACK-431 Issue G smoke-tier
+    audit, the same failure shape BACK-430 found for Rust)."""
+
+    def setUp(self):
+        code = """\
+        object Sample {
+          def validate(order: Option[String]): String = order match {
+            case None => throw new IllegalArgumentException("empty")
+            case Some(o) => o
+          }
+        }
+        """
+        self._tree, self._root, self._get_text, _ = _parse_scala(code)
+
+    def test_collect_gate_chains_finds_throw_expression(self):
+        from reveal.adapters.ast.nav import collect_gate_chains
+        chains = collect_gate_chains(self._root, 1, 999, self._get_text)
+        kinds = {c['kind'] for c in chains}
+        self.assertIn('THROW', kinds)
+
+
+# ---------------------------------------------------------------------------
 # BACK-200: --returns gate-chain walker
 # ---------------------------------------------------------------------------
 

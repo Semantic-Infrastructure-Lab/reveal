@@ -72,7 +72,11 @@ LAMBDA_NODES: frozenset = frozenset({'lambda'})
 
 RETURN_NODES: frozenset = frozenset({'return_statement', 'return'})
 RAISE_NODES: frozenset = frozenset({'raise_statement', 'raise'})
-THROW_NODES: frozenset = frozenset({'throw_statement'})
+# Scala's grammar is expression-oriented like Rust's — 'throw_expression',
+# not 'throw_statement' (BACK-431 Issue G smoke-tier audit: Scala's `throw`
+# was invisible to --exits/--returns without this, the same failure shape
+# BACK-430 found for Rust).
+THROW_NODES: frozenset = frozenset({'throw_statement', 'throw_expression'})
 YIELD_NODES: frozenset = frozenset({'yield_statement', 'yield'})
 # BACK-431: bare 'break'/'continue' were already recognized by nav_exits.py's
 # hand-written _EXIT_KIND but missing from nav_outline.py's EXIT_NODES — a
@@ -152,7 +156,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'class_definition': 'CLASS', 'class_declaration': 'CLASS', 'class': 'CLASS',
     'return_statement': 'RETURN', 'return': 'RETURN',
     'raise_statement': 'RAISE', 'raise': 'RAISE',
-    'throw_statement': 'THROW',
+    'throw_statement': 'THROW', 'throw_expression': 'THROW',
     'yield_statement': 'YIELD', 'yield': 'YIELD',
     'break_statement': 'BREAK', 'break': 'BREAK',
     'continue_statement': 'CONTINUE', 'continue': 'CONTINUE',

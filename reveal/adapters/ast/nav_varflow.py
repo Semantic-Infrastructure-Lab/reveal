@@ -32,7 +32,7 @@ class VarFlowWalker:
         if n.end_position().row + 1 < self.from_line or line > self.to_line:
             return
 
-        if ntype in ('identifier', 'variable_name') and self.get_text(n) == self.var_name:
+        if ntype in ('identifier', 'variable_name', 'simple_identifier') and self.get_text(n) == self.var_name:
             if self.from_line <= line <= self.to_line:
                 self.events.append({'kind': c, 'line': line, 'node': n})
             return
@@ -43,14 +43,28 @@ class VarFlowWalker:
             self._walk_assignment(n, ntype, c)
         elif ntype == 'named_expression':
             self._walk_named_expression(n)
-        elif ntype == 'variable_declarator':
+        elif ntype in ('variable_declarator', 'property_declaration'):
             # C#/Java/JS/TS declaration-with-initializer: `var x = f();`,
-            # `let x = f();`, `final int x = f();` (BACK-411).
+            # `let x = f();`, `final int x = f();` (BACK-411). Swift's
+            # `property_declaration` shares the same name/value field shape
+            # (`var x = f()`/`let x = f()`) — its 'name' field wraps the
+            # identifier in an extra `pattern` node, which `_walk_declarator`
+            # reaches via the generic recursion in `walk()` once
+            # `simple_identifier` is a recognized terminal kind (smoke-tier
+            # audit, BACK-431 Issue G).
             self._walk_declarator(n)
         elif ntype in ('short_var_declaration', 'let_declaration'):
             # Go `x := f()` / Rust `let x = f();` (BACK-411).
             left_field = 'left' if ntype == 'short_var_declaration' else 'pattern'
             self._walk_decl_pair(n, left_field, 'right' if ntype == 'short_var_declaration' else 'value')
+        elif ntype in ('val_definition', 'var_definition'):
+            # Scala `val x = f()` / `var x = f()` — 'pattern'/'value' fields,
+            # same shape as Rust's let_declaration (BACK-431 Issue G
+            # smoke-tier audit; without this case every Scala declaration
+            # fell into the generic recursion and was mislabeled READ
+            # instead of WRITE, the same failure shape Kotlin's
+            # property_declaration had).
+            self._walk_decl_pair(n, 'pattern', 'value')
         elif ntype == 'init_declarator':
             # C/C++ `int x = f();` — declarator/value fields (found via BACK-422
             # conformance-matrix pilot fixture; BACK-411 covered C#/Java/JS/TS/Go/Rust
@@ -119,6 +133,19 @@ class VarFlowWalker:
         """Declaration-with-initializer: declared name is a WRITE, initializer is a READ."""
         name = n.child_by_field_name('name')
         value = n.child_by_field_name('value')
+        if name is None and n.kind() == 'property_declaration':
+            # Kotlin's `property_declaration` (`val x = f()`) exposes no
+            # fields at all — unlike Swift's node of the same name, which
+            # has 'name'/'value'. The declared identifier is wrapped in a
+            # positional `variable_declaration` child; without this, the
+            # name falls through to the generic "unprocessed children are
+            # READ" branch below and every Kotlin declaration is silently
+            # mislabeled as a read instead of a write (BACK-431 Issue G
+            # smoke-tier audit).
+            for child in _children(n):
+                if child.kind() == 'variable_declaration':
+                    name = child
+                    break
         if value is None:
             # C#'s variable_declarator has no 'value' field — the initializer
             # is just the last named child that isn't the name (after '=').
@@ -368,7 +395,7 @@ def _declared_name_node(scope_node: Any) -> Optional[Any]:
     for _ in range(10):
         if node is None:
             return None
-        if node.kind() in ('identifier', 'variable_name'):
+        if node.kind() in ('identifier', 'variable_name', 'simple_identifier'):
             return node
         node = node.child_by_field_name('declarator') or node.child_by_field_name('name')
     return None
@@ -398,7 +425,7 @@ def _collect_identifier_names(
         line = node.start_position().row + 1
         if node.end_position().row + 1 < from_line or line > to_line:
             continue
-        if node.kind() in ('identifier', 'variable_name') and from_line <= line <= to_line:
+        if node.kind() in ('identifier', 'variable_name', 'simple_identifier') and from_line <= line <= to_line:
             pos = (node.start_position().row, node.start_position().column)
             if pos != skip_pos:
                 text = get_text(node)
