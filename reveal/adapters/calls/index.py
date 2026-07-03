@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from ..ast.analysis import collect_structures, is_code_file, PYTHON_BUILTINS
 from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
 from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
+from ...registry import language_for_extension
 
 # Module-level LRU cache: directory → (cache_key, index)
 # cache_key is a tuple of (abspath_str, mtime_ns) pairs so it's hashable.
@@ -29,34 +30,37 @@ _INDEX_CACHE_MAX = 8
 # never appear as explicit call expressions in source code.
 _IMPLICIT_DECORATORS: frozenset = frozenset({'property', 'classmethod', 'staticmethod'})
 
-# Extension → coarse language family, for scoping callee resolution to the
-# caller's language (BACK-405). C/C++ share one family since headers (.h)
+# Tree-sitter language slug → coarse family, for scoping callee resolution to
+# the caller's language (BACK-405). C/C++ share one family since headers (.h)
 # are ambiguous between the two and both target the same symbol namespace.
 # Deliberately coarse — the goal is only to stop bare-name collisions across
 # unrelated languages (e.g. a C `write()` resolving to a Python `def write`),
-# not to build a precise per-language classifier.
-_LANG_FAMILY_EXTS: Dict[str, str] = {
-    '.c': 'c', '.h': 'c',
-    '.cpp': 'c', '.cc': 'c', '.cxx': 'c', '.hpp': 'c', '.hh': 'c', '.h++': 'c', '.hxx': 'c',
-    '.py': 'python',
-    '.js': 'js', '.jsx': 'js', '.mjs': 'js', '.cjs': 'js', '.ts': 'js', '.tsx': 'js',
-    '.go': 'go',
-    '.rs': 'rust',
-    '.java': 'java',
-    '.cs': 'csharp',
-    '.rb': 'ruby',
-    '.php': 'php',
-    '.kt': 'kotlin', '.kts': 'kotlin',
-    '.swift': 'swift',
-    '.scala': 'scala',
-    '.lua': 'lua',
-    '.dart': 'dart',
+# not to build a precise per-language classifier. Extension→language identity
+# itself is NOT re-declared here — it's looked up from the registry
+# (BACK-431 Issue B) so a new extension routed to an existing language is
+# automatically in-family with no edit needed here.
+_FAMILY_BY_LANGUAGE: Dict[str, str] = {
+    'c': 'c', 'cpp': 'c',
+    'python': 'python',
+    'javascript': 'js', 'typescript': 'js', 'tsx': 'js',
+    'go': 'go',
+    'rust': 'rust',
+    'java': 'java',
+    'csharp': 'csharp',
+    'ruby': 'ruby',
+    'php': 'php',
+    'kotlin': 'kotlin',
+    'swift': 'swift',
+    'scala': 'scala',
+    'lua': 'lua',
+    'dart': 'dart',
 }
 
 
 def _lang_family(file_path: str) -> str:
     """Return the coarse language family for a file path, or '' if unknown."""
-    return _LANG_FAMILY_EXTS.get(Path(file_path).suffix.lower(), '')
+    lang = language_for_extension(Path(file_path).suffix.lower())
+    return _FAMILY_BY_LANGUAGE.get(lang, '') if lang else ''
 
 
 def _get_decorator_names(elem: Dict[str, Any]) -> Set[str]:

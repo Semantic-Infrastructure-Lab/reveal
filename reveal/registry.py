@@ -455,6 +455,55 @@ def get_analyzer_mapping() -> Dict[str, type]:
     return _ANALYZER_REGISTRY.copy()
 
 
+def language_for_extension(ext: str) -> Optional[str]:
+    """Return the canonical tree-sitter language slug for *ext*, or None.
+
+    Single source of truth for "what language is this extension" — used by
+    BACK-431 Issue B to derive the coarser per-consumer views (call-graph
+    family, non-Python-language display name, etc.) that used to be
+    hand-maintained parallel extension tables. Prefers the dedicated
+    analyzer's `language` class attribute (set on every TreeSitterAnalyzer
+    subclass, e.g. 'csharp', 'typescript', 'tsx') when one is registered;
+    falls back to TREESITTER_EXTENSION_MAP for extensions handled only via
+    dynamic tree-sitter fallback (no dedicated analyzer file).
+
+    Args:
+        ext: File extension including the leading dot (e.g. '.rs', '.CS')
+
+    Returns:
+        Language slug (e.g. 'rust', 'c_sharp') or None if unknown to reveal
+    """
+    ext = ext.lower()
+    cls = _ANALYZER_REGISTRY.get(ext)
+    lang = getattr(cls, 'language', None) if cls is not None else None
+    return lang or TREESITTER_EXTENSION_MAP.get(ext)
+
+
+# Coarse per-language display name, layered on top of language_for_extension()
+# for consumers that want a human-readable label rather than the tree-sitter
+# slug (e.g. 'csharp' -> 'C#'). Deliberately covers only languages that need
+# a name distinct from their capitalized slug — Title-casing the slug is the
+# fallback for everything else (see display_name_for_extension()).
+LANGUAGE_DISPLAY_NAMES: Dict[str, str] = {
+    'javascript': 'JavaScript', 'typescript': 'TypeScript', 'tsx': 'TypeScript',
+    'csharp': 'C#', 'cpp': 'C++', 'objc': 'Objective-C',
+    'php': 'PHP', 'gdscript': 'GDScript', 'sql': 'SQL',
+}
+
+
+def display_name_for_extension(ext: str) -> str:
+    """Return a human-readable language name for *ext*, or '' if unknown.
+
+    Layers LANGUAGE_DISPLAY_NAMES over language_for_extension() so consumers
+    needing a coarse display label (e.g. "Objective-C" for both .m and .mm)
+    don't each hand-maintain their own extension→name table.
+    """
+    lang = language_for_extension(ext)
+    if not lang:
+        return ''
+    return LANGUAGE_DISPLAY_NAMES.get(lang, lang.capitalize())
+
+
 @functools.lru_cache(maxsize=None)
 def get_code_extensions() -> FrozenSet[str]:
     """Return all extensions that represent code files.

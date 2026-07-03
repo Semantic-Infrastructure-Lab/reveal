@@ -8,23 +8,23 @@ from pathlib import Path
 from typing import Callable, Dict, Optional, List
 
 from ..defaults import SKIP_DIRECTORIES
+from ..registry import language_for_extension, LANGUAGE_DISPLAY_NAMES
 
 _SKIP_DIRS: frozenset = SKIP_DIRECTORIES
 
-# Extension → human-readable language label for non-Python source files.
-# Kept in sync with registered code-category analyzers (reveal/analyzers/*.py)
-# and TREESITTER_EXTENSION_MAP (reveal/registry.py) — see BACK-403.
-_NON_PYTHON_LANG_EXTS: Dict[str, str] = {
-    '.ts': 'TypeScript', '.tsx': 'TypeScript',
-    '.js': 'JavaScript', '.jsx': 'JavaScript', '.mjs': 'JavaScript', '.cjs': 'JavaScript',
-    '.go': 'Go', '.rs': 'Rust', '.rb': 'Ruby', '.java': 'Java', '.cs': 'C#',
-    '.c': 'C', '.h': 'C',
-    '.cpp': 'C++', '.cc': 'C++', '.cxx': 'C++', '.hpp': 'C++', '.hh': 'C++', '.h++': 'C++',
-    '.php': 'PHP', '.swift': 'Swift', '.scala': 'Scala', '.lua': 'Lua',
-    '.kt': 'Kotlin', '.kts': 'Kotlin', '.dart': 'Dart', '.gd': 'GDScript',
-    '.ex': 'Elixir', '.exs': 'Elixir', '.zig': 'Zig',
-    '.m': 'Objective-C', '.mm': 'Objective-C',
-}
+
+def _non_python_display_name(ext: str) -> str:
+    """Human-readable language label for *ext*, or '' if Python/unknown.
+
+    Derived from the registry's single-sourced language_for_extension()
+    instead of a hand-maintained extension table (BACK-431 Issue B) — the
+    prior _NON_PYTHON_LANG_EXTS dict was itself created to fix BACK-403,
+    which was caused by exactly this kind of table falling out of sync.
+    """
+    lang = language_for_extension(ext)
+    if not lang or lang == 'python':
+        return ''
+    return LANGUAGE_DISPLAY_NAMES.get(lang, lang.capitalize())
 
 
 def detect_non_python_language(path: Path) -> str:
@@ -35,12 +35,12 @@ def detect_non_python_language(path: Path) -> str:
     notes instead of silent empty results.
     """
     if path.is_file():
-        return _NON_PYTHON_LANG_EXTS.get(path.suffix.lower(), '')
+        return _non_python_display_name(path.suffix.lower())
     counts: Dict[str, int] = {}
     for root, dirs, filenames in os.walk(str(path)):
         dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
         for fname in filenames:
-            lang = _NON_PYTHON_LANG_EXTS.get(Path(fname).suffix.lower(), '')
+            lang = _non_python_display_name(Path(fname).suffix.lower())
             if lang:
                 counts[lang] = counts.get(lang, 0) + 1
     return max(counts, key=counts.__getitem__) if counts else ''
