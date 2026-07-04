@@ -841,6 +841,29 @@ reveal app.py myfunc --sideeffects
 ```
 Shows what external systems a range touches. Useful for assessing blast radius, spotting unexpected I/O, or understanding retry safety. Works on PHP and Python.
 
+**`--loopmap` → loop skeleton (FOR/WHILE/LOOP/DO) with nesting depth**
+```bash
+reveal file.py process_batch --loopmap
+reveal file.php :100-500 --loopmap
+
+# Output:
+#   FOR  commit in walker  L75→L85
+#     FOR  file in commit.files  L78→L83
+```
+Filtered view of `--outline` showing only loop nodes, indented by nesting depth. Answers "which loops exist and what do they iterate" without wading through the full control-flow skeleton. Works on every language `--outline` supports.
+
+**`--fanout` → each loop paired with its classified side effects**
+```bash
+reveal file.py process_batch --fanout
+reveal file.php :100-500 --fanout --format=json
+
+# Output:
+#   FOR  item in items  L2→L5
+#     L3       db         cursor.execute(item)
+#     L4       http       requests.get(item)
+```
+Composes `--loopmap` + `--sideeffects`: for each loop, runs the same classified-call scan `--sideeffects` uses, scoped to just that loop's line range. Purpose-built for N+1 query checks, per-item HTTP fan-out, and retry-safety review — the busywork it removes is manually matching call line numbers back to loop ranges when loops are nested. A loop with no classified effects renders `(no classified side effects)`, not silence, so absence of a finding is visible as a finding.
+
 **`--returns` → return/exit paths with gate chains (v0.81.0+)**
 ```bash
 reveal app.py process_order --returns

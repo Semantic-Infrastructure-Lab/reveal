@@ -431,7 +431,8 @@ class TestNavJsonOutput(unittest.TestCase):
         defaults = dict(
             scope=False, around=None, outline=False, varflow=None, calls=None,
             ifmap=False, catchmap=False, exits=False, flowto=False,
-            deps=False, mutations=False, sideeffects=False, returns=False,
+            deps=False, mutations=False, sideeffects=False, loopmap=False,
+            fanout=False, returns=False,
             boundary=False, depth=3, range=None,
         )
         defaults.update(kwargs)
@@ -496,6 +497,20 @@ class TestNavJsonOutput(unittest.TestCase):
     def test_returns_json_envelope(self):
         result = self._run('collect_deps', {'returns': True})
         self._assert_envelope(result, 'returns')
+
+    def test_loopmap_json_envelope(self):
+        result = self._run('collect_deps', {'loopmap': True})
+        self._assert_envelope(result, 'loopmap')
+
+    def test_fanout_json_envelope(self):
+        result = self._run('collect_deps', {'fanout': True})
+        self._assert_envelope(result, 'fanout')
+
+    def test_fanout_findings_have_effects_key(self):
+        result = self._run('collect_deps', {'fanout': True})
+        for f in result['findings']:
+            self.assertIn('effects', f)
+            self.assertIn('keyword', f)
 
     def test_boundary_json_envelope(self):
         result = self._run('collect_deps', {'boundary': True})

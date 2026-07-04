@@ -713,5 +713,126 @@ class TestRenderers(unittest.TestCase):
         self.assertIn('bar("msg", ...)', result)
 
 
+# ---------------------------------------------------------------------------
+# BACK-439b: collect_loops (--loopmap) / collect_fanout (--fanout)
+# ---------------------------------------------------------------------------
+
+class TestLoopMap(unittest.TestCase):
+    """collect_loops(): FOR/WHILE/LOOP/DO nodes within a range, with depth."""
+
+    def test_single_loop_with_effects(self):
+        code = """
+        def process_batch(items):
+            for item in items:
+                db.execute(item)
+        """
+        _, root, get_text, _ = _parse_python(code)
+        func = _find_func_with_text(root, get_text, 'process_batch')
+        from reveal.adapters.ast.nav import collect_loops
+        loops = collect_loops(func, 1, 10, get_text)
+        self.assertEqual(len(loops), 1)
+        self.assertEqual(loops[0]['keyword'], 'FOR')
+        self.assertIn('item in items', loops[0]['label'])
+
+    def test_nested_loop_depth_reported(self):
+        code = """
+        def process_batch(rows):
+            for row in rows:
+                for cell in row:
+                    log.info(cell)
+        """
+        _, root, get_text, _ = _parse_python(code)
+        func = _find_func_with_text(root, get_text, 'process_batch')
+        from reveal.adapters.ast.nav import collect_loops
+        loops = collect_loops(func, 1, 10, get_text, max_depth=6)
+        self.assertEqual(len(loops), 2)
+        outer = next(l for l in loops if 'row in rows' in l['label'])
+        inner = next(l for l in loops if 'cell in row' in l['label'])
+        self.assertLess(outer['depth'], inner['depth'])
+
+    def test_loop_with_no_effects_no_false_positive(self):
+        code = """
+        def total(items):
+            acc = 0
+            for item in items:
+                acc = acc + item
+            return acc
+        """
+        _, root, get_text, _ = _parse_python(code)
+        func = _find_func_with_text(root, get_text, 'total')
+        from reveal.adapters.ast.nav import collect_loops, collect_fanout
+        loops = collect_loops(func, 1, 10, get_text)
+        self.assertEqual(len(loops), 1)
+        fanout = collect_fanout(func, 1, 10, get_text)
+        self.assertEqual(fanout[0]['effects'], [])
+
+    def test_php_foreach_and_go_for(self):
+        root, get_text = _parse_lang('php', '''
+        <?php
+        function process($items) {
+            foreach ($items as $item) {
+                $wpdb->query($item);
+            }
+        }
+        ''')
+        from reveal.adapters.ast.nav import collect_loops
+        loops = collect_loops(root, 1, 10, get_text)
+        self.assertEqual(len(loops), 1)
+        self.assertEqual(loops[0]['keyword'], 'FOR')
+
+        root, get_text = _parse_lang('go', '''
+        func process(items []int) {
+            for _, item := range items {
+                db.Query(item)
+            }
+        }
+        ''')
+        loops = collect_loops(root, 1, 10, get_text)
+        self.assertEqual(len(loops), 1)
+        self.assertEqual(loops[0]['keyword'], 'FOR')
+
+
+class TestFanout(unittest.TestCase):
+    """collect_fanout(): each loop paired with its classified side effects."""
+
+    def test_loop_with_db_and_http_effects(self):
+        code = """
+        def process_batch(items):
+            for item in items:
+                cursor.execute(item)
+                requests.get(item)
+        """
+        _, root, get_text, _ = _parse_python(code)
+        func = _find_func_with_text(root, get_text, 'process_batch')
+        from reveal.adapters.ast.nav import collect_fanout
+        loops = collect_fanout(func, 1, 10, get_text, language='python')
+        self.assertEqual(len(loops), 1)
+        kinds = {e['kind'] for e in loops[0]['effects']}
+        self.assertIn('db', kinds)
+        self.assertIn('http', kinds)
+
+    def test_render_fanout_no_loops(self):
+        from reveal.adapters.ast.nav import render_fanout
+        result = render_fanout([], 1, 10)
+        self.assertIn('No loops found', result)
+
+    def test_render_fanout_no_effects(self):
+        from reveal.adapters.ast.nav import render_fanout
+        loops = [{'keyword': 'FOR', 'label': 'FOR  x in xs', 'line_start': 2,
+                  'line_end': 5, 'depth': 1, 'effects': []}]
+        result = render_fanout(loops, 1, 10)
+        self.assertIn('no classified side effects', result)
+
+    def test_render_fanout_with_effects(self):
+        from reveal.adapters.ast.nav import render_fanout
+        loops = [{'keyword': 'FOR', 'label': 'FOR  x in xs', 'line_start': 2,
+                  'line_end': 5, 'depth': 1,
+                  'effects': [{'line': 3, 'kind': 'db', 'callee': 'cursor.execute',
+                               'first_arg': 'x', 'has_more_args': False}]}]
+        result = render_fanout(loops, 1, 10)
+        self.assertIn('db', result)
+        self.assertIn('cursor.execute(x)', result)
+
+
 if __name__ == '__main__':
     unittest.main()

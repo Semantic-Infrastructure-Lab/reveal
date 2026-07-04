@@ -379,6 +379,13 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--sideeffects', action='store_true',
                         help='Show classified side effects (db/http/cache/log/file/sleep/hard_stop) in a function or line range '
                              '(e.g., reveal file.php :477-531 --sideeffects  or  reveal file.py myfunc --sideeffects)')
+    parser.add_argument('--loopmap', action='store_true',
+                        help='Show loop skeleton (FOR/WHILE/LOOP/DO) for a function or line range, with nesting depth '
+                             '(e.g., reveal file.py process_batch --loopmap  or  reveal file.php :100-500 --loopmap)')
+    parser.add_argument('--fanout', action='store_true',
+                        help='Show each loop paired with its classified side effects (db/http/cache/log/file calls inside it) — '
+                             'for N+1 query checks, per-item HTTP calls, and retry-safety review '
+                             '(e.g., reveal file.py process_batch --fanout  or  reveal file.php :100-500 --fanout --format=json)')
     parser.add_argument('--varflow', type=str, metavar='VAR',
                         help='Trace reads/writes of a variable within a function or flat file '
                              '(e.g., reveal file.py myfunc --varflow result  or  reveal file.php :1-2000 --varflow errormsg)')

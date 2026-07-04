@@ -60,6 +60,12 @@ from .nav_effects import (  # noqa: F401
     collect_effects,
     render_effects,
 )
+from .nav_loops import (  # noqa: F401
+    collect_loops,
+    collect_fanout,
+    render_loopmap,
+    render_fanout,
+)
 from .nav_boundary import (  # noqa: F401
     collect_boundary,
     render_boundary,
