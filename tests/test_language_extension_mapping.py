@@ -120,5 +120,48 @@ class TestDetectNonPythonLanguage(unittest.TestCase):
             self.assertEqual(detect_non_python_language(txt), '')
 
 
+class TestOverviewLanguageBreakdown(unittest.TestCase):
+    """`reveal overview`'s _EXT_LANG (BACK-431 Issue B #5) reproduces the
+    original hand-maintained table exactly, now derived from
+    display_name_for_extension() + EXTENSION_DISPLAY_OVERRIDES for the one
+    same-language-different-name conflict (.tf/.hcl), with only genuinely
+    non-language extensions (doc/data formats) kept as a local table."""
+
+    ORIGINAL_TABLE = {
+        '.py': 'Python', '.js': 'JavaScript', '.ts': 'TypeScript',
+        '.jsx': 'JavaScript', '.tsx': 'TypeScript', '.rb': 'Ruby',
+        '.go': 'Go', '.rs': 'Rust', '.java': 'Java', '.kt': 'Kotlin',
+        '.swift': 'Swift', '.cs': 'C#', '.cpp': 'C++', '.c': 'C',
+        '.php': 'PHP', '.lua': 'Lua', '.ex': 'Elixir', '.exs': 'Elixir',
+        '.zig': 'Zig', '.dart': 'Dart', '.scala': 'Scala', '.sh': 'Shell',
+        '.bash': 'Shell', '.ps1': 'PowerShell', '.sql': 'SQL',
+        '.md': 'Markdown', '.yaml': 'YAML', '.yml': 'YAML',
+        '.toml': 'TOML', '.json': 'JSON', '.jsonl': 'JSONL',
+        '.html': 'HTML', '.xml': 'XML', '.csv': 'CSV',
+        '.tf': 'Terraform', '.hcl': 'HCL', '.proto': 'Protobuf',
+        '.graphql': 'GraphQL', '.gql': 'GraphQL',
+        '.dockerfile': 'Dockerfile', '.ini': 'INI',
+        '.ipynb': 'Jupyter', '.r': 'R',
+        '.xlsx': 'Excel', '.docx': 'Word', '.pptx': 'PowerPoint',
+    }
+
+    def test_byte_identical_to_original_table(self):
+        from reveal.cli.commands.overview import _NON_CODE_EXT_LABELS
+        for ext, expected in self.ORIGINAL_TABLE.items():
+            actual = (
+                display_name_for_extension(ext)
+                or _NON_CODE_EXT_LABELS.get(ext)
+                or ext.lstrip('.').upper()
+            )
+            self.assertEqual(actual, expected, ext)
+
+    def test_tf_hcl_conflict_resolved_by_extension_override(self):
+        # Same language ('hcl'), deliberately different display names.
+        self.assertEqual(language_for_extension('.tf'), 'hcl')
+        self.assertEqual(language_for_extension('.hcl'), 'hcl')
+        self.assertEqual(display_name_for_extension('.tf'), 'Terraform')
+        self.assertEqual(display_name_for_extension('.hcl'), 'HCL')
+
+
 if __name__ == '__main__':
     unittest.main()

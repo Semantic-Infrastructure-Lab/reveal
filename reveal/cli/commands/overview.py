@@ -14,26 +14,21 @@ from reveal.adapters.stats import StatsAdapter
 from reveal.adapters.git import GitAdapter
 from reveal.adapters.ast import AstAdapter
 from reveal.adapters.imports import ImportsAdapter
+from reveal.registry import display_name_for_extension
 
 logger = logging.getLogger(__name__)
 
 
-# Map common extensions to display names
-_EXT_LANG: Dict[str, str] = {
-    '.py': 'Python', '.js': 'JavaScript', '.ts': 'TypeScript',
-    '.jsx': 'JavaScript', '.tsx': 'TypeScript', '.rb': 'Ruby',
-    '.go': 'Go', '.rs': 'Rust', '.java': 'Java', '.kt': 'Kotlin',
-    '.swift': 'Swift', '.cs': 'C#', '.cpp': 'C++', '.c': 'C',
-    '.php': 'PHP', '.lua': 'Lua', '.ex': 'Elixir', '.exs': 'Elixir',
-    '.zig': 'Zig', '.dart': 'Dart', '.scala': 'Scala', '.sh': 'Shell',
-    '.bash': 'Shell', '.ps1': 'PowerShell', '.sql': 'SQL',
-    '.md': 'Markdown', '.yaml': 'YAML', '.yml': 'YAML',
-    '.toml': 'TOML', '.json': 'JSON', '.jsonl': 'JSONL',
-    '.html': 'HTML', '.xml': 'XML', '.csv': 'CSV',
-    '.tf': 'Terraform', '.hcl': 'HCL', '.proto': 'Protobuf',
-    '.graphql': 'GraphQL', '.gql': 'GraphQL',
-    '.dockerfile': 'Dockerfile', '.ini': 'INI',
-    '.ipynb': 'Jupyter', '.r': 'R',
+# Display labels for extensions the language registry doesn't know at all
+# (BACK-431 Issue B #5) — these are document/data formats, not tree-sitter
+# languages, so they aren't derivable from language_for_extension(); genuinely
+# different knowledge from the language-identity table, not a parallel copy
+# of it. Extensions the registry *does* know (code + config languages like
+# JSON/YAML/HCL) are resolved via display_name_for_extension() instead — see
+# _language_breakdown().
+_NON_CODE_EXT_LABELS: Dict[str, str] = {
+    '.jsonl': 'JSONL', '.html': 'HTML', '.xml': 'XML', '.csv': 'CSV',
+    '.dockerfile': 'Dockerfile', '.ini': 'INI', '.ipynb': 'Jupyter',
     '.xlsx': 'Excel', '.docx': 'Word', '.pptx': 'PowerPoint',
 }
 
@@ -172,7 +167,11 @@ def _language_breakdown(files: List[Dict[str, Any]]) -> List[tuple]:
         if not ext and Path(path).name.lower() == 'dockerfile':
             lang = 'Dockerfile'
         else:
-            lang = _EXT_LANG.get(ext, ext.lstrip('.').upper() if ext else 'Other')
+            lang = (
+                display_name_for_extension(ext)
+                or _NON_CODE_EXT_LABELS.get(ext)
+                or (ext.lstrip('.').upper() if ext else 'Other')
+            )
         counts[lang] += 1
     return counts.most_common()
 

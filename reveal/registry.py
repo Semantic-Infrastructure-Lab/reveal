@@ -488,16 +488,32 @@ LANGUAGE_DISPLAY_NAMES: Dict[str, str] = {
     'javascript': 'JavaScript', 'typescript': 'TypeScript', 'tsx': 'TypeScript',
     'csharp': 'C#', 'cpp': 'C++', 'objc': 'Objective-C',
     'php': 'PHP', 'gdscript': 'GDScript', 'sql': 'SQL',
+    'yaml': 'YAML', 'json': 'JSON', 'toml': 'TOML', 'graphql': 'GraphQL',
+    'powershell': 'PowerShell', 'bash': 'Shell', 'hcl': 'HCL',
+    'proto': 'Protobuf',
+}
+
+# Same-language, different-desired-name overrides, keyed by *extension* rather
+# than language slug — for the rare case where two extensions share one
+# language (BACK-431 Issue B #5) but should display differently. `.tf`/`.hcl`
+# is the only known instance: both resolve to language_for_extension == 'hcl',
+# but Terraform files warrant their own label rather than the generic HCL one.
+EXTENSION_DISPLAY_OVERRIDES: Dict[str, str] = {
+    '.tf': 'Terraform',
 }
 
 
 def display_name_for_extension(ext: str) -> str:
     """Return a human-readable language name for *ext*, or '' if unknown.
 
-    Layers LANGUAGE_DISPLAY_NAMES over language_for_extension() so consumers
-    needing a coarse display label (e.g. "Objective-C" for both .m and .mm)
-    don't each hand-maintain their own extension→name table.
+    Layers EXTENSION_DISPLAY_OVERRIDES and LANGUAGE_DISPLAY_NAMES over
+    language_for_extension() so consumers needing a coarse display label
+    (e.g. "Objective-C" for both .m and .mm) don't each hand-maintain their
+    own extension→name table.
     """
+    ext = ext.lower()
+    if ext in EXTENSION_DISPLAY_OVERRIDES:
+        return EXTENSION_DISPLAY_OVERRIDES[ext]
     lang = language_for_extension(ext)
     if not lang:
         return ''
