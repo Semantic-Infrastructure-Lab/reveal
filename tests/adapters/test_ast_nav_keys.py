@@ -16,6 +16,7 @@ from reveal.analyzers.javascript import JavaScriptAnalyzer
 from reveal.analyzers.rust import RustAnalyzer
 from reveal.analyzers.go import GoAnalyzer
 from reveal.analyzers.csharp import CSharpAnalyzer
+from reveal.analyzers.lua import LuaAnalyzer
 from reveal.adapters.ast.nav_keys import collect_keys, render_keys
 from reveal.adapters.ast.nav_cross_varflow import _find_function_node
 
@@ -306,6 +307,32 @@ def f(config):
         self.assertEqual(by_key['cond'], 'COND')
         self.assertEqual(by_key['a'], 'READ')
         self.assertEqual(by_key['b'], 'READ')
+
+
+class TestLuaFieldlessAssignment(unittest.TestCase):
+    """BACK-456 regression: Lua's assignment_statement exposes no 'left'/
+    'right' fields at all — targets are a positional 'variable_list' child,
+    values an 'expression_list' child. nav_keys._walk() used to look up only
+    the fielded shape and silently fell through to generic recursion,
+    classifying assignment targets as READ instead of WRITE. Now shares
+    nav_varflow.resolve_assignment_sides() instead of reimplementing a
+    narrower, fielded-only copy."""
+
+    def test_multi_target_assignment_is_write_not_read(self):
+        path = _write("""\
+function f(cfg)
+  cfg.x, cfg.y = 1, 2
+  return cfg.x
+end
+""", '.lua')
+        try:
+            events = _keys(LuaAnalyzer, path, 'f', 'cfg')
+        finally:
+            os.unlink(path)
+        by_key_kind = [(e['key'], e['kind']) for e in events]
+        self.assertIn(('x', 'WRITE'), by_key_kind)
+        self.assertIn(('y', 'WRITE'), by_key_kind)
+        self.assertIn(('x', 'READ'), by_key_kind)
 
 
 if __name__ == '__main__':

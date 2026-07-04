@@ -20,10 +20,17 @@ Recognizes, for a given base variable name:
   isset()/empty() wrapping a subscript -- PHP's existence-check idiom
 
 Classifies each access as READ, WRITE (assignment target), or COND (used
-directly in an if/while condition — including isset()/empty()), reusing the
-same context-propagation model as nav_varflow.VarFlowWalker: assignment
-targets flip to WRITE, condition subtrees flip to COND, everything else
-defaults to READ.
+directly in an if/while condition — including isset()/empty()). _walk()
+independently mirrors the same READ/WRITE/COND context-propagation *shape*
+as nav_varflow.VarFlowWalker (assignment targets flip to WRITE, condition
+subtrees flip to COND) rather than subclassing it directly — VarFlowWalker's
+own dispatch is built around matching bare variable identifiers and
+excluding member-access/JSX/annotation nodes from descent, which is the
+opposite of what --keys needs (it must inspect member-access/subscript/call
+nodes themselves, not skip over them). What *is* genuinely shared, not
+reimplemented, is resolve_assignment_sides() (BACK-456) — including Lua's
+fieldless assignment_statement fallback — imported directly from
+nav_varflow.py so the two modules can't drift on that one grammar edge case.
 
 Reuses _ASSIGNMENT_NODES/_SUBSCRIPT_NODES from nav_statewrites.py and the
 fuller _MEMBER_ACCESS_KINDS from nav_varflow.py (which also covers Rust
@@ -38,6 +45,7 @@ from typing import Any, Callable, Dict, List, Optional
 from ...core import node_children as _children
 from .nav_statewrites import _ASSIGNMENT_NODES, _SUBSCRIPT_NODES
 from .nav_varflow import _MEMBER_ACCESS_KINDS as _MEMBER_ACCESS_NODES
+from .nav_varflow import resolve_assignment_sides
 
 _CALL_NODES: frozenset = frozenset({
     'call', 'call_expression', 'function_call_expression', 'method_invocation',
@@ -91,11 +99,14 @@ def _member_parts(node: Any) -> tuple:
 
     The base/receiver field is named 'object' in most grammars, but Rust's
     field_expression uses 'value', Go's selector_expression uses 'operand',
-    C#'s member_access_expression uses 'expression', and C++'s field_expression
-    uses 'argument' — try each before giving up. Field-based grammars expose
-    'property'/'name'/'attribute'/'field' for the property side; Python's
-    'attribute' node exposes only the base — the property identifier has no
-    field name, so it falls back to the last named non-object child.
+    C#'s member_access_expression uses 'expression', C++'s field_expression
+    uses 'argument', and Lua's dot_index_expression uses 'table' (BACK-456,
+    found while regression-testing the assignment-sides fix — cfg.x silently
+    produced zero --keys events) — try each before giving up. Field-based
+    grammars expose 'property'/'name'/'attribute'/'field' for the property
+    side; Python's 'attribute' node exposes only the base — the property
+    identifier has no field name, so it falls back to the last named
+    non-object child.
     """
     obj = (
         node.child_by_field_name('object')
@@ -103,6 +114,7 @@ def _member_parts(node: Any) -> tuple:
         or node.child_by_field_name('operand')
         or node.child_by_field_name('expression')
         or node.child_by_field_name('argument')
+        or node.child_by_field_name('table')
     )
     if obj is None:
         return None, None
@@ -147,8 +159,7 @@ def _walk(
     ntype = node.kind()
 
     if ntype in _ASSIGNMENT_NODES:
-        left = node.child_by_field_name('left')
-        right = node.child_by_field_name('right')
+        left, right = resolve_assignment_sides(node, ntype)
         processed = set()
         if left is not None:
             processed.add((left.start_byte(), left.end_byte()))

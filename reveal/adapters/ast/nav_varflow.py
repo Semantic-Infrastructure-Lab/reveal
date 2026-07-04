@@ -81,6 +81,32 @@ _DECL_SHAPES: Dict[str, _DeclShape] = {
 }
 
 
+def resolve_assignment_sides(n: Any, ntype: str) -> tuple:
+    """Return (left, right) nodes for an assignment/augmented-assignment node.
+
+    Most grammars expose 'left'/'right' fields directly. Lua's
+    assignment_statement exposes no fields at all — targets are a positional
+    'variable_list' child (supports multi-assign, `local ok, result =
+    pcall(...)`), values an 'expression_list' (BACK-431 Issue G smoke-tier
+    audit: without this fallback, `result` fell through to generic recursion
+    and was mislabeled READ instead of WRITE, the same failure shape
+    Kotlin/Scala had).
+
+    Shared by VarFlowWalker._walk_assignment and nav_keys._walk (BACK-456) —
+    previously nav_keys reimplemented only the fielded case and silently
+    lacked this Lua fallback.
+    """
+    left = n.child_by_field_name('left')
+    right = n.child_by_field_name('right')
+    if left is None and right is None and ntype == 'assignment_statement':
+        for child in _children(n):
+            if child.kind() == 'variable_list':
+                left = child
+            elif child.kind() == 'expression_list':
+                right = child
+    return left, right
+
+
 @dataclass
 class VarFlowWalker:
     """Recursive var-flow walker with write/condition context propagation.
@@ -286,20 +312,7 @@ class VarFlowWalker:
                 self.walk(child, c)
 
     def _walk_assignment(self, n: Any, ntype: str, c: str) -> None:
-        left = n.child_by_field_name('left')
-        right = n.child_by_field_name('right')
-        if left is None and right is None and ntype == 'assignment_statement':
-            # Lua's assignment_statement exposes no fields at all — targets
-            # are a positional 'variable_list' child (supports multi-assign,
-            # `local ok, result = pcall(...)`), values an 'expression_list'
-            # (BACK-431 Issue G smoke-tier audit: without this, `result` fell
-            # through to the generic recursion below and was mislabeled READ
-            # instead of WRITE, the same failure shape Kotlin/Scala had).
-            for child in _children(n):
-                if child.kind() == 'variable_list':
-                    left = child
-                elif child.kind() == 'expression_list':
-                    right = child
+        left, right = resolve_assignment_sides(n, ntype)
         is_augmented = ntype in ('augmented_assignment', 'augmented_assignment_expression',
                                   'compound_assignment_expr')
         if not is_augmented:
