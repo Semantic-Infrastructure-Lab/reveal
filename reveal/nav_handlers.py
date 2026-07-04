@@ -211,7 +211,10 @@ def _nav_mutations(ctx: _NavCtx) -> None:
 def _nav_sideeffects(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_effects, render_effects  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    effects = collect_effects(ctx.func_node, from_line, to_line, ctx.get_text)
+    effects = collect_effects(
+        ctx.func_node, from_line, to_line, ctx.get_text,
+        language=getattr(ctx.analyzer, 'language', None),
+    )
     if ctx.as_json:
         findings = [
             {'kind': e['kind'], 'line': e['line'], 'callee': e['callee'],
@@ -236,7 +239,10 @@ def _nav_returns(ctx: _NavCtx) -> None:
 def _nav_boundary(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_boundary, render_boundary  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    boundary = collect_boundary(ctx.func_node, from_line, to_line, ctx.get_text)
+    boundary = collect_boundary(
+        ctx.func_node, from_line, to_line, ctx.get_text,
+        language=getattr(ctx.analyzer, 'language', None),
+    )
     if ctx.as_json:
         findings = (
             [{'kind': 'input', 'var': d['var'], 'line': d['first_read_line'],

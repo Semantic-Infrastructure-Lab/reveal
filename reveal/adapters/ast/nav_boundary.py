@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from .nav_exits import collect_deps
 from .nav_effects import collect_effects
@@ -19,6 +19,7 @@ def collect_boundary(
     from_line: int,
     to_line: int,
     get_text: Callable,
+    language: Optional[str] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Collect INPUTS, ENVIRONMENT, and EFFECTS for a boundary report.
 
@@ -30,7 +31,7 @@ def collect_boundary(
     deps = collect_deps(scope_node, from_line, to_line, get_text)
     inputs = [d for d in deps if not _is_superglobal(d['var'])]
     superglobals = [d for d in deps if _is_superglobal(d['var'])]
-    effects = collect_effects(scope_node, from_line, to_line, get_text)
+    effects = collect_effects(scope_node, from_line, to_line, get_text, language)
     classified = [e for e in effects if e['kind'] is not None]
     return {'inputs': inputs, 'superglobals': superglobals, 'effects': classified}
 

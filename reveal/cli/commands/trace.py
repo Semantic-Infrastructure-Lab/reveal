@@ -157,12 +157,14 @@ def _collect_function_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
     """
     from reveal.adapters.ast.analysis import collect_structures
     from reveal.adapters.ast.nav_effects import classify_call
+    from reveal.registry import language_for_extension
 
     structures = collect_structures(path)
     index: Dict[str, List[Dict[str, Any]]] = {}
 
     for file_struct in structures:
         file_path = file_struct.get('file', '')
+        language = language_for_extension(Path(file_path).suffix)
         for elem in file_struct.get('elements', []):
             if elem.get('category') not in ('functions', 'methods'):
                 continue
@@ -173,7 +175,7 @@ def _collect_function_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
                 'file': file_path,
                 'line': elem.get('line', 0),
                 'params': _params_from_signature(elem.get('signature', ''), name),
-                'effects': _effects_from_calls(elem.get('calls', []), classify_call),
+                'effects': _effects_from_calls(elem.get('calls', []), classify_call, language),
             })
 
     return index
@@ -196,12 +198,12 @@ def _params_from_signature(signature: str, func_name: str) -> List[str]:
     return params
 
 
-def _effects_from_calls(calls: List[str], classify_call) -> List[str]:
+def _effects_from_calls(calls: List[str], classify_call, language=None) -> List[str]:
     """Return deduplicated effect labels for a function's call list."""
     effects: List[str] = []
     seen: Set[str] = set()
     for callee in calls:
-        kind = classify_call(callee)
+        kind = classify_call(callee, language)
         if kind:
             label = f"{kind}:{callee.split('.')[-1]}"
             if label not in seen:

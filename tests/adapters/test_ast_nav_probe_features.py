@@ -1426,6 +1426,74 @@ class TestJavaEffectsBack416(unittest.TestCase):
         self.assertEqual(classify_call('fs.writeFileSync'), 'file')  # Node fs
 
 
+class TestClassifyCallLanguageScoping(unittest.TestCase):
+    """BACK-431 Issue D: per-language taxonomy tables, opt-in via `language=`."""
+
+    def test_unscoped_call_matches_every_language_back_compat(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        # No language given == old flat-taxonomy behavior: every language's
+        # patterns still fire, so existing (unscoped) callers see no change.
+        self.assertEqual(classify_call('session_start'), 'session')
+        self.assertEqual(classify_call('os.mkdirall'), 'file')
+        self.assertEqual(classify_call('std::process::exit'), 'hard_stop')
+
+    def test_php_builtin_scoped_to_php_only(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('session_start', language='php'), 'session')
+        self.assertIsNone(classify_call('session_start', language='go'))
+        self.assertIsNone(classify_call('session_start', language='rust'))
+
+    def test_go_stdlib_scoped_to_go_only(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('os.mkdirall', language='go'), 'file')
+        self.assertIsNone(classify_call('os.mkdirall', language='python'))
+        self.assertIsNone(classify_call('os.mkdirall', language='php'))
+
+    def test_rust_stdlib_scoped_to_rust_only(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        # 'std::process::exit' also matches via the common bare 'exit'
+        # pattern regardless of language (see
+        # test_common_patterns_fire_regardless_of_language) — 'std::env::var'
+        # avoids that overlap and so demonstrates true rust-only scoping.
+        self.assertEqual(classify_call('std::process::exit', language='rust'), 'hard_stop')
+        self.assertEqual(classify_call('std::env::var', language='rust'), 'env')
+        self.assertIsNone(classify_call('std::env::var', language='python'))
+        self.assertIsNone(classify_call('std::env::var', language='java'))
+
+    def test_python_stdlib_scoped_to_python_only(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        # 'requests.get' matches for any language via the (unscoped)
+        # _RECEIVER_TAXONOMY fallback — 'os.environ' isn't a receiver name,
+        # so it isolates the python-only taxonomy table instead.
+        self.assertEqual(classify_call('os.environ', language='python'), 'env')
+        self.assertIsNone(classify_call('os.environ', language='go'))
+        self.assertIsNone(classify_call('os.environ', language='rust'))
+
+    def test_js_group_aliases_share_one_bucket(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        for lang in ('javascript', 'typescript', 'tsx'):
+            self.assertEqual(classify_call('setTimeout', language=lang), 'sleep')
+        self.assertIsNone(classify_call('setTimeout', language='python'))
+
+    def test_java_bucket_pattern_present_though_shadowed_by_common(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        # java's only distinguishing pattern ('system.getenv') is a superset
+        # of the common bare 'getenv' pattern, so it already matches for
+        # every language — there's no independently-observable java-only
+        # case today, but the entry is still correct and harmless.
+        self.assertEqual(classify_call('System.getenv', language='java'), 'env')
+
+    def test_common_patterns_fire_regardless_of_language(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('db_query', language='go'), 'db')
+        self.assertEqual(classify_call('db_query', language='php'), 'db')
+        self.assertEqual(classify_call('die', language='rust'), 'hard_stop')
+
+    def test_unknown_language_falls_back_to_unscoped(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('session_start', language='kotlin'), 'session')
+
+
 class TestCollectEffects(unittest.TestCase):
 
     def setUp(self):
