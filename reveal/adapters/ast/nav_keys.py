@@ -51,6 +51,13 @@ _CALL_NODES: frozenset = frozenset({
     'call', 'call_expression', 'function_call_expression', 'method_invocation',
 })
 
+# PHP's method-call node (unlike the _CALL_NODES shapes above) has no nested
+# 'function' node to unwrap: 'object'/'name'/'arguments' sit directly on the
+# call node itself (BACK-458 item 4 — $row->get('id') was previously
+# invisible to the .get() idiom below because member_call_expression was
+# absent from _CALL_NODES and its shape doesn't fit that branch anyway).
+_METHOD_CALL_NODES: frozenset = frozenset({'member_call_expression'})
+
 _ISSET_LIKE: frozenset = frozenset({'isset', 'empty'})
 
 _QUOTE_CHARS = ('"', "'", '`')
@@ -207,6 +214,21 @@ def _walk(
                         'line': start, 'access': 'call',
                     })
                 return
+
+    if ntype in _METHOD_CALL_NODES:
+        obj = node.child_by_field_name('object')
+        name = node.child_by_field_name('name')
+        if (
+            obj is not None and name is not None
+            and get_text(name) == 'get' and _base_matches(obj, var_name, get_text)
+        ):
+            key_node = _first_call_arg(node, get_text)
+            if key_node is not None:
+                results.append({
+                    'key': _clean_literal(get_text(key_node)), 'kind': context,
+                    'line': start, 'access': 'call',
+                })
+            return
 
     if ntype in _SUBSCRIPT_NODES:
         base, key_node = _subscript_parts(node)

@@ -125,6 +125,29 @@ function f($row) {
         self.assertEqual(z[0]['kind'], 'WRITE')
 
 
+class TestCollectKeysPhpMethodCallGet(unittest.TestCase):
+    """BACK-458 item 4: $row->get('id') parses as member_call_expression,
+    a shape distinct from every _CALL_NODES kind (no nested 'function' node
+    to unwrap) — was previously invisible to the .get() idiom entirely."""
+
+    def setUp(self):
+        self.path = _write("""<?php
+function f($row) {
+    $y = $row->get('id');
+}
+""", '.php')
+
+    def tearDown(self):
+        os.unlink(self.path)
+
+    def test_method_call_get_is_read(self):
+        events = _keys(PhpAnalyzer, self.path, 'f', '$row')
+        idk = [e for e in events if e['key'] == 'id']
+        self.assertEqual(len(idk), 1)
+        self.assertEqual(idk[0]['kind'], 'READ')
+        self.assertEqual(idk[0]['access'], 'call')
+
+
 class TestCollectKeysJavaScript(unittest.TestCase):
 
     def setUp(self):
