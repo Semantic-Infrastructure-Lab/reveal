@@ -188,12 +188,33 @@ def _try_treesitter_extraction(analyzer, element: str):
         for node_type in node_types:
             node = _find_named_node(analyzer, node_type, element)
             if node:
+                # Dart: node may be a function_signature whose body lives in
+                # a disjoint sibling (TreeSitterAnalyzer._function_end_node);
+                # every other language's node already spans its own body.
+                end_node = getattr(analyzer, '_function_end_node', lambda n: n)(node)
+                source = (
+                    analyzer._get_node_text(node) if end_node is node
+                    else analyzer._get_text_span(node.start_byte(), end_node.end_byte())
+                )
                 return {
                     'name': element,
                     'line_start': node.start_position().row + 1,
-                    'line_end': node.end_position().row + 1,
-                    'source': analyzer._get_node_text(node),
+                    'line_end': end_node.end_position().row + 1,
+                    'source': source,
                 }
+
+    # JS-family `const f = (...) => {}` — see TreeSitterAnalyzer
+    # ._find_named_arrow_function (BACK-431 Issue G tier B dogfood audit).
+    find_arrow_fn = getattr(analyzer, '_find_named_arrow_function', None)
+    if find_arrow_fn is not None:
+        node = find_arrow_fn(element)
+        if node is not None:
+            return {
+                'name': element,
+                'line_start': node.start_position().row + 1,
+                'line_end': node.end_position().row + 1,
+                'source': analyzer._get_node_text(node),
+            }
     return None
 
 
@@ -363,11 +384,19 @@ def _extract_hierarchical_element(analyzer, element: str):
     if not child_node:
         return None
 
+    # Dart methods: child_node is function_signature, whose body lives in a
+    # disjoint sibling (see TreeSitterAnalyzer._function_end_node) — every
+    # other language's child_node already spans its own body.
+    end_node = getattr(analyzer, '_function_end_node', lambda n: n)(child_node)
+    source = (
+        analyzer._get_node_text(child_node) if end_node is child_node
+        else analyzer._get_text_span(child_node.start_byte(), end_node.end_byte())
+    )
     return {
         'name': element,
         'line_start': child_node.start_position().row + 1,
-        'line_end': child_node.end_position().row + 1,
-        'source': analyzer._get_node_text(child_node),
+        'line_end': end_node.end_position().row + 1,
+        'source': source,
     }
 
 

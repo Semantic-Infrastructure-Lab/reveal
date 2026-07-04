@@ -2244,5 +2244,81 @@ class TestRenderBoundary(unittest.TestCase):
         self.assertIn('\n\n', out)
 
 
+# ---------------------------------------------------------------------------
+# BACK-431 Issue G tier B real-corpus dogfood (mysterious-probe-0703): the
+# synthetic ~20-line smoke fixtures found 4 bugs on first contact, but real
+# source (AppFlowy/Kong/Ghostty/godot-demo-projects/excalidraw) found 2 more
+# that a small hand-written fixture didn't happen to exercise.
+# ---------------------------------------------------------------------------
+
+def _parse_zig(code: str):
+    """Parse Zig code and return (tree, root, get_text, content_bytes)."""
+    parser = ts.get_parser('zig')
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+    root = tree.root_node()
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return tree, root, get_text, content_bytes
+
+
+class TestZigSwitchExpr(unittest.TestCase):
+    """Zig's `switch (x) { .a => ..., .b => ... }` (`SwitchExpr`/
+    `SwitchProng`) was entirely absent from SWITCH_NODES/CASE_NODES —
+    --ifmap/--outline saw no branches at all for a function whose only
+    control flow was a switch. Found via real Ghostty source
+    (terminal/formatter.zig's formatStyleOpen), which uses switch
+    pervasively — the hand-written smoke fixture used if/while instead and
+    never exercised this shape."""
+
+    def setUp(self):
+        code = """\
+        fn formatKind(self: Self) void {
+            switch (self.kind) {
+                .plain => unreachable,
+                .html => {
+                    doThing();
+                },
+            }
+        }
+        """
+        self._tree, self._root, self._get_text, _ = _parse_zig(code)
+
+    def test_element_outline_finds_switch_and_prongs(self):
+        from reveal.adapters.ast.nav import element_outline
+        items = element_outline(self._root, self._get_text, max_depth=5)
+        keywords = [i['keyword'] for i in items]
+        self.assertIn('SWITCH', keywords)
+        self.assertEqual(keywords.count('CASE'), 2)
+
+
+class TestLuaDottedFunctionNameNav(unittest.TestCase):
+    """Lua `function table.name(...)` (BACK-431 Issue G tier B dogfood
+    finding, via real Kong source kong/concurrency.lua) — the name is a
+    `dot_index_expression`, a kind absent from every check in
+    TreeSitterAnalyzer._get_node_name, so the function had no resolvable
+    name at all and every nav flag (not just --varflow) was blind to it."""
+
+    def test_get_node_name_returns_final_segment(self):
+        from reveal.registry import get_analyzer
+        import tempfile
+        code = "function concurrency.with_worker_mutex(opts, fn)\n  return fn(opts)\nend\n"
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            path = f.name
+        try:
+            cls = get_analyzer(path)
+            analyzer = cls(path)
+            nodes = analyzer._find_nodes_by_type('function_declaration')
+            self.assertEqual(len(nodes), 1)
+            self.assertEqual(analyzer._get_node_name(nodes[0]), 'with_worker_mutex')
+        finally:
+            import os
+            os.unlink(path)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -64,8 +64,12 @@ WITH_NODES: frozenset = frozenset({'with_statement', 'with'})
 # field names don't matter (nav_outline.py/nav_exits.py structural walking).
 MATCH_EXPRESSION_NODES: frozenset = frozenset({'match_expression'})
 MATCH_NODES: frozenset = MATCH_EXPRESSION_NODES | frozenset({'match_statement'})
-CASE_NODES: frozenset = frozenset({'case_clause', 'match_arm', 'switch_case'})
-SWITCH_NODES: frozenset = frozenset({'switch_statement', 'switch'})
+# Zig's `switch (x) { .a => ..., .b => ... }` (BACK-431 Issue G tier B
+# dogfood audit: found via real Ghostty source, terminal/formatter.zig uses
+# switch pervasively) — `SwitchExpr`/`SwitchProng`, distinct kinds from
+# every other language's switch/case shape.
+CASE_NODES: frozenset = frozenset({'case_clause', 'match_arm', 'switch_case', 'SwitchProng'})
+SWITCH_NODES: frozenset = frozenset({'switch_statement', 'switch', 'SwitchExpr'})
 SWITCH_DEFAULT_NODES: frozenset = frozenset({'switch_default', 'default'})
 
 DEF_NODES: frozenset = frozenset({
@@ -147,9 +151,9 @@ KEYWORD_LABEL: Dict[str, str] = {
     'finally_clause': 'FINALLY', 'finally': 'FINALLY',
     'with_statement': 'WITH', 'with': 'WITH',
     'match_statement': 'MATCH', 'match_expression': 'MATCH',
-    'case_clause': 'CASE', 'match_arm': 'CASE',
+    'case_clause': 'CASE', 'match_arm': 'CASE', 'SwitchProng': 'CASE',
     'do_statement': 'DO',
-    'switch_statement': 'SWITCH', 'switch': 'SWITCH',
+    'switch_statement': 'SWITCH', 'switch': 'SWITCH', 'SwitchExpr': 'SWITCH',
     'catch_clause': 'CATCH', 'catch': 'CATCH',
     'switch_case': 'CASE',
     'switch_default': 'DEFAULT', 'default': 'DEFAULT',

@@ -1,6 +1,6 @@
 """TypeScript (.ts) and TypeScript React (.tsx) file analyzers."""
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from ..core import node_children as _children
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
@@ -15,49 +15,15 @@ _TEST_FRAMEWORK_CALLEE_NAMES = frozenset({
 class _TypeScriptBase(TreeSitterAnalyzer):
     """Shared extraction for TypeScript (.ts) and TypeScript React (.tsx)."""
 
-    # ── Arrow functions & test callbacks ─────────────────────────────────────
+    # ── Test callbacks ────────────────────────────────────────────────────
+    # Arrow-function-as-const extraction (`const f = () => {}`) lives in the
+    # shared TreeSitterAnalyzer base (treesitter.py) — it's a JS-family
+    # grammar shape, not TypeScript-specific; see that class's
+    # _extract_arrow_functions()/_find_named_arrow_function() docstrings.
 
     def _extract_functions(self) -> List[Dict[str, Any]]:
         funcs = super()._extract_functions()
-        funcs.extend(self._extract_arrow_functions())
         funcs.extend(self._extract_test_callbacks())
-        return funcs
-
-    def _is_module_scope_decl(self, lexical_decl_node) -> bool:
-        parent = lexical_decl_node.parent()
-        if parent is None:
-            return False
-        if parent.kind() == 'program':
-            return True
-        if parent.kind() == 'export_statement':
-            gp = parent.parent()
-            return gp is not None and gp.kind() == 'program'
-        return False
-
-    def _arrow_or_fn_value(self, variable_declarator_node) -> Tuple[Optional[Any], Optional[Any]]:
-        """Return (name_node, value_node) for a variable_declarator, or (None, None)."""
-        name_node = value_node = None
-        for ch in _children(variable_declarator_node):
-            if ch.kind() == 'identifier' and name_node is None:
-                name_node = ch
-            elif ch.kind() in ('arrow_function', 'function_expression'):
-                value_node = ch
-        return name_node, value_node
-
-    def _extract_arrow_functions(self) -> List[Dict[str, Any]]:
-        """Extract module-scope arrow/function-expression declarations (const X = () => {})."""
-        funcs = []
-        for decl_node in self._find_nodes_by_type('lexical_declaration'):
-            if not self._is_module_scope_decl(decl_node):
-                continue
-            for child in _children(decl_node):
-                if child.kind() != 'variable_declarator':
-                    continue
-                name_node, value_node = self._arrow_or_fn_value(child)
-                if name_node and value_node:
-                    funcs.append(self._build_function_dict(
-                        value_node, self._get_node_text(name_node), []
-                    ))
         return funcs
 
     def _extract_test_callbacks(self) -> List[Dict[str, Any]]:

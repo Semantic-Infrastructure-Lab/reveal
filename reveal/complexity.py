@@ -46,6 +46,8 @@ _DECISION_TYPES = frozenset({
     # Pattern matching — Python match_statement/case_clause and Rust
     # match_expression/match_arm (BACK-431).
     'match_statement', 'match_expression', 'case_clause', 'match_arm',
+    # Zig `switch (x) { .a => ..., .b => ... }` (BACK-431 Issue G tier B).
+    'SwitchProng',
 })
 
 _NESTING_TYPES = frozenset({

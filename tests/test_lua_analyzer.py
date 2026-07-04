@@ -272,5 +272,39 @@ print(unicode_test())
             os.unlink(temp_path)
 
 
+class TestLuaDottedFunctionName(unittest.TestCase):
+    """BACK-431 Issue G tier B dogfood finding (mysterious-probe-0703, against
+    real Kong source, kong/concurrency.lua): `function table.name(...)` — a
+    very common Lua module-method idiom — was entirely invisible to
+    get_structure()/--outline/every nav flag. The name is a
+    `dot_index_expression` node, a kind `_get_node_name` never checked for,
+    so the function had no name at all and was silently dropped."""
+
+    def test_dotted_function_name_extracted_as_final_segment(self):
+        code = '''local mymodule = {}
+
+function mymodule.do_thing(x)
+  local y = x + 1
+  return y
+end
+
+return mymodule
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            structure = LuaAnalyzer(temp_path).get_structure()
+            names = [fn['name'] for fn in structure.get('functions', [])]
+            self.assertIn('do_thing', names)
+            fn = next(fn for fn in structure['functions'] if fn['name'] == 'do_thing')
+            self.assertEqual(fn['line'], 3)
+            self.assertEqual(fn['line_end'], 6)
+        finally:
+            os.unlink(temp_path)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -404,5 +404,108 @@ void main() {
             os.unlink(temp_path)
 
 
+class TestDartFunctionBodyBoundary(unittest.TestCase):
+    """BACK-431 Issue G tier B dogfood finding (mysterious-probe-0703, against
+    real AppFlowy source): Dart's grammar splits a function into SIBLING
+    `function_signature` + `function_body` nodes, not parent/child like every
+    other language. Every consumer of the raw signature node's own end
+    position — get_structure()'s line_end/complexity, --outline, plain
+    element extraction (`reveal file.dart funcname`), Class.method
+    extraction, and every nav flag's range resolution — silently truncated
+    to the one-line signature and saw the whole body as empty/out-of-range.
+    """
+
+    def _write(self, code: str) -> str:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.dart', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            return f.name
+
+    def test_top_level_function_line_end_spans_body(self):
+        code = '''String greet(String name) {
+  final upper = name.toUpperCase();
+  return 'Hello, $upper!';
+}
+'''
+        path = self._write(code)
+        try:
+            structure = DartAnalyzer(path).get_structure()
+            fn = structure['functions'][0]
+            self.assertEqual(fn['line'], 1)
+            self.assertEqual(fn['line_end'], 4)
+            self.assertGreater(fn['complexity'], 0)
+        finally:
+            os.unlink(path)
+
+    def test_class_method_line_end_spans_body(self):
+        code = '''class Foo {
+  int compute(int x) {
+    var y = x + 1;
+    return y * 2;
+  }
+}
+'''
+        path = self._write(code)
+        try:
+            structure = DartAnalyzer(path).get_structure()
+            method = structure['functions'][0]
+            self.assertEqual(method['name'], 'compute')
+            self.assertEqual(method['line'], 2)
+            self.assertEqual(method['line_end'], 5)
+        finally:
+            os.unlink(path)
+
+    def test_bare_name_element_extraction_returns_full_body(self):
+        from reveal.display.element import _try_treesitter_extraction
+
+        code = '''void run() {
+  print('one');
+  print('two');
+}
+'''
+        path = self._write(code)
+        try:
+            analyzer = DartAnalyzer(path)
+            result = _try_treesitter_extraction(analyzer, 'run')
+            self.assertIsNotNone(result)
+            self.assertEqual(result['line_start'], 1)
+            self.assertEqual(result['line_end'], 4)
+            self.assertIn("print('two')", result['source'])
+        finally:
+            os.unlink(path)
+
+    def test_class_method_hierarchical_extraction_disambiguates_and_spans_body(self):
+        """Two classes with same-named methods (a very common Dart/Flutter
+        pattern — every widget has its own `build()`) — Class.method syntax
+        must resolve the RIGHT one with its full body, not just the first
+        same-named method found anywhere in the file."""
+        from reveal.display.element import _extract_hierarchical_element
+
+        code = '''class A {
+  String build() {
+    return 'from A';
+  }
+}
+
+class B {
+  String build() {
+    final parts = ['from', 'B'];
+    return parts.join(' ');
+  }
+}
+'''
+        path = self._write(code)
+        try:
+            analyzer = DartAnalyzer(path)
+            result = _extract_hierarchical_element(analyzer, 'B.build')
+            self.assertIsNotNone(result)
+            self.assertEqual(result['line_start'], 8)
+            self.assertEqual(result['line_end'], 11)
+            self.assertIn("parts.join", result['source'])
+            self.assertNotIn("from A", result['source'])
+        finally:
+            os.unlink(path)
+
+
 if __name__ == '__main__':
     unittest.main()

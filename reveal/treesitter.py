@@ -127,6 +127,7 @@ CHILD_NODE_TYPES = (
     'function_definition', 'function_declaration',
     'method_declaration', 'method_definition',
     'function_item',         # Rust
+    'function_signature',    # Dart methods (wrapped in method_signature)
 )
 
 # All element types for line-based extraction
@@ -344,7 +345,74 @@ class TreeSitterAnalyzer(FileAnalyzer):
         undecorated_funcs = self._extract_undecorated_functions(function_types, processed_funcs)
         functions.extend(undecorated_funcs)
 
+        functions.extend(self._extract_arrow_functions())
+
         return functions
+
+    # ── JS-family arrow-function-as-const (`const f = (...) => {}`) ─────────
+    # BACK-431 Issue G tier B dogfood audit (mysterious-probe-0703, real
+    # excalidraw source): this pattern was TypeScript/TSX-only special-case
+    # logic that get_structure()/--outline used, but plain JavaScript had no
+    # equivalent at all (`const f = () => {}` was invisible even to
+    # --outline) — and neither language's nav-flag lookup
+    # (file_handler._find_element_node) called it, so `reveal file.ts f
+    # --varflow x` failed with "could not find function" for a function
+    # --outline listed a moment earlier. Promoted here so every JS-family
+    # grammar (lexical_declaration is JS/TS/TSX/JSX-specific — a no-op for
+    # every other language) gets both get_structure() coverage and nav-flag
+    # resolution from one shared implementation.
+
+    def _is_module_scope_decl(self, lexical_decl_node) -> bool:
+        parent = lexical_decl_node.parent()
+        if parent is None:
+            return False
+        if parent.kind() == 'program':
+            return True
+        if parent.kind() == 'export_statement':
+            gp = parent.parent()
+            return gp is not None and gp.kind() == 'program'
+        return False
+
+    def _arrow_or_fn_value(self, variable_declarator_node) -> Tuple[Optional[Any], Optional[Any]]:
+        """Return (name_node, value_node) for a variable_declarator, or (None, None)."""
+        name_node = value_node = None
+        for ch in _children(variable_declarator_node):
+            if ch.kind() == 'identifier' and name_node is None:
+                name_node = ch
+            elif ch.kind() in ('arrow_function', 'function_expression'):
+                value_node = ch
+        return name_node, value_node
+
+    def _extract_arrow_functions(self) -> List[Dict[str, Any]]:
+        """Extract module-scope arrow/function-expression declarations (const X = () => {})."""
+        funcs = []
+        for decl_node in self._find_nodes_by_type('lexical_declaration'):
+            if not self._is_module_scope_decl(decl_node):
+                continue
+            for child in _children(decl_node):
+                if child.kind() != 'variable_declarator':
+                    continue
+                name_node, value_node = self._arrow_or_fn_value(child)
+                if name_node and value_node:
+                    funcs.append(self._build_function_dict(
+                        value_node, self._get_node_text(name_node), []
+                    ))
+        return funcs
+
+    def _find_named_arrow_function(self, name: str):
+        """Resolve a module-scope `const name = (...) => {}` declaration to
+        its function node, for nav-flag lookup by bare name
+        (file_handler._find_element_node)."""
+        for decl_node in self._find_nodes_by_type('lexical_declaration'):
+            if not self._is_module_scope_decl(decl_node):
+                continue
+            for child in _children(decl_node):
+                if child.kind() != 'variable_declarator':
+                    continue
+                name_node, value_node = self._arrow_or_fn_value(child)
+                if name_node and value_node and self._get_node_text(name_node) == name:
+                    return value_node
+        return None
 
     def _get_function_node_types(self) -> List[str]:
         """Get common function node types across languages."""
@@ -694,11 +762,16 @@ class TreeSitterAnalyzer(FileAnalyzer):
             for node in nodes:
                 node_name = self._get_node_name(node)
                 if node_name == name:
+                    end_node = self._function_end_node(node)
+                    source = (
+                        self._get_node_text(node) if end_node is node
+                        else self._get_text_span(node.start_byte(), end_node.end_byte())
+                    )
                     return {
                         'name': name,
                         'line_start': node.start_position().row + 1,
-                        'line_end': node.end_position().row + 1,
-                        'source': self._get_node_text(node),
+                        'line_end': end_node.end_position().row + 1,
+                        'source': source,
                     }
 
         # Fall back to grep
@@ -755,6 +828,19 @@ class TreeSitterAnalyzer(FileAnalyzer):
             self._content_bytes = content_bytes
         return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
 
+    def _get_text_span(self, start_byte: int, end_byte: int) -> str:
+        """Get source text for an arbitrary byte range spanning two nodes
+        (e.g. Dart's disjoint function_signature + function_body pair) —
+        same byte-not-character slicing rationale as _get_node_text."""
+        try:
+            if self._content_bytes is None:
+                raise AttributeError
+            content_bytes = self._content_bytes
+        except AttributeError:
+            content_bytes = self.content.encode('utf-8')
+            self._content_bytes = content_bytes
+        return content_bytes[start_byte:end_byte].decode('utf-8')
+
     def _function_end_node(self, node):
         """Return the node whose end position bounds a function's body.
 
@@ -772,6 +858,17 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         if node.kind() == 'function_signature':
             sibling = _next_sibling(node)
+            if sibling is None:
+                # Methods wrap function_signature in a method_signature node
+                # (`class_body: method_signature(function_signature), function_body`)
+                # — function_signature is method_signature's only child, so its
+                # own next-sibling is None; the real function_body sibling is
+                # one level up, next to method_signature (dogfood audit against
+                # AppFlowy: every class method showed "[1 lines]" in --outline
+                # even after the top-level-function fix above).
+                parent = node.parent()
+                if parent is not None and parent.kind() == 'method_signature':
+                    sibling = _next_sibling(parent)
             if sibling is not None and sibling.kind() == 'function_body':
                 return sibling
         return node
@@ -819,6 +916,17 @@ class TreeSitterAnalyzer(FileAnalyzer):
         for child in kids:
             if child.kind() in ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier'):
                 return self._get_node_text(child)
+
+        # PRIORITY 2c: Lua `function table.name(...)` / `function tbl.a.b(...)`
+        # — an extremely common module-method idiom (BACK-431 Issue G tier B
+        # dogfood audit: found via real Kong source, `kong/concurrency.lua`'s
+        # entire public API is declared this way). The name is a
+        # `dot_index_expression` ("concurrency.with_worker_mutex"), a kind
+        # absent from every check above; return just the final segment,
+        # matching how every other bare-name function lookup in reveal works.
+        for child in kids:
+            if child.kind() == 'dot_index_expression':
+                return self._get_node_text(child).rsplit('.', 1)[-1]
 
         # PRIORITY 3: type_identifier (fallback for structs, classes)
         # Only use this if we haven't found a name in declarators

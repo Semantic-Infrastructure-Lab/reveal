@@ -246,6 +246,17 @@ def _find_element_node(analyzer, element: str):
             for node in analyzer._find_nodes_by_type(node_type):
                 if analyzer._get_node_name(node) == element:
                     return node
+
+    # JS-family `const f = (...) => {}` — not a FUNCTION_NODE_TYPES member at
+    # all (it's a filtered variable_declarator, not a flat kind match), so it
+    # needs its own resolver (BACK-431 Issue G tier B dogfood audit: found via
+    # real excalidraw/.tsx source, reproduces on plain .ts/.js too).
+    find_arrow_fn = getattr(analyzer, '_find_named_arrow_function', None)
+    if find_arrow_fn is not None:
+        node = find_arrow_fn(element)
+        if node is not None:
+            return node
+
     return None
 
 

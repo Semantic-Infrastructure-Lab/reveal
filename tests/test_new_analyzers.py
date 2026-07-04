@@ -59,6 +59,13 @@ function multiLineFunction(
             self.assertIn('regularFunction', func_names)
             self.assertIn('asyncFunction', func_names)
             self.assertIn('multiLineFunction', func_names)
+            # BACK-431 Issue G tier B dogfood finding (mysterious-probe-0703):
+            # this assertion was missing despite the docstring claiming arrow
+            # functions were covered — `const arrowFunction = () => {}` was
+            # totally invisible to get_structure() until this session (JS had
+            # no arrow-function extraction at all; TS/TSX had it for
+            # get_structure() but not nav-flag lookup by name).
+            self.assertIn('arrowFunction', func_names)
 
         finally:
             os.unlink(temp_path)
@@ -550,6 +557,74 @@ deploy
 
         finally:
             os.unlink(temp_path)
+
+
+class TestArrowFunctionConstNavResolution(unittest.TestCase):
+    """BACK-431 Issue G tier B dogfood finding (mysterious-probe-0703, against
+    real excalidraw .tsx source): `const f = (...) => {}` is arguably the
+    most common function-declaration shape in modern JS/TS/TSX, but was
+    invisible to every nav flag in all three languages. JavaScript had no
+    arrow-function extraction at all (not even --outline saw it); TypeScript/
+    TSX extracted it for get_structure()/--outline, but the separate
+    nav-flag-by-name lookup (file_handler._find_element_node) and plain
+    element-display lookup (display.element._try_treesitter_extraction)
+    never called that logic, so `reveal file.ts f --exits` failed with
+    "could not find function" for a function --outline had just listed."""
+
+    def _write(self, suffix: str, code: str) -> str:
+        with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            return f.name
+
+    def test_js_arrow_const_visible_to_outline(self):
+        path = self._write('.js', 'const add = (a, b) => {\n  return a + b;\n};\n')
+        try:
+            structure = JavaScriptAnalyzer(path).get_structure()
+            names = [f['name'] for f in structure.get('functions', [])]
+            self.assertIn('add', names)
+        finally:
+            os.unlink(path)
+
+    def test_js_arrow_const_resolves_via_find_element_node(self):
+        from reveal.file_handler import _find_element_node
+        path = self._write('.js', 'const add = (a, b) => {\n  return a + b;\n};\n')
+        try:
+            analyzer = JavaScriptAnalyzer(path)
+            node = _find_element_node(analyzer, 'add')
+            self.assertIsNotNone(node)
+            self.assertEqual(node.kind(), 'arrow_function')
+        finally:
+            os.unlink(path)
+
+    def test_ts_arrow_const_resolves_via_find_element_node(self):
+        from reveal.file_handler import _find_element_node
+        path = self._write(
+            '.ts',
+            'const add = (a: number, b: number): number => {\n  return a + b;\n};\n',
+        )
+        try:
+            analyzer = TypeScriptAnalyzer(path)
+            node = _find_element_node(analyzer, 'add')
+            self.assertIsNotNone(node)
+            self.assertEqual(node.start_position().row + 1, 1)
+            self.assertEqual(node.end_position().row + 1, 3)
+        finally:
+            os.unlink(path)
+
+    def test_ts_arrow_const_resolves_via_plain_element_display(self):
+        from reveal.display.element import _try_treesitter_extraction
+        path = self._write(
+            '.ts',
+            'const add = (a: number, b: number): number => {\n  return a + b;\n};\n',
+        )
+        try:
+            analyzer = TypeScriptAnalyzer(path)
+            result = _try_treesitter_extraction(analyzer, 'add')
+            self.assertIsNotNone(result)
+            self.assertIn('return a + b', result['source'])
+        finally:
+            os.unlink(path)
 
 
 class TestCrossPlatformCompatibility(unittest.TestCase):
