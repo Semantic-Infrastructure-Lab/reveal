@@ -87,7 +87,6 @@ class LanguageCapability:
     """
 
     language: str
-    analyzer: str
     function_body_shape: str
     varflow: str  # one of the VARFLOW_* levels above
     imports_unused: Optional[bool]
@@ -108,14 +107,35 @@ class LanguageCapability:
 
 
 # ---------------------------------------------------------------------------
+# Per-tier factories: conformance_level is 100% determined by which tier an
+# entry belongs to (BACK-456 item 1), so it is stamped once here rather than
+# repeated as a literal on every one of the ~43 entries below.
+# ---------------------------------------------------------------------------
+
+def _tier1(**kwargs: Any) -> LanguageCapability:
+    return LanguageCapability(conformance_level=CONFORMANCE_TIER1_VERIFIED, **kwargs)
+
+
+def _smoke(**kwargs: Any) -> LanguageCapability:
+    return LanguageCapability(conformance_level=CONFORMANCE_SMOKE_TESTED, **kwargs)
+
+
+def _tier_c(**kwargs: Any) -> LanguageCapability:
+    return LanguageCapability(conformance_level=CONFORMANCE_STRUCTURE_ONLY, **kwargs)
+
+
+def _untested(**kwargs: Any) -> LanguageCapability:
+    return LanguageCapability(conformance_level=CONFORMANCE_UNTESTED, **kwargs)
+
+
+# ---------------------------------------------------------------------------
 # Tier 1 — deep conformance matrix (tests/test_conformance_matrix.py, 9
 # languages, fixture + expected.yaml ground truth for every nav flag).
 # ---------------------------------------------------------------------------
 
 _TIER1: Dict[str, LanguageCapability] = {
-    "PythonAnalyzer": LanguageCapability(
+    "PythonAnalyzer": _tier1(
         language="python",
-        analyzer="reveal.analyzers.python.PythonAnalyzer",
         function_body_shape=(
             "Standard block-nested statements — the reference C/Python shape "
             "the rest of the taxonomy was grown against."
@@ -127,7 +147,6 @@ _TIER1: Dict[str, LanguageCapability] = {
             "to sibling/package files and extract_symbols for accurate "
             "unused-import detection."
         ),
-        conformance_level=CONFORMANCE_TIER1_VERIFIED,
         known_limitations=[
             "No dedicated real-corpus dogfood clone exists for Python itself "
             "(internal-docs BACK-431 Issue G: deep-9 feature-breadth pass "
@@ -137,9 +156,8 @@ _TIER1: Dict[str, LanguageCapability] = {
             "other tier1/A/B language got.",
         ],
     ),
-    "RustAnalyzer": LanguageCapability(
+    "RustAnalyzer": _tier1(
         language="rust",
-        analyzer="reveal.analyzers.rust.RustAnalyzer",
         function_body_shape=(
             "Expression-oriented: a block's tail expression (no trailing "
             "semicolon) is the function's implicit return value; loop/match "
@@ -154,7 +172,6 @@ _TIER1: Dict[str, LanguageCapability] = {
             "falsely flagged (fixed BACK-431 Issue G, 15 false positives in "
             "one real Meilisearch file before the fix)."
         ),
-        conformance_level=CONFORMANCE_TIER1_VERIFIED,
         known_limitations=[
             "BACK-428 (open, documented in tests/fixtures/conformance/"
             "expected.yaml): --exits/--returns only recognize explicit "
@@ -168,9 +185,8 @@ _TIER1: Dict[str, LanguageCapability] = {
             "references inside common macros like println!.",
         ],
     ),
-    "GoAnalyzer": LanguageCapability(
+    "GoAnalyzer": _tier1(
         language="go",
-        analyzer="reveal.analyzers.go.GoAnalyzer",
         function_body_shape="Standard block-nested, C-shaped.",
         varflow=VARFLOW_VERIFIED,
         imports_unused=True,
@@ -180,7 +196,6 @@ _TIER1: Dict[str, LanguageCapability] = {
             "from the segment before a semantic-import-versioning /vN "
             "suffix (e.g. k8s.io/klog/v2 -> klog, not v2)."
         ),
-        conformance_level=CONFORMANCE_TIER1_VERIFIED,
         known_limitations=[
             "BACK-451 (open): named `Class.method` extraction syntax fails "
             "for Go — methods are free functions with a receiver parameter, "
@@ -188,9 +203,8 @@ _TIER1: Dict[str, LanguageCapability] = {
             "may never apply; `:LINE-RANGE` is the working workaround.",
         ],
     ),
-    "CAnalyzer": LanguageCapability(
+    "CAnalyzer": _tier1(
         language="c",
-        analyzer="reveal.analyzers.c.CAnalyzer",
         function_body_shape="Standard block-nested, the reference C shape.",
         varflow=VARFLOW_VERIFIED,
         imports_unused=False,
@@ -202,12 +216,10 @@ _TIER1: Dict[str, LanguageCapability] = {
             "flagged skip_unused since textual #include lacks reliable "
             "symbol-usage semantics."
         ),
-        conformance_level=CONFORMANCE_TIER1_VERIFIED,
         known_limitations=[],
     ),
-    "CppAnalyzer": LanguageCapability(
+    "CppAnalyzer": _tier1(
         language="cpp",
-        analyzer="reveal.analyzers.cpp.CppAnalyzer",
         function_body_shape=(
             "Standard block-nested, C++-shaped; for_range_loop (range-based "
             "for) has its own declarator/right field shape distinct from "
@@ -220,7 +232,6 @@ _TIER1: Dict[str, LanguageCapability] = {
             "local-header dependency edges only, unused-detection not "
             "claimed (skip_unused always set)."
         ),
-        conformance_level=CONFORMANCE_TIER1_VERIFIED,
         known_limitations=[
             "BACK-450 (open): for_range_loop has no --varflow dispatch case "
             "— the loop variable/iterable aren't classified WRITE/READ, "
@@ -238,9 +249,8 @@ _TIER1: Dict[str, LanguageCapability] = {
             "the unexpanded macro call.",
         ],
     ),
-    "JavaAnalyzer": LanguageCapability(
+    "JavaAnalyzer": _tier1(
         language="java",
-        analyzer="reveal.analyzers.java.JavaAnalyzer",
         function_body_shape=(
             "Standard block-nested; annotations, field_access, and "
             "method_invocation all needed explicit member-access/"
@@ -253,12 +263,10 @@ _TIER1: Dict[str, LanguageCapability] = {
             "Generic textual extractor (imports/generic.py); listing only, "
             "unused-detection not claimed."
         ),
-        conformance_level=CONFORMANCE_TIER1_VERIFIED,
         known_limitations=[],
     ),
-    "CSharpAnalyzer": LanguageCapability(
+    "CSharpAnalyzer": _tier1(
         language="csharp",
-        analyzer="reveal.analyzers.csharp.CSharpAnalyzer",
         function_body_shape="Standard block-nested.",
         varflow=VARFLOW_VERIFIED,
         imports_unused=False,
@@ -266,12 +274,10 @@ _TIER1: Dict[str, LanguageCapability] = {
             "Generic textual extractor (imports/generic.py); listing only, "
             "unused-detection not claimed."
         ),
-        conformance_level=CONFORMANCE_TIER1_VERIFIED,
         known_limitations=[],
     ),
-    "JavaScriptAnalyzer": LanguageCapability(
+    "JavaScriptAnalyzer": _tier1(
         language="javascript",
-        analyzer="reveal.analyzers.javascript.JavaScriptAnalyzer",
         function_body_shape=(
             "Standard block-nested; arrow functions (const f = () => {}) "
             "are extracted via the shared TreeSitterAnalyzer base (promoted "
@@ -284,12 +290,10 @@ _TIER1: Dict[str, LanguageCapability] = {
             "Bespoke extractor (imports/javascript.py), shared with "
             "TypeScript/TSX for .js/.jsx/.ts/.tsx/.mjs/.cjs."
         ),
-        conformance_level=CONFORMANCE_TIER1_VERIFIED,
         known_limitations=[],
     ),
-    "TypeScriptAnalyzer": LanguageCapability(
+    "TypeScriptAnalyzer": _tier1(
         language="typescript",
-        analyzer="reveal.analyzers.typescript.TypeScriptAnalyzer",
         function_body_shape=(
             "Same as JavaScript plus type annotations/interfaces; arrow-"
             "function extraction now lives on the shared base, not a "
@@ -298,7 +302,6 @@ _TIER1: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_VERIFIED,
         imports_unused=True,
         import_resolution="Same bespoke extractor as JavaScript.",
-        conformance_level=CONFORMANCE_TIER1_VERIFIED,
         known_limitations=[],
     ),
 }
@@ -310,9 +313,8 @@ _TIER1: Dict[str, LanguageCapability] = {
 # ---------------------------------------------------------------------------
 
 _SMOKE: Dict[str, LanguageCapability] = {
-    "KotlinAnalyzer": LanguageCapability(
+    "KotlinAnalyzer": _smoke(
         language="kotlin",
-        analyzer="reveal.analyzers.kotlin.KotlinAnalyzer",
         function_body_shape=(
             "Expression-oriented if/when (when_expression/when_entry, "
             "fully fieldless); property_declaration exposes no fields at "
@@ -321,7 +323,6 @@ _SMOKE: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_SMOKE_TESTED,
         imports_unused=None,
         import_resolution="No import extractor registered for .kt/.kts.",
-        conformance_level=CONFORMANCE_SMOKE_TESTED,
         known_limitations=[
             "navigation_expression member-access exclusion and "
             "function_declaration's fieldless self-name detection were "
@@ -332,9 +333,8 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "until BACK-431 Issue G's scanned_files metadata fix.",
         ],
     ),
-    "SwiftAnalyzer": LanguageCapability(
+    "SwiftAnalyzer": _smoke(
         language="swift",
-        analyzer="reveal.analyzers.swift.SwiftAnalyzer",
         function_body_shape=(
             "Identifiers parse as simple_identifier (unique among reveal's "
             "languages); switch_entry case arms and the leading-dot "
@@ -343,7 +343,6 @@ _SMOKE: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_SMOKE_TESTED,
         imports_unused=None,
         import_resolution="No import extractor registered.",
-        conformance_level=CONFORMANCE_SMOKE_TESTED,
         known_limitations=[
             "Total --varflow blindness for every Swift variable (the "
             "simple_identifier kind was unchecked at all 3 read/write/"
@@ -353,9 +352,8 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "found+fixed via real-corpus (ios-oss) dogfooding.",
         ],
     ),
-    "RubyAnalyzer": LanguageCapability(
+    "RubyAnalyzer": _smoke(
         language="ruby",
-        analyzer="reveal.analyzers.ruby.RubyAnalyzer",
         function_body_shape=(
             "Paren-less method defs (def human? ... end, no parens at all); "
             "implicit last-expression return, statement modifiers "
@@ -368,7 +366,6 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "require/require_relative support; unused-detection not "
             "claimed (skip_unused always set)."
         ),
-        conformance_level=CONFORMANCE_SMOKE_TESTED,
         known_limitations=[
             "Signature-display duplication (human?human?) for paren-less "
             "defs found+fixed via Discourse real-corpus dogfooding — a "
@@ -378,9 +375,8 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "found+fixed via the same pass.",
         ],
     ),
-    "PhpAnalyzer": LanguageCapability(
+    "PhpAnalyzer": _smoke(
         language="php",
-        analyzer="reveal.analyzers.php.PhpAnalyzer",
         function_body_shape=(
             "elseif_clause sits in _GATE_NODE_TYPES but was historically "
             "absent from SCOPE_NODES/KEYWORD_LABEL (BACK-431 Issue G flagged "
@@ -394,15 +390,13 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "Generic extractor (imports/generic.py) with require/include "
             "statement + call-style support; unused-detection not claimed."
         ),
-        conformance_level=CONFORMANCE_SMOKE_TESTED,
         known_limitations=[
             "case_statement/default_statement switch arms were invisible to "
             "--ifmap until fixed via real WordPress dogfooding.",
         ],
     ),
-    "ScalaAnalyzer": LanguageCapability(
+    "ScalaAnalyzer": _smoke(
         language="scala",
-        analyzer="reveal.analyzers.scala.ScalaAnalyzer",
         function_body_shape=(
             "val_definition/var_definition declarations; enumerator "
             "(for-comprehension bindings) is one fieldless node kind "
@@ -412,7 +406,6 @@ _SMOKE: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_SMOKE_TESTED,
         imports_unused=None,
         import_resolution="No import extractor registered.",
-        conformance_level=CONFORMANCE_SMOKE_TESTED,
         known_limitations=[
             "val/var_definition WRITE-as-READ mislabeling and "
             "throw_expression invisibility to --exits/--returns were "
@@ -422,9 +415,8 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "reassignment — fixed with an arguments-node-aware branch.",
         ],
     ),
-    "DartAnalyzer": LanguageCapability(
+    "DartAnalyzer": _smoke(
         language="dart",
-        analyzer="reveal.analyzers.dart.DartAnalyzer",
         function_body_shape=(
             "UNIQUE among reveal's languages: a function is TWO SIBLING "
             "nodes (function_signature + function_body), not one nested "
@@ -436,7 +428,6 @@ _SMOKE: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_SMOKE_TESTED,
         imports_unused=None,
         import_resolution="No import extractor registered.",
-        conformance_level=CONFORMANCE_SMOKE_TESTED,
         known_limitations=[
             "Was the worst blindness of tier B: every Dart function's body "
             "was silently truncated to its one-line signature until the "
@@ -450,9 +441,8 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "CHILD_NODE_TYPES.",
         ],
     ),
-    "LuaAnalyzer": LanguageCapability(
+    "LuaAnalyzer": _smoke(
         language="lua",
-        analyzer="reveal.analyzers.lua.LuaAnalyzer",
         function_body_shape=(
             "assignment_statement and table-constructor field nodes are "
             "fully fieldless (positional variable_list/expression_list "
@@ -463,7 +453,6 @@ _SMOKE: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_SMOKE_TESTED,
         imports_unused=None,
         import_resolution="No import extractor registered.",
-        conformance_level=CONFORMANCE_SMOKE_TESTED,
         known_limitations=[
             "VarFlowWalker (used directly by --varflow) lacked "
             "member-access exclusion generally — found via Kong real-corpus "
@@ -474,9 +463,8 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "pattern).",
         ],
     ),
-    "ZigAnalyzer": LanguageCapability(
+    "ZigAnalyzer": _smoke(
         language="zig",
-        analyzer="reveal.analyzers.zig.ZigAnalyzer",
         function_body_shape=(
             "Entirely fieldless grammar — no child_by_field_name support "
             "anywhere; Decl/FnProto (not function_definition) needs its own "
@@ -486,7 +474,6 @@ _SMOKE: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_SMOKE_TESTED,
         imports_unused=None,
         import_resolution="No import extractor registered.",
-        conformance_level=CONFORMANCE_SMOKE_TESTED,
         known_limitations=[
             "Was total blindness for every single-function nav flag "
             "('could not find function or method') until ZigAnalyzer."
@@ -498,9 +485,8 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "until BACK-431 Issue G's feature-breadth pass fixed both.",
         ],
     ),
-    "GDScriptAnalyzer": LanguageCapability(
+    "GDScriptAnalyzer": _smoke(
         language="gdscript",
-        analyzer="reveal.analyzers.gdscript.GDScriptAnalyzer",
         function_body_shape=(
             "Declared identifiers are a name-kind leaf, disjoint from the "
             "identifier kind used at read sites; dotted method calls "
@@ -511,7 +497,6 @@ _SMOKE: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_SMOKE_TESTED,
         imports_unused=None,
         import_resolution="No import extractor registered.",
-        conformance_level=CONFORMANCE_SMOKE_TESTED,
         known_limitations=[
             "var x = f() was invisible to --varflow entirely until the "
             "name-kind leaf case was added (found via the smoke fixture).",
@@ -520,9 +505,8 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "--deps was already clean.",
         ],
     ),
-    "TSXAnalyzer": LanguageCapability(
+    "TSXAnalyzer": _smoke(
         language="tsx",
-        analyzer="reveal.analyzers.typescript.TSXAnalyzer",
         function_body_shape=(
             "Same as TypeScript plus JSX; lowercase intrinsic tags (<div>) "
             "parse as bare identifier with no distinguishing kind from a "
@@ -535,7 +519,6 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "Shares JavaScript/TypeScript's bespoke extractor via the "
             ".tsx extension."
         ),
-        conformance_level=CONFORMANCE_SMOKE_TESTED,
         known_limitations=[
             "Lowercase JSX intrinsic tags were misread as bogus variable "
             "reads in both the deps-candidate walker and VarFlowWalker "
@@ -559,104 +542,88 @@ _STRUCTURE_ONLY_NOTE = (
 )
 
 _TIER_C: Dict[str, LanguageCapability] = {
-    "BashAnalyzer": LanguageCapability(
+    "BashAnalyzer": _tier_c(
         language="bash",
-        analyzer="reveal.analyzers.bash.BashAnalyzer",
         function_body_shape="N/A — structure-only, no nav-flag dispatch surface.",
         varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None,
         import_resolution="No import extractor; not applicable to shell scripts.",
-        conformance_level=CONFORMANCE_STRUCTURE_ONLY,
         known_limitations=[
             _STRUCTURE_ONLY_NOTE + " Verified against Kubernetes' get-kube.sh.",
         ],
     ),
-    "DockerfileAnalyzer": LanguageCapability(
+    "DockerfileAnalyzer": _tier_c(
         language="dockerfile",
-        analyzer="reveal.analyzers.dockerfile.DockerfileAnalyzer",
         function_body_shape="N/A — structure-only, no nav-flag dispatch surface.",
         varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None,
         import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_STRUCTURE_ONLY,
         known_limitations=[
             _STRUCTURE_ONLY_NOTE + " Verified against a real build/pause/Dockerfile "
             "from the Go corpus.",
         ],
     ),
-    "SQLAnalyzer": LanguageCapability(
+    "SQLAnalyzer": _tier_c(
         language="sql",
-        analyzer="reveal.analyzers.sql.SQLAnalyzer",
         function_body_shape="N/A — structure-only, no nav-flag dispatch surface.",
         varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None,
         import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_STRUCTURE_ONLY,
         known_limitations=[
             _STRUCTURE_ONLY_NOTE + " Verified against a real AppFlowy migration "
             ".sql file.",
         ],
     ),
-    "HCLAnalyzer": LanguageCapability(
+    "HCLAnalyzer": _tier_c(
         language="hcl",
-        analyzer="reveal.analyzers.hcl.HCLAnalyzer",
         function_body_shape="N/A — structure-only, no nav-flag dispatch surface.",
         varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None,
         import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_STRUCTURE_ONLY,
         known_limitations=[
             _STRUCTURE_ONLY_NOTE + " Verified against a real Terraform main.tf "
             "from Kong's corpus.",
         ],
     ),
-    "PowerShellAnalyzer": LanguageCapability(
+    "PowerShellAnalyzer": _tier_c(
         language="powershell",
-        analyzer="reveal.analyzers.powershell.PowerShellAnalyzer",
         function_body_shape="N/A — structure-only, no nav-flag dispatch surface.",
         varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None,
         import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_STRUCTURE_ONLY,
         known_limitations=[
             _STRUCTURE_ONLY_NOTE + " Verified against a real .ps1 from the "
             "TypeScript/vscode corpus.",
         ],
     ),
-    "BatchAnalyzer": LanguageCapability(
+    "BatchAnalyzer": _tier_c(
         language="batch",
-        analyzer="reveal.analyzers.batch.BatchAnalyzer",
         function_body_shape="N/A — structure-only, no nav-flag dispatch surface.",
         varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None,
         import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_STRUCTURE_ONLY,
         known_limitations=[
             _STRUCTURE_ONLY_NOTE + " Verified against a real gradlew.bat from "
             "the Java corpus.",
         ],
     ),
-    "HTMLAnalyzer": LanguageCapability(
+    "HTMLAnalyzer": _tier_c(
         language="html",
-        analyzer="reveal.analyzers.html.HTMLAnalyzer",
         function_body_shape="N/A — structure-only, no nav-flag dispatch surface.",
         varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None,
         import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_STRUCTURE_ONLY,
         known_limitations=[
             _STRUCTURE_ONLY_NOTE + " Verified against a real index.html from "
             "the JavaScript corpus.",
         ],
     ),
-    "JupyterAnalyzer": LanguageCapability(
+    "JupyterAnalyzer": _tier_c(
         language="jupyter",
-        analyzer="reveal.analyzers.jupyter_analyzer.JupyterAnalyzer",
         function_body_shape="N/A — structure-only (cell-level), no nav-flag dispatch surface.",
         varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None,
         import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_STRUCTURE_ONLY,
         known_limitations=[
             _STRUCTURE_ONLY_NOTE + " Verified against a real test.ipynb from "
             "the TypeScript/vscode corpus.",
@@ -677,24 +644,23 @@ _NON_CODE_NOTE = (
 )
 
 _UNTESTED: Dict[str, LanguageCapability] = {
-    "CsvAnalyzer": LanguageCapability(
-        language="csv", analyzer="reveal.analyzers.csv_analyzer.CsvAnalyzer",
+    "CsvAnalyzer": _untested(
+        language="csv",
         function_body_shape=_NON_CODE_NOTE, varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None, import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_UNTESTED, known_limitations=[],
+ known_limitations=[],
     ),
-    "GraphQLAnalyzer": LanguageCapability(
-        language="graphql", analyzer="reveal.analyzers.graphql.GraphQLAnalyzer",
+    "GraphQLAnalyzer": _untested(
+        language="graphql",
         function_body_shape="N/A — schema/query language, no imperative function bodies.",
         varflow=VARFLOW_NOT_APPLICABLE, imports_unused=None,
         import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_UNTESTED, known_limitations=[],
+ known_limitations=[],
     ),
-    "IniAnalyzer": LanguageCapability(
-        language="ini", analyzer="reveal.analyzers.ini_analyzer.IniAnalyzer",
+    "IniAnalyzer": _untested(
+        language="ini",
         function_body_shape=_NON_CODE_NOTE, varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None, import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_UNTESTED,
         known_limitations=[
             "Also registers '.conf' — shadowed by NginxAnalyzer's own "
             "'.conf' registration depending on import order (see "
@@ -702,55 +668,54 @@ _UNTESTED: Dict[str, LanguageCapability] = {
             "reveal/analyzers/__init__.py import order.",
         ],
     ),
-    "JsonAnalyzer": LanguageCapability(
-        language="json", analyzer="reveal.analyzers.yaml_json.JsonAnalyzer",
+    "JsonAnalyzer": _untested(
+        language="json",
         function_body_shape=_NON_CODE_NOTE, varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None, import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_UNTESTED, known_limitations=[],
+ known_limitations=[],
     ),
-    "JsonlAnalyzer": LanguageCapability(
-        language="jsonl", analyzer="reveal.analyzers.jsonl.JsonlAnalyzer",
+    "JsonlAnalyzer": _untested(
+        language="jsonl",
         function_body_shape=_NON_CODE_NOTE, varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None, import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_UNTESTED, known_limitations=[],
+ known_limitations=[],
     ),
-    "MarkdownAnalyzer": LanguageCapability(
-        language="markdown", analyzer="reveal.analyzers.markdown.MarkdownAnalyzer",
+    "MarkdownAnalyzer": _untested(
+        language="markdown",
         function_body_shape="N/A — prose/heading structure, no function-body concept.",
         varflow=VARFLOW_NOT_APPLICABLE, imports_unused=None,
         import_resolution="Not applicable (--links tracks link targets, not imports).",
-        conformance_level=CONFORMANCE_UNTESTED, known_limitations=[],
+ known_limitations=[],
     ),
-    "ProtobufAnalyzer": LanguageCapability(
-        language="proto", analyzer="reveal.analyzers.protobuf.ProtobufAnalyzer",
+    "ProtobufAnalyzer": _untested(
+        language="proto",
         function_body_shape="N/A — schema/IDL, no imperative function bodies.",
         varflow=VARFLOW_NOT_APPLICABLE, imports_unused=None,
         import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_UNTESTED, known_limitations=[],
+ known_limitations=[],
     ),
-    "TomlAnalyzer": LanguageCapability(
-        language="toml", analyzer="reveal.analyzers.toml.TomlAnalyzer",
+    "TomlAnalyzer": _untested(
+        language="toml",
         function_body_shape=_NON_CODE_NOTE, varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None, import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_UNTESTED, known_limitations=[],
+ known_limitations=[],
     ),
-    "XmlAnalyzer": LanguageCapability(
-        language="xml", analyzer="reveal.analyzers.xml_analyzer.XmlAnalyzer",
+    "XmlAnalyzer": _untested(
+        language="xml",
         function_body_shape=_NON_CODE_NOTE, varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None, import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_UNTESTED, known_limitations=[],
+ known_limitations=[],
     ),
-    "YamlAnalyzer": LanguageCapability(
-        language="yaml", analyzer="reveal.analyzers.yaml_json.YamlAnalyzer",
+    "YamlAnalyzer": _untested(
+        language="yaml",
         function_body_shape=_NON_CODE_NOTE, varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None, import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_UNTESTED, known_limitations=[],
+ known_limitations=[],
     ),
-    "NginxAnalyzer": LanguageCapability(
-        language="nginx", analyzer="reveal.analyzers.nginx.NginxAnalyzer",
+    "NginxAnalyzer": _untested(
+        language="nginx",
         function_body_shape=_NON_CODE_NOTE, varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None, import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_UNTESTED,
         known_limitations=[
             "REACHABLE via real CLI dispatch (registry.get_analyzer()): "
             "_try_conf_detection() content/path-sniffs '.conf' files and "
@@ -769,12 +734,11 @@ _UNTESTED: Dict[str, LanguageCapability] = {
             "no single 'the' analyzer to report for '.conf'.",
         ],
     ),
-    "ElixirAnalyzer": LanguageCapability(
-        language="elixir", analyzer="reveal.analyzers.elixir.ElixirAnalyzer",
+    "ElixirAnalyzer": _untested(
+        language="elixir",
         function_body_shape="Standard block-nested (do/end blocks).",
         varflow=VARFLOW_UNTESTED, imports_unused=None,
         import_resolution="No import extractor registered.",
-        conformance_level=CONFORMANCE_UNTESTED,
         known_limitations=[
             "NOT REACHABLE via the registry in normal CLI use as of this "
             "audit (2026-07-04): reveal/analyzers/elixir.py is never "
@@ -798,19 +762,19 @@ _UNTESTED: Dict[str, LanguageCapability] = {
 _OFFICE_NOTE = "N/A — office document format, no function-body or variable-flow concept applies."
 
 _OFFICE: Dict[str, LanguageCapability] = {
-    name: LanguageCapability(
-        language=lang, analyzer=f"reveal.analyzers.office.{module}.{name}",
+    name: _untested(
+        language=lang,
         function_body_shape=_OFFICE_NOTE, varflow=VARFLOW_NOT_APPLICABLE,
         imports_unused=None, import_resolution="Not applicable.",
-        conformance_level=CONFORMANCE_UNTESTED, known_limitations=[],
+        known_limitations=[],
     )
-    for name, lang, module in [
-        ("DocxAnalyzer", "docx", "openxml"),
-        ("XlsxAnalyzer", "xlsx", "openxml"),
-        ("PptxAnalyzer", "pptx", "openxml"),
-        ("OdtAnalyzer", "odt", "odf"),
-        ("OdsAnalyzer", "ods", "odf"),
-        ("OdpAnalyzer", "odp", "odf"),
+    for name, lang in [
+        ("DocxAnalyzer", "docx"),
+        ("XlsxAnalyzer", "xlsx"),
+        ("PptxAnalyzer", "pptx"),
+        ("OdtAnalyzer", "odt"),
+        ("OdsAnalyzer", "ods"),
+        ("OdpAnalyzer", "odp"),
     ]
 }
 

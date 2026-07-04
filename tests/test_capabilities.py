@@ -109,7 +109,7 @@ class TestLanguageCapabilityFieldValidation(unittest.TestCase):
     def test_rejects_unknown_varflow_level(self):
         with self.assertRaises(ValueError):
             LanguageCapability(
-                language="madeup", analyzer="x.Y", function_body_shape="n/a",
+                language="madeup", function_body_shape="n/a",
                 varflow="totally-invalid-level", imports_unused=None,
                 import_resolution="n/a", conformance_level=CONFORMANCE_UNTESTED,
             )
@@ -117,7 +117,7 @@ class TestLanguageCapabilityFieldValidation(unittest.TestCase):
     def test_rejects_unknown_conformance_level(self):
         with self.assertRaises(ValueError):
             LanguageCapability(
-                language="madeup", analyzer="x.Y", function_body_shape="n/a",
+                language="madeup", function_body_shape="n/a",
                 varflow=VARFLOW_UNTESTED, imports_unused=None,
                 import_resolution="n/a", conformance_level="not-a-real-tier",
             )
