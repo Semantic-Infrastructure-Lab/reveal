@@ -36,6 +36,7 @@ For the full reference with output samples, see [`AGENT_HELP.md`](../AGENT_HELP.
 | `--sideeffects` | What DB/HTTP/FS/log/sleep calls fire here? |
 | `--loopmap` | What loops exist, and how are they nested? |
 | `--fanout` | Which loops make DB/HTTP/FS/log calls inside them? (N+1 / per-item fan-out review) |
+| `--statewrites` | What persistent/shared state does this mutate (field/env/session/cache/db/file writes)? |
 | `--returns` | Each exit + the condition chain that gates it |
 | `--boundary` | One-shot contract: inputs + environment + effects |
 

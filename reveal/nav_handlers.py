@@ -249,6 +249,19 @@ def _nav_fanout(ctx: _NavCtx) -> None:
         print(render_fanout(loops, from_line, to_line))
 
 
+def _nav_statewrites(ctx: _NavCtx) -> None:
+    from .adapters.ast.nav import collect_statewrites, render_statewrites  # noqa: I006
+    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    writes = collect_statewrites(
+        ctx.func_node, from_line, to_line, ctx.get_text,
+        language=getattr(ctx.analyzer, 'language', None),
+    )
+    if ctx.as_json:
+        _nav_json('statewrites', ctx.analyzer.path, ctx.element, from_line, to_line, writes)
+    else:
+        print(render_statewrites(writes, from_line, to_line))
+
+
 def _nav_returns(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_gate_chains, render_gate_chains  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
@@ -296,6 +309,7 @@ _NAV_DISPATCH: List[tuple] = [
     (lambda a: getattr(a, 'sideeffects', False),                                  _nav_sideeffects),
     (lambda a: getattr(a, 'loopmap', False),                                      _nav_loopmap),
     (lambda a: getattr(a, 'fanout', False),                                       _nav_fanout),
+    (lambda a: getattr(a, 'statewrites', False),                                  _nav_statewrites),
     (lambda a: getattr(a, 'returns', False),                                      _nav_returns),
     (lambda a: getattr(a, 'boundary', False),                                     _nav_boundary),
 ]

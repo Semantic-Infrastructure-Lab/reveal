@@ -386,6 +386,11 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
                         help='Show each loop paired with its classified side effects (db/http/cache/log/file calls inside it) — '
                              'for N+1 query checks, per-item HTTP calls, and retry-safety review '
                              '(e.g., reveal file.py process_batch --fanout  or  reveal file.php :100-500 --fanout --format=json)')
+    parser.add_argument('--statewrites', action='store_true',
+                        help='Show persistent/shared-state mutations: field writes (self.x=, $obj->x=, this.x=) plus '
+                             'cache/db/file/env/session writes — a mutation surface --mutations (local vars) and '
+                             '--sideeffects (calls only) both miss '
+                             '(e.g., reveal file.py process_order --statewrites  or  reveal file.php :1-800 --statewrites)')
     parser.add_argument('--varflow', type=str, metavar='VAR',
                         help='Trace reads/writes of a variable within a function or flat file '
                              '(e.g., reveal file.py myfunc --varflow result  or  reveal file.php :1-2000 --varflow errormsg)')

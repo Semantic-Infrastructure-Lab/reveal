@@ -834,5 +834,118 @@ class TestFanout(unittest.TestCase):
         self.assertIn('cursor.execute(x)', result)
 
 
+# ---------------------------------------------------------------------------
+# BACK-439c: collect_statewrites (--statewrites)
+# ---------------------------------------------------------------------------
+
+class TestStateWrites(unittest.TestCase):
+    """collect_statewrites(): field/env/session/call-based shared-state mutations."""
+
+    def test_python_field_write(self):
+        code = """
+        class A:
+            def f(self):
+                self.x = 1
+                self.y = 2
+        """
+        _, root, get_text, _ = _parse_python(code)
+        func = _find_func_with_text(root, get_text, 'f')
+        from reveal.adapters.ast.nav import collect_statewrites
+        writes = collect_statewrites(func, 1, 10, get_text)
+        self.assertEqual(len(writes), 2)
+        self.assertTrue(all(w['kind'] == 'field' for w in writes))
+        self.assertEqual(writes[0]['target'], 'self.x')
+
+    def test_python_module_global_write_not_misclassified_as_field(self):
+        # A bare identifier write is not a member-access target — collect_statewrites
+        # is silent on it (local/global distinction is out of this slice).
+        code = """
+        def f():
+            x = 1
+        """
+        _, root, get_text, _ = _parse_python(code)
+        func = _find_func_with_text(root, get_text, 'f')
+        from reveal.adapters.ast.nav import collect_statewrites
+        writes = collect_statewrites(func, 1, 10, get_text)
+        self.assertEqual(writes, [])
+
+    def test_python_env_subscript_write(self):
+        code = """
+        def f():
+            os.environ['X'] = '1'
+        """
+        _, root, get_text, _ = _parse_python(code)
+        func = _find_func_with_text(root, get_text, 'f')
+        from reveal.adapters.ast.nav import collect_statewrites
+        writes = collect_statewrites(func, 1, 10, get_text)
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(writes[0]['kind'], 'env')
+
+    def test_no_false_positive_on_read_only_function(self):
+        code = """
+        def total(items):
+            return sum(items)
+        """
+        _, root, get_text, _ = _parse_python(code)
+        func = _find_func_with_text(root, get_text, 'total')
+        from reveal.adapters.ast.nav import collect_statewrites
+        self.assertEqual(collect_statewrites(func, 1, 10, get_text), [])
+
+    def test_php_session_and_field_write(self):
+        root, get_text = _parse_lang('php', '''
+        <?php
+        function f() {
+            $_SESSION['user'] = 1;
+            $this->x = 2;
+        }
+        ''')
+        from reveal.adapters.ast.nav import collect_statewrites
+        writes = collect_statewrites(root, 1, 10, get_text)
+        kinds = {w['kind'] for w in writes}
+        self.assertEqual(kinds, {'session', 'field'})
+
+    def test_js_this_and_process_env_write(self):
+        root, get_text = _parse_lang('javascript', '''
+        class A {
+            f() {
+                this.x = 1;
+                process.env.X = "1";
+            }
+        }
+        ''')
+        from reveal.adapters.ast.nav import collect_statewrites
+        writes = collect_statewrites(root, 1, 10, get_text)
+        kinds = {w['kind'] for w in writes}
+        self.assertEqual(kinds, {'field', 'env'})
+
+    def test_call_based_cache_write_merged_in(self):
+        code = """
+        def f(item):
+            self.x = 1
+            cache.set(item)
+        """
+        _, root, get_text, _ = _parse_python(code)
+        func = _find_func_with_text(root, get_text, 'f')
+        from reveal.adapters.ast.nav import collect_statewrites
+        writes = collect_statewrites(func, 1, 10, get_text, language='python')
+        kinds = {w['kind'] for w in writes}
+        self.assertIn('field', kinds)
+        self.assertIn('cache', kinds)
+        # in line order
+        self.assertLess(writes[0]['line'], writes[1]['line'])
+
+    def test_render_statewrites_empty(self):
+        from reveal.adapters.ast.nav import render_statewrites
+        result = render_statewrites([], 1, 10)
+        self.assertIn('No state writes found', result)
+
+    def test_render_statewrites_with_findings(self):
+        from reveal.adapters.ast.nav import render_statewrites
+        writes = [{'kind': 'field', 'line': 3, 'target': 'self.x'}]
+        result = render_statewrites(writes, 1, 10)
+        self.assertIn('field', result)
+        self.assertIn('self.x', result)
+
+
 if __name__ == '__main__':
     unittest.main()
