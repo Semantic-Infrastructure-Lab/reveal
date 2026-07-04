@@ -854,9 +854,17 @@ class ImportsAdapter(ResourceAdapter):
             # finds `db/session.py` under the project root, not just under `api/`).
             extra_paths = [target_path] if target_path.is_dir() and target_path != base_path else []
             for stmt in imports:
-                # Skip TYPE_CHECKING imports - they're type-checking only, not runtime
-                # circular dependencies (this is a standard Python pattern to avoid real cycles)
-                if stmt.is_type_checking:
+                # BACK-445: skip imports that can't cause a circular ImportError
+                # at startup — matching the I002 circular-import rule's definition
+                # (rules/imports/I002.py:_resolve_graph_dependencies):
+                #   - TYPE_CHECKING imports never run at runtime
+                #   - function-body (deferred/lazy) imports run only after all
+                #     top-level code has finished importing — they are the
+                #     standard pattern used to *break* cycles, so counting them
+                #     as cycle edges reports phantom cycles (e.g. registry.py's
+                #     lazy `from .analyzers.nginx import ...`, whose own comment
+                #     says it exists "to avoid circular import").
+                if stmt.is_type_checking or stmt.is_in_function:
                     continue
 
                 resolved = extractor.resolve_import(stmt, base_path, search_paths=extra_paths)

@@ -472,6 +472,30 @@ class TestImportsAdapter:
         # Both should produce same results
         assert result_flag.get('count') == result_kv.get('count')
 
+    def test_deferred_imports_are_not_circular(self, tmp_path):
+        """BACK-445: function-body (deferred/lazy) imports must not be reported
+        as circular dependencies — they run only after all top-level imports
+        finish, so they cannot cause an import-time cycle. This matches the
+        I002 circular-import rule's definition and prevents the phantom
+        large-cycle reports that motivated BACK-445 (reveal's own analyzers <->
+        registry 'cycle' was entirely deferred lazy imports)."""
+        # Genuine module-level cycle: MUST be detected.
+        (tmp_path / "a.py").write_text("from b import beta\n\n\ndef alpha():\n    return 1\n")
+        (tmp_path / "b.py").write_text("from a import alpha\n\n\ndef beta():\n    return 2\n")
+        # Deferred cycle: importing each other only inside function bodies.
+        (tmp_path / "c.py").write_text("def gamma():\n    from d import delta\n    return delta()\n")
+        (tmp_path / "d.py").write_text("def delta():\n    from c import gamma\n    return gamma()\n")
+
+        result = ImportsAdapter(str(tmp_path), 'circular=true').get_structure()
+        # `cycles` is a list of groups, each a list of path strings.
+        cycle_files = {Path(f).name for group in result['cycles'] for f in group}
+        assert 'a.py' in cycle_files and 'b.py' in cycle_files, (
+            f"genuine module-level cycle a<->b must be detected: {result['cycles']}"
+        )
+        assert 'c.py' not in cycle_files and 'd.py' not in cycle_files, (
+            f"deferred function-body cycle c<->d must NOT be reported: {result['cycles']}"
+        )
+
     def test_path_not_found(self):
         """Test error handling for non-existent paths."""
         adapter = ImportsAdapter('/nonexistent/path')
