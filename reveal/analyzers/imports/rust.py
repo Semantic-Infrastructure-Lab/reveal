@@ -21,6 +21,20 @@ from .base import LanguageExtractor, register_extractor
 from ...registry import get_analyzer
 
 
+def _line_text(analyzer, line_number: int) -> str:
+    """Full source line for a 1-indexed line number, or "" if out of range.
+
+    BACK-432: I005/I001's noqa detection read ImportStatement.source_line,
+    which every non-Python extractor left at its default "" — silently
+    blind to duplicate-import detection and source-line-based suppression
+    comments for Go/Rust/JS despite advertising support for them.
+    """
+    idx = line_number - 1
+    if 0 <= idx < len(analyzer.lines):
+        return analyzer.lines[idx].rstrip()
+    return ""
+
+
 @register_extractor
 class RustExtractor(LanguageExtractor):
     """Rust import extractor using pure tree-sitter parsing.
@@ -143,7 +157,10 @@ class RustExtractor(LanguageExtractor):
             if child.kind() == 'scoped_identifier':
                 # Simple use: use std::collections::HashMap
                 use_path = analyzer._get_node_text(child)
-                return [self._create_import(file_path, line_number, use_path, skip_unused=is_reexport)]
+                return [self._create_import(
+                    file_path, line_number, use_path, skip_unused=is_reexport,
+                    source_line=_line_text(analyzer, line_number),
+                )]
 
             elif child.kind() == 'scoped_use_list':
                 # Nested use: use std::{fs, io}
@@ -156,7 +173,10 @@ class RustExtractor(LanguageExtractor):
             elif child.kind() == 'use_wildcard':
                 # Glob use: use std::collections::*
                 use_path = analyzer._get_node_text(child)
-                return [self._create_import(file_path, line_number, use_path, skip_unused=is_reexport)]
+                return [self._create_import(
+                    file_path, line_number, use_path, skip_unused=is_reexport,
+                    source_line=_line_text(analyzer, line_number),
+                )]
 
         return []
 
@@ -186,7 +206,8 @@ class RustExtractor(LanguageExtractor):
                 item_name = analyzer._get_node_text(item)
                 full_path = f"{base_path}::{item_name}"
                 imports.append(self._create_import(
-                    file_path, line_number, full_path, imported_name=item_name, skip_unused=is_reexport
+                    file_path, line_number, full_path, imported_name=item_name, skip_unused=is_reexport,
+                    source_line=_line_text(analyzer, line_number),
                 ))
             elif item.kind() == 'use_as_clause':
                 # Aliased item: io as MyIo
@@ -199,7 +220,8 @@ class RustExtractor(LanguageExtractor):
                 full_path = f"{base_path}::{item_path}"
                 imported_name = item_path.split('::')[-1]
                 imports.append(self._create_import(
-                    file_path, line_number, full_path, imported_name=imported_name, skip_unused=is_reexport
+                    file_path, line_number, full_path, imported_name=imported_name, skip_unused=is_reexport,
+                    source_line=_line_text(analyzer, line_number),
                 ))
 
         return imports
@@ -220,7 +242,10 @@ class RustExtractor(LanguageExtractor):
         if not use_path:
             return []
 
-        return [self._create_import(file_path, line_number, use_path, alias, skip_unused=is_reexport)]
+        return [self._create_import(
+            file_path, line_number, use_path, alias, skip_unused=is_reexport,
+            source_line=_line_text(analyzer, line_number),
+        )]
 
     def _parse_nested_use_as(
         self, node, file_path: Path, line_number: int, analyzer, base_path: str, is_reexport: bool = False
@@ -240,7 +265,10 @@ class RustExtractor(LanguageExtractor):
             return []
 
         full_path = f"{base_path}::{item_name}"
-        return [self._create_import(file_path, line_number, full_path, alias, item_name, skip_unused=is_reexport)]
+        return [self._create_import(
+            file_path, line_number, full_path, alias, item_name, skip_unused=is_reexport,
+            source_line=_line_text(analyzer, line_number),
+        )]
 
     @staticmethod
     def _create_import(
@@ -249,7 +277,8 @@ class RustExtractor(LanguageExtractor):
         use_path: str,
         alias: Optional[str] = None,
         imported_name: Optional[str] = None,
-        skip_unused: bool = False
+        skip_unused: bool = False,
+        source_line: str = "",
     ) -> ImportStatement:
         """Create ImportStatement for a Rust use declaration.
 
@@ -290,7 +319,8 @@ class RustExtractor(LanguageExtractor):
             is_relative=is_relative,
             import_type=import_type,
             alias=alias,
-            skip_unused=skip_unused
+            skip_unused=skip_unused,
+            source_line=source_line,
         )
 
     def _is_usage_context(self, node) -> bool:

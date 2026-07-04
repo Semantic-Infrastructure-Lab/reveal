@@ -24,6 +24,20 @@ from ...core import node_children as _children
 logger = logging.getLogger(__name__)
 
 
+def _line_text(analyzer, line_number: int) -> str:
+    """Full source line for a 1-indexed line number, or "" if out of range.
+
+    BACK-432: I005/I001's noqa detection read ImportStatement.source_line,
+    which every non-Python extractor left at its default "" — silently
+    blind to duplicate-import detection and source-line-based suppression
+    comments for Go/Rust/JS despite advertising support for them.
+    """
+    idx = line_number - 1
+    if 0 <= idx < len(analyzer.lines):
+        return analyzer.lines[idx].rstrip()
+    return ""
+
+
 @register_extractor
 class JavaScriptExtractor(LanguageExtractor):
     """JavaScript/TypeScript import extractor using pure tree-sitter parsing.
@@ -240,7 +254,8 @@ class JavaScriptExtractor(LanguageExtractor):
             imported_names=imported_names,
             is_relative=module_path.startswith('.'),
             import_type=import_type,
-            alias=alias
+            alias=alias,
+            source_line=_line_text(analyzer, line_number),
         )]
 
     def _determine_call_type(self, node, analyzer) -> Optional[str]:
@@ -273,7 +288,7 @@ class JavaScriptExtractor(LanguageExtractor):
         return None
 
     def _build_dynamic_import_statement(
-        self, file_path: Path, line_number: int, module_path: str
+        self, file_path: Path, line_number: int, module_path: str, analyzer=None
     ) -> ImportStatement:
         """Build ImportStatement for dynamic import()."""
         return ImportStatement(
@@ -283,7 +298,8 @@ class JavaScriptExtractor(LanguageExtractor):
             imported_names=[],
             is_relative=module_path.startswith('.'),
             import_type='dynamic_import',
-            alias=None
+            alias=None,
+            source_line=_line_text(analyzer, line_number) if analyzer else "",
         )
 
     def _parse_destructured_names(self, left_side: str) -> List[str]:
@@ -326,7 +342,7 @@ class JavaScriptExtractor(LanguageExtractor):
         return [left_side]
 
     def _build_require_import_statement(
-        self, file_path: Path, line_number: int, module_path: str, imported_names: List[str]
+        self, file_path: Path, line_number: int, module_path: str, imported_names: List[str], analyzer=None
     ) -> ImportStatement:
         """Build ImportStatement for CommonJS require()."""
         import_type = 'side_effect_require' if not imported_names else 'commonjs_require'
@@ -338,7 +354,8 @@ class JavaScriptExtractor(LanguageExtractor):
             imported_names=imported_names,
             is_relative=module_path.startswith('.'),
             import_type=import_type,
-            alias=None
+            alias=None,
+            source_line=_line_text(analyzer, line_number) if analyzer else "",
         )
 
     def _parse_require_call(self, node, file_path: Path, analyzer) -> Optional[ImportStatement]:
@@ -364,11 +381,11 @@ class JavaScriptExtractor(LanguageExtractor):
 
         # Handle dynamic import
         if func_name == 'import':
-            return self._build_dynamic_import_statement(file_path, line_number, module_path)
+            return self._build_dynamic_import_statement(file_path, line_number, module_path, analyzer)
 
         # Handle CommonJS require
         imported_names = self._extract_require_imported_names(node, analyzer)
-        return self._build_require_import_statement(file_path, line_number, module_path, imported_names)
+        return self._build_require_import_statement(file_path, line_number, module_path, imported_names, analyzer)
 
     def _is_usage_context(self, node) -> bool:
         """Check if identifier node is in a usage context (not definition).

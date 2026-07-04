@@ -28,6 +28,20 @@ _GO_MAJOR_VERSION_SUFFIX = re.compile(r'^v[0-9]+$')
 
 logger = logging.getLogger(__name__)
 
+
+def _line_text(analyzer, line_number: int) -> str:
+    """Full source line for a 1-indexed line number, or "" if out of range.
+
+    BACK-432: I005/I001's noqa detection read ImportStatement.source_line,
+    which every non-Python extractor left at its default "" — silently
+    blind to duplicate-import detection and source-line-based suppression
+    comments for Go/Rust/JS despite advertising support for them.
+    """
+    idx = line_number - 1
+    if 0 <= idx < len(analyzer.lines):
+        return analyzer.lines[idx].rstrip()
+    return ""
+
 from .types import ImportStatement
 from .base import LanguageExtractor, register_extractor
 from ...registry import get_analyzer
@@ -168,14 +182,18 @@ class GoExtractor(LanguageExtractor):
         if not package_path:
             return None
 
-        return self._create_import(file_path, line_number, package_path, alias)
+        return self._create_import(
+            file_path, line_number, package_path, alias,
+            source_line=_line_text(analyzer, line_number),
+        )
 
     @staticmethod
     def _create_import(
         file_path: Path,
         line_number: int,
         package_path: str,
-        alias: Optional[str] = None
+        alias: Optional[str] = None,
+        source_line: str = "",
     ) -> ImportStatement:
         """Create ImportStatement for a Go import.
 
@@ -226,7 +244,8 @@ class GoExtractor(LanguageExtractor):
             imported_names=imported_names,
             is_relative=is_relative,
             import_type=import_type,
-            alias=alias
+            alias=alias,
+            source_line=source_line,
         )
 
     def _is_usage_context(self, node) -> bool:
