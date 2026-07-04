@@ -71,6 +71,13 @@ _DECL_SHAPES: Dict[str, _DeclShape] = {
     # Zig `const x = f();` / `var x = f();` — no fields at all (BACK-431
     # Issue G smoke-tier audit).
     'VarDecl': _DeclShape(positional='_walk_zig_var_decl'),
+    # Scala for-comprehension generator (`x <- expr`) / binding (`x = expr`)
+    # — no fields at all; a bare boolean guard (`if cond`, wrapped in its
+    # own `guard` child) binds nothing. Found via real gitbucket source
+    # (WebHookService.scala's callIssuesWebHook): `repoOwner <- users.get(...)`
+    # was tracked but mislabeled READ instead of WRITE at its own binding
+    # site (BACK-431 tier A real-corpus dogfood audit).
+    'enumerator': _DeclShape(positional='_walk_scala_enumerator'),
 }
 
 
@@ -290,6 +297,34 @@ class VarFlowWalker:
         if name:
             self.walk(name, 'WRITE')
         for child in _children(n):
+            if (child.start_byte(), child.end_byte()) not in processed:
+                self.walk(child, 'READ')
+
+    def _walk_scala_enumerator(self, n: Any) -> None:
+        """Scala for-comprehension `enumerator` — no fields at all. Three
+        shapes share this node kind: `x <- expr` (generator binding), `x =
+        expr` (value binding), and a bare boolean guard (`if cond`, wrapped
+        in its own `guard` child) which binds nothing at all."""
+        children = list(_children(n))
+        if children and children[0].kind() == 'guard':
+            self.walk(children[0], 'READ')
+            return
+        name = None
+        op_idx = None
+        for i, child in enumerate(children):
+            if child.kind() in ('<-', '='):
+                op_idx = i
+                break
+            if child.kind() == 'identifier' and name is None:
+                name = child
+        if op_idx is None:
+            for child in children:
+                self.walk(child, 'READ')
+            return
+        processed = {(name.start_byte(), name.end_byte())} if name else set()
+        if name:
+            self.walk(name, 'WRITE')
+        for child in children[op_idx + 1:]:
             if (child.start_byte(), child.end_byte()) not in processed:
                 self.walk(child, 'READ')
 

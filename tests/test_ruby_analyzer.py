@@ -616,6 +616,38 @@ end
         finally:
             os.unlink(temp_path)
 
+    def test_paren_less_method_signature_is_empty_not_duplicated_name(self):
+        """Ruby methods defined without parens (`def human?` ... `end`) have
+        no parameter_list node at all — TreeSitterAnalyzer._get_signature's
+        generic fallback used to return the bare first-line text in that
+        case, which for a paren-less method is just the name again. Callers
+        that concatenate name+signature (display/outline.py's
+        _build_item_display) rendered it as a duplicated name like
+        `human?human?`. Found via real Discourse source (app/models/user.rb)
+        during the BACK-431 tier A real-corpus dogfood audit."""
+        code = '''def human?
+  true
+end
+
+def with_args(a, b)
+  a + b
+end
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.rb', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = RubyAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            functions = {f['name']: f for f in structure['functions']}
+
+            self.assertEqual(functions['human?'].get('signature', ''), '')
+            self.assertIn('(a, b)', functions['with_args'].get('signature', ''))
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()

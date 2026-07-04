@@ -48,6 +48,11 @@ _DECISION_TYPES = frozenset({
     'match_statement', 'match_expression', 'case_clause', 'match_arm',
     # Zig `switch (x) { .a => ..., .b => ... }` (BACK-431 Issue G tier B).
     'SwitchProng',
+    # Kotlin `when (x) { ... }`, Swift `switch x { case ... }`, and PHP
+    # `switch ($x) { case ... }` — each arm/entry is its own decision, same
+    # role as SwitchProng/match_arm (BACK-431 tier A real-corpus dogfood
+    # audit).
+    'when_entry', 'switch_entry', 'case_statement',
 })
 
 _NESTING_TYPES = frozenset({

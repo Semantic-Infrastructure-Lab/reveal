@@ -67,10 +67,33 @@ MATCH_NODES: frozenset = MATCH_EXPRESSION_NODES | frozenset({'match_statement'})
 # Zig's `switch (x) { .a => ..., .b => ... }` (BACK-431 Issue G tier B
 # dogfood audit: found via real Ghostty source, terminal/formatter.zig uses
 # switch pervasively) — `SwitchExpr`/`SwitchProng`, distinct kinds from
-# every other language's switch/case shape.
-CASE_NODES: frozenset = frozenset({'case_clause', 'match_arm', 'switch_case', 'SwitchProng'})
-SWITCH_NODES: frozenset = frozenset({'switch_statement', 'switch', 'SwitchExpr'})
-SWITCH_DEFAULT_NODES: frozenset = frozenset({'switch_default', 'default'})
+# every other language's switch/case shape. Kotlin's `when (x) { ... }`
+# (BACK-431 tier A real-corpus dogfood audit: found via real tivi source,
+# SeasonsEpisodesRepository.kt's markSeasonWatched) is the same
+# fully-fieldless shape as Zig's switch — `when_expression`/`when_entry`.
+# Swift's `switch x { case ... }` node itself (`switch_statement`) was
+# already covered, but its case-arm node (`switch_entry`, wrapping both
+# `case`-pattern and `default` arms) was not — every switch case in real
+# Swift source (Kickstarter's AppDelegateViewModel.navigation(fromPushEnvelope:))
+# was invisible to --ifmap/--outline (BACK-431 tier A real-corpus dogfood audit).
+# PHP's switch (`switch_statement`, already covered) uses `case_statement`/
+# `default_statement` for its arms — distinct names from every other
+# language's shape, and from the (apparently never-verified) 'switch_case'/
+# 'switch_default' placeholders already in these sets. Found via real
+# WordPress source (wp-includes/post.php's wp_attachment_is) where the
+# entire switch body — all 4 cases — was invisible to --ifmap despite
+# --exits correctly finding the returns inside them (structural walking
+# doesn't need the CASE label; --ifmap does).
+CASE_NODES: frozenset = frozenset({
+    'case_clause', 'match_arm', 'switch_case', 'SwitchProng', 'when_entry',
+    'switch_entry', 'case_statement',
+})
+SWITCH_NODES: frozenset = frozenset({
+    'switch_statement', 'switch', 'SwitchExpr', 'when_expression',
+})
+SWITCH_DEFAULT_NODES: frozenset = frozenset({
+    'switch_default', 'default', 'default_statement',
+})
 
 DEF_NODES: frozenset = frozenset({
     'function_definition', 'function_declaration', 'function_item',
@@ -152,11 +175,13 @@ KEYWORD_LABEL: Dict[str, str] = {
     'with_statement': 'WITH', 'with': 'WITH',
     'match_statement': 'MATCH', 'match_expression': 'MATCH',
     'case_clause': 'CASE', 'match_arm': 'CASE', 'SwitchProng': 'CASE',
+    'when_entry': 'CASE',
     'do_statement': 'DO',
     'switch_statement': 'SWITCH', 'switch': 'SWITCH', 'SwitchExpr': 'SWITCH',
+    'when_expression': 'SWITCH',
     'catch_clause': 'CATCH', 'catch': 'CATCH',
-    'switch_case': 'CASE',
-    'switch_default': 'DEFAULT', 'default': 'DEFAULT',
+    'switch_case': 'CASE', 'switch_entry': 'CASE', 'case_statement': 'CASE',
+    'switch_default': 'DEFAULT', 'default': 'DEFAULT', 'default_statement': 'DEFAULT',
     'function_definition': 'DEF', 'function_declaration': 'DEF',
     'function_item': 'DEF', 'function': 'DEF',
     'method_definition': 'DEF', 'method_declaration': 'DEF',

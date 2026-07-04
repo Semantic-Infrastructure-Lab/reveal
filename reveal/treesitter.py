@@ -1016,7 +1016,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
             signature = first_line[name_end:].rstrip(':').strip()
             return signature
 
-        return first_line
+        # No parens at all — e.g. Ruby's paren-less method defs (`def human?`
+        # ... `end`) — there is no parameter signature to show; the
+        # remaining text is just the name again, which callers (e.g.
+        # display/outline.py's _build_item_display, which concatenates
+        # name+signature) would otherwise render as a duplicated name like
+        # `human?human?` (BACK-431 tier A real-corpus dogfood audit: found
+        # via real Discourse source, app/models/user.rb).
+        return ''
 
     def _get_nesting_depth(self, node) -> int:
         """Return maximum nesting depth within a function node."""

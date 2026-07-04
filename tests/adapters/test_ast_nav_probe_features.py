@@ -1882,6 +1882,49 @@ class TestScalaVarflow(unittest.TestCase):
         self.assertIn('WRITE', kinds)
 
 
+class TestScalaForComprehensionEnumerator(unittest.TestCase):
+    """Scala's for-comprehension `enumerator` (`x <- expr` generator
+    binding, `x = expr` value binding, or a bare `if cond` guard) has no
+    AST fields at all and had no dispatch case — the bound name fell
+    through to the generic recursion and was mislabeled READ instead of
+    WRITE at its own binding site. Found via real gitbucket source
+    (WebHookService.scala's callIssuesWebHook): `repoOwner <- users.get(...)`
+    (BACK-431 tier A real-corpus dogfood audit)."""
+
+    def setUp(self):
+        code = """\
+        object Sample {
+          def run(users: Map[String, String]): Option[String] = {
+            for {
+              repoOwner <- users.get("a")
+              if repoOwner.nonEmpty
+              x = repoOwner.trim
+            } yield {
+              x
+            }
+          }
+        }
+        """
+        self._tree, self._root, self._get_text, _ = _parse_scala(code)
+
+    def test_generator_binding_is_write(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, 'repoOwner', 1, 999, self._get_text)
+        kinds_by_line = {e['line']: e['kind'] for e in events}
+        # Binding site (the `<-` line) is a WRITE; the guard's use and the
+        # `x = repoOwner.trim` use are READs.
+        binding_line = min(kinds_by_line)
+        self.assertEqual(kinds_by_line[binding_line], 'WRITE')
+        self.assertIn('READ', kinds_by_line.values())
+
+    def test_value_binding_is_write(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, 'x', 1, 999, self._get_text)
+        kinds = [e['kind'] for e in events]
+        self.assertIn('WRITE', kinds)
+        self.assertIn('READ', kinds)
+
+
 class TestScalaThrowExpression(unittest.TestCase):
     """Scala's grammar is expression-oriented like Rust's: `throw` parses as
     `throw_expression`, not `throw_statement` — absent from THROW_NODES it
@@ -2293,6 +2336,105 @@ class TestZigSwitchExpr(unittest.TestCase):
         keywords = [i['keyword'] for i in items]
         self.assertIn('SWITCH', keywords)
         self.assertEqual(keywords.count('CASE'), 2)
+
+
+class TestPhpCaseStatement(unittest.TestCase):
+    """PHP's `switch ($x) { case ...: ... default: ... }` node itself
+    (`switch_statement`) was already covered, but its arms use
+    `case_statement`/`default_statement` — distinct names from every other
+    language's shape (and from the never-actually-verified 'switch_case'/
+    'switch_default' placeholders already in the taxonomy) — so the entire
+    switch body was invisible to --ifmap/--outline. Found via real
+    WordPress source (wp-includes/post.php's wp_attachment_is), a 4-arm
+    switch where zero arms showed up despite --exits correctly finding the
+    returns inside them (BACK-431 tier A real-corpus dogfood audit)."""
+
+    def setUp(self):
+        code = """\
+        <?php
+        function f($x) {
+            switch ($x) {
+                case 'a':
+                    return 1;
+                case 'b':
+                    return 2;
+                default:
+                    return 0;
+            }
+        }
+        """
+        self._tree, self._root, self._get_text, _ = _parse_php(code)
+
+    def test_element_outline_finds_switch_case_and_default(self):
+        from reveal.adapters.ast.nav import element_outline
+        items = element_outline(self._root, self._get_text, max_depth=5)
+        keywords = [i['keyword'] for i in items]
+        self.assertIn('SWITCH', keywords)
+        self.assertEqual(keywords.count('CASE'), 2)
+        self.assertIn('DEFAULT', keywords)
+
+
+class TestSwiftSwitchEntry(unittest.TestCase):
+    """Swift's `switch x { case ...: ... default: ... }` node itself
+    (`switch_statement`) was already in SWITCH_NODES, but its case-arm node
+    (`switch_entry` — wraps both `case`-pattern and `default` arms, fully
+    fieldless) was entirely absent from CASE_NODES — every switch case in
+    real Swift source was invisible to --ifmap/--outline. Found via real
+    Kickstarter source (AppDelegateViewModel.swift's
+    navigation(fromPushEnvelope:)), a 7-case switch where zero cases showed
+    up (BACK-431 tier A real-corpus dogfood audit)."""
+
+    def setUp(self):
+        code = """\
+        func f(x: Int) -> String {
+            switch x {
+            case 1:
+                return "one"
+            case 2, 3:
+                return "two-or-three"
+            default:
+                return "other"
+            }
+        }
+        """
+        self._tree, self._root, self._get_text, _ = _parse_swift(code)
+
+    def test_element_outline_finds_switch_and_entries(self):
+        from reveal.adapters.ast.nav import element_outline
+        items = element_outline(self._root, self._get_text, max_depth=5)
+        keywords = [i['keyword'] for i in items]
+        self.assertIn('SWITCH', keywords)
+        self.assertEqual(keywords.count('CASE'), 3)
+
+
+class TestKotlinWhenExpr(unittest.TestCase):
+    """Kotlin's `when (x) { ... }` (`when_expression`/`when_entry`) was
+    entirely absent from SWITCH_NODES/CASE_NODES — the same fully-fieldless
+    shape as Zig's `switch`, just never audited for Kotlin. Found via real
+    tivi source (SeasonsEpisodesRepository.kt's markSeasonWatched), which
+    uses `when` as an expression assigned into a `val`; the hand-written
+    smoke fixture never exercised this shape (BACK-431 tier A real-corpus
+    dogfood audit)."""
+
+    def setUp(self):
+        code = """\
+        fun label(x: Int): String {
+            val y = when (x) {
+                1 -> "one"
+                2 -> "two"
+                else -> "other"
+            }
+            return y
+        }
+        """
+        self._tree, self._root, self._get_text, _ = _parse_kotlin(code)
+
+    def test_element_outline_finds_when_and_entries(self):
+        from reveal.adapters.ast.nav import element_outline
+        items = element_outline(self._root, self._get_text, max_depth=5)
+        keywords = [i['keyword'] for i in items]
+        self.assertIn('SWITCH', keywords)
+        self.assertEqual(keywords.count('CASE'), 3)
 
 
 class TestLuaDottedFunctionNameNav(unittest.TestCase):
