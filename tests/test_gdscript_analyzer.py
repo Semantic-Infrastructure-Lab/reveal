@@ -281,5 +281,88 @@ func apply_force(force: Vector2):
             os.unlink(temp_path)
 
 
+def _resolve_gdscript_func(path, element='run'):
+    """Resolve a GDScript function's node the same way the CLI does, and a
+    get_text helper bound to its content."""
+    from reveal.file_handler import _resolve_func_node
+    analyzer = GDScriptAnalyzer(path)
+    func_node, _, _ = _resolve_func_node(analyzer, element)
+    content_bytes = analyzer.content.encode('utf-8')
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return func_node, get_text
+
+
+class TestGDScriptCallsFindsAttributeCalls(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--calls, real-corpus dogfood on
+    godot-demo-projects' ik_fabrik.gd chain_backward): GDScript's dotted
+    method call (`x.size()`, `x.a().b()`) has no dedicated call node — it's
+    folded into the same `attribute` node plain property access uses
+    (`x.field`), as a flat run of `.` tokens paired with either a bare
+    `identifier` (property, no call) or `attribute_call` (identifier +
+    arguments — a real call). `attribute_call` was in no language's
+    CALL_NODE_TYPES, so every dotted call was invisible to --calls — only
+    bare `foo(x)` (the plain `call` node, shared with Python) worked, which
+    is the minority of real GDScript call sites."""
+
+    def _write(self, code: str) -> str:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.gd', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            return f.name
+
+    def test_calls_finds_simple_method_call(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('func run(x):\n\treturn x.size()\n')
+        try:
+            func_node, get_text = _resolve_gdscript_func(path)
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            callees = [c['callee'] for c in calls]
+            self.assertIn('x.size', callees)
+        finally:
+            os.unlink(path)
+
+    def test_calls_collapses_chained_call_to_dotted_form(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('func run(x):\n\treturn x.normalized().length()\n')
+        try:
+            func_node, get_text = _resolve_gdscript_func(path)
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            callees = [c['callee'] for c in calls]
+            self.assertIn('x.normalized', callees)
+            self.assertIn('.length', callees)
+        finally:
+            os.unlink(path)
+
+    def test_calls_ignores_bare_property_access_in_chain(self):
+        """`x.field.method()` — `field` is a plain property, not a call,
+        and must not be reported as one; only `.method` is a call site."""
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('func run(x):\n\treturn x.field.method()\n')
+        try:
+            func_node, get_text = _resolve_gdscript_func(path)
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            callees = [c['callee'] for c in calls]
+            self.assertEqual(callees, ['x.field.method'])
+        finally:
+            os.unlink(path)
+
+    def test_calls_still_finds_bare_call(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('func run(x):\n\tfoo(x)\n')
+        try:
+            func_node, get_text = _resolve_gdscript_func(path)
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            callees = [c['callee'] for c in calls]
+            self.assertIn('foo', callees)
+        finally:
+            os.unlink(path)
+
+
 if __name__ == '__main__':
     unittest.main()

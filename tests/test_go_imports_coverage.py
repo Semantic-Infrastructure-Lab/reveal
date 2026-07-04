@@ -266,6 +266,30 @@ class TestCreateImport:
         stmt = self._make('github.com/user/repo/pkg/auth')
         assert stmt.imported_names == ['auth']
 
+    def test_major_version_suffix_uses_preceding_segment(self):
+        """BACK-431 feature-breadth pass (imports://?unused, real-corpus
+        dogfood on Kubernetes' schedule_one.go): Go modules' semantic-import-
+        versioning convention suffixes a v2+ import path with `/vN`
+        (`k8s.io/klog/v2`), but the package's declared name (`package klog`)
+        is the segment *before* the suffix, not the suffix itself. Deriving
+        the local name from the raw last segment read this as package "v2",
+        which never matched real usage (`klog.FromContext(...)`) — every
+        unaliased v2+ import in the file falsely reported as unused."""
+        stmt = self._make('k8s.io/klog/v2')
+        assert stmt.imported_names == ['klog']
+
+    def test_major_version_suffix_v10_also_handled(self):
+        stmt = self._make('example.com/pkg/v10')
+        assert stmt.imported_names == ['pkg']
+
+    def test_bare_v_prefixed_package_name_without_slash_unaffected(self):
+        """A package whose own name (not a path segment) merely looks
+        version-like, e.g. `v2` as a single-segment import, has no
+        preceding segment to fall back to — keep the literal name rather
+        than crashing or guessing."""
+        stmt = self._make('v2')
+        assert stmt.imported_names == ['v2']
+
 
 # ─── _is_usage_context ───────────────────────────────────────────────────────
 

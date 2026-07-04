@@ -507,5 +507,138 @@ class B {
             os.unlink(path)
 
 
+def _resolve_dart_func(path, element='run'):
+    """Resolve a Dart function's body node the same way the CLI does —
+    Dart's function_signature/function_body sibling split requires
+    file_handler._resolve_func_node's swap, not a raw tree walk."""
+    from reveal.file_handler import _resolve_func_node
+    analyzer = DartAnalyzer(path)
+    func_node, _, _ = _resolve_func_node(analyzer, element)
+    content_bytes = analyzer.content.encode('utf-8')
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return func_node, get_text
+
+
+class TestDartDepsExcludesMemberAccess(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--deps, real-corpus dogfood on
+    AppFlowy's createNewPageInSpace): Dart's grammar has no member-access
+    wrapper node at all — `obj.method(x)` parses as a bare `identifier`
+    followed by flat sibling `selector` nodes, unlike every other supported
+    language's `_MEMBER_ACCESS_KINDS`-style single-node shape. Without a
+    Dart-specific exclusion, every member/method name in a chain
+    (`find.byWidgetPredicate(...)`) read as its own independent undefined
+    variable — one real call produced 2 bogus PARAM entries."""
+
+    def _write(self, code: str) -> str:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.dart', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            return f.name
+
+    def test_deps_excludes_dotted_member_name(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        path = self._write('''\
+void run(Object x) {
+  final y = find.byWidgetPredicate(x);
+}
+''')
+        try:
+            func_node, get_text = _resolve_dart_func(path)
+            deps = collect_deps(func_node, 1, 999, get_text)
+            names = {d['var'] for d in deps}
+            self.assertNotIn('byWidgetPredicate', names)
+            self.assertIn('find', names)
+            self.assertIn('x', names)
+        finally:
+            os.unlink(path)
+
+    def test_deps_still_tracks_index_selector_contents(self):
+        """A bracket index (`list[i]`) is the OTHER shape wrapped by Dart's
+        assignable-selector node — unlike `.member`, its contents (`i`) are
+        a real variable reference and must still be tracked."""
+        from reveal.adapters.ast.nav_exits import collect_deps
+        path = self._write('''\
+void run(List<int> list, int i) {
+  final y = list[i];
+}
+''')
+        try:
+            func_node, get_text = _resolve_dart_func(path)
+            deps = collect_deps(func_node, 1, 999, get_text)
+            names = {d['var'] for d in deps}
+            self.assertIn('i', names)
+            self.assertIn('list', names)
+        finally:
+            os.unlink(path)
+
+
+class TestDartCallsFindsSelectorChainedCalls(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--calls, same AppFlowy dogfood): Dart
+    has no call-expression node at all — `obj.method(x)` parses as
+    `identifier` + sibling `selector(.method)` + sibling `selector((x))`,
+    with no node naming "the call" as a whole. Every call in the real
+    function under audit (9 of them, including `find.byWidgetPredicate`,
+    `hoverOnWidget`, `renamePage`, ...) was silently invisible to --calls —
+    total blindness, not a taxonomy gap, since no existing node-kind
+    addition could have fixed it without reconstructing the callee from
+    flat siblings."""
+
+    def _write(self, code: str) -> str:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.dart', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            return f.name
+
+    def test_calls_finds_receiver_qualified_call(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('''\
+void run(Object x) {
+  find.byWidgetPredicate(x);
+}
+''')
+        try:
+            func_node, get_text = _resolve_dart_func(path)
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            callees = [c['callee'] for c in calls]
+            self.assertIn('find.byWidgetPredicate', callees)
+        finally:
+            os.unlink(path)
+
+    def test_calls_collapses_chained_call_to_dotted_form(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('''\
+void run() {
+  fetchThing().then((x) => x);
+}
+''')
+        try:
+            func_node, get_text = _resolve_dart_func(path)
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            callees = [c['callee'] for c in calls]
+            self.assertIn('fetchThing', callees)
+            self.assertIn('.then', callees)
+        finally:
+            os.unlink(path)
+
+    def test_calls_ignores_bare_index_access(self):
+        """`items[i]` is not a call — it must not be misreported as one."""
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('''\
+void run(List<int> items, int i) {
+  final y = items[i];
+}
+''')
+        try:
+            func_node, get_text = _resolve_dart_func(path)
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            self.assertEqual(calls, [])
+        finally:
+            os.unlink(path)
+
+
 if __name__ == '__main__':
     unittest.main()

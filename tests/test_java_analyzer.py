@@ -382,5 +382,133 @@ public class LambdaTest {
             os.unlink(temp_path)
 
 
+def _resolve_java_func(path, element='run'):
+    """Resolve a Java method's node the same way the CLI does, and a
+    get_text helper bound to its content."""
+    from reveal.file_handler import _resolve_func_node
+    analyzer = JavaAnalyzer(path)
+    func_node, _, _ = _resolve_func_node(analyzer, element)
+    content_bytes = analyzer.content.encode('utf-8')
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return func_node, get_text
+
+
+class TestJavaDepsExcludesAnnotationsAndMemberNames(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--deps, real-corpus dogfood on
+    Elasticsearch's InternalEngine.java refreshIfNeeded): three distinct
+    non-reads, all invisible to prior passes since they only tested
+    --varflow/--exits/--ifmap, not --deps/--boundary's full-scan.
+
+    1. `@Override`/`@SuppressWarnings("x")` (`marker_annotation`/
+       `annotation`) both parse as `['@', identifier, args?]` — the
+       identifier is a type name, not a variable, but reads as one.
+    2. `field_access` (`obj.field`, no call) was entirely absent from
+       `_MEMBER_ACCESS_KINDS` — every plain field access leaked its field
+       name as a bogus PARAM.
+    3. `method_invocation`'s 'name' field (the method being called) leaked
+       too whenever a real 'object' receiver was present
+       (`internalReaderManager.maybeRefreshBlocking(...)` produced a bogus
+       PARAM for `maybeRefreshBlocking`) — a receiver-less bare call
+       correctly keeps its own name as a read, matching Python's `sum(x)`
+       parity.
+    """
+
+    def _write(self, code: str) -> str:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.java', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            return f.name
+
+    def test_deps_excludes_marker_annotation_name(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        path = self._write('''\
+class Foo {
+    @Override
+    void run(String x) {
+    }
+}
+''')
+        try:
+            func_node, get_text = _resolve_java_func(path)
+            deps = collect_deps(func_node, 1, 999, get_text)
+            names = {d['var'] for d in deps}
+            self.assertNotIn('Override', names)
+        finally:
+            os.unlink(path)
+
+    def test_deps_excludes_annotation_with_arguments_name(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        path = self._write('''\
+class Foo {
+    @SuppressWarnings("unchecked")
+    void run(String x) {
+    }
+}
+''')
+        try:
+            func_node, get_text = _resolve_java_func(path)
+            deps = collect_deps(func_node, 1, 999, get_text)
+            names = {d['var'] for d in deps}
+            self.assertNotIn('SuppressWarnings', names)
+        finally:
+            os.unlink(path)
+
+    def test_deps_excludes_plain_field_access_name(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        path = self._write('''\
+class Foo {
+    void run() {
+        var y = a.b;
+    }
+}
+''')
+        try:
+            func_node, get_text = _resolve_java_func(path)
+            deps = collect_deps(func_node, 1, 999, get_text)
+            names = {d['var'] for d in deps}
+            self.assertNotIn('b', names)
+            self.assertIn('a', names)
+        finally:
+            os.unlink(path)
+
+    def test_deps_excludes_qualified_method_call_name(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        path = self._write('''\
+class Foo {
+    void run(String x) {
+        manager.doThing(x);
+    }
+}
+''')
+        try:
+            func_node, get_text = _resolve_java_func(path)
+            deps = collect_deps(func_node, 1, 999, get_text)
+            names = {d['var'] for d in deps}
+            self.assertNotIn('doThing', names)
+            self.assertIn('manager', names)
+            self.assertIn('x', names)
+        finally:
+            os.unlink(path)
+
+    def test_deps_still_tracks_bare_call_name(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        path = self._write('''\
+class Foo {
+    void run(String x) {
+        doThing(x);
+    }
+}
+''')
+        try:
+            func_node, get_text = _resolve_java_func(path)
+            deps = collect_deps(func_node, 1, 999, get_text)
+            names = {d['var'] for d in deps}
+            self.assertIn('doThing', names)
+        finally:
+            os.unlink(path)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -123,6 +123,48 @@ class TestParseUseStatements:
         names = [imp.imported_names[0] for imp in imports]
         assert 'fs' in names
 
+    def test_pub_use_reexport_marked_skip_unused(self, tmp_path):
+        """BACK-431 feature-breadth pass (imports://?unused, real-corpus
+        dogfood on Meilisearch's search/mod.rs): `pub use foo::{...};`
+        re-exports items as part of THIS module's public API for other
+        files to consume — it's never locally "unused" by design, unlike a
+        private `use` that should be consumed in the same file. Without
+        `skip_unused`, a barrel-file pattern (`mod federated; pub use
+        federated::{a, b, c};`) falsely flagged every re-exported name as
+        unused — 15 false positives in one real file."""
+        code = "pub use federated::{perform_search, FederatedSearch};\n"
+        p = _write_rs(tmp_path, 'reexport.rs', code)
+        extractor = RustExtractor()
+        imports = extractor.extract_imports(p)
+        assert len(imports) == 2
+        assert all(imp.skip_unused for imp in imports)
+
+    def test_private_use_not_marked_skip_unused(self, tmp_path):
+        """A plain (non-pub) `use` must still be checked for unused-ness —
+        only `pub use` gets the re-export exemption."""
+        code = "use std::collections::HashMap;\n"
+        p = _write_rs(tmp_path, 'private_use.rs', code)
+        extractor = RustExtractor()
+        imports = extractor.extract_imports(p)
+        assert len(imports) == 1
+        assert imports[0].skip_unused is False
+
+    def test_pub_use_simple_path_marked_skip_unused(self, tmp_path):
+        code = "pub use foo::Bar;\n"
+        p = _write_rs(tmp_path, 'reexport_simple.rs', code)
+        extractor = RustExtractor()
+        imports = extractor.extract_imports(p)
+        assert len(imports) == 1
+        assert imports[0].skip_unused is True
+
+    def test_pub_use_aliased_marked_skip_unused(self, tmp_path):
+        code = "pub use foo::Bar as Baz;\n"
+        p = _write_rs(tmp_path, 'reexport_aliased.rs', code)
+        extractor = RustExtractor()
+        imports = extractor.extract_imports(p)
+        assert len(imports) == 1
+        assert imports[0].skip_unused is True
+
 
 class TestResolveImport:
     """Lines 352–380 — resolve_import routing."""

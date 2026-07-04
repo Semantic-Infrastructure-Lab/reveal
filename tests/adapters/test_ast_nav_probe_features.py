@@ -1838,6 +1838,91 @@ class TestKotlinVarflow(unittest.TestCase):
         self.assertTrue(min(write_lines) < max(read_lines))
 
 
+class TestKotlinDepsAndBoundary(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--deps/--boundary, real-corpus dogfood
+    on tivi's markSeasonWatched): Kotlin's `navigation_expression` (obj.member
+    / obj.method()) was absent from nav_varflow's `_MEMBER_ACCESS_KINDS`, so
+    every method/property name in a call chain was misread as an independent
+    undefined variable — a `.filter().map().toList()` chain alone produced 3
+    bogus "PARAM" entries. Separately, Kotlin's `function_declaration` has
+    neither a 'name' nor a 'declarator' field, so `_declared_name_node`
+    (used to exclude a scope's own name from its dep list) always returned
+    None — every function's own name showed up as a dependency on itself."""
+
+    def setUp(self):
+        code = """\
+        fun run(x: Int): Int {
+            val y = bar.baz(x)
+            return y
+        }
+        """
+        from reveal.core import node_children
+        self._tree, root, self._get_text, _ = _parse_kotlin(code)
+        # collect_deps runs against the resolved function node in production
+        # (ctx.func_node), not the source_file root — descend to it here too.
+        self._func_node = node_children(root)[0]
+
+    def test_deps_excludes_member_access_name(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        deps = collect_deps(self._func_node, 1, 999, self._get_text)
+        names = {d['var'] for d in deps}
+        self.assertNotIn('baz', names)
+        self.assertIn('bar', names)
+
+    def test_deps_excludes_own_function_name(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        deps = collect_deps(self._func_node, 1, 999, self._get_text)
+        names = {d['var'] for d in deps}
+        self.assertNotIn('run', names)
+
+
+class TestVarflowExcludesOwnDeclarationSiteButKeepsRecursiveReference(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--varflow, real-corpus dogfood on
+    three.js's WebGLRenderer.checkMaterialsReady): a direct --varflow query
+    goes straight to var_flow()/VarFlowWalker, which — unlike
+    _collect_identifier_names's skip_positions — never excluded a scope's
+    own declaration-site name at all. A function that legitimately
+    references its own name for recursion (`setTimeout(checkThing, 10)`)
+    showed TWO reads: the real recursive reference, plus a bogus one at the
+    `function checkThing()` declaration line itself. Confirmed
+    language-agnostic (reproduces in plain Python, not just JS) since the
+    gap was in the shared walker, not any per-language taxonomy."""
+
+    def test_python_recursive_self_reference(self):
+        from reveal.adapters.ast.nav import var_flow
+        _, root, get_text, _ = _parse_python("""\
+        def check_thing():
+            do_later(check_thing)
+        """)
+        func = _find_func(root, get_text, 'check_thing')
+        events = var_flow(func, 'check_thing', 1, 999, get_text)
+        read_lines = [e['line'] for e in events if e['kind'] == 'READ']
+        self.assertEqual(read_lines, [2])
+
+    def test_javascript_recursive_self_reference(self):
+        from reveal.adapters.ast.nav import var_flow
+        from reveal.core import node_children
+        parser = ts.get_parser('javascript')
+        src = textwrap.dedent("""\
+        function checkThing() {
+          setTimeout(checkThing, 10);
+        }
+        """).lstrip('\n')
+        content_bytes = src.encode('utf-8')
+        root = parser.parse(src).root_node()
+        # var_flow runs against the resolved function node in production
+        # (ctx.func_node), not the source_file root — descend to it here too
+        # (_declared_name_node needs the function node itself to find 'name').
+        func = node_children(root)[0]
+
+        def get_text(node):
+            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+        events = var_flow(func, 'checkThing', 1, 999, get_text)
+        read_lines = [e['line'] for e in events if e['kind'] == 'READ']
+        self.assertEqual(read_lines, [2])
+
+
 # ---------------------------------------------------------------------------
 # BACK-431 Issue G smoke-tier audit: Scala varflow (val_definition/
 # var_definition) and --exits/--returns (throw_expression)
@@ -1947,6 +2032,42 @@ class TestScalaThrowExpression(unittest.TestCase):
         chains = collect_gate_chains(self._root, 1, 999, self._get_text)
         kinds = {c['kind'] for c in chains}
         self.assertIn('THROW', kinds)
+
+
+class TestScalaNamedArgumentNotWrite(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--deps, real-corpus dogfood on
+    gitbucket's WebHookService.scala callIssuesWebHook): Scala's named
+    call argument (`f(x = value)`) parses as `assignment_expression` —
+    structurally identical to a real reassignment statement `x = value` —
+    so the generic WRITE-detection walker misread the argument label as a
+    write to a same-named local/parameter. `WebHookIssuesPayload(repository
+    = ApiRepository(repository, ...), ...)` made --deps report the
+    `repository` parameter as reassigned inside the function body, when it
+    never is — the label and the parameter merely share a name."""
+
+    def setUp(self):
+        code = """\
+        object Sample {
+          def run(repository: Int): Unit = {
+            val x = Bar(repository = ApiRepository(repository))
+          }
+        }
+        """
+        self._tree, self._root, self._get_text, _ = _parse_scala(code)
+
+    def test_var_flow_has_no_write_for_named_argument_label(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, 'repository', 1, 999, self._get_text)
+        kinds = [e['kind'] for e in events]
+        self.assertNotIn('WRITE', kinds)
+        self.assertIn('READ', kinds)
+
+    def test_deps_reports_no_write_for_named_argument_label(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        deps = collect_deps(self._root, 1, 999, self._get_text)
+        by_var = {d['var']: d for d in deps}
+        self.assertIn('repository', by_var)
+        self.assertIsNone(by_var['repository']['first_write_line'])
 
 
 # ---------------------------------------------------------------------------
@@ -2407,6 +2528,56 @@ class TestSwiftSwitchEntry(unittest.TestCase):
         self.assertEqual(keywords.count('CASE'), 3)
 
 
+class TestSwiftDepsAndBoundary(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--deps/--boundary, real-corpus dogfood
+    on ios-oss's AppDelegateViewModel.navigation(fromPushEnvelope:)): two
+    distinct false-positive sources in Swift, both invisible to --varflow
+    (which only tests one already-known variable at a time) but glaring in
+    --deps/--boundary (which enumerate every identifier in range).
+
+    1. A parameter's external argument label (`fromPushEnvelope` in
+       `func f(fromPushEnvelope envelope: T)`) is a call-site-only label,
+       never bound inside the function body — only the internal name
+       (`envelope`) is a real variable. Swift's grammar exposes it as a
+       distinct `external_name` field, previously never checked.
+    2. Swift's leading-dot implicit-member shorthand (`.someCase`) — used
+       both as a bare enum-case switch pattern and as an inferred-type
+       static member reference — parses as `pattern`/`prefix_expression`
+       wrapping a literal '.' token plus the member-name identifier; the
+       identifier was read as an ordinary variable. A 7-case switch over
+       `activity.category` alone produced 7 bogus PARAM entries.
+    """
+
+    def setUp(self):
+        code = """\
+        func navigate(fromEnvelope envelope: Int) -> String? {
+            switch envelope {
+            case .backing:
+                return .project(.id(envelope))
+            case .other:
+                return nil
+            }
+        }
+        """
+        self._tree, self._root, self._get_text, _ = _parse_swift(code)
+
+    def test_deps_excludes_external_argument_label(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        deps = collect_deps(self._root, 1, 999, self._get_text)
+        names = {d['var'] for d in deps}
+        self.assertNotIn('fromEnvelope', names)
+        self.assertIn('envelope', names)
+
+    def test_deps_excludes_leading_dot_enum_case_and_member(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        deps = collect_deps(self._root, 1, 999, self._get_text)
+        names = {d['var'] for d in deps}
+        self.assertNotIn('backing', names)
+        self.assertNotIn('other', names)
+        self.assertNotIn('project', names)
+        self.assertNotIn('id', names)
+
+
 class TestKotlinWhenExpr(unittest.TestCase):
     """Kotlin's `when (x) { ... }` (`when_expression`/`when_entry`) was
     entirely absent from SWITCH_NODES/CASE_NODES — the same fully-fieldless
@@ -2460,6 +2631,286 @@ class TestLuaDottedFunctionNameNav(unittest.TestCase):
         finally:
             import os
             os.unlink(path)
+
+
+def _parse_lua(code: str):
+    """Parse Lua code and return (tree, root, get_text, content_bytes)."""
+    parser = ts.get_parser('lua')
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+    root = tree.root_node()
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return tree, root, get_text, content_bytes
+
+
+class TestLuaDepsExcludesMemberAndMethodNames(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--deps, real-corpus dogfood on Kong's
+    concurrency.lua with_worker_mutex): neither of Lua's two member-access
+    node kinds — `dot_index_expression` (`obj.field`) and
+    `method_index_expression` (`obj:method()`, colon-call syntax) — was in
+    `_MEMBER_ACCESS_KINDS`, so every field/method name in the function
+    (`opts.name`, `rlock:lock(...)`, `rlock.dict:ttl(...)`, `rlock:unlock(...)`)
+    read as its own independent undefined variable."""
+
+    def setUp(self):
+        self._tree, self._root, self._get_text, _ = _parse_lua("""\
+        function run(opts, rlock)
+          local x = opts.name
+          rlock:lock(x)
+          rlock.dict:ttl(x)
+        end
+        """)
+
+    def test_deps_excludes_dot_and_method_index_names(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        deps = collect_deps(self._root, 1, 999, self._get_text)
+        names = {d['var'] for d in deps}
+        self.assertNotIn('name', names)
+        self.assertNotIn('lock', names)
+        self.assertNotIn('ttl', names)
+        self.assertNotIn('dict', names)  # also a member name (rlock.dict), not a var
+        self.assertIn('opts', names)
+        self.assertIn('rlock', names)  # the real base of rlock.dict:ttl(...)
+
+
+class TestLuaVarflowMemberNameCollision(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--varflow, same Kong dogfood): a
+    direct --varflow query bypasses `_collect_identifier_names` and goes
+    straight to `var_flow()`'s `VarFlowWalker`, which had no member-access
+    exclusion at all (a gap pre-dating this session, present for every
+    language, not just Lua) — so a real local variable whose name happened
+    to collide with an unrelated member-access name elsewhere in the same
+    function (`opts.timeout` vs. `local timeout = ...`) picked up a bogus
+    extra READ event from the unrelated dotted access."""
+
+    def test_varflow_ignores_unrelated_dotted_member_of_same_name(self):
+        from reveal.adapters.ast.nav import var_flow
+        tree, root, get_text, _ = _parse_lua("""\
+        function run(opts)
+          local x = opts.timeout
+          local timeout = 60
+          return timeout
+        end
+        """)
+        events = var_flow(root, 'timeout', 1, 999, get_text)
+        read_lines = [e['line'] for e in events if e['kind'] == 'READ']
+        write_lines = [e['line'] for e in events if e['kind'] == 'WRITE']
+        self.assertNotIn(2, read_lines)  # opts.timeout must not count
+        self.assertEqual(write_lines, [3])
+        self.assertIn(4, read_lines)
+
+    def test_varflow_no_double_read_for_table_field_shorthand_collision(self):
+        """`{timeout = timeout}` (Lua table-constructor named field) must
+        count as exactly one READ of the value, not two (label + value)."""
+        from reveal.adapters.ast.nav import var_flow
+        tree, root, get_text, _ = _parse_lua("""\
+        function run(opts)
+          local timeout = opts.timeout
+          local t = new("x", {
+            timeout = timeout,
+          })
+        end
+        """)
+        events = var_flow(root, 'timeout', 1, 999, get_text)
+        read_lines = [e['line'] for e in events if e['kind'] == 'READ']
+        self.assertEqual(read_lines, [4])
+
+    def test_varflow_still_tracks_positional_and_computed_key_fields(self):
+        """Positional (`{x}`) and computed-key (`{[k] = x}`) table fields
+        have no label to exclude — every identifier there is a genuine
+        read, unlike the named-key form above."""
+        from reveal.adapters.ast.nav import var_flow
+        tree, root, get_text, _ = _parse_lua("""\
+        function run(k)
+          local x = 1
+          local t = {x, [k] = x}
+        end
+        """)
+        events = var_flow(root, 'x', 1, 999, get_text)
+        read_lines = [e['line'] for e in events if e['kind'] == 'READ']
+        self.assertEqual(len(read_lines), 2)
+
+
+def _parse_ruby(code: str):
+    """Parse Ruby code and return (tree, root, get_text, content_bytes)."""
+    parser = ts.get_parser('ruby')
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+    root = tree.root_node()
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return tree, root, get_text, content_bytes
+
+
+class TestRubyDepsExcludesMethodNames(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--deps, real-corpus dogfood on
+    Discourse's User#unread_notifications): Ruby's `call` node
+    (`receiver.method(args)`) was entirely absent from
+    `_MEMBER_ACCESS_KINDS`-style handling — unlike every other supported
+    language's member-access node, it exposes 'receiver'/'method'/
+    'arguments' as direct fields rather than nesting them in a shared
+    member-access node, so it needed its own branch. Without it, every
+    method name in a call chain (`DB.query_single(...)[0].to_i`) read as an
+    independent undefined variable — 5 bogus PARAM entries from one line."""
+
+    def setUp(self):
+        self._tree, self._root, self._get_text, _ = _parse_ruby("""\
+        def run(x)
+          y = DB.query_single(x)[0].to_i
+          y
+        end
+        """)
+
+    def test_deps_excludes_chained_method_names(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        deps = collect_deps(self._root, 1, 999, self._get_text)
+        names = {d['var'] for d in deps}
+        self.assertNotIn('query_single', names)
+        self.assertNotIn('to_i', names)
+        self.assertIn('x', names)
+
+    def test_deps_still_tracks_bare_call_name(self):
+        """A receiver-less call (`puts(x)`) has no member name to strip —
+        its own callee is itself an undefined read, same as Python's
+        `sum(x)` — so it must still show up, unlike the chained case above."""
+        from reveal.adapters.ast.nav_exits import collect_deps
+        _, root, get_text, _ = _parse_ruby("""\
+        def run(x)
+          puts(x)
+        end
+        """)
+        deps = collect_deps(root, 1, 999, get_text)
+        names = {d['var'] for d in deps}
+        self.assertIn('puts', names)
+
+
+class TestRubyCallsShowsMethodName(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--calls, same Discourse dogfood):
+    Ruby's `call` node holds 'receiver'/'method'/'arguments' as direct
+    fields, not nested inside a shared member-access wrapper the way
+    JS/Kotlin/C# do — the generic `_extract_callee` fallback grabbed only
+    `child(0)` (the receiver), dropping the method name entirely.
+    `DB.query_single(sql)` rendered as the nonsensical `DB(sql)` — as if
+    the receiver constant itself were being called with the method's args."""
+
+    def test_extract_callee_keeps_method_name(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        _, root, get_text, _ = _parse_ruby("""\
+        def run(x)
+          DB.query_single(x)
+        end
+        """)
+        calls = range_calls(root, 1, 999, get_text, CALL_NODE_TYPES)
+        callees = [c['callee'] for c in calls]
+        self.assertIn('DB.query_single', callees)
+
+    def test_extract_callee_collapses_chained_call_to_dotted_form(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        _, root, get_text, _ = _parse_ruby("""\
+        def run(x)
+          DB.query_single(x).to_i
+        end
+        """)
+        calls = range_calls(root, 1, 999, get_text, CALL_NODE_TYPES)
+        callees = [c['callee'] for c in calls]
+        self.assertIn('DB.query_single', callees)
+        self.assertIn('.to_i', callees)
+
+
+def _parse_tsx(code: str):
+    """Parse TSX code and return (tree, root, get_text, content_bytes)."""
+    parser = ts.get_parser('tsx')
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+    root = tree.root_node()
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return tree, root, get_text, content_bytes
+
+
+class TestTsxDepsExcludesLowercaseJsxTags(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--deps, real-corpus dogfood on
+    excalidraw's Actions.tsx SelectedShapeActions): a lowercase JSX tag
+    (`<div>`, `<fieldset>`) is an HTML intrinsic — a string-like element
+    name, not a variable — but it parses as a bare `identifier` with no
+    distinguishing node kind from a real reference, same as everything
+    else. `<div className="...">...</div>` alone produced 2 bogus PARAM
+    entries. An uppercase tag (`<MyComponent>`) IS a real component
+    reference and must still be tracked — JSX's own lowercase/uppercase
+    convention is the only signal available."""
+
+    def test_deps_excludes_lowercase_tag_name(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        _, root, get_text, _ = _parse_tsx("""\
+        function run(x: number) {
+          return (
+            <div className="wrap">
+              <fieldset>{x}</fieldset>
+            </div>
+          );
+        }
+        """)
+        deps = collect_deps(root, 1, 999, get_text)
+        names = {d['var'] for d in deps}
+        self.assertNotIn('div', names)
+        self.assertNotIn('fieldset', names)
+        self.assertIn('x', names)
+
+    def test_deps_excludes_self_closing_lowercase_tag(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        _, root, get_text, _ = _parse_tsx("""\
+        function run(x: number) {
+          return <div style={{ width: x }} />;
+        }
+        """)
+        deps = collect_deps(root, 1, 999, get_text)
+        names = {d['var'] for d in deps}
+        self.assertNotIn('div', names)
+        self.assertIn('x', names)
+
+    def test_deps_still_tracks_uppercase_component_reference(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        _, root, get_text, _ = _parse_tsx("""\
+        function run(x: number) {
+          return <MyComponent value={x} />;
+        }
+        """)
+        deps = collect_deps(root, 1, 999, get_text)
+        names = {d['var'] for d in deps}
+        self.assertIn('MyComponent', names)
+        self.assertIn('x', names)
+
+    def test_varflow_ignores_lowercase_tag_matching_unrelated_variable(self):
+        """A direct --varflow query bypasses collect_deps's candidate pass
+        and goes straight to var_flow()/VarFlowWalker — a separate walker
+        that needed its own copy of this exclusion. Without it, a real
+        variable whose name happens to match a JSX tag elsewhere in scope
+        (rare, but the same class of collision Lua's `timeout` bug hit)
+        would pick up bogus READ events from the tag occurrences."""
+        from reveal.adapters.ast.nav import var_flow
+        _, root, get_text, _ = _parse_tsx("""\
+        function run() {
+          const div = 1;
+          return <div>{div}</div>;
+        }
+        """)
+        events = var_flow(root, 'div', 1, 999, get_text)
+        read_lines = [e['line'] for e in events if e['kind'] == 'READ']
+        # Only the real `{div}` expression reference is a read — not the
+        # opening/closing <div> tag-name occurrences.
+        self.assertEqual(read_lines, [3])
 
 
 if __name__ == '__main__':

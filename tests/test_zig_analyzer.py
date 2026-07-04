@@ -692,5 +692,137 @@ pub fn longer(a: i32, b: i32) i32 {
             os.unlink(temp_path)
 
 
+def _resolve_zig_func(path, element='run'):
+    """Resolve a Zig function's node the same way the CLI does, and a
+    get_text helper bound to its content."""
+    from reveal.file_handler import _resolve_func_node
+    analyzer = ZigAnalyzer(path)
+    func_node, _, _ = _resolve_func_node(analyzer, element)
+    content_bytes = analyzer.content.encode('utf-8')
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return func_node, get_text
+
+
+class TestZigCallsFindsSuffixExprCalls(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--calls, real-corpus dogfood on
+    Ghostty's formatter.zig cellStyle): Zig has no call-expression wrapper
+    node — `foo(x)` / `a.b.c(x)` both parse as one `SuffixExpr` node holding
+    [IDENTIFIER, then a bare `FnCallArguments` or a run of `FieldOrFnCall`
+    children], unlike every other language's dedicated call node. Every
+    call in the real function under audit (`cell.hasStyling()`,
+    `self.page.styles.get(...)`) was silently invisible to --calls — total
+    blindness, the same failure class Dart's --calls fix addressed."""
+
+    def _write(self, code: str) -> str:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.zig', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            return f.name
+
+    def test_calls_finds_receiver_qualified_chained_call(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('''\
+fn run(cell: Cell) bool {
+    return self.page.styles.get(cell);
+}
+''')
+        try:
+            func_node, get_text = _resolve_zig_func(path)
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            callees = [c['callee'] for c in calls]
+            self.assertIn('self.page.styles.get', callees)
+        finally:
+            os.unlink(path)
+
+    def test_calls_finds_bare_call(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('''\
+fn run(cell: Cell) bool {
+    return cell.hasStyling();
+}
+''')
+        try:
+            func_node, get_text = _resolve_zig_func(path)
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            callees = [c['callee'] for c in calls]
+            self.assertIn('cell.hasStyling', callees)
+        finally:
+            os.unlink(path)
+
+
+class TestZigDepsExcludesMemberNamesAndOwnName(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--deps, same Ghostty dogfood): three
+    stacked bugs, found in order as each was fixed:
+    1. `_collect_identifier_names` matched `identifier`/`simple_identifier`/
+       etc. but never Zig's actual (all-caps) `IDENTIFIER` node kind — total
+       blindness, --deps found *nothing* in a function with 6+ real reads.
+    2. Once that was fixed, every member name in a chain
+       (`self.page.styles.get(...)`) read as its own bogus undefined
+       variable — Zig's `SuffixExpr` packs a chain of any length into one
+       node's children rather than nesting, unlike every other language.
+    3. The function's own name (`cellStyle`) also leaked through — Zig
+       wraps a function in a fieldless `Decl` containing `FnProto`, which
+       `_declared_name_node` had no case for.
+    """
+
+    def _write(self, code: str) -> str:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.zig', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            return f.name
+
+    def test_deps_finds_real_params_at_all(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        path = self._write('''\
+fn run(cell: Cell) bool {
+    return cell.hasStyling();
+}
+''')
+        try:
+            func_node, get_text = _resolve_zig_func(path)
+            deps = collect_deps(func_node, 1, 999, get_text)
+            names = {d['var'] for d in deps}
+            self.assertIn('cell', names)
+        finally:
+            os.unlink(path)
+
+    def test_deps_excludes_chained_member_names(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        path = self._write('''\
+fn run(self: Self, cell: Cell) bool {
+    return self.page.styles.get(cell);
+}
+''')
+        try:
+            func_node, get_text = _resolve_zig_func(path)
+            deps = collect_deps(func_node, 1, 999, get_text)
+            names = {d['var'] for d in deps}
+            self.assertNotIn('page', names)
+            self.assertNotIn('styles', names)
+            self.assertNotIn('get', names)
+            self.assertIn('self', names)
+            self.assertIn('cell', names)
+        finally:
+            os.unlink(path)
+
+    def test_deps_excludes_own_function_name(self):
+        from reveal.adapters.ast.nav_exits import collect_deps
+        path = self._write('''\
+fn cellStyle(cell: Cell) bool {
+    return cell.hasStyling();
+}
+''')
+        try:
+            func_node, get_text = _resolve_zig_func(path, element='cellStyle')
+            deps = collect_deps(func_node, 1, 999, get_text)
+            names = {d['var'] for d in deps}
+            self.assertNotIn('cellStyle', names)
+        finally:
+            os.unlink(path)
+
+
 if __name__ == '__main__':
     unittest.main()

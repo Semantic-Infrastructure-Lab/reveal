@@ -322,8 +322,27 @@ class ImportsRenderer:
         print(f"Unused Imports: {count}")
         print(f"{'='*60}\n")
 
-        if count == 0:
+        # A language with no import extractor (e.g. Kotlin, Swift, Scala) was
+        # never analyzed at all — count == 0 in that case means "not checked,"
+        # not "clean." Without this, the text renderer prints the same "✅ No
+        # unused imports found!" for both cases, a false-confidence result
+        # (BACK-431 feature-breadth pass); the JSON renderer already exposes
+        # this via metadata.unsupported_extensions.
+        unsupported = result.get('metadata', {}).get('unsupported_extensions') or {}
+        if unsupported:
+            exts = ', '.join(f'{ext} ({n} file{"s" if n != 1 else ""})' for ext, n in sorted(unsupported.items()))
+            print(f"  ⚠ Not analyzed — no import extractor for: {exts}\n")
+
+        # scanned_files (files with a working extractor), not total_files
+        # (files with >=1 import statement) — a file can be fully, correctly
+        # analyzed and still have zero imports (BACK-431: real WordPress
+        # source with no `use`/`require` at all), and total_files would
+        # wrongly read as "unchecked" in that case.
+        analyzed_files = result.get('metadata', {}).get('scanned_files', 0)
+        if count == 0 and analyzed_files > 0:
             print("  ✅ No unused imports found!\n")
+        elif count == 0:
+            pass
         else:
             if verbose:
                 for imp in result['unused']:
@@ -709,6 +728,14 @@ class ImportsAdapter(ResourceAdapter):
         return {
             'total_imports': self._graph.get_import_count(),
             'total_files': self._graph.get_file_count(),
+            # Files actually scanned with a working extractor — distinct from
+            # total_files (files that happen to have >=1 import statement).
+            # A file with a supported language but zero imports (common in
+            # older procedural PHP/Ruby, found via real WordPress source
+            # during the BACK-431 feature-breadth pass) legitimately has
+            # total_files == 0 despite being fully, correctly analyzed; the
+            # text renderer needs this count to tell "clean" from "unchecked."
+            'scanned_files': len(self._scanned_files),
             'has_cycles': len(self._graph.find_cycle_groups()) > 0,
             'analyzer': 'imports',
             # Recognized code files whose language has no import extractor yet.
@@ -779,10 +806,13 @@ class ImportsAdapter(ResourceAdapter):
         unextractable: Dict[str, int] = {}
 
         if target_path.is_file():
-            files = [target_path]
             ext = target_path.suffix.lower()
-            if ext not in supported_exts and ext in code_exts:
-                unextractable[ext] = unextractable.get(ext, 0) + 1
+            if ext in supported_exts:
+                files = [target_path]
+            else:
+                files = []
+                if ext in code_exts:
+                    unextractable[ext] = unextractable.get(ext, 0) + 1
         else:
             files = []
             for root, dirs, filenames in os.walk(str(target_path)):

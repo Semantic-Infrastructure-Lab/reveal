@@ -412,5 +412,76 @@ public class LinqExample
             os.unlink(temp_path)
 
 
+class TestCSharpObjectCreationCallee(unittest.TestCase):
+    """BACK-431 feature-breadth pass (--calls, real-corpus dogfood on
+    Jellyfin's EncodingHelper.cs GetH26xOrAv1Encoder): `object_creation_expression`
+    is the exact same node-kind name PHP's `new ClassName(args)` uses, but
+    C#'s internal shape is unrelated (`identifier`/`generic_name` +
+    `argument_list` + optional `initializer_expression`, vs. PHP's
+    `name`/`qualified_name`). The PHP-only extraction found no matching
+    child and returned no callee at all, which `render_range_calls`
+    displays as the literal placeholder `?(...)` — `new Dictionary<K, V>()
+    { ... }` rendered as `?(...)` in --calls."""
+
+    def _write(self, code: str) -> str:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cs', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            return f.name
+
+    def test_calls_names_generic_object_creation(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.file_handler import _resolve_func_node
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('''\
+class Foo {
+    void Run() {
+        var codecMap = new Dictionary<int, string>()
+        {
+            { 1, "a" },
+        };
+    }
+}
+''')
+        try:
+            analyzer = CSharpAnalyzer(path)
+            func_node, _, _ = _resolve_func_node(analyzer, 'Run')
+            content_bytes = analyzer.content.encode('utf-8')
+
+            def get_text(node):
+                return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            callees = [c['callee'] for c in calls]
+            self.assertIn('new Dictionary', callees)
+            self.assertNotIn(None, callees)
+        finally:
+            os.unlink(path)
+
+    def test_calls_names_plain_object_creation(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.file_handler import _resolve_func_node
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('''\
+class Foo {
+    void Run() {
+        var a = new Bar();
+    }
+}
+''')
+        try:
+            analyzer = CSharpAnalyzer(path)
+            func_node, _, _ = _resolve_func_node(analyzer, 'Run')
+            content_bytes = analyzer.content.encode('utf-8')
+
+            def get_text(node):
+                return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            callees = [c['callee'] for c in calls]
+            self.assertIn('new Bar', callees)
+        finally:
+            os.unlink(path)
+
+
 if __name__ == '__main__':
     unittest.main()

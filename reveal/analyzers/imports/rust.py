@@ -127,29 +127,42 @@ class RustExtractor(LanguageExtractor):
         """
         line_number = node.start_position().row + 1
 
+        # `pub use foo::Bar;` re-exports Bar as part of this module's public
+        # API for OTHER files to consume — it's never "locally unused" by
+        # design, unlike a private `use` that should be consumed in this
+        # same file or else is genuinely dead. Without this, every re-export
+        # barrel file (a common Rust pattern: `mod foo; pub use foo::{...};`)
+        # falsely reported every re-exported name as unused (BACK-431
+        # feature-breadth pass, found via real Meilisearch source,
+        # search/mod.rs re-exporting its `federated` submodule's public API —
+        # 15 false positives in one file).
+        is_reexport = any(child.kind() == 'visibility_modifier' for child in _children(node))
+
         # Find the main use clause (skip 'pub', 'use' keywords, ';')
         for child in _children(node):
             if child.kind() == 'scoped_identifier':
                 # Simple use: use std::collections::HashMap
                 use_path = analyzer._get_node_text(child)
-                return [self._create_import(file_path, line_number, use_path)]
+                return [self._create_import(file_path, line_number, use_path, skip_unused=is_reexport)]
 
             elif child.kind() == 'scoped_use_list':
                 # Nested use: use std::{fs, io}
-                return self._parse_scoped_use_list(child, file_path, line_number, analyzer)
+                return self._parse_scoped_use_list(child, file_path, line_number, analyzer, is_reexport)
 
             elif child.kind() == 'use_as_clause':
                 # Aliased use: use std::io::Result as IoResult
-                return self._parse_use_as_clause(child, file_path, line_number, analyzer)
+                return self._parse_use_as_clause(child, file_path, line_number, analyzer, is_reexport)
 
             elif child.kind() == 'use_wildcard':
                 # Glob use: use std::collections::*
                 use_path = analyzer._get_node_text(child)
-                return [self._create_import(file_path, line_number, use_path)]
+                return [self._create_import(file_path, line_number, use_path, skip_unused=is_reexport)]
 
         return []
 
-    def _parse_scoped_use_list(self, node, file_path: Path, line_number: int, analyzer) -> List[ImportStatement]:
+    def _parse_scoped_use_list(
+        self, node, file_path: Path, line_number: int, analyzer, is_reexport: bool = False
+    ) -> List[ImportStatement]:
         """Parse scoped_use_list node: std::{fs, io}"""
         imports: List[ImportStatement] = []
 
@@ -173,12 +186,12 @@ class RustExtractor(LanguageExtractor):
                 item_name = analyzer._get_node_text(item)
                 full_path = f"{base_path}::{item_name}"
                 imports.append(self._create_import(
-                    file_path, line_number, full_path, imported_name=item_name
+                    file_path, line_number, full_path, imported_name=item_name, skip_unused=is_reexport
                 ))
             elif item.kind() == 'use_as_clause':
                 # Aliased item: io as MyIo
                 imports.extend(self._parse_nested_use_as(
-                    item, file_path, line_number, analyzer, base_path
+                    item, file_path, line_number, analyzer, base_path, is_reexport
                 ))
             elif item.kind() == 'scoped_identifier':
                 # Nested path: collections::HashMap
@@ -186,12 +199,14 @@ class RustExtractor(LanguageExtractor):
                 full_path = f"{base_path}::{item_path}"
                 imported_name = item_path.split('::')[-1]
                 imports.append(self._create_import(
-                    file_path, line_number, full_path, imported_name=imported_name
+                    file_path, line_number, full_path, imported_name=imported_name, skip_unused=is_reexport
                 ))
 
         return imports
 
-    def _parse_use_as_clause(self, node, file_path: Path, line_number: int, analyzer) -> List[ImportStatement]:
+    def _parse_use_as_clause(
+        self, node, file_path: Path, line_number: int, analyzer, is_reexport: bool = False
+    ) -> List[ImportStatement]:
         """Parse use_as_clause node: std::io::Result as IoResult"""
         use_path = None
         alias = None
@@ -205,9 +220,11 @@ class RustExtractor(LanguageExtractor):
         if not use_path:
             return []
 
-        return [self._create_import(file_path, line_number, use_path, alias)]
+        return [self._create_import(file_path, line_number, use_path, alias, skip_unused=is_reexport)]
 
-    def _parse_nested_use_as(self, node, file_path: Path, line_number: int, analyzer, base_path: str) -> List[ImportStatement]:
+    def _parse_nested_use_as(
+        self, node, file_path: Path, line_number: int, analyzer, base_path: str, is_reexport: bool = False
+    ) -> List[ImportStatement]:
         """Parse use_as_clause within a scoped use list."""
         item_name = None
         alias = None
@@ -223,7 +240,7 @@ class RustExtractor(LanguageExtractor):
             return []
 
         full_path = f"{base_path}::{item_name}"
-        return [self._create_import(file_path, line_number, full_path, alias, item_name)]
+        return [self._create_import(file_path, line_number, full_path, alias, item_name, skip_unused=is_reexport)]
 
     @staticmethod
     def _create_import(
@@ -231,7 +248,8 @@ class RustExtractor(LanguageExtractor):
         line_number: int,
         use_path: str,
         alias: Optional[str] = None,
-        imported_name: Optional[str] = None
+        imported_name: Optional[str] = None,
+        skip_unused: bool = False
     ) -> ImportStatement:
         """Create ImportStatement for a Rust use declaration.
 
@@ -241,6 +259,7 @@ class RustExtractor(LanguageExtractor):
             use_path: Full use path (e.g., "std::collections::HashMap")
             alias: Optional alias from 'as' clause
             imported_name: For nested imports, the specific item imported
+            skip_unused: True for `pub use` re-exports, never locally "unused"
 
         Returns:
             ImportStatement object
@@ -270,7 +289,8 @@ class RustExtractor(LanguageExtractor):
             imported_names=imported_names,
             is_relative=is_relative,
             import_type=import_type,
-            alias=alias
+            alias=alias,
+            skip_unused=skip_unused
         )
 
     def _is_usage_context(self, node) -> bool:

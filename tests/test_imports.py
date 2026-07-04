@@ -952,6 +952,65 @@ class TestImportsRenderer:
         # Should contain unused imports info
         assert 'unused' in output.lower() or 'import' in output.lower()
 
+    def test_renderer_warns_on_unsupported_extension_instead_of_false_clean(self, tmp_path):
+        """BACK-431 feature-breadth pass: a language with no import extractor
+        (e.g. Kotlin, Swift, Scala) was never analyzed, so count == 0 means
+        "not checked," not "clean." The text renderer used to print the same
+        "✅ No unused imports found!" for both cases — found via a real
+        Kotlin file where JSON metadata already recorded
+        unsupported_extensions but the text path silently ignored it."""
+        from reveal.adapters.imports import ImportsRenderer
+        from io import StringIO
+        import sys
+
+        test_file = tmp_path / "test.kt"
+        test_file.write_text("import kotlin.time.Duration\n\nfun f() {}\n")
+
+        adapter = ImportsAdapter(str(test_file), 'unused')
+        result = adapter.get_structure()
+        assert result['metadata']['unsupported_extensions'] == {'.kt': 1}
+
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+        ImportsRenderer.render_structure(result, format='text')
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        assert 'No unused imports found' not in output
+        assert '.kt' in output
+
+    def test_renderer_shows_clean_for_supported_file_with_zero_imports(self, tmp_path):
+        """A file whose language IS supported but which happens to have zero
+        import statements (common in older procedural PHP with no `use`/
+        `require` at all — found via real WordPress source,
+        wp-includes/post.php) must still show the clean checkmark: it was
+        correctly analyzed, just genuinely import-free. The first version
+        of the unsupported-extension fix above used `total_files` (files
+        with >=1 import) to gate the checkmark, which wrongly suppressed it
+        for exactly this case — `scanned_files` (files with a working
+        extractor, regardless of whether they had imports) is the correct
+        gate."""
+        from reveal.adapters.imports import ImportsRenderer
+        from io import StringIO
+        import sys
+
+        test_file = tmp_path / "test.php"
+        test_file.write_text("<?php\nfunction f() { return 1; }\n")
+
+        adapter = ImportsAdapter(str(test_file), 'unused')
+        result = adapter.get_structure()
+        assert result['metadata']['unsupported_extensions'] == {}
+        assert result['metadata']['total_files'] == 0
+        assert result['metadata']['scanned_files'] == 1
+
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+        ImportsRenderer.render_structure(result, format='text')
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        assert '✅ No unused imports found!' in output
+
 
 class TestFanInRanking:
     """Tests for ?rank=fan-in feature (BACK-206)."""

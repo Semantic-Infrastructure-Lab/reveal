@@ -10,9 +10,21 @@ Benefits:
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import List, Set, Optional
 from ...core import node_children as _children
+
+# Go modules' semantic-import-versioning convention: a major version >= 2
+# suffixes the import path (`k8s.io/klog/v2`, `gopkg.in/yaml.v3`-style
+# module paths use `/v2`, `/v3`, ...), but the package's actual declared
+# name (`package klog`) is the segment BEFORE the suffix, not the suffix
+# itself. Deriving the local name from the raw last path segment reads
+# `k8s.io/klog/v2` as package "v2" — which never matches real usage
+# (`klog.FromContext(...)`), so every unaliased v2+ import falsely reports
+# as unused (BACK-431 feature-breadth pass, found via real Kubernetes
+# source using `k8s.io/klog/v2` throughout).
+_GO_MAJOR_VERSION_SUFFIX = re.compile(r'^v[0-9]+$')
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +208,10 @@ class GoExtractor(LanguageExtractor):
         # path basename, so imported_names must be the alias or the import reads
         # as falsely unused (BACK-420). Blank imports ('_') bind no name; dot
         # imports ('.') pull names into scope directly (skipped by I001 anyway).
-        package_name = package_path.split('/')[-1]
+        path_segments = package_path.split('/')
+        package_name = path_segments[-1]
+        if _GO_MAJOR_VERSION_SUFFIX.match(package_name) and len(path_segments) > 1:
+            package_name = path_segments[-2]
         if alias == '_':
             imported_names = []
         elif alias and alias not in ('.', '_'):

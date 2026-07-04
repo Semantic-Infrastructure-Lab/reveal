@@ -44,9 +44,177 @@ def range_calls(
             callee = _extract_callee(node, get_text, call_node_types)
             first_arg, has_more = _extract_first_arg(node, get_text)
             results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
+        # Dart has no call-expression wrapper node at all — `obj.method(x)`
+        # parses as a bare `identifier` followed by flat sibling `selector`
+        # nodes (`.method`, then `(x)`), so it's invisible to the node-kind
+        # check above regardless of what's in call_node_types. `selector` is
+        # a Dart-only kind name (no-op scan elsewhere), so this is safe to
+        # run unconditionally. Found via real AppFlowy source
+        # (createNewPageInSpace) — every call in the function, including
+        # `find.byWidgetPredicate(...)` and 8 others, was silently invisible
+        # to --calls (BACK-431 feature-breadth pass).
+        children = _children(node)
+        if any(c.kind() == 'selector' for c in children):
+            for call in _extract_dart_selector_calls(children, get_text):
+                if from_line <= call['line'] <= to_line:
+                    results.append(call)
+        # Zig has no call-expression wrapper node either — `foo(x)` /
+        # `a.b.c(x)` parse as one `SuffixExpr` holding [IDENTIFIER, then
+        # either a bare `FnCallArguments` or a run of `FieldOrFnCall`
+        # children (`.member` or `.method(args)`)]. `SuffixExpr` is a
+        # Zig-only kind name, so this is a no-op scan for every other
+        # language. Found via real Ghostty source (formatter.zig's
+        # cellStyle): `cell.hasStyling()` and
+        # `self.page.styles.get(...)` were both silently invisible to
+        # --calls (BACK-431 feature-breadth pass).
+        if node.kind() == 'SuffixExpr':
+            for call in _extract_zig_suffix_calls(children, get_text):
+                if from_line <= call['line'] <= to_line:
+                    results.append(call)
+        # GDScript's dotted method call (`x.size()`, `x.a().b()`) has no
+        # dedicated call node either — it's folded into the same `attribute`
+        # node Python-style plain attribute access uses (`x.field`), as a
+        # flat run of `.` tokens and either bare `identifier` (plain
+        # property) or `attribute_call` (identifier + arguments) segments.
+        # `attribute_call` isn't a member of CALL_NODE_TYPES for any
+        # language, so this whole shape was invisible to --calls. Bare
+        # `foo(x)` (the plain `call` node, shared with Python) already
+        # worked — only the dotted form was blind, which is most real
+        # GDScript call sites. Found via real godot-demo-projects source
+        # (ik_fabrik.gd's chain_backward): `bone_nodes[...].normalized()`
+        # and 4 others were silently invisible (BACK-431 feature-breadth
+        # pass).
+        if node.kind() == 'attribute' and any(c.kind() == 'attribute_call' for c in children):
+            for call in _extract_gdscript_attribute_calls(children, get_text):
+                if from_line <= call['line'] <= to_line:
+                    results.append(call)
         stack.extend(reversed(_children(node)))
 
     results.sort(key=lambda r: r['line'])
+    return results
+
+
+def _extract_dart_selector_calls(children: List[Any], get_text: Callable) -> List[Dict[str, Any]]:
+    """Reconstruct call sites from Dart's flat identifier+selector siblings.
+
+    `obj.method(x, y).other()` parses as siblings:
+    `identifier(obj) selector(.method) selector((x,y)) selector(.other)
+    selector(())` — with no enclosing node naming "the call". Walk the
+    sibling list left to right, accumulating the callee text through
+    `.member` selectors, and emit one entry per `argument_part` selector.
+    Chained calls (whose callee text was reset by a prior call) collapse to
+    `.member`, mirroring every other language's chained-call convention.
+    """
+    results: List[Dict[str, Any]] = []
+    base_parts: List[str] = []
+    for child in children:
+        kind = child.kind()
+        if kind == 'identifier':
+            base_parts = [get_text(child)]
+            continue
+        if kind != 'selector':
+            base_parts = []
+            continue
+        sel_children = _children(child)
+        if not sel_children:
+            continue
+        inner = sel_children[0]
+        inner_kind = inner.kind()
+        if inner_kind == 'argument_part':
+            callee = ''.join(base_parts) if base_parts else None
+            line = child.start_position().row + 1
+            first_arg, has_more = _extract_first_arg(inner, get_text)
+            results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
+            base_parts = []
+        elif inner_kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
+            inner_sub = _children(inner)
+            if inner_sub and inner_sub[0].kind() == 'index_selector':
+                base_parts = []
+            else:
+                member = get_text(inner_sub[-1]).strip() if inner_sub else ''
+                base_parts = (base_parts + [f'.{member}']) if base_parts and member else ([f'.{member}'] if member else [])
+        else:
+            base_parts = []
+    return results
+
+
+def _extract_zig_suffix_calls(children: List[Any], get_text: Callable) -> List[Dict[str, Any]]:
+    """Reconstruct call sites from Zig's single-node `SuffixExpr` children.
+
+    `foo(x)` is `SuffixExpr` → [IDENTIFIER, FnCallArguments] (bare call);
+    `a.b.c(x)` is `SuffixExpr` → [IDENTIFIER, FieldOrFnCall(.b),
+    FieldOrFnCall(.c, FnCallArguments)] — a run of dot segments, each
+    optionally carrying its own call arguments, all under one node (unlike
+    Dart's flat siblings, but equally invisible to a plain node-kind check
+    since there's still no wrapper naming "the call" itself).
+    """
+    results: List[Dict[str, Any]] = []
+    if not children:
+        return results
+    base_parts: List[str] = []
+    if children[0].kind() == 'IDENTIFIER':
+        base_parts = [get_text(children[0])]
+    for child in children[1:]:
+        kind = child.kind()
+        if kind == 'FnCallArguments':
+            callee = ''.join(base_parts) if base_parts else None
+            line = child.start_position().row + 1
+            first_arg, has_more = _extract_first_arg(child, get_text)
+            results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
+            base_parts = []
+        elif kind == 'FieldOrFnCall':
+            seg_children = _children(child)
+            names = [c for c in seg_children if c.kind() == 'IDENTIFIER']
+            args = next((c for c in seg_children if c.kind() == 'FnCallArguments'), None)
+            member = get_text(names[0]).strip() if names else ''
+            if args is not None:
+                callee = (
+                    ''.join(base_parts) + f'.{member}' if base_parts and member
+                    else (f'.{member}' if member else None)
+                )
+                line = child.start_position().row + 1
+                first_arg, has_more = _extract_first_arg(args, get_text)
+                results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
+                base_parts = []
+            elif member:
+                base_parts = base_parts + [f'.{member}'] if base_parts else [f'.{member}']
+    return results
+
+
+def _extract_gdscript_attribute_calls(children: List[Any], get_text: Callable) -> List[Dict[str, Any]]:
+    """Reconstruct call sites from GDScript's flat `attribute` chain.
+
+    `x.a().b` and `x.size()` both live inside one `attribute` node: a base
+    `identifier` followed by a run of `.` tokens paired with either a bare
+    `identifier` (plain property, no call) or `attribute_call` (identifier +
+    arguments — a real call). Same flat-chain-in-one-node shape as Dart's
+    `selector`/Zig's `SuffixExpr`, just GDScript's own node-kind names.
+    """
+    results: List[Dict[str, Any]] = []
+    if not children:
+        return results
+    base_parts: List[str] = []
+    if children[0].kind() == 'identifier':
+        base_parts = [get_text(children[0])]
+    for child in children[1:]:
+        kind = child.kind()
+        if kind == 'identifier':
+            member = get_text(child).strip()
+            if member:
+                base_parts = base_parts + [f'.{member}'] if base_parts else [f'.{member}']
+        elif kind == 'attribute_call':
+            seg_children = _children(child)
+            name_node = next((c for c in seg_children if c.kind() == 'identifier'), None)
+            member = get_text(name_node).strip() if name_node else ''
+            callee = (
+                ''.join(base_parts) + f'.{member}' if base_parts and member
+                else (f'.{member}' if member else None)
+            )
+            line = child.start_position().row + 1
+            first_arg, has_more = _extract_first_arg(child, get_text)
+            results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
+            base_parts = []
+        # '.' tokens are skipped implicitly (unnamed, never match either branch)
     return results
 
 
@@ -77,6 +245,17 @@ def _extract_callee(
     # `path.resolveIndex` (BACK-416).
     if call_node.kind() == 'method_invocation':
         return _extract_java_method_invocation_callee(call_node, get_text, call_node_types)
+
+    # Ruby: `call` exposes 'receiver'/'method'/'arguments' fields directly
+    # rather than nesting `receiver.method` inside its own member-access
+    # node like most grammars — the generic child(0) fallback below grabs
+    # only the receiver, dropping the method name entirely
+    # (`DB.query_single(sql)` rendered as the nonsensical `DB(sql)`, found
+    # via real Discourse source, BACK-431 feature-breadth pass). A
+    # receiver-less call (`puts(x)`) has no method field to separate out,
+    # so it falls through to the generic path unchanged.
+    if call_node.kind() == 'call' and call_node.child_by_field_name('receiver') is not None:
+        return _extract_ruby_call_callee(call_node, get_text, call_node_types)
 
     callee_node = call_node.child(0)
 
@@ -167,12 +346,30 @@ def _extract_member_call_callee(node: Any, get_text: Callable) -> Optional[str]:
 
 
 def _extract_object_creation_callee(node: Any, get_text: Callable) -> Optional[str]:
-    """PHP object_creation_expression: new <name|qualified_name> <arguments>."""
+    """`object_creation_expression`: PHP's `new <name|qualified_name>(args)`
+    and C#'s `new <identifier|generic_name>(args) { initializer }` share
+    this exact node-kind name despite unrelated internal shapes — without a
+    C# case, `new Dictionary<K, V>() { ... }` fell through with no callee at
+    all, rendering as the placeholder `?(...)` in --calls (found via real
+    Jellyfin source, EncodingHelper.cs's GetH26xOrAv1Encoder, BACK-431
+    feature-breadth pass). C#'s generic type collapses to its base name
+    (`Dictionary`, not `Dictionary<K, V>`) to match plain `new Foo()`.
+    """
     for child in _children(node):
         if child.kind() in ('name', 'qualified_name'):
             class_name = get_text(child).strip()
             if class_name:
                 return f"new {class_name}"
+        if child.kind() == 'identifier':
+            class_name = get_text(child).strip()
+            if class_name:
+                return f"new {class_name}"
+        if child.kind() == 'generic_name':
+            base = next((c for c in _children(child) if c.kind() == 'identifier'), None)
+            if base is not None:
+                class_name = get_text(base).strip()
+                if class_name:
+                    return f"new {class_name}"
     return None
 
 
@@ -207,6 +404,32 @@ def _extract_java_method_invocation_callee(
         if obj_text and name:
             return f"{obj_text}.{name}"
     return name or None
+
+
+def _extract_ruby_call_callee(
+    node: Any,
+    get_text: Callable,
+    call_node_types: Optional[frozenset],
+) -> Optional[str]:
+    """Ruby `call`: fielded `receiver`/`method`/`arguments` → `receiver.method`.
+
+    Chained calls (`a.b.c`) whose receiver is itself a call collapse to
+    `.method` (the inner call is captured separately), mirroring the
+    member-access handling in _extract_callee (BACK-415/416/BACK-431).
+    """
+    receiver = node.child_by_field_name('receiver')
+    method = node.child_by_field_name('method')
+    if method is None:
+        return None
+    name = get_text(method).strip()
+    if not name:
+        return None
+    if call_node_types and _subtree_contains_call(receiver, call_node_types):
+        return f".{name}"
+    receiver_text = get_text(receiver).strip()
+    if not receiver_text or '\n' in receiver_text or len(receiver_text) > 40:
+        return f".{name}"
+    return f"{receiver_text}.{name}"
 
 
 def _subtree_contains_call(node: Any, call_node_types: frozenset) -> bool:
