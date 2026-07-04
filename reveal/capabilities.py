@@ -752,13 +752,21 @@ _UNTESTED: Dict[str, LanguageCapability] = {
         imports_unused=None, import_resolution="Not applicable.",
         conformance_level=CONFORMANCE_UNTESTED,
         known_limitations=[
-            "NOT REACHABLE via the registry as of this audit (2026-07-04): "
-            "NginxAnalyzer registers only '.conf', and reveal/analyzers/"
-            "__init__.py imports nginx.py before ini_analyzer.py, so "
-            "IniAnalyzer's later '.conf' registration silently overwrites "
-            "it in _ANALYZER_REGISTRY — every .conf file routes to "
-            "IniAnalyzer, never NginxAnalyzer, regardless of content. "
-            "Noticed during BACK-444, not fixed (out of scope).",
+            "REACHABLE via real CLI dispatch (registry.get_analyzer()): "
+            "_try_conf_detection() content/path-sniffs '.conf' files and "
+            "routes nginx-shaped ones to NginxAnalyzer *before* the plain "
+            "extension-table lookup runs, so real analysis is correct "
+            "(verified 2026-07-04, BACK-455). What IS true: "
+            "_ANALYZER_REGISTRY['.conf'] itself (a single dict slot) can "
+            "only hold one class, and IniAnalyzer's import in reveal/"
+            "analyzers/__init__.py registers '.conf' after NginxAnalyzer, "
+            "so it wins that slot — any caller that reads the registry "
+            "directly instead of going through get_analyzer() (this "
+            "module's get_capability_for_extension('.conf'), "
+            "get_analyzer_mapping(), 'reveal --languages') sees IniAnalyzer "
+            "only. That's a structural limit of one-class-per-extension "
+            "metadata, not a routing bug — content-dependent dispatch has "
+            "no single 'the' analyzer to report for '.conf'.",
         ],
     ),
     "ElixirAnalyzer": LanguageCapability(
