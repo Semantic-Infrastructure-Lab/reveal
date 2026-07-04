@@ -171,13 +171,20 @@ def reveal_element(path: str, element: str) -> str:
     return f"{header}\n{analyzer.format_with_lines(source, line_start)}"
 
 
-# Nav flags that take no value (boolean).  New boolean nav flags are automatically
-# supported — no MCP changes needed when new flags are added.
-_NAV_BOOLEAN_FLAGS = frozenset({
-    'scope', 'ifmap', 'catchmap', 'exits', 'flowto',
-    'deps', 'mutations', 'sideeffects', 'returns', 'boundary', 'outline',
-    'loopmap', 'fanout', 'statewrites',
-})
+# Nav flags that take no value (boolean), derived from nav_handlers._NAV_DISPATCH
+# (BACK-457) — new boolean nav flags are genuinely automatically supported now,
+# not just documented as such: this set can no longer drift from the dispatch
+# table it's describing.
+from .nav_handlers import NAV_BOOLEAN_FLAG_NAMES as _NAV_BOOLEAN_FLAGS  # noqa: I006
+
+# Nav flags that require a variable-name flag_value, mapped to an example name
+# for the error message. Collapses what used to be three near-identical
+# copy-pasted elif branches (BACK-457).
+_NAV_VAR_NAME_FLAGS = {
+    'varflow': 'result',
+    'keys': 'config',
+    'narrow': 'x',
+}
 
 
 @mcp.tool()
@@ -230,18 +237,11 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
 
     if flag in _NAV_BOOLEAN_FLAGS:
         args = _default_args(**{flag: True})
-    elif flag == 'varflow':
+    elif flag in _NAV_VAR_NAME_FLAGS:
         if not flag_value:
-            return "[reveal error: varflow requires flag_value (variable name, e.g. 'result')]"
-        args = _default_args(varflow=flag_value)
-    elif flag == 'keys':
-        if not flag_value:
-            return "[reveal error: keys requires flag_value (variable name, e.g. 'config')]"
-        args = _default_args(keys=flag_value)
-    elif flag == 'narrow':
-        if not flag_value:
-            return "[reveal error: narrow requires flag_value (variable name, e.g. 'x')]"
-        args = _default_args(narrow=flag_value)
+            example = _NAV_VAR_NAME_FLAGS[flag]
+            return f"[reveal error: {flag} requires flag_value (variable name, e.g. '{example}')]"
+        args = _default_args(**{flag: flag_value})
     elif flag == 'calls':
         args = _default_args(calls=flag_value or 'FULL')
     elif flag == 'around':
@@ -251,7 +251,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
             return f"[reveal error: around requires an integer flag_value, got '{flag_value}']"
         args = _default_args(around=n)
     else:
-        valid = sorted(_NAV_BOOLEAN_FLAGS | {'varflow', 'keys', 'narrow', 'calls', 'around'})
+        valid = sorted(_NAV_BOOLEAN_FLAGS | set(_NAV_VAR_NAME_FLAGS) | {'calls', 'around'})
         return f"[reveal error: unknown nav flag '{flag}'. Valid flags: {valid}]"
 
     return _run_and_capture(handle_file, path, element, False, 'text', args)

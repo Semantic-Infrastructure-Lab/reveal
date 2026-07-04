@@ -338,23 +338,38 @@ def _nav_boundary(ctx: _NavCtx) -> None:
 
 # Maps each nav flag (or flag pair) to its handler.  Adding a new nav flag:
 # 1 entry here + 1 new _nav_* function above.
+#
+# `bool_flags` lists the boolean (no-value) flag names an entry contributes —
+# empty for value flags (varflow/narrow/calls/keys), which mcp_server.py's
+# reveal_nav handles explicitly with their own flag_value validation.
+# NAV_BOOLEAN_FLAG_NAMES below derives from this so consumers (MCP) never
+# hand-maintain a second list that can drift out of sync (BACK-457).
 _NAV_DISPATCH: List[tuple] = [
-    (lambda a: getattr(a, 'outline', False),                                      _nav_outline),
-    (lambda a: getattr(a, 'varflow', None),                                       _nav_varflow),
-    (lambda a: getattr(a, 'narrow', None),                                        _nav_narrow),
-    (lambda a: getattr(a, 'calls', None) is not None,                             _nav_calls),
-    (lambda a: getattr(a, 'ifmap', False) or getattr(a, 'catchmap', False),       _nav_branchmap),
-    (lambda a: getattr(a, 'exits', False) or getattr(a, 'flowto', False),         _nav_exits),
-    (lambda a: getattr(a, 'deps', False),                                         _nav_deps),
-    (lambda a: getattr(a, 'mutations', False) or getattr(a, 'writes', False),     _nav_mutations),
-    (lambda a: getattr(a, 'sideeffects', False),                                  _nav_sideeffects),
-    (lambda a: getattr(a, 'loopmap', False),                                      _nav_loopmap),
-    (lambda a: getattr(a, 'fanout', False),                                       _nav_fanout),
-    (lambda a: getattr(a, 'statewrites', False),                                  _nav_statewrites),
-    (lambda a: getattr(a, 'keys', None),                                          _nav_keys),
-    (lambda a: getattr(a, 'returns', False),                                      _nav_returns),
-    (lambda a: getattr(a, 'boundary', False),                                     _nav_boundary),
+    # (bool_flags, check, handler)
+    (('outline',),                lambda a: getattr(a, 'outline', False),                                  _nav_outline),
+    ((),                           lambda a: getattr(a, 'varflow', None),                                    _nav_varflow),
+    ((),                           lambda a: getattr(a, 'narrow', None),                                     _nav_narrow),
+    ((),                           lambda a: getattr(a, 'calls', None) is not None,                          _nav_calls),
+    (('ifmap', 'catchmap'),       lambda a: getattr(a, 'ifmap', False) or getattr(a, 'catchmap', False),    _nav_branchmap),
+    (('exits', 'flowto'),         lambda a: getattr(a, 'exits', False) or getattr(a, 'flowto', False),      _nav_exits),
+    (('deps',),                   lambda a: getattr(a, 'deps', False),                                       _nav_deps),
+    (('mutations', 'writes'),     lambda a: getattr(a, 'mutations', False) or getattr(a, 'writes', False),  _nav_mutations),
+    (('sideeffects',),            lambda a: getattr(a, 'sideeffects', False),                                _nav_sideeffects),
+    (('loopmap',),                lambda a: getattr(a, 'loopmap', False),                                    _nav_loopmap),
+    (('fanout',),                 lambda a: getattr(a, 'fanout', False),                                     _nav_fanout),
+    (('statewrites',),            lambda a: getattr(a, 'statewrites', False),                                _nav_statewrites),
+    ((),                           lambda a: getattr(a, 'keys', None),                                       _nav_keys),
+    (('returns',),                lambda a: getattr(a, 'returns', False),                                    _nav_returns),
+    (('boundary',),               lambda a: getattr(a, 'boundary', False),                                   _nav_boundary),
 ]
+
+# Boolean nav flag names derived structurally from _NAV_DISPATCH — the set
+# mcp_server.py exposes as its no-value flags. `scope` is added separately
+# because it (like `around`) is dispatched before _NAV_DISPATCH runs, on a
+# line reference rather than a function node (see file_handler._dispatch_nav).
+NAV_BOOLEAN_FLAG_NAMES: frozenset = frozenset(
+    name for bool_flags, _, _ in _NAV_DISPATCH for name in bool_flags
+) | {'scope'}
 
 
 def _nav_scope(analyzer, element: str, as_json: bool) -> None:

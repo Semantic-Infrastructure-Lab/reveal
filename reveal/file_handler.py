@@ -131,7 +131,7 @@ def _has_nav_flag(args) -> bool:
     return (
         getattr(args, 'scope', False)
         or getattr(args, 'around', None) is not None
-        or any(check(args) for check, _ in _NAV_DISPATCH)
+        or any(check(args) for _, check, _ in _NAV_DISPATCH)
     )
 
 
@@ -220,7 +220,7 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         get_text=analyzer._get_node_text,
     )
 
-    for check, handler in _NAV_DISPATCH:
+    for _, check, handler in _NAV_DISPATCH:
         if check(args):
             handler(ctx)
             return

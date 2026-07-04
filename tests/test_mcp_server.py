@@ -188,6 +188,27 @@ class TestRevealNavTool(unittest.TestCase):
         self.assertIsInstance(result, str)
         self.assertNotIn('[reveal error', result)
 
+    def test_every_dispatch_boolean_flag_is_reachable(self):
+        # BACK-457 regression: every boolean flag name nav_handlers._NAV_DISPATCH
+        # declares must actually work through reveal_nav, not just appear in a
+        # hand-maintained list that can silently drift (as loopmap/fanout/
+        # statewrites/writes previously did). Exercises the real dispatch table
+        # instead of a copy of it, so a newly added flag can't be forgotten here.
+        from reveal.nav_handlers import NAV_BOOLEAN_FLAG_NAMES
+        for flag in sorted(NAV_BOOLEAN_FLAG_NAMES - {'scope'}):
+            result = self.reveal_nav('reveal/adapters/ast/nav_exits.py', 'collect_gate_chains', flag)
+            self.assertNotIn(
+                '[reveal error: unknown nav flag', result,
+                f"flag '{flag}' from NAV_BOOLEAN_FLAG_NAMES is not dispatched by reveal_nav",
+            )
+
+    def test_writes_alias_reachable_via_mcp(self):
+        # 'writes' is the CLI's documented alias for 'mutations' but was missing
+        # from the old hand-maintained MCP boolean-flag set entirely.
+        result = self.reveal_nav('reveal/adapters/ast/nav_exits.py', 'collect_gate_chains', 'writes')
+        self.assertIsInstance(result, str)
+        self.assertNotIn('[reveal error', result)
+
 
 class TestRevealQueryTool(unittest.TestCase):
 
