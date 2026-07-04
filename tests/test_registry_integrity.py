@@ -134,6 +134,36 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
 class TestAnalyzerRegistryIntegrity(unittest.TestCase):
     """Test that all analyzers are properly registered and discoverable."""
 
+    def test_all_analyzer_files_are_imported(self):
+        """Every reveal/analyzers/*.py defining @register should be imported by __init__.py.
+
+        BACK-454: ElixirAnalyzer's @register never fired in production because
+        analyzers/__init__.py never imported the elixir module at all — only
+        tests/test_elixir_analyzer.py (which imports it directly) exercised it,
+        masked by pytest's shared import cache. Checks module-level import
+        (the decorator fires as an import side effect), not whether the class
+        name is re-exported — e.g. TSXAnalyzer lives in typescript.py, whose
+        module import already fires its @register even though only
+        TypeScriptAnalyzer is bound as a name in __init__.py.
+        """
+        analyzers_dir = Path(__file__).parent.parent / 'reveal' / 'analyzers'
+
+        registered_modules = {
+            f.stem for f in analyzers_dir.glob('*.py')
+            if f.stem != '__init__' and '@register(' in f.read_text(encoding='utf-8')
+        }
+
+        init_source = (analyzers_dir / '__init__.py').read_text(encoding='utf-8')
+        imported_modules = set(re.findall(r'^from \.(\w+) import', init_source, re.MULTILINE))
+
+        missing = registered_modules - imported_modules
+        self.assertFalse(
+            missing,
+            f"Analyzer modules with @register but never imported by "
+            f"reveal/analyzers/__init__.py (their @register never fires in "
+            f"production CLI use): {sorted(missing)}"
+        )
+
     def test_analyzer_count_is_consistent(self):
         """Analyzer count should be consistent with language claims.
 
