@@ -1,0 +1,137 @@
+# Real-corpus dogfood manifest — the single source of truth for the large
+# open-source repos used for exploratory, real-world validation of reveal's
+# analyzers (Layer 3 of internal-docs/planning/POPULAR_LANGUAGE_VALIDATION_STRATEGY_2026-07-03.md).
+#
+# WHY THIS FILE EXISTS
+# Previously these repos were cloned by hand into a gitignored `samples/`
+# directory sibling to the repo, with the repo→language→SHA mapping recorded
+# only as prose in a planning doc (which drifted: it listed 8 repos while 18
+# existed on disk). That made real-corpus findings non-reproducible — a finding
+# citing "calls:// misses 599/602 sites in Godot" silently rots the moment
+# upstream moves, and nobody can re-materialize the exact tree it came from.
+#
+# This manifest pins each corpus to an exact commit. scripts/fetch_corpus.py
+# reads it and materializes each repo (blobless, single-commit, no history) into
+# a shared cache at $REVEAL_CORPUS_DIR or ~/.cache/reveal-corpus/<language>/.
+#
+# TWO KINDS OF TESTING, DELIBERATELY SEPARATED
+#   - Deterministic regression tests (CI, tests/test_conformance_matrix.py,
+#     tests/test_smoke_tier.py) use tiny HAND-WRITTEN fixtures under
+#     tests/fixtures/ — committed, reproducible, no license entanglement. They
+#     do NOT depend on this corpus.
+#   - Exploratory real-corpus dogfood (occasional, maintainer-run, finds new
+#     idiom/scale bugs) uses this corpus. Tests that reference it MUST skip
+#     cleanly when the corpus is absent (see tests/corpus_paths.py).
+#
+# EXTRACTING A REAL FILE INTO A COMMITTED FIXTURE
+# When a real-corpus file exercises a bug worth pinning forever, prefer copying
+# that single file into tests/fixtures/corpus/<language>/ with a header citing
+# source repo + sha + path. Do this ONLY from permissively-licensed sources
+# (MIT/BSD/Apache, see `license` below). For copyleft/restrictive sources
+# (GPL/AGPL/SSPL) write a minimal hand-authored reproduction instead — your own
+# code, deterministic, no license question.
+#
+# RE-PINNING: entries with `sha: null` were snapshotted on 2026-07-02 before
+# this manifest existed and their local .git was already removed, so the exact
+# commit is unrecoverable. fetch_corpus.py clones the default branch HEAD for
+# them and prints the resolved SHA — paste it back here to pin.
+
+version: 1
+cache_dir_default: "~/.cache/reveal-corpus"
+
+corpora:
+  # ---- Tier 1: deep-conformance languages (also have hand-written fixtures) ----
+  - language: c
+    repo: https://github.com/redis/redis.git
+    sha: 5b22a09918743ba72952e35e431db23eb3d19605
+    license: AGPLv3/SSPLv1/RSALv2 (post-2024 relicense) — restrictive, do not extract
+    role: Real application (database server), dense idiomatic C
+  - language: cpp
+    repo: https://github.com/godotengine/godot.git
+    sha: efce2b1017111f75480ff160117f52a1b3a720d0
+    license: MIT
+    role: Real product (game engine), modern idiomatic C++
+  - language: csharp
+    repo: https://github.com/jellyfin/jellyfin.git
+    sha: 8f3eb3205d61d71638a1c695372cef273e76d2b3
+    license: GPLv2 — restrictive, do not extract
+    role: Real application (self-hosted media server)
+  - language: go
+    repo: https://github.com/kubernetes/kubernetes.git
+    sha: 359c508e3cafcded7482361fadc1a5a8f07c8bcb
+    license: Apache-2.0
+    role: Largest widely-known idiomatic Go application codebase
+  - language: java
+    repo: https://github.com/elastic/elasticsearch.git
+    sha: a6141b9dbec012eb147c8280ccc65f847b2956fa
+    license: SSPL/Elastic-2.0 — restrictive, do not extract
+    role: Real application (search engine), enterprise Java
+  - language: javascript
+    repo: https://github.com/mrdoob/three.js.git
+    sha: 4a1f515d1316b842e9388a3e59a23ea9edd8e52e
+    license: MIT
+    role: Large, well-known, pure JS library
+  - language: rust
+    repo: https://github.com/meilisearch/meilisearch.git
+    sha: 17758dce3fcc21d8e2415176c29d1106e905de00
+    license: MIT
+    role: Real product (search engine)
+  - language: typescript
+    repo: https://github.com/microsoft/vscode.git
+    sha: 71a83f43ef275a9adc01278e75a13915cf46e686
+    license: MIT
+    role: Huge real desktop app, extensive idiomatic TypeScript
+
+  # ---- Tier A/B/deep-9: smoke-tier languages ----
+  - language: kotlin
+    repo: https://github.com/chrisbanes/tivi.git
+    sha: a0c62c2c763c83e3a0ecf79b283224374bb06c4a
+    license: Apache-2.0
+    role: Real Android/Kotlin app
+  - language: php
+    repo: https://github.com/WordPress/WordPress.git
+    sha: 5a57baa3352953e1f9cef97fc480ed14a8135335
+    license: GPLv2 — restrictive, do not extract
+    role: Real product (CMS), dominant real-world PHP
+  - language: ruby
+    repo: https://github.com/discourse/discourse.git
+    sha: 4cac48263809d806cee8660c6b1adc6e5d0c9445
+    license: GPLv2 — restrictive, do not extract
+    role: Real product (forum platform), idiomatic Rails
+  - language: scala
+    repo: https://github.com/gitbucket/gitbucket.git
+    sha: f55982e8a5262d841f29489f5954616967b3504b
+    license: Apache-2.0
+    role: Real product (git platform), idiomatic Scala
+  - language: swift
+    repo: https://github.com/kickstarter/ios-oss.git
+    sha: 749793d48d5d39342608106397fea6debe11a382
+    license: Apache-2.0
+    role: Real iOS app, idiomatic Swift
+
+  # ---- Tier B additions: .git already removed on disk, sha unrecoverable ----
+  - language: dart
+    repo: https://github.com/AppFlowy-IO/AppFlowy.git
+    sha: null  # snapshot 2026-07-02; re-pin via fetch_corpus.py
+    license: AGPLv3 — restrictive, do not extract
+    role: Real product (notes/knowledge app), Flutter frontend
+  - language: lua
+    repo: https://github.com/Kong/kong.git
+    sha: null  # snapshot 2026-07-02; re-pin via fetch_corpus.py
+    license: Apache-2.0
+    role: Real production API gateway on OpenResty/Lua
+  - language: zig
+    repo: https://github.com/ghostty-org/ghostty.git
+    sha: null  # snapshot 2026-07-02; re-pin via fetch_corpus.py
+    license: MIT
+    role: Real product (terminal emulator)
+  - language: gdscript
+    repo: https://github.com/godotengine/godot-demo-projects.git
+    sha: null  # snapshot 2026-07-02; re-pin via fetch_corpus.py
+    license: MIT
+    role: Official Godot demo corpus — broad idiomatic GDScript
+  - language: tsx
+    repo: https://github.com/excalidraw/excalidraw.git
+    sha: null  # snapshot 2026-07-02; re-pin via fetch_corpus.py
+    license: MIT
+    role: Real product (drawing app), heavy TSX
