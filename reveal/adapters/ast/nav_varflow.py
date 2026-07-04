@@ -103,13 +103,29 @@ class VarFlowWalker:
         if n.end_position().row + 1 < self.from_line or line > self.to_line:
             return
 
+        # Terminal-identifier matches and per-language "this name is not a
+        # variable" exclusions (member access, JSX tags, annotations, Zig
+        # suffix chains) are handled first; each fully consumes the node.
+        if self._walk_exclusions(n, ntype, line, c):
+            return
+
+        self._dispatch(n, ntype, c)
+
+    def _walk_exclusions(self, n: Any, ntype: str, line: int, c: str) -> bool:
+        """Terminal-identifier match + per-language member-access/tag/annotation
+        exclusions. Returns True when the node was fully handled (caller returns).
+
+        This is the read/write-event mirror of the descent exclusions in
+        _collect_identifier_names — direct --varflow queries reach var_flow()
+        without going through that candidate pass, so the same "not a variable"
+        knowledge has to be applied here too (BACK-431 feature-breadth pass)."""
         if ntype in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER') and self.get_text(n) == self.var_name:
             pos = (n.start_position().row, n.start_position().column)
             if pos == self.own_name_pos:
-                return
+                return True
             if self.from_line <= line <= self.to_line:
                 self.events.append({'kind': c, 'line': line, 'node': n})
-            return
+            return True
 
         if ntype in _MEMBER_ACCESS_KINDS:
             # A member/method name (the non-base segment of `obj.field`/
@@ -125,7 +141,7 @@ class VarFlowWalker:
             children = _children(n)
             if children:
                 self.walk(children[0], c)
-            return
+            return True
 
         if ntype == 'SuffixExpr':
             # Zig's chain-of-any-length member access/calls live inside one
@@ -135,7 +151,7 @@ class VarFlowWalker:
             # queries (BACK-431 feature-breadth pass).
             for child in _zig_suffix_expr_walkable_children(_children(n)):
                 self.walk(child, c)
-            return
+            return True
 
         jsx_tag = _jsx_lowercase_tag_name_node(n, self.get_text)
         if jsx_tag is not None:
@@ -152,7 +168,7 @@ class VarFlowWalker:
                 pos = (child.start_position().row, child.start_position().column)
                 if pos != tag_pos:
                     self.walk(child, c)
-            return
+            return True
 
         java_annotation_name = _java_annotation_name_node(n)
         if java_annotation_name is not None:
@@ -165,8 +181,12 @@ class VarFlowWalker:
                 pos = (child.start_position().row, child.start_position().column)
                 if pos != name_pos:
                     self.walk(child, c)
-            return
+            return True
 
+        return False
+
+    def _dispatch(self, n: Any, ntype: str, c: str) -> None:
+        """Route a non-excluded node to its structural handler by grammar kind."""
         if ntype in ('assignment', 'augmented_assignment',
                      'assignment_expression', 'augmented_assignment_expression',
                      'assignment_statement', 'compound_assignment_expr'):
@@ -794,6 +814,94 @@ def _declared_name_node(scope_node: Any) -> Optional[Any]:
     return None
 
 
+def _register_skip_positions(node: Any, skip_positions: set, get_text: Callable) -> None:
+    """Record positions of names that look like identifiers but are not
+    variables, so the terminal-identifier collector skips them: a parameter's
+    Swift `external_name` (call-site argument label), a lowercase JSX tag, and a
+    Java annotation's type name (BACK-431 feature-breadth pass)."""
+    if node.kind() == 'parameter':
+        external_name = node.child_by_field_name('external_name')
+        if external_name is not None:
+            skip_positions.add(
+                (external_name.start_position().row, external_name.start_position().column)
+            )
+    jsx_tag = _jsx_lowercase_tag_name_node(node, get_text)
+    if jsx_tag is not None:
+        skip_positions.add((jsx_tag.start_position().row, jsx_tag.start_position().column))
+    java_annotation_name = _java_annotation_name_node(node)
+    if java_annotation_name is not None:
+        skip_positions.add(
+            (java_annotation_name.start_position().row, java_annotation_name.start_position().column)
+        )
+
+
+def _member_access_descent(node: Any) -> Optional[List[Any]]:
+    """For a member-access-shaped node, return exactly the children to descend
+    into (excluding the non-base member/method name), or None when `node` is
+    not such a shape and should be walked generically.
+
+    This is the candidate-name (--deps/--boundary) mirror of the same
+    per-language exclusions VarFlowWalker._walk_exclusions applies for direct
+    --varflow queries. Every branch here was found via real-corpus dogfood
+    (BACK-431 feature-breadth pass); see the original inline comments preserved
+    below for the exact source each idiom came from."""
+    kind = node.kind()
+    if kind in _MEMBER_ACCESS_KINDS:
+        # `obj.field` / `obj:method()` — only the base object is a variable.
+        children = _children(node)
+        return children[:1]
+    if kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
+        # Dart's member access (`.member`/`?.member`) holds only the trailing
+        # selector; the base is a preceding sibling already visited. Descend
+        # only into an `index_selector` (`[i]`, a real read target); a bare
+        # `.`/`?.` + member-name is not a variable (real AppFlowy source,
+        # `find.byWidgetPredicate(...)`).
+        children = _children(node)
+        if children and children[0].kind() == 'index_selector':
+            return [children[0]]
+        return []
+    if kind == 'call' and node.child_by_field_name('receiver') is not None:
+        # Ruby's `call` (`receiver.method(args)`) exposes receiver/method/
+        # arguments fields; walk receiver + arguments but not the method name
+        # (real Discourse source, `DB.query_single(...)[0].to_i`). A
+        # receiver-less bare call falls through — its callee is itself a read.
+        out = []
+        receiver = node.child_by_field_name('receiver')
+        arguments = node.child_by_field_name('arguments')
+        if receiver is not None:
+            out.append(receiver)
+        if arguments is not None:
+            out.append(arguments)
+        return out
+    if kind == 'method_invocation' and node.child_by_field_name('object') is not None:
+        # Java's `method_invocation` — same shape as Ruby's `call`; skip the
+        # `name` field only when a real `object` receiver is present (real
+        # Elasticsearch source, `InternalEngine.refreshIfNeeded`). A bare call
+        # has no object field and falls through, keeping its own name a read.
+        out = []
+        obj = node.child_by_field_name('object')
+        arguments = node.child_by_field_name('arguments')
+        if obj is not None:
+            out.append(obj)
+        if arguments is not None:
+            out.append(arguments)
+        return out
+    if kind in ('prefix_expression', 'pattern'):
+        # Swift's leading-dot implicit-member shorthand (`.someCase`) parses as
+        # prefix_expression/pattern with a literal '.' first child — the name
+        # after it is an enum case / static member, not a variable. Genuine
+        # prefix operators (`!flag`, `-x`) have a named operator kind, and
+        # `.some(let y)` has >2 children — both fall through to a generic walk.
+        children = _children(node)
+        if len(children) == 2 and children[0].kind() == '.':
+            return []
+        return None
+    if kind == 'SuffixExpr':
+        # Zig's flat member-access/call chain lives in one node's children.
+        return _zig_suffix_expr_walkable_children(_children(node))
+    return None
+
+
 def _collect_identifier_names(
     scope_node: Any,
     from_line: int,
@@ -830,89 +938,10 @@ def _collect_identifier_names(
                 text = get_text(node)
                 if text:
                     names.add(text)
-        if node.kind() == 'parameter':
-            external_name = node.child_by_field_name('external_name')
-            if external_name is not None:
-                skip_positions.add(
-                    (external_name.start_position().row, external_name.start_position().column)
-                )
-        jsx_tag = _jsx_lowercase_tag_name_node(node, get_text)
-        if jsx_tag is not None:
-            skip_positions.add((jsx_tag.start_position().row, jsx_tag.start_position().column))
-        java_annotation_name = _java_annotation_name_node(node)
-        if java_annotation_name is not None:
-            skip_positions.add(
-                (java_annotation_name.start_position().row, java_annotation_name.start_position().column)
-            )
-        if node.kind() in _MEMBER_ACCESS_KINDS:
-            children = _children(node)
-            if children:
-                stack.append(children[0])
-            continue
-        # Dart's member access (`.member`/`?.member`) doesn't wrap the base
-        # object at all — the base is an independent preceding sibling
-        # (already visited on its own), and this node holds only the
-        # trailing selector: either `index_selector` (`[i]`, whose contents
-        # ARE a real read/write target) or a bare `.`/`?.` + member-name
-        # identifier (not a variable at all). Found via real AppFlowy
-        # source (`find.byWidgetPredicate(...)`) — every member/method name
-        # in a chain read as its own independent undefined variable
-        # (BACK-431 feature-breadth pass).
-        if node.kind() in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
-            children = _children(node)
-            if children and children[0].kind() == 'index_selector':
-                stack.append(children[0])
-            continue
-        # Ruby's `call` node (`receiver.method(args)`) exposes 'receiver'/
-        # 'method'/'arguments' fields directly, unlike the base-child-only
-        # shape _MEMBER_ACCESS_KINDS assumes — arguments must still be
-        # walked for nested reads, so 'call' can't just reuse that branch.
-        # Without this, every method name in a Ruby call chain (found via
-        # real Discourse source: DB.query_single(...)[0].to_i) reads as an
-        # independent undefined variable (BACK-431 feature-breadth pass).
-        # A receiver-less call (bare `foo(x)`) has no member-access name to
-        # exclude — its callee is itself an undefined global/method read,
-        # same as Python's `sum(x)`, so it falls through to the generic walk.
-        if node.kind() == 'call' and node.child_by_field_name('receiver') is not None:
-            receiver = node.child_by_field_name('receiver')
-            arguments = node.child_by_field_name('arguments')
-            if receiver is not None:
-                stack.append(receiver)
-            if arguments is not None:
-                stack.append(arguments)
-            continue
-        # Java's `method_invocation` exposes 'object'/'name'/'arguments'
-        # fields directly too, same shape as Ruby's 'call' — the 'name'
-        # field is always present (even for a bare, receiver-less call), so
-        # only skip it when there's a real 'object' receiver to preserve
-        # instead. Without this, every qualified call's method name
-        # (`internalReaderManager.maybeRefreshBlocking(...)`) read as an
-        # independent undefined variable (BACK-431 feature-breadth pass,
-        # found via real Elasticsearch source, InternalEngine.refreshIfNeeded).
-        # A bare call (`doThing(x)`) has no object field — falls through to
-        # the generic walk so its own name stays a read, matching Python's
-        # `sum(x)` parity.
-        if node.kind() == 'method_invocation' and node.child_by_field_name('object') is not None:
-            obj = node.child_by_field_name('object')
-            arguments = node.child_by_field_name('arguments')
-            if obj is not None:
-                stack.append(obj)
-            if arguments is not None:
-                stack.append(arguments)
-            continue
-        # Swift's leading-dot implicit-member shorthand (`.someCase`) parses
-        # as `prefix_expression`/`pattern` with a literal '.' first child —
-        # the identifier after it names an enum case or static member, not a
-        # variable. Genuine prefix operators (`!flag`, `-x`) have a named
-        # first-child kind ('bang', 'minus', ...), not the '.' token, so this
-        # doesn't touch them. A `pattern` node with associated values (e.g.
-        # `.some(let y)`) has more than 2 children — skipped only when bare.
-        if node.kind() in ('prefix_expression', 'pattern'):
-            children = _children(node)
-            if len(children) == 2 and children[0].kind() == '.':
-                continue
-        if node.kind() == 'SuffixExpr':
-            stack.extend(reversed(_zig_suffix_expr_walkable_children(_children(node))))
+        _register_skip_positions(node, skip_positions, get_text)
+        descent = _member_access_descent(node)
+        if descent is not None:
+            stack.extend(reversed(descent))
             continue
         stack.extend(reversed(_children(node)))
     return frozenset(names)
