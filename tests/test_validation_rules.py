@@ -20,6 +20,7 @@ from reveal.rules.validation.V009 import V009
 from reveal.rules.validation.V011 import V011
 from reveal.rules.validation.V012 import V012
 from reveal.rules.validation.V013 import V013
+from reveal.rules.validation.V014 import V014
 from reveal.rules.validation.V015 import V015
 from reveal.rules.validation.V016 import V016
 from reveal.rules.validation.V024 import V024
@@ -1277,6 +1278,112 @@ One CLI, 14 URI adapters.
             self.assertIn(14, counts)   # "14 URI adapters"
         finally:
             readme_path.unlink()
+
+
+class TestV014TokenCost(unittest.TestCase):
+    """Test V014: Token-cost estimate accuracy for AGENT_HELP.md."""
+
+    def setUp(self):
+        self.rule = V014()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V014")
+        self.assertEqual(self.rule.severity.name, "MEDIUM")
+        self.assertIn("token-cost", self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        """Test that non-reveal URIs are ignored."""
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        """Test that reveal:// URIs are processed."""
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        # Should return detections list (empty today since AGENT_HELP.md is accurate)
+        self.assertIsInstance(detections, list)
+
+    def test_estimate_tokens(self):
+        """Test that _estimate_tokens returns a plausible chars/4 estimate."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write('---\nhelp_token_estimate: "~1"\n---\n' + ('x' * 400))
+            path = Path(f.name)
+        try:
+            estimate = self.rule._estimate_tokens(path)
+            self.assertEqual(estimate, 100)  # 400 chars / 4, frontmatter stripped
+        finally:
+            path.unlink()
+
+    def test_frontmatter_within_tolerance_not_flagged(self):
+        """A frontmatter claim within 50% of the computed estimate is not flagged."""
+        detections = self.rule._check_frontmatter(
+            Path(__file__), actual=40000, low=20000, high=60000)
+        # Path(__file__) has no frontmatter -> no claim to check, no detection
+        self.assertEqual(detections, [])
+
+    def test_body_line_drift_flagged(self):
+        """A body '**Token Cost:**' line far outside tolerance is flagged."""
+        content = "**Token Cost:** ~12,000 tokens\n"
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write(content)
+            path = Path(f.name)
+        try:
+            detections = self.rule._check_body_line(path, actual=40000, low=20000, high=60000)
+            self.assertEqual(len(detections), 1)
+            self.assertIn("12,000", detections[0].message)
+            self.assertIn("40,000", detections[0].message)
+        finally:
+            path.unlink()
+
+    def test_body_line_within_tolerance_not_flagged(self):
+        """A body line within tolerance is not flagged."""
+        content = "**Token Cost:** ~40,000 tokens\n"
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write(content)
+            path = Path(f.name)
+        try:
+            detections = self.rule._check_body_line(path, actual=40000, low=20000, high=60000)
+            self.assertEqual(detections, [])
+        finally:
+            path.unlink()
+
+    def test_help_py_literal_drift_flagged(self):
+        """A '~NK tokens' literal far outside tolerance is flagged."""
+        content = "                'description': 'Comprehensive agent reference (~12K tokens)'\n"
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(content)
+            path = Path(f.name)
+        try:
+            detections = self.rule._check_help_py_literals(path, actual=40000, low=20000, high=60000)
+            self.assertEqual(len(detections), 1)
+        finally:
+            path.unlink()
+
+    def test_help_py_comment_literal_not_flagged(self):
+        """A '~NK tokens' literal inside a narrative comment is not a current claim."""
+        content = "    # used to be exempted, dumping ~12K tokens against the thesis\n"
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(content)
+            path = Path(f.name)
+        try:
+            detections = self.rule._check_help_py_literals(path, actual=40000, low=20000, high=60000)
+            self.assertEqual(detections, [])
+        finally:
+            path.unlink()
+
+    def test_agent_help_md_currently_within_tolerance(self):
+        """The live AGENT_HELP.md, help.py literals should currently be within tolerance (no drift today)."""
+        detections = self.rule.check(file_path="reveal://", structure=None, content="")
+        self.assertEqual(detections, [],
+                          f"Unexpected live drift detected: {[d.message for d in detections]}")
 
 
 class TestV015RulesCount(unittest.TestCase):
