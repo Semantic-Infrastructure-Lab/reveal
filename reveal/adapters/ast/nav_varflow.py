@@ -11,6 +11,69 @@ from .node_taxonomy import (
 )
 
 
+@dataclass(frozen=True)
+class _DeclShape:
+    """One grammar's declaration-with-initializer node shape (BACK-431 Issue C).
+
+    Replaces a growing elif chain of per-language branches with one table:
+    the knowledge "Rust declares via `let_declaration` with fields
+    `pattern`/`value`" is data, not control flow. Mirrors the precedent set
+    by ``_ImportSpec``/``_GenericTreeSitterImportExtractor``.
+
+    write_field/read_field name the node's own tree-sitter fields for the
+    declared name / initializer, when the grammar exposes them at all.
+    missing_name/missing_value name a VarFlowWalker method to call when the
+    corresponding field lookup returns None — either because the grammar
+    never has that field (Kotlin's fieldless `property_declaration`) or
+    only sometimes does (C#'s valueless `variable_declarator`). positional
+    names a method that owns the whole node when the grammar exposes no
+    fields at all (Dart/GDScript/Zig); write_field/read_field are unused
+    in that case.
+    """
+
+    write_field: Optional[str] = None
+    read_field: Optional[str] = None
+    missing_name: Optional[str] = None
+    missing_value: Optional[str] = None
+    positional: Optional[str] = None
+
+
+_DECL_SHAPES: Dict[str, _DeclShape] = {
+    # C#/Java/JS/TS declaration-with-initializer: `var x = f();`, `let x =
+    # f();`, `final int x = f();` (BACK-411). C#'s variable_declarator omits
+    # the 'value' field entirely for valueless decls.
+    'variable_declarator': _DeclShape(
+        write_field='name', read_field='value', missing_value='_csharp_missing_value',
+    ),
+    # Swift `var x = f()`/`let x = f()` shares variable_declarator's name/value
+    # shape. Kotlin's node of the same name exposes no fields at all — the
+    # identifier is wrapped in a positional 'variable_declaration' child
+    # (BACK-431 Issue G smoke-tier audit).
+    'property_declaration': _DeclShape(
+        write_field='name', read_field='value', missing_name='_kotlin_missing_name',
+    ),
+    # Go `x := f()` (BACK-411).
+    'short_var_declaration': _DeclShape(write_field='left', read_field='right'),
+    # Rust `let x = f();` (BACK-411).
+    'let_declaration': _DeclShape(write_field='pattern', read_field='value'),
+    # Scala `val x = f()` / `var x = f()` — same pattern/value shape as Rust
+    # (BACK-431 Issue G smoke-tier audit).
+    'val_definition': _DeclShape(write_field='pattern', read_field='value'),
+    'var_definition': _DeclShape(write_field='pattern', read_field='value'),
+    # C/C++ `int x = f();` (found via BACK-422 conformance-matrix pilot).
+    'init_declarator': _DeclShape(write_field='declarator', read_field='value'),
+    # Dart `final x = f();` / `var x = f();` — no fields at all (BACK-431
+    # Issue G smoke-tier audit).
+    'initialized_variable_definition': _DeclShape(positional='_walk_dart_var_decl'),
+    # GDScript `var x = f()` — no fields; declared name is a 'name' leaf
+    # (BACK-431 Issue G smoke-tier audit).
+    'variable_statement': _DeclShape(positional='_walk_gdscript_var_decl'),
+    # Zig `const x = f();` / `var x = f();` — no fields at all (BACK-431
+    # Issue G smoke-tier audit).
+    'VarDecl': _DeclShape(positional='_walk_zig_var_decl'),
+}
+
+
 @dataclass
 class VarFlowWalker:
     """Recursive var-flow walker with write/condition context propagation.
@@ -43,56 +106,11 @@ class VarFlowWalker:
             self._walk_assignment(n, ntype, c)
         elif ntype == 'named_expression':
             self._walk_named_expression(n)
-        elif ntype in ('variable_declarator', 'property_declaration'):
-            # C#/Java/JS/TS declaration-with-initializer: `var x = f();`,
-            # `let x = f();`, `final int x = f();` (BACK-411). Swift's
-            # `property_declaration` shares the same name/value field shape
-            # (`var x = f()`/`let x = f()`) — its 'name' field wraps the
-            # identifier in an extra `pattern` node, which `_walk_declarator`
-            # reaches via the generic recursion in `walk()` once
-            # `simple_identifier` is a recognized terminal kind (smoke-tier
-            # audit, BACK-431 Issue G).
-            self._walk_declarator(n)
-        elif ntype in ('short_var_declaration', 'let_declaration'):
-            # Go `x := f()` / Rust `let x = f();` (BACK-411).
-            left_field = 'left' if ntype == 'short_var_declaration' else 'pattern'
-            self._walk_decl_pair(n, left_field, 'right' if ntype == 'short_var_declaration' else 'value')
-        elif ntype in ('val_definition', 'var_definition'):
-            # Scala `val x = f()` / `var x = f()` — 'pattern'/'value' fields,
-            # same shape as Rust's let_declaration (BACK-431 Issue G
-            # smoke-tier audit; without this case every Scala declaration
-            # fell into the generic recursion and was mislabeled READ
-            # instead of WRITE, the same failure shape Kotlin's
-            # property_declaration had).
-            self._walk_decl_pair(n, 'pattern', 'value')
-        elif ntype == 'init_declarator':
-            # C/C++ `int x = f();` — declarator/value fields (found via BACK-422
-            # conformance-matrix pilot fixture; BACK-411 covered C#/Java/JS/TS/Go/Rust
-            # but missed the C-family grammar shape entirely).
-            self._walk_decl_pair(n, 'declarator', 'value')
-        elif ntype == 'initialized_variable_definition':
-            # Dart `final x = f();` / `var x = f();` — no fields at all; the
-            # declared name is the first bare 'identifier' child (after the
-            # final_builtin/inferred_type prefix), everything from '=' onward
-            # is the initializer (BACK-431 Issue G smoke-tier audit: without
-            # this, `result` was invisible to --varflow entirely — total
-            # blindness, not just a WRITE/READ mislabel).
-            self._walk_dart_var_decl(n)
-        elif ntype == 'variable_statement':
-            # GDScript `var x = f()` — the declared identifier is a 'name'
-            # leaf child, a kind not shared with the generic terminal-match
-            # set (usage sites use plain 'identifier'), so it must be
-            # compared directly rather than recursed into (BACK-431 Issue G
-            # smoke-tier audit: without this, `result` fell through to the
-            # generic recursion below and was silently invisible as a WRITE).
-            self._walk_gdscript_var_decl(n)
-        elif ntype == 'VarDecl':
-            # Zig `const x = f();` / `var x = f();` — the grammar exposes no
-            # AST fields at all (ZigAnalyzer's own structure extraction also
-            # walks this node positionally); the declared name is the first
-            # IDENTIFIER child, immediately after the const/var keyword
-            # (BACK-431 Issue G smoke-tier audit).
-            self._walk_zig_var_decl(n)
+        elif ntype in _DECL_SHAPES:
+            # Declaration-with-initializer, table-driven across all covered
+            # grammars (BACK-431 Issue C) — see _DECL_SHAPES for per-language
+            # field names and fallback strategies.
+            self._walk_decl_shape(n, _DECL_SHAPES[ntype])
         elif ntype in FOR_NODES:
             # for_statement / C#/PHP foreach_statement / JS-TS for_in_statement —
             # all share the 'left'/'right' field shape (BACK-431).
@@ -164,33 +182,24 @@ class VarFlowWalker:
             if (child.start_byte(), child.end_byte()) not in processed:
                 self.walk(child, c)
 
-    def _walk_declarator(self, n: Any) -> None:
-        """Declaration-with-initializer: declared name is a WRITE, initializer is a READ."""
-        name = n.child_by_field_name('name')
-        value = n.child_by_field_name('value')
-        if name is None and n.kind() == 'property_declaration':
-            # Kotlin's `property_declaration` (`val x = f()`) exposes no
-            # fields at all — unlike Swift's node of the same name, which
-            # has 'name'/'value'. The declared identifier is wrapped in a
-            # positional `variable_declaration` child; without this, the
-            # name falls through to the generic "unprocessed children are
-            # READ" branch below and every Kotlin declaration is silently
-            # mislabeled as a read instead of a write (BACK-431 Issue G
-            # smoke-tier audit).
-            for child in _children(n):
-                if child.kind() == 'variable_declaration':
-                    name = child
-                    break
-        if value is None:
-            # C#'s variable_declarator has no 'value' field — the initializer
-            # is just the last named child that isn't the name (after '=').
-            name_range = (name.start_byte(), name.end_byte()) if name else None
-            for child in _children(n):
-                if not child.is_named():
-                    continue
-                if name_range is not None and (child.start_byte(), child.end_byte()) == name_range:
-                    continue
-                value = child
+    def _walk_decl_shape(self, n: Any, shape: _DeclShape) -> None:
+        """Declaration-with-initializer: declared name is a WRITE, initializer is a READ.
+
+        Table-driven per _DECL_SHAPES (BACK-431 Issue C) — one method for
+        every field-based grammar shape, plus dispatch to a positional
+        fallback for grammars with no fields at all.
+        """
+        if shape.positional:
+            getattr(self, shape.positional)(n)
+            return
+
+        name = n.child_by_field_name(shape.write_field)
+        value = n.child_by_field_name(shape.read_field)
+        if name is None and shape.missing_name:
+            name = getattr(self, shape.missing_name)(n)
+        if value is None and shape.missing_value:
+            value = getattr(self, shape.missing_value)(n, name)
+
         processed = {
             (name.start_byte(), name.end_byte()) if name else None,
             (value.start_byte(), value.end_byte()) if value else None,
@@ -202,6 +211,34 @@ class VarFlowWalker:
         for child in _children(n):
             if (child.start_byte(), child.end_byte()) not in processed:
                 self.walk(child, 'READ')
+
+    @staticmethod
+    def _kotlin_missing_name(n: Any) -> Optional[Any]:
+        """Kotlin's `property_declaration` (`val x = f()`) exposes no fields
+        at all — unlike Swift's node of the same name, which has
+        'name'/'value'. The declared identifier is wrapped in a positional
+        `variable_declaration` child; without this, the name falls through
+        to the generic "unprocessed children are READ" branch and every
+        Kotlin declaration is silently mislabeled as a read instead of a
+        write (BACK-431 Issue G smoke-tier audit)."""
+        for child in _children(n):
+            if child.kind() == 'variable_declaration':
+                return child
+        return None
+
+    @staticmethod
+    def _csharp_missing_value(n: Any, name: Optional[Any]) -> Optional[Any]:
+        """C#'s variable_declarator has no 'value' field — the initializer
+        is just the last named child that isn't the name (after '=')."""
+        name_range = (name.start_byte(), name.end_byte()) if name else None
+        value = None
+        for child in _children(n):
+            if not child.is_named():
+                continue
+            if name_range is not None and (child.start_byte(), child.end_byte()) == name_range:
+                continue
+            value = child
+        return value
 
     def _walk_dart_var_decl(self, n: Any) -> None:
         """Dart `initialized_variable_definition` — no fields; the declared
@@ -252,22 +289,6 @@ class VarFlowWalker:
         processed = {(name.start_byte(), name.end_byte())} if name else set()
         if name:
             self.walk(name, 'WRITE')
-        for child in _children(n):
-            if (child.start_byte(), child.end_byte()) not in processed:
-                self.walk(child, 'READ')
-
-    def _walk_decl_pair(self, n: Any, left_field: str, right_field: str) -> None:
-        """Go `short_var_declaration` (left/right) / Rust `let_declaration` (pattern/value)."""
-        left = n.child_by_field_name(left_field)
-        right = n.child_by_field_name(right_field)
-        processed = {
-            (left.start_byte(), left.end_byte()) if left else None,
-            (right.start_byte(), right.end_byte()) if right else None,
-        }
-        if left:
-            self.walk(left, 'WRITE')
-        if right:
-            self.walk(right, 'READ')
         for child in _children(n):
             if (child.start_byte(), child.end_byte()) not in processed:
                 self.walk(child, 'READ')
