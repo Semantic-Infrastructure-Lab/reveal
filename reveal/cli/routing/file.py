@@ -21,20 +21,6 @@ from ...file_handler import handle_file  # noqa: E402
 from ...grep_handler import handle_grep  # noqa: E402
 
 
-_NGINX_ADAPTER_FLAGS = {
-    'check_acl': '--check-acl',
-    'validate_nginx_acme': '--validate-nginx-acme',
-    'check_conflicts': '--check-conflicts',
-    'cpanel_certs': '--cpanel-certs',
-    'diagnose': '--diagnose',
-    'global_audit': '--global-audit',
-}
-_SSL_ADAPTER_FLAGS = {
-    'expiring_within': '--expiring-within',
-    'summary': '--summary',
-    'validate_nginx': '--validate-nginx',
-}
-_NGINX_EXTENSIONS = {'.conf', '.ini', ''}  # '' = files with no extension (e.g. nginx, site.conf)
 _MARKDOWN_EXTENSIONS = {'.md', '.markdown', '.rst', '.txt', ''}
 
 
@@ -199,50 +185,42 @@ def _guard_hotspots_flag(args: 'Namespace', path_str: str) -> None:
     sys.exit(1)
 
 
-def _guard_nginx_flags(args: 'Namespace', path_str: str) -> None:
-    """Exit with error if nginx-specific flags are used on non-nginx file extensions."""
-    path_ext = Path(path_str).suffix.lower() if '.' in Path(path_str).name else ''
-    if path_ext in _NGINX_EXTENSIONS:
+def _guard_adapter_flags(args: 'Namespace', scheme: str, path_str: Optional[str]) -> None:
+    """Exit with error if an adapter's CLI flags are used on a plain file path.
+
+    The flag ownership lives on the adapter (GUARDED_FLAGS / GUARDED_FLAG_*),
+    not in this router — see reveal/adapters/base.py. When path_str is given and
+    its extension is one the adapter accepts, the guard is skipped.
+    """
+    from ...adapters.registry import get_adapter_class
+    adapter_cls = get_adapter_class(scheme)
+    if adapter_cls is None or not getattr(adapter_cls, 'GUARDED_FLAGS', ()):
         return
-    for attr, flag in _NGINX_ADAPTER_FLAGS.items():
-        if getattr(args, attr, False):
-            print(f"❌ Error: {flag} only works with nginx config files", file=sys.stderr)
+    if path_str is not None:
+        path_ext = Path(path_str).suffix.lower() if '.' in Path(path_str).name else ''
+        if path_ext in getattr(adapter_cls, 'GUARDED_FLAG_EXTENSIONS', frozenset()):
+            return
+    context = getattr(adapter_cls, 'GUARDED_FLAG_CONTEXT', scheme)
+    help_topic = getattr(adapter_cls, 'GUARDED_FLAG_HELP', scheme)
+    for spec in adapter_cls.GUARDED_FLAGS:
+        if getattr(args, spec.attr, False):
+            print(f"❌ Error: {spec.flag} only works with {context}", file=sys.stderr)
             print(file=sys.stderr)
             print("Examples:", file=sys.stderr)
-            print(f"  reveal nginx.conf {flag}                    # with a .conf file", file=sys.stderr)
-            print(f"  reveal nginx://nginx.conf?{attr.replace('_', '-')}=true  # URI param", file=sys.stderr)
+            print(spec.examples, file=sys.stderr)
             print(file=sys.stderr)
-            print("Learn more: reveal help://nginx", file=sys.stderr)
+            print(f"Learn more: reveal help://{help_topic}", file=sys.stderr)
             sys.exit(1)
 
 
-_SSL_FLAG_EXAMPLES = {
-    'expiring_within': (
-        "  reveal ssl://example.com --expiring-within 30   # single domain (CLI flag)\n"
-        "  reveal 'ssl://example.com?expiring-within=30' --check  # URI param form (preferred for pipelines)\n"
-        "  reveal ssl://nginx:///etc/nginx --check --expiring-within 30  # batch"
-    ),
-    'summary': (
-        "  reveal ssl://nginx:///etc/nginx --check --summary   # batch summary counts\n"
-        "  reveal ssl://example.com --check                    # single domain check"
-    ),
-    'validate_nginx': (
-        "  reveal ssl://example.com --validate-nginx   # cross-validate cert vs nginx config"
-    ),
-}
+def _guard_nginx_flags(args: 'Namespace', path_str: str) -> None:
+    """Exit with error if nginx-specific flags are used on non-nginx file extensions."""
+    _guard_adapter_flags(args, 'nginx', path_str)
 
 
 def _guard_ssl_flags(args: 'Namespace') -> None:
     """Exit with error if ssl:// adapter flags are used on plain file paths."""
-    for attr, flag in _SSL_ADAPTER_FLAGS.items():
-        if getattr(args, attr, False):
-            print(f"❌ Error: {flag} only works with the ssl:// adapter", file=sys.stderr)
-            print(file=sys.stderr)
-            print("Examples:", file=sys.stderr)
-            print(_SSL_FLAG_EXAMPLES[attr], file=sys.stderr)
-            print(file=sys.stderr)
-            print("Learn more: reveal help://ssl", file=sys.stderr)
-            sys.exit(1)
+    _guard_adapter_flags(args, 'ssl', None)
 
 
 def _guard_related_flags(args: 'Namespace', path_str: str) -> None:

@@ -20,7 +20,7 @@ import glob
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 
-from ..base import ResourceAdapter, register_adapter, register_renderer
+from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
 from ..ssl.probe import probe_http_redirect
 from .renderer import NginxUriRenderer
 
@@ -801,6 +801,31 @@ class NginxUriAdapter(ResourceAdapter):
         reveal nginx://app.example.com/config    # raw filtered config
         reveal nginx://                            # overview of all enabled sites
     """
+
+    # nginx CLI flags are valid on nginx config files (.conf/.ini/extensionless);
+    # generic file routing rejects them on any other plain path. Example text is
+    # generated uniformly from the flag name (unlike ssl://'s per-flag text).
+    GUARDED_FLAG_CONTEXT = 'nginx config files'
+    GUARDED_FLAG_HELP = 'nginx'
+    GUARDED_FLAG_EXTENSIONS = frozenset({'.conf', '.ini', ''})
+    GUARDED_FLAGS = tuple(
+        AdapterFlag(
+            attr=attr,
+            flag=flag,
+            examples=(
+                f"  reveal nginx.conf {flag}                    # with a .conf file\n"
+                f"  reveal nginx://nginx.conf?{attr.replace('_', '-')}=true  # URI param"
+            ),
+        )
+        for attr, flag in (
+            ('check_acl', '--check-acl'),
+            ('validate_nginx_acme', '--validate-nginx-acme'),
+            ('check_conflicts', '--check-conflicts'),
+            ('cpanel_certs', '--cpanel-certs'),
+            ('diagnose', '--diagnose'),
+            ('global_audit', '--global-audit'),
+        )
+    )
 
     @staticmethod
     def get_help() -> Dict[str, Any]:

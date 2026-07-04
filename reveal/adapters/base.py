@@ -11,7 +11,8 @@ Internal layout:
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
+from dataclasses import dataclass
+from typing import Dict, Any, Optional, List, Tuple
 
 from reveal.types import RevealMeta, RevealResult, WarningEntry
 
@@ -43,6 +44,22 @@ from .registry import (  # noqa: F401
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class AdapterFlag:
+    """A CLI flag an adapter owns, used by generic file routing to reject the
+    flag on plain file paths without hard-coding per-adapter tables.
+
+    attr:     argparse dest checked on the parsed args namespace.
+    flag:     display form shown in the error, e.g. '--expiring-within'.
+    examples: exact stderr example block printed under 'Examples:' — kept
+              verbatim per-flag because some flags intentionally omit the
+              URI-param form (BACK-162).
+    """
+    attr: str
+    flag: str
+    examples: str
+
+
 class ResourceAdapter(ABC):
     """Base class for all resource adapters."""
 
@@ -54,6 +71,21 @@ class ResourceAdapter(ABC):
     # Set True in subclasses where scheme://RESOURCE means "get element RESOURCE"
     # rather than "analyze path RESOURCE" (e.g. env, python, help).
     ELEMENT_NAMESPACE_ADAPTER: bool = False
+
+    # CLI flags this adapter owns. Generic file routing rejects these flags on
+    # plain file paths (see cli/routing/file.py:_guard_adapter_flags) instead
+    # of hard-coding per-adapter tables. Empty = adapter owns no guarded flags.
+    GUARDED_FLAGS: Tuple[AdapterFlag, ...] = ()
+
+    # File extensions on which this adapter's GUARDED_FLAGS are valid (the guard
+    # is skipped for these). Empty set = the flags are never valid on a plain
+    # path, so the guard always fires (e.g. ssl:// has no file form).
+    GUARDED_FLAG_EXTENSIONS: frozenset = frozenset()
+
+    # Trailing noun in the guard error "... only works with {context}", plus the
+    # help:// topic. Only consulted when GUARDED_FLAGS is non-empty.
+    GUARDED_FLAG_CONTEXT: str = ''
+    GUARDED_FLAG_HELP: str = ''
 
     @classmethod
     def from_uri(cls, scheme: str, resource: str,

@@ -3,7 +3,7 @@
 import glob
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from ..base import ResourceAdapter, register_adapter, register_renderer
+from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from .certificate import SSLFetcher, CertificateInfo, check_ssl_health, load_certificate_from_file
 from .probe import probe_http_redirect
@@ -123,6 +123,39 @@ class SSLAdapter(ResourceAdapter):
     """
 
     BUDGET_LIST_FIELD = 'results'
+
+    # ssl:// has no plain-file form, so these flags are never valid on a file
+    # path — GUARDED_FLAG_EXTENSIONS stays empty and the guard always fires.
+    # Example text is per-flag: --summary and --validate-nginx intentionally
+    # omit the URI-param form (BACK-162).
+    GUARDED_FLAG_CONTEXT = 'the ssl:// adapter'
+    GUARDED_FLAG_HELP = 'ssl'
+    GUARDED_FLAGS = (
+        AdapterFlag(
+            attr='expiring_within',
+            flag='--expiring-within',
+            examples=(
+                "  reveal ssl://example.com --expiring-within 30   # single domain (CLI flag)\n"
+                "  reveal 'ssl://example.com?expiring-within=30' --check  # URI param form (preferred for pipelines)\n"
+                "  reveal ssl://nginx:///etc/nginx --check --expiring-within 30  # batch"
+            ),
+        ),
+        AdapterFlag(
+            attr='summary',
+            flag='--summary',
+            examples=(
+                "  reveal ssl://nginx:///etc/nginx --check --summary   # batch summary counts\n"
+                "  reveal ssl://example.com --check                    # single domain check"
+            ),
+        ),
+        AdapterFlag(
+            attr='validate_nginx',
+            flag='--validate-nginx',
+            examples=(
+                "  reveal ssl://example.com --validate-nginx   # cross-validate cert vs nginx config"
+            ),
+        ),
+    )
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
