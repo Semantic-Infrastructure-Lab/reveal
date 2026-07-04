@@ -380,7 +380,7 @@ def _build_usage_examples(ext: str) -> List[str]:
         f"   reveal file{ext}              # Show structure",
         f"   reveal file{ext} MyClass      # Extract specific class",
         f"   reveal file{ext} --check      # Run quality checks",
-        f"   reveal file{ext} --explain    # Show how it's analyzed",
+        f"   reveal file{ext} --explain-file    # Show how it's analyzed",
     ]
 
 

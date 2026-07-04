@@ -44,6 +44,18 @@ class TestListSupportedLanguages(unittest.TestCase):
         self.assertIn("💡 Usage:", result)
         self.assertIn("reveal file.ext", result)
 
+    def test_usage_hints_do_not_advertise_stale_explain_flag(self):
+        """BACK-452: the real file-analysis flag is --explain-file, not --explain
+
+        (which is rule documentation, a different flag) — and --language-info
+        already shipped, so help text must not call it "coming soon".
+        """
+        result = list_supported_languages()
+
+        self.assertIn("--explain-file", result)
+        self.assertNotIn("--explain ", result)
+        self.assertNotIn("coming soon", result)
+
     def test_shows_total_count(self):
         """Test that total language count is shown."""
         result = list_supported_languages()

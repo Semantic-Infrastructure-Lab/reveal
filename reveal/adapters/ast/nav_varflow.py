@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 from ...core import node_children as _children
 from .node_taxonomy import (
     FOR_NODES, FOR_EXPRESSION_NODES, FOR_EACH_NAME_VALUE_NODES,
-    IF_WHILE_NODES, MATCH_EXPRESSION_NODES,
+    FOR_RANGE_LOOP_NODES, IF_WHILE_NODES, MATCH_EXPRESSION_NODES,
 )
 
 
@@ -236,6 +236,10 @@ class VarFlowWalker:
             # Java `for (T x : items)` — loop var is the 'name' field, iterable
             # is 'value' (BACK-431).
             self._walk_for(n, c, 'name', 'value')
+        elif ntype in FOR_RANGE_LOOP_NODES:
+            # C++ `for (T x : items)` — loop var is the 'declarator' field,
+            # iterable is 'right' (BACK-450).
+            self._walk_for(n, c, 'declarator', 'right')
         elif ntype == 'with_statement':
             self._walk_with(n, c)
         elif ntype in IF_WHILE_NODES:

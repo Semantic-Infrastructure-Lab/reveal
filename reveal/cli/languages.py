@@ -89,8 +89,8 @@ def list_supported_languages() -> str:
     # Usage hints
     lines.append("\n💡 Usage:")
     lines.append("  reveal file.ext                  # Analyze file")
-    lines.append("  reveal file.ext --explain        # See how file is analyzed (coming soon)")
-    lines.append("  reveal --language-info python    # Language details (coming soon)")
+    lines.append("  reveal file.ext --explain-file   # See how file is analyzed")
+    lines.append("  reveal --language-info python    # Language details")
 
     return '\n'.join(lines)
 

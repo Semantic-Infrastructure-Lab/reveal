@@ -320,6 +320,29 @@ def test_statewrites_classifies_field_and_call(lang):
     assert findings == EXPECTED[lang]["statewrites"], f"{lang}: statewrites mismatch\n{out}"
 
 
+# ─────────────────── BACK-450: C++ for_range_loop --varflow dispatch ──────────
+
+def test_cpp_for_range_loop_classifies_declarator_as_write():
+    """--varflow must classify a C++ range-based for loop's declarator
+    (`for (int item : items)`) as WRITE, not READ.
+
+    `for_range_loop`'s field shape (declarator=loop var, right=iterable) was
+    added to node_taxonomy.py's SCOPE_NODES/GATE_NODES/KEYWORD_LABEL during
+    the BACK-439b/c conformance-matrix pass, but nav_varflow.py's dispatch
+    table had no branch for it — the loop var fell through to the generic
+    child walk and was misread as a bare READ. Confirmed to fail pre-fix
+    (line 42 reported as READ instead of WRITE)."""
+    element = EXPECTED["cpp"]["batch_element"]
+    out = _run(str(_sample_path("cpp")), element, "--varflow", "item", "--format", "json")
+    data = json.loads(out)
+    findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
+    assert findings == [
+        {"kind": "WRITE", "line": 42},
+        {"kind": "READ", "line": 43},
+        {"kind": "READ", "line": 44},
+    ], f"cpp: for_range_loop varflow mismatch\n{out}"
+
+
 # ───────────────────── BACK-427 (remaining): Rust loop/match ──────────────────
 
 def test_rust_outline_recognizes_expression_oriented_control_flow():

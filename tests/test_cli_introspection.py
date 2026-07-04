@@ -206,6 +206,15 @@ class TestGetLanguageInfoDetailed(unittest.TestCase):
         self.assertIn("--check", result)
         self.assertIn("--explain", result)
 
+    def test_get_info_advertises_explain_file_not_stale_explain(self):
+        """BACK-452: file-analysis help must say --explain-file, the live flag —
+
+        bare --explain is rule documentation (a different, unrelated flag).
+        """
+        result = get_language_info_detailed("python")
+
+        self.assertIn("--explain-file", result)
+
     def test_get_info_shows_analyzer_class(self):
         """Test that info shows the analyzer class name."""
         result = get_language_info_detailed(".py")
