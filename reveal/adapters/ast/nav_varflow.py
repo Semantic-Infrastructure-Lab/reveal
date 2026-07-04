@@ -32,7 +32,7 @@ class VarFlowWalker:
         if n.end_position().row + 1 < self.from_line or line > self.to_line:
             return
 
-        if ntype in ('identifier', 'variable_name', 'simple_identifier') and self.get_text(n) == self.var_name:
+        if ntype in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER') and self.get_text(n) == self.var_name:
             if self.from_line <= line <= self.to_line:
                 self.events.append({'kind': c, 'line': line, 'node': n})
             return
@@ -70,6 +70,29 @@ class VarFlowWalker:
             # conformance-matrix pilot fixture; BACK-411 covered C#/Java/JS/TS/Go/Rust
             # but missed the C-family grammar shape entirely).
             self._walk_decl_pair(n, 'declarator', 'value')
+        elif ntype == 'initialized_variable_definition':
+            # Dart `final x = f();` / `var x = f();` — no fields at all; the
+            # declared name is the first bare 'identifier' child (after the
+            # final_builtin/inferred_type prefix), everything from '=' onward
+            # is the initializer (BACK-431 Issue G smoke-tier audit: without
+            # this, `result` was invisible to --varflow entirely — total
+            # blindness, not just a WRITE/READ mislabel).
+            self._walk_dart_var_decl(n)
+        elif ntype == 'variable_statement':
+            # GDScript `var x = f()` — the declared identifier is a 'name'
+            # leaf child, a kind not shared with the generic terminal-match
+            # set (usage sites use plain 'identifier'), so it must be
+            # compared directly rather than recursed into (BACK-431 Issue G
+            # smoke-tier audit: without this, `result` fell through to the
+            # generic recursion below and was silently invisible as a WRITE).
+            self._walk_gdscript_var_decl(n)
+        elif ntype == 'VarDecl':
+            # Zig `const x = f();` / `var x = f();` — the grammar exposes no
+            # AST fields at all (ZigAnalyzer's own structure extraction also
+            # walks this node positionally); the declared name is the first
+            # IDENTIFIER child, immediately after the const/var keyword
+            # (BACK-431 Issue G smoke-tier audit).
+            self._walk_zig_var_decl(n)
         elif ntype in FOR_NODES:
             # for_statement / C#/PHP foreach_statement / JS-TS for_in_statement —
             # all share the 'left'/'right' field shape (BACK-431).
@@ -103,6 +126,18 @@ class VarFlowWalker:
     def _walk_assignment(self, n: Any, ntype: str, c: str) -> None:
         left = n.child_by_field_name('left')
         right = n.child_by_field_name('right')
+        if left is None and right is None and ntype == 'assignment_statement':
+            # Lua's assignment_statement exposes no fields at all — targets
+            # are a positional 'variable_list' child (supports multi-assign,
+            # `local ok, result = pcall(...)`), values an 'expression_list'
+            # (BACK-431 Issue G smoke-tier audit: without this, `result` fell
+            # through to the generic recursion below and was mislabeled READ
+            # instead of WRITE, the same failure shape Kotlin/Scala had).
+            for child in _children(n):
+                if child.kind() == 'variable_list':
+                    left = child
+                elif child.kind() == 'expression_list':
+                    right = child
         is_augmented = ntype in ('augmented_assignment', 'augmented_assignment_expression',
                                   'compound_assignment_expr')
         if not is_augmented:
@@ -164,6 +199,59 @@ class VarFlowWalker:
             self.walk(name, 'WRITE')
         if value:
             self.walk(value, 'READ')
+        for child in _children(n):
+            if (child.start_byte(), child.end_byte()) not in processed:
+                self.walk(child, 'READ')
+
+    def _walk_dart_var_decl(self, n: Any) -> None:
+        """Dart `initialized_variable_definition` — no fields; the declared
+        name is the first bare 'identifier' child, everything after '=' is
+        the initializer."""
+        children = list(_children(n))
+        name = None
+        eq_idx = None
+        for i, child in enumerate(children):
+            if child.kind() == '=':
+                eq_idx = i
+                break
+            if child.kind() == 'identifier' and name is None:
+                name = child
+        processed = {(name.start_byte(), name.end_byte())} if name else set()
+        if name:
+            self.walk(name, 'WRITE')
+        if eq_idx is not None:
+            for child in children[eq_idx + 1:]:
+                if (child.start_byte(), child.end_byte()) not in processed:
+                    self.walk(child, 'READ')
+
+    def _walk_gdscript_var_decl(self, n: Any) -> None:
+        """GDScript `variable_statement` — 'name' leaf child is the declared
+        identifier, checked directly since it isn't in the generic terminal
+        identifier-match kinds."""
+        name = None
+        value = None
+        for child in _children(n):
+            if child.kind() == 'name':
+                name = child
+            elif child.kind() not in ('var', 'const', '='):
+                value = child
+        if name is not None and self.get_text(name) == self.var_name:
+            line = name.start_position().row + 1
+            if self.from_line <= line <= self.to_line:
+                self.events.append({'kind': 'WRITE', 'line': line, 'node': name})
+        if value is not None:
+            self.walk(value, 'READ')
+
+    def _walk_zig_var_decl(self, n: Any) -> None:
+        """Zig `VarDecl` — no fields; name is the first IDENTIFIER child."""
+        name = None
+        for child in _children(n):
+            if child.kind() == 'IDENTIFIER':
+                name = child
+                break
+        processed = {(name.start_byte(), name.end_byte())} if name else set()
+        if name:
+            self.walk(name, 'WRITE')
         for child in _children(n):
             if (child.start_byte(), child.end_byte()) not in processed:
                 self.walk(child, 'READ')

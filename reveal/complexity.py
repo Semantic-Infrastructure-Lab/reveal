@@ -20,7 +20,7 @@ from .core import node_children as _children
 # fails if node_taxonomy grows a loop/conditional/match kind this file omits.
 _DECISION_TYPES = frozenset({
     # Conditionals
-    'if_statement', 'if_expression', 'if',
+    'if_statement', 'if_expression', 'if', 'IfStatement',
     'elif_clause', 'elsif', 'elseif_clause', 'else_if_clause',
     'case_statement', 'case',
     'when',
@@ -49,7 +49,7 @@ _DECISION_TYPES = frozenset({
 })
 
 _NESTING_TYPES = frozenset({
-    'if_statement', 'if_expression', 'if',
+    'if_statement', 'if_expression', 'if', 'IfStatement',
     'for_statement', 'for_expression', 'for',
     'foreach_statement', 'for_in_statement', 'enhanced_for_statement',
     'while_statement', 'while_expression', 'while',

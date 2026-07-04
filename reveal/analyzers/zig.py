@@ -56,6 +56,20 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                 return child
         return None
 
+    def _get_node_name(self, node) -> Optional[str]:
+        """Override: Zig's grammar wraps functions in a 'Decl' node (added to
+        the shared FUNCTION_NODE_TYPES so nav flags like --varflow/--exits can
+        resolve a function by name via the generic file_handler lookup, which
+        was previously blind to Zig entirely — outline used a bespoke
+        extractor while every single-function nav flag used the generic
+        FUNCTION_NODE_TYPES search, which never matched Zig's grammar).
+        A bare 'Decl' may also wrap a struct/enum/union/var — those have no
+        FnProto child, so this correctly returns None and falls through."""
+        if node.kind() == 'Decl':
+            fn_proto = self._find_fn_proto(node)
+            return self._extract_function_name(fn_proto) if fn_proto else None
+        return super()._get_node_name(node)
+
     def _extract_function_name(self, fn_proto) -> Optional[str]:
         """Extract function name from FnProto node."""
         for fn_child in _children(fn_proto):

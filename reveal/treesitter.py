@@ -8,6 +8,7 @@ from .base import FileAnalyzer
 from .complexity import calculate_complexity_and_depth
 from .core import suppress_treesitter_warnings
 from .core import node_children as _children
+from .core import node_next_sibling as _next_sibling
 
 # Suppress tree-sitter deprecation warnings (centralized in core module)
 suppress_treesitter_warnings()
@@ -51,6 +52,7 @@ FUNCTION_NODE_TYPES = (
     'method',                # Ruby
     'function_definition_statement',       # Lua (global functions)
     'local_function_definition_statement',  # Lua (local functions)
+    'Decl',                   # Zig (wraps FnProto + body; see ZigAnalyzer._get_node_name)
 )
 
 # Node types for class extraction
@@ -422,9 +424,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # Use decorated_node bounds if available (includes decorators)
         bounds_node = decorated_node if decorated_node else node
         line_start = bounds_node.start_position().row + 1
-        line_end = bounds_node.end_position().row + 1
+        end_node = self._function_end_node(bounds_node)
+        line_end = end_node.end_position().row + 1
+        # For Dart, end_node is the sibling function_body — walk that for
+        # complexity/calls too, or both metrics silently see an empty body
+        # (same blindness _function_end_node's docstring describes).
+        body_node = end_node if end_node is not bounds_node else node
 
-        complexity, depth = calculate_complexity_and_depth(node)
+        complexity, depth = calculate_complexity_and_depth(body_node)
         return {
             'line': line_start,
             'line_end': line_end,
@@ -434,7 +441,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'depth': depth,
             'complexity': complexity,
             'decorators': decorators,
-            'calls': self._extract_calls_in_function(node),
+            'calls': self._extract_calls_in_function(body_node),
         }
 
     def _extract_classes(self) -> List[Dict[str, Any]]:
@@ -747,6 +754,27 @@ class TreeSitterAnalyzer(FileAnalyzer):
             content_bytes = self.content.encode('utf-8')
             self._content_bytes = content_bytes
         return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    def _function_end_node(self, node):
+        """Return the node whose end position bounds a function's body.
+
+        Every other FUNCTION_NODE_TYPES member nests its body inside the
+        function node itself. Dart's grammar is the odd one out:
+        `function_signature` (name + params) and `function_body` are
+        SEPARATE sibling nodes, not parent/child. Using the signature node's
+        own end position (old behavior) silently truncated every Dart
+        function's range to its one-line signature — every nav flag
+        (--varflow/--exits/--returns/--ifmap/etc.), plus --outline's
+        line_end/line_count, saw an empty range for the entire function body
+        (BACK-431 Issue G smoke-tier audit: `--varflow` reported "no
+        references found" for a variable declared and read three lines into
+        the body).
+        """
+        if node.kind() == 'function_signature':
+            sibling = _next_sibling(node)
+            if sibling is not None and sibling.kind() == 'function_body':
+                return sibling
+        return node
 
     def _get_node_name(self, node) -> Optional[str]:
         """Get the name of a node (function/class/struct name).

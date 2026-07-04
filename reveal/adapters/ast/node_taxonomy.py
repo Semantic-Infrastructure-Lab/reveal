@@ -26,9 +26,14 @@ from typing import Dict
 # Per-construct families
 # ---------------------------------------------------------------------------
 
-IF_NODES: frozenset = frozenset({'if_statement', 'if_expression', 'if'})
+IF_NODES: frozenset = frozenset({'if_statement', 'if_expression', 'if', 'IfStatement'})
 ELIF_NODES: frozenset = frozenset({'elif_clause', 'elseif_clause'})
 ELSE_NODES: frozenset = frozenset({'else_clause', 'else'})
+# Zig's IfStatement (BACK-431 Issue G smoke-tier audit) has no AST fields at
+# all — unlike every other IF_NODES member, `_walk_if_while`'s
+# 'condition'/'body' field lookup silently no-ops for it, so it's kept out
+# of nav_varflow's IF_WHILE_NODES; it still counts for --outline/--ifmap
+# (SCOPE_NODES/KEYWORD_LABEL), which only match on node kind.
 WHILE_NODES: frozenset = frozenset({'while_statement', 'while_expression', 'while'})
 # Loop constructs that share the C-style 'left'/'right' field shape in
 # nav_varflow (loop var = 'left', iterable = 'right'): plain for, C#/PHP
@@ -129,7 +134,7 @@ IF_WHILE_NODES: frozenset = IF_NODES | ELIF_NODES | WHILE_NODES
 
 
 KEYWORD_LABEL: Dict[str, str] = {
-    'if_statement': 'IF', 'if': 'IF', 'if_expression': 'IF',
+    'if_statement': 'IF', 'if': 'IF', 'if_expression': 'IF', 'IfStatement': 'IF',
     'elif_clause': 'ELIF', 'elseif_clause': 'ELIF',
     'else_clause': 'ELSE', 'else': 'ELSE',
     'for_statement': 'FOR', 'for': 'FOR', 'for_expression': 'FOR',

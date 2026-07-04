@@ -164,7 +164,16 @@ def _resolve_func_node(analyzer, element: str):
             sys.exit(1)
     else:
         func_start = func_node.start_position().row + 1
-        func_end = func_node.end_position().row + 1
+        # Dart's grammar splits a function into sibling `function_signature`
+        # + `function_body` nodes rather than nesting the body inside one
+        # function node (see TreeSitterAnalyzer._function_end_node) — every
+        # nav flag walks func_node's own subtree, so without this swap they'd
+        # walk only the one-line signature and see the body as empty, no
+        # matter what func_end says.
+        end_node = getattr(analyzer, '_function_end_node', lambda n: n)(func_node)
+        func_end = end_node.end_position().row + 1
+        if end_node is not func_node:
+            func_node = end_node
     return func_node, func_start, func_end
 
 
