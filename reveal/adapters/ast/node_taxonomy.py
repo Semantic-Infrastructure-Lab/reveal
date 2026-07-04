@@ -49,6 +49,14 @@ FOR_EXPRESSION_NODES: frozenset = frozenset({'for_expression'})
 # absent from the taxonomy (BACK-431), so Java enhanced-for loops were
 # invisible to --outline/--varflow the same way JS/TS for-each were.
 FOR_EACH_NAME_VALUE_NODES: frozenset = frozenset({'enhanced_for_statement'})
+# C++ `for (T x : items)` — 'declarator'/'right' fields (its own shape,
+# distinct from Java's enhanced_for_statement above). Found via the BACK-439b/c
+# conformance-matrix cross-language pass: the existing Tier 1 C++ fixture had
+# no range-based for loop, so this was never exercised — --outline/--ifmap/
+# --loopmap were silently blind to it. --varflow dispatch (declarator=WRITE,
+# right=READ) is a follow-on, not fixed by this taxonomy addition alone; see
+# BACK-450.
+FOR_RANGE_LOOP_NODES: frozenset = frozenset({'for_range_loop'})
 # Rust `loop { }` — no condition field at all.
 LOOP_NODES: frozenset = frozenset({'loop_expression'})
 DO_NODES: frozenset = frozenset({'do_statement'})
@@ -138,7 +146,8 @@ ALTERNATIVE_NODES: frozenset = (
 # nav_outline.py: every construct that opens a nested scope worth descending into.
 SCOPE_NODES: frozenset = (
     IF_NODES | ELIF_NODES | ELSE_NODES | WHILE_NODES | FOR_NODES
-    | FOR_EXPRESSION_NODES | FOR_EACH_NAME_VALUE_NODES | LOOP_NODES | DO_NODES
+    | FOR_EXPRESSION_NODES | FOR_EACH_NAME_VALUE_NODES | FOR_RANGE_LOOP_NODES
+    | LOOP_NODES | DO_NODES
     | TRY_NODES | EXCEPT_NODES | FINALLY_NODES | CATCH_NODES | WITH_NODES
     | MATCH_NODES | CASE_NODES | SWITCH_NODES
 )
@@ -151,7 +160,8 @@ SCOPE_NODES: frozenset = (
 # return nested inside one is still walked, not skipped outright.
 GATE_NODES: frozenset = (
     IF_NODES | ELIF_NODES | WHILE_NODES | FOR_NODES | FOR_EXPRESSION_NODES
-    | FOR_EACH_NAME_VALUE_NODES | LOOP_NODES | DO_NODES | MATCH_NODES | WITH_NODES
+    | FOR_EACH_NAME_VALUE_NODES | FOR_RANGE_LOOP_NODES
+    | LOOP_NODES | DO_NODES | MATCH_NODES | WITH_NODES
 )
 
 # nav_varflow.py: if/elif/while share the same 'condition'/'body' field
@@ -166,7 +176,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'else_clause': 'ELSE', 'else': 'ELSE',
     'for_statement': 'FOR', 'for': 'FOR', 'for_expression': 'FOR',
     'foreach_statement': 'FOR', 'for_in_statement': 'FOR',
-    'enhanced_for_statement': 'FOR',
+    'enhanced_for_statement': 'FOR', 'for_range_loop': 'FOR',
     'while_statement': 'WHILE', 'while': 'WHILE', 'while_expression': 'WHILE',
     'loop_expression': 'LOOP',
     'try_statement': 'TRY', 'try': 'TRY',

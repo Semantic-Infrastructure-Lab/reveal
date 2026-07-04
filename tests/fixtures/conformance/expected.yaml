@@ -45,6 +45,14 @@ python:
   returns:
   - {line: 19, gate_lines: []}
   - {line: 21, gate_lines: []}
+  batch_element: Batch.run
+  loopmap:
+  - {keyword: FOR, line_start: 37}
+  fanout_effects:
+  - {line: 39, kind: cache}
+  statewrites:
+  - {kind: field, line: 38}
+  - {kind: cache, line: 39}
 
 c:
   entry_function: process_order
@@ -77,6 +85,14 @@ c:
   - {line: 15, gate_lines: [14]}
   - {line: 19, gate_lines: [18]}
   - {line: 24, gate_lines: []}
+  batch_element: batch_run
+  loopmap:
+  - {keyword: FOR, line_start: 39}
+  fanout_effects:
+  - {line: 41, kind: cache}
+  statewrites:
+  - {kind: field, line: 40}
+  - {kind: cache, line: 41}
 
 cpp:
   entry_function: process_order
@@ -117,6 +133,17 @@ cpp:
   - {line: 18, gate_lines: [17]}
   - {line: 23, gate_lines: [22]}
   - {line: 28, gate_lines: []}
+  # `Batch.run` named extraction fails for C++ (BACK-451, filed not fixed) —
+  # a :LINE-RANGE covering the whole method is the workaround, same shape
+  # as the mutations_probe range above.
+  batch_element: ":38-47"
+  loopmap:
+  - {keyword: FOR, line_start: 42}
+  fanout_effects:
+  - {line: 44, kind: cache}
+  statewrites:
+  - {kind: field, line: 43}
+  - {kind: cache, line: 44}
 
 csharp:
   entry_function: ProcessOrder
@@ -146,6 +173,14 @@ csharp:
   returns:
   - {line: 28, gate_lines: []}
   - {line: 31, gate_lines: []}
+  batch_element: Batch.Run
+  loopmap:
+  - {keyword: FOR, line_start: 49}
+  fanout_effects:
+  - {line: 52, kind: cache}
+  statewrites:
+  - {kind: field, line: 51}
+  - {kind: cache, line: 52}
 
 java:
   entry_function: processOrder
@@ -175,6 +210,14 @@ java:
   returns:
   - {line: 22, gate_lines: []}
   - {line: 25, gate_lines: []}
+  batch_element: Batch.run
+  loopmap:
+  - {keyword: FOR, line_start: 40}
+  fanout_effects:
+  - {line: 42, kind: cache}
+  statewrites:
+  - {kind: field, line: 41}
+  - {kind: cache, line: 42}
 
 javascript:
   entry_function: processOrder
@@ -202,6 +245,14 @@ javascript:
   returns:
   - {line: 18, gate_lines: []}
   - {line: 21, gate_lines: []}
+  batch_element: Batch.run
+  loopmap:
+  - {keyword: FOR, line_start: 36}
+  fanout_effects:
+  - {line: 38, kind: cache}
+  statewrites:
+  - {kind: field, line: 37}
+  - {kind: cache, line: 38}
 
 rust:
   entry_function: process_order
@@ -238,6 +289,14 @@ rust:
   mutations_probe: {range: "14-14", var: result, next_read_line: 15}
   returns:
   - {line: 16, gate_lines: [15]}
+  batch_element: Batch.run
+  loopmap:
+  - {keyword: FOR, line_start: 53}
+  fanout_effects:
+  - {line: 55, kind: cache}
+  statewrites:
+  - {kind: field, line: 54}
+  - {kind: cache, line: 55}
 
 typescript:
   entry_function: processOrder
@@ -265,6 +324,14 @@ typescript:
   returns:
   - {line: 18, gate_lines: []}
   - {line: 21, gate_lines: []}
+  batch_element: Batch.run
+  loopmap:
+  - {keyword: FOR, line_start: 34}
+  fanout_effects:
+  - {line: 36, kind: cache}
+  statewrites:
+  - {kind: field, line: 35}
+  - {kind: cache, line: 36}
 
 go:
   entry_function: processOrder
@@ -294,3 +361,13 @@ go:
   - {line: 22, gate_lines: [21]}
   - {line: 26, gate_lines: [25]}
   - {line: 31, gate_lines: []}
+  # `Batch.Run` named extraction fails for Go (BACK-451, filed not fixed) —
+  # a :LINE-RANGE covering the whole method is the workaround.
+  batch_element: ":45-49"
+  loopmap:
+  - {keyword: FOR, line_start: 46}
+  fanout_effects:
+  - {line: 48, kind: cache}
+  statewrites:
+  - {kind: field, line: 47}
+  - {kind: cache, line: 48}

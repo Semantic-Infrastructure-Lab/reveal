@@ -23,3 +23,18 @@ def process_order(order):
 
 def run(order):
     return process_order(order)
+
+
+class Batch:
+    """BACK-439b/c fixture addition: loop + field write + call effect,
+    added standalone (not touching process_order's line-numbered asserts),
+    same precedent as Rust's count_down (BACK-427/430)."""
+
+    def __init__(self):
+        self.total = 0
+
+    def run(self, items):
+        for item in items:
+            self.total = self.total + item
+            cache.set(item)
+        return self.total

@@ -36,6 +36,9 @@ _ASSIGNMENT_NODES: frozenset = frozenset({
 _MEMBER_ACCESS_NODES: frozenset = frozenset({
     'attribute', 'member_access_expression', 'field_expression',
     'selector_expression', 'member_expression',
+    # Java's `this.x`/`obj.x` (BACK-439c conformance-matrix pass) — distinct
+    # kind from every other Tier 1 language's member-access shape.
+    'field_access',
 })
 
 _SUBSCRIPT_NODES: frozenset = frozenset({
@@ -78,6 +81,21 @@ def _target_kind(left: Any, get_text: Callable) -> Optional[str]:
     return None
 
 
+def _assignment_targets(left: Any) -> List[Any]:
+    """Unwrap Go's `expression_list` assignment-target wrapper.
+
+    Go's assignment_statement always wraps its 'left' field in an
+    expression_list (to support multi-assign `a, b = 1, 2`) even for a
+    single target — found via the BACK-439b/c conformance-matrix
+    cross-language pass: `b.Total = ...` was silently invisible to
+    --statewrites because `left.kind()` was 'expression_list', never
+    matching _MEMBER_ACCESS_NODES/_SUBSCRIPT_NODES directly.
+    """
+    if left.kind() == 'expression_list':
+        return [c for c in _children(left) if c.is_named()]
+    return [left]
+
+
 def _walk_assignments(
     node: Any,
     from_line: int,
@@ -93,11 +111,12 @@ def _walk_assignments(
         left = node.child_by_field_name('left')
         line = start
         if left is not None and from_line <= line <= to_line:
-            kind = _target_kind(left, get_text)
-            if kind:
-                results.append({
-                    'kind': kind, 'line': line, 'target': get_text(left), 'via': 'assignment',
-                })
+            for target in _assignment_targets(left):
+                kind = _target_kind(target, get_text)
+                if kind:
+                    results.append({
+                        'kind': kind, 'line': line, 'target': get_text(target), 'via': 'assignment',
+                    })
     for child in _children(node):
         _walk_assignments(child, from_line, to_line, get_text, results)
 

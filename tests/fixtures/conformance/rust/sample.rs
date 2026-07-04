@@ -40,3 +40,19 @@ fn count_down(mut n: i32) -> i32 {
     }
     n
 }
+
+// BACK-439b/c fixture addition: loop + field write + call effect, added
+// standalone (not touching process_order/count_down's line-numbered
+// asserts), same precedent as count_down itself (BACK-427/430).
+struct Batch {
+    total: i32,
+}
+
+impl Batch {
+    fn run(&mut self, items: &[i32]) {
+        for item in items {
+            self.total = self.total + item;
+            cache.set(*item);
+        }
+    }
+}

@@ -25,4 +25,20 @@ function run(order) {
     return processOrder(order);
 }
 
-module.exports = { run };
+// BACK-439b/c fixture addition: loop + field write + call effect, added
+// standalone (not touching processOrder's line-numbered asserts), same
+// precedent as Rust's count_down (BACK-427/430).
+class Batch {
+    constructor() {
+        this.total = 0;
+    }
+    run(items) {
+        for (const item of items) {
+            this.total = this.total + item;
+            cache.set(item);
+        }
+        return this.total;
+    }
+}
+
+module.exports = { run, Batch };

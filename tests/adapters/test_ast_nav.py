@@ -720,6 +720,25 @@ class TestRenderers(unittest.TestCase):
 class TestLoopMap(unittest.TestCase):
     """collect_loops(): FOR/WHILE/LOOP/DO nodes within a range, with depth."""
 
+    def test_cpp_range_based_for_loop(self):
+        # C++'s range-based for (`for (T x : items)`) is its own node kind,
+        # `for_range_loop` — distinct from for_statement and from Java's
+        # enhanced_for_statement. Found via the BACK-439b/c conformance-matrix
+        # cross-language pass: the existing Tier 1 C++ fixture had no
+        # range-based for loop, so --outline/--ifmap/--loopmap were silently
+        # blind to it until this fixture addition caught it.
+        root, get_text = _parse_lang('cpp', '''
+        void f(std::vector<int>& items) {
+            for (int item : items) {
+                g(item);
+            }
+        }
+        ''')
+        from reveal.adapters.ast.nav import collect_loops
+        loops = collect_loops(root, 1, 10, get_text, max_depth=6)
+        self.assertEqual(len(loops), 1)
+        self.assertEqual(loops[0]['keyword'], 'FOR')
+
     def test_single_loop_with_effects(self):
         code = """
         def process_batch(items):
@@ -904,6 +923,23 @@ class TestStateWrites(unittest.TestCase):
         kinds = {w['kind'] for w in writes}
         self.assertEqual(kinds, {'session', 'field'})
 
+    def test_go_selector_field_write_through_expression_list(self):
+        # Go's assignment_statement always wraps 'left' in an expression_list
+        # (to support multi-assign `a, b = 1, 2`), even for a single target —
+        # found via the BACK-439b/c conformance-matrix cross-language pass.
+        # Without unwrapping it, `b.Total = ...` was silently invisible.
+        root, get_text = _parse_lang('go', '''
+        package m
+        func run(b *Batch, item int) {
+            b.Total = b.Total + item
+        }
+        ''')
+        from reveal.adapters.ast.nav import collect_statewrites
+        writes = collect_statewrites(root, 1, 10, get_text)
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(writes[0]['kind'], 'field')
+        self.assertEqual(writes[0]['target'], 'b.Total')
+
     def test_js_this_and_process_env_write(self):
         root, get_text = _parse_lang('javascript', '''
         class A {
@@ -917,6 +953,23 @@ class TestStateWrites(unittest.TestCase):
         writes = collect_statewrites(root, 1, 10, get_text)
         kinds = {w['kind'] for w in writes}
         self.assertEqual(kinds, {'field', 'env'})
+
+    def test_java_this_field_write(self):
+        # Java's `this.x` is `field_access` — a distinct node kind from every
+        # other Tier 1 language's member-access shape (found via the
+        # conformance-matrix cross-language pass, BACK-439c).
+        root, get_text = _parse_lang('java', '''
+        class A {
+            int total;
+            void f() {
+                this.total = this.total + 1;
+            }
+        }
+        ''')
+        from reveal.adapters.ast.nav import collect_statewrites
+        writes = collect_statewrites(root, 1, 10, get_text)
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(writes[0]['kind'], 'field')
 
     def test_call_based_cache_write_merged_in(self):
         code = """

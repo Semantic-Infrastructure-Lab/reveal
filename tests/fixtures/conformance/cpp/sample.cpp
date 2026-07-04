@@ -31,3 +31,17 @@ int process_order(int order) {
 int run(int order) {
     return process_order(order);
 }
+
+// BACK-439b/c fixture addition: loop + field write + call effect, added
+// standalone (not touching process_order's line-numbered asserts), same
+// precedent as Rust's count_down (BACK-427/430).
+class Batch {
+public:
+    int total = 0;
+    void run(std::vector<int>& items) {
+        for (int item : items) {
+            this->total = this->total + item;
+            cache.set(item);
+        }
+    }
+};

@@ -29,3 +29,17 @@ public class OrderProcessor {
         return processOrder(order);
     }
 }
+
+// BACK-439b/c fixture addition: loop + field write + call effect, added
+// standalone (not touching OrderProcessor's line-numbered asserts), same
+// precedent as Rust's count_down (BACK-427/430).
+class Batch {
+    int total;
+
+    void run(java.util.List<Integer> items) {
+        for (int item : items) {
+            this.total = this.total + item;
+            cache.set(item);
+        }
+    }
+}

@@ -34,3 +34,17 @@ func processOrder(order string) (string, error) {
 func Run(order string) (string, error) {
 	return processOrder(order)
 }
+
+// BACK-439b/c fixture addition: loop + field write + call effect, added
+// standalone (not touching processOrder's line-numbered asserts), same
+// precedent as Rust's count_down (BACK-427/430).
+type Batch struct {
+	Total int
+}
+
+func (b *Batch) Run(items []int) {
+	for _, item := range items {
+		b.Total = b.Total + item
+		cache.Set(item)
+	}
+}

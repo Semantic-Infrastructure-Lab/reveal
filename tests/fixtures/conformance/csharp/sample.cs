@@ -36,4 +36,21 @@ namespace Sample
             return ProcessOrder(order);
         }
     }
+
+    // BACK-439b/c fixture addition: loop + field write + call effect, added
+    // standalone (not touching OrderProcessor's line-numbered asserts), same
+    // precedent as Rust's count_down (BACK-427/430).
+    public class Batch
+    {
+        public int Total = 0;
+
+        public void Run(System.Collections.Generic.List<int> items)
+        {
+            foreach (var item in items)
+            {
+                this.Total = this.Total + item;
+                cache.Set(item);
+            }
+        }
+    }
 }

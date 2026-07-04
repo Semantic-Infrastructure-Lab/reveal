@@ -276,6 +276,50 @@ def test_mutations_finds_read_after_write(lang):
     )
 
 
+# ─────────────────────────────────── --loopmap ─────────────────────────────────
+
+def test_loopmap_finds_loop(lang):
+    """--loopmap must find the fixture's Batch loop, for every language.
+
+    Uses a dedicated `Batch` type added standalone to each fixture (BACK-439b/c
+    conformance-matrix pass), not the shared entry_function — same precedent
+    as Rust's count_down (BACK-427/430): a loop + field write + call effect
+    that doesn't disturb any existing line-numbered assertion. Named
+    Class.method extraction fails for cpp/go (BACK-451, filed not fixed);
+    their batch_element is a :LINE-RANGE workaround instead."""
+    element = EXPECTED[lang]["batch_element"]
+    out = _run(str(_sample_path(lang)), element, "--loopmap", "--format", "json")
+    data = json.loads(out)
+    findings = [{"keyword": f["keyword"], "line_start": f["line_start"]} for f in data["findings"]]
+    assert findings == EXPECTED[lang]["loopmap"], f"{lang}: loopmap mismatch\n{out}"
+
+
+# ─────────────────────────────────── --fanout ──────────────────────────────────
+
+def test_fanout_classifies_effect_inside_loop(lang):
+    """--fanout must pair the Batch loop with its classified `cache.set(...)`
+    call effect, for every language."""
+    element = EXPECTED[lang]["batch_element"]
+    out = _run(str(_sample_path(lang)), element, "--fanout", "--format", "json")
+    data = json.loads(out)
+    assert len(data["findings"]) == 1, f"{lang}: expected exactly one loop\n{out}"
+    effects = [{"line": e["line"], "kind": e["kind"]} for e in data["findings"][0]["effects"]]
+    assert effects == EXPECTED[lang]["fanout_effects"], f"{lang}: fanout mismatch\n{out}"
+
+
+# ───────────────────────────────── --statewrites ───────────────────────────────
+
+def test_statewrites_classifies_field_and_call(lang):
+    """--statewrites must find the Batch field write (self/this/pointer-receiver,
+    a distinct tree-sitter node kind per language — BACK-439c) plus the merged
+    call-based cache write, for every language."""
+    element = EXPECTED[lang]["batch_element"]
+    out = _run(str(_sample_path(lang)), element, "--statewrites", "--format", "json")
+    data = json.loads(out)
+    findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
+    assert findings == EXPECTED[lang]["statewrites"], f"{lang}: statewrites mismatch\n{out}"
+
+
 # ───────────────────── BACK-427 (remaining): Rust loop/match ──────────────────
 
 def test_rust_outline_recognizes_expression_oriented_control_flow():
