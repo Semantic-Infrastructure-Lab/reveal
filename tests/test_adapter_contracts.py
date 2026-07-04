@@ -273,6 +273,90 @@ class TestAdapterContracts(unittest.TestCase):
                             f"'{ot}' (defined: {sorted(defined_types)})"
                         )
 
+    # ------------------------------------------------------------------
+    # BACK-449: schema-contract guard over the FULL registry (not the stale
+    # expected_schemes set) — asserts every registered adapter exposes a schema
+    # with all required fields and round-trippable example URIs.
+    # ------------------------------------------------------------------
+
+    #: Fields every adapter schema must expose for help://schemas / --discover.
+    REQUIRED_SCHEMA_FIELDS = (
+        'adapter', 'description', 'uri_syntax',
+        'query_params', 'output_types', 'example_queries', 'notes',
+    )
+
+    @staticmethod
+    def _production_schemes():
+        """Registered schemes minus meta/scaffold adapters (help/test/demo)."""
+        return sorted(
+            s for s in list_supported_schemes()
+            if s not in ('help', 'test', 'demo')
+        )
+
+    @staticmethod
+    def _canonical_uri(example_uri):
+        """Reduce a (possibly CLI-flavored) example to its bare URI token.
+
+        Examples in schemas are sometimes shell strings like
+        'reveal autossl:// --format=json | jq ...'; strip a leading 'reveal '
+        and keep only the first whitespace-delimited token.
+        """
+        u = (example_uri or '').strip()
+        if u.startswith('reveal '):
+            u = u[len('reveal '):].strip()
+        return u.split()[0] if u else ''
+
+    def test_every_registered_adapter_schema_has_required_fields(self):
+        """BACK-449: every production adapter's schema exposes all 7 fields.
+
+        Iterates the live registry so newly-added adapters (codex, depends,
+        letsencrypt, patches — absent from the legacy expected_schemes set) are
+        held to the same contract. A renamed/dropped field fails here at PR time
+        instead of silently breaking help://schemas or the DD capability map.
+        """
+        for scheme in self._production_schemes():
+            with self.subTest(scheme=scheme):
+                schema = get_adapter_class(scheme).get_schema()
+                self.assertIsInstance(
+                    schema, dict, f"{scheme}.get_schema() must return a dict")
+                missing = [f for f in self.REQUIRED_SCHEMA_FIELDS if f not in schema]
+                self.assertEqual(
+                    missing, [],
+                    f"{scheme} schema missing required field(s): {missing}")
+                self.assertIsInstance(
+                    schema['notes'], list, f"{scheme} schema 'notes' must be a list")
+                self.assertGreater(
+                    len(schema['notes']), 0,
+                    f"{scheme} schema 'notes' must have at least one entry")
+                self.assertIsInstance(
+                    schema['query_params'], dict,
+                    f"{scheme} schema 'query_params' must be a dict")
+                for i, ex in enumerate(schema['example_queries']):
+                    self.assertIn(
+                        'uri', ex,
+                        f"{scheme} example_queries[{i}] missing 'uri' key")
+
+    def test_schema_example_uris_round_trip_to_own_scheme(self):
+        """BACK-449: each schema example URI parses back to its own adapter.
+
+        A cheap round-trip through the same 'scheme://resource' split routing
+        uses — catches copy-paste drift (an example naming a different adapter)
+        and malformed example URIs without needing env-dependent construction.
+        """
+        for scheme in self._production_schemes():
+            schema = get_adapter_class(scheme).get_schema() or {}
+            for i, ex in enumerate(schema.get('example_queries', [])):
+                canonical = self._canonical_uri(ex.get('uri', ''))
+                # Skip command-substitution / non-URI display examples.
+                if '$(' in canonical or '://' not in canonical:
+                    continue
+                with self.subTest(scheme=scheme, example=i):
+                    parsed_scheme = canonical.split('://', 1)[0].lower()
+                    self.assertEqual(
+                        parsed_scheme, scheme,
+                        f"{scheme} example_queries[{i}] URI '{ex.get('uri')}' "
+                        f"names scheme '{parsed_scheme}', not '{scheme}'")
+
     def test_adapters_inherit_from_resource_adapter(self):
         """Verify all adapters inherit from ResourceAdapter."""
         from reveal.adapters.base import ResourceAdapter
