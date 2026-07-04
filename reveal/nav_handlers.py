@@ -56,14 +56,36 @@ def _parse_line_range(range_str, default_start: int, default_end: int):
 
 
 def _nav_json(flag: str, path: str, element: str, from_line: int, to_line: int,
-              findings, extra_meta: Optional[dict] = None) -> None:
+              findings, extra_meta: Optional[dict] = None,
+              warnings: Optional[List[str]] = None) -> None:
     """Serialize nav findings as a JSON envelope and print to stdout."""
     import json  # noqa: I006
     meta = {'flag': flag, 'file': str(path), 'element': element,
             'from_line': from_line, 'to_line': to_line}
     if extra_meta:
         meta.update(extra_meta)
-    print(json.dumps({'meta': meta, 'findings': findings, 'warnings': []}, indent=2))
+    print(json.dumps({'meta': meta, 'findings': findings, 'warnings': warnings or []}, indent=2))
+
+
+def _varflow_trust_warning(analyzer) -> Optional[str]:
+    """Return a one-line trust caveat for --varflow on *analyzer*'s language,
+    or None when the language's varflow capability is fully verified.
+
+    Grounded in the BACK-444 capability registry (reveal/capabilities.py) —
+    only languages in the deep conformance matrix (tests/test_conformance_matrix.py)
+    are "verified"; everything else is smoke-tested-at-best or has no
+    nav-flag surface at all, and should say so rather than imply parity.
+    """
+    from .capabilities import get_capability, VARFLOW_VERIFIED  # noqa: I006
+
+    cap = get_capability(analyzer)
+    if cap is None or cap.varflow == VARFLOW_VERIFIED:
+        return None
+    return (
+        f"--varflow is '{cap.varflow}' for {cap.language} (not fully "
+        f"conformance-verified) — see `reveal --language-info {cap.language}` "
+        f"for known limitations."
+    )
 
 
 @dataclass
@@ -97,6 +119,7 @@ def _nav_varflow(ctx: _NavCtx) -> None:
     )
     var_name = ctx.args.varflow
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    trust_warning = _varflow_trust_warning(ctx.analyzer)
     if getattr(ctx.args, 'cross_calls', False):
         frames = cross_var_flow(ctx.analyzer, ctx.func_node, var_name, from_line, to_line, ctx.get_text)
         if ctx.as_json:
@@ -108,16 +131,22 @@ def _nav_varflow(ctx: _NavCtx) -> None:
                 for frame in frames
             ]
             _nav_json('cross_varflow', ctx.analyzer.path, ctx.element, from_line, to_line, json_frames,
-                      extra_meta={'var': var_name})
+                      extra_meta={'var': var_name},
+                      warnings=[trust_warning] if trust_warning else None)
         else:
+            if trust_warning:
+                print(f"⚠️  {trust_warning}", file=sys.stderr)
             print(render_cross_var_flow(var_name, frames, ctx.analyzer.content.splitlines()))
         return
     events = var_flow(ctx.func_node, var_name, from_line, to_line, ctx.get_text)
     if ctx.as_json:
         findings = [{'kind': e['kind'], 'line': e['line']} for e in events]
         _nav_json('varflow', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
-                  extra_meta={'var': var_name})
+                  extra_meta={'var': var_name},
+                  warnings=[trust_warning] if trust_warning else None)
     else:
+        if trust_warning:
+            print(f"⚠️  {trust_warning}", file=sys.stderr)
         print(render_var_flow(var_name, events, ctx.analyzer.content.splitlines()))
 
 

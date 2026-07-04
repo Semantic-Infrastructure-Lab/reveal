@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any, List, Tuple
 
 from ..registry import get_analyzer, get_all_analyzers
 from ..core import node_children as _children
+from ..capabilities import get_capability
 
 _CAPABILITY_METHODS = [
     ('get_functions', 'Functions'),
@@ -345,6 +346,22 @@ def _build_full_support_info(info: Dict[str, Any]) -> List[str]:
     for cap in caps:
         lines.append(f"   • {cap}")
 
+    # BACK-444: language capability profile — how trustworthy is --varflow /
+    # unused-import detection for this language, and what's the evidence?
+    profile = get_capability(info['class'])
+    if profile is not None:
+        lines.append("")
+        lines.append(f"🎯 Conformance level: {profile.conformance_level}")
+        lines.append(f"   --varflow trust: {profile.varflow}")
+        imports_unused_display = {
+            True: "reliable", False: "unreliable", None: "not supported",
+        }[profile.imports_unused]
+        lines.append(f"   Unused-import detection: {imports_unused_display}")
+        if profile.known_limitations:
+            lines.append("   Known limitations:")
+            for item in profile.known_limitations:
+                lines.append(f"     - {item}")
+
     return lines
 
 
@@ -461,6 +478,19 @@ def get_capabilities(path: str) -> Dict[str, Any]:
     if is_fallback:
         result["analyzer"]["fallback_language"] = getattr(analyzer_cls, 'fallback_language', 'unknown')
         result["analyzer"]["fallback_quality"] = getattr(analyzer_cls, 'fallback_quality', 'unknown')
+
+    # BACK-444: language capability profile — is --varflow/imports_unused
+    # actually trustworthy for this language, and what's the evidence?
+    cap = get_capability(analyzer_cls)
+    if cap is not None:
+        result["capability"] = {
+            "conformance_level": cap.conformance_level,
+            "varflow": cap.varflow,
+            "imports_unused": cap.imports_unused,
+            "function_body_shape": cap.function_body_shape,
+            "import_resolution": cap.import_resolution,
+            "known_limitations": cap.known_limitations,
+        }
 
     # Determine extractable element types based on file extension
     ext = file_path.suffix.lower()

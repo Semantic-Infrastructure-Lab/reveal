@@ -55,11 +55,15 @@ def list_supported_languages() -> str:
     lines.append("Full analysis with language-specific features\n")
 
     # Group by extension
+    from ..capabilities import get_capability
+
     explicit_sorted = sorted(explicit_extensions.items(), key=lambda x: str(x[1]['name']).lower())
     for ext, info in explicit_sorted:
         name = info['name']
         icon = info['icon']
-        lines.append(f"  {icon} {name:20} ({ext})")
+        cap = get_capability(info['class'])
+        tag = f" [{cap.conformance_level}]" if cap else ""
+        lines.append(f"  {icon} {name:20} ({ext}){tag}")
 
     # Fallback section
     lines.append(f"\n🔄 Tree-sitter Fallback ({len(fallback_languages)})")
@@ -76,6 +80,11 @@ def list_supported_languages() -> str:
     total = len(explicit_extensions) + len(fallback_languages)
     lines.append(f"\n{'='*70}")
     lines.append(f"Total: {total} languages supported")
+    lines.append(
+        "\n[tag] = capability conformance level (BACK-444): "
+        "tier1-verified > smoke-tested > structure-only > untested. "
+        "See: reveal --language-info <name>"
+    )
 
     # Usage hints
     lines.append("\n💡 Usage:")
