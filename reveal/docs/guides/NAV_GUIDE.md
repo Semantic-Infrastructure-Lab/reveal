@@ -21,7 +21,7 @@ For the full reference with output samples, see [`AGENT_HELP.md`](../AGENT_HELP.
 | Flag | Question it answers |
 |------|---------------------|
 | `--outline` | What's the shape of this function? |
-| `--scope :LINE` | What scope is this line inside? |
+| `--scope :LINE` | What scope is this line inside, and what gates it (JSON `condition` field per ancestor)? |
 | `--around N` | What's near line N? (verbatim ±N lines) |
 | `--ifmap` | What conditional branches exist? |
 | `--catchmap` | What try/except structure exists? |

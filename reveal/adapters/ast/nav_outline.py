@@ -9,6 +9,7 @@ from .node_taxonomy import (  # noqa: F401 — re-exported for nav.py/back-compa
     ALTERNATIVE_NODES,
     FUNCTION_TYPES,
     EXIT_NODES,
+    GATE_NODES,
     KEYWORD_LABEL,
 )
 
@@ -159,6 +160,11 @@ def _find_ancestors(
         return
 
     if node.is_named() and (node.kind() in SCOPE_NODES or node.kind() in FUNCTION_TYPES):
+        condition = None
+        if node.kind() in GATE_NODES:
+            from .nav_exits import _get_condition  # noqa: PLC0415 — avoid import-time cost for non-JSON callers
+            cond = _get_condition(node, get_text)
+            condition = cond['text'] if cond else None
         chain.append({
             'type': node.kind(),
             'keyword': KEYWORD_LABEL.get(node.kind(), node.kind().upper()),
@@ -166,6 +172,7 @@ def _find_ancestors(
             'line_start': start,
             'line_end': end,
             'depth': depth,
+            'condition': condition,
         })
         depth += 1
 

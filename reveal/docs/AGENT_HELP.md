@@ -692,7 +692,7 @@ reveal app.py :5 --scope
 #
 #     ▶ L5 is here
 ```
-Useful when a stack trace or grep result gives you a line number and you need to know what scope it's inside.
+Useful when a stack trace or grep result gives you a line number and you need to know what scope it's inside. `--format=json` adds a `condition` field per ancestor (the extracted `IF`/`ELIF`/`WHILE` condition text, `null` for `DEF`/`FOR`/`TRY`/`WITH`/etc.) — the same "what gates this line" question, machine-parseable.
 
 **`--varflow VAR` → read/write trace for a variable**
 ```bash

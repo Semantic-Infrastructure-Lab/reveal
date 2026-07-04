@@ -252,6 +252,110 @@ class TestScopeChain(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# scope_chain condition field tests (BACK-439a)
+# ---------------------------------------------------------------------------
+
+class TestScopeChainCondition(unittest.TestCase):
+    """--scope's JSON `condition` field, extracted via nav_exits._get_condition."""
+
+    def test_python_if_condition_present(self):
+        code = """
+        def process(items):
+            for item in items:
+                if item.active:
+                    x = item.value
+        """
+        _, root, get_text, _ = _parse_python(code)
+        from reveal.adapters.ast.nav import scope_chain
+        chain = scope_chain(root, 4, get_text)
+        by_keyword = {item['keyword']: item for item in chain}
+        self.assertEqual(by_keyword['IF']['condition'], 'item.active')
+
+    def test_python_for_condition_null(self):
+        # Python's for_statement has no 'condition' field (left/right instead) —
+        # _get_condition() returns None for it, same as collect_gate_chains.
+        code = """
+        def process(items):
+            for item in items:
+                if item.active:
+                    x = item.value
+        """
+        _, root, get_text, _ = _parse_python(code)
+        from reveal.adapters.ast.nav import scope_chain
+        chain = scope_chain(root, 4, get_text)
+        by_keyword = {item['keyword']: item for item in chain}
+        self.assertIsNone(by_keyword['FOR']['condition'])
+
+    def test_python_def_and_try_condition_null(self):
+        code = """
+        def process(items):
+            try:
+                x = items[0]
+            except IndexError:
+                x = None
+        """
+        _, root, get_text, _ = _parse_python(code)
+        from reveal.adapters.ast.nav import scope_chain
+        chain = scope_chain(root, 3, get_text)
+        by_keyword = {item['keyword']: item for item in chain}
+        self.assertIsNone(by_keyword['DEF']['condition'])
+        self.assertIsNone(by_keyword['TRY']['condition'])
+
+    def test_python_while_condition_present(self):
+        code = """
+        def process(items):
+            while items:
+                x = items.pop()
+        """
+        _, root, get_text, _ = _parse_python(code)
+        from reveal.adapters.ast.nav import scope_chain
+        chain = scope_chain(root, 3, get_text)
+        by_keyword = {item['keyword']: item for item in chain}
+        self.assertEqual(by_keyword['WHILE']['condition'], 'items')
+
+    def test_php_if_and_loop_condition(self):
+        root, get_text = _parse_lang('php', '''
+        <?php
+        function process($items) {
+            foreach ($items as $item) {
+                if ($item->active) {
+                    $x = $item->value;
+                }
+            }
+        }
+        ''')
+        from reveal.adapters.ast.nav import scope_chain
+        # Line 5 is "$x = $item->value;"
+        chain = scope_chain(root, 5, get_text)
+        keywords = [item['keyword'] for item in chain]
+        self.assertIn('IF', keywords)
+        by_keyword = {item['keyword']: item for item in chain}
+        self.assertIn('active', by_keyword['IF']['condition'])
+
+    def test_rust_if_condition_and_for_expression_null(self):
+        # Expression-oriented language: guards node_taxonomy's documented gap
+        # (for_expression/match_expression have no 'condition' field, BACK-430).
+        root, get_text = _parse_lang('rust', '''
+        fn process(items: &[i32]) -> i32 {
+            for item in items {
+                if *item > 0 {
+                    return *item;
+                }
+            }
+            0
+        }
+        ''')
+        from reveal.adapters.ast.nav import scope_chain
+        # Line 4 is "return *item;"
+        chain = scope_chain(root, 4, get_text)
+        by_keyword = {item['keyword']: item for item in chain}
+        self.assertIn('IF', by_keyword)
+        self.assertIn('*item > 0', by_keyword['IF']['condition'])
+        self.assertIn('FOR', by_keyword)
+        self.assertIsNone(by_keyword['FOR']['condition'])
+
+
+# ---------------------------------------------------------------------------
 # var_flow tests
 # ---------------------------------------------------------------------------
 
