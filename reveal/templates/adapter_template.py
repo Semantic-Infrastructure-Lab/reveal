@@ -5,6 +5,7 @@ ADAPTER_TEMPLATE = '''"""{description}."""
 import sys
 from typing import Dict, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..utils.results import ResultBuilder  # BACK-447: sole Output Contract constructor
 
 
 class {class_name}Renderer:
@@ -173,20 +174,24 @@ class {class_name}Adapter(ResourceAdapter):
         Returns:
             Dict containing structure information
         """
-        # TODO: Implement structure retrieval
-        return {{
-            'contract_version': '1.0',
-            'type': '{adapter_name}_structure',
-            'source': '{scheme}://',
-            'items': [
-                # TODO: Populate with actual items
-                {{'name': 'example_item', 'type': 'item'}},
-            ],
-            'metadata': {{
-                'total_count': 1,
-                # TODO: Add metadata
-            }}
-        }}
+        # TODO: Implement structure retrieval.
+        # BACK-447: build the Output Contract through ResultBuilder — never
+        # hand-write a `'contract_version': ...` dict. ResultBuilder owns the
+        # contract shape so a future version bump touches one place.
+        return ResultBuilder.create(
+            result_type='{adapter_name}_structure',
+            source='{scheme}://',
+            data={{
+                'items': [
+                    # TODO: Populate with actual items
+                    {{'name': 'example_item', 'type': 'item'}},
+                ],
+                'metadata': {{
+                    'total_count': 1,
+                    # TODO: Add metadata
+                }},
+            }},
+        )
 
     def get_element(self, element_name: str) -> Optional[Dict[str, Any]]:
         """Get details about a specific resource.

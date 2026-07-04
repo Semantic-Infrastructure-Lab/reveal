@@ -140,26 +140,12 @@ class ResourceAdapter(ABC):
                 'results': [...]
             }
         """
-        meta: Dict[str, Any] = {}
-
-        if parse_mode is not None:
-            meta['parse_mode'] = parse_mode
-
-        if confidence is not None:
-            # Clamp to [0.0, 1.0]
-            meta['confidence'] = max(0.0, min(1.0, confidence))
-
-        if warnings is not None:
-            meta['warnings'] = warnings
-        else:
-            meta['warnings'] = []
-
-        if errors is not None:
-            meta['errors'] = errors
-        else:
-            meta['errors'] = []
-
-        return meta if meta else {}
+        # BACK-447: delegate to ResultBuilder — the sole output-contract
+        # constructor. Kept as a thin passthrough so existing adapters that
+        # call `self.create_meta(...)` keep working while the contract logic
+        # lives in exactly one place.
+        from reveal.utils.results import ResultBuilder
+        return ResultBuilder.create_meta(parse_mode, confidence, warnings, errors)
 
     def get_element(self, element_name: str, **kwargs) -> Optional[RevealResult]:
         """Get details about a specific element within the resource.

@@ -101,7 +101,7 @@ class ResultBuilder:
 
         # Add v1.1 meta if metadata provided
         if contract_version == '1.1' and any([parse_mode, confidence is not None, warnings, errors]):
-            result['meta'] = ResultBuilder._create_meta(
+            result['meta'] = ResultBuilder.create_meta(
                 parse_mode=parse_mode,
                 confidence=confidence,
                 warnings=warnings,
@@ -173,7 +173,7 @@ class ResultBuilder:
         return result
 
     @staticmethod
-    def _create_meta(
+    def create_meta(
         parse_mode: Optional[str] = None,
         confidence: Optional[float] = None,
         warnings: Optional[List[WarningEntry]] = None,
@@ -225,6 +225,10 @@ class ResultBuilder:
             meta['errors'] = []
 
         return meta if meta else {}
+
+    # BACK-447: back-compat alias — `create_meta` is the public name now;
+    # older internal call sites and tests may still reference `_create_meta`.
+    _create_meta = create_meta
 
     @staticmethod
     def add_pagination_meta(
@@ -335,8 +339,8 @@ def create_meta(
     warnings: Optional[List[WarningEntry]] = None,
     errors: Optional[List[WarningEntry]] = None
 ) -> RevealMeta:
-    """Convenience function for ResultBuilder._create_meta().
+    """Convenience function for ResultBuilder.create_meta().
 
-    See ResultBuilder._create_meta() for full documentation.
+    See ResultBuilder.create_meta() for full documentation.
     """
-    return ResultBuilder._create_meta(parse_mode, confidence, warnings, errors)
+    return ResultBuilder.create_meta(parse_mode, confidence, warnings, errors)
