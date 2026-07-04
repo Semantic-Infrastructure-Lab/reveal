@@ -115,6 +115,7 @@ CALLEE_ATTRIBUTE_TYPES = {
 # Parent node types for hierarchical extraction (Class.method)
 PARENT_NODE_TYPES = (
     'class_definition', 'class_declaration',
+    'class_specifier',        # C++ class (BACK-451)
     'struct_item', 'struct_specifier', 'struct_declaration',
     'impl_item',              # Rust impl blocks
     'interface_declaration',
@@ -946,9 +947,16 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         Used to extract names from deeply nested declarators.
         Example: pointer_declarator → function_declarator → identifier
+
+        BACK-451: C++ in-line member functions parse their name as a
+        ``field_identifier`` inside the ``function_declarator`` (a free
+        function uses a plain ``identifier``). Without it here, every C++
+        class method returned no name and was silently dropped from the
+        structure entirely — invisible to ``--outline`` and ``Class.method``
+        extraction alike.
         """
         # Check current node
-        if node.kind() in ('identifier', 'name', 'simple_identifier'):
+        if node.kind() in ('identifier', 'name', 'simple_identifier', 'field_identifier'):
             return self._get_node_text(node)
 
         # Search children recursively

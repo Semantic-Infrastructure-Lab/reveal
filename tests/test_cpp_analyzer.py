@@ -636,6 +636,94 @@ int Counter::count = 0;
         finally:
             os.unlink(temp_path)
 
+    def test_inline_member_functions_extracted(self):
+        """BACK-451: in-line C++ member functions must be extracted, not dropped.
+
+        Their name parses as a ``field_identifier`` inside the
+        ``function_declarator`` (a free function uses a plain ``identifier``).
+        Before the fix, ``_find_identifier_in_tree`` did not recognize
+        ``field_identifier``, so every C++ class method returned no name and
+        was silently discarded — invisible to structure, ``--outline`` and
+        ``Class.method`` extraction.
+        """
+        code = '''#include <vector>
+
+int run(int order) {
+    return order + 1;
+}
+
+class Batch {
+public:
+    int total = 0;
+    void run(std::vector<int>& items) {
+        for (int item : items) {
+            this->total = this->total + item;
+        }
+    }
+    int size() const {
+        return total;
+    }
+};
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CppAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            func_names = [fn['name'] for fn in structure.get('functions', [])]
+            # The in-line member functions must now be present...
+            self.assertIn('run', func_names)
+            self.assertIn('size', func_names)
+            # ...and the free function must still be there too (both named 'run').
+            self.assertEqual(func_names.count('run'), 2,
+                             f"expected free run + Batch::run, got {func_names}")
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_hierarchical_member_extraction(self):
+        """BACK-451: ``Class.method`` extraction must resolve for C++ classes.
+
+        C++'s class node kind is ``class_specifier``, which was absent from
+        ``PARENT_NODE_TYPES`` — so hierarchical resolution never matched a C++
+        class as a parent and ``reveal file.cpp Batch.run`` failed.
+        """
+        from reveal.file_handler import _find_element_node
+
+        code = '''#include <vector>
+
+int run(int order) {
+    return order + 1;
+}
+
+class Batch {
+public:
+    int total = 0;
+    void run(std::vector<int>& items) {
+        this->total = items.size();
+    }
+};
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CppAnalyzer(temp_path)
+            node = _find_element_node(analyzer, 'Batch.run')
+            self.assertIsNotNone(node, "Batch.run should resolve to the member method")
+            # Must be the member method (inside the class), not the free run()
+            self.assertGreater(node.start_position().row + 1, 6,
+                               "resolved node should be the member method, not free run()")
+
+        finally:
+            os.unlink(temp_path)
+
     def test_lambda_expressions(self):
         """Should handle lambda expressions and not crash."""
         code = '''#include <algorithm>
