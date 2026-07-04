@@ -37,6 +37,7 @@ For the full reference with output samples, see [`AGENT_HELP.md`](../AGENT_HELP.
 | `--loopmap` | What loops exist, and how are they nested? |
 | `--fanout` | Which loops make DB/HTTP/FS/log calls inside them? (N+1 / per-item fan-out review) |
 | `--statewrites` | What persistent/shared state does this mutate (field/env/session/cache/db/file writes)? |
+| `--keys VAR` | Which keys/properties of VAR are read, written, or tested (dict/object/array shape)? |
 | `--returns` | Each exit + the condition chain that gates it |
 | `--boundary` | One-shot contract: inputs + environment + effects |
 

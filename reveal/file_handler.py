@@ -62,6 +62,7 @@ from .nav_handlers import (  # noqa: F401
     _nav_loopmap,
     _nav_fanout,
     _nav_statewrites,
+    _nav_keys,
     _nav_returns,
     _nav_boundary,
     _nav_scope,
@@ -357,7 +358,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         # show_structure, which renders a top-level structural outline.  Adding
         # --outline here would route it through _dispatch_nav on root_node instead,
         # producing a different (lower-level) output and breaking existing behaviour.
-        _FLAT_FLAGS = ('varflow', 'calls', 'ifmap', 'catchmap', 'exits', 'flowto', 'deps', 'mutations', 'writes', 'sideeffects', 'loopmap', 'fanout', 'statewrites', 'returns', 'boundary')
+        _FLAT_FLAGS = ('varflow', 'calls', 'ifmap', 'catchmap', 'exits', 'flowto', 'deps', 'mutations', 'writes', 'sideeffects', 'loopmap', 'fanout', 'statewrites', 'keys', 'returns', 'boundary')
         for flag in _FLAT_FLAGS:
             if getattr(args, flag, None):
                 total = len(analyzer.content.splitlines())

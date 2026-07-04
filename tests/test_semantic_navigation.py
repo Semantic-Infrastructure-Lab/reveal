@@ -432,7 +432,7 @@ class TestNavJsonOutput(unittest.TestCase):
             scope=False, around=None, outline=False, varflow=None, calls=None,
             ifmap=False, catchmap=False, exits=False, flowto=False,
             deps=False, mutations=False, sideeffects=False, loopmap=False,
-            fanout=False, statewrites=False, returns=False,
+            fanout=False, statewrites=False, keys=None, returns=False,
             boundary=False, depth=3, range=None,
         )
         defaults.update(kwargs)
@@ -526,6 +526,19 @@ class TestNavJsonOutput(unittest.TestCase):
     def test_boundary_json_envelope(self):
         result = self._run('collect_deps', {'boundary': True})
         self._assert_envelope(result, 'boundary')
+
+    def test_keys_json_envelope(self):
+        result = self._run('collect_deps', {'keys': 'from_line'})
+        self._assert_envelope(result, 'keys')
+        self.assertEqual(result['meta']['var'], 'from_line')
+
+    def test_keys_findings_have_key_kind_line_access(self):
+        result = self._run('collect_deps', {'keys': 'from_line'})
+        for f in result['findings']:
+            self.assertIn('key', f)
+            self.assertIn('kind', f)
+            self.assertIn('line', f)
+            self.assertIn('access', f)
 
     def test_boundary_findings_kinds(self):
         result = self._run('collect_deps', {'boundary': True})

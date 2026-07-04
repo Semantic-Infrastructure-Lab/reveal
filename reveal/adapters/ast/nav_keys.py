@@ -1,0 +1,232 @@
+"""Dynamic key/property access surface: collect_keys (--keys VAR).
+
+BACK-439d: dict/object/array shape assumptions are a major source of agent
+mistakes, and no existing nav flag exposes them. Dogfood-confirmed blind
+spot on reveal/config.py's _check_rule_enabled: `--varflow rules` collapses
+`rules.get('enabled', ...)`, `rules.get('disable', ...)`, and
+`rules.get('select', ...)` into generic READ lines on the enclosing
+statement — the actual keys never appear in the output. An agent has to
+open the file and read the literals by eye today.
+
+Recognizes, for a given base variable name:
+  subscript access  -- config['x'], $row['id'], payload["id"] (any language's
+                        subscript/index node, field-based or PHP's fieldless
+                        positional shape)
+  member access     -- payload.id, $obj->x, config.enabled (any language's
+                        attribute/member-access node)
+  .get(key, default) call -- config.get('x'), row.get('id') (Python/JS dict-get
+                        idiom; the key is the call's first argument, not the
+                        method name)
+  isset()/empty() wrapping a subscript -- PHP's existence-check idiom
+
+Classifies each access as READ, WRITE (assignment target), or COND (used
+directly in an if/while condition — including isset()/empty()), reusing the
+same context-propagation model as nav_varflow.VarFlowWalker: assignment
+targets flip to WRITE, condition subtrees flip to COND, everything else
+defaults to READ.
+
+Reuses _ASSIGNMENT_NODES/_MEMBER_ACCESS_NODES/_SUBSCRIPT_NODES from
+nav_statewrites.py rather than redeclaring the same grammar-shape literals a
+second time.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Callable, Dict, List, Optional
+
+from ...core import node_children as _children
+from .nav_statewrites import _ASSIGNMENT_NODES, _MEMBER_ACCESS_NODES, _SUBSCRIPT_NODES
+
+_CALL_NODES: frozenset = frozenset({
+    'call', 'call_expression', 'function_call_expression', 'method_invocation',
+})
+
+_ISSET_LIKE: frozenset = frozenset({'isset', 'empty'})
+
+_QUOTE_CHARS = ('"', "'", '`')
+
+
+def _base_text(base: Any, get_text: Callable) -> str:
+    return get_text(base).strip().lstrip('$')
+
+
+def _base_matches(base: Any, var_name: str, get_text: Callable) -> bool:
+    return _base_text(base, get_text) == var_name.lstrip('$')
+
+
+def _clean_literal(text: str) -> str:
+    text = text.strip()
+    if len(text) >= 2 and text[0] in _QUOTE_CHARS and text[-1] == text[0]:
+        return text[1:-1]
+    return text
+
+
+def _subscript_parts(node: Any) -> tuple:
+    """Return (base_node, key_node) for a subscript/index node.
+
+    Field-based grammars (Python 'value'/'subscript', JS/TS 'object'/'index')
+    expose both directly. PHP's subscript_expression exposes no fields at
+    all — base is the first child, key is the first named child after '['.
+    """
+    base = node.child_by_field_name('value') or node.child_by_field_name('object')
+    key = node.child_by_field_name('subscript') or node.child_by_field_name('index')
+    if base is not None:
+        return base, key
+    children = _children(node)
+    if not children:
+        return None, None
+    base = children[0]
+    key = None
+    for child in children[1:]:
+        if child.is_named():
+            key = child
+            break
+    return base, key
+
+
+def _member_parts(node: Any) -> tuple:
+    """Return (object_node, property_node) for a member/attribute-access node.
+
+    Field-based grammars expose 'property'/'name'/'attribute'/'field'; Python's
+    'attribute' node exposes only 'object' — the property identifier has no
+    field name, so it falls back to the last named non-object child.
+    """
+    obj = node.child_by_field_name('object')
+    if obj is None:
+        return None, None
+    prop = (
+        node.child_by_field_name('property')
+        or node.child_by_field_name('name')
+        or node.child_by_field_name('attribute')
+        or node.child_by_field_name('field')
+    )
+    if prop is not None:
+        return obj, prop
+    obj_span = (obj.start_byte(), obj.end_byte())
+    candidates = [c for c in _children(node) if c.is_named() and (c.start_byte(), c.end_byte()) != obj_span]
+    if candidates:
+        return obj, candidates[-1]
+    return None, None
+
+
+def _first_call_arg(call_node: Any, get_text: Callable) -> Optional[Any]:
+    args = call_node.child_by_field_name('arguments')
+    if args is None:
+        return None
+    for child in _children(args):
+        if child.is_named():
+            return child
+    return None
+
+
+def _walk(
+    node: Any,
+    context: str,
+    var_name: str,
+    from_line: int,
+    to_line: int,
+    get_text: Callable,
+    results: List[Dict[str, Any]],
+) -> None:
+    start = node.start_position().row + 1
+    end = node.end_position().row + 1
+    if end < from_line or start > to_line:
+        return
+    ntype = node.kind()
+
+    if ntype in _ASSIGNMENT_NODES:
+        left = node.child_by_field_name('left')
+        right = node.child_by_field_name('right')
+        processed = set()
+        if left is not None:
+            processed.add((left.start_byte(), left.end_byte()))
+            _walk(left, 'WRITE', var_name, from_line, to_line, get_text, results)
+        if right is not None:
+            processed.add((right.start_byte(), right.end_byte()))
+            _walk(right, 'READ', var_name, from_line, to_line, get_text, results)
+        for child in _children(node):
+            if (child.start_byte(), child.end_byte()) not in processed:
+                _walk(child, context, var_name, from_line, to_line, get_text, results)
+        return
+
+    cond = node.child_by_field_name('condition')
+    if cond is not None:
+        _walk(cond, 'COND', var_name, from_line, to_line, get_text, results)
+        cond_span = (cond.start_byte(), cond.end_byte())
+        for child in _children(node):
+            if (child.start_byte(), child.end_byte()) != cond_span:
+                _walk(child, context, var_name, from_line, to_line, get_text, results)
+        return
+
+    if ntype in _CALL_NODES:
+        func = node.child_by_field_name('function')
+        if func is not None and func.kind() in ('name', 'identifier'):
+            if get_text(func) in _ISSET_LIKE:
+                args = node.child_by_field_name('arguments')
+                if args is not None:
+                    for child in _children(args):
+                        if child.is_named():
+                            _walk(child, 'COND', var_name, from_line, to_line, get_text, results)
+                return
+        if func is not None and func.kind() in _MEMBER_ACCESS_NODES:
+            obj, prop = _member_parts(func)
+            if obj is not None and prop is not None and get_text(prop) == 'get' and _base_matches(obj, var_name, get_text):
+                key_node = _first_call_arg(node, get_text)
+                if key_node is not None:
+                    results.append({
+                        'key': _clean_literal(get_text(key_node)), 'kind': context,
+                        'line': start, 'access': 'call',
+                    })
+                return
+
+    if ntype in _SUBSCRIPT_NODES:
+        base, key_node = _subscript_parts(node)
+        if base is not None and _base_matches(base, var_name, get_text):
+            key = _clean_literal(get_text(key_node)) if key_node is not None else '?'
+            results.append({'key': key, 'kind': context, 'line': start, 'access': 'subscript'})
+            return
+
+    if ntype in _MEMBER_ACCESS_NODES:
+        obj, prop = _member_parts(node)
+        if obj is not None and prop is not None and _base_matches(obj, var_name, get_text):
+            results.append({'key': get_text(prop), 'kind': context, 'line': start, 'access': 'attribute'})
+            return
+
+    for child in _children(node):
+        _walk(child, context, var_name, from_line, to_line, get_text, results)
+
+
+def collect_keys(
+    func_node: Any,
+    var_name: str,
+    from_line: int,
+    to_line: int,
+    get_text: Callable,
+) -> List[Dict[str, Any]]:
+    """Return dict/object/array key accesses on ``var_name`` in a line range.
+
+    Each result: {key, kind (READ/WRITE/COND), line, access (subscript/attribute/call)}.
+    """
+    results: List[Dict[str, Any]] = []
+    _walk(func_node, 'READ', var_name, from_line, to_line, get_text, results)
+    results.sort(key=lambda r: r['line'])
+    return results
+
+
+def render_keys(var_name: str, events: List[Dict[str, Any]], from_line: int, to_line: int) -> str:
+    """Render collect_keys output, grouped by key in first-seen order."""
+    if not events:
+        return f'No key access found for {var_name} in lines {from_line}–{to_line}'
+    order: List[str] = []
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for e in events:
+        if e['key'] not in groups:
+            groups[e['key']] = []
+            order.append(e['key'])
+        groups[e['key']].append(e)
+    key_width = max(len(k) for k in order)
+    lines = []
+    for key in order:
+        accesses = ', '.join(f"{a['kind']} L{a['line']}" for a in groups[key])
+        lines.append(f'{key:<{key_width}}  {accesses}')
+    return '\n'.join(lines)

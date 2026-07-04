@@ -204,9 +204,11 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
                        scope       — ancestor scope chain (requires :LINE element)
                      Value flags (pass flag_value):
                        varflow     — trace one variable's reads/writes (flag_value = var name)
+                       keys        — dict/object/array key access on a variable: READ/WRITE/COND
+                                     per key (flag_value = var name, e.g. 'config' or '$row')
                        calls       — call sites in range (flag_value = range like '89-120' or blank for all)
                        around      — verbatim lines centred on a line (flag_value = context lines, default 20)
-        flag_value:  Required for varflow (variable name). Optional for calls
+        flag_value:  Required for varflow and keys (variable name). Optional for calls
                      (range string) and around (integer context lines).
 
     Examples:
@@ -214,6 +216,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
         reveal_nav('app.py', 'process_order', 'sideeffects')
         reveal_nav('flat.php', ':477-531', 'deps')
         reveal_nav('app.py', 'process_order', 'varflow', 'result')
+        reveal_nav('app.py', 'normalize', 'keys', 'config')
         reveal_nav('app.py', 'process_order', 'calls', '20-60')
     """
     from .file_handler import handle_file  # noqa: I006
@@ -224,6 +227,10 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
         if not flag_value:
             return "[reveal error: varflow requires flag_value (variable name, e.g. 'result')]"
         args = _default_args(varflow=flag_value)
+    elif flag == 'keys':
+        if not flag_value:
+            return "[reveal error: keys requires flag_value (variable name, e.g. 'config')]"
+        args = _default_args(keys=flag_value)
     elif flag == 'calls':
         args = _default_args(calls=flag_value or 'FULL')
     elif flag == 'around':
@@ -233,7 +240,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
             return f"[reveal error: around requires an integer flag_value, got '{flag_value}']"
         args = _default_args(around=n)
     else:
-        valid = sorted(_NAV_BOOLEAN_FLAGS | {'varflow', 'calls', 'around'})
+        valid = sorted(_NAV_BOOLEAN_FLAGS | {'varflow', 'keys', 'calls', 'around'})
         return f"[reveal error: unknown nav flag '{flag}'. Valid flags: {valid}]"
 
     return _run_and_capture(handle_file, path, element, False, 'text', args)

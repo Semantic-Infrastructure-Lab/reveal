@@ -876,6 +876,19 @@ reveal file.php :1-800 --statewrites
 ```
 `--mutations` is local-variable/refactor oriented (read-after-write hazards) and `--sideeffects` is call oriented — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--statewrites` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--sideeffects`'s call taxonomy, merged in by kind. `db` inherits `--sideeffects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. True global-vs-local scope distinction and DB column/table extraction are out of scope for this flag. Works on PHP, Python, and JS/TS.
 
+**`--keys VAR` → dynamic key/property access surface (BACK-439d)**
+```bash
+reveal file.py normalize --keys config
+reveal file.php :1-500 --keys '$row'
+reveal file.ts handler --keys payload
+
+# Output:
+# enabled  COND L2
+# x        READ L3
+# y        WRITE L4
+```
+`--varflow` traces a variable's own reads/writes but collapses everything the variable's keys/properties are used for into generic READ lines on the enclosing statement — `rules.get('enabled', ...)` never shows that the key is `enabled`. `--keys` fills that gap: for the given base variable, it finds subscript access (`config['x']`, `$row['id']`, `payload["id"]`), member/attribute access (`payload.id`, `$obj->x`, optional chaining `payload?.id`), and the dict-get idiom (`config.get('x', default)`, key = first argument, not the method name), then classifies each occurrence as `READ`, `WRITE` (assignment target), or `COND` (used directly in an `if`/`while` condition, including PHP's `isset()`/`empty()` wrapping a subscript). Output groups by key in first-seen order. Works on Python, PHP, and JS/TS.
+
 **`--returns` → return/exit paths with gate chains (v0.81.0+)**
 ```bash
 reveal app.py process_order --returns
