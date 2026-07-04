@@ -1,33 +1,46 @@
 """V013: Adapter count accuracy in documentation.
 
-Validates that README.md adapter counts match actual registered URI adapters.
-Prevents documentation drift when new adapters are added.
+Validates that documented adapter counts match the registered URI adapters.
+Prevents documentation drift when adapters are added (see BACK-388).
 
 Example violation:
-    - README.md claims: "10 adapters"
-    - Actual registered: 14 adapters
+    - A doc claims: "22 adapters"
+    - Actually registered: 25 production adapters
     - Result: Documentation out of sync
 
-Checks:
-    - README.md: ALL numeric claims about adapters
+Counting:
+    - Production adapters only — list_supported_schemes() minus the 'test' and
+      'demo' scaffold schemes that leak in during test runs. Strict equality:
+      both overclaims and stale underclaims are drift and are flagged.
+
+Scope:
+    - Checks every current-claim doc (README, ARCHITECTURE, QUICK_START,
+      WHY_REVEAL), skipping version-history lines.
 """
 
-import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from .utils import find_reveal_root
+from .utils import find_reveal_root, iter_current_claim_docs, scan_doc_for_counts
 
 
 class V013(BaseRule):
-    """Validate README adapter count matches registered adapters."""
+    """Validate documented adapter counts match registered adapters."""
 
     code = "V013"
     message = "Adapter count mismatch in documentation"
     category = RulePrefix.V
     severity = Severity.MEDIUM  # Important for releases
     file_patterns = ['*']
+
+    # Explicit phrasings (not a greedy "N <words> adapters") so a sentence like
+    # "5 minutes to configure 22 adapters" can't misattribute the count.
+    _ADAPTER_PATTERNS = [
+        r'(\d+)\s+adapters?\b',                 # "22 adapters"
+        r'(\d+)\s+URI\s+adapters?\b',           # "25 URI adapters"
+        r'(\d+)\s+Built-in\s+Adapters?\b',      # "25 Built-in Adapters"
+    ]
 
     def check(self,
               file_path: str,
@@ -36,84 +49,45 @@ class V013(BaseRule):
         """Check adapter count accuracy across documentation files."""
         detections: List[Detection] = []
 
-        # Only run for reveal:// URIs
+        # Only run for reveal:// URIs (self-analysis)
         if not file_path.startswith('reveal://'):
             return detections
 
-        # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
             return detections
-
         project_root = reveal_root.parent
 
-        # Count actual registered adapters
-        actual_count = self._count_registered_adapters()
+        actual_count = self._count_production_adapters()
         if actual_count is None:
             return detections
 
-        # Check README.md claims
-        readme_file = project_root / 'README.md'
-        if readme_file.exists():
-            detections.extend(self._check_readme_adapter_count(readme_file, actual_count, project_root))
+        for rel_path, doc_path in iter_current_claim_docs(project_root):
+            seen: set = set()
+            for line_num, claimed in scan_doc_for_counts(doc_path, self._ADAPTER_PATTERNS):
+                # A line matching both "N adapters" and "N URI adapters" yields
+                # the same (line, count) twice — dedupe.
+                if (line_num, claimed) in seen:
+                    continue
+                seen.add((line_num, claimed))
+                if claimed != actual_count:
+                    detections.append(self.create_detection(
+                        file_path=rel_path,
+                        line=line_num,
+                        message=f"Adapter count mismatch: claims {claimed}, actual {actual_count}",
+                        suggestion=f"Update {rel_path} line {line_num} to '{actual_count} adapters' (see `reveal --adapters`)",
+                        context=f"Claimed: {claimed}, Actual: {actual_count} registered URI adapters"
+                    ))
 
         return detections
 
-    def _count_registered_adapters(self) -> Optional[int]:
-        """Count actual registered URI adapters.
-
-        Returns count of registered URI schemes (ast://, diff://, etc.).
-        """
+    def _count_production_adapters(self) -> Optional[int]:
+        """Count production URI adapters, excluding test/demo scaffold schemes."""
         try:
             from reveal.adapters.base import list_supported_schemes
-            schemes = list_supported_schemes()
+            schemes = set(list_supported_schemes())
+            schemes.discard('test')
+            schemes.discard('demo')
             return len(schemes)
         except Exception:
             return None
-
-    def _check_readme_adapter_count(self, readme_file: Path, actual_count: int, project_root: Path) -> List[Detection]:
-        """Check all adapter count claims in README.md."""
-        detections: List[Detection] = []
-        claims = self._extract_adapter_count_from_readme(readme_file)
-
-        for line_num, claimed in claims:
-            if claimed != actual_count:
-                detections.append(self.create_detection(
-                    file_path="README.md",
-                    line=line_num,
-                    message=f"Adapter count mismatch: claims {claimed}, actual {actual_count}",
-                    suggestion=f"Update README.md line {line_num} to: '{actual_count} adapters'",
-                    context=f"Claimed: {claimed}, Actual: {actual_count} registered URI adapters"
-                ))
-
-        return detections
-
-    def _extract_adapter_count_from_readme(self, readme_file: Path) -> List[Tuple[int, int]]:
-        """Extract ALL adapter count claims from README.
-
-        Returns: List of (line_number, count) tuples
-
-        Looks for patterns like:
-        - "12 adapters"
-        - "(38 languages, 12 adapters)"
-        - "**10 Built-in Adapters:**"
-        """
-        try:
-            content = readme_file.read_text(encoding='utf-8')
-            lines = content.split('\n')
-
-            claims = []
-            for i, line in enumerate(lines, 1):
-                # Pattern 1: "N adapters" (case insensitive)
-                matches = re.finditer(r'(\d+)\s+adapters?', line, re.IGNORECASE)
-                for match in matches:
-                    claims.append((i, int(match.group(1))))
-
-                # Pattern 2: "**N Built-in Adapters**"
-                matches = re.finditer(r'\*\*(\d+)\s+Built-in\s+Adapters?', line)
-                for match in matches:
-                    claims.append((i, int(match.group(1))))
-
-            return claims
-        except Exception:
-            return []

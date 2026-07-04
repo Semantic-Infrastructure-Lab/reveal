@@ -1,31 +1,40 @@
 """V012: Language count accuracy in documentation.
 
-Validates that README.md language count matches actual registered analyzers.
-Prevents documentation drift when new languages are added.
+Validates that documented language counts match what `reveal --languages`
+actually reports. Prevents documentation drift when languages are added.
 
 Example violation:
-    - README.md claims: "38 languages built-in"
-    - Actual registered: 40 language extensions
-    - Result: Documentation out of sync
+    - A doc claims: "305+ languages"
+    - `reveal --languages` reports: "Total: 84 languages supported"
+    - Result: an overclaim the tool itself contradicts (reveal file.f90 errors)
 
 How it counts:
-    - Counts unique file extension registrations
-    - Each @register() call adds to the count
-    - Example: yaml_json.py registers 2 (.yaml, .yml counted as 1, .json as 1)
+    - Source of truth is the "Total: N languages supported" line printed by
+      list_supported_languages() — the exact figure `reveal --languages` shows
+      (explicit analyzers + curated tree-sitter fallbacks). This is NOT the raw
+      tree-sitter-language-pack grammar count (~306); reveal only maps ~84.
 
-Note: Checks ALL language count claims in README, not just first occurrence.
+Floor semantics:
+    - A documented count is acceptable as long as reveal supports AT LEAST that
+      many languages. Only overclaims (doc > actual) are flagged. This catches
+      the dangerous direction while tolerating the +1 registry pollution that
+      leaks in when the full test suite registers a scratch analyzer.
+
+Scope:
+    - Checks every current-claim doc (README, ARCHITECTURE, QUICK_START,
+      WHY_REVEAL), skipping version-history lines. See BACK-388.
 """
 
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from .utils import find_reveal_root
+from .utils import find_reveal_root, iter_current_claim_docs, scan_doc_for_counts
 
 
 class V012(BaseRule):
-    """Validate README language count matches registered analyzers."""
+    """Validate documented language counts match `reveal --languages`."""
 
     code = "V012"
     message = "Language count mismatch in documentation"
@@ -33,102 +42,56 @@ class V012(BaseRule):
     severity = Severity.MEDIUM  # Important for releases
     file_patterns = ['*']
 
+    # Every current phrasing captures the count in group 1.
+    _LANGUAGE_PATTERNS = [
+        r'(\d+)\+?\s+languages?\b',      # "84 languages", "84+ languages"
+        r'Built-in\s*\((\d+)\)',          # "Built-in (84)"
+    ]
+
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
-        """Check language count accuracy."""
+        """Check language count accuracy across documentation files."""
         detections: List[Detection] = []
 
-        # Only run for reveal:// URIs
+        # Only run for reveal:// URIs (self-analysis)
         if not file_path.startswith('reveal://'):
             return detections
 
-        # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
             return detections
-
         project_root = reveal_root.parent
-        readme_file = project_root / 'README.md'
 
-        if not readme_file.exists():
-            return detections
-
-        # Count actual registered languages
-        actual_count = self._count_registered_languages()
+        actual_count = self._count_supported_languages()
         if actual_count is None:
             return detections
 
-        # Extract ALL claimed counts from README
-        claims = self._extract_language_count_from_readme(readme_file)
-
-        # Flag ALL incorrect claims
-        for line_num, claimed in claims:
-            if claimed != actual_count:
-                detections.append(self.create_detection(
-                    file_path="README.md",
-                    line=line_num,
-                    message=f"Language count mismatch: claims {claimed}, actual {actual_count}",
-                    suggestion=f"Update README.md line {line_num} to: '{actual_count} languages built-in'",
-                    context=f"Claimed: {claimed}, Actual: {actual_count} registered language analyzers"
-                ))
+        for rel_path, doc_path in iter_current_claim_docs(project_root):
+            for line_num, claimed in scan_doc_for_counts(doc_path, self._LANGUAGE_PATTERNS):
+                # Floor semantics: only overclaims are wrong.
+                if claimed > actual_count:
+                    detections.append(self.create_detection(
+                        file_path=rel_path,
+                        line=line_num,
+                        message=f"Language overclaim: claims {claimed}, actual {actual_count}",
+                        suggestion=f"Update {rel_path} line {line_num} to '{actual_count} languages' (see `reveal --languages`)",
+                        context=f"Claimed: {claimed}, Actual: {actual_count} supported languages"
+                    ))
 
         return detections
 
-    def _count_registered_languages(self) -> Optional[int]:
-        """Count actual registered language analyzers.
+    def _count_supported_languages(self) -> Optional[int]:
+        """Count supported languages the same way `reveal --languages` does.
 
-        Returns count of unique language names (not extensions).
-        Example: .yaml and .yml both count as 1 language (YAML).
+        Reads the "Total: N languages supported" line from
+        list_supported_languages() — explicit analyzers + curated fallbacks.
         """
         try:
-            from reveal.registry import get_all_analyzers
-            analyzers = get_all_analyzers()
-
-            # Count unique language names (not extensions)
-            # get_all_analyzers() returns {ext: {name, icon, ...}}
-            # We want unique 'name' values
-            unique_languages = set()
-            for analyzer_info in analyzers.values():
-                if 'name' in analyzer_info:
-                    unique_languages.add(analyzer_info['name'])
-
-            return len(unique_languages)
+            from reveal.cli.languages import list_supported_languages
+            listing = list_supported_languages()
+            match = re.search(r'Total:\s*(\d+)\s+languages?\s+supported', listing)
+            return int(match.group(1)) if match else None
         except Exception:
             return None
-
-    def _extract_language_count_from_readme(self, readme_file: Path) -> List[Tuple[int, int]]:
-        """Extract ALL language count claims from README.
-
-        Returns: List of (line_number, count) tuples
-
-        Looks for patterns like:
-        - "38 languages built-in"
-        - "Built-in (38):"
-        - "Zero config. 38 languages"
-        """
-        try:
-            content = readme_file.read_text(encoding='utf-8')
-            lines = content.split('\n')
-
-            claims = []
-            for i, line in enumerate(lines, 1):
-                # Pattern 1: "N languages built-in"
-                matches = re.finditer(r'(\d+)\s+languages?\s+built-in', line, re.IGNORECASE)
-                for match in matches:
-                    claims.append((i, int(match.group(1))))
-
-                # Pattern 2: "Built-in (N):"
-                matches = re.finditer(r'Built-in\s*\((\d+)\):', line)
-                for match in matches:
-                    claims.append((i, int(match.group(1))))
-
-                # Pattern 3: "Zero config. N languages"
-                matches = re.finditer(r'Zero config\.\s*(\d+)\s+languages', line, re.IGNORECASE)
-                for match in matches:
-                    claims.append((i, int(match.group(1))))
-
-            return claims
-        except Exception:
-            return []

@@ -1152,9 +1152,9 @@ class TestV012LanguageCount(unittest.TestCase):
         # Should return detections list (may have detections if counts mismatch)
         self.assertIsInstance(detections, list)
 
-    def test_count_registered_languages(self):
-        """Test that _count_registered_languages returns valid count."""
-        count = self.rule._count_registered_languages()
+    def test_count_supported_languages(self):
+        """Test that _count_supported_languages returns valid count."""
+        count = self.rule._count_supported_languages()
         # Should return a number or None
         if count is not None:
             self.assertIsInstance(count, int)
@@ -1162,6 +1162,7 @@ class TestV012LanguageCount(unittest.TestCase):
 
     def test_extract_language_count_patterns(self):
         """Test that all language count patterns are detected."""
+        from reveal.rules.validation.utils import scan_doc_for_counts
         # Create test README content
         readme_content = """
 # Reveal
@@ -1180,7 +1181,7 @@ Supports 42 languages built-in for maximum compatibility.
             readme_path = Path(f.name)
 
         try:
-            claims = self.rule._extract_language_count_from_readme(readme_path)
+            claims = scan_doc_for_counts(readme_path, self.rule._LANGUAGE_PATTERNS)
             # Should find all 3 claims
             self.assertGreaterEqual(len(claims), 3)
             # Check that we found different counts
@@ -1190,6 +1191,25 @@ Supports 42 languages built-in for maximum compatibility.
             self.assertIn(42, counts)
         finally:
             readme_path.unlink()
+
+    def test_version_history_lines_skipped(self):
+        """Version-history count lines must not be flagged (BACK-388)."""
+        from reveal.rules.validation.utils import scan_doc_for_counts
+        content = """
+Works out of the box on 84 languages.
+
+- **v0.95.0** - reveal wires up analyzers for 300 languages of the pack.
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write(content)
+            path = Path(f.name)
+        try:
+            claims = scan_doc_for_counts(path, self.rule._LANGUAGE_PATTERNS)
+            counts = [c for _, c in claims]
+            self.assertIn(84, counts)
+            self.assertNotIn(300, counts)  # version-history line skipped
+        finally:
+            path.unlink()
 
 
 class TestV013AdapterCount(unittest.TestCase):
@@ -1223,9 +1243,9 @@ class TestV013AdapterCount(unittest.TestCase):
         # Should return detections list
         self.assertIsInstance(detections, list)
 
-    def test_count_registered_adapters(self):
-        """Test that _count_registered_adapters returns valid count."""
-        count = self.rule._count_registered_adapters()
+    def test_count_production_adapters(self):
+        """Test that _count_production_adapters returns valid count."""
+        count = self.rule._count_production_adapters()
         # Should return a number or None
         if count is not None:
             self.assertIsInstance(count, int)
@@ -1233,6 +1253,7 @@ class TestV013AdapterCount(unittest.TestCase):
 
     def test_extract_adapter_count_patterns(self):
         """Test that adapter count patterns are detected."""
+        from reveal.rules.validation.utils import scan_doc_for_counts
         # Create test README content
         readme_content = """
 # Reveal
@@ -1241,21 +1262,19 @@ class TestV013AdapterCount(unittest.TestCase):
 
 Supports (38 languages, 12 adapters).
 
-Currently 14 adapters available.
+One CLI, 14 URI adapters.
 """
         with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
             f.write(readme_content)
             readme_path = Path(f.name)
 
         try:
-            claims = self.rule._extract_adapter_count_from_readme(readme_path)
+            claims = scan_doc_for_counts(readme_path, self.rule._ADAPTER_PATTERNS)
             # Should find all adapter count claims
-            self.assertGreaterEqual(len(claims), 3)
-            # Check that we found different counts
             counts = [count for _, count in claims]
-            self.assertIn(10, counts)
-            self.assertIn(12, counts)
-            self.assertIn(14, counts)
+            self.assertIn(10, counts)   # "10 Built-in Adapters"
+            self.assertIn(12, counts)   # "12 adapters"
+            self.assertIn(14, counts)   # "14 URI adapters"
         finally:
             readme_path.unlink()
 

@@ -5,8 +5,61 @@ particularly for finding and working with reveal's installation directory.
 """
 
 import os
+import re
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
+
+
+# Docs that carry *current* adapter/language count claims. Deliberately excludes
+# AGENT_HELP.md and CHANGELOG.md, whose count mentions are all historical
+# version-history entries (see BACK-388). Paths are relative to project_root.
+CURRENT_CLAIM_DOCS = (
+    'README.md',
+    'ARCHITECTURE.md',
+    'reveal/docs/QUICK_START.md',
+    'reveal/docs/WHY_REVEAL.md',
+)
+
+# A line that documents a past release, e.g. "- **v0.72.1** - ... corrected to 22".
+# Counts on these lines are correct-in-context and must not be flagged.
+_VERSION_HISTORY_LINE = re.compile(r'\*\*v\d+\.\d+', re.IGNORECASE)
+
+
+def is_version_history_line(line: str) -> bool:
+    """True if a line is a changelog/version-history entry (skip count checks)."""
+    return bool(_VERSION_HISTORY_LINE.search(line))
+
+
+def iter_current_claim_docs(project_root: Path) -> List[Tuple[str, Path]]:
+    """Yield (relative_path, absolute_path) for each existing current-claim doc."""
+    docs: List[Tuple[str, Path]] = []
+    for rel in CURRENT_CLAIM_DOCS:
+        abs_path = project_root / rel
+        if abs_path.exists():
+            docs.append((rel, abs_path))
+    return docs
+
+
+def scan_doc_for_counts(doc_path: Path,
+                        patterns: List[str]) -> List[Tuple[int, int]]:
+    """Return (line_number, claimed_count) for every count matched by `patterns`.
+
+    Version-history lines are skipped. Each pattern must capture the integer in
+    group 1.
+    """
+    try:
+        lines = doc_path.read_text(encoding='utf-8').split('\n')
+    except Exception:
+        return []
+    compiled = [re.compile(p, re.IGNORECASE) for p in patterns]
+    claims: List[Tuple[int, int]] = []
+    for i, line in enumerate(lines, 1):
+        if is_version_history_line(line):
+            continue
+        for rx in compiled:
+            for match in rx.finditer(line):
+                claims.append((i, int(match.group(1))))
+    return claims
 
 
 def find_reveal_root(dev_only: bool = False) -> Optional[Path]:
