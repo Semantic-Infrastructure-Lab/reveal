@@ -455,6 +455,15 @@ def get_analyzer_mapping() -> Dict[str, type]:
     return _ANALYZER_REGISTRY.copy()
 
 
+def get_analyzer_for_extension(ext: str) -> Optional[type]:
+    """Look up the registered analyzer class for one extension, or None.
+
+    Single-entry counterpart to get_analyzer_mapping() — for callers that
+    only need one extension, this skips copying the entire registry.
+    """
+    return _ANALYZER_REGISTRY.get(ext.lower())
+
+
 def language_for_extension(ext: str) -> Optional[str]:
     """Return the canonical tree-sitter language slug for *ext*, or None.
 

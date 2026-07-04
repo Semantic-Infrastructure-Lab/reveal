@@ -52,7 +52,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from .registry import get_analyzer_mapping
+from .registry import get_analyzer_for_extension
 
 # --- varflow trust levels --------------------------------------------------
 
@@ -836,7 +836,7 @@ def get_capability_for_extension(ext: str) -> Optional[LanguageCapability]:
     Resolves the extension to its registered analyzer class first, so this
     always reflects what the registry would actually dispatch to.
     """
-    cls = get_analyzer_mapping().get(ext.lower())
+    cls = get_analyzer_for_extension(ext)
     return get_capability(cls) if cls is not None else None
 
 
