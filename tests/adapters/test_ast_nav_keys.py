@@ -13,6 +13,9 @@ from conftest import _run_reveal_direct
 from reveal.analyzers.python import PythonAnalyzer
 from reveal.analyzers.php import PhpAnalyzer
 from reveal.analyzers.javascript import JavaScriptAnalyzer
+from reveal.analyzers.rust import RustAnalyzer
+from reveal.analyzers.go import GoAnalyzer
+from reveal.analyzers.csharp import CSharpAnalyzer
 from reveal.adapters.ast.nav_keys import collect_keys, render_keys
 from reveal.adapters.ast.nav_cross_varflow import _find_function_node
 
@@ -214,6 +217,95 @@ function f($row) {
             self.assertIn('id', out.stdout)
         finally:
             os.unlink(php_path)
+
+
+class TestMemberAccessNonObjectFieldNames(unittest.TestCase):
+    """Regression: _member_parts() must not assume 'object' is the only
+    base-field name — Rust/Go/C# each name it differently. Found by
+    roaring-mist-0704's review; every case below returned zero events
+    before the fix."""
+
+    def test_rust_field_expression_uses_value_field(self):
+        path = _write("""\
+fn f(cfg: &Config) -> i32 {
+    let x = cfg.x;
+    x
+}
+""", '.rs')
+        try:
+            events = _keys(RustAnalyzer, path, 'f', 'cfg')
+            self.assertEqual([e['key'] for e in events], ['x'])
+        finally:
+            os.unlink(path)
+
+    def test_go_selector_expression_uses_operand_field(self):
+        path = _write("""\
+package main
+func f(cfg Config) int {
+	x := cfg.X
+	return x
+}
+""", '.go')
+        try:
+            events = _keys(GoAnalyzer, path, 'f', 'cfg')
+            self.assertEqual([e['key'] for e in events], ['X'])
+        finally:
+            os.unlink(path)
+
+    def test_csharp_member_access_expression_uses_expression_field(self):
+        path = _write("""\
+class C {
+    int F(Config cfg) {
+        int x = cfg.X;
+        return x;
+    }
+}
+""", '.cs')
+        try:
+            events = _keys(CSharpAnalyzer, path, 'F', 'cfg')
+            self.assertEqual([e['key'] for e in events], ['X'])
+        finally:
+            os.unlink(path)
+
+
+class TestFlatFileNarrowFlag(unittest.TestCase):
+    """Regression: --narrow was missing from file_handler.py's _FLAT_FLAGS,
+    so `reveal file.py --narrow x` (no explicit function/range) silently
+    fell through to show_structure instead of running the narrowing
+    analysis. Found by roaring-mist-0704's review."""
+
+    def test_narrow_with_no_element_runs_narrowing_not_structure(self):
+        path = _write("""\
+def f(x: int):
+    if x > 0:
+        x = str(x)
+    return x
+""", '.py')
+        try:
+            out = _run_reveal_direct(path, '--narrow', 'x')
+        finally:
+            os.unlink(path)
+        self.assertNotIn('[reveal error', out.stdout)
+        self.assertNotIn('Functions (', out.stdout)
+
+
+class TestPythonTernaryCondition(unittest.TestCase):
+    """Regression: Python's fieldless conditional_expression (ternary) must
+    still flip its middle sub-expression to COND, matching if/while."""
+
+    def test_ternary_condition_is_cond_not_read(self):
+        path = _write("""\
+def f(config):
+    return config['a'] if config['cond'] else config['b']
+""", '.py')
+        try:
+            events = _keys(PythonAnalyzer, path, 'f', 'config')
+        finally:
+            os.unlink(path)
+        by_key = {e['key']: e['kind'] for e in events}
+        self.assertEqual(by_key['cond'], 'COND')
+        self.assertEqual(by_key['a'], 'READ')
+        self.assertEqual(by_key['b'], 'READ')
 
 
 if __name__ == '__main__':

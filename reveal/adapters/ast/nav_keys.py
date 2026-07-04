@@ -25,9 +25,10 @@ same context-propagation model as nav_varflow.VarFlowWalker: assignment
 targets flip to WRITE, condition subtrees flip to COND, everything else
 defaults to READ.
 
-Reuses _ASSIGNMENT_NODES/_MEMBER_ACCESS_NODES/_SUBSCRIPT_NODES from
-nav_statewrites.py rather than redeclaring the same grammar-shape literals a
-second time.
+Reuses _ASSIGNMENT_NODES/_SUBSCRIPT_NODES from nav_statewrites.py and the
+fuller _MEMBER_ACCESS_KINDS from nav_varflow.py (which also covers Rust
+scoped_identifier, Kotlin navigation_expression, and Lua's dot/method index
+shapes) rather than redeclaring the same grammar-shape literals a second time.
 """
 
 from __future__ import annotations
@@ -35,7 +36,8 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional
 
 from ...core import node_children as _children
-from .nav_statewrites import _ASSIGNMENT_NODES, _MEMBER_ACCESS_NODES, _SUBSCRIPT_NODES
+from .nav_statewrites import _ASSIGNMENT_NODES, _SUBSCRIPT_NODES
+from .nav_varflow import _MEMBER_ACCESS_KINDS as _MEMBER_ACCESS_NODES
 
 _CALL_NODES: frozenset = frozenset({
     'call', 'call_expression', 'function_call_expression', 'method_invocation',
@@ -87,11 +89,21 @@ def _subscript_parts(node: Any) -> tuple:
 def _member_parts(node: Any) -> tuple:
     """Return (object_node, property_node) for a member/attribute-access node.
 
-    Field-based grammars expose 'property'/'name'/'attribute'/'field'; Python's
-    'attribute' node exposes only 'object' — the property identifier has no
+    The base/receiver field is named 'object' in most grammars, but Rust's
+    field_expression uses 'value', Go's selector_expression uses 'operand',
+    C#'s member_access_expression uses 'expression', and C++'s field_expression
+    uses 'argument' — try each before giving up. Field-based grammars expose
+    'property'/'name'/'attribute'/'field' for the property side; Python's
+    'attribute' node exposes only the base — the property identifier has no
     field name, so it falls back to the last named non-object child.
     """
-    obj = node.child_by_field_name('object')
+    obj = (
+        node.child_by_field_name('object')
+        or node.child_by_field_name('value')
+        or node.child_by_field_name('operand')
+        or node.child_by_field_name('expression')
+        or node.child_by_field_name('argument')
+    )
     if obj is None:
         return None, None
     prop = (
@@ -150,6 +162,12 @@ def _walk(
         return
 
     cond = node.child_by_field_name('condition')
+    if cond is None and ntype == 'conditional_expression':
+        # Python's ternary (`a if cond else b`) is fieldless — the condition
+        # is the middle named child.
+        named = [c for c in _children(node) if c.is_named()]
+        if len(named) == 3:
+            cond = named[1]
     if cond is not None:
         _walk(cond, 'COND', var_name, from_line, to_line, get_text, results)
         cond_span = (cond.start_byte(), cond.end_byte())
