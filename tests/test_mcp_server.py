@@ -149,6 +149,31 @@ class TestRevealNavTool(unittest.TestCase):
         self.assertIsInstance(result, str)
         self.assertNotIn('[reveal error', result)
 
+    def test_loopmap_flag(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_exits.py', 'collect_gate_chains', 'loopmap')
+        self.assertIsInstance(result, str)
+        self.assertNotIn('[reveal error', result)
+
+    def test_fanout_flag(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_exits.py', 'collect_gate_chains', 'fanout')
+        self.assertIsInstance(result, str)
+        self.assertNotIn('[reveal error', result)
+
+    def test_statewrites_flag(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_exits.py', 'collect_gate_chains', 'statewrites')
+        self.assertIsInstance(result, str)
+        self.assertNotIn('[reveal error', result)
+
+    def test_narrow_requires_flag_value(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'narrow')
+        self.assertIn('[reveal error', result)
+        self.assertIn('flag_value', result)
+
+    def test_narrow_with_value(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'narrow', 'calls')
+        self.assertIsInstance(result, str)
+        self.assertNotIn('[reveal error', result)
+
     def test_unknown_flag_returns_error(self):
         result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'notaflag')
         self.assertIn('[reveal error', result)
