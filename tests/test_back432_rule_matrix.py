@@ -28,8 +28,10 @@ from reveal.registry import get_analyzer
 from reveal.rules.complexity.C901 import C901
 from reveal.rules.complexity.C902 import C902
 from reveal.rules.complexity.C905 import C905
+from reveal.rules.duplicates.D001 import D001
 from reveal.rules.imports.I002 import I002
 from reveal.rules.imports.I005 import I005
+from reveal.rules.maintainability.M501 import M501
 
 
 class _TempDirMixin:
@@ -231,6 +233,89 @@ class TestComplexityRulesRealGoFixtures(_TempDirMixin, unittest.TestCase):
         )
 
         self.assertEqual(C905().check(str(path), structure, content), [])
+
+
+class TestD001DuplicateFunctionsNonPython(_TempDirMixin, unittest.TestCase):
+    """D001 declares file_patterns=['*'] ("works on any language with
+    functions") but its whole suite (test_D001.py) is Python-only. It reads
+    real `functions` (with line/line_end) from the analyzer's structure, so a
+    silent per-language extraction gap (like BACK-461's for imports) would make
+    it blind to duplicates outside Python. Positive: two byte-identical bodies
+    (same identifiers) must be flagged; negative: bodies that differ only by an
+    identifier must NOT be flagged (D001 does not rename variables).
+    """
+
+    def _structure(self, name: str, source: str):
+        path = self._write(name, source)
+        analyzer_class = get_analyzer(str(path), allow_fallback=False)
+        analyzer = analyzer_class(str(path))
+        return path, analyzer.get_structure(), analyzer.content
+
+    _DUP = {
+        'dup.go': (
+            'package main\n\n'
+            'func alpha(x int) int {\n\ttotal := x * 2\n\ttotal = total + 5\n\treturn total\n}\n\n'
+            'func beta(x int) int {\n\ttotal := x * 2\n\ttotal = total + 5\n\treturn total\n}\n'
+        ),
+        'dup.js': (
+            'function alpha(x) {\n\tlet total = x * 2;\n\ttotal = total + 5;\n\treturn total;\n}\n\n'
+            'function beta(x) {\n\tlet total = x * 2;\n\ttotal = total + 5;\n\treturn total;\n}\n'
+        ),
+        'dup.rs': (
+            'fn alpha(x: i32) -> i32 {\n\tlet mut total = x * 2;\n\ttotal = total + 5;\n\ttotal\n}\n\n'
+            'fn beta(x: i32) -> i32 {\n\tlet mut total = x * 2;\n\ttotal = total + 5;\n\ttotal\n}\n'
+        ),
+    }
+
+    def test_identical_bodies_flagged(self):
+        for name, source in self._DUP.items():
+            with self.subTest(lang=name):
+                path, structure, content = self._structure(name, source)
+                detections = D001().check(str(path), structure, content)
+                self.assertEqual(len(detections), 1, f'{name}: {detections}')
+                self.assertEqual(detections[0].rule_code, 'D001')
+                self.assertIn('beta', detections[0].message)
+
+    def test_bodies_differing_by_identifier_not_flagged(self):
+        # Same shape, different variable name (x vs y) — not an exact duplicate.
+        source = (
+            'package main\n\n'
+            'func alpha(x int) int {\n\ttotal := x + 1\n\treturn total\n}\n\n'
+            'func beta(y int) int {\n\ttotal := y + 1\n\treturn total\n}\n'
+        )
+        path, structure, content = self._structure('near.go', source)
+        self.assertEqual(D001().check(str(path), structure, content), [])
+
+
+class TestM501MarkersNonPython(_TempDirMixin, unittest.TestCase):
+    """M501 declares file_patterns=['*'] ("universal: all file types") but its
+    marker regex only matched `#`-style comments, so every C-family/Go/Rust/JS
+    (`//`, `/* */`), HTML/Markdown (`<!-- -->`) and SQL/Lua (`--`) marker was
+    invisible (BACK-432 — a real bug fixed alongside this test). Positive: each
+    non-`#` comment style is detected; negative: a bare marker in a string
+    literal stays unflagged.
+    """
+
+    def test_non_hash_comment_styles_detected(self):
+        cases = {
+            'f.go': '// TODO: refactor\nx := 1 // FIXME now\n',   # 2 markers
+            'f.c': '/* HACK: temp shim */\nint x = 1;\n',          # 1
+            'f.html': '<!-- XXX: revisit layout -->\n',            # 1
+            'f.sql': '-- TODO: add covering index\nSELECT 1;\n',   # 1
+        }
+        expected = {'f.go': 2, 'f.c': 1, 'f.html': 1, 'f.sql': 1}
+        for name, source in cases.items():
+            with self.subTest(file=name):
+                path = self._write(name, source)
+                detections = M501().check(str(path), None, source)
+                self.assertEqual(len(detections), expected[name], f'{name}: {detections}')
+
+    def test_marker_in_string_literal_not_flagged(self):
+        # No comment introducer → must stay silent (matches the Python-only
+        # test_non_comment_todo_not_flagged contract, cross-language).
+        source = 'const msg = "TODO: not a real comment";\n'
+        path = self._write('f.js', source)
+        self.assertEqual(M501().check(str(path), None, source), [])
 
 
 if __name__ == '__main__':

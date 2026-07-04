@@ -6,9 +6,14 @@ from ..base import BaseRule, Detection, RulePrefix, Severity
 
 logger = logging.getLogger(__name__)
 
-# Marker patterns: match `# TODO`, `# FIXME`, `# HACK`, `# XXX`
-# at the start of a comment anywhere on the line (inline or standalone)
-_MARKER_RE = re.compile(r'#\s*(TODO|FIXME|HACK|XXX)\b', re.IGNORECASE)
+# Marker patterns: match TODO/FIXME/HACK/XXX immediately after a comment
+# introducer, anywhere on the line (inline or standalone). M501 declares
+# universal (`['*']`) scope, so it must recognize every common comment style,
+# not just `#` (BACK-432): `#` (Python/Ruby/Shell/YAML), `//` and `/*`
+# (C/C++/Go/Rust/JS/TS/Java/Swift/Kotlin/Dart), `<!--` (HTML/Markdown/XML),
+# and `--` (SQL/Lua/Haskell). Requiring an introducer keeps a bare `TODO`
+# inside a string literal unflagged.
+_MARKER_RE = re.compile(r'(?:#|//|/\*|<!--|--)\s*(TODO|FIXME|HACK|XXX)\b', re.IGNORECASE)
 
 # Paths that are intentionally full of TODO markers (templates, scaffolds)
 _SKIP_PATH_FRAGMENTS = [
