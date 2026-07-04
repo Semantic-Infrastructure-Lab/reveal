@@ -357,6 +357,25 @@ end
         self.assertIn(('y', 'WRITE'), by_key_kind)
         self.assertIn(('x', 'READ'), by_key_kind)
 
+    def test_bracket_index_access(self):
+        """BACK-458 item 1: Lua's `t["k"]` (bracket_index_expression) was
+        absent from _SUBSCRIPT_NODES, so bracket-style key access was invisible
+        to --keys — only dot access (dot_index_expression) was tracked."""
+        path = _write("""\
+local function handle(cfg)
+  cfg["host"] = "localhost"
+  local p = cfg["port"]
+  return p
+end
+""", '.lua')
+        try:
+            events = _keys(LuaAnalyzer, path, 'handle', 'cfg')
+        finally:
+            os.unlink(path)
+        by_key_kind = [(e['key'], e['kind'], e['access']) for e in events]
+        self.assertIn(('host', 'WRITE', 'subscript'), by_key_kind)
+        self.assertIn(('port', 'READ', 'subscript'), by_key_kind)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -43,6 +43,11 @@ _MEMBER_ACCESS_NODES: frozenset = frozenset({
 
 _SUBSCRIPT_NODES: frozenset = frozenset({
     'subscript', 'subscript_expression', 'index_expression', 'element_access_expression',
+    # Lua's `t["k"]` (BACK-458 item 1). Python-shaped: base is child 0, the
+    # key literal the first named child after '['. Kotlin/Swift/Dart subscript
+    # shapes are NOT this shape (sibling base / call_expression collision /
+    # nested selectors) and need bespoke base extraction, not a set entry.
+    'bracket_index_expression',
 })
 
 _SESSION_BASES = ('_session', '_cookie', 'session')
