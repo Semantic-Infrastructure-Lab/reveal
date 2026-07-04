@@ -1,10 +1,16 @@
 """Environment diagnostics for Python adapter."""
 
+import re
 import sys
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 
 from .bytecode import check_bytecode
+
+# Match a literal `__version__ = "1.2.3"` assignment (single or double quotes).
+_VERSION_LITERAL = re.compile(
+    r"""^__version__\s*[:=]\s*['"]([^'"]+)['"]""", re.MULTILINE
+)
 
 
 def check_venv(detect_venv_func) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -62,6 +68,136 @@ def check_cwd_shadowing() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
             )
 
     return warnings, recommendations
+
+
+def _read_package_dir_version(pkg_dir: Path) -> Optional[str]:
+    """Best-effort static read of a source package directory's declared version.
+
+    Looks for a literal ``__version__ = "x.y.z"`` in the usual homes. Returns
+    None when the version is computed dynamically (e.g. read from
+    importlib.metadata at import time) — such packages can't be compared
+    statically and are deliberately not flagged.
+    """
+    for candidate in ("__init__.py", "version.py", "_version.py"):
+        f = pkg_dir / candidate
+        if not f.is_file():
+            continue
+        try:
+            text = f.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        m = _VERSION_LITERAL.search(text)
+        if m:
+            return m.group(1)
+    return None
+
+
+def check_package_dir_shadowing() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """BACK-419: detect a source package DIRECTORY on an earlier sys.path entry
+    that shadows a separately-installed distribution of the same import name
+    with a DIFFERENT version.
+
+    This is the mechanism that silently contaminated reveal's own dogfood sweep:
+    ``reveal --version`` returned 0.102.0 or 0.103.0 depending purely on cwd,
+    because an unregistered dev checkout on sys.path shadowed a differently-
+    versioned real install in site-packages. The existing ``check_cwd_shadowing``
+    only globs *loose* ``.py`` files in cwd; it never looks at package
+    *directories*, and ``check_editable_conflicts`` only sees PEP-660 editable
+    registrations, not a manual checkout relying on sys.path's cwd-prepend.
+
+    To keep false positives near zero this only fires on a confirmed version
+    mismatch: the shadowing directory must (a) be an importable package
+    (have ``__init__.py``), (b) map to an installed distribution, (c) sit on an
+    earlier sys.path entry than that install, and (d) declare a *literal*
+    ``__version__`` that differs from the installed distribution's version.
+    Packages whose version is computed dynamically (no literal marker) are not
+    flagged — including reveal itself, whose version is read from metadata.
+    """
+    issues: List[Dict[str, Any]] = []
+    recommendations: List[Dict[str, Any]] = []
+
+    try:
+        import importlib.metadata as im
+
+        pkg_to_dist = im.packages_distributions()
+
+        # Ordered, resolved, existing sys.path directories.
+        path_dirs: List[Path] = []
+        for entry in sys.path:
+            d = Path(entry or ".").resolve()
+            if d.is_dir():
+                path_dirs.append(d)
+
+        def _install_dir(dist_name: str) -> Optional[Path]:
+            try:
+                return Path(str(im.distribution(dist_name).locate_file(""))).resolve()
+            except Exception:  # noqa: BLE001 — best-effort metadata probe
+                return None
+
+        seen: set = set()
+        for d_idx, d in enumerate(path_dirs):
+            try:
+                entries = list(d.iterdir())
+            except OSError:
+                continue
+            for pkg in entries:
+                if pkg.name in seen:
+                    continue
+                if not (pkg.is_dir() and (pkg / "__init__.py").is_file()):
+                    continue
+                dists = set(pkg_to_dist.get(pkg.name, []))
+                if not dists:
+                    continue
+                local_ver = _read_package_dir_version(pkg)
+                if not local_ver:
+                    continue  # dynamic version — can't compare, don't guess
+                for dist in dists:
+                    inst = _install_dir(dist)
+                    if inst is None or inst == pkg.parent:
+                        continue  # not installed, or this dir IS the install (editable)
+                    # Only shadowing if the install is later on sys.path.
+                    try:
+                        inst_idx = path_dirs.index(inst)
+                    except ValueError:
+                        inst_idx = None
+                    if inst_idx is not None and d_idx >= inst_idx:
+                        continue
+                    try:
+                        installed_ver = im.version(dist)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if installed_ver and installed_ver != local_ver:
+                        seen.add(pkg.name)
+                        issues.append(
+                            {
+                                "category": "import_shadowing",
+                                "message": (
+                                    f"Package directory '{pkg}' (version {local_ver}) "
+                                    f"shadows installed '{dist}' (version {installed_ver})"
+                                ),
+                                "impact": (
+                                    f"'import {pkg.name}' resolves to the local checkout, not the "
+                                    f"installed package — behavior changes with cwd/PYTHONPATH"
+                                ),
+                                "severity": "high",
+                            }
+                        )
+                        recommendations.append(
+                            {
+                                "action": "resolve_package_shadowing",
+                                "message": (
+                                    f"Reconcile '{pkg.name}': `pip install -e {pkg.parent}` so the "
+                                    f"checkout IS the install, or run from a directory that keeps "
+                                    f"{pkg.parent} off sys.path"
+                                ),
+                                "command": f'python -c "import {pkg.name}; print({pkg.name}.__file__)"',
+                            }
+                        )
+                        break
+    except Exception:  # noqa: BLE001 — diagnostics must never crash the doctor
+        pass
+
+    return issues, recommendations
 
 
 def check_stale_bytecode() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -262,6 +398,10 @@ def run_doctor(detect_venv_func) -> Dict[str, Any]:
     warnings.extend(w)
     recommendations.extend(r)
 
+    i, r = check_package_dir_shadowing()
+    issues.extend(i)
+    recommendations.extend(r)
+
     i, r = check_stale_bytecode()
     issues.extend(i)
     recommendations.extend(r)
@@ -293,6 +433,7 @@ def run_doctor(detect_venv_func) -> Dict[str, Any]:
         "checks_performed": [
             "virtual_environment",
             "cwd_shadowing",
+            "package_dir_shadowing",
             "stale_bytecode",
             "python_version",
             "editable_installs",

@@ -123,6 +123,91 @@ class TestPythonAdapter(unittest.TestCase):
         self.assertIn(result["status"], ["clean", "issues_found"])
 
 
+class TestPackageDirShadowing(unittest.TestCase):
+    """BACK-419: package-directory shadowing with version mismatch."""
+
+    def test_clean_env_has_no_false_positives(self):
+        """A normal env must not flag shadowing (guards against noisy mismaps
+        like a stdlib `test` dir mapping to an unrelated distribution)."""
+        from reveal.adapters.python.doctor import check_package_dir_shadowing
+
+        issues, _recs = check_package_dir_shadowing()
+        self.assertEqual(issues, [], f"unexpected shadowing issues: {issues}")
+
+    def test_detects_version_mismatch(self):
+        """A source package dir with a literal __version__ that differs from an
+        installed distribution of the same import name, on an earlier sys.path
+        entry, is flagged high-severity."""
+        import importlib.metadata as im
+        import tempfile
+        from reveal.adapters.python.doctor import check_package_dir_shadowing
+
+        # Find an installed distribution whose top-level import package we can
+        # shadow with a bogus version.
+        pkg_to_dist = im.packages_distributions()
+        target = None
+        for import_name, dists in pkg_to_dist.items():
+            try:
+                if im.version(dists[0]):
+                    target = (import_name, dists[0])
+                    break
+            except Exception:
+                continue
+        if target is None:
+            self.skipTest("no importable installed distribution available")
+        import_name, dist = target
+
+        tmp = Path(tempfile.mkdtemp())
+        pkg = tmp / import_name
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text('__version__ = "0.0.0-shadow-test"\n')
+        sys.path.insert(0, str(tmp))
+        try:
+            issues, recs = check_package_dir_shadowing()
+        finally:
+            sys.path.remove(str(tmp))
+
+        mine = [i for i in issues if import_name in i["message"]]
+        self.assertEqual(len(mine), 1, f"expected one shadowing issue, got {issues}")
+        self.assertEqual(mine[0]["severity"], "high")
+        self.assertEqual(mine[0]["category"], "import_shadowing")
+        self.assertTrue(recs, "a resolution recommendation should accompany the issue")
+
+    def test_matching_version_not_flagged(self):
+        """When the local __version__ matches the installed version, it is not a
+        problem (this is what a correct editable checkout looks like)."""
+        import importlib.metadata as im
+        import tempfile
+        from reveal.adapters.python.doctor import check_package_dir_shadowing
+
+        pkg_to_dist = im.packages_distributions()
+        target = None
+        for import_name, dists in pkg_to_dist.items():
+            try:
+                v = im.version(dists[0])
+                if v:
+                    target = (import_name, v)
+                    break
+            except Exception:
+                continue
+        if target is None:
+            self.skipTest("no importable installed distribution available")
+        import_name, real_ver = target
+
+        tmp = Path(tempfile.mkdtemp())
+        pkg = tmp / import_name
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(f'__version__ = "{real_ver}"\n')
+        sys.path.insert(0, str(tmp))
+        try:
+            issues, _recs = check_package_dir_shadowing()
+        finally:
+            sys.path.remove(str(tmp))
+
+        mine = [i for i in issues if import_name in i["message"]]
+        self.assertEqual(mine, [], f"matching version must not be flagged: {mine}")
+
+
 class TestPycToSource(unittest.TestCase):
     """Test .pyc to source file conversion."""
 
