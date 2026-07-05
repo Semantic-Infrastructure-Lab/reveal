@@ -46,6 +46,7 @@ class V017(BaseRule):
     severity = Severity.HIGH
     file_patterns = ['.py']
     version = "1.0.0"
+    internal = True  # only ever validates reveal's own treesitter.py
 
     def check(self,
               file_path: str,

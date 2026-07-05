@@ -63,6 +63,9 @@ class V023(BaseRule):
     severity = Severity.HIGH
     file_patterns = ['.py']
     version = "1.0.0"
+    # internal stays False (default): validates any adapter/analyzer file under
+    # an /adapters/ or /analyzers/ directory, including a user's own custom
+    # ones, not just reveal:// self-inspection.
 
     # Valid source_type enum values
     VALID_SOURCE_TYPES = {'file', 'directory', 'database', 'runtime', 'network'}

@@ -32,14 +32,15 @@ class V022(BaseRule):
     message = "Package manifest missing critical files"
     category = RulePrefix.V
     severity = Severity.HIGH  # Blocks deployment
-    file_patterns = ['*']
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
 
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check package manifest accuracy."""
-        # Only run for reveal:// URIs
         if not file_path.startswith('reveal://'):
             return []
 

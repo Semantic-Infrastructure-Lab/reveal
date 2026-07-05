@@ -23,9 +23,9 @@ class V006(BaseRule):
     message = "Analyzer may not properly support all output formats"
     category = RulePrefix.V
     severity = Severity.MEDIUM
-    file_patterns = ['*']
-
-    # Required method for analyzers
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
     REQUIRED_METHOD = 'get_structure'
 
     def check(self,
@@ -33,11 +33,10 @@ class V006(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for output format support."""
-        detections: List[Detection] = []
-
-        # Only run for reveal:// URIs
         if not file_path.startswith('reveal://'):
-            return detections
+            return []
+
+        detections: List[Detection] = []
 
         # Find reveal root
         reveal_root = self._find_reveal_root()

@@ -30,7 +30,9 @@ class V024(BaseRule):
     message = "Registered adapter missing guide file in docs/adapters/"
     category = RulePrefix.V
     severity = Severity.MEDIUM
-    file_patterns = ['*']
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
 
     GUIDE_EXEMPT = {'demo', 'test', 'help'}
 

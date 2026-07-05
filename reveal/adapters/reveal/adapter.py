@@ -25,6 +25,8 @@ class RevealAdapter(ResourceAdapter):
         reveal help://reveal                 # Learn about reveal://
     """
 
+    internal = True
+
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         """Get machine-readable schema for reveal:// adapter.

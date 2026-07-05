@@ -40,9 +40,9 @@ class V012(BaseRule):
     message = "Language count mismatch in documentation"
     category = RulePrefix.V
     severity = Severity.MEDIUM  # Important for releases
-    file_patterns = ['*']
-
-    # Every current phrasing captures the count in group 1.
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
     _LANGUAGE_PATTERNS = [
         r'(\d+)\+?\s+languages?\b',      # "84 languages", "84+ languages"
         r'Built-in\s*\((\d+)\)',          # "Built-in (84)"
@@ -53,11 +53,10 @@ class V012(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check language count accuracy across documentation files."""
-        detections: List[Detection] = []
-
-        # Only run for reveal:// URIs (self-analysis)
         if not file_path.startswith('reveal://'):
-            return detections
+            return []
+
+        detections: List[Detection] = []
 
         reveal_root = find_reveal_root()
         if not reveal_root:

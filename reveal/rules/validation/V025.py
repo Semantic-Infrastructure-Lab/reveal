@@ -28,7 +28,9 @@ class V025(BaseRule):
     message = "Registered adapter missing from help://relationships cluster map"
     category = RulePrefix.V
     severity = Severity.HIGH
-    file_patterns = ['*']
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
 
     RELATIONSHIP_EXEMPT = {'demo', 'test', 'help'}
 

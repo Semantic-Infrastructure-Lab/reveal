@@ -27,18 +27,19 @@ class V015(BaseRule):
     message = "Rules count mismatch in documentation"
     category = RulePrefix.V
     severity = Severity.MEDIUM  # Important for releases
-    file_patterns = ['*']
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
 
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check rules count accuracy."""
-        detections: List[Detection] = []
-
-        # Only run for reveal:// URIs
         if not file_path.startswith('reveal://'):
-            return detections
+            return []
+
+        detections: List[Detection] = []
 
         # Find reveal root
         reveal_root = find_reveal_root()

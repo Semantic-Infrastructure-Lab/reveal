@@ -233,6 +233,9 @@ class BaseRule(ABC):
     skip_categories: Optional[set] = None
     version: str = "1.0.0"
     enabled: bool = True
+    # True for rules that only ever apply to reveal's own source (reveal:// self-check),
+    # never to an external user's codebase. Excluded from default --rules listings/counts.
+    internal: bool = False
     # Optional: thresholds exposed via --explain (key → default value)
     # e.g. {"max_lines": 15, "threshold": 10}
     thresholds: Dict[str, Any] = {}

@@ -32,9 +32,9 @@ class V013(BaseRule):
     message = "Adapter count mismatch in documentation"
     category = RulePrefix.V
     severity = Severity.MEDIUM  # Important for releases
-    file_patterns = ['*']
-
-    # Explicit phrasings (not a greedy "N <words> adapters") so a sentence like
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
     # "5 minutes to configure 22 adapters" can't misattribute the count.
     _ADAPTER_PATTERNS = [
         r'(\d+)\s+adapters?\b',                 # "22 adapters"
@@ -47,11 +47,10 @@ class V013(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check adapter count accuracy across documentation files."""
-        detections: List[Detection] = []
-
-        # Only run for reveal:// URIs (self-analysis)
         if not file_path.startswith('reveal://'):
-            return detections
+            return []
+
+        detections: List[Detection] = []
 
         reveal_root = find_reveal_root()
         if not reveal_root:

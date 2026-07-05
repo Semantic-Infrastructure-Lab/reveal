@@ -24,7 +24,9 @@ class V001(BaseRule):
     message = "File type analyzer missing help documentation"
     category = RulePrefix.V
     severity = Severity.MEDIUM
-    file_patterns = ['*']  # Runs on any target (checks reveal internals)
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
 
     # Known file types that should have help (paths relative to reveal/docs/)
     EXPECTED_HELP_TOPICS = {
@@ -38,7 +40,6 @@ class V001(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for missing help documentation."""
-        # Only run this check for reveal:// URIs
         if not file_path.startswith('reveal://'):
             return []
 

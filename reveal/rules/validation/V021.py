@@ -55,7 +55,9 @@ class V021(BaseRule):
     message = "Analyzer uses regex when tree-sitter is available"
     category = RulePrefix.V
     severity = Severity.HIGH
-    file_patterns = ['*']  # Runs on reveal:// URIs
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
 
     # Languages with tree-sitter support in tree-sitter-language-pack
     TREE_SITTER_LANGUAGES = {

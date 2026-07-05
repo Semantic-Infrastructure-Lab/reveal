@@ -35,14 +35,15 @@ class V019(BaseRule):
     message = "Adapter initialization pattern violation"
     category = RulePrefix.V
     severity = Severity.HIGH
-    file_patterns = ['*']  # Runs on reveal:// URIs
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
 
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check that all adapters handle initialization patterns correctly."""
-        # Only run this check for reveal:// URIs
         if not file_path.startswith('reveal://'):
             return []
 

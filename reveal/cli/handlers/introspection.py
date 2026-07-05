@@ -39,20 +39,32 @@ def handle_languages():
     sys.exit(0)
 
 
-def handle_adapters():
+def handle_adapters(show_all: bool = False):
     """Handle --adapters flag.
 
     Shows all URI adapters with their syntax and purpose.
+
+    Args:
+        show_all: When True (--all), also include adapters that only inspect
+            reveal's own source tree (adapter_class.internal is True), never a
+            user's own resources. Excluded by default.
     """
     from ...adapters.base import _ADAPTER_REGISTRY
 
+    schemes = [
+        scheme for scheme in _ADAPTER_REGISTRY
+        if show_all or not _ADAPTER_REGISTRY[scheme].internal
+    ]
+
     lines = ["URI Adapters\n", "=" * 70]
-    lines.append(f"\n📡 Registered Adapters ({len(_ADAPTER_REGISTRY)})")
+    lines.append(f"\n📡 Registered Adapters ({len(schemes)})")
     lines.append("-" * 70)
     lines.append("Query resources beyond files using URI schemes\n")
+    if not show_all and len(schemes) < len(_ADAPTER_REGISTRY):
+        lines.append("(reveal's internal self-inspection adapters are hidden — pass --all to include them)\n")
 
     # Sort adapters by name
-    for scheme in sorted(_ADAPTER_REGISTRY.keys()):
+    for scheme in sorted(schemes):
         adapter_class = _ADAPTER_REGISTRY[scheme]
 
         # Try to get help data from adapter class
@@ -238,14 +250,17 @@ Status: Beta 🟡 (v1.0 in development)
 """
 
 
-def handle_rules_list(version: str):
+def handle_rules_list(version: str, show_all: bool = False):
     """Handle --rules flag to list all pattern detection rules.
 
     Args:
         version: Reveal version string
+        show_all: When True (--all), also include reveal's internal self-check
+            rules (rule_class.internal is True) that can never fire against an
+            external user's codebase. Excluded by default.
     """
     from ...rules import RuleRegistry
-    rules = RuleRegistry.list_rules()
+    rules = RuleRegistry.list_rules(include_internal=show_all)
 
     if not rules:
         print("No rules discovered")
@@ -279,6 +294,8 @@ def handle_rules_list(version: str):
         print()
 
     print(f"Total: {enabled_count} rules ({disabled_count} opt-in, enable via --select <code>)")
+    if not show_all:
+        print("(reveal's internal self-check rules are hidden — pass --all to include them)")
     print("\nUsage: reveal <file> --check --select B,S --ignore E501")
     sys.exit(0)
 
@@ -353,18 +370,29 @@ def handle_explain_rule(rule_code: str):
     sys.exit(0)
 
 
-def handle_discover():
+def handle_discover(show_all: bool = False):
     """Handle --discover flag.
 
     Dumps the full adapter registry as a single JSON document.
     Each adapter entry includes its schema (output_types, query_params,
     example_queries, notes) for programmatic discovery by agents and scripts.
+
+    Args:
+        show_all: When True (--all), also include adapters that only inspect
+            reveal's own source tree (adapter_class.internal is True). Excluded
+            by default so external users/agents see only adapters that apply
+            to their own resources.
     """
     import json
     from ...adapters.base import _ADAPTER_REGISTRY
 
+    schemes = [
+        scheme for scheme in _ADAPTER_REGISTRY
+        if show_all or not _ADAPTER_REGISTRY[scheme].internal
+    ]
+
     adapters = {}
-    for scheme in sorted(_ADAPTER_REGISTRY.keys()):
+    for scheme in sorted(schemes):
         adapter_class = _ADAPTER_REGISTRY[scheme]
         entry: dict = {'scheme': scheme}
         try:

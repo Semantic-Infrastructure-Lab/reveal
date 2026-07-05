@@ -27,6 +27,7 @@ class V009(BaseRule):
     category = RulePrefix.V
     severity = Severity.MEDIUM
     file_patterns = ['*.md']  # Only check markdown files
+    internal = True  # reveal-internal self-check (see check()'s reveal:// gate)
 
     def check(self,
               file_path: str,

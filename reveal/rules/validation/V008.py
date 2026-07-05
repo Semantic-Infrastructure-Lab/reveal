@@ -43,18 +43,19 @@ class V008(BaseRule):
     message = "Analyzer get_structure() missing **kwargs parameter"
     category = RulePrefix.V
     severity = Severity.HIGH  # High because this causes runtime errors
-    file_patterns = ['*']  # Runs on any target (checks reveal internals)
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
 
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check that analyzer get_structure methods accept **kwargs."""
-        detections: List[Detection] = []
-
-        # Only run this check for reveal:// URIs
         if not file_path.startswith('reveal://'):
-            return detections
+            return []
+
+        detections: List[Detection] = []
 
         # Find reveal root
         reveal_root = find_reveal_root()

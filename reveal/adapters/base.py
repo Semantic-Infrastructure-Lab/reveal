@@ -72,6 +72,11 @@ class ResourceAdapter(ABC):
     # rather than "analyze path RESOURCE" (e.g. env, python, help).
     ELEMENT_NAMESPACE_ADAPTER: bool = False
 
+    # True for adapters that only ever inspect reveal's own source tree
+    # (e.g. reveal://), never an external user's resources. Excluded from
+    # default --adapters/--discover listings; shown with --all.
+    internal: bool = False
+
     # CLI flags this adapter owns. Generic file routing rejects these flags on
     # plain file paths (see cli/routing/file.py:_guard_adapter_flags) instead
     # of hard-coding per-adapter tables. Empty = adapter owns no guarded flags.

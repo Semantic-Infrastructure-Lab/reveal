@@ -22,9 +22,9 @@ class V004(BaseRule):
     message = "Analyzer missing test file"
     category = RulePrefix.V
     severity = Severity.LOW  # Nice to have but not critical
-    file_patterns = ['*']
-
-    # Analyzers that are known to not need separate test files
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
     # (e.g., tested via integration tests or shared test suites)
     EXEMPT_ANALYZERS = {
         '__init__',
@@ -45,11 +45,10 @@ class V004(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for missing test files."""
-        detections: List[Detection] = []
-
-        # Only run for reveal:// URIs
         if not file_path.startswith('reveal://'):
-            return detections
+            return []
+
+        detections: List[Detection] = []
 
         # Find reveal root
         reveal_root = find_reveal_root()

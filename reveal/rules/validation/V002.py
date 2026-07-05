@@ -24,18 +24,19 @@ class V002(BaseRule):
     message = "Analyzer file exists but may not be registered"
     category = RulePrefix.V
     severity = Severity.HIGH  # Unregistered analyzers silently don't work
-    file_patterns = ['*']
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
 
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for unregistered analyzers."""
-        detections: List[Detection] = []
-
-        # Only run for reveal:// URIs
         if not file_path.startswith('reveal://'):
-            return detections
+            return []
+
+        detections: List[Detection] = []
 
         # Find reveal root
         reveal_root = find_reveal_root()

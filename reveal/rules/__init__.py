@@ -398,6 +398,7 @@ class RuleRegistry:
             'uri_patterns': rule_class.uri_patterns,
             'version': rule_class.version,
             'enabled': rule_class.enabled,
+            'internal': rule_class.internal,
         }
 
     @classmethod
@@ -406,6 +407,7 @@ class RuleRegistry:
         select: Optional[List[str]] = None,
         category: Optional[RulePrefix] = None,
         include_disabled: bool = True,
+        include_internal: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         List rules with metadata.
@@ -415,6 +417,9 @@ class RuleRegistry:
             category: Filter by category
             include_disabled: When True (default), include opt-in/disabled rules so users
                 can discover them. The enabled field in the returned dict indicates status.
+            include_internal: When False (default), exclude rules that only ever apply to
+                reveal's own source (rule_class.internal is True) from the listing — they
+                can never fire against an external user's codebase.
 
         Returns:
             List of rule metadata dicts
@@ -432,6 +437,9 @@ class RuleRegistry:
 
         if category:
             rules = [r for r in rules if r.category == category]
+
+        if not include_internal:
+            rules = [r for r in rules if not r.internal]
 
         sorted_rules = sorted(rules, key=lambda r: r.code)
         return [cls._rule_to_dict(rule_class) for rule_class in sorted_rules]

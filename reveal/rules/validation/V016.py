@@ -41,6 +41,9 @@ class V016(BaseRule):
     severity = Severity.MEDIUM
     file_patterns = ['.py']
     version = "1.0.0"
+    # internal stays False (default): unlike most V-rules, this also validates a
+    # user's own custom adapter files (see check()'s non-reveal:// branch), not
+    # just reveal:// self-inspection.
 
     def check(self,
               file_path: str,

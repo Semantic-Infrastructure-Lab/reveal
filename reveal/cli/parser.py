@@ -344,7 +344,9 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--type', type=str, metavar='TYPE',
                         help='Filter by element type (function, class, method, etc.)')
     parser.add_argument('--all', action='store_true',
-                        help='Show all results (no limit, e.g., reveal claude:// --all)')
+                        help='Show all results (no limit, e.g., reveal claude:// --all); '
+                             'with --rules/--adapters/--discover, also include reveal-internal '
+                             'self-check entries hidden by default')
     parser.add_argument('--since', type=str, metavar='DATE',
                         help='Filter results since date (YYYY-MM-DD, e.g., reveal claude:// --since 2026-02-27)')
     parser.add_argument('--until', type=str, metavar='DATE',

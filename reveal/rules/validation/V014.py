@@ -42,7 +42,9 @@ class V014(BaseRule):
     message = "Token-cost estimate mismatch in agent help documentation"
     category = RulePrefix.V
     severity = Severity.MEDIUM  # Important for releases
-    file_patterns = ['*']
+    file_patterns = []  # No file-extension form; reveal:// self-check only
+    uri_patterns = ['^reveal://.*']
+    internal = True  # reveal-internal self-check, never applies to external user code
 
     _CHARS_PER_TOKEN = 4
     _TOLERANCE_RATIO = 0.5  # flag if a claim is <0.5x or >1.5x the computed estimate
@@ -59,11 +61,10 @@ class V014(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check AGENT_HELP.md's token-cost claims against a computed estimate."""
-        detections: List[Detection] = []
-
-        # Only run for reveal:// URIs (self-analysis)
         if not file_path.startswith('reveal://'):
-            return detections
+            return []
+
+        detections: List[Detection] = []
 
         reveal_root = find_reveal_root()
         if not reveal_root:
