@@ -313,5 +313,44 @@ CMD ["nginx", "-g", "daemon off;"]
             os.rmdir(os.path.dirname(path))
 
 
+class TestDockerfileVariantNamingRegistryLookup(unittest.TestCase):
+    """BACK-432 tranche 5 found a real gap: reveal.registry only recognized
+    the exact filename 'Dockerfile' (via a case-insensitive exact-match
+    lookup, _try_filename_lookup), not the extremely common variant-naming
+    convention 'Dockerfile.dev'/'Dockerfile.prod'/'Dockerfile.test' used for
+    multi-environment builds. Neither the extension lookup ('.prod' is not a
+    registered extension) nor the exact-name lookup matched, so
+    get_analyzer() returned None for every variant Dockerfile — meaning
+    collect_files_to_check() (used by every directory-recursive `reveal
+    check`) silently never even saw these files, regardless of any rule's
+    file_patterns. Fixed via a prefix check in _try_filename_lookup for any
+    filename starting with 'dockerfile.'."""
+
+    def _get_analyzer_for(self, filename: str):
+        from reveal.registry import get_analyzer
+        temp_dir = tempfile.mkdtemp()
+        path = os.path.join(temp_dir, filename)
+        with open(path, 'w') as f:
+            f.write('FROM node:18\n')
+        try:
+            return get_analyzer(path, allow_fallback=False)
+        finally:
+            os.unlink(path)
+            os.rmdir(temp_dir)
+
+    def test_dockerfile_variant_suffixes_resolve_to_dockerfile_analyzer(self):
+        for filename in ('Dockerfile.dev', 'Dockerfile.prod', 'Dockerfile.test', 'dockerfile.staging'):
+            with self.subTest(filename=filename):
+                analyzer = self._get_analyzer_for(filename)
+                self.assertIsNotNone(analyzer, f"{filename} should resolve to an analyzer")
+                self.assertIs(analyzer, DockerfileAnalyzer)
+
+    def test_bare_dockerfile_still_resolves(self):
+        self.assertIs(self._get_analyzer_for('Dockerfile'), DockerfileAnalyzer)
+
+    def test_unrelated_prod_extension_still_unresolved(self):
+        self.assertIsNone(self._get_analyzer_for('config.prod'))
+
+
 if __name__ == '__main__':
     unittest.main()

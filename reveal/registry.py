@@ -253,6 +253,11 @@ def _try_filename_lookup(file_path: Path) -> Optional[type]:
     filename = file_path.name.lower()
     if filename in _ANALYZER_REGISTRY:
         return _ANALYZER_REGISTRY.get(filename)
+    # Dockerfile variant naming (Dockerfile.dev, Dockerfile.prod, Dockerfile.test,
+    # etc.) is a common real-world convention for multi-environment images —
+    # match it against the plain 'dockerfile' registration too.
+    if filename.startswith('dockerfile.') and 'dockerfile' in _ANALYZER_REGISTRY:
+        return _ANALYZER_REGISTRY.get('dockerfile')
     return None
 
 

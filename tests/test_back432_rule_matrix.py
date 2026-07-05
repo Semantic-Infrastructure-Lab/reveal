@@ -51,6 +51,7 @@ from reveal.rules.maintainability.M105 import M105
 from reveal.rules.maintainability.M501 import M501
 from reveal.rules.refactoring.R913 import R913
 from reveal.rules.security.S001 import S001
+from reveal.rules.security.S701 import S701
 from reveal.rules.types.T004 import T004
 from reveal.rules.types.T005 import T005
 from reveal.rules.types.T006 import T006
@@ -665,6 +666,44 @@ class TestM105GlobFilePatternNonPython(_TempDirMixin, unittest.TestCase):
         detections = M105().check(str(handler_path), None, source)
         self.assertEqual(len(detections), 1)
         self.assertIn('handle_orphan_thing', detections[0].message)
+
+
+class TestS701DockerfileVariantNaming(_TempDirMixin, unittest.TestCase):
+    """BACK-432 tranche 5, "remainder/single-purpose" applicability class:
+    S701 (Docker :latest tag) declared file_patterns = ['Dockerfile',
+    '.dockerfile'] — exact bare name plus one suffix form — which silently
+    excluded the extremely common 'Dockerfile.dev'/'Dockerfile.prod'/
+    'Dockerfile.test' multi-environment naming convention (used by, e.g.,
+    most Node/Rails project templates). Fixed by adding 'Dockerfile.*' to
+    file_patterns (matched via BaseRule.matches_target's Path.match() glob
+    fallback from the M105/V009 fix above). A deeper, separate bug in the
+    same real-world scenario: reveal.registry's get_analyzer() didn't
+    recognize the variant names at all (fixed separately, see
+    tests/test_dockerfile_analyzer.py::TestDockerfileVariantNamingRegistryLookup)
+    — without that fix, matches_target() alone would still never see these
+    files in a real `reveal check <dir>` run, since collect_files_to_check()
+    gates on get_analyzer() succeeding before rule routing is ever reached."""
+
+    def test_matches_target_variant_names(self):
+        self.assertTrue(S701.matches_target('Dockerfile'))
+        self.assertTrue(S701.matches_target('Dockerfile.prod'))
+        self.assertTrue(S701.matches_target('Dockerfile.dev'))
+        self.assertTrue(S701.matches_target('docker/Dockerfile.test'))
+        self.assertTrue(S701.matches_target('app.dockerfile'))
+        self.assertFalse(S701.matches_target('service.go'))
+        self.assertFalse(S701.matches_target('DockerfileNotReally.py'))
+
+    def test_latest_tag_flagged_in_variant_named_file(self):
+        source = 'FROM node:latest\nWORKDIR /app\n'
+        path = self._write('Dockerfile.prod', source)
+        detections = S701().check(str(path), None, source)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('latest', detections[0].message)
+
+    def test_pinned_tag_not_flagged_in_variant_named_file(self):
+        source = 'FROM node:18\nWORKDIR /app\n'
+        path = self._write('Dockerfile.prod', source)
+        self.assertEqual(S701().check(str(path), None, source), [])
 
 
 if __name__ == '__main__':

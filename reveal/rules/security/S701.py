@@ -19,7 +19,7 @@ class S701(BaseRule):
     message = "Docker image uses :latest tag (pin to specific version)"
     category = RulePrefix.S
     severity = Severity.MEDIUM
-    file_patterns = ['Dockerfile', '.dockerfile']
+    file_patterns = ['Dockerfile', 'Dockerfile.*', '.dockerfile']
     uri_patterns = [
         r'^https?://hub\.docker\.com/r/.*/tags',
         r'^docker\.io/.*',
