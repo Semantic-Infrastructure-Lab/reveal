@@ -81,6 +81,8 @@ IMPORT_NODE_TYPES = (
     'using_directive',       # C#
     'import_from_statement',  # Python
     'preproc_include',       # C/C++
+    'namespace_use_declaration',  # PHP: use App\Models\User;
+    'import_header',         # Kotlin
 )
 
 # Mapping from element type to node types (for element extraction)
@@ -320,6 +322,16 @@ class TreeSitterAnalyzer(FileAnalyzer):
         for import_type in IMPORT_NODE_TYPES:
             nodes = self._find_nodes_by_type(import_type)
             for node in nodes:
+                imports.append({
+                    'line': node.start_position().row + 1,
+                    'content': self._get_node_text(node),
+                })
+
+        # Dart wraps both `import` and `export` under one node kind
+        # (`import_or_export` -> `library_import` | `library_export`), so
+        # a plain node-kind-set entry would also capture exports as imports.
+        for node in self._find_nodes_by_type('import_or_export'):
+            if any(child.kind() == 'library_import' for child in _children(node)):
                 imports.append({
                     'line': node.start_position().row + 1,
                     'content': self._get_node_text(node),
