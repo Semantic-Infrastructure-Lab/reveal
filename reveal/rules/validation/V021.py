@@ -72,8 +72,23 @@ class V021(BaseRule):
     REGEX_WHITELIST = {
         'markdown.py',    # Link/heading patterns (also uses tree-sitter)
         'html.py',        # Template variable detection (supplemental)
-        'imports/base.py',  # String literal extraction from imports
     }
+
+    # Directories (relative to analyzers/) whose modules are never the primary
+    # language structural parser, so a same-named file here (e.g.
+    # imports/go.py alongside the real analyzers/go.py) must not be judged by
+    # the bare-filename language_map heuristic below. These are downstream
+    # helpers that post-process output tree-sitter already produced elsewhere
+    # — e.g. imports/go.py's own docstring: "using tree-sitter... Eliminates
+    # all regex patterns (package path, alias)" — yet it kept one small regex
+    # for Go's semantic-import-versioning suffix (`/v2`, `/v3`) classification,
+    # which used to trip this rule into claiming it "uses regex for parsing go
+    # code instead of tree-sitter", a false positive (BACK-432 tranche 7):
+    # imports/base.py was already whitelisted for exactly this reason, but the
+    # exclusion was only ever applied per-file, not to the whole submodule
+    # category, so imports/go.py (and any future imports/<lang>.py gaining a
+    # single incidental regex) kept tripping the same false alarm.
+    NON_STRUCTURAL_SUBDIRS = {'imports'}
 
     def _check_analyzer_file(self, analyzer_file: Path, analyzers_dir: Path) -> Optional[Detection]:
         """Check a single analyzer file for regex usage when tree-sitter is available.
@@ -82,6 +97,8 @@ class V021(BaseRule):
         """
         relative = analyzer_file.relative_to(analyzers_dir)
         if str(relative) in self.REGEX_WHITELIST:
+            return None
+        if relative.parts and relative.parts[0] in self.NON_STRUCTURAL_SUBDIRS:
             return None
         try:
             file_content = analyzer_file.read_text(encoding='utf-8')

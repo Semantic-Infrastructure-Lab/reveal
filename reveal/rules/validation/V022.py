@@ -58,39 +58,83 @@ class V022(BaseRule):
 
         return detections
 
-    def _check_cli_handler_paths(self, reveal_root: Path) -> List[Detection]:
-        """Validate CLI handlers reference existing files."""
-        detections: List[Detection] = []
-        handlers_file = reveal_root / 'cli' / 'handlers.py'
+    # Matches Path(__file__) followed by one or more .parent hops, e.g.
+    # Path(__file__).parent.parent or Path(__file__).parent.parent.parent
+    _FILE_PARENT_PATTERN = re.compile(r"Path\(__file__\)((?:\.parent)+)")
+    # A single chained `/ 'segment'` path-join operator following it. Matched
+    # repeatedly so a full `.parent.parent / 'docs' / 'AGENT_HELP.md'` chain
+    # resolves to the joined path, not just its first segment ('docs') — the
+    # original single-capture regex silently could only ever validate that
+    # the first path component existed, never the actual target file.
+    _PATH_SEGMENT_PATTERN = re.compile(r"\s*/\s*['\"]([^'\"]+)['\"]")
 
-        if not handlers_file.exists():
+    def _check_cli_handler_paths(self, reveal_root: Path) -> List[Detection]:
+        """Validate CLI handler modules reference existing files.
+
+        CLI handlers used to live in a single flat reveal/cli/handlers.py;
+        that was split into a reveal/cli/handlers/ package (introspection.py,
+        batch.py, ...) plus reveal/cli/handlers_scaffold.py. This check used
+        to hardcode the now-nonexistent handlers.py path and an exact
+        `.parent.parent` hop count, so it went 100% silently dead after the
+        reorg — reveal/cli/handlers/introspection.py's real
+        `Path(__file__).parent.parent.parent / 'docs' / 'AGENT_HELP.md'`
+        (one hop deeper, since it's nested one directory further) was never
+        even looked at (BACK-432 tranche 7). Scan every .py file under
+        reveal/cli/ instead of one hardcoded path, and resolve however many
+        .parent hops each match actually uses from that file's real location,
+        so this keeps working across future reorganizations too.
+        """
+        detections: List[Detection] = []
+        cli_dir = reveal_root / 'cli'
+
+        if not cli_dir.exists():
             return detections
 
-        handler_content = handlers_file.read_text(encoding='utf-8')
-
-        # Find Path(...) / 'docs' / 'AGENT_HELP*.md' patterns
-        path_patterns = re.findall(
-            r"Path\(__file__\)\.parent\.parent\s*/\s*['\"](\S+)['\"]",
-            handler_content
-        )
-
-        for path_part in path_patterns:
-            # Skip wildcards
-            if any(c in path_part for c in ['*', '?']):
+        for handlers_file in sorted(cli_dir.rglob('*.py')):
+            try:
+                handler_content = handlers_file.read_text(encoding='utf-8')
+            except OSError:
                 continue
 
-            # Path from CLI handler is relative to reveal/ directory
-            check_path = reveal_root / path_part
+            for match in self._FILE_PARENT_PATTERN.finditer(handler_content):
+                parent_hops = match.group(1).count('.parent')
 
-            # Check if it exists (file or directory)
-            if not check_path.exists():
-                detections.append(self.create_detection(
-                    file_path="reveal/cli/handlers.py",
-                    line=1,
-                    message=f"CLI handler references non-existent path: {path_part}",
-                    suggestion="Update handler path or create file/directory",
-                    context=f"Path: reveal/{path_part}"
-                ))
+                # Walk forward from the end of the .parent chain, collecting
+                # every contiguous `/ 'segment'` join on the same statement.
+                segments: List[str] = []
+                cursor = match.end()
+                while True:
+                    seg_match = self._PATH_SEGMENT_PATTERN.match(handler_content, cursor)
+                    if not seg_match:
+                        break
+                    segments.append(seg_match.group(1))
+                    cursor = seg_match.end()
+
+                if not segments:
+                    continue
+
+                # Skip wildcards
+                if any(c in seg for seg in segments for c in ['*', '?']):
+                    continue
+
+                # Path(__file__).parent is the file's own directory (1 hop);
+                # each additional .parent walks up one more level from there.
+                base = handlers_file.parent
+                for _ in range(parent_hops - 1):
+                    base = base.parent
+                check_path = base.joinpath(*segments)
+                path_part = '/'.join(segments)
+
+                # Check if it exists (file or directory)
+                if not check_path.exists():
+                    rel_path = handlers_file.relative_to(reveal_root.parent).as_posix()
+                    detections.append(self.create_detection(
+                        file_path=rel_path,
+                        line=1,
+                        message=f"CLI handler references non-existent path: {path_part}",
+                        suggestion="Update handler path or create file/directory",
+                        context=f"Path: {check_path}"
+                    ))
 
         return detections
 

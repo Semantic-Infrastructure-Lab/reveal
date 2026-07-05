@@ -56,7 +56,12 @@ from reveal.rules.types.T004 import T004
 from reveal.rules.types.T005 import T005
 from reveal.rules.types.T006 import T006
 from reveal.rules.urls.U501 import U501
+from reveal.rules.urls.U502 import U502
 from reveal.rules.validation.V009 import V009
+from reveal.rules.validation import V017 as v017_module
+from reveal.rules.validation.V017 import V017
+from reveal.rules.validation.V021 import V021
+from reveal.rules.validation.V022 import V022
 
 
 class _TempDirMixin:
@@ -704,6 +709,214 @@ class TestS701DockerfileVariantNaming(_TempDirMixin, unittest.TestCase):
         source = 'FROM node:18\nWORKDIR /app\n'
         path = self._write('Dockerfile.prod', source)
         self.assertEqual(S701().check(str(path), None, source), [])
+
+
+class TestU502GitSuffixStripping(unittest.TestCase):
+    """BACK-432 tranche 7: U502 normalized found/canonical repo names via
+    `name.rstrip('.git')`, but str.rstrip() treats its argument as a set of
+    characters to strip, not a literal suffix — 'cli.git'.rstrip('.git')
+    mangles to 'cl', 'tig.git'.rstrip('.git') mangles to '' entirely. Any
+    canonical repo whose name ends in a run of '.', 'g', 'i', 't' characters
+    (extremely common — 'cli', 'digit', 'light', 'wait', 'tig', ...) was
+    silently mismatched against its own correctly-suffixed '.git' URL,
+    producing a false positive: a URL that IS the canonical repo (just with
+    a '.git' clone-style suffix) got flagged as non-canonical. Confirmed to
+    misfire pre-fix via `git stash` (non-empty detections); fixed via a
+    literal `.endswith('.git')` suffix strip in both call sites."""
+
+    def _rule_with_canonical(self, owner_repo: str) -> U502:
+        rule = U502()
+        rule._find_pyproject = lambda path: Path('fake-pyproject.toml')
+        rule._get_canonical_urls = lambda p: {f'https://github.com/{owner_repo}'}
+        rule._extract_repos = lambda urls: {owner_repo}
+        return rule
+
+    def test_git_suffix_on_canonical_repo_not_flagged(self):
+        # 'cli.git'.rstrip('.git') == 'cl' pre-fix — a real mismatch bug.
+        rule = self._rule_with_canonical('owner/cli')
+        content = 'Clone from https://github.com/owner/cli.git please.'
+        self.assertEqual(rule.check('README.md', None, content), [])
+
+    def test_git_suffix_on_worst_case_canonical_repo_not_flagged(self):
+        # 'tig.git'.rstrip('.git') == '' pre-fix — total name loss.
+        rule = self._rule_with_canonical('owner/tig')
+        content = 'See https://github.com/owner/tig.git for source.'
+        self.assertEqual(rule.check('README.md', None, content), [])
+
+    def test_git_suffix_on_actually_different_repo_still_flagged(self):
+        # Sanity: a genuinely non-canonical .git URL must still be caught.
+        rule = self._rule_with_canonical('owner/cli')
+        content = 'Clone from https://github.com/someoneelse/other.git please.'
+        detections = rule.check('README.md', None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('other.git', detections[0].message)
+
+
+class TestV017DeadInRealSelfCheck(_TempDirMixin, unittest.TestCase):
+    """BACK-432 tranche 7: `reveal reveal:// --check` invokes every internal
+    rule's check() with file_path="reveal://" and content="" (see
+    reveal/adapters/reveal/operations.py::check() ->
+    RuleRegistry.check_file("reveal://", None, "", ...)) — there is no
+    per-file scan for internal V-rules; each rule must handle the literal
+    "reveal://" self-check invocation itself. V017 declared file_patterns =
+    ['.py'] with no uri_patterns, and BaseRule.matches_target("reveal://")
+    requires either a '.py' suffix (which the literal string "reveal://"
+    doesn't have) or an explicit uri_patterns match — so V017 was **100% dead
+    in every real `reveal reveal:// --check` invocation**, identical in shape
+    to the M105 bug from BACK-432 tranche 5, regardless of whether
+    reveal/treesitter.py actually had a coverage gap. Fixed by adding
+    `uri_patterns = ['^reveal://.*']` and having check() load treesitter.py
+    directly via find_reveal_root() when file_path == 'reveal://'."""
+
+    def test_matches_target_reveal_uri(self):
+        self.assertTrue(V017.matches_target('reveal://'))
+
+    def test_fires_via_real_self_check_entrypoint_when_deficient(self):
+        # Simulate the exact call shape operations.check() uses:
+        # RuleRegistry.check_file("reveal://", None, "", ...) with a
+        # deliberately deficient treesitter.py under a fake reveal root.
+        self._write('treesitter.py', '# minimal, no node types here\n')
+        original_find_root = v017_module.find_reveal_root
+        v017_module.find_reveal_root = lambda *a, **k: self.temp_dir
+        try:
+            detections = V017().check('reveal://', None, '')
+        finally:
+            v017_module.find_reveal_root = original_find_root
+
+        self.assertEqual(len(detections), 2)
+        messages = ' '.join(d.message for d in detections)
+        self.assertIn('function node types', messages)
+        self.assertIn('class node types', messages)
+
+    def test_silent_when_treesitter_py_is_healthy(self):
+        healthy = (
+            "def _get_function_node_types(self):\n"
+            "    return ['function_definition', 'function_declaration',\n"
+            "            'function_item', 'method_declaration',\n"
+            "            'function_signature', 'func_literal',\n"
+            "            'arrow_function', 'lambda_expression',\n"
+            "            'method_definition', 'constructor_declaration']\n"
+            "def _get_class_node_types(self):\n"
+            "    return ['class_definition', 'class_declaration',\n"
+            "            'struct_item', 'interface_declaration',\n"
+            "            'trait_item']\n"
+            "simple_identifier = 'simple_identifier'\n"
+        )
+        self._write('treesitter.py', healthy)
+        original_find_root = v017_module.find_reveal_root
+        v017_module.find_reveal_root = lambda *a, **k: self.temp_dir
+        try:
+            detections = V017().check('reveal://', None, '')
+        finally:
+            v017_module.find_reveal_root = original_find_root
+        self.assertEqual(detections, [])
+
+
+class TestV021ImportsSubdirFalsePositive(_TempDirMixin, unittest.TestCase):
+    """BACK-432 tranche 7: V021 flags analyzers that use regex "instead of"
+    tree-sitter, inferring the language purely from the bare filename stem
+    (e.g. 'go.py' -> 'go'). reveal/analyzers/imports/go.py shares that stem
+    with the real reveal/analyzers/go.py but is a different, downstream
+    import-extraction helper — its own docstring says it "uses tree-sitter...
+    Eliminates all regex patterns (package path, alias)", keeping exactly one
+    small regex for Go's semantic-import-versioning suffix (`/v2`, `/v3`)
+    classification, unrelated to code-structure parsing. Before this fix,
+    V021 flagged it as "uses regex for parsing go code instead of
+    tree-sitter" — a real false positive confirmed against reveal's actual
+    corpus (reveal/analyzers/imports/go.py:13). imports/base.py was already
+    whitelisted for the identical reason but only per-file, so any
+    imports/<lang>.py module picking up an incidental regex kept re-tripping
+    the same false alarm. Fixed by excluding the whole imports/ submodule
+    category via NON_STRUCTURAL_SUBDIRS, not just base.py."""
+
+    def _make_analyzers_dir(self) -> Path:
+        analyzers_dir = self.temp_dir / 'analyzers'
+        (analyzers_dir / 'imports').mkdir(parents=True)
+        return analyzers_dir
+
+    def test_imports_go_py_with_incidental_regex_not_flagged(self):
+        analyzers_dir = self._make_analyzers_dir()
+        go_helper = analyzers_dir / 'imports' / 'go.py'
+        go_helper.write_text(
+            "\"\"\"Go import extraction using tree-sitter.\"\"\"\n"
+            "import re\n"
+            "_GO_MAJOR_VERSION_SUFFIX = re.compile(r'^v[0-9]+$')\n"
+        )
+        rule = V021()
+        detection = rule._check_analyzer_file(go_helper, analyzers_dir)
+        self.assertIsNone(detection)
+
+    def test_top_level_go_py_with_real_regex_parsing_still_flagged(self):
+        # Sanity: the real top-level analyzer for a tree-sitter language must
+        # still be caught if it regex-parses code instead of using tree-sitter.
+        analyzers_dir = self._make_analyzers_dir()
+        go_analyzer = analyzers_dir / 'go.py'
+        go_analyzer.write_text(
+            "import re\n"
+            "FUNC_PATTERN = re.compile(r'^func\\\\s+(\\\\w+)')\n"
+        )
+        rule = V021()
+        detection = rule._check_analyzer_file(go_analyzer, analyzers_dir)
+        self.assertIsNotNone(detection)
+        self.assertIn('go', detection.message)
+
+
+class TestV022HandlersReorgDeadCheck(_TempDirMixin, unittest.TestCase):
+    """BACK-432 tranche 7: V022's CLI-handler-path check hardcoded a single
+    now-nonexistent path (reveal/cli/handlers.py — split into a
+    reveal/cli/handlers/ package plus handlers_scaffold.py) and an exact
+    `.parent.parent` hop count, matching only reveal/cli/handlers/
+    introspection.py's real `.parent.parent.parent` (one hop deeper since
+    it's nested one directory further). Confirmed via git stash: pre-fix,
+    a deliberately broken reveal/cli/handlers/introspection.py referencing
+    a nonexistent docs file produced zero detections — the check never even
+    looked at the file. Separately, the original regex only ever captured
+    the FIRST quoted path segment after the .parent chain (e.g. 'docs'),
+    never validating the full chained path (`'docs' / 'AGENT_HELP.md'`), so
+    even a correctly-routed check could only catch a wrong top-level
+    directory, never a wrong filename within a correct directory. Both
+    fixed: scan every .py file under reveal/cli/ and resolve N .parent hops
+    from that file's real location; join every chained path segment."""
+
+    def _make_cli_dir(self) -> Path:
+        cli_dir = self.temp_dir / 'cli'
+        (cli_dir / 'handlers').mkdir(parents=True)
+        return cli_dir
+
+    def test_nested_handler_with_missing_target_is_flagged(self):
+        cli_dir = self._make_cli_dir()
+        (cli_dir / 'handlers' / 'introspection.py').write_text(
+            "from pathlib import Path\n"
+            "agent_help_path = Path(__file__).parent.parent.parent / 'docs' / 'DOES_NOT_EXIST.md'\n"
+        )
+        detections = V022()._check_cli_handler_paths(self.temp_dir)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('docs/DOES_NOT_EXIST.md', detections[0].message)
+
+    def test_nested_handler_with_wrong_filename_in_correct_dir_is_flagged(self):
+        # Regression for the "only checks the first segment" gap: a correct
+        # directory but wrong filename must still be caught.
+        cli_dir = self._make_cli_dir()
+        (self.temp_dir / 'docs').mkdir()
+        (self.temp_dir / 'docs' / 'AGENT_HELP.md').write_text('actual content')
+        (cli_dir / 'handlers' / 'introspection.py').write_text(
+            "from pathlib import Path\n"
+            "agent_help_path = Path(__file__).parent.parent.parent / 'docs' / 'WRONG_NAME.md'\n"
+        )
+        detections = V022()._check_cli_handler_paths(self.temp_dir)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('WRONG_NAME.md', detections[0].message)
+
+    def test_nested_handler_with_correct_full_path_is_silent(self):
+        cli_dir = self._make_cli_dir()
+        (self.temp_dir / 'docs').mkdir()
+        (self.temp_dir / 'docs' / 'AGENT_HELP.md').write_text('actual content')
+        (cli_dir / 'handlers' / 'introspection.py').write_text(
+            "from pathlib import Path\n"
+            "agent_help_path = Path(__file__).parent.parent.parent / 'docs' / 'AGENT_HELP.md'\n"
+        )
+        detections = V022()._check_cli_handler_paths(self.temp_dir)
+        self.assertEqual(detections, [])
 
 
 if __name__ == '__main__':

@@ -19,6 +19,7 @@ import re
 from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from .utils import find_reveal_root
 
 
 class V017(BaseRule):
@@ -45,6 +46,7 @@ class V017(BaseRule):
     category = RulePrefix.V
     severity = Severity.HIGH
     file_patterns = ['.py']
+    uri_patterns = ['^reveal://.*']
     version = "1.0.0"
     internal = True  # only ever validates reveal's own treesitter.py
 
@@ -62,8 +64,29 @@ class V017(BaseRule):
         Returns:
             List of detections for missing node type coverage
         """
-        # Only check treesitter.py
-        if 'treesitter.py' not in file_path:
+        # `reveal reveal:// --check` invokes every internal rule's check() with
+        # file_path="reveal://" and content="" (see
+        # reveal/adapters/reveal/operations.py::check()) — there is no per-file
+        # scan for internal rules to hook into. Without uri_patterns above, this
+        # rule never matched that literal string (BaseRule.matches_target()
+        # requires a '.py' suffix or an explicit URI pattern) and was 100% dead
+        # in every real reveal:// self-check, identical in shape to the M105
+        # bug from BACK-432 tranche 5. Load treesitter.py directly in that case.
+        if file_path.startswith('reveal://'):
+            reveal_root = find_reveal_root()
+            if not reveal_root:
+                return []
+            treesitter_path = reveal_root / 'treesitter.py'
+            if not treesitter_path.exists():
+                return []
+            try:
+                content = treesitter_path.read_text(encoding='utf-8')
+            except OSError:
+                return []
+            file_path = str(treesitter_path)
+        elif 'treesitter.py' not in file_path:
+            # Direct per-file invocation (e.g. `reveal reveal/treesitter.py --check`)
+            # still only applies to treesitter.py itself.
             return []
 
         # Check coverage for critical node categories

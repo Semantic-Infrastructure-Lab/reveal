@@ -83,8 +83,13 @@ class U502(BaseRule):
                 found_owner = match.group(1)
                 found_repo = match.group(2)
 
-                # Normalize repo name (remove .git suffix)
-                found_repo = found_repo.rstrip('.git')
+                # Normalize repo name (remove .git suffix). Note: this must be a
+                # literal suffix strip, not str.rstrip('.git') — rstrip() treats
+                # its argument as a set of characters to strip, not a suffix, so
+                # e.g. 'cli.git'.rstrip('.git') mangles to 'cl' and
+                # 'tig.git'.rstrip('.git') mangles to '' (BACK-432 tranche 7).
+                if found_repo.endswith('.git'):
+                    found_repo = found_repo[:-len('.git')]
 
                 # Check if this matches any canonical repo
                 found_key = f"{found_owner}/{found_repo}".lower()
@@ -184,7 +189,9 @@ class U502(BaseRule):
             match = self.GITHUB_URL_PATTERN.search(url)
             if match:
                 owner = match.group(1)
-                repo = match.group(2).rstrip('.git')
+                repo = match.group(2)
+                if repo.endswith('.git'):
+                    repo = repo[:-len('.git')]
                 repos.add(f"{owner}/{repo}")
 
         return repos
