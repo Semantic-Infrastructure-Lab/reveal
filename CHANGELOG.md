@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.103.0] - 2026-07-01 (sessions cloudy-haze-0701, expanding-planet-0701, indigo-spectrum-0701, obsidian-paint-0702, yewicama-0703, pulse-lens-0703, mamukuko-0703, mysterious-probe-0703, fated-sea-0703, intergalactic-nebula-0703, fohapa-0705)
+## [0.103.0] - 2026-07-01 (sessions cloudy-haze-0701, expanding-planet-0701, indigo-spectrum-0701, obsidian-paint-0702, yewicama-0703, pulse-lens-0703, mamukuko-0703, mysterious-probe-0703, fated-sea-0703, intergalactic-nebula-0703, fohapa-0705, passing-sunshine-0705)
 
 ### Fixed
 - **I003 (architectural layer violations) silently never fired outside Python despite claiming universal scope (BACK-432 tranche 4)** — `check()` unconditionally calls `extract_python_imports()`, which only recognizes Python's tree-sitter import node kinds, so any non-Python file with a `.reveal.yaml` layer config silently produced zero detections no matter how it violated the config. Not a false-positive risk, but a dead capability claim and wasted work on every non-Python file. Fixed by declaring `file_patterns=['.py']` so the rule engine stops routing other languages to it.
