@@ -19,7 +19,7 @@ from reveal import complexity
 from reveal.adapters.ast import node_taxonomy as tax
 from reveal.adapters.ast import nav_outline
 from reveal.adapters.ast import nav_exits
-from reveal.adapters.ast.nav_outline import element_outline
+from reveal.adapters.ast.nav_outline import element_outline, scope_chain
 from reveal.adapters.ast.nav_varflow import var_flow
 
 
@@ -176,6 +176,53 @@ class TestForEachVisibility(unittest.TestCase):
             any(e['kind'] == 'WRITE' for e in events),
             'JS for-of loop variable never recorded as WRITE',
         )
+
+
+class TestClassScopeVisibility(unittest.TestCase):
+    """BACK-431 remaining scope (rose-tone-0704 finding #1): node_taxonomy.py's
+    CLASS_NODES only knew Python/Java/C#/JS/Ruby's plain class shapes, while
+    treesitter.py's separate CLASS_NODE_TYPES (element extraction) already
+    covered C++ (`class_specifier`), PHP (`anonymous_class`), and TypeScript
+    (`abstract_class_declaration`) — so a method's enclosing class/struct/impl
+    was invisible to --scope's ancestor chain for those languages, confirmed
+    live before the fix (Python correctly showed CLASS as an ancestor;
+    C++/Rust/PHP/TS did not)."""
+
+    CPP_CLASS = 'class Batch { public: void run() { int x = 1; } };'
+    CPP_STRUCT = 'struct Foo { void bar() { int x = 1; } };'
+    RUST_IMPL = ('struct Batch { total: i32 } '
+                 'impl Batch { fn run(&mut self) { let x = 1; } }')
+    PHP_ANON_CLASS = '<?php $o = new class { function bar() { $x = 1; } };'
+    TS_ABSTRACT_CLASS = 'abstract class Foo { bar() { let x = 1; } }'
+
+    def _chain_keywords(self, lang, code, marker):
+        """Parse code and return scope_chain keywords for the line containing marker."""
+        content_bytes = code.encode('utf-8')
+        get_text = lambda n: content_bytes[n.start_byte():n.end_byte()].decode('utf-8', 'replace')
+        root = ts.get_parser(lang).parse(code).root_node()
+        line_no = code[:code.index(marker)].count('\n') + 1
+        chain = scope_chain(root, line_no, get_text)
+        return [item['keyword'] for item in chain]
+
+    def test_cpp_class_specifier_appears_in_scope_chain(self):
+        keywords = self._chain_keywords('cpp', self.CPP_CLASS, 'int x = 1')
+        self.assertIn('CLASS', keywords, 'C++ class_specifier missing from --scope ancestry')
+
+    def test_cpp_struct_specifier_appears_in_scope_chain(self):
+        keywords = self._chain_keywords('cpp', self.CPP_STRUCT, 'int x = 1')
+        self.assertIn('STRUCT', keywords, 'C++ struct_specifier missing from --scope ancestry')
+
+    def test_rust_impl_item_appears_in_scope_chain(self):
+        keywords = self._chain_keywords('rust', self.RUST_IMPL, 'let x = 1')
+        self.assertIn('IMPL', keywords, 'Rust impl_item missing from --scope ancestry')
+
+    def test_php_anonymous_class_appears_in_scope_chain(self):
+        keywords = self._chain_keywords('php', self.PHP_ANON_CLASS, '$x = 1')
+        self.assertIn('CLASS', keywords, 'PHP anonymous_class missing from --scope ancestry')
+
+    def test_typescript_abstract_class_appears_in_scope_chain(self):
+        keywords = self._chain_keywords('typescript', self.TS_ABSTRACT_CLASS, 'let x = 1')
+        self.assertIn('CLASS', keywords, 'TS abstract_class_declaration missing from --scope ancestry')
 
 
 if __name__ == '__main__':

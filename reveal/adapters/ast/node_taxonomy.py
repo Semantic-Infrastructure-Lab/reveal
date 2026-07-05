@@ -118,7 +118,28 @@ DEF_NODES: frozenset = frozenset({
     # (real Lua node kind; the treesitter.py comment naming them appears stale).
     'method', 'function_signature', 'Decl',
 })
-CLASS_NODES: frozenset = frozenset({'class_definition', 'class_declaration', 'class'})
+CLASS_NODES: frozenset = frozenset({
+    'class_definition', 'class_declaration', 'class',
+    # BACK-431 remaining scope (rose-tone-0704 finding #1): treesitter.py's
+    # CLASS_NODE_TYPES (element-extraction taxonomy) already covered these —
+    # C++ `class_specifier`, PHP `new class {...}` (`anonymous_class`), and
+    # TypeScript `abstract class` (`abstract_class_declaration`) — but this
+    # set (used for --scope's ancestor chain via FUNCTION_TYPES) didn't, so a
+    # method's enclosing class was silently dropped from --scope in those
+    # three languages (confirmed live: Python correctly showed CLASS as an
+    # ancestor, C++/PHP/TS did not).
+    'class_specifier', 'anonymous_class', 'abstract_class_declaration',
+})
+# C/C++ struct-with-methods (`struct Foo { void bar() {...} }`) has the same
+# --scope gap as CLASS_NODES above, confirmed live — kept as its own family
+# (not folded into CLASS_NODES) so the STRUCT label stays honest rather than
+# claiming "class" for a construct that isn't one.
+STRUCT_NODES: frozenset = frozenset({'struct_specifier'})
+# Rust methods live in `impl Foo { }` blocks, not in `struct Foo { }` itself
+# (Rust structs have no nested methods) — the --scope gap there is impl_item
+# missing, not struct_item, confirmed live (a Rust method's enclosing impl
+# block was silently dropped from --scope's ancestor chain).
+IMPL_NODES: frozenset = frozenset({'impl_item'})
 LAMBDA_NODES: frozenset = frozenset({'lambda'})
 
 RETURN_NODES: frozenset = frozenset({'return_statement', 'return'})
@@ -142,7 +163,7 @@ CONTINUE_NODES: frozenset = frozenset({'continue_statement', 'continue'})
 # Composite sets — what each consumer actually queries against
 # ---------------------------------------------------------------------------
 
-FUNCTION_TYPES: frozenset = DEF_NODES | CLASS_NODES | LAMBDA_NODES
+FUNCTION_TYPES: frozenset = DEF_NODES | CLASS_NODES | STRUCT_NODES | IMPL_NODES | LAMBDA_NODES
 
 EXIT_NODES: frozenset = (
     RETURN_NODES | RAISE_NODES | THROW_NODES | YIELD_NODES
@@ -210,6 +231,10 @@ KEYWORD_LABEL: Dict[str, str] = {
     'method': 'DEF', 'function_signature': 'DEF', 'Decl': 'DEF',
     'lambda': 'LAMBDA',
     'class_definition': 'CLASS', 'class_declaration': 'CLASS', 'class': 'CLASS',
+    'class_specifier': 'CLASS', 'anonymous_class': 'CLASS',
+    'abstract_class_declaration': 'CLASS',
+    'struct_specifier': 'STRUCT',
+    'impl_item': 'IMPL',
     'return_statement': 'RETURN', 'return': 'RETURN',
     'raise_statement': 'RAISE', 'raise': 'RAISE',
     'throw_statement': 'THROW', 'throw_expression': 'THROW',
