@@ -20,6 +20,7 @@ commands don't actually support.
 """
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -98,6 +99,22 @@ def test_discover_is_valid_json_and_self_consistent():
         assert adapter in data["adapters"], (
             f"core code-understanding adapter {adapter!r} missing from --discover"
         )
+
+
+def test_mcp_server_docstrings_have_no_stale_adapter_count():
+    """BACK-472 — the MCP tool metadata agents read to decide *how* to call a
+    tool is a discovery surface too, same as --discover/help://schemas. A
+    hardcoded "N adapters" in a docstring drifts the moment an adapter is
+    added or removed (this is exactly the BACK-471 doc-drift failure class,
+    found here instead of in a public .md file), so no digit is allowed in
+    that phrasing at all — not even one that happens to match today's count."""
+    mcp_server = Path(__file__).parent.parent / "reveal" / "mcp_server.py"
+    source = mcp_server.read_text()
+    match = re.search(r"any of (\d+) adapters", source)
+    assert match is None, (
+        f"mcp_server.py hardcodes an adapter count ({match.group(1)!r}) in a "
+        "tool docstring agents read — it will drift as adapters are added/removed"
+    )
 
 
 # --------------------------------------------------------------------------- #
