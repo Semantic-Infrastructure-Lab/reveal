@@ -40,26 +40,73 @@ class TestB005DeadImports(unittest.TestCase):
             f.write("# Package init\n")
         return pkg_dir
 
-    # ==================== Tests for import statements ====================
+    def create_project_file(self, top_pkg: str, rel_path: str, content: str) -> str:
+        """Helper: build a project rooted at temp_dir with a top-level package,
+        placing a file at temp_dir/top_pkg/rel_path (packages get __init__.py).
 
-    def test_dead_import_simple(self):
-        """Test detection of simple dead import."""
+        This lets us exercise same-project absolute-import resolution — the
+        case B005 can prove (BACK-465).
+        """
+        parts = os.path.join(top_pkg, rel_path).split(os.sep)
+        cur = self.temp_dir
+        for d in parts[:-1]:
+            cur = os.path.join(cur, d)
+            os.makedirs(cur, exist_ok=True)
+            init = os.path.join(cur, "__init__.py")
+            if not os.path.exists(init):
+                with open(init, 'w') as f:
+                    f.write("")
+        path = os.path.join(cur, parts[-1])
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    # ==================== Tests for import statements ====================
+    # BACK-465: an absolute import is 'dead' only when its top-level package is
+    # part of THIS project (resolvable under the project root) but the dotted
+    # path is missing. A bare unresolvable absolute import (third-party module
+    # not installed in reveal's env) is 'unknown' and NOT flagged — flagging it
+    # conflated "not installed here" with "does not exist" and produced a 100%
+    # false-positive flood on every external repo.
+
+    def test_unknown_absolute_import_not_flagged(self):
+        """A non-stdlib, non-same-project absolute import is unknown, not dead."""
         content = "import nonexistent_module_xyz123"
         path = self.create_temp_file(content)
         detections = self.rule.check(path, None, content)
-        self.assertEqual(len(detections), 1)
-        self.assertEqual(detections[0].rule_code, 'B005')
-        self.assertIn('nonexistent_module_xyz123', detections[0].message)
-        self.assertIn('Remove unused import', detections[0].suggestion)
+        self.assertEqual(len(detections), 0)
 
-    def test_dead_import_dotted(self):
-        """Test detection of dotted import (foo.bar.baz)."""
+    def test_unknown_dotted_absolute_import_not_flagged(self):
         content = "import nonexistent_pkg_xyz.submodule.deep"
         path = self.create_temp_file(content)
         detections = self.rule.check(path, None, content)
-        # Should check the root module (nonexistent_pkg_xyz)
+        self.assertEqual(len(detections), 0)
+
+    def test_third_party_from_import_not_flagged(self):
+        """The home-assistant FP: a declared third-party dep not in reveal's env."""
+        content = "from voluptuous_not_installed_xyz import Schema"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_same_project_dead_import_flagged(self):
+        """Absolute import of the project's own package to a missing module."""
+        # Project: temp_dir/proj/{__init__, real.py}, file at proj/sub/mod.py
+        self.create_project_file("proj", "real.py", "X = 1")
+        content = "from proj.typo_missing import thing"
+        path = self.create_project_file("proj", os.path.join("sub", "mod.py"), content)
+        detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 1)
-        self.assertIn('nonexistent_pkg_xyz', detections[0].message)
+        self.assertEqual(detections[0].rule_code, 'B005')
+        self.assertIn('proj.typo_missing', detections[0].message)
+
+    def test_same_project_valid_absolute_import_not_flagged(self):
+        """Own-package absolute import from a subdirectory resolves on disk."""
+        self.create_project_file("proj", "real.py", "X = 1")
+        content = "from proj.real import X"
+        path = self.create_project_file("proj", os.path.join("sub", "mod.py"), content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
 
     def test_valid_stdlib_import_not_detected(self):
         """Test that valid stdlib imports are not flagged."""
@@ -74,35 +121,21 @@ import typing
         detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 0)
 
-    def test_multiple_imports_one_line(self):
-        """Test multiple imports in one statement."""
-        content = "import os, nonexistent_xyz, sys, nonexistent_abc"
-        path = self.create_temp_file(content)
-        detections = self.rule.check(path, None, content)
-        # Should detect both nonexistent modules
-        self.assertEqual(len(detections), 2)
-        modules = [d.message for d in detections]
-        self.assertTrue(any('nonexistent_xyz' in m for m in modules))
-        self.assertTrue(any('nonexistent_abc' in m for m in modules))
-
-    def test_import_as_alias(self):
-        """Test import with 'as' alias."""
-        content = "import nonexistent_xyz as nx"
-        path = self.create_temp_file(content)
+    def test_mixed_imports_only_same_project_dead_flagged(self):
+        """A mix: stdlib ok, third-party unknown, same-project dead flagged."""
+        self.create_project_file("proj", "real.py", "X = 1")
+        content = (
+            "import os\n"
+            "import some_uninstalled_thirdparty_xyz\n"
+            "from proj.real import X\n"
+            "from proj.gone_missing import Y\n"
+        )
+        path = self.create_project_file("proj", os.path.join("sub", "mod.py"), content)
         detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 1)
-        self.assertIn('nonexistent_xyz', detections[0].message)
+        self.assertIn('proj.gone_missing', detections[0].message)
 
     # ==================== Tests for from...import statements ====================
-
-    def test_dead_from_import(self):
-        """Test detection of dead 'from X import Y' statement."""
-        content = "from nonexistent_module_xyz import something"
-        path = self.create_temp_file(content)
-        detections = self.rule.check(path, None, content)
-        self.assertEqual(len(detections), 1)
-        self.assertEqual(detections[0].rule_code, 'B005')
-        self.assertIn('nonexistent_module_xyz', detections[0].message)
 
     def test_valid_from_import_not_detected(self):
         """Test that valid 'from' imports are not flagged."""
@@ -114,15 +147,6 @@ from typing import List, Dict
         path = self.create_temp_file(content)
         detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 0)
-
-    def test_from_import_dotted_module(self):
-        """Test 'from' import with dotted module name."""
-        content = "from nonexistent_pkg_xyz.submodule import func"
-        path = self.create_temp_file(content)
-        detections = self.rule.check(path, None, content)
-        # Should check root module
-        self.assertEqual(len(detections), 1)
-        self.assertIn('nonexistent_pkg_xyz', detections[0].message)
 
     # ==================== Tests for relative imports ====================
 
@@ -289,44 +313,47 @@ class Bar:
 
     def test_line_and_column_accuracy(self):
         """Test that line and column numbers are accurate."""
+        self.create_project_file("proj", "real.py", "X = 1")
         content = """import os
-import nonexistent_xyz
+from proj.gone_missing import Y
 import sys
 """
-        path = self.create_temp_file(content)
+        path = self.create_project_file("proj", os.path.join("sub", "mod.py"), content)
         detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 1)
         self.assertEqual(detections[0].line, 2)  # Line 2
         self.assertGreater(detections[0].column, 0)  # Has column position
 
     def test_multiple_dead_imports_different_lines(self):
-        """Test multiple dead imports on different lines."""
+        """Test multiple same-project dead imports on different lines."""
+        self.create_project_file("proj", "real.py", "X = 1")
         content = """import os
-import dead_import_1
+from proj.gone_1 import a
 from pathlib import Path
-import dead_import_2
-from dead_import_3 import something
+from proj.gone_2 import b
+from proj.gone_3 import c
 """
-        path = self.create_temp_file(content)
+        path = self.create_project_file("proj", os.path.join("sub", "mod.py"), content)
         detections = self.rule.check(path, None, content)
-        # Should detect 3 dead imports (os and pathlib are stdlib)
+        # 3 same-project dead imports (os and pathlib stdlib; proj.real absent from these)
         self.assertEqual(len(detections), 3)
-        # Verify they're on correct lines
         lines = sorted([d.line for d in detections])
         self.assertEqual(lines, [2, 4, 5])
 
     def test_context_preservation(self):
         """Test that context is preserved in detections."""
-        content = "import nonexistent_module"
-        path = self.create_temp_file(content)
+        self.create_project_file("proj", "real.py", "X = 1")
+        content = "from proj.gone_missing import thing"
+        path = self.create_project_file("proj", os.path.join("sub", "mod.py"), content)
         detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 1)
         self.assertIn('import', detections[0].context)
 
     def test_severity_is_high(self):
         """Test that B005 detections have HIGH severity."""
-        content = "import nonexistent_xyz"
-        path = self.create_temp_file(content)
+        self.create_project_file("proj", "real.py", "X = 1")
+        content = "from proj.gone_missing import thing"
+        path = self.create_project_file("proj", os.path.join("sub", "mod.py"), content)
         detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 1)
         self.assertEqual(detections[0].severity, Severity.HIGH)
