@@ -106,6 +106,17 @@ SWITCH_DEFAULT_NODES: frozenset = frozenset({
 DEF_NODES: frozenset = frozenset({
     'function_definition', 'function_declaration', 'function_item',
     'method_definition', 'method_declaration', 'function', 'arrow_function',
+    # BACK-462: treesitter.py's FUNCTION_NODE_TYPES (element-extraction taxonomy)
+    # and this set (control-flow/scope taxonomy) independently diverged after
+    # Issue A's control-flow consolidation. 'method' (Ruby), 'function_signature'
+    # (Dart), 'Decl' (Zig) were present there but missing here, so --scope
+    # silently dropped the enclosing function from a line's ancestor chain in
+    # those three languages (verified: Ruby/Dart/Zig --scope on a nested `if`
+    # showed only the IF, never the enclosing DEF — Python's equivalent
+    # correctly shows both). Lua's two statement kinds are also in
+    # FUNCTION_NODE_TYPES but were already covered here via 'function_declaration'
+    # (real Lua node kind; the treesitter.py comment naming them appears stale).
+    'method', 'function_signature', 'Decl',
 })
 CLASS_NODES: frozenset = frozenset({'class_definition', 'class_declaration', 'class'})
 LAMBDA_NODES: frozenset = frozenset({'lambda'})
@@ -196,6 +207,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'function_item': 'DEF', 'function': 'DEF',
     'method_definition': 'DEF', 'method_declaration': 'DEF',
     'arrow_function': 'DEF',
+    'method': 'DEF', 'function_signature': 'DEF', 'Decl': 'DEF',
     'lambda': 'LAMBDA',
     'class_definition': 'CLASS', 'class_declaration': 'CLASS', 'class': 'CLASS',
     'return_statement': 'RETURN', 'return': 'RETURN',

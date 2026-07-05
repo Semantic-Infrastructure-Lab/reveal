@@ -252,6 +252,66 @@ class TestScopeChain(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# scope_chain cross-language DEF-recognition tests (BACK-462)
+# ---------------------------------------------------------------------------
+
+class TestScopeChainDefRecognitionCrossLanguage(unittest.TestCase):
+    """node_taxonomy.DEF_NODES and treesitter.py's FUNCTION_NODE_TYPES had
+    independently drifted (BACK-431 Issue A's documented-but-unfixed tail):
+    'method' (Ruby), 'function_signature' (Dart), 'Decl' (Zig) were tracked
+    for element extraction but absent from DEF_NODES, so scope_chain silently
+    dropped the enclosing function from a nested line's ancestor chain in
+    those languages — verified against the Python case above, which correctly
+    includes DEF. Dart's function_signature/function_body are disjoint
+    siblings (documented in treesitter.py's _function_end_node), so it needs
+    its own structural fix and is not asserted here — see BACK-463.
+    """
+
+    def _chain_for(self, language: str, code: str, line_no: int):
+        from reveal.adapters.ast.nav import scope_chain
+        parser = ts.get_parser(language)
+        src = textwrap.dedent(code).lstrip('\n')
+        content_bytes = src.encode('utf-8')
+        tree = parser.parse(src)
+        root = tree.root_node()
+
+        def get_text(node):
+            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+        return scope_chain(root, line_no, get_text)
+
+    def test_ruby_method_is_in_ancestor_chain(self):
+        code = """
+        def foo
+          x = 1
+          if x > 0
+            y = 2
+          end
+        end
+        """
+        # Line 4 ("y = 2") is inside the if inside the method.
+        chain = self._chain_for('ruby', code, 4)
+        keywords = [item['keyword'] for item in chain]
+        self.assertIn('DEF', keywords)
+        self.assertIn('IF', keywords)
+
+    def test_zig_fn_decl_is_in_ancestor_chain(self):
+        code = """
+        fn foo() void {
+            var x: i32 = 1;
+            if (x > 0) {
+                var y: i32 = 2;
+            }
+        }
+        """
+        # Line 4 ("var y: i32 = 2;") is inside the if inside the fn.
+        chain = self._chain_for('zig', code, 4)
+        keywords = [item['keyword'] for item in chain]
+        self.assertIn('DEF', keywords)
+        self.assertIn('IF', keywords)
+
+
+# ---------------------------------------------------------------------------
 # scope_chain condition field tests (BACK-439a)
 # ---------------------------------------------------------------------------
 
