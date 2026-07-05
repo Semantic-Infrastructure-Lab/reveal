@@ -107,6 +107,28 @@ class TestParamsFromSignature(unittest.TestCase):
         params = _params_from_signature('(x=1, y=2) -> None', 'f')
         self.assertEqual(params, ['x', 'y'])
 
+    def test_generic_type_with_comma_no_phantom_param(self):
+        # BACK-464: a comma inside a type annotation must not fabricate a param.
+        # Found dogfooding home-assistant/core: `dict[str, str] | None` produced
+        # a phantom 'str] | None' param in `trace`.
+        params = _params_from_signature(
+            '(self, key: str, placeholders: dict[str, str] | None = None) -> None',
+            'f',
+        )
+        self.assertEqual(params, ['key', 'placeholders'])
+
+    def test_callable_type_with_nested_commas(self):
+        params = _params_from_signature(
+            '(cb: Callable[[int, str], None], items: tuple[int, ...]) -> None', 'f'
+        )
+        self.assertEqual(params, ['cb', 'items'])
+
+    def test_default_containing_parens_not_truncated(self):
+        # The closing paren of the param list must be the one matching the
+        # opening paren — not the first ')' (which a default like foo() has).
+        params = _params_from_signature('(factory=dict(), name="x") -> None', 'f')
+        self.assertEqual(params, ['factory', 'name'])
+
 
 # ---------------------------------------------------------------------------
 # _effects_from_calls

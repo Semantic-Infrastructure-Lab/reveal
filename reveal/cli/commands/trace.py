@@ -181,19 +181,63 @@ def _collect_function_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
     return index
 
 
+def _split_top_level_commas(text: str) -> List[str]:
+    """Split on commas that are not nested inside (), [] or {}.
+
+    Type annotations routinely contain commas (`dict[str, str]`,
+    `Callable[[int], None]`, `tuple[int, ...]`), so a naive `str.split(',')`
+    over a parameter list fabricates phantom parameters.
+    """
+    parts: List[str] = []
+    depth = 0
+    current: List[str] = []
+    for ch in text:
+        if ch in '([{':
+            depth += 1
+        elif ch in ')]}':
+            depth = max(0, depth - 1)
+        if ch == ',' and depth == 0:
+            parts.append(''.join(current))
+            current = []
+        else:
+            current.append(ch)
+    if current:
+        parts.append(''.join(current))
+    return parts
+
+
 def _params_from_signature(signature: str, func_name: str) -> List[str]:
     """Extract parameter names from a function signature string.
 
     Signature format from tree-sitter: '(param1: Type, *args) -> ReturnType'
-    or just '(param1, param2)'.
+    or just '(param1, param2)'. A parameter's type annotation or default can
+    itself contain commas, parens and brackets (`dict[str, str]`,
+    `Callable[[], None]`, `x=foo()`), so the list is delimited by the paren
+    that matches the opening one — not the first close-paren — and split on
+    top-level commas only. A naive `split('(',1)[1].split(')',1)[0]` +
+    `split(',')` produced phantom params like `str] | None` from
+    `error_...placeholders: dict[str, str] | None` and truncated on any
+    default containing `)`.
     """
-    if '(' not in signature:
+    start = signature.find('(')
+    if start == -1:
         return []
-    inner = signature.split('(', 1)[1].split(')', 1)[0]
+    depth = 0
+    end = -1
+    for i in range(start, len(signature)):
+        ch = signature[i]
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+    inner = signature[start + 1:end] if end != -1 else signature[start + 1:]
     params = []
-    for part in inner.split(','):
+    for part in _split_top_level_commas(inner):
         name = part.strip().lstrip('*').split(':')[0].split('=')[0].strip()
-        if name and name not in ('self', 'cls', ''):
+        if name and name not in ('self', 'cls', '/', ''):
             params.append(name)
     return params
 
