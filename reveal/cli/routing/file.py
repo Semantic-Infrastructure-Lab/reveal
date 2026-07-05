@@ -295,7 +295,8 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
                              respect_gitignore=args.respect_gitignore,
                              exclude_patterns=args.exclude,
                              sort_by=sort_by, sort_desc=sort_desc,
-                             include_extensions=include_extensions))
+                             include_extensions=include_extensions,
+                             max_entries=args.max_entries))
     else:
         sort_desc = getattr(args, 'desc', False)
         print(show_directory_tree(str(path), depth=args.depth if args.depth is not None else 3,

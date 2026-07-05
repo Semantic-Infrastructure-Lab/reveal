@@ -64,7 +64,8 @@ def show_file_list(path: str, show_hidden: bool = False,
                    exclude_patterns: Optional[List[str]] = None,
                    sort_by: Optional[str] = None,
                    sort_desc: bool = True,
-                   include_extensions: Optional[List[str]] = None) -> str:
+                   include_extensions: Optional[List[str]] = None,
+                   max_entries: int = 500) -> str:
     """Show a flat sorted file list — replaces `find dir/ | sort -rn`.
 
     Args:
@@ -75,6 +76,8 @@ def show_file_list(path: str, show_hidden: bool = False,
         sort_by: Sort key: 'mtime'/'modified' (default), 'name', 'size'
         sort_desc: If True, newest/largest/z-first (default: True)
         include_extensions: If set, only include files with these extensions
+        max_entries: Cap on files shown. 0 (or negative) means unlimited,
+                     matching show_directory_tree's --max-entries semantics.
 
     Returns:
         Formatted list string, one file per line with date prefix
@@ -93,23 +96,28 @@ def show_file_list(path: str, show_hidden: bool = False,
 
     effective_sort = sort_by or 'mtime'
     file_gen = _collect_matching_files(root_path, show_hidden, path_filter, exts)
+    unlimited = max_entries <= 0
 
     # For mtime sort (the default and most common case) use a bounded heap so we
     # never hold more than max_entries tuples in memory regardless of directory size.
     # For name/size sorts we need a full pass anyway — materialize then sort.
-    _MAX_FILE_LIST = 500
+    total_count = None
     if effective_sort in ('mtime', 'modified'):
         mtime_key = lambda x: x[1].st_mtime  # noqa: E731
-        if sort_desc:
-            files = heapq.nlargest(_MAX_FILE_LIST, file_gen, key=mtime_key)
+        if unlimited:
+            files = list(file_gen)
+            files.sort(key=mtime_key, reverse=sort_desc)
+        elif sort_desc:
+            files = heapq.nlargest(max_entries, file_gen, key=mtime_key)
         else:
-            files = heapq.nsmallest(_MAX_FILE_LIST, file_gen, key=mtime_key)
+            files = heapq.nsmallest(max_entries, file_gen, key=mtime_key)
             files.sort(key=mtime_key)  # nsmallest doesn't guarantee order
     else:
         files = list(file_gen)
         _sort_files(files, sort_by, sort_desc)
-        if len(files) > _MAX_FILE_LIST:
-            files = files[:_MAX_FILE_LIST]
+        if not unlimited and len(files) > max_entries:
+            total_count = len(files)
+            files = files[:max_entries]
 
     if not files:
         ext_suffix = f" (ext: {','.join(include_extensions)})" if include_extensions else ""
@@ -123,6 +131,11 @@ def show_file_list(path: str, show_hidden: bool = False,
         except ValueError:
             rel = fpath
         lines.append(f"{date_str}  {rel}")
+
+    if not unlimited and len(files) == max_entries:
+        lines.append(f"\n... showing first {max_entries} entries (use --max-entries 0 to show all)"
+                      if total_count is None else
+                      f"\n... showing first {max_entries} of {total_count} entries (use --max-entries 0 to show all)")
 
     return '\n'.join(lines)
 

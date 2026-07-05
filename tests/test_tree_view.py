@@ -439,7 +439,7 @@ class TestCollectMatchingFilesGenerator(unittest.TestCase):
             for i in range(_MAX + 50):
                 Path(os.path.join(d, f'f{i:04d}.txt')).write_text(str(i))
             result = show_file_list(d)
-            lines = [l for l in result.strip().splitlines() if l]
+            lines = [l for l in result.strip().splitlines() if l and not l.startswith('...')]
         self.assertLessEqual(len(lines), _MAX,
                              f"show_file_list returned {len(lines)} lines, expected <= {_MAX}")
 
