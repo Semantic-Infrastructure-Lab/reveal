@@ -29,9 +29,14 @@ from reveal.rules.complexity.C901 import C901
 from reveal.rules.complexity.C902 import C902
 from reveal.rules.complexity.C905 import C905
 from reveal.rules.duplicates.D001 import D001
+from reveal.rules.duplicates.D002 import D002
+from reveal.rules.errors.E501 import E501
 from reveal.rules.imports.I002 import I002
 from reveal.rules.imports.I005 import I005
+from reveal.rules.maintainability.M101 import M101
 from reveal.rules.maintainability.M501 import M501
+from reveal.rules.security.S001 import S001
+from reveal.rules.urls.U501 import U501
 
 
 class _TempDirMixin:
@@ -316,6 +321,150 @@ class TestM501MarkersNonPython(_TempDirMixin, unittest.TestCase):
         source = 'const msg = "TODO: not a real comment";\n'
         path = self._write('f.js', source)
         self.assertEqual(M501().check(str(path), None, source), [])
+
+
+class TestD002NearDuplicateNonPython(_TempDirMixin, unittest.TestCase):
+    """D002 declares file_patterns=['*'] and reads real `functions` from the
+    analyzer structure (same extraction path as D001/BACK-461), but its suite
+    (test_D002.py) is Python-only. Positive: two near-identical Go/JS functions
+    (same shape, renamed vars) rank as a candidate; negative: two structurally
+    different functions do not."""
+
+    def _structure(self, name: str, source: str):
+        path = self._write(name, source)
+        analyzer_class = get_analyzer(str(path), allow_fallback=False)
+        analyzer = analyzer_class(str(path))
+        return path, analyzer.get_structure(), analyzer.content
+
+    _NEAR = {
+        'near.go': (
+            'package main\n\n'
+            'func processA(items []int) int {\n\ttotal := 0\n\tfor _, v := range items {\n'
+            '\t\tif v > 0 {\n\t\t\ttotal += v\n\t\t}\n\t}\n\ttotal = total * 2\n\treturn total\n}\n\n'
+            'func processB(values []int) int {\n\tsum := 0\n\tfor _, x := range values {\n'
+            '\t\tif x > 0 {\n\t\t\tsum += x\n\t\t}\n\t}\n\tsum = sum * 2\n\treturn sum\n}\n'
+        ),
+        'near.js': (
+            'function processA(items) {\n\tlet total = 0;\n\tfor (const v of items) {\n'
+            '\t\tif (v > 0) {\n\t\t\ttotal += v;\n\t\t}\n\t}\n\ttotal = total * 2;\n\treturn total;\n}\n\n'
+            'function processB(values) {\n\tlet sum = 0;\n\tfor (const x of values) {\n'
+            '\t\tif (x > 0) {\n\t\t\tsum += x;\n\t\t}\n\t}\n\tsum = sum * 2;\n\treturn sum;\n}\n'
+        ),
+    }
+
+    def test_near_duplicate_ranked(self):
+        for name, source in self._NEAR.items():
+            with self.subTest(lang=name):
+                path, structure, content = self._structure(name, source)
+                detections = D002().check(str(path), structure, content)
+                self.assertEqual(len(detections), 1, f'{name}: {detections}')
+                self.assertEqual(detections[0].rule_code, 'D002')
+
+    def test_structurally_different_not_ranked(self):
+        # Two functions doing genuinely different work (below MIN_SIMILARITY).
+        source = (
+            'package main\n\n'
+            'func greet(name string) string {\n\tprefix := "Hello, "\n\tgreeting := prefix + name\n'
+            '\tgreeting = greeting + "!"\n\treturn greeting\n}\n\n'
+            'func fib(n int) int {\n\ta, b := 0, 1\n\tfor i := 0; i < n; i++ {\n'
+            '\t\ta, b = b, a+b\n\t}\n\treturn a\n}\n'
+        )
+        path, structure, content = self._structure('diff.go', source)
+        self.assertEqual(D002().check(str(path), structure, content), [])
+
+
+class TestS001SecretsNonPythonFormats(_TempDirMixin, unittest.TestCase):
+    """S001 declares file_patterns=['.py', '.env', '.yaml', '.yml', '.toml']
+    with per-format branches, but its suite (test_rules.py) only exercises the
+    Python AST path. Covers the .env/.yaml/.toml regex branches: each flags a
+    real secret assigned to a secret-named key, and each stays silent on a
+    placeholder value."""
+
+    _SECRET = 'sk-ant-abc123def456ghi789'
+
+    def test_secret_flagged_per_format(self):
+        cases = {
+            'config.env': f'API_KEY={self._SECRET}\n',
+            'config.yaml': f'api_key: {self._SECRET}\n',
+            'config.toml': f'api_key = "{self._SECRET}"\n',
+        }
+        for name, source in cases.items():
+            with self.subTest(fmt=name):
+                path = self._write(name, source)
+                detections = S001().check(str(path), None, source)
+                self.assertEqual(len(detections), 1, f'{name}: {detections}')
+                self.assertEqual(detections[0].rule_code, 'S001')
+
+    def test_placeholder_not_flagged_per_format(self):
+        cases = {
+            'safe.env': 'API_KEY=your-key-here\n',
+            'safe.yaml': 'api_key: ${API_KEY}\n',
+            'safe.toml': 'api_key = "changeme"\n',
+        }
+        for name, source in cases.items():
+            with self.subTest(fmt=name):
+                path = self._write(name, source)
+                self.assertEqual(S001().check(str(path), None, source), [])
+
+
+class TestE501LineTooLongNonPython(_TempDirMixin, unittest.TestCase):
+    """E501 declares file_patterns=['*'] but its suite is Python-only. It is a
+    pure line-length scan, so it must fire on an over-length code line in any
+    language and stay silent when every line is within the limit. (skip_categories
+    gating for data/doc files is applied by the rule runner, not check(), so it's
+    out of scope for this unit test.)"""
+
+    def test_long_line_flagged(self):
+        long_line = 'let total = ' + ' + '.join('1' for _ in range(60)) + ';'
+        for name, source in {
+            'f.go': f'package main\nfunc f() {{\n\t{long_line}\n}}\n',
+            'f.rs': f'fn main() {{\n\t{long_line}\n}}\n',
+        }.items():
+            with self.subTest(lang=name):
+                path = self._write(name, source)
+                detections = E501().check(str(path), None, source)
+                self.assertTrue(detections, f'{name}: expected a long-line detection')
+                self.assertEqual(detections[0].rule_code, 'E501')
+
+    def test_short_lines_not_flagged(self):
+        path = self._write('ok.go', 'package main\n\nfunc add(a, b int) int {\n\treturn a + b\n}\n')
+        self.assertEqual(E501().check(str(path), None, 'package main\n\nfunc add(a, b int) int {\n\treturn a + b\n}\n'), [])
+
+
+class TestU501GitHubHttpNonPython(_TempDirMixin, unittest.TestCase):
+    """U501 declares file_patterns=['*'] but its suite is Python-only. Positive:
+    an insecure http:// GitHub URL in a non-Python file is flagged; negative:
+    the https:// form is not."""
+
+    def test_insecure_github_url_flagged(self):
+        source = 'const repo = "http://github.com/foo/bar";\n'
+        path = self._write('f.js', source)
+        detections = U501().check(str(path), None, source)
+        self.assertEqual(len(detections), 1, detections)
+        self.assertEqual(detections[0].rule_code, 'U501')
+
+    def test_https_github_url_not_flagged(self):
+        source = 'const repo = "https://github.com/foo/bar";\n'
+        path = self._write('f.js', source)
+        self.assertEqual(U501().check(str(path), None, source), [])
+
+
+class TestM101FileTooLargeNonPython(_TempDirMixin, unittest.TestCase):
+    """M101 declares file_patterns=['*'] but its suite is Python-only. It is a
+    line-count check (WARN >500, ERROR >1000). Positive: a >500-line Go file is
+    flagged; negative: a small Go file is not."""
+
+    def test_large_file_flagged(self):
+        source = 'package main\n\n' + '\n'.join(f'var x{i} = {i}' for i in range(600)) + '\n'
+        path = self._write('big.go', source)
+        detections = M101().check(str(path), None, source)
+        self.assertEqual(len(detections), 1, detections)
+        self.assertEqual(detections[0].rule_code, 'M101')
+
+    def test_small_file_not_flagged(self):
+        source = 'package main\n\nfunc main() {}\n'
+        path = self._write('small.go', source)
+        self.assertEqual(M101().check(str(path), None, source), [])
 
 
 if __name__ == '__main__':
