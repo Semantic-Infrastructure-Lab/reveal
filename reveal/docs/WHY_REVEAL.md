@@ -257,7 +257,7 @@ reveal 'claude://sessions/?search=validate_token'
 
 ## The Day-to-Day Core
 
-The most-used pattern. Works across 84 languages with zero configuration.
+The most-used pattern. Works across 85 languages with zero configuration.
 
 ```bash
 # What's in this directory?
@@ -333,7 +333,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 | Adapter | What it queries |
 |---|---|
-| `ast://` | Functions, classes, complexity, decorators — 84 languages |
+| `ast://` | Functions, classes, complexity, decorators — 85 languages |
 | `calls://` | Cross-file call graph with coupling metrics |
 | `stats://` | Codebase quality scores, hotspots, duplication |
 | `imports://` | Dependency graph, circular imports, unused imports |

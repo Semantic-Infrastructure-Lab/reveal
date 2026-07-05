@@ -86,7 +86,7 @@ The `ast://` adapter provides **semantic code search** - it parses source code i
 - 🔍 **Query by properties**: Find functions by complexity, size, type, decorators
 - 🎯 **Pattern matching**: Wildcards (`*`, `?`) and regex (`~=`) for name searches
 - 📊 **Complexity analysis**: McCabe cyclomatic complexity calculation
-- 🔗 **Multi-language**: Supports 84 languages via tree-sitter
+- 🔗 **Multi-language**: Supports 85 languages via tree-sitter
 - 📈 **Result control**: Sort, limit, offset for efficient queries
 - 🤖 **AI-friendly**: JSON schema for agent integration
 
@@ -877,7 +877,7 @@ AST can't understand code meaning:
 
 **Complexity calculation**: Tree-sitter-based McCabe cyclomatic complexity for supported languages; heuristic (line count proxy) for others. Check `reveal --languages` to see what your target language supports.
 
-**Language support**: Tree-sitter parsers available for 84 languages, but complexity/decorator extraction may be Python-specific. Check language support:
+**Language support**: Tree-sitter parsers available for 85 languages, but complexity/decorator extraction may be Python-specific. Check language support:
 
 ```bash
 reveal --languages
@@ -1288,7 +1288,7 @@ A: AST queries parse all source files. Narrow your path (`ast://./src` instead o
 
 **Q: Can I query across multiple languages?**
 
-A: Yes! reveal supports 84 languages. However, some features (decorator filtering) may be language-specific.
+A: Yes! reveal supports 85 languages. However, some features (decorator filtering) may be language-specific.
 
 **Q: How accurate is complexity measurement?**
 

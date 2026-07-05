@@ -280,7 +280,7 @@ def get_help() -> Dict[str, Any]:
         'notes': [
             'Quote URIs with > or < operators: \'ast://path?lines>50\'',
             'Scans all code files in directory recursively',
-            'Supports Python, JS, TS, Rust, Go, and 84 languages via tree-sitter',
+            'Supports Python, JS, TS, Rust, Go, and 85 languages via tree-sitter',
             'Use --format=json for programmatic filtering with jq'
         ],
 
