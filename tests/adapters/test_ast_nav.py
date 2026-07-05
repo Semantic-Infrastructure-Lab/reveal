@@ -263,8 +263,10 @@ class TestScopeChainDefRecognitionCrossLanguage(unittest.TestCase):
     dropped the enclosing function from a nested line's ancestor chain in
     those languages — verified against the Python case above, which correctly
     includes DEF. Dart's function_signature/function_body are disjoint
-    siblings (documented in treesitter.py's _function_end_node), so it needs
-    its own structural fix and is not asserted here — see BACK-463.
+    siblings (documented in treesitter.py's _function_end_node): the plain
+    taxonomy fix (BACK-462) couldn't reach it because the body's lines are
+    never inside the signature node, so scope_chain synthesizes the DEF from
+    the sibling signature (BACK-463) — asserted below.
     """
 
     def _chain_for(self, language: str, code: str, line_no: int):
@@ -309,6 +311,59 @@ class TestScopeChainDefRecognitionCrossLanguage(unittest.TestCase):
         keywords = [item['keyword'] for item in chain]
         self.assertIn('DEF', keywords)
         self.assertIn('IF', keywords)
+
+    def test_dart_method_is_in_ancestor_chain(self):
+        # BACK-463: function_signature (name) and function_body (the lines) are
+        # disjoint siblings, so a line inside the body is never inside the
+        # signature — pre-fix the DEF was silently absent from the chain.
+        code = """
+        class Batch {
+          void run(int x) {
+            if (x > 0) {
+              print("positive");
+            }
+          }
+        }
+        """
+        # Line 4 ('print("positive");') is inside the if inside the method body.
+        chain = self._chain_for('dart', code, 4)
+        keywords = [item['keyword'] for item in chain]
+        self.assertEqual(['CLASS', 'DEF', 'IF'], keywords)
+        # The synthesized DEF spans signature-start → body-end and is labeled
+        # from the signature.
+        def_item = next(i for i in chain if i['keyword'] == 'DEF')
+        self.assertIn('run', def_item['label'])
+        self.assertEqual(2, def_item['line_start'])
+
+    def test_dart_top_level_function_is_in_ancestor_chain(self):
+        code = """
+        void run(int x) {
+          if (x > 0) {
+            print("positive");
+          }
+        }
+        """
+        # Line 3 ('print("positive");') is inside the if inside the function.
+        chain = self._chain_for('dart', code, 3)
+        keywords = [item['keyword'] for item in chain]
+        self.assertEqual(['DEF', 'IF'], keywords)
+
+    def test_dart_signature_line_yields_single_def(self):
+        # Guard: querying the signature line itself must not double-count the
+        # DEF (the real function_signature node AND the synthesized one).
+        code = """
+        class Batch {
+          void run(int x) {
+            if (x > 0) {
+              print("positive");
+            }
+          }
+        }
+        """
+        # Line 2 is the signature 'void run(int x) {'.
+        chain = self._chain_for('dart', code, 2)
+        keywords = [item['keyword'] for item in chain]
+        self.assertEqual(1, keywords.count('DEF'))
 
 
 # ---------------------------------------------------------------------------

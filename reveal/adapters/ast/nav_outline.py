@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List
 from ...core import node_children as _children
+from ...core import node_prev_sibling as _prev_sibling
 from .node_taxonomy import (  # noqa: F401 — re-exported for nav.py/back-compat
     SCOPE_NODES,
     ALTERNATIVE_NODES,
@@ -146,6 +147,34 @@ def scope_chain(
     return chain
 
 
+def _dart_signature_for_body(body_node: Any) -> Any:
+    """Return the `function_signature` node paired with a Dart `function_body`.
+
+    BACK-463: Dart's grammar makes `function_signature` (name + params) and
+    `function_body` DISJOINT siblings, not parent/child — so the enclosing
+    function's *name* lives in a node that does NOT contain the body's lines.
+    `_find_ancestors`' containment walk therefore never visits the signature
+    for any line inside the body, silently dropping the DEF from `--scope`'s
+    ancestor chain (the IF-but-no-DEF symptom). This resolves the signature
+    from the body — the inverse of `treesitter.py:_function_end_node`, which
+    resolves the body from the signature for line-range purposes.
+
+    Two shapes (both confirmed via --show-ast):
+      top-level:  program → function_signature, function_body        (siblings)
+      method:     class_body → method_signature(function_signature), function_body
+    """
+    prev = _prev_sibling(body_node)
+    if prev is None:
+        return None
+    if prev.kind() == 'function_signature':
+        return prev
+    if prev.kind() == 'method_signature':
+        for child in _children(prev):
+            if child.kind() == 'function_signature':
+                return child
+    return None
+
+
 def _find_ancestors(
     node: Any,
     line_no: int,
@@ -158,6 +187,30 @@ def _find_ancestors(
     end = node.end_position().row + 1
     if not (start <= line_no <= end):
         return
+
+    # BACK-463: Dart's function_body is the node that contains the body's
+    # lines, but it isn't itself a DEF node — the name lives in a disjoint
+    # sibling signature. Synthesize the DEF entry from that signature, spanning
+    # signature-start → body-end, before descending into the body's scopes.
+    if node.kind() == 'function_body':
+        sig = _dart_signature_for_body(node)
+        # Only synthesize when the line is purely inside the body. If it falls
+        # on the signature itself, the normal DEF_NODES walk already visits
+        # function_signature (a sibling subtree) and adds the DEF — synthesizing
+        # too would double it.
+        if sig is not None and not (
+            sig.start_position().row + 1 <= line_no <= sig.end_position().row + 1
+        ):
+            chain.append({
+                'type': 'function_signature',
+                'keyword': KEYWORD_LABEL.get('function_signature', 'DEF'),
+                'label': _node_label(sig, get_text),
+                'line_start': sig.start_position().row + 1,
+                'line_end': end,
+                'depth': depth,
+                'condition': None,
+            })
+            depth += 1
 
     if node.is_named() and (node.kind() in SCOPE_NODES or node.kind() in FUNCTION_TYPES):
         condition = None
