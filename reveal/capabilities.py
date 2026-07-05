@@ -147,14 +147,7 @@ _TIER1: Dict[str, LanguageCapability] = {
             "to sibling/package files and extract_symbols for accurate "
             "unused-import detection."
         ),
-        known_limitations=[
-            "No dedicated real-corpus dogfood clone exists for Python itself "
-            "(internal-docs BACK-431 Issue G: deep-9 feature-breadth pass "
-            "covered 18 of 19 target languages, skipping Python) — its "
-            "verified status rests on the conformance matrix + smoke "
-            "fixtures only, not an additional real-repo pass like every "
-            "other tier1/A/B language got.",
-        ],
+        known_limitations=[],
     ),
     "RustAnalyzer": _tier1(
         language="rust",
