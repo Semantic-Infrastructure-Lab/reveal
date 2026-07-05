@@ -608,6 +608,41 @@ class TestVarFlowBack411(unittest.TestCase):
         self.assertIn(('READ', kinds[1][1]), kinds)
         self.assertIn(('WRITE', kinds[1][1]), kinds)
 
+    def test_kotlin_reassignment_target_is_write(self):
+        # Kotlin's `x = ...` reassignment parses as an `assignment` node whose
+        # target/value are POSITIONAL children (directly_assignable_expression,
+        # '=', <expr>) with no 'left'/'right' fields — so resolve_assignment_
+        # sides returned (None, None) and both `x` identifiers fell through to
+        # READ. The declaration (`var x = ...`) already worked via _DECL_SHAPES;
+        # only the bare reassignment was blind (BACK-476).
+        code = """
+        fun m(): Int {
+            var x = foo()
+            x = x * 2
+            return x
+        }
+        """
+        kinds = self._kinds_for(code, 'kotlin', 'x')
+        self.assertEqual(kinds[0][0], 'WRITE')            # var x = foo()  (decl)
+        self.assertIn(('WRITE', kinds[1][1]), kinds)      # x = x * 2      (reassign target)
+        self.assertIn(('READ', kinds[1][1]), kinds)       # x = x * 2      (rhs read)
+
+    def test_swift_reassignment_target_is_write(self):
+        # Swift shares Kotlin's exact `assignment` shape (positional
+        # directly_assignable_expression / '=' / <expr>, no fields) — same
+        # BACK-476 fix covers both.
+        code = """
+        func m() -> Int {
+            var x = foo()
+            x = x * 2
+            return x
+        }
+        """
+        kinds = self._kinds_for(code, 'swift', 'x')
+        self.assertEqual(kinds[0][0], 'WRITE')
+        self.assertIn(('WRITE', kinds[1][1]), kinds)
+        self.assertIn(('READ', kinds[1][1]), kinds)
+
 
 # ===========================================================================
 # collect_mutations

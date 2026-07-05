@@ -104,6 +104,19 @@ def resolve_assignment_sides(n: Any, ntype: str) -> tuple:
                 left = child
             elif child.kind() == 'expression_list':
                 right = child
+    elif left is None and right is None and ntype == 'assignment':
+        # Kotlin/Swift reassignment (`x = expr`) parses as an `assignment`
+        # node with POSITIONAL children (directly_assignable_expression, '=',
+        # <expr>) and no 'left'/'right' fields — unlike Python/JS/TS/C# whose
+        # `assignment`/`assignment_expression` expose the fields. Without this
+        # fallback both sides fell through to generic recursion and the target
+        # was mislabeled READ instead of WRITE (BACK-476), the same failure
+        # shape Lua's fieldless assignment_statement had above. The declaration
+        # form (`var x = ...`) was already correct via _DECL_SHAPES; only the
+        # bare reassignment was blind.
+        named = [child for child in _children(n) if child.is_named()]
+        if len(named) >= 2:
+            left, right = named[0], named[-1]
     return left, right
 
 
