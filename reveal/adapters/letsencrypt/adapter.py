@@ -306,20 +306,8 @@ class LetsEncryptAdapter(ResourceAdapter):
             ],
             'example_queries': [
                 {
-                    'uri': 'reveal letsencrypt://',
-                    'description': 'List all certs with SANs and expiry',
-                },
-                {
-                    'uri': 'reveal letsencrypt:// --check-orphans',
-                    'description': 'Find certs not referenced by any nginx ssl_certificate',
-                },
-                {
-                    'uri': 'reveal letsencrypt:// --check-duplicates',
-                    'description': 'Find certs with identical SANs (renewal candidates)',
-                },
-                {
-                    'uri': 'reveal letsencrypt:// --format json',
-                    'description': 'Machine-readable cert inventory',
+                    'uri': 'letsencrypt://',
+                    'description': 'List all certs with SANs and expiry (add --check-orphans to find certs not referenced by any nginx ssl_certificate, --check-duplicates for identical-SAN renewal candidates, --format json for machine-readable output)',
                 },
             ],
             'notes': [

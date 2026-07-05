@@ -424,42 +424,32 @@ class AutosslAdapter(ResourceAdapter):
             ],
             'example_queries': [
                 {
-                    'uri': 'reveal autossl://',
+                    'uri': 'autossl://',
                     'description': 'List all available AutoSSL run timestamps on this server',
                     'output_type': 'autossl_runs',
                 },
                 {
-                    'uri': 'reveal autossl://2024-01-15_03-00-00',
+                    'uri': 'autossl://2024-01-15_03-00-00',
                     'description': 'Inspect a specific AutoSSL run — per-user/domain TLS outcomes',
                     'output_type': 'autossl_run',
                 },
                 {
-                    'uri': 'reveal autossl://latest?only-failures',
+                    'uri': 'autossl://latest?only-failures',
                     'description': 'Most recent run — failures only (no ok domains)',
                     'output_type': 'autossl_run',
                 },
                 {
-                    'uri': 'reveal autossl://latest?summary',
+                    'uri': 'autossl://latest?summary',
                     'description': 'Most recent run — header and counts only, no per-domain detail',
                     'output_type': 'autossl_run',
                 },
                 {
-                    'uri': 'reveal autossl://latest?user=bob&only-failures',
+                    'uri': 'autossl://latest?user=bob&only-failures',
                     'description': 'Most recent run filtered to a single user, failures only',
                     'output_type': 'autossl_run',
                 },
                 {
-                    'uri': "reveal autossl:// --format=json | jq '.runs[-1]'",
-                    'description': 'Get timestamp of the most recent AutoSSL run',
-                    'output_type': 'autossl_runs',
-                },
-                {
-                    'uri': "reveal autossl://$(reveal autossl:// --format=json | jq -r '.runs[-1]')",
-                    'description': 'Inspect the most recent AutoSSL run directly',
-                    'output_type': 'autossl_run',
-                },
-                {
-                    'uri': 'reveal autossl://app.example.com',
+                    'uri': 'autossl://app.example.com',
                     'description': 'Domain history — TLS status for one domain across all runs',
                     'output_type': 'autossl_domain_history',
                 },
@@ -470,6 +460,8 @@ class AutosslAdapter(ResourceAdapter):
                 'tls_status values: ok (cert valid), incomplete (pending), defective (failed)',
                 'defect_codes explain why AutoSSL failed: DCV_ERROR, RATE_LIMIT, etc.',
                 'Only available on cPanel servers — adapter errors cleanly on non-cPanel systems',
+                'jq: get timestamp of most recent run — reveal autossl:// --format=json | jq \'.runs[-1]\'',
+                'jq: chain into the most recent run directly — reveal autossl://$(reveal autossl:// --format=json | jq -r \'.runs[-1]\')',
             ],
         }
 

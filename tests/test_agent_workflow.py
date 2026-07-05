@@ -25,6 +25,8 @@ from pathlib import Path
 import pytest
 from conftest import _run_reveal_direct
 
+from reveal.adapters.base import _ADAPTER_REGISTRY
+
 # A real, analyzed fixture to build discovered queries against. Reused from the
 # conformance matrix so this suite doesn't own a parallel fixture to maintain.
 CONFORMANCE_DIR = Path(__file__).parent / "fixtures" / "conformance" / "python"
@@ -34,6 +36,17 @@ FIXTURE_FILE = CONFORMANCE_DIR / "sample.py"
 # discoverable AND its schema must compose into an executable, JSON-returning
 # command. Query built per-adapter from the schema's own advertised surface.
 CORE_ADAPTERS = ("ast", "calls", "imports", "stats", "git", "diff", "help")
+
+# Every publicly-registered adapter, read live from the registry rather than
+# hardcoded — so a newly-added adapter is swept automatically instead of
+# silently sitting outside test_schema_is_valid_and_names_itself /
+# test_schema_example_queries_are_well_formed the way 17 of 24 adapters did
+# before this list existed (found auditing the discovery contract, see
+# internal-docs/research/REVEAL_GOALS_PRIORITY_ASSESSMENT_2026-07-05.md).
+ALL_PUBLIC_ADAPTERS = tuple(sorted(
+    name for name, cls in _ADAPTER_REGISTRY.items()
+    if not getattr(cls, "internal", False)
+))
 
 # The query adapters an agent builds URIs against. `help` is excluded: it is a
 # discovery meta-adapter that lists other adapters' schemas, so it correctly
@@ -123,6 +136,50 @@ def test_schema_example_queries_are_well_formed(adapter):
         assert ex["uri"].startswith(f"{adapter}://"), (
             f"{adapter} example query uri {ex['uri']!r} is not a {adapter}:// URI — "
             f"an agent building on it would target the wrong adapter"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Layer 1b: the same two checks, swept across every public adapter — not just
+# the 7 "core" ones above. CORE_ADAPTERS/QUERY_ADAPTERS are spot-checks with
+# deeper executability tests (Layer 2); this sweep is the full-registry floor
+# every public adapter must clear, cheap enough to run for all of them since it
+# only inspects the schema dict, no real backend/network/DB state required.
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("adapter", ALL_PUBLIC_ADAPTERS)
+def test_every_public_adapter_schema_is_valid_and_names_itself(adapter):
+    """Same contract as test_schema_is_valid_and_names_itself, for every
+    registered public adapter — a schema that mis-names itself or tracebacks
+    breaks --discover/help://schemas silently for that one entry."""
+    schema = _schema(adapter)
+    assert schema.get("adapter") == adapter, (
+        f"help://schemas/{adapter} identifies as {schema.get('adapter')!r}"
+    )
+
+
+# help:// is a discovery meta-adapter listing other adapters' schemas — it
+# correctly advertises no example_queries of its own scheme (see QUERY_ADAPTERS
+# comment above).
+_ADAPTERS_WITH_EXAMPLES = tuple(a for a in ALL_PUBLIC_ADAPTERS if a != "help")
+
+
+@pytest.mark.parametrize("adapter", _ADAPTERS_WITH_EXAMPLES)
+def test_every_public_adapter_example_queries_are_well_formed(adapter):
+    """Same contract as test_schema_example_queries_are_well_formed, for every
+    registered public adapter. Catches the class of bug found in autossl/cpanel/
+    letsencrypt (BACK-432/agent-contract audit, 2026-07-05): 'uri' fields that
+    were actually full CLI invocations (`'reveal cpanel://x --flag'`) or shell
+    pipelines, not parseable URIs — an agent treating them as a URI would break."""
+    schema = _schema(adapter)
+    examples = schema.get("example_queries", [])
+    assert examples, f"{adapter} schema advertises no example_queries for agents"
+    for ex in examples:
+        assert "uri" in ex, f"{adapter} example query missing 'uri': {ex}"
+        assert ex["uri"].startswith(f"{adapter}://"), (
+            f"{adapter} example query uri {ex['uri']!r} is not a bare {adapter}:// "
+            f"URI — an agent building on it would get a malformed query or target "
+            f"the wrong adapter"
         )
 
 

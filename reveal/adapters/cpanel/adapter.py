@@ -485,22 +485,18 @@ _SCHEMA_OUTPUT_TYPES = [
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
-    {'uri': 'reveal cpanel://johndoe/full-audit', 'description': 'One-shot composite: ssl + ACL + nginx ACME; exits 2 on any failure', 'output_type': 'cpanel_full_audit'},
-    {'uri': 'reveal cpanel://johndoe/full-audit --format=json', 'description': 'Machine-readable composite audit for scripting', 'output_type': 'cpanel_full_audit'},
-    {'uri': 'reveal cpanel://johndoe', 'description': 'Overview: domain count, SSL summary, nginx config path', 'output_type': 'cpanel_user'},
-    {'uri': 'reveal cpanel://johndoe/domains', 'description': 'List all domains with docroots and type (main/addon/subdomain)', 'output_type': 'cpanel_domains'},
-    {'uri': 'reveal cpanel://johndoe/ssl', 'description': 'Disk cert health per domain — sorted by severity', 'output_type': 'cpanel_ssl'},
-    {'uri': 'reveal cpanel://johndoe/ssl --dns-verified', 'description': 'SSL cert health: excludes NXDOMAIN and elsewhere-pointing domains from counts', 'output_type': 'cpanel_ssl'},
-    {'uri': 'reveal cpanel://johndoe/ssl --only-failures', 'description': 'Show only cert failures (non-ok domains)', 'output_type': 'cpanel_ssl'},
-    {'uri': 'reveal cpanel://johndoe/ssl?domain_type=main_domain', 'description': 'Disk cert health for main domain only', 'output_type': 'cpanel_ssl'},
-    {'uri': 'reveal cpanel://johndoe/ssl?domain_type=subdomain --only-failures', 'description': 'Failed subdomain certs only', 'output_type': 'cpanel_ssl'},
-    {'uri': 'reveal cpanel://johndoe/acl-check', 'description': 'nobody ACL status on every docroot — needed for ACME cert renewal', 'output_type': 'cpanel_acl'},
-    {'uri': 'reveal cpanel://johndoe/acl-check --only-failures', 'description': 'Show only denied docroots', 'output_type': 'cpanel_acl'},
-    {'uri': "reveal cpanel://johndoe/ssl --format=json | jq '.certs[] | select(.status != \"ok\")'", 'description': 'jq: all failing certs', 'output_type': 'cpanel_ssl'},
-    {'uri': "reveal cpanel://johndoe/ssl --dns-verified --format=json | jq '.certs[] | select(.dns_points_here == false)'", 'description': 'jq: domains pointing to a different server', 'output_type': 'cpanel_ssl'},
+    {'uri': 'cpanel://johndoe/full-audit', 'description': 'One-shot composite: ssl + ACL + nginx ACME; exits 2 on any failure (add --format=json for scripting)', 'output_type': 'cpanel_full_audit'},
+    {'uri': 'cpanel://johndoe', 'description': 'Overview: domain count, SSL summary, nginx config path', 'output_type': 'cpanel_user'},
+    {'uri': 'cpanel://johndoe/domains', 'description': 'List all domains with docroots and type (main/addon/subdomain)', 'output_type': 'cpanel_domains'},
+    {'uri': 'cpanel://johndoe/ssl', 'description': 'Disk cert health per domain — sorted by severity (add --dns-verified to exclude NXDOMAIN/elsewhere-pointing domains, --only-failures for non-ok only)', 'output_type': 'cpanel_ssl'},
+    {'uri': 'cpanel://johndoe/ssl?domain_type=main_domain', 'description': 'Disk cert health for main domain only', 'output_type': 'cpanel_ssl'},
+    {'uri': 'cpanel://johndoe/ssl?domain_type=subdomain', 'description': 'Disk cert health for subdomains only (add --only-failures for failed subdomain certs only)', 'output_type': 'cpanel_ssl'},
+    {'uri': 'cpanel://johndoe/acl-check', 'description': 'nobody ACL status on every docroot — needed for ACME cert renewal (add --only-failures to show only denied docroots)', 'output_type': 'cpanel_acl'},
 ]
 
 _SCHEMA_NOTES = [
+    'jq: all failing certs — reveal cpanel://johndoe/ssl --format=json | jq \'.certs[] | select(.status != "ok")\'',
+    'jq: domains pointing to a different server — reveal cpanel://johndoe/ssl --dns-verified --format=json | jq \'.certs[] | select(.dns_points_here == false)\'',
     'Reads /var/cpanel/userdata/<username>/ directly — no WHM API or credentials required',
     'SSL cert data comes from /var/cpanel/ssl/apache_tls/ (disk-based, not live connection)',
     "acl-check validates nobody can read each docroot — required for Let's Encrypt / AutoSSL",
