@@ -59,6 +59,12 @@ class I003(BaseRule):
     category = RulePrefix.I
     severity = Severity.HIGH
     message = "Architectural layer violation"
+    # extract_python_imports() only understands Python's tree-sitter import node
+    # kinds (BACK-432) — on any other language it silently finds zero imports
+    # (safe, but the inherited default file_patterns=['*'] falsely advertised
+    # universal support and made the rule run its full config-load + parse path
+    # on every non-Python file for no reason).
+    file_patterns = ['.py']
 
     def check(
         self,

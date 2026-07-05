@@ -32,6 +32,7 @@ from reveal.rules.duplicates.D001 import D001
 from reveal.rules.duplicates.D002 import D002
 from reveal.rules.errors.E501 import E501
 from reveal.rules.imports.I002 import I002
+from reveal.rules.imports.I003 import I003
 from reveal.rules.imports.I005 import I005
 from reveal.rules.maintainability.M101 import M101
 from reveal.rules.maintainability.M501 import M501
@@ -465,6 +466,44 @@ class TestM101FileTooLargeNonPython(_TempDirMixin, unittest.TestCase):
         source = 'package main\n\nfunc main() {}\n'
         path = self._write('small.go', source)
         self.assertEqual(M101().check(str(path), None, source), [])
+
+
+class TestI003ArchitecturalLayerNonPython(_TempDirMixin, unittest.TestCase):
+    """I003 inherited BaseRule's default file_patterns=['*'] (universal) but its
+    check() unconditionally calls extract_python_imports(), which only recognizes
+    Python's tree-sitter import node kinds — on any other language it silently
+    finds zero imports (no crash, no false positive, just quietly non-functional).
+    Same silent-universal-scope class as BACK-461/M501: the rule ran its full
+    config-load + parse path on every non-Python file for a result that could
+    never be non-empty. Fixed by declaring file_patterns=['.py'] so the engine's
+    matches_target() (which BOTH BACK-432's test bar and real `--check` runs go
+    through) stops routing non-Python files to it at all; check() itself is left
+    unchanged as a defense-in-depth no-op for any direct caller that bypasses
+    matches_target (mirrors the V-rule guard precedent from BACK-468)."""
+
+    def test_matches_target_excludes_non_python(self):
+        self.assertFalse(I003.matches_target('service.go'))
+        self.assertFalse(I003.matches_target('service.rs'))
+        self.assertTrue(I003.matches_target('service.py'))
+
+    def test_direct_check_on_non_python_file_is_a_safe_noop(self):
+        """A caller that bypasses matches_target (e.g. an explicit --select I003
+        run, or the old pre-fix behavior) must still not crash or false-positive
+        on a non-Python file, even with a real violating-shaped layer config."""
+        config = (
+            'architecture:\n'
+            '  layers:\n'
+            '    - name: "services"\n'
+            '      paths: ["services/"]\n'
+            '      allow_imports: ["models/"]\n'
+            '      deny_imports: ["api/"]\n'
+        )
+        (self.temp_dir / '.reveal.yaml').write_text(config)
+        (self.temp_dir / 'services').mkdir()
+        source = 'package services\n\nimport "myapp/api"\n\nfunc GetUser() {}\n'
+        path = self._write('services/user_service.go', source)
+        detections = I003().check(str(path), None, source)
+        self.assertEqual(detections, [])
 
 
 if __name__ == '__main__':

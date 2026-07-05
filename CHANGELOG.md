@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.103.0] - 2026-07-01 (sessions cloudy-haze-0701, expanding-planet-0701, indigo-spectrum-0701, obsidian-paint-0702, yewicama-0703, pulse-lens-0703, mamukuko-0703, mysterious-probe-0703, fated-sea-0703, intergalactic-nebula-0703, fohapa-0705)
 
+### Fixed
+- **I003 (architectural layer violations) silently never fired outside Python despite claiming universal scope (BACK-432 tranche 4)** — `check()` unconditionally calls `extract_python_imports()`, which only recognizes Python's tree-sitter import node kinds, so any non-Python file with a `.reveal.yaml` layer config silently produced zero detections no matter how it violated the config. Not a false-positive risk, but a dead capability claim and wasted work on every non-Python file. Fixed by declaring `file_patterns=['.py']` so the rule engine stops routing other languages to it.
+
 ### Added
 - **`recommended` built-in `--profile` (BACK-467)** — selects the 12 rules BACK-432 has confirmed correct on non-Python code (`I001`/`I002`/`I005` import health, `C901`/`C902`/`C905` complexity, `D001` duplicate functions, `M501` comment markers, `S001` secrets, `E501` line length, `U501` insecure URL, `M101` file size). A bare `--check` still runs the full ~75-rule set unchanged — no breaking change, no default switch — but a new non-Python adopter now has a documented, low-noise starting point instead of hitting rules (nginx-only, nginx-config-shaped nginx, Python-only-verified, etc.) that were never exercised outside reveal's own Python codebase. Precedent: Ruff/ESLint ship a small trusted default and gate the wider net behind explicit opt-in. Decision on changing the actual `--check` default remains open, tracked separately.
 
