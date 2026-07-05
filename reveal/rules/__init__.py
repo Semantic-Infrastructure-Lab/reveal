@@ -389,6 +389,7 @@ class RuleRegistry:
             if rule_class.category
             else 'unknown'
         )
+        from .coverage import derive_verified_languages
         return {
             'code': rule_class.code,
             'message': rule_class.message,
@@ -399,6 +400,7 @@ class RuleRegistry:
             'version': rule_class.version,
             'enabled': rule_class.enabled,
             'internal': rule_class.internal,
+            'verified_languages': derive_verified_languages(rule_class),
         }
 
     @classmethod

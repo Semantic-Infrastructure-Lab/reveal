@@ -291,9 +291,16 @@ def handle_rules_list(version: str, show_all: bool = False):
             patterns = rule.get('file_patterns', ['*'])
             if patterns and patterns != ['*']:
                 print(f"             Files: {', '.join(_normalize_patterns(patterns))}")
+            # Show correctness-verified languages/formats (BACK-466 part 1) so a
+            # user sees where a rule is trustworthy vs best-effort at a glance.
+            verified = rule.get('verified_languages') or []
+            if verified:
+                print(f"             Verified: {', '.join(verified)}")
         print()
 
     print(f"Total: {enabled_count} rules ({disabled_count} opt-in, enable via --select <code>)")
+    print("Verified = correctness-checked on these languages/formats (BACK-432 matrix); "
+          "rules still run beyond them as best-effort.")
     if not show_all:
         print("(reveal's internal self-check rules are hidden — pass --all to include them)")
     print("\nUsage: reveal <file> --check --select B,S --ignore E501")
@@ -342,6 +349,12 @@ def handle_explain_rule(rule_code: str):
     print(f"File Patterns: {', '.join(rule.file_patterns)}")
     if rule.uri_patterns:
         print(f"URI Patterns: {', '.join(rule.uri_patterns)}")
+    from ...rules.coverage import derive_verified_languages
+    # get_rule returns the rule *class* (not an instance), so pass it straight
+    # through — derive_* reads class attributes off whatever it's given.
+    verified = derive_verified_languages(rule)
+    if verified:
+        print(f"Verified on: {', '.join(verified)} (BACK-432 correctness matrix)")
     print(f"Version: {rule.version}")
     print(f"Enabled: {'Yes' if rule.enabled else 'No'}")
 

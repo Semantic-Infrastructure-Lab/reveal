@@ -236,6 +236,11 @@ class BaseRule(ABC):
     # True for rules that only ever apply to reveal's own source (reveal:// self-check),
     # never to an external user's codebase. Excluded from default --rules listings/counts.
     internal: bool = False
+    # Optional: languages/formats this rule is *correctness*-verified against
+    # (BACK-466 part 1). Leave None to derive it from file_patterns + the tier-1
+    # conformance set (see rules/coverage.py) — the default, non-drifting path.
+    # Set an explicit list only for a genuine exception the derivation gets wrong.
+    verified_languages: Optional[List[str]] = None
     # Optional: thresholds exposed via --explain (key → default value)
     # e.g. {"max_lines": 15, "threshold": 10}
     thresholds: Dict[str, Any] = {}
