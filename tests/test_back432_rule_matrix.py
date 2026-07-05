@@ -25,19 +25,37 @@ import unittest
 from pathlib import Path
 
 from reveal.registry import get_analyzer
+from reveal.rules.bugs.B001 import B001
+from reveal.rules.bugs.B002 import B002
+from reveal.rules.bugs.B003 import B003
+from reveal.rules.bugs.B004 import B004
+from reveal.rules.bugs.B005 import B005
+from reveal.rules.bugs.B006 import B006
 from reveal.rules.complexity.C901 import C901
 from reveal.rules.complexity.C902 import C902
 from reveal.rules.complexity.C905 import C905
 from reveal.rules.duplicates.D001 import D001
 from reveal.rules.duplicates.D002 import D002
+from reveal.rules.duplicates.D005 import D005
 from reveal.rules.errors.E501 import E501
 from reveal.rules.imports.I002 import I002
 from reveal.rules.imports.I003 import I003
+from reveal.rules.imports.I004 import I004
 from reveal.rules.imports.I005 import I005
+from reveal.rules.imports.I006 import I006
 from reveal.rules.maintainability.M101 import M101
+from reveal.rules.maintainability.M102 import M102
+from reveal.rules.maintainability.M103 import M103
+from reveal.rules.maintainability.M104 import M104
+from reveal.rules.maintainability.M105 import M105
 from reveal.rules.maintainability.M501 import M501
+from reveal.rules.refactoring.R913 import R913
 from reveal.rules.security.S001 import S001
+from reveal.rules.types.T004 import T004
+from reveal.rules.types.T005 import T005
+from reveal.rules.types.T006 import T006
 from reveal.rules.urls.U501 import U501
+from reveal.rules.validation.V009 import V009
 
 
 class _TempDirMixin:
@@ -504,6 +522,149 @@ class TestI003ArchitecturalLayerNonPython(_TempDirMixin, unittest.TestCase):
         path = self._write('services/user_service.go', source)
         detections = I003().check(str(path), None, source)
         self.assertEqual(detections, [])
+
+
+class TestPythonOnlyByDesignRulesHonestlySkipNonPython(_TempDirMixin, unittest.TestCase):
+    """BACK-432 tranche 5, "Python-only by design" applicability class (per
+    internal-docs/planning/POPULAR_LANGUAGE_VALIDATION_STRATEGY_2026-07-03.md's
+    validation-style table: "Assert non-Python files are skipped honestly").
+
+    Unlike I003/BACK-461/M501 (rules that claimed universal file_patterns but
+    only worked on Python), these rules already declare a narrow .py-scoped
+    file_patterns — so the silently-dead-universal-claim bug class does not
+    apply. This spot-check instead confirms the two things that bug class
+    could still hide in: (1) matches_target() actually excludes non-Python
+    files rather than the declared pattern being aspirational/unused, and
+    (2) a direct check() call that bypasses matches_target (an explicit
+    --select run, or a future refactor that forgets the guard) is a safe
+    no-op on real non-Python source rather than crashing on an assumption
+    that only holds for Python's tree-sitter/AST shape.
+
+    M103 (`__init__.py`) and M105 (`reveal/cli/handlers_*.py`) use non-suffix
+    file_patterns and are covered separately below, alongside a real bug this
+    tranche found in M105's glob pattern.
+    """
+
+    PYTHON_ONLY_RULES = [
+        B001, B002, B003, B004, B005, B006,
+        D005, I004, I006,
+        M102, M104,
+        R913,
+        T004, T005, T006,
+    ]
+
+    GO_SOURCE = (
+        'package main\n\n'
+        'import "fmt"\n\n'
+        'func GetUser() {\n'
+        '\tif true {\n'
+        '\t\tfmt.Println("hi")\n'
+        '\t}\n'
+        '}\n'
+    )
+
+    def test_matches_target_excludes_non_python(self):
+        for rule in self.PYTHON_ONLY_RULES:
+            with self.subTest(rule=rule.__name__):
+                self.assertFalse(rule.matches_target('service.go'))
+                self.assertTrue(rule.matches_target('service.py'))
+
+    def test_direct_check_on_non_python_file_is_a_safe_noop(self):
+        path = self._write('service.go', self.GO_SOURCE)
+        for rule in self.PYTHON_ONLY_RULES:
+            with self.subTest(rule=rule.__name__):
+                detections = rule().check(str(path), None, self.GO_SOURCE)
+                self.assertEqual(detections, [])
+
+
+class TestGlobFilePatternFixAlsoRestoresV009(unittest.TestCase):
+    """The BaseRule.matches_target() glob fix (added for M105 below) also
+    silently restored V009 (file_patterns = ['*.md']), which had the exact
+    same bug: '*.md' matched neither the bare-suffix branch ('.md' != '*.md')
+    nor the exact-name branch, so V009 was equally 100% dead in any real
+    `reveal check` run before this fix. No V009-specific logic changed —
+    this only confirms the generic base.py fix also covers it."""
+
+    def test_matches_target_glob_pattern(self):
+        self.assertTrue(V009.matches_target('doc.md'))
+        self.assertTrue(V009.matches_target('docs/readme.md'))
+        self.assertFalse(V009.matches_target('doc.py'))
+
+
+class TestM103ExactNameFilePatternNonPython(_TempDirMixin, unittest.TestCase):
+    """M103 uses an exact-name file_patterns = ['__init__.py'] (not a suffix,
+    not a glob) — confirmed already correctly handled by BaseRule's existing
+    exact-name branch, no bug found."""
+
+    def test_matches_target_exact_name(self):
+        self.assertTrue(M103.matches_target('__init__.py'))
+        self.assertTrue(M103.matches_target('reveal/rules/__init__.py'))
+        self.assertFalse(M103.matches_target('service.py'))
+        self.assertFalse(M103.matches_target('service.go'))
+
+
+class TestM105GlobFilePatternNonPython(_TempDirMixin, unittest.TestCase):
+    """BACK-432 tranche 5 found a real bug: M105 declared file_patterns =
+    ['reveal/cli/handlers_*.py'] (a glob), but BaseRule.matches_target() only
+    ever supported exact-suffix and exact-full-name matching — no glob
+    support at all. So matches_target() returned False for every possible
+    input, meaning M105 could never be routed to any file by the real engine
+    (a full default `reveal check` run, or `--select M105`): 100% silently
+    dead since the rule was written, a different flavor of the same
+    silent-scope-mismatch class as I003/BACK-461/M501, discovered by the same
+    "Python-only by design" honesty sweep. Fixed generically in
+    BaseRule.matches_target() (reveal/rules/base.py) by falling back to
+    Path.match() — which does right-anchored, per-path-component glob
+    matching — for any pattern containing '*'.
+
+    Unblocking the rule then surfaced a second, real bug: M105's own
+    detection logic only ever searched reveal/main.py for the handler's
+    import+call, but reveal/main.py now lazily delegates whole subcommands to
+    reveal/cli/commands/*.py modules (see main.py's COMMAND_MODULES-style
+    dispatch table) — so a handler wired correctly through a delegated
+    command module (e.g. handle_scaffold_adapter via
+    reveal/cli/commands/scaffold.py) produced a false "not imported in
+    main.py" positive the instant the rule started actually running. Fixed by
+    having check() also search reveal/cli/commands/*.py for the wiring, and
+    widening _is_imported()'s regexes to accept the absolute `from reveal.cli
+    import ...` form those modules use (main.py itself uses the relative
+    `from .cli import ...` form)."""
+
+    def test_matches_target_glob_pattern(self):
+        self.assertTrue(M105.matches_target('reveal/cli/handlers_scaffold.py'))
+        self.assertTrue(M105.matches_target('/abs/path/reveal/cli/handlers_foo.py'))
+        self.assertFalse(M105.matches_target('reveal/cli/main.py'))
+        self.assertFalse(M105.matches_target('service.go'))
+
+    def test_handler_wired_via_delegated_command_module_not_flagged(self):
+        """Regression test for the false positive this tranche found on the
+        real reveal/cli/handlers_scaffold.py + reveal/cli/commands/scaffold.py
+        pair: a handler imported/called only in a delegated command module,
+        never named in main.py, must not be flagged."""
+        (self.temp_dir / 'reveal' / 'cli' / 'commands').mkdir(parents=True)
+        (self.temp_dir / 'reveal' / 'main.py').write_text(
+            "from .cli.commands import scaffold\n"
+        )
+        (self.temp_dir / 'reveal' / 'cli' / 'commands' / 'scaffold.py').write_text(
+            "from reveal.cli import handle_scaffold_adapter\n\n"
+            "def run_scaffold(args):\n"
+            "    handle_scaffold_adapter(args.name, args.uri, args.force)\n"
+        )
+        handler_path = self.temp_dir / 'reveal' / 'cli' / 'handlers_scaffold.py'
+        source = "def handle_scaffold_adapter(name, uri, force=False):\n    pass\n"
+        handler_path.write_text(source)
+        detections = M105().check(str(handler_path), None, source)
+        self.assertEqual(detections, [])
+
+    def test_handler_missing_from_all_wiring_sources_still_flagged(self):
+        (self.temp_dir / 'reveal' / 'cli' / 'commands').mkdir(parents=True)
+        (self.temp_dir / 'reveal' / 'main.py').write_text("# no wiring here\n")
+        handler_path = self.temp_dir / 'reveal' / 'cli' / 'handlers_orphan.py'
+        source = "def handle_orphan_thing(name):\n    pass\n"
+        handler_path.write_text(source)
+        detections = M105().check(str(handler_path), None, source)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('handle_orphan_thing', detections[0].message)
 
 
 if __name__ == '__main__':

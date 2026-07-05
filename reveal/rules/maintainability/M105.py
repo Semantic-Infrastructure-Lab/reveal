@@ -69,16 +69,25 @@ class M105(BaseRule):
         if not handlers:
             return detections
 
-        # Read main.py to check imports and calls
+        # Read main.py (and any delegated command modules) to check imports and calls
         main_py_path = self._find_main_py(file_path)
         if not main_py_path or not Path(main_py_path).exists():
             # Can't verify without main.py - skip check
             return detections
 
-        try:
-            main_content = Path(main_py_path).read_text()
-        except Exception as e:
-            logger.warning(f"Could not read main.py: {e}")
+        wiring_sources = [Path(main_py_path)]
+        commands_dir = Path(main_py_path).parent / 'cli' / 'commands'
+        if commands_dir.is_dir():
+            wiring_sources.extend(sorted(commands_dir.glob('*.py')))
+
+        main_content_parts = []
+        for source in wiring_sources:
+            try:
+                main_content_parts.append(source.read_text())
+            except Exception as e:
+                logger.warning(f"Could not read {source}: {e}")
+        main_content = '\n'.join(main_content_parts)
+        if not main_content:
             return detections
 
         # Check each handler
@@ -140,9 +149,11 @@ class M105(BaseRule):
         if f'import {handler}' in main_content:
             return True
 
-        # Check for from .cli import ... handler ...
+        # Check for from .cli import ... handler ... (relative, in main.py) or
+        # from reveal.cli import ... handler ... (absolute, in a delegated
+        # reveal/cli/commands/*.py module)
         import_pattern = re.compile(
-            r'from\s+\.cli\s+import\s+\([^)]*?' + re.escape(handler) + r'[^)]*?\)',
+            r'from\s+(?:\.cli|reveal\.cli)\s+import\s+\([^)]*?' + re.escape(handler) + r'[^)]*?\)',
             re.DOTALL
         )
         if import_pattern.search(main_content):
@@ -150,7 +161,7 @@ class M105(BaseRule):
 
         # Check for single-line from import
         single_import = re.compile(
-            r'from\s+\.cli\s+import\s+.*?' + re.escape(handler)
+            r'from\s+(?:\.cli|reveal\.cli)\s+import\s+.*?' + re.escape(handler)
         )
         if single_import.search(main_content):
             return True

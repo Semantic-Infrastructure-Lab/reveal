@@ -418,6 +418,10 @@ class BaseRule(ABC):
             # Support patterns like 'Dockerfile' (exact name match)
             if pattern == name:
                 return True
+            # Support glob patterns like 'reveal/cli/handlers_*.py'
+            # (right-anchored path-component match, e.g. M105)
+            if '*' in pattern and target_path.match(pattern):
+                return True
 
         return False
 
