@@ -21,6 +21,21 @@ BUILTIN_PROFILES: Dict[str, Dict] = {
         'select': ['B', 'C', 'I', 'M', 'S', 'T'],
         'ignore': [],
     },
+    'recommended': {
+        'description': (
+            'Rules with confirmed cross-language correctness (BACK-432) — the safe '
+            'starting point for a first check on a non-Python repo, unlike the full '
+            'rule set which includes rules only ever verified against Python'
+        ),
+        'select': [
+            'I001', 'I002', 'I005',  # import health: unused/circular/duplicate
+            'C901', 'C902', 'C905',  # complexity/length/nesting
+            'D001', 'M501',          # duplicate functions, unresolved comment markers
+            'S001',                  # hardcoded secrets
+            'E501', 'U501', 'M101',  # line length, insecure URL, file size
+        ],
+        'ignore': [],
+    },
 }
 
 

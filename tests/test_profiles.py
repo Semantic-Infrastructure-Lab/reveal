@@ -38,6 +38,24 @@ class TestResolveProfileBuiltin(unittest.TestCase):
         self.assertIn("ignore", result)
         self.assertGreater(len(result["select"]), 0, "ci-strict profile must select at least one rule/category")
 
+    def test_recommended_profile_exists(self):
+        result = resolve_profile("recommended")
+        self.assertIn("select", result)
+        self.assertIn("ignore", result)
+        self.assertGreater(len(result["select"]), 0, "recommended profile must select at least one rule/category")
+
+    def test_recommended_profile_only_selects_back432_verified_codes(self):
+        """Every code in 'recommended' must be a rule BACK-432 has confirmed correct
+        outside Python, and none may be an opt-in rule (opt-in status signals lower
+        confidence, which contradicts a 'safe default' profile)."""
+        verified = {
+            "I001", "I002", "I005", "C901", "C902", "C905",
+            "D001", "M501", "S001", "E501", "U501", "M101",
+        }
+        result = resolve_profile("recommended")
+        self.assertEqual(set(result["select"]), verified)
+        self.assertNotIn("D002", result["select"], "D002 is opt-in — must not appear in a safe-default profile")
+
     def test_unknown_profile_raises_key_error(self):
         with self.assertRaises(KeyError) as ctx:
             resolve_profile("nonexistent-profile")

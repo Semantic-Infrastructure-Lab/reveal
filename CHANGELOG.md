@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.103.0] - 2026-07-01 (sessions cloudy-haze-0701, expanding-planet-0701, indigo-spectrum-0701, obsidian-paint-0702, yewicama-0703, pulse-lens-0703, mamukuko-0703, mysterious-probe-0703, fated-sea-0703, intergalactic-nebula-0703, fohapa-0705)
 
+### Added
+- **`recommended` built-in `--profile` (BACK-467)** — selects the 12 rules BACK-432 has confirmed correct on non-Python code (`I001`/`I002`/`I005` import health, `C901`/`C902`/`C905` complexity, `D001` duplicate functions, `M501` comment markers, `S001` secrets, `E501` line length, `U501` insecure URL, `M101` file size). A bare `--check` still runs the full ~75-rule set unchanged — no breaking change, no default switch — but a new non-Python adopter now has a documented, low-noise starting point instead of hitting rules (nginx-only, nginx-config-shaped nginx, Python-only-verified, etc.) that were never exercised outside reveal's own Python codebase. Precedent: Ruff/ESLint ship a small trusted default and gate the wider net behind explicit opt-in. Decision on changing the actual `--check` default remains open, tracked separately.
+
 ### Changed
 - **`--rules`/`--adapters`/`--discover` now hide reveal's internal self-check entries by default (BACK-468)** — a new declared `internal: bool` flag on `BaseRule`/`ResourceAdapter` replaces V-rules' scattered hand-rolled `startswith('reveal://')` gates. 22 of 24 V-rules and the `reveal://` adapter are internal-only (they can never fire against an external user's codebase); the other 2 (V016, V023) genuinely validate a user's own custom adapter/analyzer files too, so they stay listed. Default `--rules` output drops from 77 to 55 rules and `--adapters` from 25 to 24 — pass `--all` to see everything, including reveal's own CI/dogfood self-checks. No change to `--check` behavior itself, only to what the introspection flags list/count.
 
