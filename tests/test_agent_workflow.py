@@ -101,6 +101,52 @@ def test_discover_is_valid_json_and_self_consistent():
         )
 
 
+def test_discover_entries_conform_to_the_discovery_api_shape():
+    """BACK-453 — `--discover` is a *different, coarser* contract from raw
+    `get_schema()` / `help://schemas/<a>`: agents consume the registry dump to
+    pick an adapter, then drill into a schema for detail. That dump layer had no
+    shape guard — only the raw-schema layer did (`test_..._names_itself` above).
+
+    Every `--discover` entry must expose the uniform discovery-API shape below,
+    and self-name via `scheme` (the dump's equivalent of a raw schema's
+    `adapter` key). A future adapter that drops `query_params`, renames `scheme`,
+    or degrades to a stub (the `help://` "Schema not available" bug, BACK-473)
+    should fail here rather than silently break agent discovery."""
+    result = _run("--discover", "--format=json")
+    _assert_sane(result, "--discover --format=json")
+    data = json.loads(result.stdout)
+
+    # The discovery-API entry contract. Distinct from a raw schema (which names
+    # itself `adapter` and carries `elements`/`operators`/`type`): the dump is
+    # normalized down to exactly these keys for every advertised adapter.
+    DISCOVERY_ENTRY_KEYS = {
+        "scheme", "description", "uri_syntax", "output_types", "query_params",
+        "cli_flags", "cli_only_flags", "supports_batch", "supports_advanced",
+        "example_queries", "notes",
+    }
+    for scheme, entry in data["adapters"].items():
+        assert set(entry.keys()) == DISCOVERY_ENTRY_KEYS, (
+            f"--discover entry {scheme!r} shape drifted: "
+            f"missing {DISCOVERY_ENTRY_KEYS - set(entry)}, "
+            f"extra {set(entry) - DISCOVERY_ENTRY_KEYS}"
+        )
+        assert entry["scheme"] == scheme, (
+            f"--discover entry keyed {scheme!r} self-names as {entry['scheme']!r}"
+        )
+        # Honesty: no advertised adapter may dump as a schema-less stub — even a
+        # meta-adapter like help:// describes itself via get_help() (BACK-473).
+        assert entry["description"] and entry["description"] != "Schema not available", (
+            f"--discover entry {scheme!r} has no honest description "
+            f"({entry['description']!r}) — reads as broken to a discovering agent"
+        )
+        # The dump's example URIs are the ones an agent copy-pastes first; they
+        # must be bare `scheme://...` URIs, not CLI lines or pipelines (BACK-471).
+        for uri in entry["example_queries"]:
+            assert isinstance(uri, str) and "://" in uri and not uri.startswith("reveal "), (
+                f"--discover entry {scheme!r} has a malformed example URI: {uri!r}"
+            )
+
+
 def test_mcp_server_docstrings_have_no_stale_adapter_count():
     """BACK-472 — the MCP tool metadata agents read to decide *how* to call a
     tool is a discovery surface too, same as --discover/help://schemas. A

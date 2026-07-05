@@ -397,6 +397,10 @@ def handle_discover(show_all: bool = False):
         entry: dict = {'scheme': scheme}
         try:
             schema = adapter_class.get_schema()  # type: ignore[attr-defined]
+        except (AttributeError, TypeError):
+            schema = None
+
+        if isinstance(schema, dict):
             entry['description'] = schema.get('description', '')
             entry['uri_syntax'] = schema.get('uri_syntax', f'{scheme}://<target>')
             entry['output_types'] = [
@@ -414,16 +418,32 @@ def handle_discover(show_all: bool = False):
             ]
             notes = schema.get('notes', [])
             entry['notes'] = notes if isinstance(notes, list) else [notes]
-        except (AttributeError, TypeError):
-            entry['description'] = 'Schema not available'
-            entry.setdefault('output_types', [])
-            entry.setdefault('query_params', [])
-            entry.setdefault('cli_flags', [])
-            entry.setdefault('cli_only_flags', {})
-            entry.setdefault('supports_batch', False)
-            entry.setdefault('supports_advanced', False)
-            entry.setdefault('example_queries', [])
-            entry.setdefault('notes', [])
+        else:
+            # Schema-less meta-adapter (e.g. help://): no machine-readable query
+            # schema by design, but it's still a real, advertised adapter — so
+            # describe it honestly from get_help() rather than dumping a
+            # "Schema not available" entry that reads as broken to a
+            # discovering agent (BACK-473). Falls through to empty defaults only
+            # if get_help() is also unavailable.
+            help_data = {}
+            try:
+                help_data = adapter_class.get_help() or {}  # type: ignore[attr-defined]
+            except Exception:
+                help_data = {}
+            entry['description'] = help_data.get('description', '') or 'Schema not available'
+            entry['uri_syntax'] = help_data.get('syntax', f'{scheme}://<target>')
+            entry['output_types'] = []
+            entry['query_params'] = []
+            entry['cli_flags'] = []
+            entry['cli_only_flags'] = {}
+            entry['supports_batch'] = False
+            entry['supports_advanced'] = False
+            entry['example_queries'] = [
+                ex.get('uri') for ex in help_data.get('examples', [])
+                if isinstance(ex, dict) and 'uri' in ex
+            ]
+            notes = help_data.get('notes', [])
+            entry['notes'] = notes if isinstance(notes, list) else [notes]
 
         adapters[scheme] = entry
 
