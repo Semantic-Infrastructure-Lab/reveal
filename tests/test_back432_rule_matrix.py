@@ -62,6 +62,7 @@ from reveal.rules.validation import V017 as v017_module
 from reveal.rules.validation.V017 import V017
 from reveal.rules.validation.V021 import V021
 from reveal.rules.validation.V022 import V022
+from reveal.rules.links.L001 import L001
 
 
 class _TempDirMixin:
@@ -916,6 +917,69 @@ class TestV022HandlersReorgDeadCheck(_TempDirMixin, unittest.TestCase):
             "agent_help_path = Path(__file__).parent.parent.parent / 'docs' / 'AGENT_HELP.md'\n"
         )
         detections = V022()._check_cli_handler_paths(self.temp_dir)
+        self.assertEqual(detections, [])
+
+
+class TestL001ReferenceStyleLinks(_TempDirMixin, unittest.TestCase):
+    """BACK-432 tranche 8: L001 (broken internal link) was blind to
+    reference-style links. The shared markdown analyzer's link extraction
+    (`_extract_links`) only surfaces inline `[text](url)` links — both the
+    tree-sitter path ('inline_link' node) and the regex fallback
+    (`\\[..\\]\\(..\\)`). Reference-style links (`[text][ref]` + a
+    `[ref]: url` definition) are valid CommonMark and appear in real docs
+    (117 files in the sample corpus), but a broken reference-style link
+    passed L001 silently — the M501-shape "handles only one dialect" class.
+    Fixed by extracting reference definitions directly from content in
+    L001 and validating them through the same broken-link logic. Confirmed
+    via git stash that the broken reference definition below produced zero
+    detections pre-fix."""
+
+    def _read(self, path: Path) -> str:
+        return path.read_text()
+
+    def test_broken_reference_definition_is_flagged(self):
+        # A real target so we can prove the valid ref stays silent.
+        self._write('target.md', '# Target\n')
+        doc = self._write(
+            'doc.md',
+            "# Doc\n\n"
+            "See [good][g] and [bad][b].\n\n"
+            "[g]: ./target.md\n"
+            "[b]: ./missing.md\n",
+        )
+        detections = L001().check(str(doc), None, self._read(doc))
+        broken_urls = [d.message for d in detections]
+        # The broken reference-style link must be flagged...
+        self.assertTrue(any('./missing.md' in m for m in broken_urls),
+                        f"expected ./missing.md flagged, got {broken_urls}")
+        # ...and the valid one must stay silent.
+        self.assertFalse(any('./target.md' in m for m in broken_urls),
+                         f"valid ref ./target.md should not be flagged, got {broken_urls}")
+
+    def test_reference_definition_in_code_fence_is_ignored(self):
+        # A `[x]: url` line inside a fenced code block is illustrative text,
+        # not a real reference definition — must not false-positive.
+        doc = self._write(
+            'fence.md',
+            "# Doc\n\n"
+            "```\n"
+            "[b]: ./missing.md\n"
+            "```\n",
+        )
+        detections = L001().check(str(doc), None, self._read(doc))
+        self.assertEqual(
+            [d for d in detections if './missing.md' in d.message], [],
+            "reference definition inside a code fence must not be flagged",
+        )
+
+    def test_external_reference_definition_is_ignored(self):
+        doc = self._write(
+            'ext.md',
+            "# Doc\n\n"
+            "See [site][s].\n\n"
+            "[s]: https://example.com/page\n",
+        )
+        detections = L001().check(str(doc), None, self._read(doc))
         self.assertEqual(detections, [])
 
 

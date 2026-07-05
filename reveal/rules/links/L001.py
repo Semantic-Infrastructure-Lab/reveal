@@ -66,6 +66,13 @@ class L001(BaseRule):
             anchors = self._headings_to_anchors(structure['headings'])
             _anchor_cache[source_path] = anchors
 
+        # The markdown analyzer's link extraction only sees inline `[text](url)`
+        # links.  Reference-style links (`[text][ref]` + a `[ref]: url`
+        # definition) are valid CommonMark and common in real docs, but would
+        # otherwise be invisible to this rule — a broken reference-style link
+        # would pass silently.  Validate the reference definitions directly.
+        links = list(links) + self._extract_reference_definitions(content)
+
         # Check each link for issues
         for link in links:
             text = link.get('text', '')
@@ -109,6 +116,35 @@ class L001(BaseRule):
             if anchor:
                 anchors.append(anchor)
         return anchors
+
+    # CommonMark link reference definition: up to 3 leading spaces, [label]:,
+    # then a destination (optionally <bracketed>).  Title is ignored.
+    _REF_DEF_RE = re.compile(r'^ {0,3}\[([^\]]+)\]:\s*(?:<([^>]*)>|(\S+))')
+    _FENCE_RE = re.compile(r'^\s*(```|~~~)')
+
+    def _extract_reference_definitions(self, content: str) -> List[Dict[str, Any]]:
+        """Extract reference-style link definitions (`[label]: url`) as link dicts.
+
+        The markdown analyzer only surfaces inline `[text](url)` links, so
+        reference-style definitions must be parsed here to be validated.
+        Lines inside fenced code blocks are skipped to avoid false positives.
+        """
+        refs: List[Dict[str, Any]] = []
+        in_fence = False
+        for i, line in enumerate(content.splitlines(), 1):
+            if self._FENCE_RE.match(line):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
+            m = self._REF_DEF_RE.match(line)
+            if not m:
+                continue
+            url = (m.group(2) if m.group(2) is not None else m.group(3)) or ''
+            if not url:
+                continue
+            refs.append({'text': m.group(1), 'url': url, 'line': i})
+        return refs
 
     def _extract_anchors_from_markdown(self, file_path: Path) -> List[str]:
         """Extract valid anchor IDs from markdown headings.
