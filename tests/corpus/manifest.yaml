@@ -71,6 +71,14 @@ corpora:
     sha: 4a1f515d1316b842e9388a3e59a23ea9edd8e52e
     license: MIT
     role: Large, well-known, pure JS library
+  - language: python
+    repo: https://github.com/home-assistant/core.git
+    sha: d6fe80d208b2dc96a34447fc749b31f4d249fdd2
+    license: Apache-2.0
+    role: Real product (home-automation platform), one of the largest idiomatic
+      Python codebases — async-heavy, dataclasses, dynamic platform loading; not
+      the CPython runtime/tooling (reveal itself is Python, so a distinct
+      application corpus is what surfaces new bugs)
   - language: rust
     repo: https://github.com/meilisearch/meilisearch.git
     sha: 17758dce3fcc21d8e2415176c29d1106e905de00
