@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-07-01 (indigo-spectrum-0701 — BACK-391 help://quick registry-driven, BACK-390 breadcrumb outline≠content lesson, BACK-389 agent-help progressive disclosure)
+> **Last updated**: 2026-07-05 (budepade-0705 — v0.104.0 release: multi-language conformance, rule-correctness matrix complete, help-system coherence)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,13 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.104.0 — Multi-language nav-layer conformance + rule-correctness matrix complete + help-system coherence
+- ✅ Nav-layer flags (`--varflow`/`--sideeffects`/`--catchmap`/`--fanout`/`--statewrites`/`--loopmap`, `Class.method`) closed every catalogued gap for Kotlin/Swift/Ruby/PHP, now regression-pinned in the conformance matrix (BACK-476/477/478).
+- ✅ Rule-correctness matrix complete: all 77 `--check` rules verified to fire *correctly* (not just avoid hanging) across languages — 12 real bugs found and fixed across 8 tranches (BACK-432).
+- ✅ Cross-language taxonomy fixes: Go/Rust struct extraction, PHP/Kotlin import detection, C++/PHP/TS/Rust `--scope` class/struct/impl detection, Kotlin/Swift assignment & fluent-call-chain classification (BACK-474/475/478).
+- ✅ Per-rule verified-language coverage now surfaced in `--rules`/`--explain`, so users see where each rule is trustworthy vs. best-effort before relying on it (BACK-466 part 1).
+- ✅ Full 52-file help-system content-accuracy sweep plus help-index coherence fixes — ~28 files had real drift corrected, 15 previously-invisible guides now indexed (BACK-479).
 
 ### v0.103.0 — Agent onboarding sprint complete (M1–M4)
 - ✅ `help://quick` command block now derived live from the adapter registry instead of hand-maintained, fixing drift risk and surfacing project-local plugin adapters for the first time (BACK-391, M4 — last open item of the onboarding strategy).
