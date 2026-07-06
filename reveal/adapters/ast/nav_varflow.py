@@ -82,42 +82,72 @@ _DECL_SHAPES: Dict[str, _DeclShape] = {
 }
 
 
+def _lua_assignment_sides(n: Any) -> tuple:
+    """Lua's assignment_statement exposes no fields at all — targets are a
+    positional 'variable_list' child (supports multi-assign, `local ok,
+    result = pcall(...)`), values an 'expression_list' (BACK-431 Issue G
+    smoke-tier audit)."""
+    left = right = None
+    for child in _children(n):
+        if child.kind() == 'variable_list':
+            left = child
+        elif child.kind() == 'expression_list':
+            right = child
+    return left, right
+
+
+def _positional_assignment_sides(n: Any) -> tuple:
+    """Kotlin/Swift reassignment (`x = expr`) parses as an `assignment` node
+    with POSITIONAL children (directly_assignable_expression, '=', <expr>)
+    and no 'left'/'right' fields — unlike Python/JS/TS/C# whose `assignment`/
+    `assignment_expression` expose the fields (BACK-476). The declaration
+    form (`var x = ...`) is handled separately via _DECL_SHAPES; this is only
+    the bare reassignment."""
+    named = [child for child in _children(n) if child.is_named()]
+    if len(named) >= 2:
+        return named[0], named[-1]
+    return None, None
+
+
+@dataclass(frozen=True)
+class _AssignShape:
+    """One grammar's fieldless assignment-node shape (BACK-478 move 1 step 3).
+
+    Mirrors _DeclShape's role for declarations. Most grammars (Python,
+    JS/TS, C#, Go) expose 'left'/'right' fields directly and never reach a
+    row here — resolve_assignment_sides only consults this table once the
+    field lookup comes back empty. Keyed by node *kind*, not language: Lua
+    and Go both parse to 'assignment_statement', but only Lua's is fieldless,
+    so Go silently never reaches its row's fallback.
+    """
+
+    missing_sides: Optional[Callable[[Any], tuple]] = None
+
+
+_ASSIGN_SHAPES: Dict[str, _AssignShape] = {
+    'assignment_statement': _AssignShape(missing_sides=_lua_assignment_sides),
+    'assignment': _AssignShape(missing_sides=_positional_assignment_sides),
+}
+
+
 def resolve_assignment_sides(n: Any, ntype: str) -> tuple:
     """Return (left, right) nodes for an assignment/augmented-assignment node.
 
-    Most grammars expose 'left'/'right' fields directly. Lua's
-    assignment_statement exposes no fields at all — targets are a positional
-    'variable_list' child (supports multi-assign, `local ok, result =
-    pcall(...)`), values an 'expression_list' (BACK-431 Issue G smoke-tier
-    audit: without this fallback, `result` fell through to generic recursion
-    and was mislabeled READ instead of WRITE, the same failure shape
-    Kotlin/Scala had).
+    Most grammars expose 'left'/'right' fields directly; the remaining
+    per-grammar fallback shapes (BACK-431 Issue G, BACK-476) live in
+    _ASSIGN_SHAPES, table-driven the same way _DECL_SHAPES covers
+    declarations (BACK-478 move 1 step 3) instead of an elif chain.
 
     Shared by VarFlowWalker._walk_assignment and nav_keys._walk (BACK-456) —
     previously nav_keys reimplemented only the fielded case and silently
-    lacked this Lua fallback.
+    lacked the Lua fallback.
     """
     left = n.child_by_field_name('left')
     right = n.child_by_field_name('right')
-    if left is None and right is None and ntype == 'assignment_statement':
-        for child in _children(n):
-            if child.kind() == 'variable_list':
-                left = child
-            elif child.kind() == 'expression_list':
-                right = child
-    elif left is None and right is None and ntype == 'assignment':
-        # Kotlin/Swift reassignment (`x = expr`) parses as an `assignment`
-        # node with POSITIONAL children (directly_assignable_expression, '=',
-        # <expr>) and no 'left'/'right' fields — unlike Python/JS/TS/C# whose
-        # `assignment`/`assignment_expression` expose the fields. Without this
-        # fallback both sides fell through to generic recursion and the target
-        # was mislabeled READ instead of WRITE (BACK-476), the same failure
-        # shape Lua's fieldless assignment_statement had above. The declaration
-        # form (`var x = ...`) was already correct via _DECL_SHAPES; only the
-        # bare reassignment was blind.
-        named = [child for child in _children(n) if child.is_named()]
-        if len(named) >= 2:
-            left, right = named[0], named[-1]
+    if left is None and right is None:
+        shape = _ASSIGN_SHAPES.get(ntype)
+        if shape and shape.missing_sides:
+            left, right = shape.missing_sides(n)
     return left, right
 
 

@@ -575,6 +575,66 @@ class TestVarFlow(unittest.TestCase):
         self.assertEqual(len(positions), len(set(positions)))
 
 
+class TestAssignShapesTable(unittest.TestCase):
+    """BACK-478 move 1 step 3: resolve_assignment_sides is now table-driven
+    via _ASSIGN_SHAPES instead of an elif chain. These pin the exact
+    fallback rows (Lua, Kotlin/Swift) so a future edit to the table can't
+    silently drop one — a pure refactor guard, not new bug coverage
+    (BACK-431/BACK-476 already cover the underlying behavior)."""
+
+    def test_lua_multi_assign_sides(self):
+        root, get_text = _parse_lang('lua', 'local ok, result = pcall(f)')
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(root, 'result', 1, 10, get_text)
+        writes = [e for e in events if e['kind'] == 'WRITE']
+        self.assertEqual(len(writes), 1)
+
+    def test_kotlin_bare_reassignment_sides(self):
+        root, get_text = _parse_lang('kotlin', '''
+        fun run() {
+            total = total + 1
+        }
+        ''')
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(root, 'total', 1, 10, get_text)
+        kinds_by_line = {}
+        for e in events:
+            kinds_by_line.setdefault(e['line'], set()).add(e['kind'])
+        self.assertIn('WRITE', kinds_by_line[2])
+        self.assertIn('READ', kinds_by_line[2])
+
+    def test_swift_bare_reassignment_sides(self):
+        root, get_text = _parse_lang('swift', '''
+        func run() {
+            total = total + 1
+        }
+        ''')
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(root, 'total', 1, 10, get_text)
+        kinds_by_line = {}
+        for e in events:
+            kinds_by_line.setdefault(e['line'], set()).add(e['kind'])
+        self.assertIn('WRITE', kinds_by_line[2])
+        self.assertIn('READ', kinds_by_line[2])
+
+    def test_go_assignment_statement_unaffected_by_lua_row(self):
+        # Go's assignment_statement shares a node-kind *name* with Lua's but
+        # has real 'left'/'right' fields — the shared _ASSIGN_SHAPES row must
+        # never be reached for Go, since its fallback assumes Lua's
+        # variable_list/expression_list shape.
+        root, get_text = _parse_lang('go', '''
+        package m
+        func f() {
+            x := 0
+            x = x + 1
+        }
+        ''')
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(root, 'x', 1, 10, get_text)
+        writes = [e for e in events if e['kind'] == 'WRITE']
+        self.assertGreaterEqual(len(writes), 2)
+
+
 # ---------------------------------------------------------------------------
 # range_calls tests
 # ---------------------------------------------------------------------------
