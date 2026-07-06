@@ -202,6 +202,32 @@ IMPORT_NODES: frozenset = frozenset({
     'import_header',              # Kotlin
 })
 
+# Data-flow family: Finding 2's second example. Member/scoped-access node
+# kinds where only the leftmost (base object) child is a real variable
+# reference — the rightmost child is an attribute/field/member name, not an
+# independent identifier. This was the *literal* re-declared-three-times
+# case Finding 2 named: nav_varflow.py had the fullest version (this one,
+# unchanged); nav_statewrites.py's independent copy was missing
+# 'scoped_identifier'/'dot_index_expression'/'method_index_expression';
+# nav_calls.py's independent copy was missing 'field_access' (Java),
+# 'navigation_expression' (Kotlin/Swift), and both Lua kinds — a real,
+# live bug (BACK-478 move 1 step 2): nav_calls.py's fluent-chain callee
+# collapse (BACK-415, `a().b().c()` -> callee ".c" not the whole chain
+# text) silently didn't fire for Kotlin/Swift/Lua chains, which rendered
+# each outer call's "callee" as the entire chain's source text instead.
+MEMBER_ACCESS_NODES: frozenset = frozenset({
+    'attribute',                  # Python: obj.attr
+    'member_access_expression',   # C#: obj.Member
+    'field_expression',           # C, Rust: obj.field
+    'field_access',               # Java: obj.field
+    'member_expression',          # JS/TS: obj.prop
+    'selector_expression',        # Go: obj.Field
+    'scoped_identifier',          # Rust: path::segment
+    'navigation_expression',      # Kotlin/Swift: obj.member / obj.method()
+    'dot_index_expression',       # Lua: obj.field
+    'method_index_expression',    # Lua: obj:method() (colon call syntax)
+})
+
 
 # ---------------------------------------------------------------------------
 # Composite sets — what each consumer actually queries against

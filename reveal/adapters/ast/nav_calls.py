@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 from ...core import node_children as _children
+from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_KINDS
 
-# Member/attribute access node kinds across the tree-sitter grammars reveal
-# supports (JS/TS member_expression, C#/Java member_access, C/C++/Go field &
-# selector, Python attribute, Rust scoped_identifier). A call whose callee is
-# one of these is a method/attribute call like `obj.method(...)`.
-_MEMBER_ACCESS_KINDS = frozenset({
-    'member_expression', 'member_access_expression', 'attribute',
-    'field_expression', 'selector_expression', 'scoped_identifier',
-})
+# _MEMBER_ACCESS_KINDS: promoted to node_taxonomy.MEMBER_ACCESS_NODES
+# (BACK-478 move 1 step 2). This used to be an independent copy missing
+# 'field_access' (Java), 'navigation_expression' (Kotlin/Swift), and Lua's
+# 'dot_index_expression'/'method_index_expression' — a live bug: the
+# fluent-chain callee collapse below (BACK-415, `a().b().c()` -> callee
+# ".c" not the whole chain text) silently never fired for those languages,
+# so `builder.setName(x).setValue(y).build()` rendered the outer call's
+# callee as the entire chain's source text instead of ".build".
 
 
 def range_calls(
@@ -312,7 +313,19 @@ def _trailing_property_name(member_node: Any, get_text: Callable) -> Optional[st
     named = [c for c in _children(member_node) if c.is_named()]
     if not named:
         return None
-    prop = get_text(named[-1]).strip()
+    trailing = named[-1]
+    # Kotlin/Swift's navigation_expression wraps the name in its own
+    # 'navigation_suffix' node (['.', simple_identifier]) rather than exposing
+    # the identifier as a direct child — using its text as-is doubles the
+    # leading dot the caller already prepends (BACK-478 move 1 step 2: found
+    # while migrating this file onto the shared MEMBER_ACCESS_NODES family,
+    # which made Kotlin/Swift chains reach this function for the first time).
+    if trailing.kind() == 'navigation_suffix':
+        suffix_named = [c for c in _children(trailing) if c.is_named()]
+        if not suffix_named:
+            return None
+        trailing = suffix_named[-1]
+    prop = get_text(trailing).strip()
     # Guard against a multi-line / call-bearing trailing node (shouldn't happen
     # for a plain property, but keep the output a clean single token).
     if not prop or '\n' in prop or '(' in prop:

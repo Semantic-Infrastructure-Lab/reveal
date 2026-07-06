@@ -28,25 +28,20 @@ from typing import Any, Callable, Dict, List, Optional
 from ...core import node_children as _children
 from .nav_effects import collect_effects
 from .nav_varflow import resolve_assignment_sides
+from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_NODES
 
 _ASSIGNMENT_NODES: frozenset = frozenset({
     'assignment', 'augmented_assignment', 'assignment_expression',
     'augmented_assignment_expression', 'assignment_statement', 'compound_assignment_expr',
 })
 
-_MEMBER_ACCESS_NODES: frozenset = frozenset({
-    'attribute', 'member_access_expression', 'field_expression',
-    'selector_expression', 'member_expression',
-    # Java's `this.x`/`obj.x` (BACK-439c conformance-matrix pass) — distinct
-    # kind from every other Tier 1 language's member-access shape.
-    'field_access',
-    # Kotlin's `obj.member` read shape (BACK-478 Finding 2) — matches
-    # nav_varflow.py's _MEMBER_ACCESS_KINDS. On the *read* side this is the
-    # node kind directly; on an assignment *target*, Kotlin/Swift wrap it
-    # (and the bare-identifier case) in 'directly_assignable_expression'
-    # instead — see the unwrap in _target_kind below.
-    'navigation_expression',
-})
+# _MEMBER_ACCESS_NODES: promoted to node_taxonomy.MEMBER_ACCESS_NODES
+# (BACK-478 move 1 step 2) — this used to be an independent copy, missing
+# 'scoped_identifier'/'dot_index_expression'/'method_index_expression'
+# relative to nav_varflow.py's fuller version. On an assignment *target*,
+# Kotlin/Swift wrap the real member-access shape (and the bare-identifier
+# case) in 'directly_assignable_expression' instead of exposing it
+# directly — see the unwrap in _target_kind below.
 
 _SUBSCRIPT_NODES: frozenset = frozenset({
     'subscript', 'subscript_expression', 'index_expression', 'element_access_expression',

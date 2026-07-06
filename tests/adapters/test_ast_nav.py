@@ -739,6 +739,37 @@ class TestChainedCallCallee(unittest.TestCase):
         self.assertIn('get_thing', callees)      # inner call captured
         self.assertIn('File.read', callees)      # plain receiver kept
 
+    def test_kotlin_fluent_chain_not_folded(self):
+        # BACK-478 move 1 step 2: nav_calls.py's local _MEMBER_ACCESS_KINDS
+        # never included Kotlin/Swift's 'navigation_expression', so the
+        # BACK-415 chain-collapse check above never fired for this shape —
+        # the outer call's callee rendered as the entire chain's source text
+        # instead of the intended '.build'.
+        callees = self._callees('kotlin', '''
+        fun run() {
+            builder.setName("x").setValue(1).build()
+        }
+        ''', 'run')
+        self.assertEqual(callees, ['.build', '.setValue', 'builder.setName'])
+
+    def test_swift_fluent_chain_not_folded(self):
+        callees = self._callees('swift', '''
+        func run() {
+            builder.setName("x").setValue(1).build()
+        }
+        ''', 'run')
+        self.assertEqual(callees, ['.build', '.setValue', 'builder.setName'])
+
+    def test_lua_fluent_chain_not_folded(self):
+        # Lua's colon-call ('method_index_expression', obj:method()) was
+        # also missing from the local set.
+        callees = self._callees('lua', '''
+        function run()
+            builder.setName("x").setValue(1):build()
+        end
+        ''', 'run')
+        self.assertEqual(callees, ['.build', '.setValue', 'builder.setName'])
+
 
 # ---------------------------------------------------------------------------
 # render_* tests

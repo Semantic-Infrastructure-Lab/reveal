@@ -8,6 +8,7 @@ from ...core import node_children as _children
 from .node_taxonomy import (
     FOR_NODES, FOR_EXPRESSION_NODES, FOR_EACH_NAME_VALUE_NODES,
     FOR_RANGE_LOOP_NODES, IF_WHILE_NODES, MATCH_EXPRESSION_NODES,
+    MEMBER_ACCESS_NODES as _MEMBER_ACCESS_KINDS,
 )
 
 
@@ -713,19 +714,11 @@ def render_var_flow(
 
 # Member/scoped-access node kinds where only the leftmost (base object) child
 # is a real variable reference — the rightmost child is an attribute/field/
-# member name, not an independent identifier. BACK-402.
-_MEMBER_ACCESS_KINDS = frozenset({
-    'attribute',                  # Python: obj.attr
-    'member_access_expression',   # C#: obj.Member
-    'field_expression',           # C, Rust: obj.field
-    'field_access',               # Java: obj.field (BACK-431 feature-breadth pass)
-    'member_expression',          # JS/TS: obj.prop
-    'selector_expression',        # Go: obj.Field
-    'scoped_identifier',          # Rust: path::segment
-    'navigation_expression',      # Kotlin: obj.member / obj.method() (BACK-431 feature-breadth pass)
-    'dot_index_expression',       # Lua: obj.field (BACK-431 feature-breadth pass)
-    'method_index_expression',    # Lua: obj:method() — colon call syntax (BACK-431 feature-breadth pass)
-})
+# member name, not an independent identifier. BACK-402. Promoted to
+# node_taxonomy.MEMBER_ACCESS_NODES (BACK-478 move 1 step 2) — this used to
+# be independently declared here, in nav_statewrites.py, and in nav_calls.py,
+# with all three drifting out of sync; imported above as _MEMBER_ACCESS_KINDS
+# to avoid renaming every call site in this file.
 
 _JSX_TAG_KINDS = frozenset({
     'jsx_opening_element', 'jsx_closing_element', 'jsx_self_closing_element',
