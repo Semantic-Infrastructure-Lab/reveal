@@ -928,7 +928,17 @@ class ImportsAdapter(ResourceAdapter):
         # Phase 1 — discover candidate code files (serial, cheap: no parsing).
         # Preserves the original walk semantics exactly (skip-dirs, hidden dirs,
         # supported-or-code extension filter).
+        #
+        # BACK-491: during this same walk, build a `basename -> [full paths]`
+        # index of *every* file under the tree (not just candidates — C/C++
+        # include targets such as .inc/.tcc headers are not code-extension
+        # files and must still be resolvable). Handed to include-resolving
+        # extractors below so `#include` edge resolution is a dict lookup
+        # instead of a full os.walk(root) per include. Built in walk order with
+        # the same skip-dir/hidden filter, so it's byte-identical to the walk it
+        # replaces in generic.py:resolve_import.
         candidates: List[Path] = []
+        file_index: Dict[str, List[Path]] = {}
         if target_path.is_file():
             ext = target_path.suffix.lower()
             if target_path.suffix in supported_exts or ext in code_exts:
@@ -938,6 +948,7 @@ class ImportsAdapter(ResourceAdapter):
                 dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
                 for fname in filenames:
                     fp = Path(root) / fname
+                    file_index.setdefault(fname, []).append(fp)
                     if fp.suffix in supported_exts or fp.suffix.lower() in code_exts:
                         candidates.append(fp)
 
@@ -976,6 +987,10 @@ class ImportsAdapter(ResourceAdapter):
             # imports resolve (e.g., `from db.session import X` from `api/routes.py`
             # finds `db/session.py` under the project root, not just under `api/`).
             extra_paths = [target_path] if target_path.is_dir() and target_path != base_path else []
+            # BACK-491: only C/C++ generic extractors resolve file-level include
+            # edges (spec.resolve_includes) and can use the prebuilt index; other
+            # languages' extractors keep their unchanged resolve_import signature.
+            resolves_includes = getattr(getattr(extractor, 'spec', None), 'resolve_includes', False)
             for stmt in imports:
                 # BACK-445: skip imports that can't cause a circular ImportError
                 # at startup — matching the I002 circular-import rule's definition
@@ -990,7 +1005,11 @@ class ImportsAdapter(ResourceAdapter):
                 if stmt.is_type_checking or stmt.is_in_function:
                     continue
 
-                resolved = extractor.resolve_import(stmt, base_path, search_paths=extra_paths)
+                if resolves_includes:
+                    resolved = extractor.resolve_import(
+                        stmt, base_path, search_paths=extra_paths, file_index=file_index)
+                else:
+                    resolved = extractor.resolve_import(stmt, base_path, search_paths=extra_paths)
                 # Skip self-references (e.g., logging.py importing stdlib logging
                 # should not create logging.py → logging.py dependency)
                 if resolved and resolved != file_path:

@@ -33,7 +33,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, FrozenSet, List, Optional, Set
+from typing import ClassVar, Dict, FrozenSet, List, Optional, Set
 
 from ...core import node_children as _children
 from ...defaults import SKIP_DIRECTORIES
@@ -271,12 +271,24 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         stmt: ImportStatement,
         base_path: Path,
         search_paths: Optional[List[Path]] = None,
+        file_index: Optional[Dict[str, List[Path]]] = None,
     ) -> Optional[Path]:
         """Resolve a quoted C/C++ ``#include`` to a real file (for the dep graph).
 
         System includes (``<stdio.h>``) and non-include languages return None —
         their file-level graph is not claimed. Quoted includes are looked up
         next to the including file first, then under each project search path.
+
+        ``file_index`` (BACK-491): an optional ``basename -> [full paths]`` map
+        of every file under the (single) search root, prebuilt once by the
+        caller (``ImportsAdapter._build_graph``) during its file-discovery walk.
+        When supplied, the multi-component fallback resolves by dict lookup
+        instead of a full ``os.walk(root)`` per include — O(includes × tree) →
+        O(tree + includes). The index must have been built from the same root
+        passed in ``search_paths`` with the same ``SKIP_DIRECTORIES``/hidden-dir
+        filtering (as ``_build_graph`` does), which makes the lookup
+        byte-identical to the walk it replaces. Callers that pass no index
+        (I002, call_graph, depends) fall back to the walk unchanged.
         """
         # System includes (is_relative=False) and non-include languages are not
         # resolved — their file-level graph is not claimed.
@@ -313,6 +325,18 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             # util.h"), not just its basename — a basename-only match collides
             # across vendored subtrees that happen to share a common header
             # name (util.h, config.h, types.h, ...).
+            #
+            # BACK-491: with a prebuilt index, iterate only the files sharing
+            # this include's basename (in walk order) instead of re-walking the
+            # whole tree. Because the index holds every file under `root` in the
+            # same walk order and with the same skip-dir filter, the first
+            # full-suffix match here is the same file the os.walk below would
+            # return — just without the O(tree) scan per include.
+            if file_index is not None:
+                for candidate in file_index.get(target_parts[-1], ()):
+                    if candidate.parts[-n:] == target_parts:
+                        return candidate.resolve()
+                continue
             for dirpath, dirnames, filenames in os.walk(root):
                 dirnames[:] = [
                     d for d in dirnames
