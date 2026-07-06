@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 from ...core import node_children as _children
 from ...core import node_prev_sibling as _prev_sibling
 from .node_taxonomy import (  # noqa: F401 — re-exported for nav.py/back-compat
@@ -12,6 +12,9 @@ from .node_taxonomy import (  # noqa: F401 — re-exported for nav.py/back-compa
     EXIT_NODES,
     GATE_NODES,
     KEYWORD_LABEL,
+    RUBY_BLOCK_NODES,
+    RUBY_ITERATOR_METHODS,
+    RUBY_LOOP_METHODS,
 )
 
 
@@ -19,9 +22,14 @@ from .node_taxonomy import (  # noqa: F401 — re-exported for nav.py/back-compa
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _node_label(node: Any, get_text: Callable) -> str:
-    """Return 'KEYWORD  condition_text' for a scope or exit node."""
-    keyword = KEYWORD_LABEL.get(node.kind(), node.kind().upper())
+def _node_label(node: Any, get_text: Callable, keyword: Optional[str] = None) -> str:
+    """Return 'KEYWORD  condition_text' for a scope or exit node.
+
+    ``keyword`` overrides the KEYWORD_LABEL lookup for nodes whose kind alone
+    doesn't name their role (Ruby block-iterator calls — see _make_item).
+    """
+    if keyword is None:
+        keyword = KEYWORD_LABEL.get(node.kind(), node.kind().upper())
     first_line = get_text(node).splitlines()[0].strip().rstrip(':').rstrip('{').strip()
     lower = first_line.lower()
     kw_lower = keyword.lower()
@@ -41,16 +49,51 @@ def _make_item(
     depth: int,
     get_text: Callable,
     is_exit: bool = False,
+    keyword: Optional[str] = None,
 ) -> Dict[str, Any]:
+    # keyword override: for Ruby block-iterator `call` nodes, the kind is
+    # 'call' (which KEYWORD_LABEL would surface as 'CALL'); the caller passes
+    # the semantic loop keyword (FOR/LOOP) it derived from the method name.
+    resolved = keyword or KEYWORD_LABEL.get(node.kind(), node.kind().upper())
     return {
         'type': node.kind(),
-        'keyword': KEYWORD_LABEL.get(node.kind(), node.kind().upper()),
-        'label': _node_label(node, get_text),
+        'keyword': resolved,
+        'label': _node_label(node, get_text, keyword=resolved),
         'line_start': node.start_position().row + 1,
         'line_end': node.end_position().row + 1,
         'depth': depth,
         'is_exit': is_exit,
     }
+
+
+def _block_loop_keyword(node: Any, get_text: Callable) -> Optional[str]:
+    """Ruby block-iterator recognizer (BACK-477).
+
+    A ``call`` node carrying a do/brace ``block`` whose called method is a
+    known iterator (`.each do`, `.map { }`, `3.times do`) reads as a loop
+    even though Ruby gives it no dedicated loop AST node; Kernel#`loop do`
+    is a genuine unconditional loop. Returns 'FOR' / 'LOOP' or None.
+
+    The ``block`` field requirement (kind in RUBY_BLOCK_NODES) is what keeps
+    this Ruby-scoped and false-positive-free: no other supported grammar's
+    `call` node exposes a `do_block`/`block` child, and the no-block
+    callsites of the same method names (`Model.find(id)`) carry no block so
+    never match — see the taxonomy comment on RUBY_ITERATOR_METHODS.
+    """
+    if node.kind() != 'call':
+        return None
+    block = node.child_by_field_name('block')
+    if block is None or block.kind() not in RUBY_BLOCK_NODES:
+        return None
+    method = node.child_by_field_name('method')
+    if method is None:
+        return None
+    name = get_text(method)
+    if name in RUBY_LOOP_METHODS:
+        return 'LOOP'
+    if name in RUBY_ITERATOR_METHODS:
+        return 'FOR'
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +136,10 @@ def _collect_outline(
             items.append(_make_item(child, depth, get_text))
             if depth < max_depth:
                 _collect_scope_interior(child, depth, items, get_text, max_depth)
+        elif (block_kw := _block_loop_keyword(child, get_text)) is not None:
+            items.append(_make_item(child, depth, get_text, keyword=block_kw))
+            if depth < max_depth:
+                _collect_scope_interior(child, depth, items, get_text, max_depth)
         elif ctype in EXIT_NODES:
             items.append(_make_item(child, depth, get_text, is_exit=True))
         else:
@@ -123,6 +170,10 @@ def _collect_scope_interior(
                 _collect_outline(child, scope_depth + 1, items, get_text, max_depth)
         elif ctype in SCOPE_NODES:
             items.append(_make_item(child, scope_depth + 1, get_text))
+            if scope_depth + 1 < max_depth:
+                _collect_scope_interior(child, scope_depth + 1, items, get_text, max_depth)
+        elif (block_kw := _block_loop_keyword(child, get_text)) is not None:
+            items.append(_make_item(child, scope_depth + 1, get_text, keyword=block_kw))
             if scope_depth + 1 < max_depth:
                 _collect_scope_interior(child, scope_depth + 1, items, get_text, max_depth)
         elif ctype in EXIT_NODES:

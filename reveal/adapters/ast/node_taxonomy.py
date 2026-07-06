@@ -61,6 +61,34 @@ FOR_RANGE_LOOP_NODES: frozenset = frozenset({'for_range_loop'})
 LOOP_NODES: frozenset = frozenset({'loop_expression'})
 DO_NODES: frozenset = frozenset({'do_statement'})
 
+# BACK-477: Ruby's per-element iteration idiom (`items.each do |x| ... end`,
+# `list.map { |x| ... }`, `3.times do ... end`) has NO dedicated loop AST
+# node at all — it parses to a generic `call` node with a `do_block`/`block`
+# child, structurally indistinguishable by kind from any other block-taking
+# call that is *not* a loop (`File.open(p) do |f|`, `mutex.synchronize do`,
+# `ActiveRecord::Base.transaction do`). The called method name is the only
+# signal that a block runs once per element, so --loopmap/--fanout recognize
+# these names specifically (see nav_outline._block_loop_keyword) rather than
+# treating every block-call as a loop — a semantic pattern, deliberately not
+# a node-kind add to LOOP_NODES/SCOPE_NODES (which would swallow every Ruby
+# block). The block requirement gates out the no-block callsites of the same
+# names (`Model.find(id)`, `arr.map` returning an Enumerator) — nothing
+# executes per-element inline there, so they are correctly not loops.
+RUBY_BLOCK_NODES: frozenset = frozenset({'do_block', 'block'})
+RUBY_ITERATOR_METHODS: frozenset = frozenset({
+    'each', 'each_with_index', 'each_with_object', 'each_pair', 'each_key',
+    'each_value', 'each_entry', 'each_index', 'each_slice', 'each_cons',
+    'each_line', 'each_char', 'each_byte',
+    'map', 'map!', 'flat_map', 'collect', 'collect!', 'collect_concat',
+    'select', 'select!', 'filter', 'filter!', 'filter_map',
+    'reject', 'reject!', 'find_all', 'detect', 'find',
+    'inject', 'reduce', 'group_by', 'partition', 'sort_by', 'min_by', 'max_by',
+    'times', 'upto', 'downto', 'step',
+    'find_each', 'find_in_batches', 'in_batches',  # ActiveRecord batching
+})
+# Ruby Kernel#loop — a genuine unconditional loop (labeled LOOP, not FOR).
+RUBY_LOOP_METHODS: frozenset = frozenset({'loop'})
+
 # BACK-477: Ruby's 'begin' is the literal tree-sitter kind of its
 # begin/rescue/ensure/end block. Kotlin's try/catch/finally block is a
 # `try_expression` node — deliberately NOT added here: Rust's `?` operator

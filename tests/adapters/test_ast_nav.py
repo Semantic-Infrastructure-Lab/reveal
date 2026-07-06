@@ -1095,6 +1095,78 @@ class TestLoopMap(unittest.TestCase):
         self.assertEqual(len(loops), 1)
         self.assertEqual(loops[0]['keyword'], 'FOR')
 
+    def test_ruby_each_block_is_a_loop(self):
+        # BACK-477: Ruby's `.each do |x| ... end` has NO dedicated loop AST
+        # node — it parses to a generic `call` wrapping a `do_block`, so
+        # --loopmap/--fanout silently found nothing. Recognized now by the
+        # called method name (`each`) plus the block child.
+        root, get_text = _parse_lang('ruby', '''
+        def run(items)
+          items.each do |item|
+            cache.set(item)
+          end
+        end
+        ''')
+        from reveal.adapters.ast.nav import collect_loops
+        loops = collect_loops(root, 1, 10, get_text)
+        self.assertEqual(len(loops), 1)
+        self.assertEqual(loops[0]['keyword'], 'FOR')
+        self.assertIn('items.each', loops[0]['label'])
+
+    def test_ruby_brace_block_and_times_are_loops(self):
+        # Brace-delimited blocks (`.map { }`) parse to `block` not `do_block`;
+        # integer iteration (`3.times do`) is the same idiom on a non-collection
+        # receiver — both must be recognized.
+        root, get_text = _parse_lang('ruby', '''
+        def a(items)
+          items.map { |x| db.query(x) }
+          3.times do |i|
+            log.info(i)
+          end
+        end
+        ''')
+        from reveal.adapters.ast.nav import collect_loops
+        loops = collect_loops(root, 1, 20, get_text)
+        self.assertEqual(len(loops), 2, loops)
+        self.assertTrue(all(l['keyword'] == 'FOR' for l in loops), loops)
+        labels = ' '.join(l['label'] for l in loops)
+        self.assertIn('items.map', labels)
+        self.assertIn('3.times', labels)
+
+    def test_ruby_kernel_loop_is_a_loop(self):
+        # Ruby's Kernel#loop (`loop do ... end`) is a genuine unconditional
+        # loop — labeled LOOP, not FOR.
+        root, get_text = _parse_lang('ruby', '''
+        def poll
+          loop do
+            http.get("/status")
+          end
+        end
+        ''')
+        from reveal.adapters.ast.nav import collect_loops
+        loops = collect_loops(root, 1, 10, get_text)
+        self.assertEqual(len(loops), 1)
+        self.assertEqual(loops[0]['keyword'], 'LOOP')
+
+    def test_ruby_non_iterator_block_is_not_a_loop(self):
+        # `File.open(p) do |f|` and `mutex.synchronize do` are block-taking
+        # calls but NOT loops — the block runs once, not per-element. The
+        # method-name allow-list is what distinguishes them: neither `open`
+        # nor `synchronize` is an iterator, so no loop is reported.
+        root, get_text = _parse_lang('ruby', '''
+        def write_it(path)
+          File.open(path) do |f|
+            f.write("hi")
+          end
+          mutex.synchronize do
+            do_work
+          end
+        end
+        ''')
+        from reveal.adapters.ast.nav import collect_loops
+        loops = collect_loops(root, 1, 12, get_text)
+        self.assertEqual(loops, [], f'expected no loops, got {loops}')
+
 
 class TestFanout(unittest.TestCase):
     """collect_fanout(): each loop paired with its classified side effects."""
@@ -1114,6 +1186,23 @@ class TestFanout(unittest.TestCase):
         kinds = {e['kind'] for e in loops[0]['effects']}
         self.assertIn('db', kinds)
         self.assertIn('http', kinds)
+
+    def test_ruby_each_block_fanout_pairs_effect(self):
+        # BACK-477: with the loop now recognized, --fanout must pair the
+        # `.each do` block with the cache effect inside it (the whole point
+        # of --fanout — per-item side effects for N+1 review).
+        root, get_text = _parse_lang('ruby', '''
+        def run(items)
+          items.each do |item|
+            cache.set(item)
+          end
+        end
+        ''')
+        from reveal.adapters.ast.nav import collect_fanout
+        loops = collect_fanout(root, 1, 10, get_text, language='ruby')
+        self.assertEqual(len(loops), 1)
+        kinds = {e['kind'] for e in loops[0]['effects']}
+        self.assertIn('cache', kinds)
 
     def test_render_fanout_no_loops(self):
         from reveal.adapters.ast.nav import render_fanout
