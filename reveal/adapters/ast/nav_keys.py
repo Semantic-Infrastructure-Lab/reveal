@@ -40,6 +40,7 @@ shapes) rather than redeclaring the same grammar-shape literals a second time.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 from ...core import node_children as _children
@@ -150,101 +151,134 @@ def _first_call_arg(call_node: Any, get_text: Callable) -> Optional[Any]:
     return None
 
 
-def _walk(
-    node: Any,
-    context: str,
-    var_name: str,
-    from_line: int,
-    to_line: int,
-    get_text: Callable,
-    results: List[Dict[str, Any]],
-) -> None:
-    start = node.start_position().row + 1
-    end = node.end_position().row + 1
-    if end < from_line or start > to_line:
-        return
-    ntype = node.kind()
+@dataclass
+class _KeysWalker:
+    """Recursive dynamic-key-access walker with READ/WRITE/COND context
+    propagation, mirroring VarFlowWalker's shape (nav_varflow.py): a `walk()`
+    entry point dispatching to independently-testable branch handlers, each
+    returning True when it fully consumed the node (caller returns without
+    descending further)."""
 
-    if ntype in _ASSIGNMENT_NODES:
+    var_name: str
+    from_line: int
+    to_line: int
+    get_text: Callable
+    results: List[Dict[str, Any]] = field(default_factory=list)
+
+    def walk(self, node: Any, context: str) -> None:
+        start = node.start_position().row + 1
+        end = node.end_position().row + 1
+        if end < self.from_line or start > self.to_line:
+            return
+        ntype = node.kind()
+
+        if ntype in _ASSIGNMENT_NODES:
+            self._walk_assignment(node, ntype, context)
+            return
+
+        cond = self._condition_of(node, ntype)
+        if cond is not None:
+            self._walk_condition(node, cond, context)
+            return
+
+        if ntype in _CALL_NODES and self._walk_call(node, start, context):
+            return
+        if ntype in _METHOD_CALL_NODES and self._walk_method_call(node, start, context):
+            return
+        if ntype in _SUBSCRIPT_NODES and self._walk_subscript(node, start, context):
+            return
+        if ntype in _MEMBER_ACCESS_NODES and self._walk_member_access(node, start, context):
+            return
+
+        for child in _children(node):
+            self.walk(child, context)
+
+    def _walk_assignment(self, node: Any, ntype: str, context: str) -> None:
         left, right = resolve_assignment_sides(node, ntype)
         processed = set()
         if left is not None:
             processed.add((left.start_byte(), left.end_byte()))
-            _walk(left, 'WRITE', var_name, from_line, to_line, get_text, results)
+            self.walk(left, 'WRITE')
         if right is not None:
             processed.add((right.start_byte(), right.end_byte()))
-            _walk(right, 'READ', var_name, from_line, to_line, get_text, results)
+            self.walk(right, 'READ')
         for child in _children(node):
             if (child.start_byte(), child.end_byte()) not in processed:
-                _walk(child, context, var_name, from_line, to_line, get_text, results)
-        return
+                self.walk(child, context)
 
-    cond = node.child_by_field_name('condition')
-    if cond is None and ntype == 'conditional_expression':
-        # Python's ternary (`a if cond else b`) is fieldless — the condition
-        # is the middle named child.
-        named = [c for c in _children(node) if c.is_named()]
-        if len(named) == 3:
-            cond = named[1]
-    if cond is not None:
-        _walk(cond, 'COND', var_name, from_line, to_line, get_text, results)
+    def _condition_of(self, node: Any, ntype: str) -> Optional[Any]:
+        cond = node.child_by_field_name('condition')
+        if cond is not None:
+            return cond
+        if ntype == 'conditional_expression':
+            # Python's ternary (`a if cond else b`) is fieldless — the
+            # condition is the middle named child.
+            named = [c for c in _children(node) if c.is_named()]
+            if len(named) == 3:
+                return named[1]
+        return None
+
+    def _walk_condition(self, node: Any, cond: Any, context: str) -> None:
+        self.walk(cond, 'COND')
         cond_span = (cond.start_byte(), cond.end_byte())
         for child in _children(node):
             if (child.start_byte(), child.end_byte()) != cond_span:
-                _walk(child, context, var_name, from_line, to_line, get_text, results)
-        return
+                self.walk(child, context)
 
-    if ntype in _CALL_NODES:
+    def _walk_call(self, node: Any, start: int, context: str) -> bool:
         func = node.child_by_field_name('function')
-        if func is not None and func.kind() in ('name', 'identifier'):
-            if get_text(func) in _ISSET_LIKE:
-                args = node.child_by_field_name('arguments')
-                if args is not None:
-                    for child in _children(args):
-                        if child.is_named():
-                            _walk(child, 'COND', var_name, from_line, to_line, get_text, results)
-                return
-        if func is not None and func.kind() in _MEMBER_ACCESS_NODES:
+        if func is None:
+            return False
+        if func.kind() in ('name', 'identifier') and self.get_text(func) in _ISSET_LIKE:
+            args = node.child_by_field_name('arguments')
+            if args is not None:
+                for child in _children(args):
+                    if child.is_named():
+                        self.walk(child, 'COND')
+            return True
+        if func.kind() in _MEMBER_ACCESS_NODES:
             obj, prop = _member_parts(func)
-            if obj is not None and prop is not None and get_text(prop) == 'get' and _base_matches(obj, var_name, get_text):
-                key_node = _first_call_arg(node, get_text)
-                if key_node is not None:
-                    results.append({
-                        'key': _clean_literal(get_text(key_node)), 'kind': context,
-                        'line': start, 'access': 'call',
-                    })
-                return
+            if (
+                obj is not None and prop is not None and self.get_text(prop) == 'get'
+                and _base_matches(obj, self.var_name, self.get_text)
+            ):
+                self._record_call_key(node, start, context)
+                return True
+        return False
 
-    if ntype in _METHOD_CALL_NODES:
+    def _walk_method_call(self, node: Any, start: int, context: str) -> bool:
         obj = node.child_by_field_name('object')
         name = node.child_by_field_name('name')
-        if (
+        if not (
             obj is not None and name is not None
-            and get_text(name) == 'get' and _base_matches(obj, var_name, get_text)
+            and self.get_text(name) == 'get' and _base_matches(obj, self.var_name, self.get_text)
         ):
-            key_node = _first_call_arg(node, get_text)
-            if key_node is not None:
-                results.append({
-                    'key': _clean_literal(get_text(key_node)), 'kind': context,
-                    'line': start, 'access': 'call',
-                })
-            return
+            return False
+        self._record_call_key(node, start, context)
+        return True
 
-    if ntype in _SUBSCRIPT_NODES:
+    def _record_call_key(self, node: Any, start: int, context: str) -> None:
+        key_node = _first_call_arg(node, self.get_text)
+        if key_node is not None:
+            self.results.append({
+                'key': _clean_literal(self.get_text(key_node)), 'kind': context,
+                'line': start, 'access': 'call',
+            })
+
+    def _walk_subscript(self, node: Any, start: int, context: str) -> bool:
         base, key_node = _subscript_parts(node)
-        if base is not None and _base_matches(base, var_name, get_text):
-            key = _clean_literal(get_text(key_node)) if key_node is not None else '?'
-            results.append({'key': key, 'kind': context, 'line': start, 'access': 'subscript'})
-            return
+        if base is None or not _base_matches(base, self.var_name, self.get_text):
+            return False
+        key = _clean_literal(self.get_text(key_node)) if key_node is not None else '?'
+        self.results.append({'key': key, 'kind': context, 'line': start, 'access': 'subscript'})
+        return True
 
-    if ntype in _MEMBER_ACCESS_NODES:
+    def _walk_member_access(self, node: Any, start: int, context: str) -> bool:
         obj, prop = _member_parts(node)
-        if obj is not None and prop is not None and _base_matches(obj, var_name, get_text):
-            results.append({'key': get_text(prop), 'kind': context, 'line': start, 'access': 'attribute'})
-            return
-
-    for child in _children(node):
-        _walk(child, context, var_name, from_line, to_line, get_text, results)
+        if obj is None or prop is None or not _base_matches(obj, self.var_name, self.get_text):
+            return False
+        self.results.append({'key': self.get_text(prop), 'kind': context, 'line': start, 'access': 'attribute'})
+        return True
 
 
 def collect_keys(
@@ -258,10 +292,10 @@ def collect_keys(
 
     Each result: {key, kind (READ/WRITE/COND), line, access (subscript/attribute/call)}.
     """
-    results: List[Dict[str, Any]] = []
-    _walk(func_node, 'READ', var_name, from_line, to_line, get_text, results)
-    results.sort(key=lambda r: r['line'])
-    return results
+    walker = _KeysWalker(var_name, from_line, to_line, get_text)
+    walker.walk(func_node, 'READ')
+    walker.results.sort(key=lambda r: r['line'])
+    return walker.results
 
 
 def render_keys(var_name: str, events: List[Dict[str, Any]], from_line: int, to_line: int) -> str:
