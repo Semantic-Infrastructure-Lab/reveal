@@ -483,6 +483,50 @@ class TestHierarchicalExtraction:
         finally:
             os.unlink(temp_path)
 
+    def test_hierarchical_ruby_instance_method(self):
+        """Ruby `class Foo ... def bar` — BACK-451/477: 'class' was missing
+        from PARENT_NODE_TYPES entirely, so Class.method always failed for
+        Ruby regardless of the child method's node kind."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.rb', delete=False) as f:
+            f.write('class Batch\n  def process(y)\n    y * 2\n  end\nend\n')
+            f.flush()
+            temp_path = f.name
+
+        try:
+            from reveal.registry import get_analyzer
+            analyzer_class = get_analyzer(temp_path)
+            analyzer = analyzer_class(temp_path)
+
+            result = _extract_hierarchical_element(analyzer, 'Batch.process')
+            assert result is not None
+            assert 'process' in result['name']
+            assert 'def process' in result['source']
+        finally:
+            os.unlink(temp_path)
+
+    def test_hierarchical_ruby_class_method(self):
+        """Ruby `def self.bar` parses to 'singleton_method', a distinct node
+        kind from instance methods' 'method' — BACK-451/477: neither was in
+        CHILD_NODE_TYPES, so `Batch.run`-style class methods (the common
+        factory/class-method idiom) were unreachable even after 'class' is
+        added to PARENT_NODE_TYPES."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.rb', delete=False) as f:
+            f.write('class Batch\n  def self.run(x)\n    x + 1\n  end\nend\n')
+            f.flush()
+            temp_path = f.name
+
+        try:
+            from reveal.registry import get_analyzer
+            analyzer_class = get_analyzer(temp_path)
+            analyzer = analyzer_class(temp_path)
+
+            result = _extract_hierarchical_element(analyzer, 'Batch.run')
+            assert result is not None
+            assert 'run' in result['name']
+            assert 'def self.run' in result['source']
+        finally:
+            os.unlink(temp_path)
+
 
 # ============================================================================
 # Task #5: Test line-based extraction (lines 330-361, 441-460)

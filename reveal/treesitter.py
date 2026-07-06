@@ -143,6 +143,12 @@ PARENT_NODE_TYPES = (
     'impl_item',              # Rust impl blocks
     'interface_declaration',
     'module',                 # Ruby module
+    'class',                  # Ruby class (BACK-451/477: was missing entirely,
+                               # so Class.method always failed for Ruby classes
+                               # regardless of CHILD_NODE_TYPES — verified via
+                               # direct tree-sitter inspection, `class Batch`
+                               # parses to kind 'class', already used elsewhere
+                               # in CLASS_NODE_TYPES but never added here)
     'anonymous_class',        # PHP anonymous class
 )
 
@@ -152,6 +158,8 @@ CHILD_NODE_TYPES = (
     'method_declaration', 'method_definition',
     'function_item',         # Rust
     'function_signature',    # Dart methods (wrapped in method_signature)
+    'method',                # Ruby instance method (`def foo`)
+    'singleton_method',      # Ruby class method (`def self.foo`) — BACK-451/477
 )
 
 # All element types for line-based extraction
