@@ -81,6 +81,39 @@ def node_children(node):
     return [node.child(i) for i in range(node.child_count())]
 
 
+def iter_tree(node):
+    """Yield `node` and every descendant in pre-order (document order).
+
+    Uses a `TreeCursor` (`node.walk()`), which traverses the subtree in the
+    native layer without materializing a Python child-list per node the way a
+    `node_children`-based stack walk does. Measured ~1.79x faster than the
+    equivalent `[node.child(i) ...]` stack walk on a real 250KB TypeScript
+    file (48,953 nodes), with an identical node set and order — see BACK-489
+    design doc §8.2/§8.3 (P2). Pre-order means the sequence of nodes matches a
+    `stack=[root]; pop; push reversed(children)` walk exactly, so callers that
+    bucket nodes by kind get byte-identical document-ordered lists.
+
+    Note: a cursor from `node.walk()` will not ascend above `node` itself
+    (`goto_parent()` returns False at the starting node), so this correctly
+    yields only `node`'s own subtree even when `node` is not the tree root.
+    """
+    cursor = node.walk()
+    reached_root = False
+    while not reached_root:
+        yield cursor.node()
+        if cursor.goto_first_child():
+            continue
+        if cursor.goto_next_sibling():
+            continue
+        retracing = True
+        while retracing:
+            if not cursor.goto_parent():
+                retracing = False
+                reached_root = True
+            elif cursor.goto_next_sibling():
+                retracing = False
+
+
 def node_prev_sibling(node):
     """Return the previous sibling of a tree-sitter 1.x node, or None.
 

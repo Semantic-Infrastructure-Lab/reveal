@@ -286,11 +286,13 @@ class TestIsUsageContext:
         node = _mock_ts_node(parent_result=None)
         assert e._is_usage_context(node) is True
 
-    def test_inside_import_statement_returns_false(self):
+    def test_default_import_binding_returns_false(self):
+        # `import Foo from 'x'` — Foo's direct parent is import_clause in the
+        # real tree-sitter-javascript grammar (verified against real parses;
+        # BACK-489 perf fix — no deeper ancestor walk needed).
         e = JavaScriptExtractor()
-        import_anc = _mock_ts_node(kind='import_statement', parent_result=None)
-        inner = _mock_ts_node(kind='something', parent_result=import_anc)
-        node = _mock_ts_node(parent_result=inner)
+        parent = _mock_ts_node(kind='import_clause', parent_result=None)
+        node = _mock_ts_node(parent_result=parent)
         assert e._is_usage_context(node) is False
 
     def test_function_declaration_returns_false(self):

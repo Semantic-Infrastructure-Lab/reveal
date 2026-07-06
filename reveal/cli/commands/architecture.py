@@ -9,7 +9,7 @@ import logging
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +65,11 @@ def run_architecture(args: Namespace) -> None:
     top = args.top
     no_imports = getattr(args, 'no_imports', False)
 
-    complex_fns = _run_complex_functions(path, top * 4)
-    imports_data = {} if no_imports else _run_imports_analysis(path)
+    if no_imports:
+        complex_fns = _run_complex_functions(path, top * 4)
+        imports_data: Dict[str, Any] = {}
+    else:
+        complex_fns, imports_data = _run_combined_analysis(path, top * 4)
 
     risks = _compute_risks(imports_data, complex_fns, path)
     next_commands = _build_next_commands(path, risks, imports_data)
@@ -105,34 +108,80 @@ def _run_imports_analysis(path: Path) -> Dict[str, Any]:
         from reveal.adapters.imports import ImportsAdapter
         adapter = ImportsAdapter(str(path))
         adapter._build_graph(path)
-
-        fan_in_data = adapter._format_fan_in()
-        entrypoints_data = adapter._format_entrypoints()
-        components_data = adapter._format_components()
-        circular_data = adapter._format_circular()
-
-        all_entries = fan_in_data.get('entries', [])
-        raw_eps = entrypoints_data.get('entries', [])
-        components = components_data.get('components', [])
-        cycle_groups = circular_data.get('cycles', [])
-
-        live_eps = [
-            e for e in raw_eps
-            if e.get('fan_out', 0) > 0
-            and not _is_test_file(e['file'])
-            and Path(e['file']).name != '__init__.py'
-        ]
-        core_abstractions = [e for e in all_entries if e.get('fan_in', 0) > 0]
-
-        return {
-            'entry_points': live_eps,
-            'core_abstractions': core_abstractions,
-            'components': components,
-            'circular_groups': cycle_groups,
-        }
+        return _format_imports_data(adapter, path)
     except Exception as exc:
         logger.warning("imports analysis failed for %s: %s", path, exc)
         return {}
+
+
+def _format_imports_data(adapter, path: Path) -> Dict[str, Any]:
+    fan_in_data = adapter._format_fan_in()
+    entrypoints_data = adapter._format_entrypoints()
+    components_data = adapter._format_components()
+    circular_data = adapter._format_circular()
+
+    all_entries = fan_in_data.get('entries', [])
+    raw_eps = entrypoints_data.get('entries', [])
+    components = components_data.get('components', [])
+    cycle_groups = circular_data.get('cycles', [])
+
+    live_eps = [
+        e for e in raw_eps
+        if e.get('fan_out', 0) > 0
+        and not _is_test_file(e['file'])
+        and Path(e['file']).name != '__init__.py'
+    ]
+    core_abstractions = [e for e in all_entries if e.get('fan_in', 0) > 0]
+
+    return {
+        'entry_points': live_eps,
+        'core_abstractions': core_abstractions,
+        'components': components,
+        'circular_groups': cycle_groups,
+    }
+
+
+def _run_combined_analysis(path: Path, limit: int) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Run imports + complexity analysis sharing one walk, one parse per file.
+
+    Running these as two independent full-repo walk+parse passes (the original
+    shape) double-parses every file on any repo bigger than the tree-sitter
+    parse cache (128 entries) — see BACK-489,
+    internal-docs/design/BACK489_ARCHITECTURE_PERF_FINDINGS_2026-07-06.md.
+    Piggybacking the AST/complexity collection onto the imports walk's
+    per-file callback keeps each file's parse-cache entry warm between the
+    two uses instead of it getting evicted by the rest of a large repo.
+    """
+    structures: List[Dict[str, Any]] = []
+
+    imports_data: Dict[str, Any] = {}
+    graph_built = False
+    try:
+        from reveal.adapters.imports import ImportsAdapter
+        adapter = ImportsAdapter(str(path))
+        # collect_structures=True runs per-file AST analysis in the same
+        # (parallelized) walk as import extraction — no second full-repo pass.
+        adapter._build_graph(path, collect_structures=True)
+        structures = adapter._structures
+        graph_built = True
+        imports_data = _format_imports_data(adapter, path)
+    except Exception as exc:
+        logger.warning("imports analysis failed for %s: %s", path, exc)
+
+    if not graph_built:
+        # The shared walk never ran, so no structures were collected either —
+        # fall back to complexity analysis's own independent walk.
+        return _run_complex_functions(path, limit), imports_data
+
+    try:
+        from reveal.adapters.ast import AstAdapter
+        data = AstAdapter(str(path), f'complexity>9&sort=-complexity&limit={limit}').get_structure(structures=structures)
+        complex_fns = data.get('results', data.get('elements', []))
+    except Exception as exc:
+        logger.warning("AST analysis failed for %s: %s", path, exc)
+        complex_fns = []
+
+    return complex_fns, imports_data
 
 
 def _compute_risks(

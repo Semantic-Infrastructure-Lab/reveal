@@ -16,6 +16,7 @@ from .treesitter_compat import (
     node_children,
     node_prev_sibling,
     node_next_sibling,
+    iter_tree,
 )
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     'node_children',
     'node_prev_sibling',
     'node_next_sibling',
+    'iter_tree',
 ]

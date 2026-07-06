@@ -19,6 +19,7 @@ from reveal.cli.commands.architecture import (
     _render_entry_points,
     _render_next_commands,
     _render_risks,
+    _run_combined_analysis,
     _run_complex_functions,
     _run_imports_analysis,
     create_architecture_parser,
@@ -434,9 +435,8 @@ class TestRunArchitecture(unittest.TestCase):
     def test_json_output(self):
         args = _args(path='.', format='json')
         mock_complex = [{'name': 'f', 'complexity': 25, 'file': '/tmp/a.py'}]
-        with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=mock_complex):
-            with patch('reveal.cli.commands.architecture._run_imports_analysis', return_value=_IMPORTS_DATA):
-                out = _capture(run_architecture, args)
+        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=(mock_complex, _IMPORTS_DATA)):
+            out = _capture(run_architecture, args)
 
         data = json.loads(out)
         self.assertIn('path', data)
@@ -446,9 +446,8 @@ class TestRunArchitecture(unittest.TestCase):
 
     def test_json_facts_structure(self):
         args = _args(path='.', format='json')
-        with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=[]):
-            with patch('reveal.cli.commands.architecture._run_imports_analysis', return_value=_IMPORTS_DATA):
-                out = _capture(run_architecture, args)
+        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=([], _IMPORTS_DATA)):
+            out = _capture(run_architecture, args)
 
         facts = json.loads(out)['facts']
         self.assertIn('entry_points', facts)
@@ -458,17 +457,15 @@ class TestRunArchitecture(unittest.TestCase):
 
     def test_text_output_renders(self):
         args = _args(path='.')
-        with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=_COMPLEX_FNS):
-            with patch('reveal.cli.commands.architecture._run_imports_analysis', return_value=_IMPORTS_DATA):
-                out = _capture(run_architecture, args)
+        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
+            out = _capture(run_architecture, args)
 
         self.assertIn('Architecture Brief', out)
 
     def test_text_output_sections(self):
         args = _args(path='.')
-        with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=_COMPLEX_FNS):
-            with patch('reveal.cli.commands.architecture._run_imports_analysis', return_value=_IMPORTS_DATA):
-                out = _capture(run_architecture, args)
+        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
+            out = _capture(run_architecture, args)
 
         self.assertIn('Entry Points', out)
         self.assertIn('Core Abstractions', out)
@@ -478,9 +475,8 @@ class TestRunArchitecture(unittest.TestCase):
 
     def test_dynamic_imports_note_shown(self):
         args = _args(path='.')
-        with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=[]):
-            with patch('reveal.cli.commands.architecture._run_imports_analysis', return_value=_IMPORTS_DATA):
-                out = _capture(run_architecture, args)
+        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=([], _IMPORTS_DATA)):
+            out = _capture(run_architecture, args)
         self.assertIn('static imports only', out)
 
     def test_dynamic_imports_note_hidden_when_no_imports(self):
@@ -498,6 +494,62 @@ class TestRunComplexFunctions(unittest.TestCase):
         with patch('reveal.adapters.ast.AstAdapter', side_effect=Exception('fail')):
             result = _run_complex_functions(Path('/p'), 5)
         self.assertEqual(result, [])
+
+
+# ── _run_combined_analysis ─────────────────────────────────────────────────────
+
+class TestRunCombinedAnalysis(unittest.TestCase):
+    """BACK-489: the merged single-walk path used by run_architecture unless
+    --no-imports is passed."""
+
+    def test_falls_back_to_standalone_complexity_on_imports_failure(self):
+        """If the shared walk (ImportsAdapter._build_graph) never runs, complexity
+        analysis must still fall back to its own independent walk rather than
+        silently losing data because of an unrelated imports failure."""
+        with patch('reveal.adapters.imports.ImportsAdapter', side_effect=Exception('fail')):
+            with patch(
+                'reveal.cli.commands.architecture._run_complex_functions',
+                return_value=_COMPLEX_FNS,
+            ) as mock_fallback:
+                complex_fns, imports_data = _run_combined_analysis(Path('/p'), 5)
+
+        mock_fallback.assert_called_once_with(Path('/p'), 5)
+        self.assertEqual(complex_fns, _COMPLEX_FNS)
+        self.assertEqual(imports_data, {})
+
+    def test_merges_imports_and_complexity_from_one_walk(self):
+        mock_adapter = MagicMock()
+
+        fake_structures = [
+            {'file': '/p/a.py', 'functions': [{'name': 'f', 'complexity': 25}]},
+        ]
+
+        # _build_graph(collect_structures=True) populates adapter._structures
+        # from the same (parallelized) per-file walk that extracts imports —
+        # no second directory walk / re-parse.
+        def fake_build_graph(path, on_file_processed=None, collect_structures=False):
+            if collect_structures:
+                mock_adapter._structures = fake_structures
+
+        mock_adapter._build_graph.side_effect = fake_build_graph
+        mock_adapter._format_fan_in.return_value = {'entries': []}
+        mock_adapter._format_entrypoints.return_value = {'entries': []}
+        mock_adapter._format_components.return_value = {'components': []}
+        mock_adapter._format_circular.return_value = {'cycles': [], 'count': 0}
+
+        with patch('reveal.adapters.imports.ImportsAdapter', return_value=mock_adapter):
+            with patch('reveal.adapters.ast.AstAdapter') as mock_ast_adapter_cls:
+                mock_ast_adapter_cls.return_value.get_structure.return_value = {
+                    'results': [{'name': 'f', 'complexity': 25, 'file': '/p/a.py'}]
+                }
+                complex_fns, imports_data = _run_combined_analysis(Path('/p'), 5)
+
+        # The structures collected during the shared walk must be the ones handed
+        # to AstAdapter.get_structure — i.e. it must NOT re-walk the directory.
+        _, kwargs = mock_ast_adapter_cls.return_value.get_structure.call_args
+        self.assertEqual(kwargs.get('structures'), fake_structures)
+        self.assertEqual(complex_fns, [{'name': 'f', 'complexity': 25, 'file': '/p/a.py'}])
+        self.assertIn('entry_points', imports_data)
 
 
 # ── _run_imports_analysis ──────────────────────────────────────────────────────

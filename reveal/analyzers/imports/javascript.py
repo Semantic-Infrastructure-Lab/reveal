@@ -400,13 +400,6 @@ class JavaScriptExtractor(LanguageExtractor):
         if not node.parent():
             return True
 
-        # Walk up the tree to check if we're inside an import statement
-        current = node
-        while current:
-            if current.kind() == 'import_statement':
-                return False
-            current = current.parent()
-
         parent_type = node.parent().kind()
 
         # Skip definition contexts
@@ -429,8 +422,10 @@ class JavaScriptExtractor(LanguageExtractor):
             if _p and _p.child_count() > 0 and _p.child(0).start_byte() == node.start_byte():
                 return False
 
-        # For import specifiers like { foo as bar }, both names are part of import
-        if parent_type in ('import_specifier', 'namespace_import'):
+        # Import bindings — default (`import Foo from 'x'`, parent import_clause),
+        # named (`{ foo as bar }`, parent import_specifier), and namespace
+        # (`* as NS`, parent namespace_import) — are declarations, not usages.
+        if parent_type in ('import_clause', 'import_specifier', 'namespace_import'):
             return False
 
         return True

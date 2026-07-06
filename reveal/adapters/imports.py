@@ -15,7 +15,7 @@ Usage:
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Callable, Dict, Any, List, Optional
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
@@ -633,6 +633,67 @@ class ImportsRenderer:
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages  # noqa: E402
 
 
+# ── BACK-489 P1: parallel per-file extraction ───────────────────────────────
+# `_build_graph`'s per-file work (import/symbol extraction + optional AST
+# structure) is independent across files — an embarrassingly-parallel map whose
+# only shared step is the cheap graph-assembly reduce that follows. On large
+# repos this map is ~94% of `reveal architecture`'s cost and is otherwise
+# single-threaded (see design/BACK489_ARCHITECTURE_PERF_FINDINGS_2026-07-06.md
+# §8). We fan it out across processes (tree-sitter parsing is fork-safe;
+# measured 4.6x on a 12-core box for a 852-file TS subset). Results are
+# consumed in submission order (ProcessPoolExecutor.map preserves order), so
+# the assembled graph and structure list are byte-identical to the serial path.
+_PARALLEL_MIN_FILES = 200   # below this, pool startup/IPC outweighs the win
+_PARALLEL_MAX_WORKERS = 16  # cap so huge core counts don't oversubscribe/thrash
+
+
+def _parallel_worker_count(n_files: int) -> int:
+    """Workers to use for `n_files`. 1 = run serially (no pool).
+
+    `REVEAL_MAX_WORKERS` overrides everything (set to 1 to force the serial
+    path — used by tests and for debugging); otherwise parallelize only above
+    `_PARALLEL_MIN_FILES`, capped at `_PARALLEL_MAX_WORKERS` and the CPU count.
+    """
+    override = os.environ.get('REVEAL_MAX_WORKERS')
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
+    if n_files < _PARALLEL_MIN_FILES:
+        return 1
+    return max(1, min(os.cpu_count() or 1, _PARALLEL_MAX_WORKERS))
+
+
+def _extract_one_file(fp_str: str, want_structure: bool):
+    """Extract imports/symbols (+ optional AST structure) for a single file.
+
+    Module-level and picklable so it runs unchanged under a
+    `ProcessPoolExecutor` (fork *or* spawn). Returns
+    `(fp_str, imports_or_None, symbols_or_None, structure_or_None)`:
+    `imports`/`symbols` are None when the file has no import extractor (mirrors
+    the serial path only populating them for extractable files); `structure`
+    is None when not requested or when analysis raised (mirrors the serial
+    `collect_structure`'s try/except-to-None). Import extraction errors are NOT
+    swallowed here — the serial path lets them propagate too.
+    """
+    fp = Path(fp_str)
+    imports = symbols = structure = None
+    extractor = get_extractor(fp)
+    if extractor is not None:
+        imports = extractor.extract_imports(fp)
+        symbols = extractor.extract_symbols(fp)
+        if hasattr(extractor, 'extract_exports'):
+            symbols = symbols | extractor.extract_exports(fp)
+    if want_structure:
+        try:
+            from .ast.analysis import analyze_file
+            structure = analyze_file(fp_str)
+        except Exception:
+            structure = None
+    return fp_str, imports, symbols, structure
+
+
 @register_adapter('imports')
 @register_renderer(ImportsRenderer)
 class ImportsAdapter(ResourceAdapter):
@@ -649,6 +710,9 @@ class ImportsAdapter(ResourceAdapter):
         self._symbols_by_file: Dict[Path, set] = {}
         self._scanned_files: set = set()
         self._unsupported_extensions: Dict[str, int] = {}
+        # Populated only when _build_graph is called with collect_structures=True
+        # (reveal architecture) — per-file AST structures from the shared walk.
+        self._structures: List[Dict[str, Any]] = []
         # Handle both absolute and relative paths:
         # - netloc component from URI parsing (imports://relative/path → 'relative/path')
         # - absolute path (imports:///absolute/path → '/absolute/path')
@@ -785,7 +849,42 @@ class ImportsAdapter(ResourceAdapter):
             symbols = symbols | exports
         return imports, symbols
 
-    def _build_graph(self, target_path: Path) -> None:
+    def _extract_files(self, candidates: List[Path], want_structure: bool):
+        """Yield ``(Path, imports_or_None, symbols_or_None, structure_or_None)``
+        per candidate file, in candidate order.
+
+        Fans the independent per-file extraction out across processes when the
+        repo is large enough to pay back pool startup (`_parallel_worker_count`);
+        otherwise runs it inline. `ProcessPoolExecutor.map` preserves input
+        order, so the caller's assembly is identical either way — and identical
+        to the previous purely-serial implementation.
+        """
+        workers = _parallel_worker_count(len(candidates))
+        if workers <= 1:
+            for fp in candidates:
+                fp_str, imports, symbols, structure = _extract_one_file(str(fp), want_structure)
+                yield fp, imports, symbols, structure
+            return
+
+        from concurrent.futures import ProcessPoolExecutor
+        from itertools import repeat
+
+        n = len(candidates)
+        # A few chunks per worker balances load without excessive IPC round-trips.
+        chunksize = max(1, n // (workers * 8))
+        paths = [str(fp) for fp in candidates]
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            for fp_str, imports, symbols, structure in executor.map(
+                _extract_one_file, paths, repeat(want_structure), chunksize=chunksize
+            ):
+                yield Path(fp_str), imports, symbols, structure
+
+    def _build_graph(
+        self,
+        target_path: Path,
+        on_file_processed: Optional[Callable[[Path], None]] = None,
+        collect_structures: bool = False,
+    ) -> None:
         """Build import graph from target path (multi-language).
 
         Uses plugin-based architecture to automatically detect and use
@@ -796,48 +895,72 @@ class ImportsAdapter(ResourceAdapter):
         and similar patterns — is invisible to this graph. All query modes
         (fan-in, entrypoints, unused, circular, violations) share this limitation.
 
+        Per-file import/symbol extraction (and, when requested, AST structure
+        analysis) is independent across files and runs in parallel across
+        processes on large repos — see `_extract_one_file` / the module-level
+        BACK-489 P1 note. The graph assembly that follows is a cheap serial
+        reduce; results are consumed in file order so output is identical to a
+        serial run.
+
         Args:
             target_path: Directory or file to analyze
+            on_file_processed: Optional callback invoked once per code file
+                (import-extractable or not), in deterministic file order, after
+                that file's extraction. A lightweight per-file notification hook
+                (structure is delivered via ``collect_structures`` below, not
+                this callback).
+            collect_structures: When True, also run AST structure analysis
+                (`analyze_file`) on every code file during the same parallel
+                pass and store the truthy results in ``self._structures`` — lets
+                `reveal architecture` get per-file complexity structures without
+                a second full-repo walk/parse. When False (default), no
+                structure analysis is done.
         """
         supported_exts = frozenset(get_all_extensions())
         # Recognized-code extensions that lack an import extractor — used to warn
         # honestly (instead of a silent 0) when a scan hits, e.g., Swift or Scala.
         code_exts = get_code_extensions()
         unextractable: Dict[str, int] = {}
+        files: List[Path] = []
+        all_imports: List[ImportStatement] = []
+        structures: List[Dict[str, Any]] = []
 
+        # Phase 1 — discover candidate code files (serial, cheap: no parsing).
+        # Preserves the original walk semantics exactly (skip-dirs, hidden dirs,
+        # supported-or-code extension filter).
+        candidates: List[Path] = []
         if target_path.is_file():
             ext = target_path.suffix.lower()
-            if ext in supported_exts:
-                files = [target_path]
-            else:
-                files = []
-                if ext in code_exts:
-                    unextractable[ext] = unextractable.get(ext, 0) + 1
+            if target_path.suffix in supported_exts or ext in code_exts:
+                candidates.append(target_path)
         else:
-            files = []
             for root, dirs, filenames in os.walk(str(target_path)):
                 dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
                 for fname in filenames:
                     fp = Path(root) / fname
-                    if fp.suffix in supported_exts:
-                        files.append(fp)
-                    else:
-                        ext = fp.suffix.lower()
-                        if ext in code_exts:
-                            unextractable[ext] = unextractable.get(ext, 0) + 1
+                    if fp.suffix in supported_exts or fp.suffix.lower() in code_exts:
+                        candidates.append(fp)
+
+        # Phase 2 — per-file extraction (parallel on large repos, else serial),
+        # consumed in candidate order so assembly is deterministic.
+        for fp, imports, symbols, structure in self._extract_files(candidates, collect_structures):
+            if fp.suffix in supported_exts:
+                files.append(fp)
+                if imports is not None:
+                    self._symbols_by_file[fp] = symbols
+                    all_imports.extend(imports)
+            else:
+                ext = fp.suffix.lower()
+                if ext in code_exts:
+                    unextractable[ext] = unextractable.get(ext, 0) + 1
+            if collect_structures and structure:
+                structures.append(structure)
+            if on_file_processed:
+                on_file_processed(fp)
 
         self._scanned_files = set(files)
         self._unsupported_extensions = unextractable
-
-        # Extract imports from all files using appropriate extractor
-        all_imports = []
-        for file_path in files:
-            extractor = get_extractor(file_path)
-            if not extractor:
-                continue
-            imports, symbols = self._extract_file_imports_and_symbols(file_path, extractor)
-            self._symbols_by_file[file_path] = symbols
-            all_imports.extend(imports)
+        self._structures = structures
 
         # Build graph
         self._graph = ImportGraph.from_imports(all_imports)

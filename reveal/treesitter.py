@@ -5,10 +5,16 @@ import os
 from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Tuple
 from .base import FileAnalyzer
-from .complexity import calculate_complexity_and_depth
+from .complexity import (
+    calculate_complexity_and_depth,
+    _DECISION_TYPES,
+    _NESTING_TYPES,
+    _KEYWORD_PAIRS,
+)
 from .core import suppress_treesitter_warnings
 from .core import node_children as _children
 from .core import node_next_sibling as _next_sibling
+from .core import iter_tree as _iter_tree
 
 # Suppress tree-sitter deprecation warnings (centralized in core module)
 suppress_treesitter_warnings()
@@ -541,7 +547,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # (same blindness _function_end_node's docstring describes).
         body_node = end_node if end_node is not bounds_node else node
 
-        complexity, depth = calculate_complexity_and_depth(body_node)
+        complexity, depth, calls = self._complexity_depth_and_calls(body_node)
         return {
             'line': line_start,
             'line_end': line_end,
@@ -551,7 +557,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'depth': depth,
             'complexity': complexity,
             'decorators': decorators,
-            'calls': self._extract_calls_in_function(body_node),
+            'calls': calls,
         }
 
     def _extract_classes(self) -> List[Dict[str, Any]]:
@@ -855,14 +861,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # Build cache on first access (lazy initialization); None sentinel means unbuilt
         if self._node_cache is None:
             self._node_cache = {}
-            stack = [self.tree.root_node()]
-            while stack:
-                node = stack.pop()
-                self._node_cache.setdefault(node.kind(), []).append(node)
-                # Reverse children to maintain document order (stack is LIFO)
-                children = _children(node)
-                if children:
-                    stack.extend(reversed(children))
+            cache = self._node_cache
+            # BACK-489 P2: a TreeCursor pre-order walk (iter_tree) is ~1.79x
+            # faster than the equivalent node_children stack walk and yields
+            # the identical node sequence in document order, so each kind's
+            # bucket is byte-identical to the old `stack=[root]; pop; push
+            # reversed(children)` walk (verified over 557K real nodes).
+            for node in _iter_tree(self.tree.root_node()):
+                cache.setdefault(node.kind(), []).append(node)
 
             # Write completed node_cache back to module-level cache
             if hasattr(self, '_cache_key') and self._cache_key in _parse_cache:
@@ -1207,4 +1213,76 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     seen.add(name)
             stack.extend(reversed(_children(node)))
         return calls
+
+    def _complexity_depth_and_calls(self, func_node) -> Tuple[int, int, List[str]]:
+        """Compute complexity, nesting depth, and callee names in one subtree walk.
+
+        `_build_function_dict` used to call `calculate_complexity_and_depth`
+        and `_extract_calls_in_function` back to back — two independent full
+        walks of the same function-body subtree via `node_children`. Profiling
+        a real 11K-file TypeScript repo (BACK-489) showed this pair dominates
+        `reveal architecture`'s cost for large repos even after fixing the
+        double-parse-per-file bug: `node_children` alone accounted for 88s of
+        self time across 94M calls. Merging into one traversal halves that.
+
+        Traversal order matches `_extract_calls_in_function` exactly (reversed
+        children pushed onto a stack, so pop order is document order) so the
+        `calls` list is identical to before; complexity/depth are order-
+        independent aggregates, computed alongside using the same decision/
+        nesting-type rules as `calculate_complexity_and_depth`.
+
+        BACK-490: a nested node whose kind is in `FUNCTION_NODE_TYPES` is a
+        leaf for this walk — its own body is not expanded here. Every
+        `FUNCTION_NODE_TYPES` node anywhere in the tree already gets its own
+        top-level entry (and its own call to this method) via
+        `_find_nodes_by_type`'s whole-tree scan, so expanding into it here
+        would double-count its decisions/calls into the enclosing function
+        too (confirmed live across Python/Ruby/Rust/JS: a wrapper containing
+        only a nested named function reported the same complexity as the
+        nested function itself). Anonymous closures/lambdas/arrow functions
+        that never get their own entry (not in `FUNCTION_NODE_TYPES`) are
+        deliberately NOT stopped at — their contribution should keep bleeding
+        into the enclosing function, since they have no separate identity in
+        the output.
+        """
+        decision_count = 0
+        max_depth = 0
+        calls: List[str] = []
+        seen_calls: set = set()
+
+        # Stack entries: (node, parent_kind, depth). parent_kind is None only
+        # for func_node's direct children — mirrors calculate_complexity_and_depth's
+        # (node, None, 0) seed (func_node itself is never itself checked as a
+        # decision/call node, only its descendants are). The top-level push is
+        # intentionally NOT reversed, matching _extract_calls_in_function's own
+        # top-level `stack = _children(func_node)` exactly (only its recursive
+        # `stack.extend(reversed(...))` step reverses) — preserved byte-for-byte
+        # so this merged walk returns the identical `calls` list order.
+        stack = [
+            (child, None, 1 if child.kind() in _NESTING_TYPES else 0)
+            for child in _children(func_node)
+        ]
+        while stack:
+            node, parent_kind, depth = stack.pop()
+            if depth > max_depth:
+                max_depth = depth
+
+            kind = node.kind()
+            if kind in CALL_NODE_TYPES:
+                name = self._get_callee_name(node)
+                if name and name not in seen_calls:
+                    calls.append(name)
+                    seen_calls.add(name)
+            if kind in _DECISION_TYPES and (parent_kind is None or (parent_kind, kind) not in _KEYWORD_PAIRS):
+                decision_count += 1
+
+            if kind in FUNCTION_NODE_TYPES:
+                continue
+
+            for child in reversed(_children(node)):
+                child_kind = child.kind()
+                child_depth = depth + 1 if child_kind in _NESTING_TYPES else depth
+                stack.append((child, kind, child_depth))
+
+        return decision_count + 1, max_depth, calls
 

@@ -504,6 +504,34 @@ class TestImportsAdapter:
         assert 'error' in result
         assert 'Path not found' in result['error']
 
+    def test_build_graph_on_file_processed_callback(self, tmp_path):
+        """BACK-489: `_build_graph`'s on_file_processed callback must fire once
+        per code file — including files with no import extractor (e.g. Swift,
+        which BACK-488 found has none) — not just the import-supported subset.
+        `reveal architecture` piggybacks its AST/complexity pass onto this
+        callback specifically to avoid a second full-repo walk+parse; if the
+        callback silently skipped unextractable-but-code files, those
+        languages would lose complexity data under the merged path."""
+        (tmp_path / "a.py").write_text("import os\n")
+        (tmp_path / "b.swift").write_text("import Foundation\n")
+
+        adapter = ImportsAdapter(str(tmp_path))
+        seen = []
+        adapter._build_graph(tmp_path, on_file_processed=lambda fp: seen.append(fp.name))
+
+        assert 'a.py' in seen
+        assert 'b.swift' in seen
+
+    def test_build_graph_without_callback_unaffected(self, tmp_path):
+        """Omitting on_file_processed must behave exactly as before (no callback arg)."""
+        (tmp_path / "a.py").write_text("import os\n")
+        (tmp_path / "b.py").write_text("from pathlib import Path\n")
+
+        adapter = ImportsAdapter(str(tmp_path))
+        adapter._build_graph(tmp_path)
+
+        assert len(adapter._scanned_files) == 2
+
     def test_unused_query_param(self, tmp_path):
         """Test ?unused query parameter."""
         # Create file with unused imports
