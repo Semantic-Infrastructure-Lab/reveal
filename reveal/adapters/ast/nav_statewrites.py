@@ -96,6 +96,13 @@ def _target_kind(left: Any, get_text: Callable) -> Optional[str]:
             if child.kind() == 'navigation_expression':
                 return _target_kind(child, get_text)
         return None
+    if ltype == 'instance_variable':
+        # Ruby `@total = ...` — a single sigil-prefixed token, not an
+        # "obj.attr" member-access shape at all (unlike Python's `self.x`),
+        # so it's invisible to _MEMBER_ACCESS_NODES/_member_kind's text-prefix
+        # check. Always a field write regardless of receiver, same as every
+        # other language's self/this-style member write (BACK-477).
+        return 'field'
     if ltype in _MEMBER_ACCESS_NODES:
         return _member_kind(get_text(left))
     if ltype in _SUBSCRIPT_NODES:

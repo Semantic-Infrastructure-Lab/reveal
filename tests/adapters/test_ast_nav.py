@@ -1309,6 +1309,31 @@ class TestStateWrites(unittest.TestCase):
         self.assertEqual(len(writes), 1, f'expected the self.total field write: {writes}')
         self.assertEqual(writes[0]['kind'], 'field')
 
+    def test_ruby_instance_variable_write(self):
+        # BACK-477: Ruby's `@total = ...` is a single sigil-prefixed
+        # 'instance_variable' token, not an "obj.attr" member-access shape
+        # like Python's `self.total` — invisible to _MEMBER_ACCESS_NODES/
+        # _member_kind's text-prefix check, so the field write was silently
+        # dropped from --statewrites entirely (verified via direct
+        # tree-sitter inspection: Ruby's assignment node does expose
+        # 'left'/'right' fields directly, so resolve_assignment_sides was
+        # never the issue here — only _target_kind's classification was).
+        root, get_text = _parse_lang('ruby', '''
+        class Batch
+          def run
+            @total = @total + 1
+            cache.set(1)
+          end
+        end
+        ''')
+        from reveal.adapters.ast.nav import collect_statewrites
+        writes = collect_statewrites(root, 1, 10, get_text)
+        kinds = {w['kind'] for w in writes}
+        self.assertIn('field', kinds, f'expected the @total field write: {writes}')
+        self.assertIn('cache', kinds)
+        field_write = next(w for w in writes if w['kind'] == 'field')
+        self.assertEqual(field_write['target'], '@total')
+
     def test_render_statewrites_empty(self):
         from reveal.adapters.ast.nav import render_statewrites
         result = render_statewrites([], 1, 10)
