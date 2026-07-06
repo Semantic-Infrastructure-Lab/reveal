@@ -30,6 +30,7 @@ EXPECTED = yaml.safe_load((FIXTURES_DIR / "expected.yaml").read_text())
 EXTENSIONS = {
     "python": "py", "c": "c", "cpp": "cpp", "csharp": "cs", "go": "go",
     "java": "java", "javascript": "js", "rust": "rs", "typescript": "ts",
+    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php",
 }
 
 LANGUAGES = sorted(EXPECTED.keys())
@@ -60,7 +61,12 @@ def test_outline_lists_all_functions(lang):
     out = _run(str(_sample_path(lang)), "--outline")
     # Class-bearing languages (java, csharp) nest methods under the class with
     # tree-drawing prefixes (`├─ `/`└─ `); flat-function languages don't.
-    found = set(re.findall(r"^(?:[│├└─\s]*)(\w+)\([^)]*\)\s*\{?\s*\[\d+ lines", out, re.MULTILINE))
+    # Signature trailer varies by language: most (rust/go/c#/...) render
+    # `name(args) [N lines...`, but Kotlin/Swift keep the arrow return type and
+    # opening brace (`name(args) -> Type { [N lines...`) — match anything
+    # between the args and the `[N lines` marker rather than assuming either
+    # shape (found via BACK-477-successor fixture work, Kotlin/Swift matrix).
+    found = set(re.findall(r"^(?:[│├└─\s]*)(\w+)\([^)]*\)[^\[\n]*\[\d+ lines", out, re.MULTILINE))
     expected_functions = set(EXPECTED[lang]["outline_functions"])
     assert expected_functions <= found, (
         f"{lang}: expected functions {expected_functions} not all found in outline: {found}\n{out}"
@@ -109,9 +115,15 @@ def test_imports_unused_detection(lang):
 
 def test_varflow_declaration_is_write_not_read(lang):
     """--varflow must classify a declaration-with-initializer as WRITE (BACK-411),
-    for every language — this is the exact bug class the matrix exists to catch."""
+    for every language — this is the exact bug class the matrix exists to catch.
+
+    Most languages spell the fixture's variable as bare `result`; PHP always
+    requires the `$` sigil in both source and query (`expected.yaml`'s
+    `varflow_var` overrides the default for it) — querying bare `result` for
+    PHP is a correct non-match, not a bug (see BACK-477 progress log)."""
     entry_fn = EXPECTED[lang]["entry_function"]
-    out = _run(str(_sample_path(lang)), entry_fn, "--varflow", "result", "--format", "json")
+    var = EXPECTED[lang].get("varflow_var", "result")
+    out = _run(str(_sample_path(lang)), entry_fn, "--varflow", var, "--format", "json")
     data = json.loads(out)
     findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
     expected = EXPECTED[lang]["varflow_result"]
@@ -168,12 +180,16 @@ def test_returns_finds_gate_chains(lang):
 def test_deps_finds_parameter_flowing_in(lang):
     """--deps must list every variable whose first event in entry_function is
     a READ (i.e. it flows in from outside) — every fixture's `order` parameter
-    qualifies in every language, since it's read before ever being written."""
+    qualifies in every language, since it's read before ever being written.
+
+    PHP always spells its parameter `$order` (the same `$`-sigil rule that
+    motivates `varflow_var` — see BACK-477 progress log)."""
     entry_fn = EXPECTED[lang]["entry_function"]
+    order_var = EXPECTED[lang].get("deps_var", "order")
     out = _run(str(_sample_path(lang)), entry_fn, "--deps", "--format", "json")
     data = json.loads(out)
     dep_vars = {f["var"] for f in data["findings"]}
-    assert "order" in dep_vars, f"{lang}: 'order' param not found as a dep\n{out}"
+    assert order_var in dep_vars, f"{lang}: '{order_var}' param not found as a dep\n{out}"
 
 
 # ─────────────────────────────────── --flowto ──────────────────────────────────
@@ -208,8 +224,9 @@ def test_cross_calls_varflow_json_does_not_crash(lang):
     JSON serializable`). The root frame's events must match the plain
     --varflow result exactly."""
     entry_fn = EXPECTED[lang]["entry_function"]
+    var = EXPECTED[lang].get("varflow_var", "result")
     out = _run(
-        str(_sample_path(lang)), entry_fn, "--varflow", "result",
+        str(_sample_path(lang)), entry_fn, "--varflow", var,
         "--cross-calls", "--format", "json",
     )
     data = json.loads(out)  # raises if BACK-429 regresses

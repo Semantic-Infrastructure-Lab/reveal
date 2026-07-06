@@ -371,3 +371,141 @@ go:
   statewrites:
   - {kind: field, line: 47}
   - {kind: cache, line: 48}
+
+kotlin:
+  entry_function: processOrder
+  outline_functions: [validate, processOrder, run]
+  calls_validate_callers:
+  - {line: 11, function: processOrder}
+  imports_unused:
+    not_supported: true  # no import extractor registered for .kt/.kts (BACK-431 Issue G)
+  varflow_result:
+  - {kind: WRITE, line: 12}
+  - {kind: READ, line: 15}
+  - {kind: READ, line: 19}
+  sideeffects:
+  - {line: 15, kind: file}
+  exits:
+  - {kind: RETURN, line: 19}
+  - {kind: RETURN, line: 21}
+  ifmap:
+    not_supported: true  # entry_function uses try/catch, no bare if
+  catchmap:
+  - {keyword: CATCH, line_start: 20}
+  mutations_probe: {range: "12-12", var: result, next_read_line: 15}
+  returns:
+  - {line: 19, gate_lines: []}
+  - {line: 21, gate_lines: []}
+  batch_element: Batch.run
+  loopmap:
+  - {keyword: FOR, line_start: 36}
+  fanout_effects:
+  - {line: 38, kind: cache}
+  statewrites:
+  - {kind: field, line: 37}
+  - {kind: cache, line: 38}
+
+swift:
+  entry_function: processOrder
+  outline_functions: [validate, processOrder, run]
+  calls_validate_callers:
+  - {line: 11, function: processOrder}
+  imports_unused:
+    not_supported: true  # no import extractor registered (BACK-431 Issue G)
+  varflow_result:
+  - {kind: WRITE, line: 13}
+  - {kind: READ, line: 14}
+  - {kind: WRITE, line: 19}
+  - {kind: READ, line: 19}
+  - {kind: READ, line: 20}
+  sideeffects:
+  - {line: 14, kind: file}
+  exits:
+  - {kind: RETURN, line: 20}
+  - {kind: RETURN, line: 22}
+  ifmap:
+    not_supported: true  # entry_function uses do/catch, no bare if
+  catchmap:
+  - {keyword: CATCH, line_start: 21}
+  mutations_probe: {range: "13-13", var: result, next_read_line: 14}
+  returns:
+  - {line: 20, gate_lines: []}
+  - {line: 22, gate_lines: []}
+  batch_element: Batch.run
+  loopmap:
+  - {keyword: FOR, line_start: 37}
+  fanout_effects:
+  - {line: 39, kind: cache}
+  statewrites:
+  - {kind: field, line: 38}
+  - {kind: cache, line: 39}
+
+ruby:
+  entry_function: process_order
+  outline_functions: [validate, process_order, run]
+  calls_validate_callers:
+  - {line: 9, function: process_order}
+  imports_unused:
+    not_supported: true  # extractor exists (require/require_relative) but unused-detection not claimed (skip_unused always set)
+  varflow_result:
+  - {kind: WRITE, line: 10}
+  - {kind: READ, line: 17}
+  sideeffects:
+  - {line: 13, kind: file}
+  - {line: 13, kind: file}
+  exits:
+  - {kind: RETURN, line: 17}
+  - {kind: RETURN, line: 19}
+  ifmap:
+    not_supported: true  # entry_function uses begin/rescue, no bare if
+  catchmap:
+  - {keyword: TRY, line_start: 12}
+  - {keyword: CATCH, line_start: 18}
+  mutations_probe: {range: "10-10", var: result, next_read_line: 17}
+  returns:
+  - {line: 17, gate_lines: []}
+  - {line: 19, gate_lines: []}
+  batch_element: Batch.run
+  loopmap:
+  - {keyword: FOR, line_start: 33}
+  fanout_effects:
+  - {line: 35, kind: cache}
+  statewrites:
+  - {kind: field, line: 34}
+  - {kind: cache, line: 35}
+
+php:
+  entry_function: processOrder
+  outline_functions: [validate, processOrder, run]
+  calls_validate_callers:
+  - {line: 12, function: processOrder}
+  imports_unused:
+    not_supported: true  # extractor exists (require/include + generic) but unused-detection not claimed
+  varflow_var: "$result"  # PHP variables are always $-sigil-spelled; bare 'result' is a correct non-match, not a bug
+  deps_var: "$order"  # same sigil rule applies to --deps' parameter-name check
+  varflow_result:
+  - {kind: WRITE, line: 14}
+  - {kind: READ, line: 16}
+  - {kind: READ, line: 20}
+  sideeffects:
+  - {line: 16, kind: file}
+  exits:
+  - {kind: RETURN, line: 20}
+  - {kind: RETURN, line: 22}
+  ifmap:
+    not_supported: true  # entry_function uses try/catch, no bare if
+  catchmap:
+  - {keyword: TRY, line_start: 13}
+  - {keyword: CATCH, line_start: 21}
+  mutations_probe: {range: "14-14", var: "$result", next_read_line: 16}
+  returns:
+  - {line: 20, gate_lines: []}
+  - {line: 22, gate_lines: []}
+  batch_element: Batch.run
+  loopmap:
+  - {keyword: FOR, line_start: 37}
+  fanout_effects:
+  - {line: 39, kind: cache}
+  statewrites:
+  - {kind: field, line: 38}
+  - {kind: cache, line: 39}
