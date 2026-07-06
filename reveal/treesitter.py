@@ -50,9 +50,13 @@ FUNCTION_NODE_TYPES = (
     'method_definition',     # Ruby
     'function',              # Generic
     'method',                # Ruby
-    'function_definition_statement',       # Lua (global functions)
-    'local_function_definition_statement',  # Lua (local functions)
     'Decl',                   # Zig (wraps FnProto + body; see ZigAnalyzer._get_node_name)
+    # BACK-478: 'function_definition_statement'/'local_function_definition_statement'
+    # used to be listed here as Lua's global/local function kinds. Verified via
+    # direct tree-sitter inspection: both `function foo() end` and
+    # `local function foo() end` parse to the same 'function_declaration' kind
+    # (already covered above) — these two names never matched any real Lua
+    # grammar node. Dead entries, removed rather than fixed.
 )
 
 # Node types for class extraction
@@ -61,16 +65,33 @@ CLASS_NODE_TYPES = (
     'class_declaration',          # Java, C#, JavaScript, PHP
     'abstract_class_declaration', # TypeScript: abstract class Foo { ... }
     'class_specifier',            # C++
-    'struct_item',                # Rust (treated as class)
     'class',                      # Ruby
     'anonymous_class',            # PHP: new class(...) extends Foo { ... }
+    # BACK-478: 'struct_item' (Rust) used to be listed here too ("treated as
+    # class"), so every Rust struct was double-counted under both Classes
+    # and Structs in get_structure()/--outline (confirmed live). It's a
+    # struct, and STRUCT_NODE_TYPES below already extracts it correctly —
+    # removed here rather than adding it to keep the label honest.
 )
 
 # Node types for struct extraction
 STRUCT_NODE_TYPES = (
     'struct_item',           # Rust
     'struct_specifier',      # C/C++
-    'struct_declaration',    # Go
+    # BACK-478: this entry was labeled "Go" but is actually C#'s real struct
+    # node kind (verified via direct tree-sitter inspection: `struct Foo { }`
+    # in C# parses to `struct_declaration`; Go has no node of this kind at
+    # all). Go's real struct kind is `struct_type` below — it was entirely
+    # absent, so Go structs were invisible to --structs/--outline/--scope
+    # regardless of this mislabel.
+    'struct_declaration',    # C#
+    # Go `type Foo struct { ... }` — the struct body parses as `struct_type`
+    # nested inside `type_declaration -> type_spec -> [type_identifier,
+    # struct_type]`. Unlike every other member here, struct_type carries no
+    # name of its own; see TreeSitterAnalyzer._get_node_name's struct_type
+    # branch, which reaches into the parent type_spec for the sibling
+    # type_identifier.
+    'struct_type',            # Go
 )
 
 # Node types for import extraction
@@ -905,7 +926,24 @@ class TreeSitterAnalyzer(FileAnalyzer):
         the first match (old behavior) grabs the return type/receiver instead
         of the name. The real name is always the one immediately preceding
         the parameter list, so that pairing is checked first.
+
+        BACK-478: Go `type Foo struct { ... }` parses the struct body as a
+        `struct_type` node with no name-shaped child at all — the name
+        (`type_identifier`) is a *sibling* under the shared parent
+        `type_spec` (`type_declaration -> type_spec -> [type_identifier,
+        struct_type]`), not a descendant. Every other STRUCT_NODE_TYPES
+        member carries its own name as a child, so this needs its own
+        lookup before the generic child-scanning below (which would find
+        nothing and return None).
         """
+        if node.kind() == 'struct_type':
+            parent = node.parent()
+            if parent is not None:
+                for sibling in _children(parent):
+                    if sibling.kind() == 'type_identifier':
+                        return self._get_node_text(sibling)
+            return None
+
         kids = _children(node)
 
         # PRIORITY 1: For C/C++ functions, look inside declarators FIRST

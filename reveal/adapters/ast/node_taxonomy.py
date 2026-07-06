@@ -134,7 +134,27 @@ CLASS_NODES: frozenset = frozenset({
 # --scope gap as CLASS_NODES above, confirmed live — kept as its own family
 # (not folded into CLASS_NODES) so the STRUCT label stays honest rather than
 # claiming "class" for a construct that isn't one.
-STRUCT_NODES: frozenset = frozenset({'struct_specifier'})
+#
+# BACK-478: the other three members were found via a cross-taxonomy audit
+# against treesitter.py's separate extraction-side STRUCT_NODE_TYPES, which
+# had drifted in two different ways: (1) `struct_declaration` was labeled
+# "Go" in a comment but is actually C#'s real struct node kind (verified via
+# direct tree-sitter inspection) — Go has no `struct_declaration` node at
+# all; (2) Go's *real* struct kind, `struct_type`, was missing from every
+# taxonomy, so Go structs were entirely invisible to --structs/--outline/
+# --scope. `struct_type` has no name of its own — it nests inside
+# `type_declaration -> type_spec -> [type_identifier, struct_type]`, so the
+# name lives on a sibling, not a descendant; see
+# TreeSitterAnalyzer._get_node_name's struct_type branch. `struct_item`
+# (Rust) was already extracted correctly via this family but was *also*
+# double-listed under CLASS_NODE_TYPES in treesitter.py — removed there so a
+# Rust struct is labeled STRUCT everywhere, not STRUCT-and-CLASS.
+STRUCT_NODES: frozenset = frozenset({
+    'struct_specifier',    # C/C++
+    'struct_item',         # Rust
+    'struct_declaration',  # C#
+    'struct_type',         # Go
+})
 # Rust methods live in `impl Foo { }` blocks, not in `struct Foo { }` itself
 # (Rust structs have no nested methods) — the --scope gap there is impl_item
 # missing, not struct_item, confirmed live (a Rust method's enclosing impl
@@ -157,6 +177,30 @@ YIELD_NODES: frozenset = frozenset({'yield_statement', 'yield'})
 # working in --exits/--returns).
 BREAK_NODES: frozenset = frozenset({'break_statement', 'break'})
 CONTINUE_NODES: frozenset = frozenset({'continue_statement', 'continue'})
+
+
+# ---------------------------------------------------------------------------
+# Extraction-taxonomy families (BACK-478)
+# ---------------------------------------------------------------------------
+# Not control-flow constructs, so not part of FUNCTION_TYPES/SCOPE_NODES/
+# EXIT_NODES/KEYWORD_LABEL below — this is the second, independently-drifting
+# taxonomy Finding 1 (MULTI_LANGUAGE_FORWARD_DIRECTION_2026-07-05.md) named:
+# treesitter.py's element-extraction node-kind lists. IMPORT_NODES is the
+# first one pulled in here; tests/adapters/test_node_taxonomy.py pins that
+# treesitter.py's IMPORT_NODE_TYPES/CLASS_NODE_TYPES/STRUCT_NODE_TYPES stay
+# equal to this module's families (not re-declared at module level to avoid
+# the treesitter.py <-> adapters.ast circular-import risk that already made
+# nav_exits.py/nav_calls.py use deferred imports for CALL_NODE_TYPES).
+IMPORT_NODES: frozenset = frozenset({
+    'import_statement',           # Python, JavaScript
+    'import_declaration',         # Go, Java
+    'use_declaration',            # Rust
+    'using_directive',            # C#
+    'import_from_statement',      # Python
+    'preproc_include',            # C/C++
+    'namespace_use_declaration',  # PHP
+    'import_header',              # Kotlin
+})
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +278,9 @@ KEYWORD_LABEL: Dict[str, str] = {
     'class_specifier': 'CLASS', 'anonymous_class': 'CLASS',
     'abstract_class_declaration': 'CLASS',
     'struct_specifier': 'STRUCT',
+    'struct_item': 'STRUCT',
+    'struct_declaration': 'STRUCT',
+    'struct_type': 'STRUCT',
     'impl_item': 'IMPL',
     'return_statement': 'RETURN', 'return': 'RETURN',
     'raise_statement': 'RAISE', 'raise': 'RAISE',

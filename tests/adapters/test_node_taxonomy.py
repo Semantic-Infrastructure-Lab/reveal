@@ -11,16 +11,20 @@ importing the shared family, these tests catch it at import/identity time
 instead of waiting for a language-specific bug report.
 """
 
+import os
+import tempfile
 import unittest
 
 import tree_sitter_language_pack as ts
 
-from reveal import complexity
+from reveal import complexity, treesitter
 from reveal.adapters.ast import node_taxonomy as tax
 from reveal.adapters.ast import nav_outline
 from reveal.adapters.ast import nav_exits
 from reveal.adapters.ast.nav_outline import element_outline, scope_chain
 from reveal.adapters.ast.nav_varflow import var_flow
+from reveal.analyzers.go import GoAnalyzer
+from reveal.analyzers.rust import RustAnalyzer
 
 
 class TestSharedIdentity(unittest.TestCase):
@@ -223,6 +227,91 @@ class TestClassScopeVisibility(unittest.TestCase):
     def test_typescript_abstract_class_appears_in_scope_chain(self):
         keywords = self._chain_keywords('typescript', self.TS_ABSTRACT_CLASS, 'let x = 1')
         self.assertIn('CLASS', keywords, 'TS abstract_class_declaration missing from --scope ancestry')
+
+
+class TestCrossTaxonomyConsistency(unittest.TestCase):
+    """BACK-478: treesitter.py keeps its own extraction-side node-kind lists
+    (FUNCTION_/CLASS_/STRUCT_/IMPORT_NODE_TYPES) as literal tuples rather than
+    importing this module's families directly — a direct import creates a
+    circular-import risk (adapters.ast <-> treesitter) that nav_exits.py/
+    nav_calls.py already route around via deferred imports for
+    CALL_NODE_TYPES. These tests are the guard-rail instead: they pin the two
+    taxonomies to the same *content*, so a future edit to one side that
+    forgets the other fails a test immediately instead of waiting for a
+    language-specific bug report (the exact BACK-462/474/475 pattern)."""
+
+    def test_class_node_types_matches_class_nodes(self):
+        self.assertEqual(frozenset(treesitter.CLASS_NODE_TYPES), tax.CLASS_NODES)
+
+    def test_struct_node_types_matches_struct_nodes(self):
+        self.assertEqual(frozenset(treesitter.STRUCT_NODE_TYPES), tax.STRUCT_NODES)
+
+    def test_import_node_types_matches_import_nodes(self):
+        self.assertEqual(frozenset(treesitter.IMPORT_NODE_TYPES), tax.IMPORT_NODES)
+
+    def test_function_node_types_matches_def_nodes_minus_arrow_function(self):
+        # arrow_function is deliberately excluded from the extraction-side
+        # list: JS-family arrow functions are extracted via a dedicated path
+        # (_extract_arrow_functions / file_handler.py), not this generic
+        # node-kind scan, to avoid double-extracting every nested callback
+        # arrow expression as a false top-level function.
+        self.assertEqual(
+            frozenset(treesitter.FUNCTION_NODE_TYPES),
+            tax.DEF_NODES - {'arrow_function'},
+        )
+
+
+def _get_structure(analyzer_cls, suffix, code):
+    with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False, encoding='utf-8') as f:
+        f.write(code)
+        f.flush()
+        temp_path = f.name
+    try:
+        return analyzer_cls(temp_path).get_structure()
+    finally:
+        os.unlink(temp_path)
+
+
+class TestGoStructVisibility(unittest.TestCase):
+    """BACK-478: Go's real struct node kind (`struct_type`, nested inside
+    `type_declaration -> type_spec`) was absent from both taxonomies —
+    `treesitter.py`'s STRUCT_NODE_TYPES had a `struct_declaration` entry
+    labeled "Go" that is actually C#'s node kind (verified via direct
+    tree-sitter inspection), so Go structs were entirely invisible to
+    get_structure()['structs'] / --outline / --scope."""
+
+    GO_STRUCT = 'package main\n\ntype Foo struct {\n\tX int\n}\n'
+
+    def test_go_struct_appears_in_structure(self):
+        structure = _get_structure(GoAnalyzer, '.go', self.GO_STRUCT)
+        structs = structure.get('structs') or []
+        names = [s['name'] for s in structs]
+        self.assertIn('Foo', names, f'Go struct missing from structs: {structs}')
+
+    def test_go_struct_not_misfiled_as_class(self):
+        structure = _get_structure(GoAnalyzer, '.go', self.GO_STRUCT)
+        classes = structure.get('classes') or []
+        self.assertEqual(classes, [], f'Go struct wrongly extracted as class: {classes}')
+
+
+class TestRustStructNotDoubleCounted(unittest.TestCase):
+    """BACK-478: treesitter.py's CLASS_NODE_TYPES included `struct_item`
+    ("Rust, treated as class"), so every Rust struct was extracted twice —
+    once under 'structs' (correctly) and once under 'classes' (a duplicate,
+    mislabeled entry) — confirmed live before the fix."""
+
+    RUST_STRUCT = 'struct Foo { x: i32 }'
+
+    def test_rust_struct_appears_once_under_structs(self):
+        structure = _get_structure(RustAnalyzer, '.rs', self.RUST_STRUCT)
+        structs = structure.get('structs') or []
+        names = [s['name'] for s in structs]
+        self.assertEqual(names.count('Foo'), 1, f'expected exactly 1 Foo struct: {structs}')
+
+    def test_rust_struct_does_not_also_appear_under_classes(self):
+        structure = _get_structure(RustAnalyzer, '.rs', self.RUST_STRUCT)
+        classes = structure.get('classes') or []
+        self.assertEqual(classes, [], f'Rust struct double-counted as class: {classes}')
 
 
 if __name__ == '__main__':
