@@ -1,6 +1,10 @@
 ---
 title: "reveal Subcommands"
 type: guide
+help_topic: subcommands
+help_description: "High-level workflow subcommands (dev, health, pack, review, ...)"
+help_category: feature_guides
+help_token_estimate: "~5,900"
 ---
 
 # reveal Subcommands
@@ -16,10 +20,10 @@ Scaffolding and introspection tools for extending Reveal.
 ### Commands
 
 ```
-reveal dev new-adapter NAME [--uri SCHEME]    # Scaffold a new URI adapter
-reveal dev new-analyzer NAME [--ext EXT]     # Scaffold a new file analyzer
-reveal dev new-rule CODE NAME [--cat CAT]    # Scaffold a new quality rule
-reveal dev inspect-config [PATH]             # Show effective .reveal.yaml config
+reveal dev new-adapter NAME [--uri SCHEME]        # Scaffold a new URI adapter
+reveal dev new-analyzer NAME [--ext EXT]          # Scaffold a new file analyzer
+reveal dev new-rule CODE NAME [--category CAT]    # Scaffold a new quality rule
+reveal dev inspect-config                         # Show effective .reveal.yaml config
 ```
 
 ### CLI Flags
@@ -28,16 +32,15 @@ reveal dev inspect-config [PATH]             # Show effective .reveal.yaml confi
 |------|-------------|
 | `--uri SCHEME` | URI scheme for new adapter (e.g., `mydb`) |
 | `--ext EXT` | File extension for new analyzer (e.g., `.myext`) |
-| `--cat CAT` | Rule category (bugs, maintainability, performance, etc.) |
+| `--category CAT` | Rule category (bugs, maintainability, performance, etc.) |
 
 ### Examples
 
 ```bash
 reveal dev new-adapter mydb --uri mydb        # Creates adapters/mydb/ scaffold
 reveal dev new-analyzer toml --ext .toml      # Creates analyzers/toml.py scaffold
-reveal dev new-rule M999 "Too Long" --cat maintainability
+reveal dev new-rule M999 "Too Long" --category maintainability
 reveal dev inspect-config                     # See config applied to current dir
-reveal dev inspect-config /some/project/      # See config for another dir
 ```
 
 ### Scaffold Output
@@ -379,6 +382,8 @@ reveal surface [PATH] [--type TYPE] [--format FORMAT]
 | Flag | Description |
 |------|-------------|
 | `--type TYPE` | Filter to one surface type (see table below) |
+| `--top N` | Show only the top N entries per surface type (default: all) |
+| `--source-only` | Exclude test files/dirs (`test_*.py`, `tests/`, `*.spec.ts`, etc.) |
 | `--format` | `text` (default), `json`, `typed`, `grep` |
 
 ### Surface Types
@@ -606,7 +611,7 @@ reveal deps . --format json          # Machine-readable for CI
 
 ## reveal check — Quality Rule Engine
 
-Run 69 built-in quality rules against a file or directory. Covers bugs, complexity, imports, maintainability, security, types, and more. Exit code 1 = issues found.
+Run 55 built-in quality rules against a file or directory (79 including internal self-check rules, shown with `--all`). Covers bugs, complexity, imports, maintainability, security, types, and more. Exit code 1 = issues found.
 
 ### Usage
 
@@ -620,6 +625,8 @@ reveal check [path] [flags]
 |------|-------------|
 | `--select RULES` | Run only specific rules or categories: `B,S` or `B001,I002` |
 | `--ignore RULES` | Skip rules or categories |
+| `--profile NAME` | Apply a named rule preset (e.g., `maintenance`, `security`, `ci-strict`); list with `reveal --profiles` |
+| `--config FILE` | Config file (`.reveal.yaml` or `pyproject.toml`) |
 | `--only-failures` | Hide passing checks; show violations only |
 | `--recursive, -r` | Recurse into directories (default: on) |
 | `--advanced` | Enable deeper validation checks |
@@ -656,7 +663,7 @@ reveal check src/ --select B,S            # bugs and security only
 reveal check src/ --only-failures         # show violations only
 reveal check src/ --format json           # machine-readable
 reveal check src/ --severity high         # high/critical issues only
-reveal check --rules                      # list all 69 rules
+reveal check --rules                      # list active rules
 reveal check --explain C901              # explain the complexity rule
 git diff --name-only | reveal --stdin --check  # check only changed files
 ```
@@ -685,15 +692,17 @@ Scaffold new reveal components (adapters, analyzers, rules) with correct structu
 ### Usage
 
 ```
-reveal scaffold {adapter,analyzer,rule} [options]
+reveal scaffold adapter NAME URI       # e.g. mydb mydb://
+reveal scaffold analyzer NAME EXT      # e.g. toml .toml
+reveal scaffold rule CODE NAME         # e.g. B007 "too-long"
 ```
 
 ### Examples
 
 ```bash
-reveal scaffold adapter mydb --uri mydb://    # new URI adapter skeleton
-reveal scaffold analyzer toml --ext .toml     # new file type analyzer
-reveal scaffold rule B007                     # new quality rule stub
+reveal scaffold adapter mydb mydb://          # new URI adapter skeleton
+reveal scaffold analyzer toml .toml           # new file type analyzer
+reveal scaffold rule B007 "too-long"          # new quality rule stub
 ```
 
 ### See Also

@@ -999,47 +999,49 @@ Summary:
 reveal diff://app.py:old.py --format json
 ```
 
-**Structure**:
+**Actual structure** (`type` is `diff_comparison`; there is no unified top-level `changes` array — added/removed/modified entries are split into `diff.functions`, `diff.classes`, and `diff.imports`, and `summary` is nested per element kind rather than a flat `{added, removed, modified, unchanged}`):
 ```json
 {
   "contract_version": "1.0",
-  "type": "diff",
-  "source": "diff://app.py:old.py",
-  "left": {"uri": "app.py", "type": "file"},
-  "right": {"uri": "old.py", "type": "file"},
+  "type": "diff_comparison",
+  "source": "app.py vs old.py",
+  "left": {"uri": "app.py", "type": "unknown"},
+  "right": {"uri": "old.py", "type": "unknown"},
   "summary": {
-    "added": 3,
-    "removed": 1,
-    "modified": 4,
-    "unchanged": 12
+    "functions": {"added": 3, "removed": 1, "modified": 4},
+    "classes": {"added": 0, "removed": 0, "modified": 0},
+    "imports": {"added": 0, "removed": 0}
   },
-  "changes": [
-    {
-      "type": "added",
-      "element": "new_feature",
-      "element_type": "function",
-      "lines": 15,
-      "complexity": 3
-    },
-    {
-      "type": "removed",
-      "element": "old_handler",
-      "element_type": "function",
-      "lines": 20,
-      "complexity": 5
-    },
-    {
-      "type": "modified",
-      "element": "process",
-      "element_type": "function",
-      "old": {"complexity": 8, "lines": 45},
-      "new": {"complexity": 4, "lines": 32},
-      "delta": {"complexity": -4, "lines": -13},
-      "improvement": true
-    }
-  ]
+  "diff": {
+    "functions": [
+      {
+        "type": "added",
+        "name": "new_feature",
+        "line": 15,
+        "signature": "()",
+        "complexity": 3,
+        "line_count": 15,
+        "complexity_before": null,
+        "complexity_after": 3,
+        "complexity_delta": 3
+      },
+      {
+        "type": "modified",
+        "name": "process",
+        "complexity": 4,
+        "line_count": 32,
+        "complexity_before": 8,
+        "complexity_after": 4,
+        "complexity_delta": -4
+      }
+    ],
+    "classes": [],
+    "imports": []
+  }
 }
 ```
+
+**Note on the examples below**: several `jq` snippets in this guide (Detailed Workflows, Integration Examples) predate this schema and reference a flat `.changes[]` array with `.element`, `.old`/`.new`, `.delta.complexity`, and `.improvement` fields. Translate them as: `.changes[]` → `(.diff.functions + .diff.classes + .diff.imports)[]`, `.element` → `.name`, `.delta.complexity` → `.complexity_delta` (already correct in most places), and `.improvement == true` → `.complexity_delta < 0`. There is no `.improvement` field in the live output.
 
 ---
 

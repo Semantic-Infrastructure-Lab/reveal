@@ -112,7 +112,7 @@ Get nameserver and registrar info:
 reveal domain://example.com/registrar
 ```
 
-**Returns**: Nameservers and registrar details (full WHOIS not yet implemented)
+**Returns**: Nameservers and registrar details (registrar name, creation/expiry dates)
 
 ### 6. Advanced Health Check
 
@@ -356,25 +356,24 @@ reveal domain://<domain>/whois
 reveal domain://example.com/whois
 ```
 
-**Status**: ⚠️ **Not yet implemented** - requires python-whois package
+**Status**: ✅ Implemented
 
 **Output**:
 ```json
 {
   "type": "domain_whois",
   "domain": "example.com",
-  "error": "WHOIS lookup not yet implemented (requires python-whois)",
-  "next_steps": [
-    "Install python-whois: pip install python-whois",
-    "View DNS instead: reveal domain://example.com/dns"
-  ]
+  "registrar": "RESERVED-Internet Assigned Numbers Authority",
+  "creation_date": "1995-08-14",
+  "expiration_date": "2026-08-13",
+  "nameservers": ["elliott.ns.cloudflare.com", "hera.ns.cloudflare.com"],
+  "status": ["clientDeleteProhibited"]
 }
 ```
 
-**Future capabilities** (when implemented):
+**Capabilities**:
 - Registrar information
 - Registration and expiry dates
-- Registrant contact details (if public)
 - Nameserver delegation
 - Domain status codes
 
@@ -447,7 +446,8 @@ reveal domain://example.com/registrar
     "a.iana-servers.net",
     "b.iana-servers.net"
   ],
-  "note": "Full registrar info requires WHOIS lookup (not yet implemented)",
+  "creation_date": "1995-08-14",
+  "expiration_date": "2026-08-13",
   "next_steps": [
     "View DNS records: reveal domain://example.com/dns"
   ]
@@ -724,6 +724,8 @@ reveal domain://example.com --check
 ---
 
 ### Check Types
+
+**Note**: `--check` now runs 9 checks total, including the four documented below plus HTTP redirect (port 80 → HTTPS), mail deliverability (SPF/DMARC), and NS authority checks. See the `/mail`, `/http`, and `/ns-audit` elements listed in `reveal domain://<domain>` output for details on those additional checks.
 
 #### 1. DNS Resolution Check
 
@@ -1447,32 +1449,27 @@ cat domains.txt | xargs -P 10 -I {} sh -c 'reveal domain://{} --check'
 
 ### Current Limitations
 
-1. **WHOIS not implemented**
-   - **Status**: Placeholder only, returns error
-   - **Workaround**: Use external `whois` command
-   - **Future**: Will require python-whois package
-
-2. **No DNS record modification**
+1. **No DNS record modification**
    - **Limitation**: Read-only (inspection only)
    - **Design**: Intentional (inspection tool, not DNS manager)
    - **Workaround**: Use DNS provider's API or control panel
 
-3. **Propagation check performance**
+2. **Propagation check performance**
    - **Issue**: Queries all nameservers (3-6 seconds)
    - **Impact**: Slower than basic checks
    - **Workaround**: Use basic overview for quick checks, propagation check only when needed
 
-4. **SSL check delegates to ssl://**
+3. **SSL check delegates to ssl://**
    - **Design**: ssl:// adapter owns certificate inspection
    - **Impact**: domain:// provides SSL summary only
    - **Workaround**: Use ssl:// directly for deep SSL inspection
 
-5. **Requires dnspython**
+4. **Requires dnspython**
    - **Dependency**: `pip install dnspython`
    - **Impact**: Won't work without dnspython
    - **Workaround**: Install dependency
 
-6. **No batch mode for elements**
+5. **No batch mode for elements**
    - **Limitation**: Batch mode only supported for health checks
    - **Impact**: Can't batch `domain://*/dns` queries
    - **Workaround**: Use bash loops with xargs for parallel element queries
@@ -1561,22 +1558,6 @@ reveal ssl://example.com --check
 reveal ssl://example.com/dates
 
 # Renew certificate (provider-specific)
-```
-
----
-
-#### Error: "WHOIS lookup not yet implemented (requires python-whois)"
-
-**Meaning**: WHOIS feature not yet implemented
-
-**Status**: Feature pending
-
-**Workarounds**:
-```bash
-# Use external whois command
-whois example.com
-
-# Or use online WHOIS lookup services
 ```
 
 ---
@@ -2275,18 +2256,9 @@ See [Performance Considerations](#performance-considerations) for details.
 
 ### WHOIS Questions
 
-**Q: Why doesn't WHOIS work?**
+**Q: How do I get WHOIS data?**
 
-A: WHOIS lookup is not yet implemented. It requires the python-whois package and additional development. Current workaround:
-```bash
-whois example.com
-```
-
----
-
-**Q: When will WHOIS be implemented?**
-
-A: WHOIS is planned for a future release. Track progress at: https://github.com/reveal-tool/reveal/issues
+A: Use `reveal domain://example.com/whois` (or `/registrar` for the short form). Returns registrar, creation/expiry dates, nameservers, and status codes.
 
 ---
 

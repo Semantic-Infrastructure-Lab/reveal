@@ -332,14 +332,16 @@ reveal env://DATABASE_URL
 ### Self-referential diagnosis
 
 ```bash
-# Use reveal to extract reveal's own implementation
-reveal reveal://rules/links/L001.py _extract_anchors_from_markdown
+# Use reveal to extract reveal's own implementation (plain file+element syntax,
+# run from a reveal checkout — reveal://<path> <element> only shows the overview,
+# it does not extract elements)
+reveal reveal/rules/links/L001.py _extract_anchors_from_markdown
 
 # Extract a class definition
-reveal reveal://analyzers/markdown.py MarkdownAnalyzer
+reveal reveal/analyzers/markdown.py MarkdownAnalyzer
 
 # Learn adapter patterns by extracting adapter code
-reveal reveal://adapters/reveal.py get_element
+reveal reveal/adapters/reveal/adapter.py get_element
 ```
 
 ### Cross-adapter orientation

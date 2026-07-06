@@ -107,7 +107,8 @@ state, notifications, clocks, environment reads, process globals, or mutation.
 
 ## Limits
 
-- Initial language support is Python tests.
+- Language support is Python and TypeScript/JavaScript tests (`jest.mock`/`vi.mock` and
+  `patch.object`-style calls); TypeScript/JavaScript scanning requires `tree_sitter_language_pack`.
 - Static target resolution is best-effort.
 - `patch.object(adapter, "name")` can identify the patched symbol but may not
   always know the concrete production module.

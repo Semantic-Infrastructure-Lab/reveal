@@ -179,6 +179,11 @@ Key fields in the JSON response:
     "duplicate_group_count": 0,
     "groups": []
   },
+  "renewal_timer": {
+    "configured": true,
+    "mechanisms": ["systemd"],
+    "warning": null
+  },
   "next_steps": []
 }
 ```
@@ -265,4 +270,4 @@ grep -r ssl_certificate /etc/nginx/ | grep -v ssl_certificate_key
 
 ---
 
-**Navigation**: [Index](../README.md) | [Adapter Guides](../INDEX.md#adapter-guides-19-files)
+**Navigation**: [Index](../README.md) | [Adapter Guides](../INDEX.md#adapter-guides-22-files)

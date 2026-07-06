@@ -384,7 +384,7 @@ def test_lua_structure():
 > **Current roadmap**: See [ROADMAP.md](ROADMAP.md) for detailed status and priorities.
 
 **Good first contributions:**
-- More pattern detection rules (see `reveal/rules/` — 69 rules across 14 categories)
+- More pattern detection rules (see `reveal/rules/` — run `reveal --rules` for the current count and categories)
 - Language analyzer improvements (see `reveal/analyzers/`)
 - Documentation fixes and examples
 - Tests for edge cases in existing adapters

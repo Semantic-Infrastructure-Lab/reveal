@@ -1,6 +1,10 @@
 ---
 title: CLI Integration Guide
 category: guide
+help_topic: cli-integration
+help_description: "Adding a new top-level subcommand to reveal's CLI"
+help_category: dev_guides
+help_token_estimate: "~2,000"
 ---
 # CLI Integration Guide
 
@@ -258,7 +262,14 @@ Reference this guide in:
 
 ## Real Example: The Scaffold Command
 
-See `reveal/main.py` `_handle_scaffold_command()` for a complete, production example of:
+**Note:** Current wiring uses a table-driven dispatcher, not per-command `_handle_*_command()`
+functions as shown above. `reveal/main.py`'s `_dispatch_subcommand()` looks up
+`sys.argv[1]` in a `_SUBCOMMANDS` dict mapping the command name to
+`(module_path, parser_factory_name, runner_name)`, then lazily imports the module
+and calls the factory/runner. Adding a subcommand today means adding one entry to
+that dict plus a `create_<name>_parser()` / `run_<name>()` pair in
+`reveal/cli/commands/<name>.py` — see `reveal/cli/commands/scaffold.py` for a
+complete, production example of:
 - Subcommand architecture
 - Multiple subparsers (adapter, analyzer, rule)
 - Handler routing

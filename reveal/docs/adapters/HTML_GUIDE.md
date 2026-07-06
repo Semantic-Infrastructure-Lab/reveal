@@ -23,12 +23,17 @@ reveal page.html --links
 
 # Get metadata (SEO, OpenGraph, Twitter cards)
 reveal page.html --metadata
-
-# Extract specific element by ID, class, or CSS selector
-reveal page.html "#search-form"
-reveal page.html ".hero-section"
-reveal page.html "nav ul li"
 ```
+
+> **Known issues (current version):**
+> - Positional CSS-selector/ID extraction (`reveal page.html "#search-form"`,
+>   `reveal page.html ".hero-section"`, `reveal page.html "nav ul li"`) currently errors with
+>   "Element not found" — the generic element-extraction path doesn't route selector syntax to
+>   the HTML analyzer. Use `--search '<text>'` for content lookup, or `--semantic`/`--links`/
+>   `--metadata` for structured extraction instead.
+> - The bare default view (`reveal page.html` with no flags) currently prints only the file
+>   summary line (size/line count), not the `Elements`/`Template_blocks` listing shown below —
+>   use `--semantic`, `--links`, or `--metadata` to see structured content.
 
 ## Features
 
@@ -181,7 +186,7 @@ reveal templates/base.html
 reveal templates/*.html | grep "block content"
 
 # Check template variable usage
-reveal template.html --format json | jq '.template.variables'
+reveal template.html --format json | jq '.structure.template.variables'
 ```
 
 ### Web Scraping Preparation
@@ -209,7 +214,7 @@ reveal scraped_page.html "table.data"
 reveal index.html --metadata
 
 # Verify OpenGraph tags
-reveal page.html --metadata --format json | jq '.meta | select(has("og:title"))'
+reveal page.html --metadata --format json | jq '.structure.metadata.meta | select(has("og:title"))'
 
 # Find pages missing descriptions
 for f in site/**/*.html; do

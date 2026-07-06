@@ -27,6 +27,7 @@ cpanel://USERNAME[/element]
 | `domains` | All domains with docroots and type (addon/subdomain/main) |
 | `ssl` | Disk cert health per domain from `/var/cpanel/ssl/apache_tls/` |
 | `acl-check` | `nobody` ACL status on every domain docroot |
+| `full-audit` | Composite: `ssl` + `acl-check` + nginx ACME check in one pass; exits 2 on any failure — the preferred single command for agents |
 
 ---
 
@@ -44,6 +45,9 @@ reveal cpanel://myuser/ssl
 
 # ACL check (is nobody user allowed into every docroot?)
 reveal cpanel://myuser/acl-check
+
+# Composite: ssl + acl-check + nginx ACME in one pass (exits 2 on failure)
+reveal cpanel://myuser/full-audit
 ```
 
 ---
@@ -200,6 +204,27 @@ chmod o+x /home/myuser/api/public
 
 ---
 
+### Full Audit (`cpanel://USERNAME/full-audit`)
+
+Composite check combining `ssl`, `acl-check`, and the nginx ACME path check in a single pass. Exits with code 2 if any check fails — designed as the one-shot command for agents/CI rather than running the three elements separately.
+
+```bash
+reveal cpanel://myuser/full-audit
+```
+
+```
+Full audit: myuser
+===================
+
+✅ SSL (9 domains): 9 ok
+✅ ACL (12 domains): 12 ok
+✅ nginx: ACME path OK
+
+✅ Audit complete — all checks passed
+```
+
+---
+
 ## JSON Output
 
 All elements support `--format=json` for scripting and pipeline use:
@@ -315,6 +340,9 @@ See [NGINX_GUIDE.md](NGINX_GUIDE.md) for all nginx operator commands.
 | Flag | Element | Description |
 |------|---------|-------------|
 | `--dns-verified` | `ssl` | Exclude NXDOMAIN domains from summary counts |
+| `--only-failures` | `ssl`, `acl-check` | Show only non-ok/denied entries |
+| `--check-live` | `ssl` | Cross-reference disk cert against the live server cert |
+| `?domain_type=<type>` | `ssl` | Filter to one domain type, e.g. `?domain_type=subdomain` |
 | `--format=json` | all | JSON output for scripting |
 
 ---

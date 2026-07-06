@@ -355,10 +355,10 @@ reveal 'ast://./src?complexity>10' --format=json
   "results": [
     {
       "file": "src/auth.py",
-      "symbol": "authenticate",
-      "type": "function",
+      "category": "functions",
+      "name": "authenticate",
       "line": 45,
-      "lines": 67,
+      "line_count": 67,
       "complexity": 15,
       "decorators": []
     }
@@ -377,7 +377,7 @@ reveal 'ast://./src?complexity>10' --format=json
 - `total_files`: Number of files scanned
 - `total_results`: Number of matches before limit/offset
 - `displayed_results`: Number of results in output
-- `results`: Array of matched code elements
+- `results`: Array of matched code elements — each has `name` (not `symbol`), `category` (not `type`; values `functions`/`classes`/`methods`), and `line_count` (not `lines`)
 - `meta`: Trust metadata (parse mode, confidence)
 
 ### 3. Grep Format
@@ -588,7 +588,7 @@ reveal 'ast://.?decorator=property&lines>10'
 
 # Step 6: Get JSON for analysis
 reveal 'ast://.?decorator=*cache*' --format=json | \
-  jq -r '.results[] | "\(.file):\(.line) \(.symbol)"'
+  jq -r '.results[] | "\(.file):\(.line) \(.name)"'
 ```
 
 **Expected outcome**: Understanding of caching patterns and potential issues.
@@ -624,14 +624,14 @@ reveal 'ast://./src?type=class' --format=json
 
 # Step 2: Find all public functions (not starting with _)
 reveal 'ast://./src?type=function' --format=json | \
-  jq '.results[] | select(.symbol | startswith("_") | not)'
+  jq '.results[] | select(.name | startswith("_") | not)'
 
 # Step 3: Find all @property methods (getters/setters)
 reveal 'ast://./src?decorator=property' --format=json
 
 # Step 4: Create API index
 reveal 'ast://./src?type=class|function' --format=json | \
-  jq -r '.results[] | "\(.file):\(.line) [\(.type)] \(.symbol)"' | \
+  jq -r '.results[] | "\(.file):\(.line) [\(.category)] \(.name)"' | \
   sort > api_index.txt
 ```
 
@@ -823,7 +823,7 @@ reveal 'ast://./src' --format=json > structure_cache.json
 
 # Query cache with jq (instant)
 jq '.results[] | select(.complexity > 10)' structure_cache.json
-jq '.results[] | select(.lines > 100)' structure_cache.json
+jq '.results[] | select(.line_count > 100)' structure_cache.json
 ```
 
 **Cache invalidation**: Regenerate when files change.
@@ -891,43 +891,30 @@ reveal --languages
 
 ### Common errors and solutions:
 
-**1. Invalid operator**
+**Note**: The current adapter fails soft rather than raising hard errors — an unsupported operator, a nonexistent path, or a malformed query (e.g. `lines>>50`) all just produce a `Files scanned: 0` / `No matches found` result instead of an error message. If a query returns nothing, double-check the path and operator syntax below rather than expecting an exception.
+
+**1. No matches (bad operator, bad path, or malformed query)**
 
 ```
-Error: Invalid operator '!=' for parameter 'lines'
+Files scanned: 0
+Results: 0
+
+No matches found.
 ```
 
-**Cause**: Used unsupported operator for parameter type.
-**Solution**: Check [Operators](#operators) table for valid operators per parameter type.
+**Cause**: Any of: unsupported operator for the parameter type, a path that doesn't exist, or a malformed query string (e.g. `lines>>50`).
+**Solution**: Check the [Operators](#operators) table for valid operators per parameter type, verify the path with `ls`, and use single operators (`lines>50`, not `lines>>50`).
 
-**2. Path not found**
-
-```
-Error: Path './src' does not exist
-```
-
-**Cause**: Specified path doesn't exist.
-**Solution**: Check path spelling, use `ls` to verify directory exists.
-
-**3. Syntax error in query**
+**2. No results (query is valid, nothing matches)**
 
 ```
-Error: Failed to parse query string: lines>>50
-```
-
-**Cause**: Double operator or invalid syntax.
-**Solution**: Use single operators: `lines>50` not `lines>>50`.
-
-**4. No results**
-
-```
-No results found matching query: complexity>10
+No matches found.
 ```
 
 **Cause**: No code elements match filters.
 **Solution**: Relax filters or verify you're querying the right path.
 
-**5. Tree-sitter parsing error**
+**3. Tree-sitter parsing error**
 
 ```
 Warning: Failed to parse file.py (tree-sitter error)
@@ -1044,12 +1031,12 @@ reveal 'ast://./src?type=function' --format=json | \
 
 # Find top 10 most complex functions
 reveal 'ast://./src' --format=json | \
-  jq -r '[.results[] | {name: .symbol, file, complexity, lines}] |
+  jq -r '[.results[] | {name, file, complexity, line_count}] |
          sort_by(.complexity) | reverse | .[0:10][]'
 
 # Generate CSV report
 reveal 'ast://./src' --format=json | \
-  jq -r '.results[] | [.file, .symbol, .complexity, .lines] | @csv' \
+  jq -r '.results[] | [.file, .name, .complexity, .line_count] | @csv' \
   > code_metrics.csv
 ```
 
@@ -1094,7 +1081,7 @@ reveal 'ast://.?complexity>10' --format=json
 ```bash
 # Top 10 most complex functions
 reveal 'ast://./src' --format=json | \
-  jq '[.results[] | {name: .symbol, complexity}] |
+  jq '[.results[] | {name, complexity}] |
       sort_by(.complexity) | reverse | .[0:10]'
 
 # Functions by file with complexity
@@ -1105,7 +1092,7 @@ reveal 'ast://./src?complexity>10' --format=json | \
 # Generate HTML report
 reveal 'ast://./src' --format=json | \
   jq -r '.results[] |
-         "<tr><td>\(.symbol)</td><td>\(.complexity)</td></tr>"' \
+         "<tr><td>\(.name)</td><td>\(.complexity)</td></tr>"' \
   > report.html
 ```
 
@@ -1172,7 +1159,7 @@ data = json.loads(result.stdout)
 # Process results
 for item in data["results"]:
     print(f"{item['file']}:{item['line']} - "
-          f"{item['symbol']} (complexity: {item['complexity']})")
+          f"{item['name']} (complexity: {item['complexity']})")
 ```
 
 ### With pandas (data analysis)
@@ -1203,7 +1190,7 @@ print(df.nlargest(10, "complexity"))
 ```bash
 # Export to CSV
 reveal 'ast://./src' --format=json | \
-  jq -r '.results[] | [.file, .symbol, .type, .line, .lines, .complexity] | @csv' \
+  jq -r '.results[] | [.file, .name, .category, .line, .line_count, .complexity] | @csv' \
   > code_structure.csv
 
 # Import to SQLite
@@ -1260,7 +1247,7 @@ sqlite3 code.db "SELECT file, symbol, complexity
 - ✅ Wildcard and regex pattern matching
 - ✅ Result control (sort, limit, offset)
 - ✅ Multiple output formats (text, JSON, grep)
-- ✅ 84 language support via tree-sitter
+- ✅ 85 language support via tree-sitter
 - ✅ Combined filters with AND logic
 - ✅ OR logic for type parameter
 - ✅ Tree-sitter-based McCabe complexity for supported languages

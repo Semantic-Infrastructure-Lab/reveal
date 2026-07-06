@@ -264,34 +264,29 @@ Track and analyze tool usage patterns:
 - **Common operations**: Most frequent operations per tool
 - **Tool pairs**: Which tools are commonly used together
 
-**Example output**:
+**Example output** (actual field names — `tools` is an object keyed by tool name, not an array, and there is no top-level `overall_success_rate`):
 ```json
 {
-  "type": "claude_tools",
-  "session_name": "infernal-earth-0118",
-  "tools": [
-    {
-      "name": "Read",
+  "type": "claude_tool_summary",
+  "session": "infernal-earth-0118",
+  "total_calls": 23,
+  "tools": {
+    "Read": {
       "count": 15,
-      "success_rate": 93.3,
-      "common_operations": [
-        "/path/to/file.py (5 times)",
-        "/path/to/config.yaml (3 times)"
-      ]
+      "success_rate": "93.3%",
+      "success": 14,
+      "failure": 1
     },
-    {
-      "name": "Bash",
+    "Bash": {
       "count": 8,
-      "success_rate": 87.5,
-      "common_operations": [
-        "git status",
-        "pytest tests/"
-      ]
+      "success_rate": "87.5%",
+      "success": 7,
+      "failure": 1
     }
-  ],
-  "overall_success_rate": 91.2
+  }
 }
 ```
+To get a per-tool success rate below a threshold: `jq '.tools | to_entries[] | select(.value.success_rate | rtrimstr("%") | tonumber < 80)'`.
 
 **Use cases**:
 - Identify unreliable tools (low success rates)
@@ -315,29 +310,23 @@ Track all file access patterns:
 - Access frequency (how many times each file was touched)
 - Operation distribution (Read vs Write vs Edit)
 
-**Example output**:
+**Example output** (actual shape — `operations` is a flat list of events with `file_path`, and per-file counts live under `by_operation`, not a `files`/`summary` array):
 ```json
 {
   "type": "claude_files",
-  "session_name": "infernal-earth-0118",
-  "files": [
-    {
-      "path": "/home/user/project/src/main.py",
-      "operations": ["Read", "Edit"],
-      "access_count": 3
-    },
-    {
-      "path": "/home/user/project/tests/test_main.py",
-      "operations": ["Write"],
-      "access_count": 1
-    }
-  ],
-  "summary": {
-    "total_files": 12,
-    "read_only": 7,
-    "modified": 4,
-    "created": 1
-  }
+  "session": "infernal-earth-0118",
+  "total_operations": 4,
+  "unique_files": 2,
+  "by_operation": {
+    "Read": {"/home/user/project/src/main.py": 2},
+    "Write": {"/home/user/project/tests/test_main.py": 1},
+    "Edit": {"/home/user/project/src/main.py": 1},
+    "Glob": {},
+    "Grep": {}
+  },
+  "operations": [
+    {"message_index": 47, "operation": "Read", "file_path": "/home/user/project/src/main.py", "timestamp": "2026-02-12T11:21:27Z"}
+  ]
 }
 ```
 
@@ -409,12 +398,12 @@ Find errors with full context:
 - Error responses
 - Context around errors (surrounding messages)
 
-**Example output**:
+**Example output** (actual field name is `error_count`, not `count`):
 ```json
 {
   "type": "claude_errors",
-  "session_name": "infernal-earth-0118",
-  "count": 2,
+  "session": "infernal-earth-0118",
+  "error_count": 2,
   "errors": [
     {
       "message_id": 67,
@@ -2043,26 +2032,26 @@ echo "Error trends logged to $ERROR_LOG"
 
 ### 1. jq Integration
 
-**Extract tool success rates**:
+**Extract tool success rates** (`tools` is an object keyed by tool name, not an array):
 ```bash
 reveal claude://session/my-session/tools --format json | \
-  jq '.tools[] | {name, success_rate}'
+  jq '.tools | to_entries[] | {name: .key, success_rate: .value.success_rate}'
 ```
 
 **Find low-success tools**:
 ```bash
 reveal claude://session/my-session/tools --format json | \
-  jq '.tools[] | select(.success_rate < 80)'
+  jq '.tools | to_entries[] | select(.value.success_rate | rtrimstr("%") | tonumber < 80)'
 ```
 
-**Count errors**:
+**Count errors** (field is `error_count`, not `count`):
 ```bash
-reveal claude://session/my-session?errors --format json | jq '.count'
+reveal claude://session/my-session?errors --format json | jq '.error_count'
 ```
 
-**Extract file paths**:
+**Extract file paths** (field is `operations[].file_path`, not `files[].path`):
 ```bash
-reveal claude://session/my-session/files --format json | jq -r '.files[].path'
+reveal claude://session/my-session/files --format json | jq -r '.operations[].file_path' | sort -u
 ```
 
 ---

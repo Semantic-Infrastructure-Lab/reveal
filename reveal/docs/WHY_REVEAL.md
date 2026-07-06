@@ -1,6 +1,10 @@
 ---
 title: Why Reveal
 category: reference
+help_topic: why
+help_description: "Why reveal exists and what problems it solves"
+help_category: getting_started
+help_token_estimate: "~4,050"
 beth_topics:
   - reveal
   - capabilities
@@ -313,7 +317,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 4. **`reveal overview` + `reveal deps`** — codebase orientation dashboard and dependency health in one command each. `reveal deps` finds circular import chains and unused imports across a full project; `reveal overview` synthesises file count, language breakdown, quality score, and git velocity into a single output.
 
-5. **70 quality rules via `reveal check`** — 14 categories: bugs (B), complexity (C), duplicates (D), errors (E), frontmatter (F), imports (I), links (L), maintainability (M), infrastructure/nginx (N), refactoring (R), security (S), types (T), URLs (U), and Reveal's own adapter contract validation (V). One CLI, no config file required.
+5. **79 quality rules via `reveal check`** — 14 categories: bugs (B), complexity (C), duplicates (D), errors (E), frontmatter (F), imports (I), links (L), maintainability (M), infrastructure/nginx (N), refactoring (R), security (S), types (T), URLs (U), and Reveal's own adapter contract validation (V). One CLI, no config file required.
 
 6. **`reveal pack --since <branch> --budget N`** — PR-aware codebase snapshots. Changed files boosted to priority tier 0; remaining budget fills with entry points and complexity leaders. Built for agents, not retrofitted.
 
@@ -352,6 +356,8 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 | `env://` | Environment variable analysis, `.env` validation |
 | `python://` | Runtime introspection of live Python modules |
 | `xlsx://` | Excel data extraction and analysis |
+| `codex://` | OpenAI Codex CLI session index and analysis |
+| `patches://` | Mock/patch pressure in Python and TS/JS tests, grouped by target |
 | `letsencrypt://` | Let's Encrypt certificate inventory — orphan and duplicate SAN detection |
 | `claude://` | AI session history, tool usage, file access patterns |
 | `reveal://` | Reveal introspects itself: adapters, rules, config |
@@ -359,4 +365,6 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 ---
 
-**Navigation**: [INDEX.md](INDEX.md) | [QUICK_START.md](QUICK_START.md) | [RECIPES.md](guides/RECIPES.md) | [AGENT_HELP.md](AGENT_HELP.md)
+**Navigation**: [INDEX.md](INDEX.md) | [QUICK_START.md](QUICK_START.md) | [What Reveal Is Good For](guides/WHAT_IS_REVEAL_GOOD_FOR.md) | [RECIPES.md](guides/RECIPES.md) | [AGENT_HELP.md](AGENT_HELP.md)
+
+> **This doc vs. [What Reveal Is Good For](guides/WHAT_IS_REVEAL_GOOD_FOR.md):** this one is the *capability tour* (what the tool can do, adapter by adapter). That one is the *decision guide* — best-fit use cases, who benefits most, and when Reveal is **not** the right tool. Read that if you're deciding whether Reveal fits your situation.

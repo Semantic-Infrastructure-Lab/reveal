@@ -56,7 +56,7 @@ reveal sqlite:///app.db/comments
 reveal sqlite:///app.db --format=json
 reveal sqlite:///app.db/users --format=json
 
-# 6. Health check
+# 6. Health check (currently a no-op — returns the standard overview; see "Output Formats")
 reveal sqlite:///app.db --check
 ```
 
@@ -351,7 +351,7 @@ reveal sqlite:///app.db --format=json
 **JSON structure:**
 ```json
 {
-  "contract_version": "1.1",
+  "contract_version": "1.0",
   "type": "sqlite_database",
   "source": "/path/to/app.db",
   "source_type": "database",
@@ -464,7 +464,7 @@ reveal sqlite:///app.db/users --format=json
 **JSON structure:**
 ```json
 {
-  "contract_version": "1.1",
+  "contract_version": "1.0",
   "type": "sqlite_table",
   "source": "/path/to/app.db",
   "source_type": "table",

@@ -74,7 +74,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
 - Internal V-series rules (V016-V022) used for reveal's self-validation
 - Undocumented query parameters on adapters
 - Features marked "experimental" in help text
-- Languages with only tree-sitter extraction (165+ languages, basic structure only)
+- Languages with only tree-sitter extraction (16 languages, basic structure only — run `reveal --languages` for the live list)
 
 **Expectations:** Use at your own risk. Test thoroughly before depending on experimental features.
 
@@ -231,7 +231,7 @@ Full support, extraction quality improving, may have edge cases:
 ### Tier 3 (Experimental)
 
 Tree-sitter extraction only, basic structure, no custom analyzers:
-- 165+ languages via tree-sitter-language-pack
+- 16 languages via tree-sitter-language-pack fallback (run `reveal --languages` for the live list)
 
 ---
 

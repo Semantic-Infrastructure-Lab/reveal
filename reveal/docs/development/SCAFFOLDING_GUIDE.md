@@ -1,6 +1,10 @@
 ---
 title: Reveal Scaffolding System
 category: guide
+help_topic: scaffolding
+help_description: "Generate production-ready adapters/analyzers/rules via reveal scaffold"
+help_category: dev_guides
+help_token_estimate: "~2,650"
 ---
 # Reveal Scaffolding System
 
@@ -165,9 +169,13 @@ Examples:
 - `E` - Errors/Style (LOW severity)
 - `F` - Frontmatter/Format (MEDIUM severity)
 - `I` - Imports (LOW severity)
+- `L` - Links (MEDIUM severity)
 - `M` - Maintainability (MEDIUM severity)
 - `N` - Naming/Infrastructure (LOW severity)
+- `R` - Refactoring (MEDIUM severity)
 - `S` - Security (HIGH severity)
+- `T` - Types (MEDIUM severity)
+- `U` - URLs (LOW severity)
 - `V` - Versioning (MEDIUM severity)
 - `X` - Custom (MEDIUM severity)
 

@@ -1,6 +1,10 @@
 ---
 title: "Output Contract Version Policy"
 type: reference
+help_topic: contract-versions
+help_description: "Output contract version policy for adapter authors"
+help_category: dev_guides
+help_token_estimate: "~1,200"
 beth_topics:
   - reveal
   - contract-version

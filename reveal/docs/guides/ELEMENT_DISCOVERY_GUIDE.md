@@ -1,6 +1,10 @@
 ---
 title: Element Discovery Guide
 category: guide
+help_topic: elements
+help_description: "Discovering queryable elements within a resource"
+help_category: feature_guides
+help_token_estimate: "~4,050"
 ---
 # Element Discovery Guide
 
@@ -226,7 +230,7 @@ reveal ssl://google.com --format=json | jq '.available_elements[].name'
 
 ### Domain Adapter
 
-**Elements**: dns, whois, ssl, registrar
+**Elements**: dns, whois, ssl, registrar, mail, http, ns-audit
 
 **Overview**:
 ```bash
@@ -254,7 +258,7 @@ reveal domain://example.com/dns
 
 ### MySQL Adapter
 
-**Elements**: connections, performance, innodb, replication, storage, errors, variables, health, databases, indexes, slow-queries
+**Elements**: connections, performance, innodb, replication, storage, errors, variables, health, databases, indexes, slow-queries, tables
 
 **Overview**:
 ```bash
@@ -641,8 +645,8 @@ reveal ssl://google.com --format=json | jq 'has("available_elements")'
 | Adapter | Elements | Notes |
 |---------|----------|-------|
 | **ssl** | san, chain, issuer, subject, dates, full | Fixed list |
-| **domain** | dns, whois, ssl, registrar | Fixed list |
-| **mysql** | connections, performance, innodb, replication, storage, errors, variables, health, databases, indexes, slow-queries | Fixed list |
+| **domain** | dns, whois, ssl, registrar, mail, http, ns-audit | Fixed list |
+| **mysql** | connections, performance, innodb, replication, storage, errors, variables, health, databases, indexes, slow-queries, tables | Fixed list |
 | **python** | version, env, venv, packages, imports, syspath, doctor | Fixed list |
 | **env** | (any variable name) | Dynamic |
 | **git** | (any commit/file/branch) | Dynamic |

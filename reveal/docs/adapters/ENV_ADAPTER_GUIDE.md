@@ -78,30 +78,28 @@ reveal env://
 
 **Output**:
 ```
-Environment Variables (42 total)
+Environment Variables (80)
 
-System (8 variables):
-  HOME: /home/user
-  PATH: /usr/local/bin:/usr/bin:/bin
-  SHELL: /bin/bash
-  USER: user
-  LANG: en_US.UTF-8
-  PWD: /home/user/project
-  TERM: xterm-256color
-  EDITOR: vim
+System (9):
+  HOME                            /home/user
+  PATH                            /usr/local/bin:/usr/bin:/bin
+  SHELL                           /bin/bash
+  USER                            user
+  LANG                            en_US.UTF-8
+  PWD                             /home/user/project
+  TERM                            xterm-256color
 
-Python (5 variables):
-  VIRTUAL_ENV: /home/user/.venv
-  PYTHONPATH: /opt/python
-  PYTHON_VERSION: 3.11.5
-  PYTHONUNBUFFERED: 1
-  PYTHONDONTWRITEBYTECODE: 1
+Python (2):
+  VIRTUAL_ENV                     /home/user/.venv
+  PYTHONPATH                     /opt/python
 
-Application (3 variables):
-  DATABASE_URL: *** (sensitive)
-  API_KEY: *** (sensitive)
-  APP_ENV: production
+Application (3):
+  DATABASE_URL                    *** (sensitive)
+  API_KEY                         *** (sensitive)
+  APP_ENV                         production
 ```
+
+(Category names and counts vary by machine; exact column widths and totals are illustrative.)
 
 ### Example 2: Get Specific Variable
 
@@ -113,11 +111,10 @@ reveal env://PATH
 
 **Output**:
 ```
-Variable: PATH
+Environment Variable: PATH
 Category: System
 Value: /usr/local/bin:/usr/bin:/bin
 Length: 29 characters
-Sensitive: No
 ```
 
 ### Example 3: Check Sensitive Variable
@@ -130,11 +127,12 @@ reveal env://DATABASE_URL
 
 **Output**:
 ```
-Variable: DATABASE_URL
+Environment Variable: DATABASE_URL
 Category: Application
-Value: *** (sensitive)
+Value: ***
+Warning: Sensitive - This variable appears to contain sensitive data
+    Value is redacted — sensitive values are not accessible via CLI
 Length: 87 characters
-Sensitive: Yes
 ```
 
 ### Example 4: JSON Output
@@ -401,8 +399,10 @@ reveal env://DATABASE_URL
 
 **Output**:
 ```
-Variable: DATABASE_URL
-Value: *** (sensitive)
+Environment Variable: DATABASE_URL
+Value: ***
+Warning: Sensitive - This variable appears to contain sensitive data
+    Value is redacted — sensitive values are not accessible via CLI
 Length: 87 characters
 ```
 

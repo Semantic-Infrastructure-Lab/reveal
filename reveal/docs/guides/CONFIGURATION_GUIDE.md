@@ -402,7 +402,7 @@ rules:
   # Disable verbose rules
   disable:
     - E501  # Line length (using black formatter)
-    - D001  # Docstring rules
+    - D001  # Duplicate function detection
 
   # Configure complexity
   C901:

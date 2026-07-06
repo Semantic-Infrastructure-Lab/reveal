@@ -21,18 +21,19 @@ category: guide
 8. [File History](#file-history)
 9. [Blame Analysis](#blame-analysis)
 10. [Semantic Blame](#semantic-blame)
-11. [Query Parameters](#query-parameters)
-12. [Commit Filtering](#commit-filtering)
-13. [Result Control](#result-control)
-14. [Output Types](#output-types)
-15. [Workflows](#workflows)
-16. [Integration Examples](#integration-examples)
-17. [Performance & Best Practices](#performance-best-practices)
-18. [Troubleshooting](#troubleshooting)
-19. [Limitations](#limitations)
-20. [Tips & Best Practices](#tips-best-practices)
-21. [Related Documentation](#related-documentation)
-22. [FAQ](#faq)
+11. [File Diff](#file-diff)
+12. [Query Parameters](#query-parameters)
+13. [Commit Filtering](#commit-filtering)
+14. [Result Control](#result-control)
+15. [Output Types](#output-types)
+16. [Workflows](#workflows)
+17. [Integration Examples](#integration-examples)
+18. [Performance & Best Practices](#performance-best-practices)
+19. [Troubleshooting](#troubleshooting)
+20. [Limitations](#limitations)
+21. [Tips & Best Practices](#tips-best-practices)
+22. [Related Documentation](#related-documentation)
+23. [FAQ](#faq)
 
 ---
 
@@ -74,8 +75,8 @@ reveal git://src/app.py?type=blame&element=load_config
 # 10. Filter commits by author
 reveal git://.@main?author=John
 
-# 11. Search commit messages
-reveal git://.?message~=bug
+# 11. Search commit messages (requires a ref — see Query Syntax note)
+reveal git://.@main?message~=bug
 ```
 
 **Why use git://?**
@@ -125,12 +126,14 @@ git://src/app.py?type=history
 # Multiple parameters (& separator)
 git://src/app.py?type=blame&detail=full
 
-# Filter with operators
-git://.?author=John&message~=bug
+# Filter with operators (requires an explicit ref — see note below)
+git://.@main?author=John&message~=bug
 
 # Result control
 git://.@main?limit=100&sort=date
 ```
+
+**Important**: Commit filters (`author`, `email`, `message`, `hash`) only take effect against an explicit ref (`git://.@main?...`, `git://.@HEAD?...`). A bare `git://.?...` with no `@ref` returns the repository overview and silently ignores filter params — always pin a ref when filtering commits.
 
 ---
 
@@ -639,6 +642,22 @@ Next Steps:
 
 ---
 
+## File Diff
+
+`?type=diff` shows what a specific commit changed in a file, relative to its parent — narrower than the full commit diff in `git://.@<ref>`.
+
+```bash
+reveal git://src/app.py@abc1234?type=diff                        # full file diff for that commit
+reveal git://src/app.py@abc1234?type=diff&element=load_config    # diff scoped to a function's hunks
+reveal git://src/app.py@abc1234?type=diff&context=10              # more context lines
+```
+
+**Modifiers**: `element=<name>` scopes to hunks touching that function/class; `context=N` sets context lines around each hunk (default varies).
+
+**Note**: `?type=history&element=<name>` similarly scopes file history to commits that touched a specific element.
+
+---
+
 ## Ownership (Commit-Share)
 
 `?type=ownership` aggregates **git-log authorship** over a file, a directory, or
@@ -699,9 +718,10 @@ that shares are limited to the fetched history. Run `git fetch --unshallow` firs
 
 | Parameter | Type | Values | Description |
 |-----------|------|--------|-------------|
-| `type` | string | `history`, `blame`, `ownership` | Operation type for files/directories |
+| `type` | string | `history`, `blame`, `diff`, `ownership` | Operation type for files/directories |
 | `detail` | string | `full`, `summary` | Blame detail level (default: summary) |
-| `element` | string | function/class name | Semantic blame target |
+| `element` | string | function/class name | Semantic blame target, or scope for `type=history`/`type=diff` |
+| `context` | integer | lines | Context lines around each hunk for `type=diff` |
 | `ref` | string | branch/tag/commit | Override the starting ref — alias for `@ref` in the URI (e.g., `?ref=v0.63.0`) |
 | `merges` | string | `1` | Include merge commits in ownership walk (default: excluded) |
 
@@ -757,7 +777,7 @@ reveal git://.@main?limit=50&offset=100
 
 ## Commit Filtering
 
-Filter commits by author, email, message, or hash:
+Filter commits by author, email, message, or hash. **All examples below need an explicit `@ref`** (`.@main`, `.@HEAD`, etc.) — a bare `git://.?...` ignores filter params and returns the repository overview instead.
 
 ### Author Filtering
 
@@ -1788,11 +1808,11 @@ reveal git://src/app.py@v1.0.0
 
 ## Related Documentation
 
-- **AST Adapter**: `docs/AST_ADAPTER_GUIDE.md` - Code structure analysis (find complex functions)
-- **Diff Adapter**: `docs/DIFF_ADAPTER_GUIDE.md` - Compare files/directories across refs
-- **Stats Adapter**: `docs/STATS_ADAPTER_GUIDE.md` - Codebase metrics and hotspots
-- **Python Adapter**: `docs/PYTHON_ADAPTER_GUIDE.md` - Runtime inspection
-- **Reveal Overview**: `README.md` - Full reveal documentation
+- **AST Adapter**: `AST_ADAPTER_GUIDE.md` - Code structure analysis (find complex functions)
+- **Diff Adapter**: `DIFF_ADAPTER_GUIDE.md` - Compare files/directories across refs
+- **Stats Adapter**: `STATS_ADAPTER_GUIDE.md` - Codebase metrics and hotspots
+- **Python Adapter**: `PYTHON_ADAPTER_GUIDE.md` - Runtime inspection
+- **Reveal Overview**: `../README.md` - Full reveal documentation
 
 ---
 

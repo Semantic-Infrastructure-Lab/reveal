@@ -1,6 +1,10 @@
 ---
 title: Output Contract Specification
 category: reference
+help_topic: output
+help_description: "Output contract specification for adapter authors"
+help_category: dev_guides
+help_token_estimate: "~4,100"
 ---
 # Output Contract Specification
 
@@ -384,7 +388,7 @@ For elements with source locations, use:
 
 ## Validation Rules
 
-### V016: Output Contract Compliance
+### V023: Output Contract Compliance
 
 Adapters MUST comply with the Output Contract specification.
 
@@ -399,7 +403,7 @@ Adapters MUST comply with the Output Contract specification.
 reveal --check reveal/adapters/myadapter.py
 ```
 
-**Implementation**: See `reveal/rules/validation/V016.py`
+**Implementation**: See `reveal/rules/validation/V023.py`
 
 ---
 
@@ -419,7 +423,7 @@ reveal --check reveal/adapters/myadapter.py
 #### Phase 1: Additive (v1.0 - Current)
 - **Add** contract fields to all adapters
 - **Keep** legacy fields for compatibility
-- **Emit** deprecation warnings via V016
+- **Emit** deprecation warnings via V023
 
 Example output (transitional):
 ```python
@@ -506,14 +510,14 @@ def test_output_contract_compliance(self):
 
 ## Checking Contract Compliance
 
-Use the V016 rule to check adapter output compliance:
+Use the V023 rule to check adapter output compliance:
 
 ```bash
 # Check a specific adapter implementation for contract compliance
-reveal --check reveal/adapters/myadapter.py --select V016
+reveal --check reveal/adapters/myadapter.py --select V023
 
 # Check all adapters at once
-reveal --check reveal/adapters/ --select V016
+reveal --check reveal/adapters/ --select V023
 ```
 
 ---
@@ -576,7 +580,7 @@ reveal --check reveal/adapters/ --select V016
 
 ## Implementation Status
 
-Run `reveal --check reveal/adapters/ --select V016` for a live compliance report. The static table that used to live here became stale faster than it could be maintained and was removed.
+Run `reveal --check reveal/adapters/ --select V023` for a live compliance report. The static table that used to live here became stale faster than it could be maintained and was removed.
 
 ---
 
@@ -606,7 +610,7 @@ A: Every adapter has a source:
 
 **Q: Do I need to migrate immediately?**
 
-A: No. V016 will emit warnings but not fail builds. You have until v2.0 (12+ months) to migrate.
+A: No. V023 will emit warnings but not fail builds. You have until v2.0 (12+ months) to migrate.
 
 **Q: How do I test contract compliance?**
 
@@ -616,25 +620,24 @@ from reveal.contracts import validate_output
 validate_output(result, version='1.0')
 ```
 
-Or run V016 validation:
+Or run V023 validation:
 ```bash
-reveal --check reveal/adapters/myadapter.py --select V016
+reveal --check reveal/adapters/myadapter.py --select V023
 ```
 
 ---
 
 ## References
 
-- **Validation**: `reveal/rules/validation/V016.py` - Contract enforcement
-- **Adapter Guide**: `docs/ADAPTER_AUTHORING.md` - Creating adapters
-- **Stability**: `STABILITY.md` - Feature stability taxonomy
+- **Validation**: `reveal/rules/validation/V023.py` - Contract enforcement
+- **Adapter Guide**: `development/ADAPTER_AUTHORING_GUIDE.md` - Creating adapters
 
 ---
 
 **Status**: This is a living document. Feedback welcome via GitHub issues.
 
 **Next Steps**:
-1. Implement V016 validation rule
+1. Implement V023 validation rule
 2. Migrate 3-5 core adapters to v1.0
 3. Add `reveal schema` command
 4. Update adapter authoring guide

@@ -2968,8 +2968,8 @@ exit 0
 
 **reveal auto-detects and provides structure for:**
 
-### Programming Languages (20+)
-Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, Swift, Kotlin, Dart, Elixir, Zig, GDScript, Bash, PowerShell, SQL, PHP, Ruby, Lua
+### Programming Languages (85 total — run `reveal --languages` for the live explicit-vs-fallback breakdown)
+Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, Swift, Kotlin, Dart, Elixir, Zig, GDScript, Bash, PowerShell, SQL, PHP, Ruby, Lua, and more — plus a tree-sitter fallback (basic structure only) for any other supported grammar
 
 **Structure provided:** Functions, classes, methods, imports, decorators, complexity
 
@@ -2983,7 +2983,7 @@ Variables (7):
   :28     FB_LOCK_SHARDS = ${FB_LOCK_SHARDS:-5}
 ```
 
-### Configuration & Data Formats (15+)
+### Configuration & Data Formats
 Nginx, Dockerfile, TOML, YAML, JSON, JSONL, CSV, XML, INI, HCL (Terraform), GraphQL, Protocol Buffers, Batch scripts
 
 **Validation:** Format-specific rules (N-series for Nginx, S701 for Docker)
@@ -3799,6 +3799,27 @@ def process(data: Optional[str] = None): ...
 - PEP 484 requires `Optional[X]` when a parameter can be `None`
 - Modern alternative: `str | None` (Python 3.10+)
 
+**T005: Function has incomplete type annotations**
+```python
+# ❌ Bad — some parameters annotated, others not (and no return type)
+def process(data: str, count, flag: bool):
+    ...
+
+# ✅ Good — fully annotated signature
+def process(data: str, count: int, flag: bool) -> None:
+    ...
+```
+
+**T006: Function uses bare dict but a matching TypedDict is available**
+```python
+# ❌ Bad — a UserRecord TypedDict already exists elsewhere in the module,
+# but this signature uses a bare dict instead of referencing it
+def save_user(data: dict) -> None: ...
+
+# ✅ Good — reuse the existing TypedDict for a checkable shape
+def save_user(data: UserRecord) -> None: ...
+```
+
 ---
 
 ### Nginx Configuration (N)
@@ -3902,13 +3923,80 @@ ssl_certificate /etc/nginx/ssl/internal.crt;  # no AIA OCSP entry
 ```
 *Typically affects self-signed or internal CA certs. Let's Encrypt certs are unaffected.*
 
+**N008: HTTPS site missing Strict-Transport-Security header** *(HIGH severity)*
+```nginx
+# ❌ Bad - HTTPS server block with no HSTS header
+server {
+    listen 443 ssl;
+    server_name example.com;
+    # no add_header Strict-Transport-Security ...
+}
+
+# ✅ Good
+server {
+    listen 443 ssl;
+    server_name example.com;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+}
+```
+
+**N009: server_tokens not disabled — nginx version exposed in headers**
+```nginx
+# ❌ Bad - version banner leaks in the Server response header
+http {
+    # server_tokens off; missing
+}
+
+# ✅ Good
+http {
+    server_tokens off;
+}
+```
+
+**N010: Deprecated X-XSS-Protection header present** *(INFO)*
+```nginx
+# ❌ Deprecated - modern browsers ignore this header; can introduce XSS in older ones
+add_header X-XSS-Protection "1; mode=block";
+
+# ✅ Good - rely on Content-Security-Policy instead
+add_header Content-Security-Policy "default-src 'self'";
+```
+
+**N011: SSL listener missing http2** *(INFO)*
+```nginx
+# ❌ Bad - SSL listener without http2
+listen 443 ssl;
+
+# ✅ Good
+listen 443 ssl http2;
+```
+
+**N012: No rate limiting applied to server block** *(INFO)*
+```nginx
+# ❌ Bad - server block has no limit_req/limit_conn anywhere
+server {
+    listen 443 ssl;
+    server_name example.com;
+}
+
+# ✅ Good
+http {
+    limit_req_zone $binary_remote_addr zone=one:10m rate=10r/s;
+}
+server {
+    listen 443 ssl;
+    server_name example.com;
+    limit_req zone=one burst=20 nodelay;
+}
+```
+
 ---
 
 ### Validation (V)
 
-**V001-V006:** Internal validation rules for reveal's own codebase
-- Used by `reveal reveal://` self-inspection
-- Ensure adapter completeness, documentation, testing
+**V001-V025 (mostly internal):** Validation rules for reveal's own codebase and plugin adapters
+- Most are internal self-checks used by `reveal reveal://` — ensure adapter completeness, doc/count accuracy, output-contract compliance. Hidden by default; pass `--all` to `reveal --rules`/`--explain` to see them.
+- Two are public and apply to your own plugin adapters: **V016** (adapter missing `get_help()` documentation) and **V023** (adapter output doesn't comply with the Output Contract).
 
 ---
 

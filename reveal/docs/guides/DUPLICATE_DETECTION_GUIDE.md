@@ -477,16 +477,16 @@ A: Architecture is complete, implementation is planned. It's the highest-priorit
 - `reveal --agent-help` - AI agent orientation (~500 tokens; `help://agent/full` for the complete guide)
 
 **Implementation:**
-- `reveal/rules/duplicates/D001.py` - Exact duplicate detection (186 lines)
-- `reveal/rules/duplicates/D002.py` - Similar code detection (239 lines)
-- `reveal/rules/duplicates/_base_detector.py` - Base framework (414 lines)
+- `reveal/rules/duplicates/D001.py` - Exact duplicate detection (187 lines)
+- `reveal/rules/duplicates/D002.py` - Similar code detection (236 lines)
+- `reveal/rules/base.py` - Shared `BaseRule` framework (478 lines)
 
 ---
 
 ## Contributing
 
 Want to help implement these features? See:
-1. `reveal/rules/duplicates/_base_detector.py` for base classes
+1. `reveal/rules/base.py` for base classes
 2. GitHub Issues for "duplicate detection" label
 
 **High-impact contributions:**

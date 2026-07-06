@@ -153,12 +153,13 @@ callee → [(file, caller_func, line), ...]
 | `target` | string | — | Function name to find **callers of** (reverse lookup) |
 | `callees` | string | — | Function name to find **callees of** (forward lookup) |
 | `rank` | string | — | Set to `callers` to rank all functions by in-degree |
-| `top` | integer | 10 | Max results for `?rank=callers` (capped at 100) |
+| `uncalled` | flag | — | List dead-code candidates — functions/methods with no static callers (see [Workflow 2](#workflow-2-find-unused-functions-dead-code)) |
+| `top` | integer | 10 | Max results for `?rank=callers` or `?uncalled` (capped at 100) |
 | `depth` | integer | 1 | Transitive levels for `?target` (1 = direct only, max 5) |
 | `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` and `?rank=callers`) |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot` |
 
-> One of `target`, `callees`, or `rank` is required. If `rank=callers` is given, it takes precedence.
+> One of `target`, `callees`, `rank`, or `uncalled` is required. If `rank=callers` is given, it takes precedence.
 
 ### `target`
 

@@ -169,7 +169,7 @@ File target output schema:
       "line": 12,
       "module": "src.utils",
       "names": ["format_response", "validate_input"],
-      "type": "named_import",
+      "type": "from_import",
       "is_relative": false,
       "alias": null
     }

@@ -475,7 +475,7 @@ reveal help://myscheme-guide
 
 ### Reference Implementation (Start Here!)
 
-- **🆕 reveal:// adapter**: `reveal/adapters/reveal.py` - Complete working example showing:
+- **🆕 reveal:// adapter**: `reveal/adapters/reveal/adapter.py` - Complete working example showing:
   - How to create non-file adapters
   - How to write validation rules
   - How to integrate with --check flag
@@ -488,8 +488,8 @@ reveal help://myscheme-guide
   - How to implement health checks (--check)
   - Clean separation: `certificate.py` (fetching), `adapter.py` (API), `renderer.py` (display)
   - YAML-based help: `reveal/adapters/help_data/ssl.yaml`
-- **Example adapters**: `reveal/adapters/python.py`, `ast.py`, `env.py`
-- **Comprehensive guide example**: `reveal/docs/PYTHON_ADAPTER_GUIDE.md`
+- **Example adapters**: `reveal/adapters/python/adapter.py`, `ast/adapter.py`, `env.py`
+- **Comprehensive guide example**: `reveal/docs/adapters/PYTHON_ADAPTER_GUIDE.md`
 - **Help system**: `reveal/adapters/help.py`
 - **Base adapter**: `reveal/adapters/base.py`
 - **Anti-patterns guide**: `reveal/docs/AGENT_HELP.md`

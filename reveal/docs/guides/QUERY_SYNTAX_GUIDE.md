@@ -1,6 +1,10 @@
 ---
 title: Query Syntax Guide
 description: Complete reference for unified query operators and result control
+help_topic: query
+help_description: "Unified query syntax reference (operators, result control)"
+help_category: feature_guides
+help_token_estimate: "~5,000"
 ---
 
 # Query Syntax Guide

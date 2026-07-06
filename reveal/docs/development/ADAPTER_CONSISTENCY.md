@@ -1,6 +1,10 @@
 ---
 title: Adapter Consistency Guide
 category: reference
+help_topic: adapter-consistency
+help_description: "Flag taxonomy and consistency rules for adapter authors"
+help_category: dev_guides
+help_token_estimate: "~3,900"
 ---
 # Adapter Consistency Guide
 

@@ -444,7 +444,8 @@ These violate reveal's mission ("reveal reveals, doesn't modify") or fail the [S
 
 ## Language Support Status
 
-**Current**: 12 built-in-only analyzers + 173 tree-sitter = 185+ languages total
+**Current counts drift with every language/adapter addition — this section is qualitative only.**
+Run `reveal --languages` for the live explicit-vs-fallback breakdown and exact count (source of truth, same one README.md quotes).
 
 ### Production-Ready
 Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Ruby, PHP, Kotlin, Swift, Dart, Zig, Scala, Lua, GDScript, Bash, SQL
@@ -456,19 +457,21 @@ Nginx, Dockerfile, TOML, YAML, JSON, JSONL, Markdown, HTML, CSV, XML, INI, HCL/T
 Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 
 ### Tree-Sitter Fallback
-173 languages with basic structure extraction via tree-sitter: Perl, R, Haskell, Elixir, OCaml, and more.
+Remaining tree-sitter grammars get basic structure extraction with no dedicated analyzer: Perl, R, Haskell, Elixir, OCaml, and more.
 
 ---
 
 ## Adapter Status
 
-### Implemented (23)
+**Current count drifts with every adapter addition — run `reveal --adapters` for the live, current list (source of truth).**
+
 | Adapter | Description |
 |---------|-------------|
 | `ast://` | Query code as database (complexity, size, type filters) |
 | `autossl://` | cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures |
 | `calls://` | Cross-file call graph — callers, callees, coupling metrics, Graphviz export |
 | `claude://` | Claude conversation analysis and install introspection |
+| `codex://` | OpenAI Codex CLI session analysis |
 | `cpanel://` | cPanel user environments — domains, SSL certs, ACL health |
 | `depends://` | Reverse module dependency graph — find everything that imports a given module |
 | `diff://` | Compare files or git revisions |
@@ -482,8 +485,9 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 | `markdown://` | Markdown document inspection and related-file discovery |
 | `mysql://` | MySQL database schema inspection |
 | `nginx://` | Nginx vhost inspection — config file, ports, upstreams, auth, locations, fleet audit |
+| `patches://` | Structured patch/diff generation |
 | `python://` | Python runtime inspection |
-| `reveal://` | Reveal's own codebase |
+| `reveal://` | Reveal's own codebase (internal self-inspection) |
 | `sqlite://` | SQLite database inspection |
 | `ssl://` | SSL/TLS certificate inspection |
 | `stats://` | Codebase statistics |

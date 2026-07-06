@@ -67,18 +67,15 @@ pipx install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
 
 Just `pip install reveal-cli` gives you everything:
 
-**Languages (25+ built-in):**
-- Python, JavaScript, TypeScript, Rust, Go, C, C++, C#, Java
-- GDScript, Bash, Shell Scripts, Jupyter Notebooks
-- Markdown, JSON, JSONL, YAML, TOML
+**Languages (85 total — run `reveal --languages` for the live breakdown):**
+- Explicit analyzers: Python, JavaScript, TypeScript, Rust, Go, C, C++, C#, Java, Ruby, PHP, Kotlin, Swift, Dart, Zig, Scala, Lua, GDScript, Bash, SQL, and more
+- Markdown, JSON, JSONL, YAML, TOML, HCL/Terraform, GraphQL, Protobuf
 - Nginx configs, Dockerfiles
 - Office documents: Word (.docx), Excel (.xlsx), PowerPoint (.pptx)
 - LibreOffice: Writer (.odt), Calc (.ods), Impress (.odp)
+- All other tree-sitter grammars work immediately as a structure-only fallback - no extra installation needed.
 
-**Tree-sitter support (50+ languages):**
-All tree-sitter languages work immediately - no extra installation needed since v0.8.0 (Nov 2025).
-
-**URI Adapters (7 included):**
+**URI Adapters (run `reveal --adapters` for the live, current list):**
 - `help://` - Self-documenting help system
 - `env://` - Environment variable inspection
 - `ast://` - Code queries and semantic analysis
@@ -86,6 +83,7 @@ All tree-sitter languages work immediately - no extra installation needed since 
 - `python://` - Python runtime inspection and diagnostics
 - `reveal://` - Self-inspection and validation
 - `stats://` - Code quality metrics and hotspot detection
+- ...plus `calls://`, `git://`, `imports://`, `claude://`, `codex://`, `diff://`, `depends://`, and more
 
 ## Optional Features
 

@@ -271,6 +271,7 @@ class HelpAdapter(ResourceAdapter):
         'quick-start': 'QUICK_START.md',
         'agent': 'AGENT_HELP.md',
         'anti-patterns': 'AGENT_HELP.md',  # Merged into AGENT_HELP.md
+        'benchmarks': 'BENCHMARKS.md',
         # Adapter guides (reveal/docs/adapters/)
         'ast': 'adapters/AST_ADAPTER_GUIDE.md',
         'autossl': 'adapters/AUTOSSL_ADAPTER_GUIDE.md',
@@ -291,8 +292,15 @@ class HelpAdapter(ResourceAdapter):
         'mysql': 'adapters/MYSQL_ADAPTER_GUIDE.md',
         'nginx': 'adapters/NGINX_GUIDE.md',
         'patches': 'adapters/PATCHES_ADAPTER_GUIDE.md',
-        'patches-guide': 'adapters/PATCHES_ADAPTER_GUIDE.md',
         'python': 'adapters/PYTHON_ADAPTER_GUIDE.md',
+        # 'python-guide' (not 'python') is the canonical topic below — pre-dates
+        # the bare 'python' alias (added v0.18.0), deeply referenced as *the*
+        # documented example of the feature_guides convention (AGENT_HELP.md,
+        # HELP_SYSTEM_GUIDE.md, test_rendering_help.py) — kept as-is. No other
+        # adapter guide has a bare+'-guide' duplicate pair except 'reveal-guide'
+        # (which has no bare form to collide with). Removed 'patches-guide'
+        # (BACK-479): added in v0.94.0 by copying this naming pattern, but never
+        # referenced anywhere outside this dict — pure dead duplicate of 'patches'.
         'python-guide': 'adapters/PYTHON_ADAPTER_GUIDE.md',
         'reveal-guide': 'adapters/REVEAL_ADAPTER_GUIDE.md',
         'sqlite': 'adapters/SQLITE_ADAPTER_GUIDE.md',
@@ -317,13 +325,21 @@ class HelpAdapter(ResourceAdapter):
         'pack': 'guides/SUBCOMMANDS_GUIDE.md',
         'query': 'guides/QUERY_SYNTAX_GUIDE.md',
         'query-params': 'guides/QUERY_PARAMETER_REFERENCE.md',
-        'recipes': 'guides/RECIPES.md',
+        'recipes': 'guides/RECIPES.md',  # alias only — see 'tricks' below for canonical
         'review': 'guides/SUBCOMMANDS_GUIDE.md',
         'schema': 'guides/SCHEMA_VALIDATION_HELP.md',
+        'subcommands': 'guides/SUBCOMMANDS_GUIDE.md',  # canonical; dev/health/pack/review are aliases
         # Note: 'schemas' is intentionally NOT in STATIC_HELP — the dynamic handler
         # at render_element intercepts help://schemas to list adapter schemas (machine-readable).
         # Use help://schema (singular) to reach SCHEMA_VALIDATION_HELP.md.
         'testability': 'guides/TESTABILITY_GUIDE.md',
+        # 'tricks' (not 'recipes', despite the file being titled/named "Reveal
+        # Recipes") is the canonical topic — kept deliberately per
+        # BACK-479 review: 'tricks' is the established public name, referenced
+        # 20+ times across docs/adapter examples/tests (including exact-string
+        # test assertions in test_rendering_help.py, test_adapter_integration.py);
+        # 'recipes' appears almost nowhere. Flipping would touch ~20 files for
+        # no discoverability gain. See RECIPES.md's own help_topic: tricks.
         'tricks': 'guides/RECIPES.md',   # Merged into RECIPES.md (task-based workflows)
         'ux': 'guides/UX_GUIDE.md',
         'what-is': 'guides/WHAT_IS_REVEAL_GOOD_FOR.md',

@@ -165,12 +165,12 @@ reveal/docs/
 │   ├── CONFIGURATION_GUIDE.md
 │   ├── MCP_SETUP.md
 │   ├── QUERY_SYNTAX_GUIDE.md
-│   └── ...  (12 guides total)
+│   └── ...  (15 guides total)
 └── development/                           # Contributor/maintainer docs
     ├── ADAPTER_AUTHORING_GUIDE.md         # help://adapter-authoring
     ├── HELP_SYSTEM_GUIDE.md               # (this file)
     ├── OUTPUT_CONTRACT.md
-    └── ...  (8 development docs total)
+    └── ...  (10 development docs total)
 ```
 
 ### Content Sources

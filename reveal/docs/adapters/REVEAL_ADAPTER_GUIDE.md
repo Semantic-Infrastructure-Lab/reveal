@@ -485,14 +485,12 @@ Running `reveal reveal:// --check` in CI ensures reveal stays well-maintained.
 ## Resources
 
 **Code**:
-- Adapter: `reveal/adapters/reveal.py`
+- Adapter: `reveal/adapters/reveal/` (package)
 - Rules: `reveal/rules/validation/V*.py`
 - Base classes: `reveal/adapters/base.py`, `reveal/rules/base.py`
 
 **Documentation**:
-- Adapter authoring: `reveal/adapters/ADAPTER_AUTHORING_GUIDE.md`
-- Self-audit report: `docs/REVEAL_SELF_AUDIT_2025-12-11.md`
-- Root cause analysis: `docs/ROOT_CAUSE_ANALYSIS_MARKDOWN_BUGS.md`
+- Adapter authoring: `reveal/docs/development/ADAPTER_AUTHORING_GUIDE.md`
 
 **Help**:
 ```bash

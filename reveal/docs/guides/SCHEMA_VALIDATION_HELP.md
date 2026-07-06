@@ -188,13 +188,15 @@ created: 2026-01-03
 ### F001: Missing Front Matter
 **Detects:** Markdown files with no YAML front matter block
 
-**Severity:** Medium
+**Severity:** Low
 
 **Example:**
 ```
-/path/to/file.md:1:1 ⚠️  F001 No front matter found in markdown file
-  💡 Add front matter block at top of file
-  📝 Schema: Session/Workflow Schema
+/path/to/file.md:1:1 ℹ️  F001 Markdown file missing front matter
+  💡 Add YAML front matter at the start of the file:
+---
+title: Document Title
+---
 ```
 
 **How to fix:**
@@ -210,13 +212,12 @@ topics: [testing]
 ### F002: Empty Front Matter
 **Detects:** Front matter block exists but contains no data
 
-**Severity:** Medium
+**Severity:** Low
 
 **Example:**
 ```
-/path/to/file.md:1:1 ⚠️  F002 Front matter is empty
-  💡 Add required fields to front matter
-  📝 Schema: Hugo Static Site Schema
+/path/to/file.md:1:1 ℹ️  F002 Front matter is empty (no fields)
+  💡 Add metadata fields to front matter (title, type, tags, etc.)
 ```
 
 **How to fix:**
@@ -320,24 +321,21 @@ reveal README.md --validate-schema session --format json
 **Output:**
 ```json
 {
+  "file": "/path/to/README.md",
   "detections": [
     {
-      "file": "/path/to/README.md",
+      "file_path": "/path/to/README.md",
       "line": 1,
-      "column": 1,
-      "code": "F003",
+      "rule_code": "F003",
       "message": "Required field 'session_id' missing from front matter",
-      "severity": "medium",
+      "column": 1,
       "suggestion": "Add 'session_id' to front matter",
-      "context": "Schema: Session/Workflow Schema"
+      "context": "Schema: Session/Workflow Schema",
+      "severity": "medium",
+      "category": "F"
     }
   ],
-  "summary": {
-    "total": 1,
-    "high": 0,
-    "medium": 1,
-    "low": 0
-  }
+  "total": 1
 }
 ```
 

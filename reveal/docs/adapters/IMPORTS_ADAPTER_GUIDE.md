@@ -132,6 +132,7 @@ Query options:
   reveal 'imports://src?unused'    - Find unused imports
   reveal 'imports://src?circular'  - Detect circular deps
   reveal 'imports://src?violations' - Check layer violations
+  reveal 'imports://src?rank=fan-in' - Rank files by fan-in (core abstractions)
 ```
 
 **What you get**:
@@ -1666,10 +1667,10 @@ reveal ast://src/**/*.py?complexity>10 --format=json | \
 
 ## Related Documentation
 
-- **AST Adapter**: `docs/AST_ADAPTER_GUIDE.md` - Code structure analysis (find complex code)
-- **Stats Adapter**: `docs/STATS_ADAPTER_GUIDE.md` - Codebase metrics and hotspots
-- **Python Adapter**: `docs/PYTHON_ADAPTER_GUIDE.md` - Runtime inspection
-- **Reveal Overview**: `README.md` - Full reveal documentation
+- **AST Adapter**: `AST_ADAPTER_GUIDE.md` - Code structure analysis (find complex code)
+- **Stats Adapter**: `STATS_ADAPTER_GUIDE.md` - Codebase metrics and hotspots
+- **Python Adapter**: `PYTHON_ADAPTER_GUIDE.md` - Runtime inspection
+- **Reveal Overview**: `../../README.md` - Full reveal documentation
 
 ---
 

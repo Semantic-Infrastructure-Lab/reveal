@@ -1,6 +1,10 @@
 ---
 title: Field Selection & Budget Constraints Guide
 category: guide
+help_topic: fields
+help_description: "Field selection and token-budget constraints"
+help_category: feature_guides
+help_token_estimate: "~3,750"
 ---
 # Field Selection & Budget Constraints Guide
 
@@ -90,16 +94,20 @@ When budget is exceeded, output includes metadata:
 ```json
 {
   "meta": {
-    "truncated": true,
-    "reason": "max_items_exceeded",
-    "total_available": 150,
-    "returned": 50,
-    "next_cursor": "offset=50"
+    "budget": {
+      "truncated": true,
+      "reason": "max_items_exceeded",
+      "total_available": 150,
+      "returned": 50,
+      "next_cursor": "offset=50"
+    }
   }
 }
 ```
 
 ### Metadata Fields
+
+Nested under `meta.budget`:
 
 - `truncated`: Boolean indicating truncation
 - `reason`: Why truncation occurred (`max_items_exceeded`)
@@ -176,11 +184,13 @@ Output:
     {"name": "validate_args", "line": 201, "complexity": 7}
   ],
   "meta": {
-    "truncated": true,
-    "reason": "max_items_exceeded",
-    "total_available": 150,
-    "returned": 5,
-    "next_cursor": "offset=5"
+    "budget": {
+      "truncated": true,
+      "reason": "max_items_exceeded",
+      "total_available": 150,
+      "returned": 5,
+      "next_cursor": "offset=5"
+    }
   }
 }
 ```
@@ -247,8 +257,8 @@ reveal 'json://users.json?role=admin' --fields=id,name,email --format=json
 reveal 'ast://src?type=function&lines>50' --max-items=20 --fields=name,line,complexity --format=json
 
 # Check truncation in response
-if data['meta']['truncated']:
-    next_offset = data['meta']['returned']
+if data['meta']['budget']['truncated']:
+    next_offset = data['meta']['budget']['returned']
     # Make follow-up query with offset
 ```
 
@@ -281,7 +291,7 @@ reveal 'mysql://localhost/mydb' --fields=status,replication_lag,connections --fo
 reveal 'ast://src?type=function' --max-items=50 --format=json > page1.json
 
 # Check truncation
-if data['meta']['truncated']:
+if data['meta']['budget']['truncated']:
     # Second page
     reveal 'ast://src?type=function&offset=50' --max-items=50 --format=json > page2.json
 ```
@@ -358,7 +368,7 @@ reveal 'stats://src?lines>100&sort=-complexity' --max-items=20 --fields=path,com
 
 ### 4. **Check truncation metadata in AI loops**
 
-Always check `meta.truncated` to know if you got partial results:
+Always check `meta.budget.truncated` to know if you got partial results:
 
 ```python
 import json
@@ -371,9 +381,9 @@ result = subprocess.run(
 
 data = json.loads(result.stdout)
 
-if data.get('meta', {}).get('truncated'):
-    print(f"Got {data['meta']['returned']} of {data['meta']['total_available']} results")
-    print(f"Next: offset={data['meta']['returned']}")
+if data.get('meta', {}).get('budget', {}).get('truncated'):
+    print(f"Got {data['meta']['budget']['returned']} of {data['meta']['budget']['total_available']} results")
+    print(f"Next: offset={data['meta']['budget']['returned']}")
 else:
     print("Got all results")
 ```
@@ -459,8 +469,8 @@ while true; do
         --format=json)
 
     # Check if truncated
-    truncated=$(echo "$result" | jq -r '.meta.truncated // false')
-    returned=$(echo "$result" | jq -r '.meta.returned // 0')
+    truncated=$(echo "$result" | jq -r '.meta.budget.truncated // false')
+    returned=$(echo "$result" | jq -r '.meta.budget.returned // 0')
 
     total=$((total + returned))
     echo "Fetched $returned results (total: $total)"
@@ -615,7 +625,7 @@ reveal <uri> --fields=<existing-field> --format=json
 
 ### Truncation metadata missing
 
-**Problem**: Expected `meta.truncated` but not present
+**Problem**: Expected `meta.budget.truncated` but not present
 
 **Cause**: Results fit within budget (no truncation occurred)
 

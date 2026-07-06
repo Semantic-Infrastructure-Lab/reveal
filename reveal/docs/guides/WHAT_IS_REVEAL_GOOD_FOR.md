@@ -1,6 +1,10 @@
 ---
 title: What Reveal Is Good For
 category: reference
+help_topic: what-is
+help_description: "When to reach for reveal — best-fit use cases and when it's not the right tool"
+help_category: getting_started
+help_token_estimate: "~5,300"
 ---
 # What Reveal Is Good For
 

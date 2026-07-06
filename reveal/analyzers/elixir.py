@@ -11,21 +11,15 @@ from ..treesitter import TreeSitterAnalyzer
 class ElixirAnalyzer(TreeSitterAnalyzer):
     """Elixir file analyzer.
 
-    Full Elixir support via tree-sitter!
+    KNOWN BROKEN (BACK-480): this is a bare TreeSitterAnalyzer subclass with
+    no Elixir-specific node taxonomy. Elixir's `defmodule`/`def` are macro-call
+    shapes, not distinct node kinds like Python's `function_definition`, so the
+    generic dispatch extracts zero functions/modules on real code — byte/line
+    count only. Matches `reveal --languages` marking Elixir `[untested]`.
+    See reveal/docs/development/ELIXIR_ANALYZER_GUIDE.md.
 
-    Automatically extracts:
-    - Functions/methods
-    - Classes/structs
-    - Imports/modules
-    - Comments and docstrings
-
-    NOTE: This assumes tree-sitter-elixir is available.
-    Install it with: pip install tree-sitter-elixir
-
-    If tree-sitter grammar doesn't exist, you'll need to:
-    1. Create a custom FileAnalyzer subclass instead
-    2. Implement get_structure() manually
-    3. See reveal/base.py for FileAnalyzer base class
+    The elixir tree-sitter grammar is bundled via tree-sitter-language-pack;
+    no separate `pip install tree-sitter-elixir` is needed or correct.
     """
     language = 'elixir'
 

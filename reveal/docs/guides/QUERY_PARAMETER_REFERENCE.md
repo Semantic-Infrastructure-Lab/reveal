@@ -2,6 +2,10 @@
 title: Query Parameter Reference
 description: Complete reference for query parameters across all Reveal adapters
 date: 2026-02-07
+help_topic: query-params
+help_description: "Query parameter reference across all adapters"
+help_category: feature_guides
+help_token_estimate: "~6,200"
 ---
 
 # Query Parameter Reference
@@ -17,7 +21,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **json://** | `schema`, `flatten`, `gron`, `type`, `keys`, `length`, field filters, `sort`, `limit`, `offset` | `json://data.json?type=object` |
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
 | **stats://** | `hotspots`, `code_only`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions` | `stats://.?hotspots` |
-| **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `has_decorator`, `calls`, `callee_of`, `show`, `rank`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` | `ast://src?complexity>10` |
+| **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `has_decorator`, `calls`, `callee_of`, `show`, `sort`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` | `ast://src?complexity>10` |
 | **calls://** | `target`, `callees`, `rank`, `top`, `depth`, `format`, `builtins`, `root`, `modules`, `external` | `calls://src?target=fn` |
 | **claude://** | `summary`, `errors`, `tools`, `contains`, `role`, `search`, `tail`, `last`, `tokens` | `claude://session?summary` |
 | **depends://** | `top`, `format` | `depends://src?top=10` |
@@ -301,10 +305,10 @@ reveal 'stats://.?hotspots&code_only'
   reveal 'ast://src?show=dict-heatmap'
   ```
 
-- **`rank`** - Sort by a field descending (e.g., `rank=-complexity`)
+- **`sort`** - Sort by a field descending with `-` prefix (e.g., `sort=-complexity`)
   ```bash
-  reveal 'ast://src?rank=-complexity'    # most complex first
-  reveal 'ast://src?rank=-lines'         # longest first
+  reveal 'ast://src?sort=-complexity'    # most complex first
+  reveal 'ast://src?sort=-lines'         # longest first
   ```
 
 - **`param_type=`** - Filter functions by parameter annotation (glob and regex supported)
@@ -477,9 +481,9 @@ reveal 'stats://.?hotspots&code_only'
   reveal 'depends://src?top=10'
   ```
 
-- **`format=dot`** (string) - Output GraphViz DOT format for visualization
+- **`format=dot`** (string) - Output GraphViz DOT format for visualization (directory mode only — single-file targets ignore this param and return plain text)
   ```bash
-  reveal 'depends://src/core.py?format=dot'
+  reveal 'depends://src?format=dot'
   ```
 
 ---

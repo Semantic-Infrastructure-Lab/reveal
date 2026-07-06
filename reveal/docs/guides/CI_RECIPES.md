@@ -1,6 +1,10 @@
 ---
 title: "Reveal CI/CD Recipes"
 type: guide
+help_topic: ci
+help_description: "CI/CD integration recipes (GitHub Actions, GitLab CI, quality gates)"
+help_category: feature_guides
+help_token_estimate: "~2,050"
 beth_topics:
   - reveal
   - ci-cd
@@ -159,10 +163,9 @@ jobs:
         run: |
           reveal stats://src/ --format json > metrics.json
           cat metrics.json | jq '{
-            quality_score: .quality_score,
-            total_functions: .total_functions,
-            avg_complexity: .avg_complexity,
-            hotspot_count: (.hotspots | length)
+            quality_score: .summary.avg_quality_score,
+            total_functions: .summary.total_functions,
+            avg_complexity: .summary.avg_complexity
           }'
 
       - uses: actions/upload-artifact@v4
@@ -192,7 +195,7 @@ jobs:
       - name: Check for dead code
         run: |
           UNCALLED=$(reveal 'calls://src/?uncalled' --format json | \
-            jq '[.uncalled[]] | length')
+            jq '[.entries[]] | length')
           echo "Uncalled functions: $UNCALLED"
           if [ "$UNCALLED" -gt 0 ]; then
             reveal 'calls://src/?uncalled'

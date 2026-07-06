@@ -16,9 +16,20 @@ from typing import List, Optional, Tuple
 CURRENT_CLAIM_DOCS = (
     'README.md',
     'ARCHITECTURE.md',
+    'CONTRIBUTING.md',
+    'INSTALL.md',
+    'STABILITY.md',
     'reveal/docs/QUICK_START.md',
     'reveal/docs/WHY_REVEAL.md',
 )
+# ROADMAP.md deliberately excluded: its "What We've Shipped" table mixes
+# historical per-version deltas (e.g. "+140 languages") with current-state
+# claims in a format the version-history skip regex doesn't recognize
+# (table rows / unlabeled "Value delivered" lines, not CHANGELOG's
+# "**vX.Y.Z**" bold-heading convention) — would false-positive on real
+# history. Its current-state sections were hand-corrected instead (BACK-388
+# follow-up); revisit if ROADMAP's shipped-history format is ever
+# standardized to match CHANGELOG's.
 
 # A line that documents a past release, e.g. "- **v0.72.1** - ... corrected to 22".
 # Counts on these lines are correct-in-context and must not be flagged.
