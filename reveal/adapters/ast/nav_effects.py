@@ -132,6 +132,25 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
     'java': [
         ('env', ['system.getenv']),
     ],
+    # BACK-477: Kotlin's kotlin.io File extension functions — none of these
+    # match any existing pattern (verified: 'writeText'/'appendText'/etc are
+    # single camelCase tokens, tokenizing to e.g. 'writetext', not 'write').
+    'kotlin': [
+        ('file', [
+            'writetext', 'appendtext', 'readtext',
+            'writebytes', 'appendbytes', 'readbytes',
+            'copyto', 'deleterecursively', 'mkdirs', 'createnewfile',
+        ]),
+    ],
+    # BACK-477: Swift's dominant file-write idiom is `"...".write(toFile:...)`
+    # / `data.write(to: url)` — the argument label carrying the file-specific
+    # meaning isn't visible to classify_call (callee text only), but a bare
+    # `write` callee is Swift-specific enough here (scoped via `language`) to
+    # not collide with other 'write' meanings the way an unscoped common
+    # pattern would.
+    'swift': [
+        ('file', ['write']),
+    ],
 }
 
 # Analyzer `language` values that share one _TAXONOMY_BY_LANG bucket.

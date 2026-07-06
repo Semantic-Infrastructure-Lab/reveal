@@ -166,6 +166,85 @@ class TestElementOutline(unittest.TestCase):
         self.assertIn('DEF', keywords)
 
 
+class TestCatchmapMultiLanguage(unittest.TestCase):
+    """BACK-477 gap map: --catchmap was empty for Kotlin/Ruby/Swift despite
+    real try/catch, purely because TRY_NODES/CATCH_NODES lacked their grammar
+    kinds. Kotlin's own try_expression is deliberately NOT added (Rust's `?`
+    operator parses to the same kind string for an unrelated construct —
+    verified via direct tree-sitter inspection); catch_block/finally_block
+    still make Kotlin's catchmap non-empty."""
+
+    def test_kotlin_catch_and_finally_visible(self):
+        root, get_text = _parse_lang('kotlin', '''
+        fun run() {
+            try {
+                risky()
+            } catch (e: Exception) {
+                handle(e)
+            } finally {
+                cleanup()
+            }
+        }
+        ''')
+        from reveal.adapters.ast.nav import element_outline
+        items = element_outline(root, get_text, max_depth=5)
+        keywords = [i['keyword'] for i in items]
+        self.assertIn('CATCH', keywords)
+        self.assertIn('FINALLY', keywords)
+
+    def test_swift_catch_visible(self):
+        root, get_text = _parse_lang('swift', '''
+        func run() {
+            do {
+                try risky()
+            } catch {
+                handle()
+            }
+        }
+        ''')
+        from reveal.adapters.ast.nav import element_outline
+        items = element_outline(root, get_text, max_depth=5)
+        keywords = [i['keyword'] for i in items]
+        self.assertIn('CATCH', keywords)
+
+    def test_ruby_begin_rescue_ensure_visible(self):
+        root, get_text = _parse_lang('ruby', '''
+        def run
+          begin
+            risky
+          rescue => e
+            handle(e)
+          ensure
+            cleanup
+          end
+        end
+        ''')
+        from reveal.adapters.ast.nav import element_outline
+        items = element_outline(root, get_text, max_depth=5)
+        keywords = [i['keyword'] for i in items]
+        self.assertIn('TRY', keywords)
+        self.assertIn('CATCH', keywords)
+        self.assertIn('FINALLY', keywords)
+
+    def test_rust_question_mark_operator_not_misread_as_try(self):
+        # Rust's `?` operator parses to a node kind literally named
+        # 'try_expression' — the same string Kotlin's try/catch/finally
+        # block uses for an unrelated reason. Confirms the deliberate
+        # exclusion of 'try_expression' from TRY_NODES doesn't regress
+        # Rust's documented no-try/catch contract.
+        root, get_text = _parse_lang('rust', '''
+        fn run() -> Result<(), String> {
+            validate(1)?;
+            Ok(())
+        }
+        ''')
+        from reveal.adapters.ast.nav import element_outline
+        items = element_outline(root, get_text, max_depth=5)
+        keywords = [i['keyword'] for i in items]
+        self.assertNotIn('TRY', keywords)
+        self.assertNotIn('CATCH', keywords)
+
+
 # ---------------------------------------------------------------------------
 # scope_chain tests
 # ---------------------------------------------------------------------------

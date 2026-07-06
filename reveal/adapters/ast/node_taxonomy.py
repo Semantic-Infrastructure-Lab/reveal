@@ -60,10 +60,25 @@ FOR_RANGE_LOOP_NODES: frozenset = frozenset({'for_range_loop'})
 # Rust `loop { }` — no condition field at all.
 LOOP_NODES: frozenset = frozenset({'loop_expression'})
 DO_NODES: frozenset = frozenset({'do_statement'})
-TRY_NODES: frozenset = frozenset({'try_statement', 'try'})
+
+# BACK-477: Ruby's 'begin' is the literal tree-sitter kind of its
+# begin/rescue/ensure/end block. Kotlin's try/catch/finally block is a
+# `try_expression` node — deliberately NOT added here: Rust's `?` operator
+# (BACK-428's territory, not this one) parses to the exact same kind string
+# for an unrelated construct (verified via direct tree-sitter inspection —
+# `validate(order)?` produces a `try_expression` wrapping the call), so
+# adding it would break Rust's documented no-try/catch `--catchmap` contract.
+# Kotlin's try-block itself stays unlabeled for now; its catch_block/
+# finally_block (below) are unambiguous and still make `--catchmap`
+# non-empty for Kotlin.
+TRY_NODES: frozenset = frozenset({'try_statement', 'try', 'begin'})
 EXCEPT_NODES: frozenset = frozenset({'except_clause'})
-FINALLY_NODES: frozenset = frozenset({'finally_clause', 'finally'})
-CATCH_NODES: frozenset = frozenset({'catch_clause', 'catch'})
+# BACK-477: Kotlin's finally_block; Ruby's 'ensure' block (literal kind name).
+FINALLY_NODES: frozenset = frozenset({'finally_clause', 'finally', 'finally_block', 'ensure'})
+# BACK-477: catch_block is Kotlin AND Swift's shared kind name for the catch
+# arm (verified via direct tree-sitter inspection, no collision found with
+# any other supported grammar). Ruby's 'rescue' clause.
+CATCH_NODES: frozenset = frozenset({'catch_clause', 'catch', 'catch_block', 'rescue'})
 WITH_NODES: frozenset = frozenset({'with_statement', 'with'})
 # Rust `match x { }` — 'value'/'body' fields. Python's `match_statement` uses
 # a *different* field name ('subject', not 'value') for its scrutinee, so it
@@ -282,8 +297,10 @@ KEYWORD_LABEL: Dict[str, str] = {
     'while_statement': 'WHILE', 'while': 'WHILE', 'while_expression': 'WHILE',
     'loop_expression': 'LOOP',
     'try_statement': 'TRY', 'try': 'TRY',
+    'begin': 'TRY',
     'except_clause': 'EXCEPT',
     'finally_clause': 'FINALLY', 'finally': 'FINALLY',
+    'finally_block': 'FINALLY', 'ensure': 'FINALLY',
     'with_statement': 'WITH', 'with': 'WITH',
     'match_statement': 'MATCH', 'match_expression': 'MATCH',
     'case_clause': 'CASE', 'match_arm': 'CASE', 'SwitchProng': 'CASE',
@@ -292,6 +309,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'switch_statement': 'SWITCH', 'switch': 'SWITCH', 'SwitchExpr': 'SWITCH',
     'when_expression': 'SWITCH',
     'catch_clause': 'CATCH', 'catch': 'CATCH',
+    'catch_block': 'CATCH', 'rescue': 'CATCH',
     'switch_case': 'CASE', 'switch_entry': 'CASE', 'case_statement': 'CASE',
     'switch_default': 'DEFAULT', 'default': 'DEFAULT', 'default_statement': 'DEFAULT',
     'function_definition': 'DEF', 'function_declaration': 'DEF',

@@ -1342,6 +1342,34 @@ class TestClassifyCallReceiver(unittest.TestCase):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertEqual(classify_call('file.read'), 'file')
 
+    def test_kotlin_file_writetext_classifies_as_file(self):
+        # BACK-477 gap map: File(...).writeText(...) was entirely absent
+        # from the taxonomy — --sideeffects saw nothing for Kotlin's
+        # dominant file-write idiom.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('.writeText', language='kotlin'), 'file')
+        self.assertEqual(classify_call('.appendText', language='kotlin'), 'file')
+        self.assertEqual(classify_call('.readText', language='kotlin'), 'file')
+
+    def test_kotlin_writetext_unscoped_by_language(self):
+        # The pattern is Kotlin-specific; a differently-scoped call must not
+        # pick it up (mirrors the Go/PHP scoping tests above).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('.writeText', language='python'))
+
+    def test_swift_write_tofile_classifies_as_file(self):
+        # BACK-477 gap map: "...".write(toFile:...) was invisible to
+        # --sideeffects. classify_call only sees the callee text ('write'),
+        # not the toFile: argument label, so the pattern is scoped to Swift
+        # rather than added as an unscoped common pattern (a bare 'write'
+        # callee is too generic in other languages to mean file I/O).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('"hello".write', language='swift'), 'file')
+
+    def test_swift_write_unscoped_by_language(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('"hello".write', language='python'))
+
 
 class TestCollectEffectsCSharpBack401(unittest.TestCase):
     """BACK-401 end-to-end: collect_effects must see C# invocation_expression
@@ -1525,8 +1553,12 @@ class TestClassifyCallLanguageScoping(unittest.TestCase):
         self.assertEqual(classify_call('die', language='rust'), 'hard_stop')
 
     def test_unknown_language_falls_back_to_unscoped(self):
+        # 'kotlin' used to be the example here, but BACK-477 gave it a real
+        # _TAXONOMY_BY_LANG entry — use a language still genuinely absent
+        # from the table so this keeps testing the fallback, not kotlin's
+        # scoping.
         from reveal.adapters.ast.nav_effects import classify_call
-        self.assertEqual(classify_call('session_start', language='kotlin'), 'session')
+        self.assertEqual(classify_call('session_start', language='ruby'), 'session')
 
 
 class TestCollectEffects(unittest.TestCase):
