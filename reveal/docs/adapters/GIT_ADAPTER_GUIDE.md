@@ -463,6 +463,20 @@ Next Steps:
 - Identify main contributors
 - Track changes over time
 
+**Also works on directories and the whole repository** — not just single
+files. A directory path resolves to a subtree oid (the same mechanism
+`?type=ownership` uses), so history aggregates every file beneath it:
+
+```bash
+reveal git://src/auth?type=history              # every commit touching src/auth/**
+reveal git://src/auth?type=history&message~=fix # bugfix commits scoped to a subsystem
+reveal git://.?type=history&message~=fix        # bugfix commits repo-wide
+```
+
+Combining `message~=` with a directory target is how to answer "what fixes
+landed in this subsystem" without a dedicated query type — filters compose
+with directory scoping the same way they do with file scoping.
+
 ---
 
 ## Blame Analysis
@@ -656,6 +670,10 @@ reveal git://src/app.py@abc1234?type=diff&context=10              # more context
 
 **Note**: `?type=history&element=<name>` similarly scopes file history to commits that touched a specific element.
 
+**Also works on directories**: `git://src/auth@abc1234?type=diff` reports
+whether that commit touched anything beneath `src/auth/` (and what), using
+the same subtree-oid comparison as directory `history`/`ownership`.
+
 ---
 
 ## Ownership (Commit-Share)
@@ -706,6 +724,20 @@ contributors.
 **Bus-factor recipe**: ownership surfaces the shares; the consumer ranks modules
 by fan-in (`calls://` / `imports://`) and applies the key-person verdict. Reveal
 does not compute the risk ranking — that judgment is the consumer's.
+
+**Ownership-over-time recipe**: `?ref=` scopes the ownership walk to history
+as of any branch, tag, or commit — so a trend across releases is one call
+per tag, diffed by the consumer, with no new primitive needed:
+
+```bash
+reveal 'git://src/auth?type=ownership&ref=v1.0.0'
+reveal 'git://src/auth?type=ownership&ref=v2.0.0'
+reveal 'git://src/auth?type=ownership'              # current (HEAD)
+```
+
+Each call reports commit-share as of that point in history — compare the
+outputs to see ownership shift (e.g. a single-author subsystem gaining
+contributors release over release, or the reverse).
 
 **Shallow clone warning**: on a `--depth 1` clone, ownership prints a warning
 that shares are limited to the fetched history. Run `git fetch --unshallow` first.
