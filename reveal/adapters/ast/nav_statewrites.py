@@ -27,6 +27,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ...core import node_children as _children
 from .nav_effects import collect_effects
+from .nav_varflow import resolve_assignment_sides
 
 _ASSIGNMENT_NODES: frozenset = frozenset({
     'assignment', 'augmented_assignment', 'assignment_expression',
@@ -39,6 +40,12 @@ _MEMBER_ACCESS_NODES: frozenset = frozenset({
     # Java's `this.x`/`obj.x` (BACK-439c conformance-matrix pass) — distinct
     # kind from every other Tier 1 language's member-access shape.
     'field_access',
+    # Kotlin's `obj.member` read shape (BACK-478 Finding 2) — matches
+    # nav_varflow.py's _MEMBER_ACCESS_KINDS. On the *read* side this is the
+    # node kind directly; on an assignment *target*, Kotlin/Swift wrap it
+    # (and the bare-identifier case) in 'directly_assignable_expression'
+    # instead — see the unwrap in _target_kind below.
+    'navigation_expression',
 })
 
 _SUBSCRIPT_NODES: frozenset = frozenset({
@@ -77,6 +84,23 @@ def _subscript_kind(base_text: str) -> Optional[str]:
 def _target_kind(left: Any, get_text: Callable) -> Optional[str]:
     """Classify an assignment's left-hand target, or None if not state-relevant."""
     ltype = left.kind()
+    if ltype == 'directly_assignable_expression':
+        # BACK-478 Finding 2: Kotlin/Swift wrap every assignment target in
+        # this node — a bare reassignment (`total = ...`) and a member
+        # write (`this.total = ...` for Kotlin; `self.total = ...` for
+        # Swift, one level deeper via a nested navigation_expression) are
+        # otherwise indistinguishable from the outside. Kotlin's member
+        # shape is flat (a navigation_suffix child directly); Swift's
+        # nests a navigation_expression child. A bare-identifier target
+        # has neither and correctly falls through un-classified, same as
+        # every other language's bare-identifier write.
+        children = _children(left)
+        if any(c.kind() == 'navigation_suffix' for c in children):
+            return _member_kind(get_text(left))
+        for child in children:
+            if child.kind() == 'navigation_expression':
+                return _target_kind(child, get_text)
+        return None
     if ltype in _MEMBER_ACCESS_NODES:
         return _member_kind(get_text(left))
     if ltype in _SUBSCRIPT_NODES:
@@ -113,7 +137,11 @@ def _walk_assignments(
     if start > to_line or end < from_line:
         return
     if node.is_named() and node.kind() in _ASSIGNMENT_NODES:
-        left = node.child_by_field_name('left')
+        # BACK-478 Finding 2: was `node.child_by_field_name('left')` directly —
+        # blind to Kotlin/Swift's fieldless `assignment` node (positional
+        # children only, the same shape BACK-476 fixed for --varflow/--keys).
+        # resolve_assignment_sides is the shared fallback (BACK-456/476).
+        left, _right = resolve_assignment_sides(node, node.kind())
         line = start
         if left is not None and from_line <= line <= to_line:
             for target in _assignment_targets(left):

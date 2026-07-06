@@ -1102,6 +1102,43 @@ class TestStateWrites(unittest.TestCase):
         # in line order
         self.assertLess(writes[0]['line'], writes[1]['line'])
 
+    def test_kotlin_field_reassignment_write(self):
+        # BACK-478 Finding 2: nav_statewrites._walk_assignments read
+        # node.child_by_field_name('left') directly, but Kotlin/Swift's
+        # `assignment` node has no 'left'/'right' fields at all (positional
+        # children only — the exact BACK-476 shape nav_varflow/nav_keys
+        # already handle via resolve_assignment_sides). `total = total + 1`
+        # and `this.total = 5` were both silently invisible to --statewrites
+        # while --varflow/--keys saw them correctly post-BACK-476.
+        root, get_text = _parse_lang('kotlin', '''
+        class Batch {
+            var total: Int = 0
+            fun run() {
+                total = total + 1
+                this.total = 5
+            }
+        }
+        ''')
+        from reveal.adapters.ast.nav import collect_statewrites
+        writes = collect_statewrites(root, 1, 10, get_text)
+        self.assertEqual(len(writes), 1, f'expected only the this.total field write: {writes}')
+        self.assertEqual(writes[0]['kind'], 'field')
+        self.assertEqual(writes[0]['target'], 'this.total')
+
+    def test_swift_field_reassignment_write(self):
+        root, get_text = _parse_lang('swift', '''
+        class Batch {
+            var total: Int = 0
+            func run() {
+                self.total = 5
+            }
+        }
+        ''')
+        from reveal.adapters.ast.nav import collect_statewrites
+        writes = collect_statewrites(root, 1, 10, get_text)
+        self.assertEqual(len(writes), 1, f'expected the self.total field write: {writes}')
+        self.assertEqual(writes[0]['kind'], 'field')
+
     def test_render_statewrites_empty(self):
         from reveal.adapters.ast.nav import render_statewrites
         result = render_statewrites([], 1, 10)
