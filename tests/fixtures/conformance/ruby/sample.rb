@@ -36,3 +36,21 @@ class Batch
     end
   end
 end
+
+# Deep-conformance additions (gexode-0707): case/when for --ifmap, compound
+# ivar assignment for --statewrites, raise for --exits — appended so the
+# line-numbered assertions on validate/process_order/Batch above are undisturbed.
+def classify(mode)
+  case mode
+  when :double then 2
+  when :neg then -1
+  else 0
+  end
+end
+
+class Accumulator
+  def add(x)
+    @sum ||= 0
+    @sum += x
+  end
+end

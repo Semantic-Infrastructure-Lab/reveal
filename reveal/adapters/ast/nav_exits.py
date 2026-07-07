@@ -10,8 +10,12 @@ from .node_taxonomy import EXIT_NODES, GATE_NODES, KEYWORD_LABEL
 from ...core import node_children as _children
 
 
-# Language-construct names treated as hard exits even when represented as calls
-_EXIT_CALL_NAMES: frozenset = frozenset({'die', 'exit'})
+# Language-construct names treated as hard exits even when represented as calls.
+# Ruby raises exceptions with `raise`/`fail` — plain method calls, not keyword
+# nodes (no raise_statement in tree-sitter-ruby), so they must be caught here the
+# way PHP/Perl `die`/`exit` are. Found via discourse deep-conformance dogfooding
+# (Ruby `raise ArgumentError` was invisible to --exits/--returns/--flowto).
+_EXIT_CALL_NAMES: frozenset = frozenset({'die', 'exit', 'raise', 'fail'})
 
 # Mapping from exit node type to kind label — derived from the shared
 # taxonomy (node_taxonomy.py) so it can't drift from EXIT_NODES/KEYWORD_LABEL

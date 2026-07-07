@@ -135,12 +135,19 @@ MATCH_NODES: frozenset = MATCH_EXPRESSION_NODES | frozenset({'match_statement'})
 # entire switch body — all 4 cases — was invisible to --ifmap despite
 # --exits correctly finding the returns inside them (structural walking
 # doesn't need the CASE label; --ifmap does).
+# Ruby's case/when use bare `case` (the case expression) and `when` (the arm)
+# node kinds — distinct from every wrapper-suffixed shape above. Safe to add as
+# bare kinds: the outline/branchmap collectors skip anonymous nodes
+# (`if not child.is_named(): continue`), and Ruby's case-expression / when-arm
+# are named while the `case`/`when` keyword *tokens* (and C/Java's `case` label
+# tokens) are anonymous — so no keyword-token collision. Found via discourse
+# deep-conformance dogfooding (Ruby `case/when` was invisible to --ifmap).
 CASE_NODES: frozenset = frozenset({
     'case_clause', 'match_arm', 'switch_case', 'SwitchProng', 'when_entry',
-    'switch_entry', 'case_statement',
+    'switch_entry', 'case_statement', 'when',
 })
 SWITCH_NODES: frozenset = frozenset({
-    'switch_statement', 'switch', 'SwitchExpr', 'when_expression',
+    'switch_statement', 'switch', 'SwitchExpr', 'when_expression', 'case',
 })
 SWITCH_DEFAULT_NODES: frozenset = frozenset({
     'switch_default', 'default', 'default_statement',
@@ -353,6 +360,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'catch_clause': 'CATCH', 'catch': 'CATCH',
     'catch_block': 'CATCH', 'rescue': 'CATCH',
     'switch_case': 'CASE', 'switch_entry': 'CASE', 'case_statement': 'CASE',
+    'case': 'SWITCH', 'when': 'CASE',  # Ruby case/when (bare kinds; named nodes)
     'switch_default': 'DEFAULT', 'default': 'DEFAULT', 'default_statement': 'DEFAULT',
     'function_definition': 'DEF', 'function_declaration': 'DEF',
     'function_item': 'DEF', 'function': 'DEF',

@@ -477,6 +477,53 @@ def test_swift_throw_is_detected_by_exits():
     ], f"swift: validate exits mismatch (guard-else throw at L6 must be detected)\n{out}"
 
 
+def test_ruby_case_when_is_mapped_by_ifmap():
+    """--ifmap must map Ruby `case`/`when`. Ruby's case-expression node kind is
+    bare `case` and its arm is bare `when` — neither was in SWITCH_NODES/
+    CASE_NODES (which carried only wrapper-suffixed shapes + Kotlin's
+    when_entry), so Ruby's case/when was entirely invisible to --ifmap (only a
+    trailing `else` showed). Safe bare-kind add: the outline collector skips
+    anonymous nodes, and Ruby's case/when expressions are named while the
+    keyword tokens are not. Found via discourse deep-conformance dogfooding."""
+    out = _run(str(_sample_path("ruby")), "classify", "--ifmap", "--format", "json")
+    data = json.loads(out)
+    findings = [{"keyword": f["keyword"], "line_start": f["line_start"]} for f in data["findings"]]
+    assert findings == [
+        {"keyword": "SWITCH", "line_start": 44},
+        {"keyword": "CASE", "line_start": 45},
+        {"keyword": "CASE", "line_start": 46},
+        {"keyword": "ELSE", "line_start": 47},
+    ], f"ruby: case/when ifmap mismatch\n{out}"
+
+
+def test_ruby_raise_is_an_exit():
+    """--exits must treat Ruby `raise` as a hard exit. Ruby has no raise keyword
+    node — `raise ArgumentError` is a plain method call — so it must be caught
+    via _EXIT_CALL_NAMES the way die/exit are. Was invisible pre-fix (validate
+    reported no exits). Found via discourse deep-conformance dogfooding."""
+    out = _run(str(_sample_path("ruby")), "validate", "--exits", "--format", "json")
+    data = json.loads(out)
+    findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
+    assert findings == [{"kind": "EXIT", "line": 5}], (
+        f"ruby: raise must be detected as an exit\n{out}"
+    )
+
+
+def test_ruby_compound_ivar_is_a_statewrite():
+    """--statewrites must catch Ruby compound ivar assignment (`@sum ||= 0`,
+    `@sum += x`) — node kind `operator_assignment`, which was absent from
+    _ASSIGNMENT_NODES (it carried `augmented_assignment` but not Ruby's kind), so
+    simple `@sum = 0` worked but compound writes were invisible. Found via
+    discourse deep-conformance dogfooding."""
+    out = _run(str(_sample_path("ruby")), "add", "--statewrites", "--format", "json")
+    data = json.loads(out)
+    findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
+    assert findings == [
+        {"kind": "field", "line": 53},
+        {"kind": "field", "line": 54},
+    ], f"ruby: compound ivar statewrite mismatch\n{out}"
+
+
 # ───────────────────── BACK-427 (remaining): Rust loop/match ──────────────────
 
 def test_rust_outline_recognizes_expression_oriented_control_flow():

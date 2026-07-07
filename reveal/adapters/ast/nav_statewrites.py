@@ -33,6 +33,11 @@ from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_NODES
 _ASSIGNMENT_NODES: frozenset = frozenset({
     'assignment', 'augmented_assignment', 'assignment_expression',
     'augmented_assignment_expression', 'assignment_statement', 'compound_assignment_expr',
+    # Ruby's compound assignment (`@count += 1`, `@x ||= y`) is `operator_assignment`,
+    # not `augmented_assignment` — so ivar compound-writes were invisible to
+    # --statewrites while simple `@count = 1` (assignment) worked. Found via
+    # discourse deep-conformance dogfooding.
+    'operator_assignment',
 })
 
 # _MEMBER_ACCESS_NODES: promoted to node_taxonomy.MEMBER_ACCESS_NODES
