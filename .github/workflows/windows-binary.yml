@@ -16,6 +16,7 @@ name: Windows Standalone Binary
 on:
   release:
     types: [published]
+  workflow_dispatch:  # manual test run — upload step below stays release-only
 
 permissions:
   contents: write   # upload release assets
@@ -64,12 +65,15 @@ jobs:
         run: |
           $version = "${{ github.ref_name }}"
           $zipName = "reveal-$version-windows-x64.zip"
-          Compress-Archive -Path dist/reveal.dist/* -DestinationPath $zipName
+          # Nuitka --standalone names the output folder after the compiled
+          # entry script (reveal/main.py -> main.dist); --output-filename only
+          # renames the .exe inside it, not the folder itself.
+          Compress-Archive -Path dist/main.dist/* -DestinationPath $zipName
           echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
 
       - name: Smoke test the binary
         shell: cmd
-        run: dist\reveal.dist\reveal.exe --version
+        run: dist\main.dist\reveal.exe --version
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
@@ -95,13 +99,14 @@ jobs:
       #     endpoint: https://eus.codesigning.azure.net/
       #     signing-account-name: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT_NAME }}
       #     certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
-      #     files-folder: dist\reveal.dist
+      #     files-folder: dist\main.dist
       #     files-folder-filter: exe
       #     file-digest: SHA256
       #     timestamp-rfc3161: http://timestamp.acs.microsoft.com
       #     timestamp-digest: SHA256
 
       - name: Upload zip to GitHub Release
+        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.ZIP_NAME }}
