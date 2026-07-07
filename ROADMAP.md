@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-07-05 (budepade-0705 — v0.104.0 release: multi-language conformance, rule-correctness matrix complete, help-system coherence)
+> **Last updated**: 2026-07-07 (hologram-arsenal-0707 — v0.105.0 release: import-graph edges for 5 more languages, depends:// cross-module fix, Kotlin/Swift/Ruby nav-layer bug fixes)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,14 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.105.0 — Import-graph edges for 5 more languages + depends:// cross-module fix + Kotlin/Swift/Ruby nav bugs
+- ✅ `reveal architecture` now produces a real fan-in/fan-out graph for Java, PHP, Ruby, Swift, and Kotlin, up from Python/JS/TS/Go/Rust-only (BACK-487/488).
+- ✅ `depends://` fixed for Java/Kotlin/C#/PHP/Swift — cross-package-directory dependents were silently under-reported due to a project-root/file-discovery mismatch with `imports://` (BACK-498).
+- ✅ Elixir structure extraction — `reveal file.ex` now extracts functions/modules instead of byte/line counts only (BACK-480).
+- ✅ Kotlin/Swift bare-`throw` exit detection + full throw-text rendering, Ruby statement-modifier gates/`case`-`when`/`raise`/compound-ivar-write nav fixes (BACK-497/499/500).
+- ✅ HTML CSS-selector/id/tag/positional extraction fixed — was erroring "Element not found" on all of it (BACK-481).
+- ✅ `reveal architecture` no longer hangs on repos with large dependency cycles — exponential cycle-path search rewritten as BFS (BACK-496).
 
 ### v0.104.0 — Multi-language nav-layer conformance + rule-correctness matrix complete + help-system coherence
 - ✅ Nav-layer flags (`--varflow`/`--sideeffects`/`--catchmap`/`--fanout`/`--statewrites`/`--loopmap`, `Class.method`) closed every catalogued gap for Kotlin/Swift/Ruby/PHP, now regression-pinned in the conformance matrix (BACK-476/477/478).
