@@ -26,8 +26,9 @@ on:
   workflow_dispatch:  # manual test run — upload step below stays release-only
 
 permissions:
-  contents: write   # upload release assets
-  id-token: write   # attest-build-provenance
+  contents: write        # upload release assets
+  id-token: write        # attest-build-provenance (OIDC)
+  attestations: write    # attest-build-provenance (persist the attestation)
 
 jobs:
   build-windows:
