@@ -329,7 +329,7 @@ pip generates `reveal.exe` unsigned at install time — structurally unresolvabl
 Plan:
 1. **Phase 1** — Apply to [SignPath Foundation](https://signpath.org/) (free Authenticode signing for OSS, HSM-backed, GitHub Actions native)
 2. **Phase 2** — Add `reveal/__main__.py` so `python -m reveal` works as ACP-safe fallback (one-file fix, no cert needed)
-3. **Phase 3** — PyInstaller single-file `reveal.exe`, signed via SignPath in GitHub Actions, distributed as GitHub Release binary
+3. **Phase 3** — PyInstaller `--onedir` `reveal.exe` (folder, not `--onefile` — onefile's temp extraction is an AV heuristic; BACK-495), signed in GitHub Actions, distributed as GitHub Release binary — build side shipped (`windows-binary.yml`), signing still to enable
 4. **Phase 4** — Document signed binary as the recommended Windows install path in README/QUICK_START
 
 Discovery: hidden-sword-0525 (2026-05-25)
