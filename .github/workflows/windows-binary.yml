@@ -1,17 +1,24 @@
 name: Windows Standalone Binary
 
-# Builds a Nuitka --standalone reveal.exe on every GitHub Release.
-# Output: reveal-windows-x64.zip attached to the release.
+# Builds a standalone reveal.exe on every GitHub Release.
+# Output: reveal-<version>-windows-x64.zip attached to the release.
+#
+# Uses PyInstaller (--onedir), NOT Nuitka. Nuitka 4.x mis-compiles a native
+# dependency in reveal's graph on Windows, producing a reveal.exe that
+# fail-fasts at import (0xC0000409, zero output) — see BACK-495. PyInstaller
+# bundles the real CPython interpreter and copies the .pyd/.dll files as-is
+# (no recompilation), which builds a working binary; validated end-to-end
+# (reveal.exe --version -> "reveal <version>").
+#
+# CRITICAL: always build --onedir (folder), never --onefile.
+# --onefile extracts to a temp dir at launch — an AV heuristic that has
+# caused signing certificates to be suspended. --onedir avoids that.
 #
 # To enable code signing, enroll in Microsoft Artifact Signing
 # (Azure/artifact-signing-action@v2; self-employed US/CA, ~$10/mo)
 # and set these repository secrets:
 #   AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET,
 #   AZURE_CODE_SIGNING_ACCOUNT_NAME, AZURE_CERT_PROFILE_NAME
-#
-# CRITICAL: always build --standalone (folder), never --onefile.
-# --onefile extracts to a temp dir at launch — an AV heuristic that has
-# caused signing certificates to be suspended (Nuitka #3842).
 
 on:
   release:
@@ -36,54 +43,36 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install reveal + Nuitka
+      - name: Install reveal + PyInstaller
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[git,mcp]"
-          pip install nuitka ordered-set zstandard
+          pip install pyinstaller
 
-      - name: Exclude build dir from Windows Defender
-        shell: pwsh
-        run: |
-          # Windows Defender scans/kills freshly-compiled unsigned binaries as
-          # a heuristic false-positive (documented Nuitka issue #2495/#2685) —
-          # the "Smoke test the binary" step below crashes with
-          # STATUS_STACK_BUFFER_OVERRUN (0xC0000409) without this exclusion.
-          # Excluding only the build output, not disabling Defender broadly.
-          Add-MpPreference -ExclusionPath "$pwd\dist"
-
-      - name: Build with Nuitka --standalone
+      - name: Build with PyInstaller --onedir
         shell: bash
         run: |
-          python -m nuitka \
-            --standalone \
-            --assume-yes-for-downloads \
-            --output-dir=dist \
-            --output-filename=reveal.exe \
-            --include-package=reveal \
-            --include-package-data=reveal \
-            --include-package=tree_sitter \
-            --include-package=tree_sitter_language_pack \
-            --include-package-data=tree_sitter_language_pack \
-            --include-data-dir=plugins=plugins \
-            --enable-plugin=anti-bloat \
-            --python-flag=no_site \
-            reveal/main.py
+          pyinstaller --noconfirm --onedir --name reveal \
+            --collect-all reveal \
+            --collect-all tree_sitter \
+            --collect-all tree_sitter_language_pack \
+            --collect-all pygit2 \
+            --collect-all certifi \
+            --collect-all jsonschema_specifications \
+            scripts/pyinstaller_entry.py
+
+      - name: Smoke test the binary
+        shell: cmd
+        run: dist\reveal\reveal.exe --version
 
       - name: Package as zip
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}"
           $zipName = "reveal-$version-windows-x64.zip"
-          # Nuitka --standalone names the output folder after the compiled
-          # entry script (reveal/main.py -> main.dist); --output-filename only
-          # renames the .exe inside it, not the folder itself.
-          Compress-Archive -Path dist/main.dist/* -DestinationPath $zipName
+          # PyInstaller --onedir --name reveal writes the bundle to dist/reveal/.
+          Compress-Archive -Path dist/reveal/* -DestinationPath $zipName
           echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
-
-      - name: Smoke test the binary
-        shell: cmd
-        run: dist\main.dist\reveal.exe --version
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
@@ -109,7 +98,7 @@ jobs:
       #     endpoint: https://eus.codesigning.azure.net/
       #     signing-account-name: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT_NAME }}
       #     certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
-      #     files-folder: dist\main.dist
+      #     files-folder: dist\reveal
       #     files-folder-filter: exe
       #     file-digest: SHA256
       #     timestamp-rfc3161: http://timestamp.acs.microsoft.com
