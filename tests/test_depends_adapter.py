@@ -55,6 +55,35 @@ def star_pkg(tmp_path):
     return tmp_path
 
 
+@pytest.fixture
+def gradle_pkg(tmp_path):
+    """
+    Gradle-style Java tree, no .git/pyproject.toml anywhere — only a
+    `settings.gradle.kts` at the true root — with the dependent in a sibling
+    package directory (com/example/app) from the target (com/example/util).
+    Regression fixture for BACK-498: find_project_root() didn't recognize
+    Gradle/Maven/dotnet/SPM/Composer root markers, so depends:// fell back to
+    scanning just the target file's own parent dir and missed this dependent
+    entirely (while imports://?rank=fan-in, which scans the whole given
+    directory, saw it fine).
+    """
+    (tmp_path / 'settings.gradle.kts').write_text('rootProject.name = "demo"\n')
+    _write(tmp_path / 'src/main/java/com/example/util/Helper.java', """\
+        package com.example.util;
+        public class Helper {
+            public static int add(int a, int b) { return a + b; }
+        }
+    """)
+    _write(tmp_path / 'src/main/java/com/example/app/Main.java', """\
+        package com.example.app;
+        import com.example.util.Helper;
+        public class Main {
+            public static void main(String[] args) { Helper.add(1, 2); }
+        }
+    """)
+    return tmp_path
+
+
 # ---------------------------------------------------------------------------
 # Unit: DependsAdapter with controlled fixture data
 # ---------------------------------------------------------------------------
@@ -301,6 +330,42 @@ class TestDependsAdapterRenderer:
         DependsRenderer.render_structure(r, format='text')
         captured = capsys.readouterr()
         assert 'Reverse Dependency Summary' in captured.out
+
+
+class TestDependsAdapterCrossModuleRoot:
+    """BACK-498: cross-package-directory dependents for Gradle/Maven/dotnet/
+    SPM/Composer trees with no .git/pyproject.toml, only their own ecosystem's
+    root marker."""
+
+    def test_gradle_root_marker_finds_sibling_package_dependent(self, gradle_pkg):
+        from reveal.adapters.depends import DependsAdapter
+        a = DependsAdapter(str(gradle_pkg / 'src/main/java/com/example/util/Helper.java'))
+        r = a.get_structure()
+        assert r['count'] == 1
+        dependent_paths = [d['file'] for d in r['dependents']]
+        assert any('Main.java' in p for p in dependent_paths)
+
+    def test_no_root_marker_falls_back_to_src_ancestor(self, tmp_path):
+        """No settings.gradle.kts either: widen to the nearest 'src' ancestor
+        rather than the bare parent dir (still finds the sibling-package
+        dependent one level up from a same-name-only fallback)."""
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'src/main/java/com/example/util/Helper.java', """\
+            package com.example.util;
+            public class Helper {
+                public static int add(int a, int b) { return a + b; }
+            }
+        """)
+        _write(tmp_path / 'src/main/java/com/example/app/Main.java', """\
+            package com.example.app;
+            import com.example.util.Helper;
+            public class Main {
+                public static void main(String[] args) { Helper.add(1, 2); }
+            }
+        """)
+        a = DependsAdapter(str(tmp_path / 'src/main/java/com/example/util/Helper.java'))
+        r = a.get_structure()
+        assert r['count'] == 1
 
 
 if __name__ == '__main__':

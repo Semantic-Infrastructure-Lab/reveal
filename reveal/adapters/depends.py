@@ -9,6 +9,7 @@ Usage:
     reveal 'depends://src?format=dot'      # GraphViz output
 """
 
+import os
 import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
@@ -17,8 +18,45 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import safe_json_dumps
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
+from ..defaults import SKIP_DIRECTORIES
 from ..utils.query import parse_query_params
-from ..utils.path_utils import find_project_root
+from ..utils.path_utils import search_parents, is_unsafe_scan_root
+
+# BACK-498: find_project_root()'s built-in default markers (pyproject.toml,
+# setup.py/.cfg, .git, Cargo.toml, package.json, go.mod) are Python/JS/Rust/Go-
+# centric — they miss the root marker every package/namespace-resolved language
+# in this adapter's scope actually uses, so for Java/Kotlin/C#/Swift/PHP repos
+# without a discoverable .git it always fell through to the too-narrow parent-
+# dir fallback below. Passed explicitly (not merged into path_utils' shared
+# default) so this widening is scoped to depends://'s own root search and
+# doesn't change behavior for I002/D005/B005's separate, private
+# _find_project_root copies. 'settings.gradle(.kts)' and '*.sln' are true
+# root-only markers (Gradle forbids nested settings files; a solution file
+# sits above its .csproj members) so they can't cause the "found a marker
+# several modules too deep" problem 'pom.xml'/'composer.json' risk in a
+# multi-module tree — those two are still net improvements over the bare
+# parent-dir fallback even when they resolve to a submodule root rather than
+# the monorepo root.
+_PROJECT_ROOT_MARKERS = [
+    'pyproject.toml', 'setup.py', 'setup.cfg', '.git', 'Cargo.toml',
+    'package.json', 'go.mod',
+    'settings.gradle', 'settings.gradle.kts',  # Java/Kotlin (Gradle)
+    'pom.xml',  # Java (Maven)
+    'Package.swift',  # Swift (SPM)
+    'composer.json',  # PHP
+]
+
+
+def _has_project_marker(directory: Path) -> bool:
+    """True if *directory* holds a depends:// project-root marker.
+
+    Extends the literal-filename check `find_project_root` uses with a
+    `*.sln` glob (C# solution files carry a repo-specific name, so they can't
+    be a fixed literal in `_PROJECT_ROOT_MARKERS`).
+    """
+    if any((directory / marker).exists() for marker in _PROJECT_ROOT_MARKERS):
+        return True
+    return any(directory.glob('*.sln'))
 
 _SCHEMA_QUERY_PARAMS = {
     'top': {
@@ -283,9 +321,25 @@ class DependsAdapter(ResourceAdapter):
         # (not just siblings) are discovered.
         # For a directory target: same — scan from project root so files outside
         # the directory that import into it are visible.
-        project_root = find_project_root(target_path) or (
-            target_path if target_path.is_dir() else target_path.parent
-        )
+        #
+        # BACK-498: when no project marker exists above a *file* target, falling
+        # back straight to the file's own parent directory is too narrow for
+        # package/namespace-resolved languages (Java, Kotlin, Swift, PHP) — a
+        # dependent commonly lives in a sibling package directory
+        # (src/main/java/com/example/{util,app}/...), not the same folder. Widen
+        # to the nearest conventional source root ('src', the Maven/Gradle/iOS/
+        # Composer convention that all four affected languages share) when one
+        # exists above the file; only fall back to the bare parent dir if even
+        # that isn't found.
+        project_root = search_parents(target_path, _has_project_marker)
+        if project_root is not None and is_unsafe_scan_root(project_root):
+            project_root = None
+        if project_root is None:
+            if target_path.is_dir():
+                project_root = target_path
+            else:
+                src_root = search_parents(target_path, lambda p: p.name == 'src')
+                project_root = src_root if src_root else target_path.parent
         self._target_path = target_path
         self._build_graph(project_root)
 
@@ -328,11 +382,31 @@ class DependsAdapter(ResourceAdapter):
 
     def _build_graph(self, scan_root: Path) -> None:
         """Build import graph from scan_root."""
+        supported_exts = frozenset(get_all_extensions())
+
+        # BACK-498: discover files the same way ImportsAdapter._build_graph does —
+        # os.walk honoring SKIP_DIRECTORIES/hidden dirs (not a raw rglob, which
+        # both scans build artifacts/vendor dirs it shouldn't and, on a repo where
+        # scan_root ends up far above the real project, times out) — and build a
+        # basename -> [full paths] index alongside it. Package/namespace-resolved
+        # languages (Java, Kotlin, C#, PHP, Swift) need that index to resolve a
+        # dotted/qualified import to a file without their own tree walk; without
+        # it `resolve_import` silently fails for every such import and depends://
+        # reports "No dependents found" even though imports://?rank=fan-in sees
+        # the same edge (BACK-491 built this index for imports:// only).
+        files: List[Path] = []
+        file_index: Dict[str, List[Path]] = {}
         if scan_root.is_file():
-            files = [scan_root]
+            if scan_root.suffix in supported_exts:
+                files.append(scan_root)
         else:
-            supported_exts = frozenset(get_all_extensions())
-            files = [f for f in scan_root.rglob('*') if f.is_file() and f.suffix in supported_exts]
+            for root, dirs, filenames in os.walk(str(scan_root)):
+                dirs[:] = [d for d in dirs if d not in SKIP_DIRECTORIES and not d.startswith('.')]
+                for fname in filenames:
+                    fp = Path(root) / fname
+                    file_index.setdefault(fname, []).append(fp)
+                    if fp.suffix in supported_exts:
+                        files.append(fp)
 
         all_imports: List[ImportStatement] = []
         for file_path in files:
@@ -352,10 +426,17 @@ class DependsAdapter(ResourceAdapter):
 
             base_path = file_path.parent
             extra_paths = [scan_root] if scan_root.is_dir() and scan_root != base_path else []
+            # Mirrors ImportsAdapter._build_graph's gating (BACK-491): only
+            # generic (spec-based) extractors accept file_index.
+            uses_file_index = getattr(extractor, 'spec', None) is not None
             for stmt in imports:
                 if stmt.is_type_checking:
                     continue
-                resolved = extractor.resolve_import(stmt, base_path, search_paths=extra_paths)
+                if uses_file_index:
+                    resolved = extractor.resolve_import(
+                        stmt, base_path, search_paths=extra_paths, file_index=file_index)
+                else:
+                    resolved = extractor.resolve_import(stmt, base_path, search_paths=extra_paths)
                 if resolved and resolved != file_path:
                     self._graph.add_dependency(file_path, resolved)
                     self._graph.resolved_paths[stmt.module_name] = resolved
