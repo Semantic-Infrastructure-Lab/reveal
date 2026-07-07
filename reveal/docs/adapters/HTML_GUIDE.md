@@ -25,12 +25,15 @@ reveal page.html --links
 reveal page.html --metadata
 ```
 
-> **Known issues (current version):**
-> - Positional CSS-selector/ID extraction (`reveal page.html "#search-form"`,
->   `reveal page.html ".hero-section"`, `reveal page.html "nav ul li"`) currently errors with
->   "Element not found" — the generic element-extraction path doesn't route selector syntax to
->   the HTML analyzer. Use `--search '<text>'` for content lookup, or `--semantic`/`--links`/
->   `--metadata` for structured extraction instead.
+> **Positional selector/ID/tag extraction works** (BACK-481, fixed
+> extragalactic-journey-0706): `reveal page.html "#search-form"`,
+> `reveal page.html ".hero-section"`, `reveal page.html "nav ul li"`, and
+> `reveal page.html title` all resolve to the matching element with its source
+> and line range. (Previously these errored "Element not found" — the
+> element-extraction path built a `"function #id"` descendant selector and
+> matched nothing.)
+>
+> **Known issue (current version):**
 > - The bare default view (`reveal page.html` with no flags) currently prints only the file
 >   summary line (size/line count), not the `Elements`/`Template_blocks` listing shown below —
 >   use `--semantic`, `--links`, or `--metadata` to see structured content.

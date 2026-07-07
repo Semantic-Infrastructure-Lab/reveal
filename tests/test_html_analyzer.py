@@ -557,6 +557,60 @@ class TestHTMLAnalyzer(unittest.TestCase):
 
         self.assertIsNone(element)
 
+    def test_extract_element_returns_display_contract(self):
+        """BACK-481: extract_element must return the line_start/line_end/source/
+        name fields the display layer renders from — before, it returned only
+        tag/attributes/content/line, so a resolved selector still printed an
+        empty line-1 result."""
+        html = (
+            "<html>\n<body>\n"
+            '  <div id="main" class="content">\n'
+            '    <p class="intro">Hello</p>\n'
+            "  </div>\n</body>\n</html>\n"
+        )
+        analyzer = HTMLAnalyzer(self.create_temp_html(html))
+        el = analyzer.extract_element('#main')
+        self.assertIsNotNone(el)
+        for field in ('name', 'line_start', 'line_end', 'source'):
+            self.assertIn(field, el)
+        self.assertEqual(el['name'], '#main')
+        self.assertIn('id="main"', el['source'])
+        self.assertLessEqual(el['line_start'], el['line_end'])
+
+    def test_line_number_survives_attribute_reordering(self):
+        """BACK-481: bs4 serializes attributes alphabetically, so a source line
+        `<div id="main" class="content">` becomes `<div class="content"
+        id="main">`. The old serialized-substring match missed it and returned
+        line 0; the tag+attribute-value scan must find the real line."""
+        html = (
+            "<html>\n<body>\n"                       # lines 1-2
+            '  <div id="main" class="content">x</div>\n'  # line 3
+            "</body>\n</html>\n"
+        )
+        analyzer = HTMLAnalyzer(self.create_temp_html(html))
+        el = analyzer.extract_element('#main')
+        self.assertEqual(el['line_start'], 3)
+        self.assertNotEqual(el['line_start'], 0)
+
+    def test_selector_routing_through_display_layer(self):
+        """BACK-481 root cause: `reveal file.html <selector>` routes through
+        display.element._try_grep_extraction, which called
+        extract_element('function', '#main') → HTMLAnalyzer built the descendant
+        selector 'function #main' and matched nothing. The fix tries the raw
+        selector form first. Exercise that dispatch, not just the analyzer."""
+        from reveal.display.element import _try_grep_extraction
+        html = (
+            "<html>\n<body>\n"
+            '  <nav><ul><li>Home</li></ul></nav>\n'
+            '  <p class="intro">Hi</p>\n'
+            "</body>\n</html>\n"
+        )
+        analyzer = HTMLAnalyzer(self.create_temp_html(html))
+        for selector in ('.intro', 'nav ul li', 'p'):
+            result = _try_grep_extraction(analyzer, selector)
+            self.assertIsNotNone(result, f"selector {selector!r} did not route to HTML analyzer")
+            self.assertIn('source', result)
+
     # ========================================
     # Script and Style Extraction Tests
     # ========================================

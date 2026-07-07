@@ -227,7 +227,7 @@ def _find_named_node(analyzer, node_type: str, name: str):
 
 
 def _try_grep_extraction(analyzer, element: str):
-    """Try extracting element using grep fallback.
+    """Try extracting element using an analyzer's own extract_element().
 
     Args:
         analyzer: File analyzer instance
@@ -236,6 +236,18 @@ def _try_grep_extraction(analyzer, element: str):
     Returns:
         Element dict or None if not found
     """
+    # Selector/tag-based analyzers (BACK-481: HTML) overload extract_element so
+    # the *first* argument is the whole target (a CSS selector, id, or tag) and
+    # the second is empty. Try that shape first — otherwise the category loop
+    # below calls extract_element('function', '#main'), which HTMLAnalyzer
+    # combines into the descendant selector "function #main" and matches
+    # nothing, so every `reveal file.html <selector>` failed with "not found".
+    # Safe for code analyzers: extract_element('#main', '') resolves the node
+    # type '#main' (none) and falls through to a no-op grep → None.
+    result = analyzer.extract_element(element, '')
+    if result:
+        return result
+
     for element_type in ['function', 'class', 'struct', 'section', 'server', 'location', 'upstream']:
         result = analyzer.extract_element(element_type, element)
         if result:

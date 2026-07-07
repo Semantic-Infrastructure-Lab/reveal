@@ -641,21 +641,36 @@ class HTMLAnalyzer(FileAnalyzer):
         Returns:
             Line number (1-indexed) or 0 if not found
         """
-        # Simple approach: search for element string in content
-        elem_str = str(element)
+        # bs4's html.parser builder populates `sourceline` directly; lxml (the
+        # preferred builder here) does not, so fall back to a source scan.
+        sourceline = getattr(element, 'sourceline', None)
+        if sourceline:
+            return sourceline
 
-        # For very long elements, use just the opening tag
-        if len(elem_str) > 200:
-            # Extract opening tag
-            tag_match = re.match(r'<[^>]+>', elem_str)
-            if tag_match:
-                elem_str = tag_match.group(0)
+        name = getattr(element, 'name', None)
+        if not name:
+            return 0
 
-        # Search for this pattern in lines
-        search_str = elem_str[:100]  # First 100 chars
+        # Match on the opening tag plus a distinctive attribute *value* (id, else
+        # first class) rather than the serialized element string: bs4 reorders
+        # attributes alphabetically (so a `<div id="main" class="x">` source line
+        # serializes as `<div class="x" id="main">` and a substring match on the
+        # serialized form misses — the BACK-481 `#main` line-0 bug). Matching the
+        # bare value survives both attribute reordering and quote-style changes.
+        tag_needle = f'<{name}'
+        attrs = getattr(element, 'attrs', {}) or {}
+        attr_needle: Optional[str] = None
+        if attrs.get('id'):
+            attr_needle = str(attrs['id'])
+        elif attrs.get('class'):
+            cls = attrs['class']
+            if isinstance(cls, (list, tuple)) and cls:
+                attr_needle = str(cls[0])
+            elif isinstance(cls, str) and cls:
+                attr_needle = cls
 
         for i, line in enumerate(self.lines, 1):
-            if search_str[:50] in line:
+            if tag_needle in line and (attr_needle is None or attr_needle in line):
                 return i
 
         return 0
@@ -735,12 +750,27 @@ class HTMLAnalyzer(FileAnalyzer):
         if not element:
             return None
 
+        source = str(element)
+        line_start = self._get_line_number(element)
+        # Estimate the end from the serialized element's own line span. bs4
+        # normalizes whitespace, so this is approximate — but for a multi-line
+        # element it beats collapsing to a single line.
+        line_end = line_start + source.count('\n') if line_start else line_start
+
         return {
+            # Standard extraction contract the display layer renders from
+            # (BACK-481: previously returned only `content`/`line`, so
+            # `reveal file.html <selector>` printed an empty line-1 result even
+            # once routing reached this method).
+            'name': selector,
+            'line_start': line_start,
+            'line_end': line_end,
+            'source': source,
+            # HTML-specific extras retained for JSON consumers.
             'tag': element.name,
             'attributes': dict(element.attrs) if hasattr(element, 'attrs') else {},
-            'content': str(element),
             'text': element.get_text(strip=True) if hasattr(element, 'get_text') else '',
-            'line': self._get_line_number(element),
+            'line': line_start,
         }
 
     def _format_metadata_as_items(self) -> List[Dict[str, Any]]:
