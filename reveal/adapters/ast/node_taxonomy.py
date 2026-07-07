@@ -211,7 +211,14 @@ RAISE_NODES: frozenset = frozenset({'raise_statement', 'raise'})
 # not 'throw_statement' (BACK-431 Issue G smoke-tier audit: Scala's `throw`
 # was invisible to --exits/--returns without this, the same failure shape
 # BACK-430 found for Rust).
-THROW_NODES: frozenset = frozenset({'throw_statement', 'throw_expression'})
+# Kotlin wraps throw (and return/break/continue) in a `jump_expression` whose
+# only distinguishing child is the bare `throw` keyword node — so the bare
+# keyword kind must be recognized too, exactly as RETURN_NODES already carries
+# bare 'return'. Safe against double-counting: collect_exits `continue`s when a
+# wrapper (throw_statement/throw_expression) matches, so its throw-keyword child
+# is never walked; the bare kind only fires under jump_expression (Kotlin), which
+# is not itself an exit node. Found via tivi deep-conformance dogfooding.
+THROW_NODES: frozenset = frozenset({'throw_statement', 'throw_expression', 'throw'})
 YIELD_NODES: frozenset = frozenset({'yield_statement', 'yield'})
 # BACK-431: bare 'break'/'continue' were already recognized by nav_exits.py's
 # hand-written _EXIT_KIND but missing from nav_outline.py's EXIT_NODES — a
@@ -356,7 +363,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'impl_item': 'IMPL',
     'return_statement': 'RETURN', 'return': 'RETURN',
     'raise_statement': 'RAISE', 'raise': 'RAISE',
-    'throw_statement': 'THROW', 'throw_expression': 'THROW',
+    'throw_statement': 'THROW', 'throw_expression': 'THROW', 'throw': 'THROW',
     'yield_statement': 'YIELD', 'yield': 'YIELD',
     'break_statement': 'BREAK', 'break': 'BREAK',
     'continue_statement': 'CONTINUE', 'continue': 'CONTINUE',

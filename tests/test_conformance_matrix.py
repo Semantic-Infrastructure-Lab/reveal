@@ -435,6 +435,27 @@ def test_cpp_for_range_loop_classifies_declarator_as_write():
     ], f"cpp: for_range_loop varflow mismatch\n{out}"
 
 
+def test_kotlin_throw_is_detected_by_exits():
+    """--exits must detect Kotlin's `throw` as a THROW exit.
+
+    Kotlin wraps both `throw` and `return` in a `jump_expression` node; the
+    only distinguishing child is the bare `throw`/`return` keyword node. bare
+    `return` was already in RETURN_NODES so returns worked, but THROW_NODES
+    carried only `throw_statement`/`throw_expression` (Java/Scala shapes) — the
+    bare `throw` keyword kind was missing, so `--exits`/`--returns` were blind
+    to every Kotlin throw (BACK-427 class). Found via tivi deep-conformance
+    dogfooding; the entry_function processOrder has no throw, so this pins
+    `validate` (throw at L6) directly. Confirmed to report only the L8 return
+    pre-fix."""
+    out = _run(str(_sample_path("kotlin")), "validate", "--exits", "--format", "json")
+    data = json.loads(out)
+    findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
+    assert findings == [
+        {"kind": "THROW", "line": 6},
+        {"kind": "RETURN", "line": 8},
+    ], f"kotlin: validate exits mismatch (throw at L6 must be detected)\n{out}"
+
+
 # ───────────────────── BACK-427 (remaining): Rust loop/match ──────────────────
 
 def test_rust_outline_recognizes_expression_oriented_control_flow():
