@@ -18,7 +18,7 @@ beth_topics:
 > - **Build tooling** (Phase 3 below shows PyInstaller `--onefile`) — avoid `--onefile`: it extracts Python to a temp dir at launch, an AV heuristic that got a signed `--onefile` binary's cert suspended (Nuitka #3842). Nuitka `--standalone` was then tried and **also abandoned** — Nuitka 4.x mis-compiles a native dep in reveal's graph on Windows, producing a binary that fail-fasts at launch (`0xC0000409`, BACK-495, bright-asteroid-0706). The active `windows-binary.yml` uses **PyInstaller `--onedir`** (a folder, not onefile — no temp extraction, so it avoids the AV heuristic), with entry `pyinstaller_entry.py` at the repo root. When signing is enabled, sign `dist/reveal/reveal.exe` inside that folder (`files-folder: dist\reveal`).
 > - **"Azure Trusted Signing is ~$10/mo — not chosen"** — this is now the recommended path; the active CI workflow uses it. SignPath Foundation remains a valid free-OSS alternative (see below) but requires manual approval per release.
 >
-> The **Phase 2 `__main__.py` workaround** and **SignPath Foundation** notes below are still accurate and worth keeping as reference.
+> The **Phase 2 `__main__.py` workaround** (shipped 2026-07-06 — `reveal/__main__.py` exists, `python -m reveal` documented in README/QUICK_START) and **SignPath Foundation** notes below are still accurate as background and worth keeping as reference.
 
 # Windows Code Signing — SignPath Foundation Plan
 

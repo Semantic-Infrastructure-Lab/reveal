@@ -20,6 +20,8 @@ pip install reveal-cli
 
 **That's it.** Zero configuration required.
 
+> **Windows on a managed machine?** If Application Control Policy blocks the pip-generated `reveal.exe` launcher, run `python -m reveal` in place of `reveal` everywhere in this guide — same install, same behavior, just an unblocked entry point.
+
 ---
 
 ## Three Core Concepts

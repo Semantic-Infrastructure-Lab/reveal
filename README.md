@@ -19,6 +19,8 @@ reveal pack src/ --since main --budget 8000 # PR context snapshot for AI agents
 pip install reveal-cli
 ```
 
+**Windows on a managed/locked-down machine?** If Application Control Policy blocks the pip-generated `reveal.exe` launcher, run `python -m reveal` instead — it uses the same install, just skips the blocked wrapper.
+
 ## What Makes It Different
 
 **Progressive disclosure — the only way in.** `dir → file → element` isn't optional; it's the architecture. You cannot accidentally dump 7,000 tokens of raw code.
