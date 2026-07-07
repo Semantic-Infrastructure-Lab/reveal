@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...analyzers.imports import ImportGraph
 from ...analyzers.imports.base import get_extractor, get_all_extensions
+from ...utils.path_utils import is_unsafe_scan_root
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,6 @@ _PROJECT_MARKERS = (
     'go.mod',          # Go
     'Cargo.toml',      # Rust
 )
-
-_SYSTEM_ROOTS = frozenset({Path('/'), Path('/tmp'), Path('/var'), Path('/var/tmp')})
 
 # Safety ceiling on the import-graph scan. A correctly-detected project root
 # almost never exceeds this; blowing past it means root detection went wrong
@@ -87,7 +86,7 @@ def _find_project_root(path: Path) -> Path:
         current = parent
 
     # .git is a strong project root signal even without a marker file
-    if git_root is not None and git_root not in _SYSTEM_ROOTS:
+    if git_root is not None and not is_unsafe_scan_root(git_root):
         return git_root
 
     # Pass 2: contiguous __init__.py chain from the target's own package upward.
@@ -151,7 +150,7 @@ class I002(BaseRule):
             # 1. The cache hits for every file in the same project (not per-subdir)
             # 2. Cross-package cycles are detected (subdir scan misses them)
             scan_root = _find_project_root(target_path)
-            if scan_root in _SYSTEM_ROOTS:
+            if is_unsafe_scan_root(scan_root):
                 logger.debug(
                     "I002: skipping circular-dependency scan for standalone file under %s",
                     scan_root,

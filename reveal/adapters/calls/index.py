@@ -18,6 +18,7 @@ from ..ast.analysis import collect_structures, is_code_file, PYTHON_BUILTINS
 from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
 from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
 from ...registry import language_for_extension
+from ...utils.path_utils import is_unsafe_scan_root
 
 # Module-level LRU cache: directory → (cache_key, index)
 # cache_key is a tuple of (abspath_str, mtime_ns) pairs so it's hashable.
@@ -500,10 +501,6 @@ def find_callers(
 # unbounded-scan footgun BACK-418 fixed for I002/hotspots. Skip the hint when the
 # parent is a well-known system/home root, or when a cheap parse-free count of
 # its code files exceeds this ceiling.
-_HINT_SCAN_SYSTEM_ROOTS = frozenset({
-    '/', '/tmp', '/var', '/var/tmp', '/usr', '/usr/local', '/home',
-    '/opt', '/etc', '/root', '/mnt',
-})
 _HINT_SCAN_MAX_FILES = 2000
 
 
@@ -515,7 +512,7 @@ def _parent_hint_scan_is_cheap(parent: str) -> bool:
     refuses outright on system/home roots (e.g. a tempdir whose parent is /tmp).
     """
     from ..ast.analysis import _SKIP_DIRS
-    if os.path.realpath(parent) in _HINT_SCAN_SYSTEM_ROOTS:
+    if is_unsafe_scan_root(parent):
         return False
     count = 0
     for root, dirs, files in os.walk(parent):

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, Generator, List, Optional, Set, Tuple
 
 from ...defaults import SKIP_DIRECTORIES
+from ...utils.path_utils import to_posix
 
 
 # Entry point filename patterns (highest priority)
@@ -372,7 +373,7 @@ def _collect_candidates(
 
         candidates.append({
             'path': str(f),
-            'relative': str(rel),
+            'relative': to_posix(rel),
             'priority': priority,
             'tokens_approx': tokens_approx,
             'lines': lines,

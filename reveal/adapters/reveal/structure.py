@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from ..base import _ADAPTER_REGISTRY
+from ...utils.path_utils import to_posix
 
 
 def get_structure(reveal_root: Path, component: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
@@ -118,7 +119,7 @@ def get_analyzers(reveal_root: Path) -> List[Dict[str, Any]]:
 
         analyzers.append({
             'name': file.stem,
-            'path': str(file.relative_to(reveal_root)),
+            'path': to_posix(file.relative_to(reveal_root)),
             'module': f'reveal.analyzers.{file.stem}'
         })
 
@@ -173,7 +174,7 @@ def get_rules(reveal_root: Path) -> List[Dict[str, Any]]:
             rules.append({
                 'code': rule_file.stem,
                 'category': category_dir.name,
-                'path': str(rule_file.relative_to(reveal_root)),
+                'path': to_posix(rule_file.relative_to(reveal_root)),
                 'module': f'reveal.rules.{category_dir.name}.{rule_file.stem}'
             })
 

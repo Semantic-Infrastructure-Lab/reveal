@@ -1,13 +1,16 @@
 """Tests for reveal/utils/path_utils.py - path utilities."""
 
+import tempfile
 import pytest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from reveal.utils.path_utils import (
     find_file_in_parents,
     search_parents,
     find_project_root,
     get_relative_to_root,
     detect_non_python_language,
+    to_posix,
+    is_unsafe_scan_root,
 )
 
 
@@ -494,3 +497,76 @@ class TestGetRelativeToRoot:
         # Should return absolute path when relative_to fails
         assert result.is_absolute()
         assert result == file.resolve()
+
+
+class TestToPosix:
+    """to_posix() — portable path serialization (Windows path-separator safety)."""
+
+    def test_posix_path_object_unchanged(self):
+        assert to_posix(Path("a/b/c.py")) == "a/b/c.py"
+
+    def test_windows_backslash_string_normalized(self):
+        # Simulates str(rel) on Windows, which emits backslashes and broke
+        # cross-OS comparisons (e.g. pack's 'relative' field vs 'tests/foo.py').
+        assert to_posix("tests\\test_core.py") == "tests/test_core.py"
+
+    def test_pure_windows_path_normalized(self):
+        # A path built with Windows semantics serializes with forward slashes.
+        assert to_posix(PureWindowsPath("tests", "sub", "file.py")) == "tests/sub/file.py"
+
+    def test_already_posix_string_unchanged(self):
+        assert to_posix("already/posix.py") == "already/posix.py"
+
+    def test_absolute_windows_path_keeps_drive(self):
+        assert to_posix("C:\\proj\\src\\a.py") == "C:/proj/src/a.py"
+
+    def test_output_never_contains_backslash(self):
+        # The core contract: output is portable regardless of input separator.
+        assert "\\" not in to_posix("a\\b\\c\\d.py")
+
+
+class TestIsUnsafeScanRoot:
+    """is_unsafe_scan_root() — platform-aware system/temp/home root detection.
+
+    Replaces three divergent hardcoded POSIX-only sets that silently no-opped
+    on Windows (temp = C:\\...\\Temp, anchor = C:\\) and macOS (temp =
+    /var/folders/..., /tmp -> /private/tmp). The simulation tests below run on
+    Linux yet exercise the non-Linux behavior, so a regression is caught on the
+    dev machine instead of only on the (slow, post-push) Windows CI matrix.
+    """
+
+    def test_filesystem_anchor_is_unsafe(self):
+        assert is_unsafe_scan_root("/") is True
+
+    def test_os_tempdir_is_unsafe(self):
+        assert is_unsafe_scan_root(tempfile.gettempdir()) is True
+
+    def test_home_is_unsafe(self):
+        assert is_unsafe_scan_root(str(Path.home())) is True
+
+    def test_none_is_not_unsafe(self):
+        assert is_unsafe_scan_root(None) is False
+
+    def test_real_project_dir_is_safe(self, tmp_path):
+        proj = tmp_path / "myproject"
+        proj.mkdir()
+        assert is_unsafe_scan_root(str(proj)) is False
+
+    def test_tempdir_is_derived_at_runtime_not_hardcoded(self, tmp_path, monkeypatch):
+        # The macOS/Windows bug in one test: the OS temp dir is NOT '/tmp'
+        # (macOS: /var/folders/...; Windows: C:\\...\\Temp). Recognizing it must
+        # come from tempfile.gettempdir() at call time, never a hardcoded '/tmp'.
+        # Point gettempdir at a non-/tmp location and confirm it's flagged
+        # unsafe, while a child of it (a real project checkout) is not.
+        fake_temp = tmp_path / "os_specific_temp"
+        fake_temp.mkdir()
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(fake_temp))
+        assert is_unsafe_scan_root(str(fake_temp)) is True
+        assert is_unsafe_scan_root(str(fake_temp / "project")) is False
+
+    def test_home_is_derived_at_runtime(self, tmp_path, monkeypatch):
+        fake_home = tmp_path / "home_user"
+        fake_home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+        assert is_unsafe_scan_root(str(fake_home)) is True
+        assert is_unsafe_scan_root(str(fake_home / "code" / "proj")) is False

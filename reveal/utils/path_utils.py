@@ -4,13 +4,86 @@ Consolidates common patterns for searching up directory trees.
 """
 
 import os
-from pathlib import Path
-from typing import Callable, Dict, Optional, List
+import tempfile
+from pathlib import Path, PurePath
+from typing import Callable, Dict, Optional, List, Union
 
 from ..defaults import SKIP_DIRECTORIES
 from ..registry import language_for_extension, LANGUAGE_DISPLAY_NAMES
 
 _SKIP_DIRS: frozenset = SKIP_DIRECTORIES
+
+
+def to_posix(path: Union[str, PurePath]) -> str:
+    """Serialize a path with forward slashes on every OS.
+
+    Use this — never ``str(path)`` — whenever a path is written to output
+    (JSON, display strings), used as a dict key, or compared as a string.
+    ``str(Path)`` emits backslashes on Windows, which makes reveal's output
+    non-portable and breaks cross-OS string comparisons (e.g. an agent or a
+    test comparing against ``'tests/foo.py'`` fails on a Windows-produced
+    ``'tests\\foo.py'``). Mirrors the ad-hoc ``.replace('\\\\', '/')`` idiom
+    that was scattered across the codebase, in one canonical place.
+
+    A path *relative* to a root serializes cleanly; pass the ``relative_to()``
+    result. Absolute Windows paths keep their drive (``C:/foo/bar``).
+    """
+    if isinstance(path, PurePath):
+        return path.as_posix()
+    return str(path).replace('\\', '/')
+
+
+# Directories that must never be treated as a project root or scanned as if they
+# were a project — the filesystem anchor, the OS temp dir, the user's home, and
+# the classic shallow POSIX system dirs. Single source of truth: three separate
+# hardcoded POSIX-only sets used to live in path_utils/I002/calls-index and each
+# silently no-opped on Windows (temp = ``C:\\...\\Temp``, anchor = ``C:\\``) and
+# macOS (temp = ``/var/folders/...``; ``/tmp`` -> ``/private/tmp`` under realpath).
+_STATIC_UNSAFE_ROOTS = (
+    '/', '/tmp', '/var', '/var/tmp', '/usr', '/usr/local',
+    '/home', '/opt', '/etc', '/root', '/mnt',
+)
+
+
+def _unsafe_scan_roots() -> frozenset:
+    """Realpath'd set of unsafe roots, derived fresh (temp/home can be patched).
+
+    Not cached: ``tempfile.gettempdir()`` and ``Path.home()`` are read at call
+    time so tests can monkeypatch them to simulate other platforms, and the
+    cost (realpath of ~13 paths) is trivial next to the walks it guards.
+    """
+    roots = set()
+    for base in (tempfile.gettempdir(), str(Path.home())):
+        try:
+            roots.add(os.path.realpath(base))
+        except (OSError, RuntimeError, ValueError):
+            pass
+    for p in _STATIC_UNSAFE_ROOTS:
+        roots.add(os.path.realpath(p))
+    return frozenset(roots)
+
+
+def is_unsafe_scan_root(path: Union[str, PurePath, None]) -> bool:
+    """True if *path* is a filesystem/system/home root, platform-aware.
+
+    Used to refuse treating a path as a project boundary (``find_project_root``)
+    or scanning it as if it were a project (I002 circular-dep scan, calls
+    widen-the-path hint) — guards against parsing thousands of unrelated files
+    under ``/tmp``, ``$HOME``, or a drive root. Recognizes:
+
+    - the filesystem *anchor* (``/`` on POSIX, ``C:\\`` on Windows);
+    - the OS temp dir (``tempfile.gettempdir()``) and the user home dir, both
+      realpath-normalized so macOS symlinks (``/tmp`` -> ``/private/tmp``) match;
+    - the classic shallow POSIX system dirs (harmless no-ops on Windows).
+
+    Accepts a ``str`` or ``PurePath``; ``None`` is not a root (False).
+    """
+    if path is None:
+        return False
+    real = os.path.realpath(str(path))
+    if real == os.path.realpath(Path(real).anchor):
+        return True
+    return real in _unsafe_scan_roots()
 
 
 def _non_python_display_name(ext: str) -> str:
@@ -44,11 +117,6 @@ def detect_non_python_language(path: Path) -> str:
             if lang:
                 counts[lang] = counts.get(lang, 0) + 1
     return max(counts, key=counts.__getitem__) if counts else ''
-
-# Paths that should never be considered project roots (stray .git / pyproject.toml
-# at filesystem boundaries produces false positives in temp-dir tests and CI).
-_SYSTEM_ROOTS = frozenset({Path('/'), Path('/tmp'), Path('/var'), Path('/var/tmp')})
-
 
 def find_file_in_parents(
     start: Path,
@@ -159,7 +227,7 @@ def find_project_root(
         return any((p / marker).exists() for marker in markers)
 
     result = search_parents(start, has_marker)
-    return None if result in _SYSTEM_ROOTS else result
+    return None if is_unsafe_scan_root(result) else result
 
 
 def get_relative_to_root(

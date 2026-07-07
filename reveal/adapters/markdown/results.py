@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 
 from ...utils.results import ResultBuilder
+from ...utils.path_utils import to_posix
 
 
 def build_result_item(
@@ -25,9 +26,9 @@ def build_result_item(
     stat = path.stat()
     result = {
         'path': str(path),
-        'relative_path': str(path.relative_to(Path.cwd())
-                            if path.is_relative_to(Path.cwd())
-                            else path),
+        'relative_path': to_posix(path.relative_to(Path.cwd())
+                                 if path.is_relative_to(Path.cwd())
+                                 else path),
         'has_frontmatter': frontmatter is not None,
         'mtime': stat.st_mtime,
         'modified': datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),

@@ -25,6 +25,7 @@ from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..defaults import SKIP_DIRECTORIES
 from ..registry import get_code_extensions
+from ..utils.path_utils import to_posix
 
 _SKIP_DIRS = SKIP_DIRECTORIES
 
@@ -1216,8 +1217,8 @@ class ImportsAdapter(ResourceAdapter):
                 if result is not None:
                     layer_name, reason = result
                     violations.append({
-                        'from_file': str(from_file.relative_to(project_root) if from_file.is_relative_to(project_root) else from_file),
-                        'to_file': str(to_file.relative_to(project_root) if to_file.is_relative_to(project_root) else to_file),
+                        'from_file': to_posix(from_file.relative_to(project_root) if from_file.is_relative_to(project_root) else from_file),
+                        'to_file': to_posix(to_file.relative_to(project_root) if to_file.is_relative_to(project_root) else to_file),
                         'layer': layer_name,
                         'reason': reason or f'{layer_name} layer violation',
                     })

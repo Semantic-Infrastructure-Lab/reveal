@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Optional
 import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ...utils.path_utils import to_posix
 
 
 class V006(BaseRule):
@@ -70,7 +71,7 @@ class V006(BaseRule):
     ) -> List[Detection]:
         """Check a single analyzer file for output format support."""
         detections: List[Detection] = []
-        rel_path = str(analyzer_file.relative_to(reveal_root))
+        rel_path = to_posix(analyzer_file.relative_to(reveal_root))
 
         has_get_structure = (
             'def get_structure' in file_content or

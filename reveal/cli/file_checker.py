@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Optional, List, TYPE_CHECKING
 
 from ..defaults import SKIP_DIRECTORIES
+from ..utils.path_utils import to_posix
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -246,7 +247,7 @@ def should_skip_file(relative_path: Path, gitignore_patterns: List[str]) -> bool
     """
     import fnmatch
 
-    path_str = str(relative_path)
+    path_str = to_posix(relative_path)
     parts = relative_path.parts
 
     for pattern in gitignore_patterns:
@@ -508,7 +509,7 @@ def _check_files_json(
             except ValueError:
                 rel_path = file_path.relative_to(directory)
             file_results.append({
-                "file": str(rel_path),
+                "file": to_posix(rel_path),
                 "issues": issue_count,
                 "detections": [
                     {

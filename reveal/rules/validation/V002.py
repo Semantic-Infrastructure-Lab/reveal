@@ -15,6 +15,7 @@ import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+from ...utils.path_utils import to_posix
 
 
 class V002(BaseRule):
@@ -84,7 +85,7 @@ class V002(BaseRule):
 
         # Has classes but no @register - create detection
         return self.create_detection(
-            file_path=str(analyzer_file.relative_to(reveal_root)),
+            file_path=to_posix(analyzer_file.relative_to(reveal_root)),
             line=1,
             message=f"Analyzer '{analyzer_file.stem}' has {class_count} class(es) but no @register decorator",
             suggestion="Add @register decorator to the analyzer class(es)",

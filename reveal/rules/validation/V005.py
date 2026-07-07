@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Optional
 import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ...utils.path_utils import to_posix
 
 
 class V005(BaseRule):
@@ -150,7 +151,7 @@ class V005(BaseRule):
 
         for pattern in auto_discovered_patterns:
             for guide_file in docs_dir.rglob(pattern):
-                relative_path = str(guide_file.relative_to(docs_dir))
+                relative_path = to_posix(guide_file.relative_to(docs_dir))
 
                 # Skip if already registered in STATIC_HELP
                 if relative_path in registered_files:

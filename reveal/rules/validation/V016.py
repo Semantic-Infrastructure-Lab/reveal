@@ -15,6 +15,7 @@ from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root, is_dev_checkout
+from ...utils.path_utils import to_posix
 
 
 class V016(BaseRule):
@@ -206,7 +207,7 @@ class V016(BaseRule):
 
             # Use path relative to project root for readable output
             try:
-                display_path = str(py_file.relative_to(reveal_root.parent))
+                display_path = to_posix(py_file.relative_to(reveal_root.parent))
             except ValueError:
                 display_path = file_path_str
 
