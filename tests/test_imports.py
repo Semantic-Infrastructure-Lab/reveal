@@ -208,6 +208,55 @@ class TestImportGraph:
         path = graph.find_cycle_path(groups[0])
         assert path[0] == path[-1]
 
+    def test_find_cycle_path_returns_shortest_representative(self):
+        # A↔B is a 2-cycle; A also reaches itself the long way A→C→D→A. The
+        # BFS representative must be the short one [A,B,A], not the long path.
+        graph = ImportGraph()
+        a, b, c, d = Path('a.py'), Path('b.py'), Path('c.py'), Path('d.py')
+        for f in [a, b, c, d]:
+            graph.files[f] = []
+        graph.add_dependency(a, b)
+        graph.add_dependency(b, a)
+        graph.add_dependency(a, c)
+        graph.add_dependency(c, d)
+        graph.add_dependency(d, a)
+        group = next(g for g in graph.find_cycle_groups() if a in g)
+        # Rotate the group so `a` is the start node the path closes on.
+        group = [a] + [n for n in group if n != a]
+        path = graph.find_cycle_path(group)
+        assert path[0] == path[-1] == a
+        assert len(path) == 3  # shortest cycle A→B→A, not the 4-node detour
+
+    def test_find_cycle_path_large_dense_scc_terminates_fast(self):
+        """BACK-496: a large, densely-connected strongly-connected component
+        must resolve in linear time. The previous recursive DFS copied its
+        ``visited`` set per branch with no global dead-end marking, enumerating
+        every simple path — exponential — and never returned on the
+        multi-thousand-node SCC that real Java/Kotlin repos produce once import
+        edges resolve (BACK-487/488). A clique of 400 nodes has more simple
+        cycles than atoms in the universe; BFS visits each node once.
+        """
+        import time
+        graph = ImportGraph()
+        n = 400
+        nodes = [Path(f'n{i}.py') for i in range(n)]
+        for f in nodes:
+            graph.files[f] = []
+        # Fully-connected digraph (every node → every other) = one giant SCC.
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+                    graph.add_dependency(nodes[i], nodes[j])
+        groups = graph.find_cycle_groups()
+        big = max(groups, key=len)
+        assert len(big) == n
+        t0 = time.time()
+        path = graph.find_cycle_path(big)
+        elapsed = time.time() - t0
+        assert elapsed < 1.0, f"find_cycle_path took {elapsed:.1f}s on a {n}-node SCC"
+        assert path[0] == path[-1]
+        assert len(path) == 3  # any two nodes form a 2-cycle in a clique
+
     def test_find_unused_imports(self):
         """Test detecting unused imports."""
         imports = [
@@ -1006,21 +1055,21 @@ class TestImportsRenderer:
 
     def test_renderer_warns_on_unsupported_extension_instead_of_false_clean(self, tmp_path):
         """BACK-431 feature-breadth pass: a language with no import extractor
-        (e.g. Kotlin, Swift, Scala) was never analyzed, so count == 0 means
-        "not checked," not "clean." The text renderer used to print the same
-        "✅ No unused imports found!" for both cases — found via a real
-        Kotlin file where JSON metadata already recorded
-        unsupported_extensions but the text path silently ignored it."""
+        was never analyzed, so count == 0 means "not checked," not "clean." The
+        text renderer used to print the same "✅ No unused imports found!" for
+        both cases. Uses Scala — a recognized *code* extension that still has no
+        import extractor (Kotlin/Swift gained one in BACK-488, so `.kt`/`.swift`
+        are now genuinely supported and no longer exercise the warn path)."""
         from reveal.adapters.imports import ImportsRenderer
         from io import StringIO
         import sys
 
-        test_file = tmp_path / "test.kt"
-        test_file.write_text("import kotlin.time.Duration\n\nfun f() {}\n")
+        test_file = tmp_path / "test.scala"
+        test_file.write_text("import scala.collection.mutable\n\ndef f() = 1\n")
 
         adapter = ImportsAdapter(str(test_file), 'unused')
         result = adapter.get_structure()
-        assert result['metadata']['unsupported_extensions'] == {'.kt': 1}
+        assert result['metadata']['unsupported_extensions'] == {'.scala': 1}
 
         old_stdout = sys.stdout
         sys.stdout = captured_output = StringIO()
@@ -1029,7 +1078,7 @@ class TestImportsRenderer:
         output = captured_output.getvalue()
 
         assert 'No unused imports found' not in output
-        assert '.kt' in output
+        assert '.scala' in output
 
     def test_renderer_shows_clean_for_supported_file_with_zero_imports(self, tmp_path):
         """A file whose language IS supported but which happens to have zero

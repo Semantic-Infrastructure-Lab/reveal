@@ -111,6 +111,81 @@ def test_imports_unused_detection(lang):
         assert unused_names == expected, f"{lang}: imports unused mismatch"
 
 
+# ──────────────────────── reveal architecture (fan-in/out) ─────────────────────
+#
+# BACK-487/488: the high-level DD command `reveal architecture` depends on
+# file-level import→file edges. Before, only Python/JS/TS/Go/Rust produced a
+# real fan-in/fan-out graph; Java/PHP/Ruby got listing-but-no-edges and
+# Swift/Kotlin got nothing at all, so `architecture` returned a bare directory
+# listing (no entry points, no core abstractions) for half the matrix. These
+# tiny 2-file projects pin that every graph-backed language resolves a
+# same-project edge into the architecture brief.
+
+# (importer_rel, importer_src, imported_rel, imported_src)
+_EDGE_PROJECTS = {
+    "java": (
+        "com/app/Main.java", "package com.app;\nimport com.app.util.Helper;\npublic class Main { void run(){ new Helper(); } }\n",
+        "com/app/util/Helper.java", "package com.app.util;\npublic class Helper {}\n",
+    ),
+    "php": (
+        "src/Ctrl/Home.php", "<?php\nnamespace App\\Ctrl;\nuse App\\Models\\User;\nclass Home { function f(){ new User(); } }\n",
+        "src/Models/User.php", "<?php\nnamespace App\\Models;\nclass User {}\n",
+    ),
+    "ruby": (
+        "lib/main.rb", "require_relative 'helper'\nHelper.go\n",
+        "lib/helper.rb", "module Helper\n  def self.go; end\nend\n",
+    ),
+    "kotlin": (
+        "app/com/foo/Main.kt", "package com.foo\nimport com.foo.Bar\nfun main() { Bar() }\n",
+        "app/com/foo/Bar.kt", "package com.foo\nclass Bar\n",
+    ),
+    "swift": (
+        "Sources/Main.swift", "import Helper\nfunc run() { _ = Helper() }\n",
+        "Sources/Helper.swift", "struct Helper {}\n",
+    ),
+    "c": (
+        "main.c", "#include \"helper.h\"\nint main(){ return 0; }\n",
+        "helper.h", "int helper(void);\n",
+    ),
+    "cpp": (
+        "main.cpp", "#include \"engine.hpp\"\nint main(){ return 0; }\n",
+        "engine.hpp", "struct Engine {};\n",
+    ),
+}
+
+EDGE_LANGUAGES = sorted(_EDGE_PROJECTS)
+
+
+@pytest.mark.parametrize("edge_lang", EDGE_LANGUAGES)
+def test_architecture_resolves_same_project_edge(edge_lang, tmp_path):
+    """`reveal architecture` must surface a resolved intra-project dependency as
+    a fan-out entry point AND a fan-in core abstraction, for every graph-backed
+    language (BACK-487/488)."""
+    importer_rel, importer_src, imported_rel, imported_src = _EDGE_PROJECTS[edge_lang]
+    for rel, src in ((importer_rel, importer_src), (imported_rel, imported_src)):
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(src)
+
+    out = _run("architecture", str(tmp_path), "--format", "json")
+    facts = json.loads(out)["facts"]
+
+    importer_name = Path(importer_rel).name
+    imported_name = Path(imported_rel).name
+
+    entry_points = {Path(e["file"]).name: e for e in facts["entry_points"]}
+    core = {Path(e["file"]).name: e for e in facts["core_abstractions"]}
+
+    assert importer_name in entry_points, (
+        f"{edge_lang}: importer {importer_name} not an entry point — edge unresolved\n{out}"
+    )
+    assert entry_points[importer_name]["fan_out"] >= 1
+    assert imported_name in core, (
+        f"{edge_lang}: imported {imported_name} not a core abstraction — edge unresolved\n{out}"
+    )
+    assert core[imported_name]["fan_in"] >= 1
+
+
 # ──────────────────────────────────── --varflow ───────────────────────────────
 
 def test_varflow_declaration_is_write_not_read(lang):

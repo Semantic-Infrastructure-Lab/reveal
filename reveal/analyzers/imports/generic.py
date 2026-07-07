@@ -17,9 +17,29 @@ subclass — no new parsing logic.
 Scope (honest about what this delivers):
   * **Listing** of import statements for all covered languages — the primary fix
     for the silent-zero bug.
-  * **File-level dependency edges** (``?circular``, fan-in) for C/C++ only, where
-    ``#include "header.h"`` resolves cleanly to a sibling/searched file. Angle-bracket
-    system includes (``<stdio.h>``) are intentionally not resolved.
+  * **File-level dependency edges** (``?circular``, fan-in) for every language
+    whose imports name an *in-tree file* structurally (BACK-487/488):
+      - C/C++ — ``#include "header.h"`` → sibling/searched file. Angle-bracket
+        system includes (``<stdio.h>``) are intentionally not resolved.
+      - Java — ``import com.pkg.Type`` → ``com/pkg/Type.java`` (package==dir is
+        guaranteed by javac, so the full path-suffix match is reliable).
+      - PHP — ``use App\\Models\\User`` → ``.../Models/User.php`` (longest unique
+        path-suffix, tolerant of the PSR-4 vendor-root prefix); ``require``/
+        ``include`` string-literal paths → file relative to the including file.
+      - Ruby — ``require_relative './x'`` → ``x.rb`` relative to the file;
+        ``load 'config.rb'``/``require 'lib/thing.rb'`` when they name a real
+        in-tree ``.rb``. Bare ``require 'json'`` (a gem) is correctly skipped.
+      - Swift — ``import Foo`` → ``Foo.swift`` when a module maps 1:1 to a file.
+      - Kotlin — ``import com.pkg.Bar`` → ``com/pkg/Bar.kt`` full-suffix.
+    Every case resolves *only* to a file that exists in the tree; when the
+    target is a package/namespace/gem with no single backing file (Java ``.*``
+    wildcards, C# ``using`` of a multi-file namespace, unresolved PSR-4 prefixes)
+    the import is **skipped, never fabricated** — same honest-skip contract the
+    C/C++ angle-bracket case has always had.
+  * **C# note**: ``using X.Y`` imports a *namespace* (a directory of files), not a
+    single type, so it resolves a file only in the rare case a matching
+    ``Y.cs`` exists — otherwise skipped. Full C# fan-in needs a
+    namespace-declaration index (not filename matching); tracked separately.
   * **Unused-import detection is not claimed** for these languages — the imports
     are flagged ``skip_unused`` so they are never falsely reported as unused
     (textual ``#include`` and namespace/require imports lack reliable
@@ -63,6 +83,19 @@ class _ImportSpec:
             the right side the module.
         resolve_includes: True when quoted paths should resolve to actual files
             for the dependency graph (C/C++ ``#include "foo.h"``).
+        module_separator: The character joining components of a qualified
+            *type* import that maps to a file path — ``.`` for Java/C#/Kotlin
+            (``com.pkg.Type`` → ``com/pkg/Type.ext``), ``\\`` for PHP
+            (``App\\Models\\User``). ``None`` for languages whose imports are
+            only ever path-style string literals (Ruby) or single-token module
+            names (Swift ``import Foo``). Enables dotted-name file resolution
+            (BACK-487/488).
+        source_extensions: The source-file extension(s) an unqualified module
+            name maps to when resolving edges — ``{'.java'}``, ``{'.rb'}``,
+            ``{'.php'}``, ``{'.cs'}``, ``{'.kt'}``, ``{'.swift'}``. Empty means
+            "listing only, no edge resolution" (the pre-BACK-487 default). A
+            non-empty set is the master switch that turns on
+            :meth:`_resolve_module`.
     """
 
     import_node_types: FrozenSet[str]
@@ -70,6 +103,8 @@ class _ImportSpec:
     call_import_names: FrozenSet[str] = field(default_factory=frozenset)
     alias_assignment: bool = False
     resolve_includes: bool = False
+    module_separator: Optional[str] = None
+    source_extensions: FrozenSet[str] = field(default_factory=frozenset)
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -273,26 +308,52 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         search_paths: Optional[List[Path]] = None,
         file_index: Optional[Dict[str, List[Path]]] = None,
     ) -> Optional[Path]:
-        """Resolve a quoted C/C++ ``#include`` to a real file (for the dep graph).
+        """Resolve an import to a real in-tree file (for the dependency graph).
 
-        System includes (``<stdio.h>``) and non-include languages return None —
-        their file-level graph is not claimed. Quoted includes are looked up
-        next to the including file first, then under each project search path.
+        Dispatches by language shape:
+          * ``resolve_includes`` (C/C++) → :meth:`_resolve_include` — quoted
+            ``#include`` to a sibling/searched header; angle-bracket system
+            includes return None.
+          * ``source_extensions`` set (Java/PHP/Ruby/Swift/Kotlin, BACK-487/488)
+            → :meth:`_resolve_module` — dotted type names and relative path
+            literals to an in-tree source file.
+          * neither → None (listing only; file-level graph not claimed).
+
+        Returns a real, existing file every time or ``None`` — never a
+        fabricated path. Self-reference filtering is the caller's job.
 
         ``file_index`` (BACK-491): an optional ``basename -> [full paths]`` map
         of every file under the (single) search root, prebuilt once by the
         caller (``ImportsAdapter._build_graph``) during its file-discovery walk.
-        When supplied, the multi-component fallback resolves by dict lookup
-        instead of a full ``os.walk(root)`` per include — O(includes × tree) →
-        O(tree + includes). The index must have been built from the same root
-        passed in ``search_paths`` with the same ``SKIP_DIRECTORIES``/hidden-dir
-        filtering (as ``_build_graph`` does), which makes the lookup
-        byte-identical to the walk it replaces. Callers that pass no index
-        (I002, call_graph, depends) fall back to the walk unchanged.
+        When supplied, multi-component resolution (include full-suffix match and
+        dotted-name lookup alike) resolves by dict lookup instead of a full
+        ``os.walk(root)`` per import — O(imports × tree) → O(tree + imports).
+        The index must have been built from the same root passed in
+        ``search_paths`` with the same ``SKIP_DIRECTORIES``/hidden-dir filtering
+        (as ``_build_graph`` does), which makes the lookup byte-identical to the
+        walk it replaces. Callers that pass no index (I002, call_graph, depends)
+        fall back to the walk unchanged.
         """
-        # System includes (is_relative=False) and non-include languages are not
-        # resolved — their file-level graph is not claimed.
-        if not self.spec.resolve_includes or not stmt.is_relative:
+        if self.spec.resolve_includes:
+            return self._resolve_include(stmt, base_path, search_paths, file_index)
+        if self.spec.source_extensions:
+            return self._resolve_module(stmt, base_path, search_paths, file_index)
+        return None
+
+    def _resolve_include(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
+        file_index: Optional[Dict[str, List[Path]]] = None,
+    ) -> Optional[Path]:
+        """Resolve a quoted C/C++ ``#include`` to a real file (for the dep graph).
+
+        System includes (``<stdio.h>``, ``is_relative=False``) return None —
+        their file-level graph is not claimed. Quoted includes are looked up
+        next to the including file first, then under each project search path.
+        """
+        if not stmt.is_relative:
             return None
 
         target = stmt.module_name
@@ -348,6 +409,161 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                         return candidate.resolve()
         return None
 
+    # --- BACK-487/488: non-#include edge resolution ----------------------
+
+    def _resolve_module(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]],
+        file_index: Optional[Dict[str, List[Path]]],
+    ) -> Optional[Path]:
+        """Resolve a Java/PHP/Ruby/Swift/Kotlin import to an in-tree source file.
+
+        Two shapes, distinguished structurally (never fabricating an edge):
+          * **Qualified type name** joined by ``module_separator`` (Java
+            ``com.pkg.Type``, PHP ``App\\Models\\User``, Kotlin
+            ``com.pkg.Bar``) → :meth:`_resolve_dotted`.
+          * **Path-style literal** (Ruby ``require_relative './x'``,
+            ``load 'config.rb'``; PHP ``require 'lib/foo.php'``) → resolved
+            relative to the including file, then project roots.
+          * A single-token module (Swift ``import Foo``) is tried as a bare
+            basename (``Foo.swift``) via the dotted path with one component.
+
+        Wildcards (Java ``import a.b.*``) and anything that resolves to a
+        package/namespace rather than one file return None.
+        """
+        module = stmt.module_name
+        if not module or module.endswith('*'):
+            return None
+
+        sep = self.spec.module_separator
+        exts = self.spec.source_extensions
+
+        if sep and sep in module:
+            parts = [p for p in module.split(sep) if p]
+            return self._resolve_dotted(parts, exts, search_paths, file_index)
+
+        if self._looks_like_path(module, exts):
+            return self._resolve_path_target(module, base_path, search_paths, exts)
+
+        # Single-token module with no separator and no path markers: try it as a
+        # bare basename (Swift `import Foo` → Foo.swift; Java default-package
+        # `import Foo`). Only resolves when exactly one such file exists.
+        if module.isidentifier():
+            return self._resolve_dotted([module], exts, search_paths, file_index)
+
+        return None
+
+    @staticmethod
+    def _looks_like_path(module: str, exts: FrozenSet[str]) -> bool:
+        """True when a module string is a filesystem path, not a qualified name."""
+        return (
+            module.startswith('.')
+            or '/' in module
+            or any(module.endswith(e) for e in exts)
+        )
+
+    def _resolve_dotted(
+        self,
+        parts: List[str],
+        exts: FrozenSet[str],
+        search_paths: Optional[List[Path]],
+        file_index: Optional[Dict[str, List[Path]]],
+    ) -> Optional[Path]:
+        """Resolve a qualified type name (``[com, pkg, Type]``) to a source file.
+
+        Matches the *longest* trailing path-suffix that uniquely identifies one
+        in-tree file, so a PSR-4 vendor prefix (``App\\`` → ``src/``) or an
+        unqualified default-package import still resolves without colliding
+        across same-named types in different packages. Ambiguity at the most
+        specific suffix → skip (never guess).
+        """
+        if not parts:
+            return None
+        for ext in exts:
+            target_parts = parts[:-1] + [parts[-1] + ext]
+            match = self._longest_unique_suffix(target_parts, search_paths, file_index)
+            if match is not None:
+                return match
+        return None
+
+    def _longest_unique_suffix(
+        self,
+        target_parts: List[str],
+        search_paths: Optional[List[Path]],
+        file_index: Optional[Dict[str, List[Path]]],
+    ) -> Optional[Path]:
+        """Return the file whose path ends with the longest unique suffix of
+        ``target_parts`` (last element carries the extension), or None.
+
+        A bare-basename match (k=1) is accepted only when exactly one file in
+        the tree bears that basename; otherwise at least one parent directory
+        component must match to disambiguate. If even the most specific
+        available suffix is ambiguous, resolution is skipped.
+        """
+        basename = target_parts[-1]
+        candidates = self._index_lookup(basename, search_paths, file_index)
+        if not candidates:
+            return None
+        n = len(target_parts)
+        min_k = 1 if len(candidates) == 1 else 2
+        for k in range(n, min_k - 1, -1):
+            suffix = tuple(target_parts[-k:])
+            matches = [c for c in candidates if c.parts[-k:] == suffix]
+            if len(matches) == 1:
+                return matches[0].resolve()
+            if len(matches) > 1:
+                # Already ambiguous at this (most-specific-available) suffix;
+                # shorter suffixes only get more ambiguous. Skip, don't guess.
+                return None
+        return None
+
+    def _resolve_path_target(
+        self,
+        module: str,
+        base_path: Path,
+        search_paths: Optional[List[Path]],
+        exts: FrozenSet[str],
+    ) -> Optional[Path]:
+        """Resolve a path-style import literal to a real file.
+
+        Tries the target verbatim and with each source extension appended
+        (Ruby ``require_relative './helper'`` → ``helper.rb``), relative to the
+        including file first, then each project root.
+        """
+        names = [module] + [module + e for e in exts if not module.endswith(e)]
+        roots = [base_path] + list(search_paths or [])
+        for root in roots:
+            for name in names:
+                candidate = (root / name).resolve()
+                if candidate.is_file():
+                    return candidate
+        return None
+
+    @staticmethod
+    def _index_lookup(
+        basename: str,
+        search_paths: Optional[List[Path]],
+        file_index: Optional[Dict[str, List[Path]]],
+    ) -> List[Path]:
+        """All in-tree files bearing ``basename`` — via the prebuilt index when
+        available (BACK-491), else a bounded walk of the search paths."""
+        if file_index is not None:
+            return list(file_index.get(basename, ()))
+        found: List[Path] = []
+        for root in search_paths or []:
+            if not root.is_dir():
+                continue
+            for dirpath, dirnames, filenames in os.walk(root):
+                dirnames[:] = [
+                    d for d in dirnames
+                    if d not in SKIP_DIRECTORIES and not d.startswith('.')
+                ]
+                if basename in filenames:
+                    found.append(Path(dirpath) / basename)
+        return found
+
 
 # --- Language specs + registered subclasses ------------------------------
 #
@@ -369,12 +585,20 @@ _CPP_SPEC = _ImportSpec(
 _JAVA_SPEC = _ImportSpec(
     import_node_types=frozenset({'import_declaration'}),
     keywords=frozenset({'import', 'static'}),
+    module_separator='.',
+    source_extensions=frozenset({'.java'}),
 )
 
 _CSHARP_SPEC = _ImportSpec(
     import_node_types=frozenset({'using_directive'}),
     keywords=frozenset({'using', 'global', 'static'}),
     alias_assignment=True,
+    # `using X.Y` names a namespace (a directory of files), not one type, so a
+    # dotted-name lookup resolves an edge only when a same-named `Y.cs` happens
+    # to exist — otherwise skipped. Full C# fan-in needs a namespace-declaration
+    # index, not filename matching (see module docstring).
+    module_separator='.',
+    source_extensions=frozenset({'.cs'}),
 )
 
 _PHP_SPEC = _ImportSpec(
@@ -389,12 +613,42 @@ _PHP_SPEC = _ImportSpec(
         'use', 'function', 'const',
         'require', 'require_once', 'include', 'include_once',
     }),
+    module_separator='\\',  # `use App\Models\User`
+    source_extensions=frozenset({'.php'}),
 )
 
 _RUBY_SPEC = _ImportSpec(
     import_node_types=frozenset(),  # no dedicated node — matched as calls
     keywords=frozenset({'require', 'require_relative', 'load'}),
     call_import_names=frozenset({'require', 'require_relative', 'load'}),
+    # Ruby imports are always path-style literals — no qualified-name separator.
+    source_extensions=frozenset({'.rb'}),
+)
+
+# BACK-488: Swift and Kotlin were absent from the table entirely — `imports://`,
+# `architecture`, and every fan-in/circular-dep feature returned nothing for two
+# of the most DD-relevant (mobile) languages. Node kinds verified against
+# tree-sitter-language-pack real parses.
+_SWIFT_SPEC = _ImportSpec(
+    # `import Foundation` / `import struct Foo.Bar` — the whole path is the
+    # import declaration; leading `struct`/`class`/`func`/etc. submodule kinds
+    # are stripped as keywords.
+    import_node_types=frozenset({'import_declaration'}),
+    keywords=frozenset({
+        'import', 'struct', 'class', 'enum', 'protocol', 'typealias',
+        'func', 'let', 'var',
+    }),
+    # Swift `import Foo` names a module; resolves to Foo.swift only when the
+    # module maps 1:1 to a single in-tree file (skipped otherwise).
+    module_separator='.',
+    source_extensions=frozenset({'.swift'}),
+)
+
+_KOTLIN_SPEC = _ImportSpec(
+    import_node_types=frozenset({'import_header'}),
+    keywords=frozenset({'import'}),
+    module_separator='.',  # `import com.foo.Bar`
+    source_extensions=frozenset({'.kt'}),
 )
 
 
@@ -440,6 +694,20 @@ class RubyImportExtractor(_GenericTreeSitterImportExtractor):
     spec = _RUBY_SPEC
 
 
+@register_extractor
+class SwiftImportExtractor(_GenericTreeSitterImportExtractor):
+    extensions = {'.swift'}
+    language_name = 'Swift'
+    spec = _SWIFT_SPEC
+
+
+@register_extractor
+class KotlinImportExtractor(_GenericTreeSitterImportExtractor):
+    extensions = {'.kt', '.kts'}
+    language_name = 'Kotlin'
+    spec = _KOTLIN_SPEC
+
+
 __all__ = [
     '_ImportSpec',
     '_GenericTreeSitterImportExtractor',
@@ -449,4 +717,6 @@ __all__ = [
     'CSharpImportExtractor',
     'PhpImportExtractor',
     'RubyImportExtractor',
+    'SwiftImportExtractor',
+    'KotlinImportExtractor',
 ]

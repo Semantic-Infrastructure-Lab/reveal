@@ -253,8 +253,11 @@ _TIER1: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_VERIFIED,
         imports_unused=False,
         import_resolution=(
-            "Generic textual extractor (imports/generic.py); listing only, "
-            "unused-detection not claimed."
+            "Generic extractor (imports/generic.py). Resolves same-project "
+            "file edges (BACK-487): `import com.pkg.Type` → com/pkg/Type.java "
+            "by package-path suffix (reliable, javac enforces package==dir); "
+            "wildcard/static imports and JDK classes skip. Unused-detection "
+            "not claimed."
         ),
         known_limitations=[],
     ),
@@ -264,10 +267,18 @@ _TIER1: Dict[str, LanguageCapability] = {
         varflow=VARFLOW_VERIFIED,
         imports_unused=False,
         import_resolution=(
-            "Generic textual extractor (imports/generic.py); listing only, "
-            "unused-detection not claimed."
+            "Generic extractor (imports/generic.py); listing always. File-edge "
+            "resolution is sparse by nature (BACK-487): `using X.Y` imports a "
+            "namespace — a directory of files — not one type, so an edge "
+            "resolves only when a matching Y.cs happens to exist; full C# "
+            "fan-in needs a namespace-declaration index (tracked separately). "
+            "Unused-detection not claimed."
         ),
-        known_limitations=[],
+        known_limitations=[
+            "imports:// file-level fan-in is largely empty for C#: `using` "
+            "names namespaces, not files, so most imports honestly skip rather "
+            "than fabricate an edge. Needs a namespace→declaring-files index.",
+        ],
     ),
     "JavaScriptAnalyzer": _tier1(
         language="javascript",
@@ -315,15 +326,20 @@ _SMOKE: Dict[str, LanguageCapability] = {
         ),
         varflow=VARFLOW_SMOKE_TESTED,
         imports_unused=None,
-        import_resolution="No import extractor registered for .kt/.kts.",
+        import_resolution=(
+            "Generic extractor (imports/generic.py), added BACK-488. Resolves "
+            "`import com.pkg.Bar` → com/pkg/Bar.kt by package-path suffix when "
+            "the file is named for the class; wildcards skip. Kotlin does not "
+            "enforce filename==classname, so resolution is best-effort (honest "
+            "skip otherwise). Unused-detection not claimed."
+        ),
         known_limitations=[
             "navigation_expression member-access exclusion and "
             "function_declaration's fieldless self-name detection were "
             "found+fixed via real-corpus (tivi) dogfooding — no known open "
             "gap, but never had full expected.yaml ground truth.",
-            "imports://?unused is unsupported (no extractor) — the text "
-            "renderer previously showed a false-confidence checkmark here "
-            "until BACK-431 Issue G's scanned_files metadata fix.",
+            "import→file resolution assumes filename==classname; imports of a "
+            "class living in a differently-named .kt file honestly skip.",
         ],
     ),
     "SwiftAnalyzer": _smoke(
@@ -335,7 +351,13 @@ _SMOKE: Dict[str, LanguageCapability] = {
         ),
         varflow=VARFLOW_SMOKE_TESTED,
         imports_unused=None,
-        import_resolution="No import extractor registered.",
+        import_resolution=(
+            "Generic extractor (imports/generic.py), added BACK-488. `import "
+            "Foo` resolves to Foo.swift only where a module maps 1:1 to a lone "
+            "in-tree file; system frameworks (Foundation, UIKit) and "
+            "multi-file modules honestly skip, so Swift fan-in is sparse. "
+            "Unused-detection not claimed."
+        ),
         known_limitations=[
             "Total --varflow blindness for every Swift variable (the "
             "simple_identifier kind was unchecked at all 3 read/write/"
@@ -343,6 +365,8 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "exact BACK-427-class failure this tier exists to catch.",
             "External argument labels and leading-dot implicit members were "
             "found+fixed via real-corpus (ios-oss) dogfooding.",
+            "import→file edges are sparse: Swift modules rarely map 1:1 to a "
+            "single file, so most imports skip rather than fabricate an edge.",
         ],
     ),
     "RubyAnalyzer": _smoke(
@@ -356,8 +380,11 @@ _SMOKE: Dict[str, LanguageCapability] = {
         imports_unused=False,
         import_resolution=(
             "Generic extractor (imports/generic.py) with call-style "
-            "require/require_relative support; unused-detection not "
-            "claimed (skip_unused always set)."
+            "require/require_relative support. Resolves same-project edges "
+            "(BACK-487): `require_relative './x'` → x.rb relative to the file, "
+            "`load 'lib/y.rb'` when it names a real in-tree .rb; bare "
+            "`require 'json'` (a gem) skips. Unused-detection not claimed "
+            "(skip_unused always set)."
         ),
         known_limitations=[
             "Signature-display duplication (human?human?) for paren-less "
@@ -381,7 +408,11 @@ _SMOKE: Dict[str, LanguageCapability] = {
         imports_unused=False,
         import_resolution=(
             "Generic extractor (imports/generic.py) with require/include "
-            "statement + call-style support; unused-detection not claimed."
+            "statement + call-style support. Resolves same-project edges "
+            "(BACK-487): `use App\\Models\\User` → .../Models/User.php by "
+            "longest-unique path-suffix (tolerant of the PSR-4 vendor-root "
+            "prefix, ambiguous basenames skip), and `require 'lib/x.php'` "
+            "relative to the file. Unused-detection not claimed."
         ),
         known_limitations=[
             "case_statement/default_statement switch arms were invisible to "

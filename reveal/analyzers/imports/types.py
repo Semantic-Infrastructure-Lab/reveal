@@ -7,7 +7,7 @@ Extracted to a separate module to avoid circular imports.
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set
-from collections import defaultdict
+from collections import defaultdict, deque
 
 
 @dataclass
@@ -155,27 +155,54 @@ class ImportGraph:
     def find_cycle_path(self, group: List[Path]) -> List[Path]:
         """Find a representative cycle path within an SCC group.
 
-        Returns a path list [A, B, C, A] showing how the first node in the
-        group reaches itself via other group members. Used for verbose display.
-        Falls back to the group list if no path is found.
+        Returns a path list [A, B, C, A] showing the *shortest* way the first
+        node in the group reaches itself via other group members. Used for
+        verbose display. Falls back to the group list if no path is found.
+
+        Implemented as a breadth-first search rather than the natural recursive
+        DFS (BACK-496): a DFS that copies its ``visited`` set per branch — with
+        no global dead-end marking — enumerates every *simple* path from
+        ``start`` before returning, which is exponential in a large dense SCC.
+        A real one surfaced the day Java/Swift/Kotlin/PHP/Ruby import edges
+        first resolved (BACK-487/488): a 30k-file Java repo produced a
+        multi-thousand-node strongly-connected component and the old DFS never
+        returned (hash-ordering-dependent, so it looked fine on small graphs and
+        some seeds). BFS visits each group node at most once — O(V+E) — and, as
+        a bonus, returns the shortest representative cycle, which reads better.
         """
         if len(group) < 2:
             return group
         group_set = set(group)
         start = group[0]
 
-        def dfs(node: Path, path: List[Path], visited: Set[Path]):
-            for neighbor in self.dependencies.get(node, set()):
-                if neighbor == start and len(path) > 1:
-                    return path + [neighbor]
-                if neighbor in group_set and neighbor not in visited:
-                    result = dfs(neighbor, path + [neighbor], visited | {neighbor})
-                    if result:
-                        return result
-            return None
+        # BFS outward from `start`; `parent` both marks a node visited and
+        # records the edge used to reach it, for path reconstruction. `start`
+        # is intentionally never marked visited so we can detect the edge that
+        # closes the cycle back onto it.
+        parent: Dict[Path, Path] = {}
+        queue: deque = deque()
+        for neighbor in self.dependencies.get(start, set()):
+            if neighbor == start:
+                return [start, start]  # self-loop
+            if neighbor in group_set and neighbor not in parent:
+                parent[neighbor] = start
+                queue.append(neighbor)
 
-        result = dfs(start, [start], {start})
-        return result if result else group
+        while queue:
+            node = queue.popleft()
+            for neighbor in self.dependencies.get(node, set()):
+                if neighbor == start:
+                    # Reconstruct start → … → node, then close back to start.
+                    path = [node]
+                    while path[-1] != start:
+                        path.append(parent[path[-1]])
+                    path.reverse()
+                    return path + [start]
+                if neighbor in group_set and neighbor not in parent:
+                    parent[neighbor] = node
+                    queue.append(neighbor)
+
+        return group
 
     def find_unused_imports(self, symbols_by_file: Dict[Path, Set[str]]) -> List[ImportStatement]:
         """Find imports that are never used in the code.

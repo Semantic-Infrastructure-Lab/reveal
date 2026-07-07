@@ -988,10 +988,13 @@ class ImportsAdapter(ResourceAdapter):
             # imports resolve (e.g., `from db.session import X` from `api/routes.py`
             # finds `db/session.py` under the project root, not just under `api/`).
             extra_paths = [target_path] if target_path.is_dir() and target_path != base_path else []
-            # BACK-491: only C/C++ generic extractors resolve file-level include
-            # edges (spec.resolve_includes) and can use the prebuilt index; other
-            # languages' extractors keep their unchanged resolve_import signature.
-            resolves_includes = getattr(getattr(extractor, 'spec', None), 'resolve_includes', False)
+            # BACK-491/487/488: every generic (spec-based) extractor shares the
+            # `resolve_import(..., file_index=...)` signature and benefits from the
+            # prebuilt basename index — C/C++ include full-suffix matching and the
+            # Java/PHP/Ruby/Swift/Kotlin dotted-name lookup alike. Bespoke
+            # extractors (python/js/go/rust) have no `spec` and keep the 3-arg
+            # signature, so gate the index-passing on spec presence.
+            uses_file_index = getattr(extractor, 'spec', None) is not None
             for stmt in imports:
                 # BACK-445: skip imports that can't cause a circular ImportError
                 # at startup — matching the I002 circular-import rule's definition
@@ -1006,7 +1009,7 @@ class ImportsAdapter(ResourceAdapter):
                 if stmt.is_type_checking or stmt.is_in_function:
                     continue
 
-                if resolves_includes:
+                if uses_file_index:
                     resolved = extractor.resolve_import(
                         stmt, base_path, search_paths=extra_paths, file_index=file_index)
                 else:

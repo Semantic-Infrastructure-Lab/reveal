@@ -558,14 +558,22 @@ Support comes in tiers — be aware of which query modes actually work per langu
 | Rust | `.rs` | ✅ Full | use statements |
 | C | `.c`, `.h` | 📦 Listing + graph | `#include` (quoted resolves to files; `<system>` listed, not resolved) |
 | C++ | `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hxx` | 📦 Listing + graph | `#include` directives (same resolution rules as C) |
-| Java | `.java` | 📝 Listing only | `import` / `import static` statements |
-| C# | `.cs` | 📝 Listing only | `using` directives (incl. `global using`, `using X = Y` aliases) |
-| PHP | `.php` | 📝 Listing only | `use`, `require`/`require_once`, `include`/`include_once` |
-| Ruby | `.rb` | 📝 Listing only | `require`, `require_relative`, `load` |
+| Java | `.java` | 📦 Listing + graph | `import com.pkg.Type` → `com/pkg/Type.java` (package==dir, reliable); wildcards/`static`/JDK classes skip |
+| PHP | `.php` | 📦 Listing + graph | `use App\Models\User` → `.../Models/User.php` (longest-unique suffix, tolerant of PSR-4 prefix); `require`/`include` file literals resolve relative to the file |
+| Ruby | `.rb` | 📦 Listing + graph | `require_relative './x'` → `x.rb`; `load`/`require` of a real in-tree `.rb`; bare `require 'gem'` skips |
+| Kotlin | `.kt`, `.kts` | 📦 Listing + graph | `import com.pkg.Bar` → `com/pkg/Bar.kt` when the file is named for the class (best-effort; Kotlin doesn't enforce filename==class) |
+| Swift | `.swift` | 📦 Listing + graph | `import Foo` → `Foo.swift` where a module maps 1:1 to a lone file; system frameworks skip (sparse fan-in by nature) |
+| C# | `.cs` | 📝 Listing (+ sparse graph) | `using` directives (incl. `global using`, `using X = Y` aliases). `using X.Y` names a *namespace* (a directory), not a file, so an edge resolves only when a matching `Y.cs` exists — full C# fan-in needs a namespace index |
 
-> **Note on the long tail:** other tree-sitter-parseable code files (Swift, Scala,
-> Lua, Kotlin, …) have no import extractor yet. Rather than silently reporting
-> zero imports for them, `imports://` prints a "code file(s) skipped — no import
+Every resolver above resolves **only to a file that exists in the tree** and
+skips (never fabricates) when the import names a package/namespace/gem/system
+module with no single backing file — the same honest-skip contract as C/C++
+angle-bracket includes. (Java/PHP/Ruby edge resolution added in BACK-487;
+Swift/Kotlin in BACK-488.)
+
+> **Note on the long tail:** other tree-sitter-parseable code files (Scala, Lua,
+> Dart, …) have no import extractor yet. Rather than silently reporting zero
+> imports for them, `imports://` prints a "code file(s) skipped — no import
 > support for: …" note so a low count is never mistaken for a clean result.
 
 ### Language-Specific Examples

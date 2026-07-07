@@ -216,3 +216,133 @@ class TestResolution:
             imports[0], base_path=tmp_path, search_paths=[tmp_path]
         )
         assert resolved == (tmp_path / 'lib' / 'util.h').resolve()
+
+
+class TestModuleResolution:
+    """BACK-487/488: file-level edge resolution for the non-#include languages.
+
+    Every case must resolve *only* to a file that exists in the tree and skip
+    (return None) when the import names a package/namespace/gem with no single
+    backing file — the same honest-skip contract C/C++ angle-bracket includes
+    have. Resolution goes through the full ``resolve_import`` entry point with an
+    explicit ``search_paths`` (the project root), mirroring ``_build_graph``.
+    """
+
+    @staticmethod
+    def _resolve(root: Path, entry_rel: str, base_rel: str):
+        entry = root / entry_rel
+        extractor = get_extractor(entry)
+        out = {}
+        for stmt in extractor.extract_imports(entry):
+            resolved = extractor.resolve_import(
+                stmt, base_path=root / base_rel, search_paths=[root])
+            out[stmt.module_name] = resolved
+        return out
+
+    def test_java_import_resolves_via_package_dir(self, tmp_path):
+        """Java `import com.pkg.Type` → com/pkg/Type.java (package==dir)."""
+        (tmp_path / 'src/com/app/util').mkdir(parents=True)
+        (tmp_path / 'src/com/app/util/Helper.java').write_text(
+            'package com.app.util;\npublic class Helper {}\n')
+        (tmp_path / 'src/com/app/Main.java').write_text(
+            'package com.app;\n'
+            'import com.app.util.Helper;\n'
+            'import java.util.List;\n')  # JDK class, no in-tree file
+        res = self._resolve(tmp_path, 'src/com/app/Main.java', 'src/com/app')
+        assert res['com.app.util.Helper'] == (tmp_path / 'src/com/app/util/Helper.java').resolve()
+        assert res['java.util.List'] is None  # skipped, not fabricated
+
+    def test_java_wildcard_and_static_skip(self, tmp_path):
+        (tmp_path / 'p').mkdir()
+        (tmp_path / 'p/A.java').write_text('package p;\nimport p.other.*;\nimport static p.M.X;\n')
+        res = self._resolve(tmp_path, 'p/A.java', 'p')
+        assert res['p.other.*'] is None      # wildcard package import
+        assert res['p.M.X'] is None          # static member, no p/M/X.java
+
+    def test_php_use_resolves_through_psr4_prefix(self, tmp_path):
+        """PHP `use App\\Models\\User` resolves to src/Models/User.php even though
+        the `App\\` vendor prefix maps to `src/` (longest unique suffix)."""
+        (tmp_path / 'src/Models').mkdir(parents=True)
+        (tmp_path / 'src/Models/User.php').write_text('<?php\nnamespace App\\Models;\nclass User {}\n')
+        (tmp_path / 'src/Ctrl').mkdir(parents=True)
+        (tmp_path / 'src/Ctrl/Home.php').write_text(
+            '<?php\nnamespace App\\Ctrl;\nuse App\\Models\\User;\n')
+        res = self._resolve(tmp_path, 'src/Ctrl/Home.php', 'src/Ctrl')
+        assert res['App\\Models\\User'] == (tmp_path / 'src/Models/User.php').resolve()
+
+    def test_php_require_literal_resolves_relative(self, tmp_path):
+        (tmp_path / 'inc.php').write_text('<?php\n$x = 1;\n')
+        (tmp_path / 'main.php').write_text("<?php\nrequire 'inc.php';\n")
+        res = self._resolve(tmp_path, 'main.php', '.')
+        assert res['inc.php'] == (tmp_path / 'inc.php').resolve()
+
+    def test_php_use_ambiguous_basename_skips(self, tmp_path):
+        """Two User.php under different namespaces with no distinguishing parent
+        in the `use` path → ambiguous → skip (never guess an edge)."""
+        (tmp_path / 'a/Models').mkdir(parents=True)
+        (tmp_path / 'b/Models').mkdir(parents=True)
+        (tmp_path / 'a/Models/User.php').write_text('<?php\nclass User {}\n')
+        (tmp_path / 'b/Models/User.php').write_text('<?php\nclass User {}\n')
+        (tmp_path / 'main.php').write_text('<?php\nuse Vendor\\User;\n')  # no "Models" parent
+        res = self._resolve(tmp_path, 'main.php', '.')
+        assert res['Vendor\\User'] is None
+
+    def test_ruby_require_relative_resolves(self, tmp_path):
+        (tmp_path / 'lib').mkdir()
+        (tmp_path / 'lib/helper.rb').write_text('module Helper\nend\n')
+        (tmp_path / 'lib/main.rb').write_text(
+            "require_relative 'helper'\nrequire 'json'\n")
+        res = self._resolve(tmp_path, 'lib/main.rb', 'lib')
+        assert res['helper'] == (tmp_path / 'lib/helper.rb').resolve()
+        assert res['json'] is None  # gem, not an in-tree file
+
+    def test_kotlin_import_resolves_when_file_named_for_class(self, tmp_path):
+        (tmp_path / 'app/com/foo').mkdir(parents=True)
+        (tmp_path / 'app/com/foo/Bar.kt').write_text('package com.foo\nclass Bar\n')
+        (tmp_path / 'app/com/foo/Main.kt').write_text(
+            'package com.foo\nimport com.foo.Bar\nimport com.baz.*\n')
+        res = self._resolve(tmp_path, 'app/com/foo/Main.kt', 'app/com/foo')
+        assert res['com.foo.Bar'] == (tmp_path / 'app/com/foo/Bar.kt').resolve()
+        assert res['com.baz.*'] is None
+
+    def test_swift_single_token_module_resolves_to_lone_file(self, tmp_path):
+        (tmp_path / 'Sources').mkdir()
+        (tmp_path / 'Sources/Helper.swift').write_text('struct Helper {}\n')
+        (tmp_path / 'Sources/Main.swift').write_text(
+            'import Helper\nimport Foundation\n')
+        res = self._resolve(tmp_path, 'Sources/Main.swift', 'Sources')
+        assert res['Helper'] == (tmp_path / 'Sources/Helper.swift').resolve()
+        assert res['Foundation'] is None  # system framework, no in-tree file
+
+    def test_bare_basename_ambiguous_skips(self, tmp_path):
+        """Swift `import Helper` with two Helper.swift in the tree → ambiguous,
+        no parent to disambiguate a single-token module → skip."""
+        (tmp_path / 'x').mkdir()
+        (tmp_path / 'y').mkdir()
+        (tmp_path / 'x/Helper.swift').write_text('struct Helper {}\n')
+        (tmp_path / 'y/Helper.swift').write_text('struct Helper {}\n')
+        (tmp_path / 'Main.swift').write_text('import Helper\n')
+        res = self._resolve(tmp_path, 'Main.swift', '.')
+        assert res['Helper'] is None
+
+    def test_resolution_matches_with_and_without_file_index(self, tmp_path):
+        """The file_index fast path (BACK-491) must resolve byte-identically to
+        the os.walk fallback used by callers that pass no index."""
+        (tmp_path / 'src/com/app').mkdir(parents=True)
+        (tmp_path / 'src/com/app/Helper.java').write_text('package com.app;\nclass Helper {}\n')
+        (tmp_path / 'src/com/app/Main.java').write_text(
+            'package com.app;\nimport com.app.Helper;\n')
+        extractor = get_extractor(tmp_path / 'src/com/app/Main.java')
+        stmt = extractor.extract_imports(tmp_path / 'src/com/app/Main.java')[0]
+        expected = (tmp_path / 'src/com/app/Helper.java').resolve()
+        # No index → os.walk fallback.
+        assert extractor.resolve_import(
+            stmt, base_path=tmp_path / 'src/com/app', search_paths=[tmp_path]) == expected
+        # With a prebuilt basename index (as _build_graph supplies).
+        index = {}
+        for p in tmp_path.rglob('*'):
+            if p.is_file():
+                index.setdefault(p.name, []).append(p)
+        assert extractor.resolve_import(
+            stmt, base_path=tmp_path / 'src/com/app', search_paths=[tmp_path],
+            file_index=index) == expected
