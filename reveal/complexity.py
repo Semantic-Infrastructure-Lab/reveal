@@ -26,6 +26,11 @@ _DECISION_TYPES = frozenset({
     'when',
     'switch_case',
     'unless',
+    # Ruby statement modifiers (`x if cond`, `x unless cond`) are branches — each
+    # adds a decision — but they wrap a single statement and do NOT nest (see
+    # _NESTING_TYPES). Counting them fixes prior under-counting of guard-clause
+    # Ruby (BACK-500).
+    'if_modifier', 'unless_modifier',
     # Loops (each iteration is a branch). for-each variants share this role:
     # C#/PHP foreach_statement, JS/TS for_in_statement, Java
     # enhanced_for_statement, Rust for_expression (BACK-431).
@@ -57,6 +62,7 @@ _DECISION_TYPES = frozenset({
 
 _NESTING_TYPES = frozenset({
     'if_statement', 'if_expression', 'if', 'IfStatement',
+    'unless',  # Ruby block `unless … end` nests; the modifiers (MODIFIER_NODES) do not
     'for_statement', 'for_expression', 'for',
     'foreach_statement', 'for_in_statement', 'enhanced_for_statement',
     'while_statement', 'while_expression', 'while',
@@ -79,6 +85,11 @@ _KEYWORD_PAIRS = frozenset({
     ('while_statement', 'while'),
     ('while_expression', 'while'),
     ('case_statement', 'case'),
+    # Ruby: each conditional wrapper contains a bare keyword token of a kind that
+    # is itself a decision type — dedup so the pair counts once (BACK-500).
+    ('if_modifier', 'if'),
+    ('unless_modifier', 'unless'),
+    ('unless', 'unless'),
     ('boolean_operator', 'or'),
     ('boolean_operator', 'and'),
 })

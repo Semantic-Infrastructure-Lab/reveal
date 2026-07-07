@@ -496,6 +496,21 @@ def test_ruby_case_when_is_mapped_by_ifmap():
     ], f"ruby: case/when ifmap mismatch\n{out}"
 
 
+def test_ruby_modifier_gate_is_captured():
+    """--returns/--exits must capture the gate on a Ruby statement modifier.
+    `raise ArgumentError if order.nil?` was reported as an unconditional exit —
+    if_modifier/unless_modifier were absent from IF_NODES/GATE_NODES, so the
+    gate condition was lost (a correctness bug: a conditional raise read as
+    always-raised, BACK-500). The fixture's validate uses exactly this shape."""
+    out = _run(str(_sample_path("ruby")), "validate", "--returns", "--format", "json")
+    data = json.loads(out)
+    exit_finding = data["findings"][0]
+    gates = [g["text"] for g in exit_finding.get("gates", [])]
+    assert gates == ["order.nil?"], (
+        f"ruby: modifier gate must be captured, got {gates}\n{out}"
+    )
+
+
 def test_ruby_raise_is_an_exit():
     """--exits must treat Ruby `raise` as a hard exit. Ruby has no raise keyword
     node — `raise ArgumentError` is a plain method call — so it must be caught

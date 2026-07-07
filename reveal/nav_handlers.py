@@ -16,7 +16,7 @@ from typing import Any, Callable, List, Optional
 
 
 # Branch keywords for --ifmap and --catchmap filtering
-_IF_KEYWORDS: frozenset = frozenset({'IF', 'ELIF', 'ELSE', 'SWITCH', 'CASE', 'DEFAULT'})
+_IF_KEYWORDS: frozenset = frozenset({'IF', 'ELIF', 'ELSE', 'UNLESS', 'SWITCH', 'CASE', 'DEFAULT'})
 _CATCH_KEYWORDS: frozenset = frozenset({'TRY', 'CATCH', 'EXCEPT', 'FINALLY'})
 
 

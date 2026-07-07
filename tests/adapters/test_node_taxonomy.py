@@ -115,8 +115,12 @@ class TestComplexityCoversFamilies(unittest.TestCase):
         )
 
     def test_loop_and_block_families_count_as_nesting(self):
+        # Statement modifiers (MODIFIER_NODES: `x if c` / `x unless c`) are
+        # decisions but wrap a single statement — they must NOT count as nesting
+        # (a guard clause shouldn't inflate a flat function's depth), so they are
+        # excluded here while still being required as decisions above.
         families = (
-            tax.IF_NODES | tax.WHILE_NODES | tax.FOR_NODES
+            (tax.IF_NODES - tax.MODIFIER_NODES) | tax.WHILE_NODES | tax.FOR_NODES
             | tax.FOR_EXPRESSION_NODES | tax.FOR_EACH_NAME_VALUE_NODES
             | tax.LOOP_NODES | tax.DO_NODES | tax.MATCH_NODES
         )

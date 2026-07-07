@@ -227,6 +227,11 @@ def _get_condition(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]:
     text = get_text(cond).strip()
     if text.startswith('(') and text.endswith(')'):
         text = text[1:-1].strip()
+    # Ruby `unless`/`unless_modifier` invert the sense — the body runs when the
+    # condition is FALSE, so a bare condition text reads backwards. Prefix
+    # `unless ` so the gate line is honest (BACK-500).
+    if node.kind() in ('unless', 'unless_modifier'):
+        text = f'unless {text}'
     if len(text) > 60:
         text = text[:57] + '...'
     return {'line': cond.start_position().row + 1, 'text': text}

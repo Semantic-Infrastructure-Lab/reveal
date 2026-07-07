@@ -26,7 +26,21 @@ from typing import Dict
 # Per-construct families
 # ---------------------------------------------------------------------------
 
-IF_NODES: frozenset = frozenset({'if_statement', 'if_expression', 'if', 'IfStatement'})
+# Ruby statement modifiers (`raise … if cond`, `return 0 unless x`) and block
+# `unless` are real conditional gates. Without them the guarded exit reads as
+# unconditional in --returns/--exits gate chains (a correctness bug, BACK-500),
+# and the branch is invisible to --ifmap. They flow into GATE_NODES (derived
+# from IF_NODES below), so _get_condition's `condition` field lookup captures the
+# gate. `unless`/`unless_modifier` carry an inverted sense conveyed by the UNLESS
+# label. Found via discourse deep-conformance dogfooding.
+# Statement modifiers (`x if cond` / `x unless cond`) are conditional decisions
+# and gates, but — unlike block conditionals — they wrap a single statement and
+# do NOT introduce a nesting level. Kept as their own set so complexity's nesting
+# metric can exclude them while still counting them as decisions.
+MODIFIER_NODES: frozenset = frozenset({'if_modifier', 'unless_modifier'})
+IF_NODES: frozenset = frozenset({
+    'if_statement', 'if_expression', 'if', 'IfStatement', 'unless',
+}) | MODIFIER_NODES
 ELIF_NODES: frozenset = frozenset({'elif_clause', 'elseif_clause'})
 ELSE_NODES: frozenset = frozenset({'else_clause', 'else'})
 # Zig's IfStatement (BACK-431 Issue G smoke-tier audit) has no AST fields at
@@ -338,6 +352,7 @@ IF_WHILE_NODES: frozenset = IF_NODES | ELIF_NODES | WHILE_NODES
 
 KEYWORD_LABEL: Dict[str, str] = {
     'if_statement': 'IF', 'if': 'IF', 'if_expression': 'IF', 'IfStatement': 'IF',
+    'if_modifier': 'IF', 'unless': 'UNLESS', 'unless_modifier': 'UNLESS',
     'elif_clause': 'ELIF', 'elseif_clause': 'ELIF',
     'else_clause': 'ELSE', 'else': 'ELSE',
     'for_statement': 'FOR', 'for': 'FOR', 'for_expression': 'FOR',
