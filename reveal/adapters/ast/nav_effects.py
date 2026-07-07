@@ -150,6 +150,11 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
     # pattern would.
     'swift': [
         ('file', ['write']),
+        # BACK-498 quick win: NSLog/os_log are Swift/Cocoa's logging calls —
+        # bare `print` deliberately stays unclassified (matches tier1 Java/C#/
+        # Python treatment of stdout writes as non-log), but NSLog/os_log are
+        # unambiguous logging APIs, not print wrappers.
+        ('log', ['nslog', 'os_log']),
     ],
 }
 

@@ -23,6 +23,15 @@ _EXIT_CALL_NAMES: frozenset = frozenset({'die', 'exit', 'raise', 'fail'})
 # here but missing from nav_outline.py's EXIT_NODES).
 _EXIT_KIND: Dict[str, str] = {k: KEYWORD_LABEL[k] for k in EXIT_NODES}
 
+# BACK-497 cosmetic follow-on: Kotlin's bare 'throw' and Swift's bare
+# 'throw_keyword' are the keyword *token* node, not the full throw expression
+# (that lives one level up, in the enclosing jump_expression/
+# control_transfer_statement) — so get_text() on the matched node itself
+# renders only the word "throw". Render the parent's text instead for these
+# two bare kinds; every other THROW_NODES entry (throw_statement,
+# throw_expression) already *is* the full expression.
+_BARE_THROW_KEYWORD_KINDS: frozenset = frozenset({'throw', 'throw_keyword'})
+
 _HARD_EXIT_KINDS: frozenset = frozenset({'RETURN', 'RAISE', 'THROW', 'EXIT'})
 
 # YIELD suspends a generator — not a hard exit but transfers control.
@@ -58,7 +67,12 @@ def collect_exits(
         if from_line <= line <= to_line:
             if node.kind() in _EXIT_KIND:
                 kind = _EXIT_KIND[node.kind()]
-                text = get_text(node).splitlines()[0].strip()
+                text_node = node
+                if node.kind() in _BARE_THROW_KEYWORD_KINDS:
+                    parent = node.parent()
+                    if parent is not None:
+                        text_node = parent
+                text = get_text(text_node).splitlines()[0].strip()
                 if len(text) > 80:
                     text = text[:77] + '...'
                 results.append({'kind': kind, 'line': line, 'text': text})
@@ -267,7 +281,12 @@ def collect_gate_chains(
 
         if from_line <= line <= to_line:
             if ntype in _EXIT_KIND:
-                text = get_text(node).splitlines()[0].strip()
+                text_node = node
+                if ntype in _BARE_THROW_KEYWORD_KINDS:
+                    parent = node.parent()
+                    if parent is not None:
+                        text_node = parent
+                text = get_text(text_node).splitlines()[0].strip()
                 if len(text) > 80:
                     text = text[:77] + '...'
                 results.append({'kind': _EXIT_KIND[ntype], 'line': line, 'text': text, 'gates': gates[:]})

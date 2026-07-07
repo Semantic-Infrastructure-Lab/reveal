@@ -477,6 +477,29 @@ def test_swift_throw_is_detected_by_exits():
     ], f"swift: validate exits mismatch (guard-else throw at L6 must be detected)\n{out}"
 
 
+def test_kotlin_throw_text_is_full_expression():
+    """--exits' `text` for a Kotlin throw must be the full expression, not just
+    the bare keyword. THROW_NODES matches on the bare 'throw' keyword-token
+    node (the only node distinguishing throw from return inside a shared
+    jump_expression), so a naive get_text(matched_node) renders just the word
+    "throw" — kind/line/gate were already correct (BACK-497), only the display
+    text was truncated. Cosmetic follow-on found alongside BACK-497, fixed by
+    rendering the parent jump_expression's text for this one bare kind."""
+    out = _run(str(_sample_path("kotlin")), "validate", "--exits", "--format", "json")
+    data = json.loads(out)
+    throw = next(f for f in data["findings"] if f["kind"] == "THROW")
+    assert throw["text"] == 'throw IllegalArgumentException("empty order")', out
+
+
+def test_swift_throw_text_is_full_expression():
+    """Same cosmetic follow-on as the Kotlin case, for Swift's bare
+    throw_keyword (child of control_transfer_statement)."""
+    out = _run(str(_sample_path("swift")), "validate", "--exits", "--format", "json")
+    data = json.loads(out)
+    throw = next(f for f in data["findings"] if f["kind"] == "THROW")
+    assert throw["text"] == "throw ValidationError.empty", out
+
+
 def test_ruby_case_when_is_mapped_by_ifmap():
     """--ifmap must map Ruby `case`/`when`. Ruby's case-expression node kind is
     bare `case` and its arm is bare `when` — neither was in SWITCH_NODES/

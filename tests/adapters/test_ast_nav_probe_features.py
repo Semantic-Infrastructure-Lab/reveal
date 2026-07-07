@@ -1064,6 +1064,21 @@ class TestClassifyCall(unittest.TestCase):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertEqual(classify_call('usleep'), 'sleep')
 
+    def test_log_swift_nslog(self):
+        # BACK-498 quick win: NSLog is Swift/Cocoa's unambiguous logging call.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('NSLog', 'swift'), 'log')
+
+    def test_log_swift_os_log(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('os_log', 'swift'), 'log')
+
+    def test_swift_print_stays_unclassified(self):
+        # print is a plain stdout write, not a log call — matches tier1
+        # Java/C#/Python treatment (bare print/println/System.out unclassified).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('print', 'swift'))
+
     def test_hard_stop_die(self):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertEqual(classify_call('die'), 'hard_stop')

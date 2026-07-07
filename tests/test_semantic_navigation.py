@@ -386,7 +386,7 @@ class TestRangeWithNavFlags(unittest.TestCase):
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
         # Sub-range: covers writes to `mutations` but stops before the sort/return read
-        args = self._make_args(mutations=True, range=(136, 158))
+        args = self._make_args(mutations=True, range=(150, 172))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
@@ -407,7 +407,7 @@ class TestRangeWithNavFlags(unittest.TestCase):
 
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
-        args = self._make_args(exits=True, range=(30, 80))
+        args = self._make_args(exits=True, range=(30, 95))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
