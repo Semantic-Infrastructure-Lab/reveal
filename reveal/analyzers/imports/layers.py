@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 
+from ...utils.path_utils import to_posix
+
 logger = logging.getLogger(__name__)
 
 
@@ -107,10 +109,10 @@ class LayerRule:
         """Return *to_file* as a slash-terminated module path, or None if outside project root."""
         if project_root:
             try:
-                return str(to_file.relative_to(project_root)).replace("\\", "/") + "/"
+                return to_posix(to_file.relative_to(project_root)) + "/"
             except ValueError:
                 return None
-        return str(to_file).replace("\\", "/") + "/"
+        return to_posix(to_file) + "/"
 
     def _is_target_allowed(self, to_module: str) -> bool:
         """Return True if *to_module* matches at least one pattern in allow_imports."""
