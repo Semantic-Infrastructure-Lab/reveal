@@ -42,6 +42,16 @@ jobs:
           pip install -e ".[git,mcp]"
           pip install nuitka ordered-set zstandard
 
+      - name: Exclude build dir from Windows Defender
+        shell: pwsh
+        run: |
+          # Windows Defender scans/kills freshly-compiled unsigned binaries as
+          # a heuristic false-positive (documented Nuitka issue #2495/#2685) —
+          # the "Smoke test the binary" step below crashes with
+          # STATUS_STACK_BUFFER_OVERRUN (0xC0000409) without this exclusion.
+          # Excluding only the build output, not disabling Defender broadly.
+          Add-MpPreference -ExclusionPath "$pwd\dist"
+
       - name: Build with Nuitka --standalone
         shell: bash
         run: |
