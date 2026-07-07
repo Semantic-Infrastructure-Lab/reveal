@@ -10,14 +10,28 @@ help_token_estimate: "~400"
 
 ## Overview
 
-**Status: broken (BACK-480).** `reveal/analyzers/elixir.py` is a bare
-`TreeSitterAnalyzer` subclass with no Elixir-specific node taxonomy. Elixir's
-`defmodule`/`def` are macro-call shapes, not distinct node kinds the way
-Python's `function_definition` is, so the generic dispatch extracts **zero
-functions or modules** on real `.ex` files — `reveal file.ex` shows only
-byte/line count. Fixing this is real feature work (teaching the analyzer
-Elixir's macro-call-based function/module shapes), not a doc issue — tracked
-separately in BACK-480, not done as part of this docs pass.
+**Status: working (BACK-480 resolved, extragalactic-journey-0706).** Elixir has
+no dedicated `function_definition`/`class_definition` grammar nodes — every
+definition is a macro **call**: `def add(a, b) do … end` parses as a `call`
+whose first child is `identifier('def')`, and `defmodule Foo do … end` as a
+call to `defmodule`. `ElixirAnalyzer` overrides `_extract_functions`,
+`_extract_classes`, and `extract_element` to match on the leading macro keyword
+and read the defined name out of the call's `arguments` subtree, so
+`reveal file.ex` now lists functions and modules (previously: byte/line count
+only).
+
+- **Functions**: `def`, `defp`, `defmacro`, `defmacrop`, `defguard`,
+  `defguardp`, `defdelegate`, `defn`. Handles zero-arg (`def ready do`), `when`
+  guards (`def f(x) when x > 0`), single-line `, do:` clauses, and default
+  args.
+- **Modules**: `defmodule Foo.Bar do` surfaces as a class named `Foo.Bar`.
+
+**Known characteristic** (not a bug): because a `def` is itself a call, a
+function's `calls`/complexity walk covers the whole `def` — so control-flow
+macros (`case`/`if`/`cond`/`with`) and the def's own name can appear in its
+`calls` list. This is correct for complexity (they are real branch points) but
+mildly noisy for `calls://`. Elixir remains `[untested]` tier: the nav-flag
+surface (`--varflow`/`--sideeffects`/…) has no ground-truth fixtures yet.
 
 ## Installation
 
@@ -67,7 +81,9 @@ def get_structure(self):
 
 ## Status
 
-See "Overview" above — function/module detection is **not** currently implemented; `reveal file.ex` extracts no structure. Run it yourself to confirm current behavior before relying on this analyzer.
+Function/module structure extraction and element extraction work (BACK-480
+resolved). Nav-flag support (`--varflow` etc.) is not yet fixture-verified —
+Elixir stays `[untested]` tier in `reveal --languages` until it is.
 
 ## See Also
 

@@ -760,20 +760,29 @@ _UNTESTED: Dict[str, LanguageCapability] = {
     ),
     "ElixirAnalyzer": _untested(
         language="elixir",
-        function_body_shape="Standard block-nested (do/end blocks).",
+        function_body_shape=(
+            "Everything is a macro *call*: `def add(a,b) do … end` parses as a "
+            "`call` node whose first child is `identifier('def')`, not a "
+            "distinct function_definition kind. `_extract_functions`/"
+            "`_extract_classes`/`extract_element` are overridden to match on "
+            "the leading macro keyword (def/defp/defmacro/defguard/defdelegate "
+            "→ functions, defmodule → class) and read the name out of the "
+            "call's `arguments` (handles zero-arg, `when` guards, single-line "
+            "`, do:` clauses, and `Foo.Bar` aliases). BACK-480."
+        ),
         varflow=VARFLOW_UNTESTED, imports_unused=None,
-        import_resolution="No import extractor registered.",
+        import_resolution="No import extractor registered (imports:// listing/graph not claimed for Elixir).",
         known_limitations=[
-            "NOT REACHABLE via the registry in normal CLI use as of this "
-            "audit (2026-07-04): reveal/analyzers/elixir.py is never "
-            "imported by reveal/analyzers/__init__.py, so its @register "
-            "decorator never fires outside of tests that import the module "
-            "directly (tests/test_elixir_analyzer.py does, which is why "
-            "its own 'test_analyzer_registered' case passes in the full "
-            "suite but would fail if run in isolation). In real CLI usage, "
-            ".ex/.exs files silently fall through to the generic "
-            "tree-sitter fallback. Noticed during BACK-444, not fixed "
-            "(out of scope).",
+            "Structure extraction (functions, modules), element extraction "
+            "(`reveal file.ex <name>`), and complexity now work (BACK-480, "
+            "extragalactic-journey-0706). Still `[untested]` tier: the "
+            "nav-flag surface (--varflow/--sideeffects/--catchmap/…) has no "
+            "ground-truth fixtures yet.",
+            "`calls`/complexity walk the whole `def` call (signature + body), "
+            "so the def's own name and control-flow macros (case/if/cond/with) "
+            "appear in a function's `calls` list — inherent to Elixir's "
+            "fully call-shaped grammar; correct for complexity (they are real "
+            "branch points), mildly noisy for calls://.",
         ],
     ),
 }
