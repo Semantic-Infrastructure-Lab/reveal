@@ -59,7 +59,7 @@ jobs:
             --collect-all pygit2 \
             --collect-all certifi \
             --collect-all jsonschema_specifications \
-            scripts/pyinstaller_entry.py
+            pyinstaller_entry.py
 
       - name: Smoke test the binary
         shell: cmd

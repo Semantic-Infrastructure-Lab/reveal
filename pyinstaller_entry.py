@@ -8,6 +8,11 @@ relative imports resolve inside the frozen build.
 
 Mirrors the ``reveal = "reveal.main:main"`` console_scripts entry in
 pyproject.toml. See .github/workflows/windows-binary.yml and BACK-495.
+
+Must live at the repo root, not under scripts/: PyInstaller puts the entry
+script's own directory on the analysis sys.path, so ``--collect-all reveal``
+only discovers the ``reveal/`` package when this launcher is its sibling.
+From a subdirectory, package discovery fails (428 missing-submodule errors).
 """
 
 from reveal.main import main
