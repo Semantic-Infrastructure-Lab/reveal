@@ -406,9 +406,13 @@ Next Steps:
 
 ## File History
 
+Works on a **file, a directory (subtree), or the whole repo** — the target
+resolves to a tree/blob oid either way (directory scoping detailed below).
+
 ```bash
 reveal git://src/app.py?type=history
 reveal git://README.md?type=history&limit=100
+reveal git://src/auth?type=history              # a directory — every commit touching src/auth/**
 ```
 
 **Returns** (~800 tokens for 50 commits):
@@ -658,12 +662,13 @@ Next Steps:
 
 ## File Diff
 
-`?type=diff` shows what a specific commit changed in a file, relative to its parent — narrower than the full commit diff in `git://.@<ref>`.
+`?type=diff` shows what a specific commit changed in a file (or directory subtree), relative to its parent — narrower than the full commit diff in `git://.@<ref>`.
 
 ```bash
 reveal git://src/app.py@abc1234?type=diff                        # full file diff for that commit
 reveal git://src/app.py@abc1234?type=diff&element=load_config    # diff scoped to a function's hunks
 reveal git://src/app.py@abc1234?type=diff&context=10              # more context lines
+reveal git://src/auth@abc1234?type=diff                          # a directory — what the commit changed beneath src/auth/
 ```
 
 **Modifiers**: `element=<name>` scopes to hunks touching that function/class; `context=N` sets context lines around each hunk (default varies).
