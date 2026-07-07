@@ -1,0 +1,128 @@
+name: Windows Import Probe (BACK-495)
+
+# DISPOSABLE for BACK-495. reveal.exe crashes at IMPORT (0xC0000409 under Nuitka,
+# zero output). Prior repros were red herrings (parse-arg TypeError; bad entry
+# point). These two PyInstaller jobs (fast, readable tracebacks) do it right:
+#
+#   probe:  import reveal's native deps one-by-one with flushed output -> the
+#           last "importing: X" before a crash names the guilty dependency.
+#   launcher: build FULL reveal via a proper launcher (from reveal.main import
+#           main) so relative imports resolve -> does a correctly-entered
+#           PyInstaller reveal run? If yes, switching off Nuitka is the fix.
+#
+# Delete once BACK-495 is resolved.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: import-probe (which dep crashes?)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install reveal + PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[git,mcp]"
+          pip install pyinstaller
+      - name: Write import_probe.py
+        shell: bash
+        run: |
+          cat > import_probe.py <<'PY'
+          import sys
+          mods = ["cffi", "pygit2", "cryptography", "pydantic_core", "pydantic",
+                  "tree_sitter", "tree_sitter_language_pack",
+                  "reveal", "reveal.registry", "reveal.treesitter", "reveal.main"]
+          for m in mods:
+              print("importing:", m, flush=True)
+              try:
+                  __import__(m)
+                  print("  ok:", m, flush=True)
+              except Exception as e:
+                  print("  FAILED:", m, repr(e), flush=True)
+          print("PROBE DONE", flush=True)
+          PY
+          cat import_probe.py
+      - name: Exclude build dir from Windows Defender
+        shell: pwsh
+        run: Add-MpPreference -ExclusionPath "$pwd\dist"
+      - name: Build probe (PyInstaller --onedir)
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --onedir --name import_probe \
+            --collect-all reveal \
+            --collect-all tree_sitter \
+            --collect-all tree_sitter_language_pack \
+            --collect-all pygit2 \
+            --collect-all cryptography \
+            --collect-all pydantic_core \
+            --collect-all certifi \
+            --collect-all jsonschema_specifications \
+            import_probe.py
+      - name: Run probe (non-fatal)
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $exe = (Get-ChildItem dist -Recurse -Filter import_probe.exe | Select-Object -First 1).FullName
+          Write-Host "exe: $exe"
+          $p = Start-Process -FilePath $exe -NoNewWindow -Wait -PassThru `
+                 -RedirectStandardOutput o.txt -RedirectStandardError e.txt
+          Write-Host "exit code: $($p.ExitCode)"
+          Write-Host "----- stdout (last import before crash names the culprit) -----"
+          Get-Content o.txt -ErrorAction SilentlyContinue | Write-Host
+          Write-Host "----- stderr -----"; Get-Content e.txt -ErrorAction SilentlyContinue | Write-Host
+
+  launcher:
+    name: full reveal via proper launcher (PyInstaller)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install reveal + PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[git,mcp]"
+          pip install pyinstaller
+      - name: Write launcher.py
+        shell: bash
+        run: |
+          printf '%s\n' 'from reveal.main import main' 'main()' > reveal_launcher.py
+          cat reveal_launcher.py
+      - name: Exclude build dir from Windows Defender
+        shell: pwsh
+        run: Add-MpPreference -ExclusionPath "$pwd\dist"
+      - name: Build full reveal (PyInstaller --onedir, launcher entry)
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --onedir --name reveal \
+            --collect-all reveal \
+            --collect-all tree_sitter \
+            --collect-all tree_sitter_language_pack \
+            --collect-all pygit2 \
+            --collect-all certifi \
+            --collect-all jsonschema_specifications \
+            reveal_launcher.py
+      - name: Run reveal --version (non-fatal)
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $exe = (Get-ChildItem dist -Recurse -Filter reveal.exe | Select-Object -First 1).FullName
+          Write-Host "exe: $exe"
+          $p = Start-Process -FilePath $exe -ArgumentList "--version" -NoNewWindow -Wait -PassThru `
+                 -RedirectStandardOutput o.txt -RedirectStandardError e.txt
+          Write-Host "exit code: $($p.ExitCode)"
+          Write-Host "----- stdout -----"; Get-Content o.txt -ErrorAction SilentlyContinue | Write-Host
+          Write-Host "----- stderr -----"; Get-Content e.txt -ErrorAction SilentlyContinue | Write-Host
+          if ($p.ExitCode -eq 0) { Write-Host "RESULT: PyInstaller reveal (launcher) RUNS -> Nuitka-specific; switch tooling." }
+          else { Write-Host "RESULT: PyInstaller reveal (launcher) FAILS -> traceback above names the real problem." }
