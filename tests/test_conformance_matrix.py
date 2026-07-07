@@ -456,6 +456,27 @@ def test_kotlin_throw_is_detected_by_exits():
     ], f"kotlin: validate exits mismatch (throw at L6 must be detected)\n{out}"
 
 
+def test_swift_throw_is_detected_by_exits():
+    """--exits must detect Swift's `throw` as a THROW exit.
+
+    Swift wraps throw in a `control_transfer_statement` whose keyword child is
+    `throw_keyword` (its return sibling is the bare `return` kind, already
+    recognized — which is why returns worked but throws didn't). THROW_NODES
+    carried only throw_statement/throw_expression + Kotlin's bare `throw`
+    (BACK-497), not `throw_keyword`, so Swift throws were invisible to
+    --exits/--returns. Same BACK-427 class, distinct node kind. Found via
+    ios-oss deep-conformance dogfooding; entry_function processOrder has no
+    throw, so this pins `validate` (guard-else throw at L6). Confirmed to report
+    only the L8 return pre-fix."""
+    out = _run(str(_sample_path("swift")), "validate", "--exits", "--format", "json")
+    data = json.loads(out)
+    findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
+    assert findings == [
+        {"kind": "THROW", "line": 6},
+        {"kind": "RETURN", "line": 8},
+    ], f"swift: validate exits mismatch (guard-else throw at L6 must be detected)\n{out}"
+
+
 # ───────────────────── BACK-427 (remaining): Rust loop/match ──────────────────
 
 def test_rust_outline_recognizes_expression_oriented_control_flow():
