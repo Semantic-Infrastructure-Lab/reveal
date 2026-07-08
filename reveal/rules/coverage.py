@@ -5,7 +5,7 @@ but "is it reliable *for my language*?" Reveal now has the data to answer that
 honestly: BACK-432's rule-correctness matrix verified all 77 rules (fires when it
 should, silent when it shouldn't), organized by applicability class, and
 `capabilities.py` records which languages have deep tier-1 conformance ground
-truth (the 9-language corpus in `tests/test_conformance_matrix.py`).
+truth (the 13-language corpus in `tests/test_conformance_matrix.py`).
 
 This module derives, per rule, the set of languages/formats the rule has been
 correctness-verified against — surfaced in `--rules` and `--explain` so a user or
@@ -20,7 +20,7 @@ Design (BACK-466 part 1):
   A rule may still override via an explicit class attribute for a genuine
   exception.
 - **"Verified" means correctness-verified (BACK-432), capped honestly.** A
-  universal rule *applies* to all ~85 languages but was fixture-verified on the 9
+  universal rule *applies* to all ~85 languages but was fixture-verified on the 13
   tier-1 families — so that is what it claims. The gap between "applies to" and
   "verified on" is the whole point of the badge.
 - **Format rules name their format.** nginx/markdown/Dockerfile rules were
@@ -109,7 +109,7 @@ def derive_verified_languages(rule_class: Any) -> List[str]:
             continue
         lang = _pattern_code_language(pattern)
         # Only claim a code language when it carries tier-1 correctness ground
-        # truth; smoke-tested/untested analyzers (ruby, php, …) are honestly not
+        # truth; smoke-tested/untested analyzers (scala, dart, …) are honestly not
         # yet claimed, even though a broad rule nominally runs on them.
         if lang is not None and lang in tier1:
             verified.add(lang)

@@ -91,6 +91,8 @@ class TestLanguageCapabilityFieldValidation(unittest.TestCase):
         tier1_languages = {
             "python", "rust", "go", "c", "cpp", "java", "csharp",
             "javascript", "typescript",
+            # Promoted from smoke tier, BACK-477 (resoyere-0707).
+            "kotlin", "swift", "ruby", "php",
         }
         found = {
             cap.language for cap in CAPABILITIES.values()

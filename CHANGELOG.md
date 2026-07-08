@@ -12,6 +12,14 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] (session resoyere-0707)
+
+### Changed
+- **Kotlin, Swift, Ruby, and PHP promoted to tier-1 verified conformance (BACK-477)** — all four now carry real fixtures + hand-written `expected.yaml` ground truth for every nav flag in `tests/test_conformance_matrix.py` (previously smoke-tier: non-crash/non-empty assertions only, no ground truth). Every catalogued nav-layer gap (`--sideeffects`/`--catchmap`/`--statewrites`/`--loopmap`/`--fanout` + `Class.method`) is closed and regression-pinned. `capabilities.py` now reports `conformance_level=tier1-verified` / `varflow=verified` for all four, growing the tier-1 set from 9 to 13 languages. Because per-rule verified-language coverage (`reveal --rules`/`--explain`, BACK-466) is *derived* live from the tier-1 set, every universal `--check` rule now honestly claims verification on 13 language families instead of 9. Remaining open per-language nav gaps are documented as `known_limitations` (Kotlin/Swift `--keys` subscript, BACK-458).
+
+### Docs
+- **`--grep` surfaced in `help://quick`'s decision tree and `help://anti-patterns` (BACK-492)** — cross-file text/identifier search (`reveal <dir> --grep 'pattern'`, grouped by enclosing function/section) was previously mentioned only incidentally inside a `markdown://` example, so routing/discovery surfaces never pointed to it and agents (and the `reveal-router` pattern, which reads `help://quick`) defaulted to shell `grep -rn`. Added a dedicated decision-tree row and a "Mistake 5" anti-pattern entry (with `ast://?name=X` called out for definition-by-name lookups).
+
 ## [0.105.0] - 2026-07-07 (sessions extragalactic-journey-0706, gexode-0707, hologram-arsenal-0707)
 
 ### Added

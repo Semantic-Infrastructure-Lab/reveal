@@ -4315,6 +4315,15 @@ Need to search text?
 After running `reveal file.py`, reveal shows: "Next: reveal file.py <function_name>"
 Use that guidance - it tells you exactly what to do next!
 
+### Mistake 5: Shelling out to grep for cross-file text search
+```bash
+❌ grep -rn "API_TIMEOUT" src/       # flat lines, no code context, often several scoped calls
+✅ reveal src/ --grep 'API_TIMEOUT'  # groups hits by enclosing function/section, one call
+```
+Use `--grep` for any text or identifier that isn't a named element `ast://` can filter on
+(constants, string literals, config keys). For a *definition* by name, use `ast://?name=X`
+(e.g. `reveal 'ast://src/?name=load_config'`) — both beat `grep -rn`.
+
 ---
 
 ## What Changed in This Guide

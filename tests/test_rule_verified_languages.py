@@ -85,7 +85,7 @@ def test_every_public_rule_has_a_populated_badge():
 def test_no_rule_claims_an_unverified_code_language():
     """Honesty guard: the only code languages a rule may claim are tier-1-
     verified ones. Formats (nginx/markdown/dockerfile) are the allowed non-code
-    labels. A smoke-tested language (ruby, php) must never appear as 'verified'."""
+    labels. A smoke-tested language (scala, dart) must never appear as 'verified'."""
     tier1 = _tier1_languages()
     allowed_formats = {"nginx", "markdown", "dockerfile"}
     for r in _public_rules():

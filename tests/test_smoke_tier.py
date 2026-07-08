@@ -69,11 +69,9 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures" / "smoke"
 # a deliberate, tested convention — see TestPhpVarflow in
 # tests/adapters/test_ast_nav_probe_features.py).
 LANGUAGES = {
-    # Tier A (mamukuko-0703)
-    "kotlin": {"ext": "kt", "process": "processOrder", "var": "result"},
-    "swift": {"ext": "swift", "process": "processOrder", "var": "result"},
-    "ruby": {"ext": "rb", "process": "process_order", "var": "result"},
-    "php": {"ext": "php", "process": "processOrder", "var": "$result"},
+    # Tier A's kotlin/swift/ruby/php were promoted to tier-1 (BACK-477,
+    # resoyere-0707) — they now carry full expected.yaml ground truth in
+    # tests/test_conformance_matrix.py, which supersedes this smoke coverage.
     "scala": {"ext": "scala", "process": "processOrder", "var": "result"},
     # Tier B
     "dart": {"ext": "dart", "process": "processOrder", "var": "result"},

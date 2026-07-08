@@ -922,6 +922,8 @@ class HelpAdapter(ResourceAdapter):
                  'use': 'ast://', 'example': "reveal ast://src/?complexity>10"},
                 {'want': 'know who calls what / find dead code',
                  'use': 'calls://', 'example': "reveal 'calls://src/?target=my_fn'"},
+                {'want': 'search text or an identifier across many files (with enclosing-function context)',
+                 'use': '--grep', 'example': "reveal src/ --grep 'API_TIMEOUT'"},
                 {'want': 'check import health / circular deps',
                  'use': 'imports://', 'example': "reveal imports://src/"},
                 {'want': 'compare files or git revisions',

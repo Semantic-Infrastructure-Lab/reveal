@@ -18,10 +18,10 @@ originating request.
 
 Conformance tiers (``conformance_level``), from strongest to weakest evidence:
 
-* ``tier1-verified``   — one of the 9 languages in
+* ``tier1-verified``   — one of the 13 languages in
   ``tests/test_conformance_matrix.py``: a real fixture + hand-written
   ``expected.yaml`` ground truth checked against every nav flag.
-* ``smoke-tested``      — one of the 10 languages in
+* ``smoke-tested``      — one of the 6 languages in
   ``tests/test_smoke_tier.py``: asserts every nav flag produces non-empty,
   non-crashing, structurally sane output, backed by at least one real-corpus
   dogfood pass (see ``internal-docs/planning/LANGUAGE_DOGFOOD_CORPUS_2026-07-02.md``).
@@ -129,8 +129,11 @@ def _untested(**kwargs: Any) -> LanguageCapability:
 
 
 # ---------------------------------------------------------------------------
-# Tier 1 — deep conformance matrix (tests/test_conformance_matrix.py, 9
+# Tier 1 — deep conformance matrix (tests/test_conformance_matrix.py, 13
 # languages, fixture + expected.yaml ground truth for every nav flag).
+# Kotlin/Swift/Ruby/PHP promoted from the smoke tier (BACK-477, resoyere-0707)
+# once all four gained real fixtures + expected.yaml ground truth in the
+# conformance matrix — every catalogued nav-layer gap closed and regression-pinned.
 # ---------------------------------------------------------------------------
 
 _TIER1: Dict[str, LanguageCapability] = {
@@ -308,23 +311,14 @@ _TIER1: Dict[str, LanguageCapability] = {
         import_resolution="Same bespoke extractor as JavaScript.",
         known_limitations=[],
     ),
-}
-
-# ---------------------------------------------------------------------------
-# Tier A/B — smoke tier (tests/test_smoke_tier.py): every nav flag asserted
-# non-crashing/non-empty, backed by at least one real-corpus dogfood pass,
-# but with no expected.yaml ground truth.
-# ---------------------------------------------------------------------------
-
-_SMOKE: Dict[str, LanguageCapability] = {
-    "KotlinAnalyzer": _smoke(
+    "KotlinAnalyzer": _tier1(
         language="kotlin",
         function_body_shape=(
             "Expression-oriented if/when (when_expression/when_entry, "
             "fully fieldless); property_declaration exposes no fields at "
             "all, unlike Swift's node of the same name."
         ),
-        varflow=VARFLOW_SMOKE_TESTED,
+        varflow=VARFLOW_VERIFIED,
         imports_unused=None,
         import_resolution=(
             "Generic extractor (imports/generic.py), added BACK-488. Resolves "
@@ -334,22 +328,23 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "skip otherwise). Unused-detection not claimed."
         ),
         known_limitations=[
-            "navigation_expression member-access exclusion and "
-            "function_declaration's fieldless self-name detection were "
-            "found+fixed via real-corpus (tivi) dogfooding — no known open "
-            "gap, but never had full expected.yaml ground truth.",
-            "import→file resolution assumes filename==classname; imports of a "
-            "class living in a differently-named .kt file honestly skip.",
+            "import→file resolution assumes filename==classname; an import of "
+            "a class living in a differently-named .kt file honestly skips "
+            "rather than fabricate an edge.",
+            "BACK-458 item (1) (open): --keys subscript extraction (t[\"k\"]) "
+            "is not yet supported — Kotlin's indexing_suffix has a sibling "
+            "base (writes via directly_assignable_expression, reads via "
+            "indexing_expression), needing bespoke base/key extraction.",
         ],
     ),
-    "SwiftAnalyzer": _smoke(
+    "SwiftAnalyzer": _tier1(
         language="swift",
         function_body_shape=(
             "Identifiers parse as simple_identifier (unique among reveal's "
             "languages); switch_entry case arms and the leading-dot "
             "implicit-member shorthand (.someCase) are fieldless."
         ),
-        varflow=VARFLOW_SMOKE_TESTED,
+        varflow=VARFLOW_VERIFIED,
         imports_unused=None,
         import_resolution=(
             "Generic extractor (imports/generic.py), added BACK-488. `import "
@@ -359,24 +354,22 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "Unused-detection not claimed."
         ),
         known_limitations=[
-            "Total --varflow blindness for every Swift variable (the "
-            "simple_identifier kind was unchecked at all 3 read/write/"
-            "declared sites) was found+fixed via the smoke fixture — the "
-            "exact BACK-427-class failure this tier exists to catch.",
-            "External argument labels and leading-dot implicit members were "
-            "found+fixed via real-corpus (ios-oss) dogfooding.",
             "import→file edges are sparse: Swift modules rarely map 1:1 to a "
-            "single file, so most imports skip rather than fabricate an edge.",
+            "single in-tree file, so most imports honestly skip rather than "
+            "fabricate an edge.",
+            "BACK-458 item (1) (open): --keys subscript extraction is not yet "
+            "supported — Swift subscripts parse as call_expression (colliding "
+            "with normal calls), so they can't be blanket-added.",
         ],
     ),
-    "RubyAnalyzer": _smoke(
+    "RubyAnalyzer": _tier1(
         language="ruby",
         function_body_shape=(
             "Paren-less method defs (def human? ... end, no parens at all); "
             "implicit last-expression return, statement modifiers "
             "(return x if y)."
         ),
-        varflow=VARFLOW_SMOKE_TESTED,
+        varflow=VARFLOW_VERIFIED,
         imports_unused=False,
         import_resolution=(
             "Generic extractor (imports/generic.py) with call-style "
@@ -386,16 +379,9 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "`require 'json'` (a gem) skips. Unused-detection not claimed "
             "(skip_unused always set)."
         ),
-        known_limitations=[
-            "Signature-display duplication (human?human?) for paren-less "
-            "defs found+fixed via Discourse real-corpus dogfooding — a "
-            "shared display-layer fallback bug, most visible in Ruby.",
-            "`call` (receiver.method(args)) member-access exclusion and "
-            "--calls callee extraction both needed Ruby-specific branches, "
-            "found+fixed via the same pass.",
-        ],
+        known_limitations=[],
     ),
-    "PhpAnalyzer": _smoke(
+    "PhpAnalyzer": _tier1(
         language="php",
         function_body_shape=(
             "elseif_clause sits in _GATE_NODE_TYPES but was historically "
@@ -404,7 +390,7 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "switch-arm kinds (the switch_case/switch_default placeholders "
             "previously in the taxonomy matched no real PHP parse)."
         ),
-        varflow=VARFLOW_SMOKE_TESTED,
+        varflow=VARFLOW_VERIFIED,
         imports_unused=False,
         import_resolution=(
             "Generic extractor (imports/generic.py) with require/include "
@@ -414,11 +400,17 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "prefix, ambiguous basenames skip), and `require 'lib/x.php'` "
             "relative to the file. Unused-detection not claimed."
         ),
-        known_limitations=[
-            "case_statement/default_statement switch arms were invisible to "
-            "--ifmap until fixed via real WordPress dogfooding.",
-        ],
+        known_limitations=[],
     ),
+}
+
+# ---------------------------------------------------------------------------
+# Tier A/B — smoke tier (tests/test_smoke_tier.py): every nav flag asserted
+# non-crashing/non-empty, backed by at least one real-corpus dogfood pass,
+# but with no expected.yaml ground truth.
+# ---------------------------------------------------------------------------
+
+_SMOKE: Dict[str, LanguageCapability] = {
     "ScalaAnalyzer": _smoke(
         language="scala",
         function_body_shape=(
