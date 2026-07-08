@@ -1,9 +1,17 @@
 """Aggregation and hotspot identification for stats adapter."""
 
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from ...utils.results import ResultBuilder
+
+# Calibrated against this repo + samples/python + samples/typescript (see
+# BACK483_CHURN_COMPLEXITY_HOTSPOTS_2026-07-07.md "Threshold calibration"):
+# files touched more than 20 times in scope start contributing to the score,
+# weighted low relative to complexity/quality so churn alone on a small,
+# simple file doesn't outrank genuinely complex files.
+CHURN_THRESHOLD = 20
+CHURN_WEIGHT = 0.2
 
 
 def aggregate_stats(file_stats: List[Dict[str, Any]], source_path: Path) -> Dict[str, Any]:
@@ -63,14 +71,21 @@ def aggregate_stats(file_stats: List[Dict[str, Any]], source_path: Path) -> Dict
     )
 
 
-def identify_hotspots(file_stats: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def identify_hotspots(
+    file_stats: List[Dict[str, Any]],
+    churn_counts: Optional[Dict[str, int]] = None,
+) -> List[Dict[str, Any]]:
     """Identify top 10 hotspot files.
 
     Hotspots are files with quality issues: long functions, high complexity,
-    deep nesting, or low quality scores.
+    deep nesting, or low quality scores — optionally weighted by churn.
 
     Args:
         file_stats: List of file statistics
+        churn_counts: Optional map of stats['file'] display path -> commit
+            touch count in scope (BACK-483). None when git is unavailable or
+            churn scoring was opted out of (?churn=false) — in that case
+            scoring falls back to today's complexity-only behavior.
 
     Returns:
         List of top 10 hotspot files sorted by severity
@@ -105,17 +120,27 @@ def identify_hotspots(file_stats: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             hotspot_score += deep_nest * 3
             issues.append(f"{deep_nest} function(s) depth >4")
 
+        # Churn (commit count in scope) — optional, None when git-unavailable
+        commit_count = churn_counts.get(stats['file']) if churn_counts is not None else None
+        if commit_count is not None and commit_count > CHURN_THRESHOLD:
+            hotspot_score += (commit_count - CHURN_THRESHOLD) * CHURN_WEIGHT
+            issues.append(f"Touched {commit_count} times in scope")
+
         if hotspot_score > 0:
+            details = {
+                'lines': stats['lines']['total'],
+                'functions': stats['elements']['functions'],
+                'complexity': stats['complexity']['average'],
+            }
+            if churn_counts is not None:
+                details['commit_count'] = commit_count if commit_count is not None else 0
+
             scored_files.append({
                 'file': stats['file'],
                 'hotspot_score': round(hotspot_score, 1),
                 'quality_score': quality,
                 'issues': issues,
-                'details': {
-                    'lines': stats['lines']['total'],
-                    'functions': stats['elements']['functions'],
-                    'complexity': stats['complexity']['average'],
-                }
+                'details': details,
             })
 
     # Sort by hotspot score (descending) and return top 10

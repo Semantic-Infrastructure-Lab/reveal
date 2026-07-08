@@ -934,3 +934,61 @@ def commit_touches_element(
             return True
 
     return False
+
+
+def get_churn_counts(
+    repo: 'pygit2.Repository',
+    ref: str,
+    scope_paths: Optional[set],
+    since: Optional[str] = None,
+    no_merges: bool = False,
+) -> Dict[str, int]:
+    """Tally commit touches per file with a single repo-wide walk.
+
+    One walk over history, tallying which paths each commit's diff touches
+    (against its first parent), rather than one history walk per file —
+    O(total historical file-touches) instead of O(files x commits). See
+    internal-docs/design/BACK483_CHURN_COMPLEXITY_HOTSPOTS_2026-07-07.md.
+
+    Args:
+        repo: Open pygit2 repository
+        ref: Starting ref (e.g. 'HEAD')
+        scope_paths: Repo-relative paths to tally, or None for all paths.
+            Bounds memory/cost on large repos to only the files being scored.
+        since: Optional ISO date string — commits before this are skipped
+        no_merges: If True, skip merge commits (multiple parents) entirely
+
+    Returns:
+        Dict mapping repo-relative path -> commit touch count (only paths
+        with at least one touch; unlisted paths have zero touches)
+    """
+    import pygit2
+    from collections import defaultdict
+
+    since_ts: Optional[float] = None
+    if since:
+        since_ts = datetime.fromisoformat(since).timestamp()
+
+    obj = repo.revparse_single(ref)
+    while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
+        obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
+    start = cast('pygit2.Commit', obj)
+
+    counts: Dict[str, int] = defaultdict(int)
+    for commit in repo.walk(start.id, pygit2.GIT_SORT_TIME):  # type: ignore[arg-type]
+        if no_merges and len(commit.parents) > 1:
+            continue
+        if since_ts is not None and commit.commit_time < since_ts:
+            continue
+
+        if commit.parents:
+            diff = commit.parents[0].tree.diff_to_tree(commit.tree)
+        else:
+            diff = commit.tree.diff_to_tree()
+
+        for delta in diff.deltas:
+            path = delta.new_file.path or delta.old_file.path
+            if scope_paths is None or path in scope_paths:
+                counts[path] += 1
+
+    return dict(counts)

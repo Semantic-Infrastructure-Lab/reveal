@@ -401,6 +401,147 @@ def complex_func(x):
         assert len(result['hotspots']) <= 10
 
 
+class TestHotspotsChurn:
+    """Test churn (commit-touch count) scoring in identify_hotspots (BACK-483)."""
+
+    COMPLEX_CODE = """
+def complex1(x):
+    if x > 0:
+        if x > 10:
+            if x > 20:
+                return "very big"
+            else:
+                return "big"
+        elif x > 5:
+            return "medium"
+        else:
+            return "small"
+    else:
+        return "zero"
+"""
+
+    def _hotspot_file_stats(self):
+        from reveal.adapters.stats.aggregation import identify_hotspots
+        return identify_hotspots
+
+    def test_churn_counts_none_leaves_score_unchanged(self):
+        identify_hotspots = self._hotspot_file_stats()
+        stats = [{
+            'file': 'a.py',
+            'lines': {'total': 10},
+            'elements': {'functions': 1},
+            'complexity': {'average': 15.0},
+            'quality': {'score': 50.0, 'long_functions': 0, 'deep_nesting': 0},
+        }]
+        without_churn = identify_hotspots(stats, churn_counts=None)
+        assert 'commit_count' not in without_churn[0]['details']
+        assert not any('Touched' in i for i in without_churn[0]['issues'])
+
+    def test_churn_below_threshold_adds_no_score_but_reports_count(self):
+        identify_hotspots = self._hotspot_file_stats()
+        stats = [{
+            'file': 'a.py',
+            'lines': {'total': 10},
+            'elements': {'functions': 1},
+            'complexity': {'average': 15.0},
+            'quality': {'score': 50.0, 'long_functions': 0, 'deep_nesting': 0},
+        }]
+        with_churn = identify_hotspots(stats, churn_counts={'a.py': 5})
+        assert with_churn[0]['details']['commit_count'] == 5
+        assert not any('Touched' in i for i in with_churn[0]['issues'])
+
+    def test_churn_above_threshold_increases_score_and_adds_issue(self):
+        identify_hotspots = self._hotspot_file_stats()
+        base_stats = [{
+            'file': 'a.py',
+            'lines': {'total': 10},
+            'elements': {'functions': 1},
+            'complexity': {'average': 15.0},
+            'quality': {'score': 50.0, 'long_functions': 0, 'deep_nesting': 0},
+        }]
+        without_churn = identify_hotspots(base_stats, churn_counts=None)
+        with_churn = identify_hotspots(base_stats, churn_counts={'a.py': 47})
+
+        assert with_churn[0]['hotspot_score'] > without_churn[0]['hotspot_score']
+        assert with_churn[0]['details']['commit_count'] == 47
+        assert any('Touched 47 times in scope' in i for i in with_churn[0]['issues'])
+
+    def test_churn_missing_entry_defaults_to_zero(self):
+        """A file absent from churn_counts (e.g. added after `since`) reports 0, not an error."""
+        identify_hotspots = self._hotspot_file_stats()
+        stats = [{
+            'file': 'a.py',
+            'lines': {'total': 10},
+            'elements': {'functions': 1},
+            'complexity': {'average': 15.0},
+            'quality': {'score': 50.0, 'long_functions': 0, 'deep_nesting': 0},
+        }]
+        result = identify_hotspots(stats, churn_counts={})
+        assert result[0]['details']['commit_count'] == 0
+
+
+class TestStatsAdapterChurnIntegration:
+    """End-to-end StatsAdapter(hotspots=true) churn wiring against a real git repo."""
+
+    @pytest.fixture
+    def churn_dir(self, tmp_path):
+        """A git repo where core.py is complex AND heavily churned, util.py is neither."""
+        import pygit2
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        repo = pygit2.init_repository(str(repo_dir))
+        author = pygit2.Signature("Test", "test@example.com")
+
+        def commit(msg):
+            index = repo.index
+            index.add_all()
+            index.write()
+            tree_oid = index.write_tree()
+            parents = [] if repo.is_empty else [repo.head.target]
+            return repo.create_commit("HEAD", author, author, msg, tree_oid, parents)
+
+        (repo_dir / "core.py").write_text(TestHotspotsChurn.COMPLEX_CODE)
+        (repo_dir / "util.py").write_text("def add(a, b): return a + b\n")
+        commit("initial")
+
+        # Touch core.py 25 more times (> CHURN_THRESHOLD=20) so it fires the churn term.
+        for i in range(25):
+            (repo_dir / "core.py").write_text(TestHotspotsChurn.COMPLEX_CODE + f"\n# rev {i}\n")
+            commit(f"revise core {i}")
+
+        return repo_dir
+
+    def test_hotspots_include_commit_count_for_git_repo(self, churn_dir):
+        adapter = StatsAdapter(str(churn_dir))
+        result = adapter.get_structure(hotspots=True)
+
+        core_hotspot = next(h for h in result['hotspots'] if h['file'] == 'core.py')
+        assert core_hotspot['details']['commit_count'] == 26
+        assert any('Touched 26 times in scope' in i for i in core_hotspot['issues'])
+
+    def test_churn_false_opts_out(self, churn_dir):
+        """With churn=false, core.py isn't complex enough on its own to be a
+        hotspot at all — it only ranks with churn's help — proving the churn
+        term (not some other factor) is what opted out."""
+        adapter = StatsAdapter(str(churn_dir), 'hotspots=true&churn=false')
+        result = adapter.get_structure()
+
+        assert not any(h['file'] == 'core.py' for h in result['hotspots'])
+        assert not any('commit_count' in h['details'] for h in result['hotspots'])
+
+    def test_non_git_directory_falls_back_gracefully(self, tmp_path):
+        """A plain (non-git) directory must not error and must omit commit_count."""
+        (tmp_path / "core.py").write_text(TestHotspotsChurn.COMPLEX_CODE)
+
+        adapter = StatsAdapter(str(tmp_path))
+        result = adapter.get_structure(hotspots=True)
+
+        assert 'hotspots' in result
+        if result['hotspots']:
+            assert 'commit_count' not in result['hotspots'][0]['details']
+
+
 class TestQualityMetrics:
     """Test quality score and complexity calculations."""
 

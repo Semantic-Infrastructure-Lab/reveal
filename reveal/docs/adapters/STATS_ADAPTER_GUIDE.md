@@ -270,8 +270,11 @@ Default penalties:
 | `min_complexity` | float | Filter files with avg complexity ≥ N | `?min_complexity=5.0` |
 | `max_complexity` | float | Filter files with avg complexity ≤ N | `?max_complexity=10.0` |
 | `min_functions` | integer | Filter files with ≥ N functions | `?min_functions=5` |
+| `churn` | boolean | Fold commit-touch counts into hotspot scoring (default: on for git repos, silently off otherwise) | `?hotspots=true&churn=false` |
+| `since` | string (ISO date) | Bound the churn walk to commits on/after this date (default: full history) | `?hotspots=true&since=2026-01-01` |
+| `no_merges` | boolean | Exclude merge commits from the churn tally | `?hotspots=true&no_merges=1` |
 
-**Note**: Legacy parameters still work but unified query syntax (below) is preferred for new queries.
+**Note**: Legacy parameters still work but unified query syntax (below) is preferred for new queries. `churn`/`since`/`no_merges` only affect hotspot scoring (`hotspots=true`) and are ignored otherwise.
 
 ### Unified Query Syntax (Recommended)
 
@@ -595,6 +598,13 @@ Starting hotspot score: **0**
 - For each deeply nested function (depth >4):
   - Add: `3 points per function`
   - Example: 2 deeply nested → `2×3 = 6 points`
+
+**Factor 5: Churn (commit touches in scope)** — only when in a git repo and `churn=false` isn't set
+- If `commit_count > 20`:
+  - Add: `(commit_count - 20) × 0.2`
+  - Example: touched 47 times → `(47-20)×0.2 = 5.4 points`
+- A complex file that's also under constant churn ranks higher than an equally complex file nobody touches — see [Query Parameters Reference](#query-parameters-reference) for `churn`/`since`/`no_merges`.
+- Silently omitted (no `commit_count` in `details`, no churn term in the score) when the target isn't inside a git repo, `pygit2` isn't installed, or `churn=false` is passed — falls back to complexity-only scoring, never a hard error.
 
 **Total hotspot score**: Sum of all factors
 

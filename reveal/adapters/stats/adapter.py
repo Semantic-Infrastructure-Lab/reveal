@@ -48,6 +48,9 @@ _SCHEMA_QUERY_PARAMS = {
     'min_complexity': {'type': 'number', 'description': 'Filter files with avg complexity >= this', 'examples': ['min_complexity=5.0']},
     'max_complexity': {'type': 'number', 'description': 'Filter files with avg complexity <= this', 'examples': ['max_complexity=15.0']},
     'min_functions': {'type': 'integer', 'description': 'Filter files with at least this many functions', 'examples': ['min_functions=10']},
+    'churn': {'type': 'boolean', 'description': 'Fold commit-touch counts into hotspot scoring (default: on for git repos, silently off otherwise). Set churn=false to opt out and fall back to complexity-only scoring.', 'examples': ['churn=false']},
+    'since': {'type': 'string', 'description': 'Bound the churn walk to commits on/after this ISO date (default: full history). Only affects churn scoring, not the file list itself.', 'examples': ['since=2026-01-01']},
+    'no_merges': {'type': 'boolean', 'description': 'Exclude merge commits from the churn tally', 'examples': ['no_merges=1']},
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -264,6 +267,62 @@ class StatsAdapter(ResourceAdapter):
             result['displayed_results'] = displayed
             result['total_matches'] = total
 
+    def _compute_churn_counts(self, file_stats: list) -> Optional[Dict[str, int]]:
+        """Compute per-file commit-touch counts for hotspot scoring (BACK-483).
+
+        Fails open (returns None) whenever git isn't available or usable —
+        churn is an optional scoring signal, not a hard requirement, so any
+        error here degrades to today's complexity-only hotspot behavior
+        rather than breaking `stats://`/`reveal hotspots`.
+        """
+        try:
+            import pygit2
+        except ImportError:
+            return None
+
+        try:
+            repo_path = pygit2.discover_repository(str(self.path))
+            if not repo_path:
+                return None
+            repo = pygit2.Repository(repo_path)
+            workdir = Path(repo.workdir) if repo.workdir else None
+            if workdir is None:
+                return None
+
+            since = self.query_params.get('since')
+            no_merges = self.query_params.get('no_merges') is True
+
+            # Map each file's display path (relative to self.path, what
+            # identify_hotspots/hotspot output key on) to its repo-relative
+            # path (what pygit2 diff deltas report), and scope the walk to
+            # exactly those paths.
+            display_to_repo_rel: Dict[str, str] = {}
+            for stats in file_stats:
+                display = stats['file']
+                abs_path = (self.path / display) if self.path.is_dir() else self.path
+                try:
+                    repo_rel = abs_path.resolve().relative_to(workdir.resolve()).as_posix()
+                except ValueError:
+                    continue
+                display_to_repo_rel[display] = repo_rel
+
+            if not display_to_repo_rel:
+                return None
+
+            from ..git import files as git_files  # deferred: avoid stats<->git import cycle at module load
+            counts_by_repo_rel = git_files.get_churn_counts(
+                repo, 'HEAD', set(display_to_repo_rel.values()),
+                since=since, no_merges=no_merges,
+            )
+
+            return {
+                display: counts_by_repo_rel.get(repo_rel, 0)
+                for display, repo_rel in display_to_repo_rel.items()
+                if repo_rel in counts_by_repo_rel
+            }
+        except Exception:
+            return None
+
     def get_structure(self,
                      hotspots: bool = False,
                      code_only: bool = False,
@@ -319,7 +378,10 @@ class StatsAdapter(ResourceAdapter):
 
         # Add hotspots if requested
         if hotspots:
-            result['hotspots'] = identify_hotspots(controlled_stats)
+            churn_counts = None
+            if self.query_params.get('churn', True) is not False:
+                churn_counts = self._compute_churn_counts(controlled_stats)
+            result['hotspots'] = identify_hotspots(controlled_stats, churn_counts=churn_counts)
 
         return {
             'contract_version': '1.0',
