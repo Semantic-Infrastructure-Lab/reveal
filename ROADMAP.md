@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-07-07 (hologram-arsenal-0707 — v0.105.0 release: import-graph edges for 5 more languages, depends:// cross-module fix, Kotlin/Swift/Ruby nav-layer bug fixes)
+> **Last updated**: 2026-07-08 (warded-hammer-0708 — v0.106.0 release: --section markdown bug fix, unknown-query-param warnings, git activity timelines + churn-aware hotspots, Kotlin/Swift/Ruby/PHP promoted to tier-1)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,14 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.106.0 — --section bug fix + unknown-query-param warnings + git activity timelines + tier-1 language expansion
+- ✅ `reveal file.md --section NAME` fixed — was silently dumping the whole file instead of the named section, a user-reported CLI-only regression (BACK-508).
+- ✅ Closed-param adapters now warn on unrecognized query params instead of silently returning a base result with no signal (BACK-507).
+- ✅ Git activity timelines — `?type=history&bucket=week|month` returns bucketed commit/author counts over time, for file/dir/repo scope (BACK-484).
+- ✅ Commit churn folded into hotspot scoring, so complex files under constant churn rank above equally complex but untouched files (BACK-483).
+- ✅ Kotlin, Swift, Ruby, and PHP promoted to tier-1 verified conformance — every catalogued nav-layer gap closed and regression-pinned, growing verified-language coverage from 9 to 13 (BACK-477).
+- ✅ `diff://REF/path` git resolution rewritten from `git` CLI subprocess calls to in-process `pygit2` (BACK-505).
 
 ### v0.105.0 — Import-graph edges for 5 more languages + depends:// cross-module fix + Kotlin/Swift/Ruby nav bugs
 - ✅ `reveal architecture` now produces a real fan-in/fan-out graph for Java, PHP, Ruby, Swift, and Kotlin, up from Python/JS/TS/Go/Rust-only (BACK-487/488).

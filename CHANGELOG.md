@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] (sessions resoyere-0707, mega-ninja-0707, hidden-helm-0707, sacred-dragon-0707, zuruhase-0707, olive-chroma-0708)
+## [0.106.0] - 2026-07-08 (sessions resoyere-0707, mega-ninja-0707, hidden-helm-0707, sacred-dragon-0707, zuruhase-0707, olive-chroma-0708, warded-hammer-0708)
 
 ### Added
 - **Churn folded into hotspot scoring (BACK-483)** — `reveal hotspots`/`stats://?hotspots=true` were complexity/quality-only, so a complex file under constant churn (where regressions are actually born) ranked the same as an equally complex file nobody touches. New `git/files.py:get_churn_counts()` tallies commit touches per file with a single repo-wide walk diffing each commit against its first parent (O(total historical file-touches), not O(files × commits) — the perf trap BACK-489/491 already paid down for `architecture`). `identify_hotspots()` gains a transparent additive churn term (`commit_count > 20` → `+= (commit_count-20)×0.2`, same shape as the existing quality/complexity/nesting terms) plus raw `commit_count` in `details`. New `churn`/`since`/`no_merges` query params; fails open (`None`/omitted) for non-git directories or missing `pygit2`, so complexity-only behavior is unchanged when git isn't available. Cross-checked against `git log --oneline -- <file>` on this repo's own `git/` directory (exact match); perf-verified on samples/java/elasticsearch (+30ms constant, not a multiplier).
