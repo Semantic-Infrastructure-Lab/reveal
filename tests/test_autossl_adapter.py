@@ -1182,15 +1182,6 @@ class TestAutosslGetHelp:
         assert 'syntax' in h
         assert 'examples' in h
 
-    def test_get_help_has_query_params_section(self):
-        """query_params key must exist and document all three params."""
-        h = AutosslAdapter.get_help()
-        assert 'query_params' in h, "help data must have query_params section"
-        qp = h['query_params']
-        assert 'only-failures' in qp
-        assert 'summary' in qp
-        assert 'user' in qp
-
     def test_get_help_examples_include_uri_param_forms(self):
         """Examples must show ?only-failures, ?summary, ?user= URI forms."""
         h = AutosslAdapter.get_help()

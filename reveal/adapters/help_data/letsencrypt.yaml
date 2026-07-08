@@ -39,10 +39,6 @@ examples:
   - uri: 'letsencrypt:// --check-orphans --format json'
     description: 'Orphan check with JSON output'
 
-query_params:
-  check-orphans: 'Cross-reference certs against nginx ssl_certificate directives — URI form: letsencrypt://?check-orphans (same as --check-orphans)'
-  check-duplicates: 'Find certs with identical SAN sets — URI form: letsencrypt://?check-duplicates (same as --check-duplicates)'
-
 flags:
   --check-orphans: 'Cross-reference certs against nginx ssl_certificate directives. URI form: ?check-orphans'
   --check-duplicates: 'Find certs with identical SAN sets. URI form: ?check-duplicates'

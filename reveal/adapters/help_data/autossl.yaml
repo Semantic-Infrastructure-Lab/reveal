@@ -47,11 +47,6 @@ examples:
   - uri: "autossl://latest --format=json | jq '[.users[].domains[] | select(.tls_status==\"defective\")]'"
     description: 'Extract all defective domains as JSON'
 
-query_params:
-  only-failures: 'Show only domains with defective/incomplete TLS status — URI form: autossl://latest?only-failures (same as --only-failures)'
-  summary: 'Aggregated counts only, no per-domain rows — URI form: autossl://latest?summary (same as --summary)'
-  user: 'Filter to a single cPanel user — URI form: autossl://latest?user=NAME (same as --user=NAME)'
-
 flags:
   --only-failures: 'Hide ok domains, show only defective/incomplete. URI form: ?only-failures'
   --summary: 'Aggregated counts only (fastest overview). URI form: ?summary'

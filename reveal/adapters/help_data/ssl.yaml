@@ -84,10 +84,6 @@ elements:
   dates: 'Certificate validity dates'
   full: 'Full certificate details (JSON)'
 
-query_params:
-  expiring-within: 'Filter to certs expiring within N days — URI form: ssl://host?expiring-within=30 (same as --expiring-within)'
-  summary: 'Show aggregated counts instead of per-domain details — URI form: ssl://nginx://...?summary (same as --summary)'
-
 flags:
   --check: 'Run health checks (expiry, chain validity, hostname match)'
   --advanced: 'Run advanced checks with --check (TLS version + cipher suite, key strength, issuer type, self-signed) [Universal flag]'

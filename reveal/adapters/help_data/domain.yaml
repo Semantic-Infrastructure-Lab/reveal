@@ -123,8 +123,6 @@ output_formats:
   - text
   - json
 
-query_params: {}
-
 see_also:
   - 'reveal help://ssl - SSL certificate inspection'
   - 'reveal ssl://example.com --check - SSL certificate health'

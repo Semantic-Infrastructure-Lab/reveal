@@ -522,14 +522,6 @@ class TestLetsEncryptGetHelp:
         assert 'syntax' in h
         assert 'examples' in h
 
-    def test_get_help_has_query_params_section(self):
-        """query_params key must exist and document both params."""
-        h = LetsEncryptAdapter.get_help()
-        assert 'query_params' in h, "help data must have query_params section"
-        qp = h['query_params']
-        assert 'check-orphans' in qp
-        assert 'check-duplicates' in qp
-
     def test_get_help_examples_include_uri_param_forms(self):
         """Examples must show ?check-orphans and ?check-duplicates URI forms."""
         h = LetsEncryptAdapter.get_help()
