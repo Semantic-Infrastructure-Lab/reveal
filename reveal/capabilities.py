@@ -331,10 +331,6 @@ _TIER1: Dict[str, LanguageCapability] = {
             "import→file resolution assumes filename==classname; an import of "
             "a class living in a differently-named .kt file honestly skips "
             "rather than fabricate an edge.",
-            "BACK-458 item (1) (open): --keys subscript extraction (t[\"k\"]) "
-            "is not yet supported — Kotlin's indexing_suffix has a sibling "
-            "base (writes via directly_assignable_expression, reads via "
-            "indexing_expression), needing bespoke base/key extraction.",
         ],
     ),
     "SwiftAnalyzer": _tier1(
@@ -357,9 +353,6 @@ _TIER1: Dict[str, LanguageCapability] = {
             "import→file edges are sparse: Swift modules rarely map 1:1 to a "
             "single in-tree file, so most imports honestly skip rather than "
             "fabricate an edge.",
-            "BACK-458 item (1) (open): --keys subscript extraction is not yet "
-            "supported — Swift subscripts parse as call_expression (colliding "
-            "with normal calls), so they can't be blanket-added.",
         ],
     ),
     "RubyAnalyzer": _tier1(

@@ -17,6 +17,8 @@ from reveal.analyzers.rust import RustAnalyzer
 from reveal.analyzers.go import GoAnalyzer
 from reveal.analyzers.csharp import CSharpAnalyzer
 from reveal.analyzers.lua import LuaAnalyzer
+from reveal.analyzers.kotlin import KotlinAnalyzer
+from reveal.analyzers.swift import SwiftAnalyzer
 from reveal.adapters.ast.nav_keys import collect_keys, render_keys
 from reveal.adapters.ast.nav_cross_varflow import _find_function_node
 
@@ -375,6 +377,84 @@ end
         by_key_kind = [(e['key'], e['kind'], e['access']) for e in events]
         self.assertIn(('host', 'WRITE', 'subscript'), by_key_kind)
         self.assertIn(('port', 'READ', 'subscript'), by_key_kind)
+
+
+class TestKotlinSubscript(unittest.TestCase):
+    """BACK-458 item 1 cont'd: Kotlin's subscript read (`indexing_expression`)
+    and write (`directly_assignable_expression` wrapping the same
+    [base, indexing_suffix] pair) were both entirely absent from --keys —
+    the write's wrapper node is shared with bare-identifier and member-access
+    targets, so it doesn't fit a plain _SUBSCRIPT_NODES entry."""
+
+    def test_subscript_write_and_read(self):
+        path = _write("""\
+fun handle(m: HashMap<String, Int>) {
+    m["host"] = 1
+    val p = m["port"]
+    println(p)
+}
+""", '.kt')
+        try:
+            events = _keys(KotlinAnalyzer, path, 'handle', 'm')
+        finally:
+            os.unlink(path)
+        by_key_kind = [(e['key'], e['kind'], e['access']) for e in events]
+        self.assertIn(('host', 'WRITE', 'subscript'), by_key_kind)
+        self.assertIn(('port', 'READ', 'subscript'), by_key_kind)
+
+    def test_bare_identifier_write_not_misclassified_as_subscript(self):
+        """directly_assignable_expression also wraps plain reassignment —
+        must not produce a bogus '?' key event."""
+        path = _write("""\
+fun handle(total: Int): Int {
+    var t = total
+    t = 5
+    return t
+}
+""", '.kt')
+        try:
+            events = _keys(KotlinAnalyzer, path, 'handle', 't')
+        finally:
+            os.unlink(path)
+        self.assertEqual([e for e in events if e['access'] == 'subscript'], [])
+
+
+class TestSwiftSubscript(unittest.TestCase):
+    """BACK-458 item 1 cont'd: Swift's subscript (`m["port"]`) parses to the
+    same `call_expression` node kind as a real function call — the
+    discriminator is the value_arguments node's opening delimiter ('[' vs
+    '('), not the node kind itself."""
+
+    def test_subscript_write_and_read(self):
+        path = _write("""\
+func handle(_ m: inout [String: Int]) {
+    m["host"] = 1
+    let p = m["port"]
+    print(p)
+}
+""", '.swift')
+        try:
+            events = _keys(SwiftAnalyzer, path, 'handle', 'm')
+        finally:
+            os.unlink(path)
+        by_key_kind = [(e['key'], e['kind'], e['access']) for e in events]
+        self.assertIn(('host', 'WRITE', 'subscript'), by_key_kind)
+        self.assertIn(('port', 'READ', 'subscript'), by_key_kind)
+
+    def test_real_call_not_misclassified_as_subscript(self):
+        """A real function call sharing call_expression's node kind (parens,
+        not brackets) must not be mistaken for a subscript on the same var
+        name, if one happened to collide."""
+        path = _write("""\
+func handle(_ m: [String: Int]) {
+    print(m)
+}
+""", '.swift')
+        try:
+            events = _keys(SwiftAnalyzer, path, 'handle', 'm')
+        finally:
+            os.unlink(path)
+        self.assertEqual([e for e in events if e['access'] == 'subscript'], [])
 
 
 if __name__ == '__main__':

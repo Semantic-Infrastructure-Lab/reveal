@@ -51,10 +51,20 @@ _ASSIGNMENT_NODES: frozenset = frozenset({
 _SUBSCRIPT_NODES: frozenset = frozenset({
     'subscript', 'subscript_expression', 'index_expression', 'element_access_expression',
     # Lua's `t["k"]` (BACK-458 item 1). Python-shaped: base is child 0, the
-    # key literal the first named child after '['. Kotlin/Swift/Dart subscript
-    # shapes are NOT this shape (sibling base / call_expression collision /
-    # nested selectors) and need bespoke base extraction, not a set entry.
+    # key literal the first named child after '['. Swift/Dart subscript
+    # shapes are NOT this shape (call_expression collision / nested selectors)
+    # and need bespoke base extraction, not a set entry.
     'bracket_index_expression',
+    # Kotlin's *read* shape (`m["port"]`, BACK-458 item 1 cont'd) — base is
+    # child 0, key is wrapped one level deeper in a sibling `indexing_suffix`
+    # (unwrapped in nav_keys._subscript_parts). The *write* shape
+    # (`m["host"] = 1`) wraps the same [base, indexing_suffix] pair inside
+    # `directly_assignable_expression` instead of exposing 'indexing_expression'
+    # directly — that overloaded wrapper also carries bare-identifier and
+    # member-access targets, so it can't be added here without misclassifying
+    # those; see nav_keys.walk()'s dedicated directly_assignable_expression
+    # handling instead.
+    'indexing_expression',
 })
 
 _SESSION_BASES = ('_session', '_cookie', 'session')

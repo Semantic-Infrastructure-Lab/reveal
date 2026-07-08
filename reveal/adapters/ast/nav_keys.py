@@ -79,17 +79,31 @@ def _clean_literal(text: str) -> str:
     return text
 
 
+def _unwrap_indexing_suffix(key: Optional[Any]) -> Optional[Any]:
+    """Kotlin's key sits one level deeper, inside a sibling `indexing_suffix`
+    (`m["port"]` -> indexing_expression[simple_identifier, indexing_suffix['[', string_literal, ']']]) —
+    drill in to the suffix's one named child (BACK-458 item 1 cont'd)."""
+    if key is None or key.kind() != 'indexing_suffix':
+        return key
+    for child in _children(key):
+        if child.is_named():
+            return child
+    return None
+
+
 def _subscript_parts(node: Any) -> tuple:
     """Return (base_node, key_node) for a subscript/index node.
 
     Field-based grammars (Python 'value'/'subscript', JS/TS 'object'/'index')
     expose both directly. PHP's subscript_expression exposes no fields at
     all — base is the first child, key is the first named child after '['.
+    Kotlin's 'indexing_expression' is likewise fieldless/positional but its
+    "key" is a wrapper node, not the literal itself — unwrapped below.
     """
     base = node.child_by_field_name('value') or node.child_by_field_name('object')
     key = node.child_by_field_name('subscript') or node.child_by_field_name('index')
     if base is not None:
-        return base, key
+        return base, _unwrap_indexing_suffix(key)
     children = _children(node)
     if not children:
         return None, None
@@ -99,6 +113,46 @@ def _subscript_parts(node: Any) -> tuple:
         if child.is_named():
             key = child
             break
+    return base, _unwrap_indexing_suffix(key)
+
+
+def _directly_assignable_subscript_parts(node: Any) -> tuple:
+    """Return (base, key) if a Kotlin `directly_assignable_expression` wraps
+    a subscript write (`m["host"] = 1`), else (None, None).
+
+    This wrapper is heavily overloaded — it also carries bare-identifier
+    (`total = ...`) and member-access (`this.total = ...`) targets — so it
+    can't join _SUBSCRIPT_NODES outright (would misclassify those as
+    subscripts with a bogus '?' key). Only the [base, indexing_suffix]
+    positional shape counts (BACK-458 item 1 cont'd).
+    """
+    children = _children(node)
+    if len(children) != 2 or children[1].kind() != 'indexing_suffix':
+        return None, None
+    return children[0], _unwrap_indexing_suffix(children[1])
+
+
+def _swift_subscript_parts(node: Any) -> tuple:
+    """Return (base, key) if a Swift `call_expression` is actually a
+    dict/array subscript (`m["port"]`), else (None, None).
+
+    Swift's subscript parses to the same `call_expression` node kind as a
+    real function call — `m["port"]` and `m(x)` are indistinguishable by
+    node kind alone. The discriminator is the `value_arguments` node's own
+    opening delimiter: '[' for a subscript, '(' for a real call (BACK-458
+    item 1 cont'd).
+    """
+    children = _children(node)
+    if len(children) != 2 or children[1].kind() != 'call_suffix':
+        return None, None
+    suffix_children = _children(children[1])
+    if len(suffix_children) != 1 or suffix_children[0].kind() != 'value_arguments':
+        return None, None
+    value_args = _children(suffix_children[0])
+    if not value_args or value_args[0].kind() != '[':
+        return None, None
+    base = children[0]
+    key = next((c for c in value_args if c.is_named()), None)
     return base, key
 
 
@@ -189,6 +243,17 @@ class _KeysWalker:
             return
         if ntype in _MEMBER_ACCESS_NODES and self._walk_member_access(node, start, context):
             return
+        # Kotlin write target (`m["host"] = 1`) — indistinguishable from a
+        # bare-identifier/member-access write by node kind alone, so it can't
+        # join _SUBSCRIPT_NODES; checked structurally instead (BACK-458).
+        if ntype == 'directly_assignable_expression' and self._walk_directly_assignable_subscript(node, start, context):
+            return
+        # Swift subscript (`m["port"]`) parses as the same node kind as a
+        # real call and was already routed through _walk_call above, which
+        # returns False for it (no 'function' field in Swift's grammar) —
+        # checked structurally here instead (BACK-458).
+        if ntype == 'call_expression' and self._walk_swift_subscript(node, start, context):
+            return
 
         for child in _children(node):
             self.walk(child, context)
@@ -267,6 +332,22 @@ class _KeysWalker:
 
     def _walk_subscript(self, node: Any, start: int, context: str) -> bool:
         base, key_node = _subscript_parts(node)
+        if base is None or not _base_matches(base, self.var_name, self.get_text):
+            return False
+        key = _clean_literal(self.get_text(key_node)) if key_node is not None else '?'
+        self.results.append({'key': key, 'kind': context, 'line': start, 'access': 'subscript'})
+        return True
+
+    def _walk_directly_assignable_subscript(self, node: Any, start: int, context: str) -> bool:
+        base, key_node = _directly_assignable_subscript_parts(node)
+        if base is None or not _base_matches(base, self.var_name, self.get_text):
+            return False
+        key = _clean_literal(self.get_text(key_node)) if key_node is not None else '?'
+        self.results.append({'key': key, 'kind': context, 'line': start, 'access': 'subscript'})
+        return True
+
+    def _walk_swift_subscript(self, node: Any, start: int, context: str) -> bool:
+        base, key_node = _swift_subscript_parts(node)
         if base is None or not _base_matches(base, self.var_name, self.get_text):
             return False
         key = _clean_literal(self.get_text(key_node)) if key_node is not None else '?'
