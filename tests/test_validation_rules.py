@@ -33,6 +33,7 @@ from reveal.rules.validation.V021 import V021
 from reveal.rules.validation.V022 import V022
 from reveal.rules.validation.V023 import V023
 from reveal.rules.validation.V027 import V027
+from reveal.rules.validation.V028 import V028
 from reveal.rules.validation.utils import find_reveal_root
 
 
@@ -2609,6 +2610,89 @@ class TestV027AdapterGuideSchemaCoherence(unittest.TestCase):
         self.assertFalse(
             any('zzznoguideadapter' in d.message for d in detections),
             "V027 should skip guideless adapters, leaving them to V024",
+        )
+
+
+class TestV028HelpDataNoQueryParams(unittest.TestCase):
+    """Test V028: help_data yaml must not carry a (dead) query-param block."""
+
+    def setUp(self):
+        self.rule = V028()
+
+    def test_metadata(self):
+        self.assertEqual(self.rule.code, "V028")
+        self.assertEqual(self.rule.severity.name, "MEDIUM")
+        self.assertTrue(self.rule.internal)
+
+    def test_non_reveal_uri_ignored(self):
+        detections = self.rule.check(
+            file_path="/some/file.py", structure=None, content="x"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        detections = self.rule.check(file_path="reveal://", structure=None, content="")
+        self.assertIsInstance(detections, list)
+
+    def test_live_corpus_zero_detections(self):
+        """Integration: the real help_data/*.yaml no longer carry a query-param
+        block (BACK-502/503), so V028 fires zero times."""
+        detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(
+            len(detections), 0,
+            f"help_data yaml reintroduced a query-param block: "
+            f"{[d.message for d in detections]}",
+        )
+
+    def test_fires_on_reintroduced_query_params(self):
+        """Positive-firing guard: a help_data yaml that reintroduces a
+        `query_params:` (or `query_parameters:`) block must be flagged. This
+        proves check() reaches its scan loop against a real dir rather than
+        silently returning [] (the failure mode V027 shipped with)."""
+        for key in ('query_params', 'query_parameters'):
+            with tempfile.TemporaryDirectory() as tmp:
+                # find_reveal_root() returns the package dir; help_data lives at
+                # adapters/help_data directly under it.
+                reveal_root = Path(tmp) / 'reveal'
+                hd = reveal_root / 'adapters' / 'help_data'
+                hd.mkdir(parents=True)
+                (hd / 'widget.yaml').write_text(
+                    "name: widget\n"
+                    "description: a test adapter\n"
+                    f"{key}:\n"
+                    "  foo: 'a param that should not live here'\n"
+                )
+                with patch('reveal.rules.validation.V028.find_reveal_root',
+                           return_value=reveal_root):
+                    detections = self.rule.check('reveal://', None, '')
+                messages = [d.message for d in detections]
+                self.assertTrue(
+                    any('widget.yaml' in m and key in m for m in messages),
+                    f"V028 did not fire on a reintroduced `{key}` block: {messages}",
+                )
+
+    def test_clean_yaml_not_flagged(self):
+        """A help_data yaml with no query-param block produces no detection."""
+        with tempfile.TemporaryDirectory() as tmp:
+            reveal_root = Path(tmp) / 'reveal'
+            hd = reveal_root / 'adapters' / 'help_data'
+            hd.mkdir(parents=True)
+            (hd / 'widget.yaml').write_text(
+                "name: widget\ndescription: clean\nflags:\n  --check: 'run checks'\n"
+            )
+            with patch('reveal.rules.validation.V028.find_reveal_root',
+                       return_value=reveal_root):
+                detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(detections, [])
+
+    def test_not_silent_noop_against_real_tree(self):
+        """Guard against a V027-style silent no-op: prove check() reaches real
+        help_data yaml files instead of early-returning on an unresolved path."""
+        root = find_reveal_root()
+        self.assertIsNotNone(root)
+        yamls = list((root / 'adapters' / 'help_data').glob('*.yaml'))
+        self.assertTrue(
+            yamls, "V028 finds no help_data yaml files -> check() is a no-op"
         )
 
 
