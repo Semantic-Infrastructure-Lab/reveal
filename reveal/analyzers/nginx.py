@@ -2,6 +2,7 @@
 
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
@@ -42,15 +43,18 @@ def _check_nobody_access(path: str) -> Dict[str, Any]:
             mode = os.stat(check).st_mode
             can_traverse = bool(mode & 0o001)  # other-execute
             # Check extended ACL as fallback (Linux only)
-            if not can_traverse and not _acl_grants_nobody(str(check), 'x'):
-                return {
-                    'status': 'denied',
-                    'message': (
-                        f'nobody cannot traverse {check} '
-                        f'(mode {oct(mode)[-3:]}, no ACL entry)'
-                    ),
-                    'failing_path': str(check),
-                }
+            if not can_traverse:
+                acl_grants = _acl_grants_nobody(str(check), 'x')
+                if not acl_grants:
+                    acl_note = 'getfacl not installed, ACL check skipped' if acl_grants is None else 'no ACL entry'
+                    return {
+                        'status': 'denied',
+                        'message': (
+                            f'nobody cannot traverse {check} '
+                            f'(mode {oct(mode)[-3:]}, {acl_note})'
+                        ),
+                        'failing_path': str(check),
+                    }
 
     # Final target: need read (+ execute for directories)
     mode = os.stat(p).st_mode
@@ -58,25 +62,31 @@ def _check_nobody_access(path: str) -> Dict[str, Any]:
         can_read = bool(mode & 0o005)  # other r-x
     else:
         can_read = bool(mode & 0o004)  # other r--
-    if not can_read and not _acl_grants_nobody(str(p), 'r'):
-        return {
-            'status': 'denied',
-            'message': (
-                f'nobody cannot read {p} '
-                f'(mode {oct(mode)[-3:]}, no ACL entry)'
-            ),
-            'failing_path': str(p),
-        }
+    if not can_read:
+        acl_grants = _acl_grants_nobody(str(p), 'r')
+        if not acl_grants:
+            acl_note = 'getfacl not installed, ACL check skipped' if acl_grants is None else 'no ACL entry'
+            return {
+                'status': 'denied',
+                'message': (
+                    f'nobody cannot read {p} '
+                    f'(mode {oct(mode)[-3:]}, {acl_note})'
+                ),
+                'failing_path': str(p),
+            }
 
     return {'status': 'ok', 'message': 'nobody has read access', 'failing_path': None}
 
 
-def _acl_grants_nobody(path: str, perm: str) -> bool:
+def _acl_grants_nobody(path: str, perm: str) -> Optional[bool]:
     """Return True if getfacl shows nobody or other has the given permission.
 
     perm: 'r', 'w', or 'x'
-    Returns False if getfacl is unavailable or raises any error.
+    Returns None if getfacl is not installed (ACL check skipped, not "checked, clean").
+    Returns False if getfacl ran but found no matching grant, or raised any error.
     """
+    if shutil.which('getfacl') is None:
+        return None
     try:
         result = subprocess.run(
             ['getfacl', '--omit-header', path],

@@ -1626,6 +1626,51 @@ class TestCheckNobodyAccess:
             d.chmod(0o755)
             d.rmdir()
 
+    def test_acl_grants_nobody_returns_none_when_getfacl_missing(self, monkeypatch):
+        """_acl_grants_nobody returns None (not False) when getfacl isn't installed."""
+        from reveal.analyzers.nginx import _acl_grants_nobody
+        monkeypatch.setattr('reveal.analyzers.nginx.shutil.which', lambda cmd: None)
+        assert _acl_grants_nobody('/tmp', 'r') is None
+
+    def test_denied_message_distinguishes_skipped_from_checked_clean(self, monkeypatch):
+        """Denied message says 'ACL check skipped' when getfacl is missing, not 'no ACL entry'."""
+        from reveal.analyzers.nginx import _check_nobody_access
+        import uuid
+        monkeypatch.setattr('reveal.analyzers.nginx.shutil.which', lambda cmd: None)
+        d = Path(tempfile.gettempdir()) / f"reveal_acl_skip_{uuid.uuid4().hex}"
+        d.mkdir(mode=0o750)
+        try:
+            result = _check_nobody_access(str(d))
+            assert result['status'] == 'denied'
+            assert 'ACL check skipped' in result['message']
+            assert 'no ACL entry' not in result['message']
+        finally:
+            d.chmod(0o755)
+            d.rmdir()
+
+    def test_denied_message_says_no_acl_entry_when_getfacl_present_and_clean(self, monkeypatch):
+        """Denied message says 'no ACL entry' when getfacl ran and found nothing (checked, clean)."""
+        from reveal.analyzers.nginx import _check_nobody_access
+        import uuid
+        monkeypatch.setattr('reveal.analyzers.nginx.shutil.which', lambda cmd: '/usr/bin/getfacl')
+
+        class _FakeResult:
+            returncode = 0
+            stdout = 'other::---\n'
+
+        monkeypatch.setattr(
+            'reveal.analyzers.nginx.subprocess.run', lambda *a, **k: _FakeResult()
+        )
+        d = Path(tempfile.gettempdir()) / f"reveal_acl_clean_{uuid.uuid4().hex}"
+        d.mkdir(mode=0o750)
+        try:
+            result = _check_nobody_access(str(d))
+            assert result['status'] == 'denied'
+            assert 'no ACL entry' in result['message']
+        finally:
+            d.chmod(0o755)
+            d.rmdir()
+
 # ---------------------------------------------------------------------------
 # N3: get_structure(server_name=...) — server block filter
 # ---------------------------------------------------------------------------
