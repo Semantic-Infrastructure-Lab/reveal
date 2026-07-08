@@ -722,18 +722,26 @@ class HTMLAnalyzer(FileAnalyzer):
             'content': content,
         }
 
-    def extract_element(self, element_type: str, name: str = "") -> Optional[Dict[str, Any]]:
-        """Extract specific element by CSS selector, ID, or tag.
+    def extract_by_selector(self, selector: str) -> Optional[Dict[str, Any]]:
+        """Extract a single element by CSS selector, id, or tag name.
+
+        Selector-based analyzers match one target *string* rather than the
+        base `(element_type, name)` pair. The display layer capability-checks
+        for this method (``getattr(analyzer, 'extract_by_selector', None)``)
+        and calls it directly, so it never has to probe ``extract_element``
+        with a swapped-argument shape — the mis-wiring that used to make
+        markdown's ``--section`` dump the whole file (see
+        `display/element.py:_try_grep_extraction`).
 
         Args:
-            element_type: Element type or CSS selector (for backwards compat with 'selector' usage)
-            name: Element name (optional, can be empty for CSS selectors)
+            selector: A CSS selector (``.cls``/``#id``/``a > b``), a bare id,
+                or a tag name.
 
         Returns:
-            Dict with element info or None if not found
+            Dict with element info or None if nothing matched.
         """
-        # If name is provided, combine with element_type, otherwise use element_type as selector
-        selector = f"{element_type} {name}".strip() if name else element_type
+        if not selector:
+            return None
 
         element = None
 
@@ -772,6 +780,18 @@ class HTMLAnalyzer(FileAnalyzer):
             'text': element.get_text(strip=True) if hasattr(element, 'get_text') else '',
             'line': line_start,
         }
+
+    def extract_element(self, element_type: str, name: str = "") -> Optional[Dict[str, Any]]:
+        """Backwards-compatible ``(element_type, name)`` shim over selectors.
+
+        Composes the pair into a single selector and delegates to
+        `extract_by_selector`. Retained so the base-class contract (and every
+        `(element_type, name)` caller — `api.py`, `_try_grep_extraction`'s
+        type loop) keeps working; new callers should prefer
+        `extract_by_selector` directly.
+        """
+        selector = f"{element_type} {name}".strip() if name else element_type
+        return self.extract_by_selector(selector)
 
     def _format_metadata_as_items(self) -> List[Dict[str, Any]]:
         """Format metadata as list of items for reveal rendering.

@@ -1494,6 +1494,21 @@ class TestMarkdownSectionSubstringMatch(unittest.TestCase):
         result = self.analyzer.extract_element('section', 'Nonexistent Heading')
         self.assertIsNone(result)
 
+    def test_empty_name_returns_none_not_match_all(self):
+        """An empty pattern must match nothing, never every heading.
+
+        Regression guard: `'' in title` is always True, so an empty name once
+        substring-matched every heading and let a mis-wired caller dump the
+        whole file banner-ed as 'N sections matched "" — showing all'.
+        """
+        self.assertIsNone(self.analyzer.extract_element('section', ''))
+
+    def test_whitespace_only_name_returns_none(self):
+        self.assertIsNone(self.analyzer.extract_element('section', '   '))
+
+    def test_pipe_only_name_returns_none(self):
+        self.assertIsNone(self.analyzer.extract_element('section', ' | '))
+
 
 class TestMarkdownSectionOrPattern(unittest.TestCase):
     """OR-alternation (``|``) in section extraction."""

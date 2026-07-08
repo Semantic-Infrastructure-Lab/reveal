@@ -1159,6 +1159,14 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         normalised = name.replace('\\|', '|')
         patterns = [p.strip() for p in normalised.split('|') if p.strip()]
 
+        # An empty / whitespace-only / pipe-only request must match nothing.
+        # `_find_heading_match('')` would substring-match every heading
+        # (`'' in title` is always True), so a mis-wired caller passing an
+        # empty name could dump the whole file as "all sections matched" —
+        # match-all is never the intent for a named-section request.
+        if not patterns:
+            return None
+
         if len(patterns) > 1:
             # Multi-pattern OR path
             spans = self._collect_section_spans(patterns)
@@ -1176,7 +1184,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             return result
 
         # Single-pattern path (original behaviour preserved)
-        pattern = patterns[0] if patterns else name
+        pattern = patterns[0]
         start_line, heading_level, substring_matches = self._find_heading_match(pattern)
 
         if not start_line or heading_level is None:

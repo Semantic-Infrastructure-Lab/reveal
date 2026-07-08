@@ -557,6 +557,48 @@ class TestHTMLAnalyzer(unittest.TestCase):
 
         self.assertIsNone(element)
 
+    def test_extract_by_selector_direct(self):
+        """extract_by_selector is the honest selector API the display layer
+        capability-checks for (instead of probing extract_element with a
+        swapped-argument shape). It must return the full display contract."""
+        html = (
+            "<html>\n<body>\n"
+            '  <div id="main" class="content"><p>Hello</p></div>\n'
+            "</body>\n</html>\n"
+        )
+        analyzer = HTMLAnalyzer(self.create_temp_html(html))
+        el = analyzer.extract_by_selector('#main')
+        self.assertIsNotNone(el)
+        for field in ('name', 'line_start', 'line_end', 'source', 'tag'):
+            self.assertIn(field, el)
+        self.assertEqual(el['name'], '#main')
+        self.assertEqual(el['tag'], 'div')
+        self.assertIn('Hello', el['source'])
+
+    def test_extract_by_selector_empty_returns_none(self):
+        """An empty selector must match nothing."""
+        analyzer = HTMLAnalyzer(self.create_temp_html('<html><body><p>x</p></body></html>'))
+        self.assertIsNone(analyzer.extract_by_selector(''))
+
+    def test_extract_element_shim_matches_extract_by_selector(self):
+        """The (element_type, name) shim must produce the same result as calling
+        extract_by_selector with the composed selector — proving the shim is a
+        faithful delegate, not a second code path that can drift."""
+        html = (
+            "<html>\n<body>\n"
+            '  <div id="main">A</div>\n'
+            '  <div class="side">B</div>\n'
+            "</body>\n</html>\n"
+        )
+        analyzer = HTMLAnalyzer(self.create_temp_html(html))
+        # Single-arg (bare selector) form.
+        self.assertEqual(analyzer.extract_element('#main'), analyzer.extract_by_selector('#main'))
+        # Two-arg form composes "type name" → same as the composed selector.
+        self.assertEqual(
+            analyzer.extract_element('div', '.side'),
+            analyzer.extract_by_selector('div .side'),
+        )
+
     def test_extract_element_returns_display_contract(self):
         """BACK-481: extract_element must return the line_start/line_end/source/
         name fields the display layer renders from — before, it returned only

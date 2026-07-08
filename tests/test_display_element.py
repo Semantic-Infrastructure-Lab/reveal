@@ -249,6 +249,7 @@ class TestExtractionRouting:
         """Test routing to name-based extraction."""
         analyzer = Mock()
         analyzer.tree = None
+        analyzer.extract_by_selector = None  # code analyzer: no selector method
         analyzer.extract_element.return_value = {
             'name': 'my_func',
             'line_start': 10,
@@ -274,6 +275,7 @@ class TestGrepFallback:
     def test_try_grep_extraction_finds_function(self):
         """Test _try_grep_extraction successfully finds function."""
         analyzer = Mock()
+        analyzer.extract_by_selector = None  # code analyzer: no selector method
         analyzer.extract_element.side_effect = [
             None,  # function type - not found
             {'name': 'my_class', 'line_start': 1, 'line_end': 10, 'source': 'class'},  # class type - found
@@ -287,6 +289,7 @@ class TestGrepFallback:
     def test_try_grep_extraction_returns_none_when_not_found(self):
         """Test _try_grep_extraction returns None when element not found."""
         analyzer = Mock()
+        analyzer.extract_by_selector = None  # code analyzer: no selector method
         analyzer.extract_element.return_value = None
 
         result = _try_grep_extraction(analyzer, 'nonexistent')
@@ -297,6 +300,7 @@ class TestGrepFallback:
         """Test _extract_by_name falls back to grep when TreeSitter unavailable."""
         analyzer = Mock()
         analyzer.tree = None
+        analyzer.extract_by_selector = None  # code analyzer: no selector method
         analyzer.extract_element.return_value = {
             'name': 'found_func',
             'line_start': 5,
@@ -396,6 +400,7 @@ class TestErrorHandling:
         analyzer = Mock()
         analyzer.path = '/tmp/test.py'
         analyzer.tree = None
+        analyzer.extract_by_selector = None  # code analyzer: no selector method
         analyzer.extract_element.return_value = None
 
         with pytest.raises(SystemExit) as exc_info:

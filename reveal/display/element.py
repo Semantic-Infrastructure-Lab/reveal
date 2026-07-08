@@ -236,17 +236,22 @@ def _try_grep_extraction(analyzer, element: str):
     Returns:
         Element dict or None if not found
     """
-    # Selector/tag-based analyzers (BACK-481: HTML) overload extract_element so
-    # the *first* argument is the whole target (a CSS selector, id, or tag) and
-    # the second is empty. Try that shape first — otherwise the category loop
-    # below calls extract_element('function', '#main'), which HTMLAnalyzer
-    # combines into the descendant selector "function #main" and matches
-    # nothing, so every `reveal file.html <selector>` failed with "not found".
-    # Safe for code analyzers: extract_element('#main', '') resolves the node
-    # type '#main' (none) and falls through to a no-op grep → None.
-    result = analyzer.extract_element(element, '')
-    if result:
-        return result
+    # Selector/tag-based analyzers (BACK-481: HTML) match a single target
+    # string — a CSS selector, id, or tag — rather than the base
+    # `(element_type, name)` pair. They expose `extract_by_selector()`;
+    # capability-check for it and hand the raw target straight through.
+    #
+    # This used to be a probe — `extract_element(element, '')`, target in the
+    # *type* slot, empty name — which markdown's `extract_element` answered
+    # with an empty-pattern = match-all result, shadowing the correct
+    # `extract_element('section', element)` loop below and dumping the whole
+    # file instead of the requested `--section`. Dispatching on an honest
+    # capability instead of a swapped-argument shape removes that footgun.
+    extract_by_selector = getattr(analyzer, 'extract_by_selector', None)
+    if extract_by_selector is not None:
+        result = extract_by_selector(element)
+        if result:
+            return result
 
     for element_type in ['function', 'class', 'struct', 'section', 'server', 'location', 'upstream']:
         result = analyzer.extract_element(element_type, element)
