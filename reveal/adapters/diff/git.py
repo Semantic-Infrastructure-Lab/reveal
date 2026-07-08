@@ -1,12 +1,71 @@
 """Git resolution methods for diff adapter."""
 
 import os
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Dict, Any, cast
 
 from ...registry import get_analyzer
+
+
+def _open_repo():
+    """Open the pygit2 repository containing the current working directory.
+
+    Raises:
+        ImportError: If pygit2 is not installed.
+        ValueError: If not inside a git repository.
+    """
+    try:
+        import pygit2
+    except ImportError:
+        raise ImportError(
+            "git:// support requires pygit2\n"
+            "Install with: pip install reveal-cli[git]\n"
+            "Alternative: pip install pygit2>=1.14.0"
+        )
+
+    repo_path = pygit2.discover_repository('.')
+    if not repo_path:
+        raise ValueError("Not in a git repository")
+    return pygit2.Repository(repo_path)
+
+
+def _resolve_commit(repo, git_ref: str):
+    """Resolve a git ref string (HEAD, main, HEAD~1, ...) to a pygit2.Commit."""
+    import pygit2
+
+    try:
+        obj = repo.revparse_single(git_ref)
+        while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
+            obj = obj.peel(pygit2.Commit)
+        if not isinstance(obj, pygit2.Commit):
+            raise ValueError(f"Cannot resolve ref to commit: {git_ref}")
+        return obj
+    except (KeyError, pygit2.GitError) as e:
+        raise ValueError(f"Git error: {e}") from e
+
+
+def _tree_entry_is_directory(commit, git_ref: str, path: str) -> bool:
+    """Return True if path is a directory (or the tree root) at commit."""
+    if path in ('', '.'):
+        return True
+    try:
+        entry = commit.tree[path]
+    except KeyError:
+        raise ValueError(f"Path not found in {git_ref}: {path}")
+    return entry.type_str == 'tree'
+
+
+def _read_blob_text(repo, commit, path: str) -> str:
+    """Read a file's content at a commit as decoded text."""
+    try:
+        entry = commit.tree[path]
+    except KeyError as e:
+        raise ValueError(f"File not found in git: {path}") from e
+    if entry.type_str != 'blob':
+        raise ValueError(f"Path is not a file: {path}")
+    blob = repo[entry.id]
+    return blob.data.decode('utf-8', errors='replace')
 
 
 def resolve_git_ref(git_ref: str, path: str) -> Dict[str, Any]:
@@ -20,34 +79,12 @@ def resolve_git_ref(git_ref: str, path: str) -> Dict[str, Any]:
         Structure dict from the git version
 
     Raises:
-        ValueError: If git command fails or path not found
+        ValueError: If the ref/path can't be resolved
     """
-    # Check if we're in a git repository
-    try:
-        subprocess.run(['git', 'rev-parse', '--git-dir'],
-                      check=True, capture_output=True)
-    except subprocess.CalledProcessError:
-        raise ValueError("Not in a git repository")
+    repo = _open_repo()
+    commit = _resolve_commit(repo, git_ref)
 
-    # Check if it's a directory or file in git
-    try:
-        # Try to list the path to see if it's a directory
-        result = subprocess.run(
-            ['git', 'ls-tree', '-r', git_ref, path],
-            capture_output=True, text=True, check=True
-        )
-
-        if not result.stdout.strip():
-            raise ValueError(f"Path not found in {git_ref}: {path}")
-
-        # If we got multiple lines, it's a directory
-        lines = result.stdout.strip().split('\n')
-        is_directory = len(lines) > 1 or lines[0].split()[1] == 'tree'
-
-    except subprocess.CalledProcessError as e:
-        raise ValueError(f"Git error: {e.stderr}")
-
-    if is_directory:
+    if _tree_entry_is_directory(commit, git_ref, path):
         return resolve_git_directory(git_ref, path)
     else:
         return resolve_git_file(git_ref, path)
@@ -141,16 +178,9 @@ def resolve_git_file(git_ref: str, path: str) -> Dict[str, Any]:
     Returns:
         Structure dict
     """
-
-    # Get file content from git
-    try:
-        result = subprocess.run(
-            ['git', 'show', f'{git_ref}:{path}'],
-            capture_output=True, text=True, check=True
-        )
-        content = result.stdout
-    except subprocess.CalledProcessError as e:
-        raise ValueError(f"Failed to get file from git: {e.stderr}")
+    repo = _open_repo()
+    commit = _resolve_commit(repo, git_ref)
+    content = _read_blob_text(repo, commit, path)
 
     # Write to temp file for analysis
     with tempfile.NamedTemporaryFile(mode='w', suffix=Path(path).suffix, delete=False) as f:
@@ -172,13 +202,12 @@ def _fetch_and_analyze_git_file(git_ref: str, file_path: str) -> Dict[str, Any]:
 
     Returns the structure dict (functions/classes/imports), or raises on failure.
     """
+    repo = _open_repo()
+    commit = _resolve_commit(repo, git_ref)
+    content = _read_blob_text(repo, commit, file_path)
 
-    content_result = subprocess.run(
-        ['git', 'show', f'{git_ref}:{file_path}'],
-        capture_output=True, text=True, check=True
-    )
     with tempfile.NamedTemporaryFile(mode='w', suffix=Path(file_path).suffix, delete=False) as f:
-        f.write(content_result.stdout)
+        f.write(content)
         temp_path = f.name
 
     try:
@@ -192,22 +221,38 @@ def _fetch_and_analyze_git_file(git_ref: str, file_path: str) -> Dict[str, Any]:
 
 
 def _ls_tree_files(git_ref: str, dir_path: str) -> list:
-    """Run git ls-tree and return list of blob file paths."""
-    try:
-        result = subprocess.run(
-            ['git', 'ls-tree', '-r', git_ref, dir_path],
-            capture_output=True, text=True, check=True
-        )
-        if not result.stdout.strip():
-            raise ValueError(f"Directory not found in {git_ref}: {dir_path}")
-    except subprocess.CalledProcessError as e:
-        raise ValueError(f"Git error: {e.stderr}")
+    """Recursively list blob (file) paths under dir_path at git_ref."""
+    repo = _open_repo()
+    commit = _resolve_commit(repo, git_ref)
 
-    file_paths = []
-    for line in result.stdout.strip().split('\n'):
-        parts = line.split(maxsplit=3)
-        if len(parts) == 4 and parts[1] == 'blob':
-            file_paths.append(parts[3])
+    if dir_path in ('', '.'):
+        tree = commit.tree
+        prefix = ''
+    else:
+        try:
+            entry = commit.tree[dir_path]
+        except KeyError:
+            raise ValueError(f"Directory not found in {git_ref}: {dir_path}")
+        if entry.type_str != 'tree':
+            raise ValueError(f"Path is not a directory: {dir_path}")
+        tree = repo[entry.id]
+        prefix = dir_path.rstrip('/') + '/'
+
+    file_paths: list = []
+
+    def _walk(subtree, path_prefix: str) -> None:
+        for item in subtree:
+            full_path = path_prefix + item.name
+            if item.type_str == 'blob':
+                file_paths.append(full_path)
+            elif item.type_str == 'tree':
+                _walk(repo[item.id], full_path + '/')
+
+    _walk(tree, prefix)
+
+    if not file_paths:
+        raise ValueError(f"Directory not found in {git_ref}: {dir_path}")
+
     return file_paths
 
 
