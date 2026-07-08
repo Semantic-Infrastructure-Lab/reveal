@@ -710,6 +710,7 @@ class XlsxAdapter(ResourceAdapter):
         if '?' in uri:
             path_part, query_part = uri.split('?', 1)
             self.query_params = parse_query_params(query_part)
+            self._warn_unknown_query_params(self.query_params)  # BACK-507
         else:
             path_part = uri
             self.query_params = {}

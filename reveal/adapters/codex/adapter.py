@@ -74,6 +74,7 @@ class CodexAdapter(ResourceAdapter):
         self.resource = resource
         self.query = query
         self.query_params = parse_query_params(query or '')
+        self._warn_unknown_query_params(self.query_params)  # BACK-507
 
     # ------------------------------------------------------------------
     # Helpers

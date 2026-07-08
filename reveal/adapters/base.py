@@ -12,7 +12,7 @@ Internal layout:
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Iterable, Optional, List, Tuple
 
 from reveal.types import RevealMeta, RevealResult, WarningEntry
 
@@ -336,3 +336,49 @@ class ResourceAdapter(ABC):
             See reveal/adapters/ssl.py, ast.py for reference implementations
         """
         return None
+
+    def _warn_unknown_query_params(self, query_params: Dict[str, Any], *,
+                                   skip_filter_keys: bool = False,
+                                   extra_known_keys: Optional[Iterable[str]] = None) -> None:
+        """Warn (stderr) about query params not in this adapter's schema.
+
+        Closed-param adapters read a fixed key set via ``.get()`` and silently
+        ignore the rest, so a typo'd or unsupported param (e.g.
+        ``stats://?complexity=true``) returns a valid-looking-but-wrong result
+        with no signal (BACK-507). Call this once, after parsing, from adapters
+        that consume a *closed* param set. The recognized set is derived from
+        this adapter's own ``get_schema()['query_params']`` so it stays in sync
+        automatically; fails open (no schema / no declared params → no check),
+        and warns without raising — the result is still produced.
+
+        Do NOT call from filter-based adapters (``ast://``, ``markdown://``,
+        ``json://``) whose query accepts arbitrary field names — every valid
+        filter would be flagged. Mixed adapters (``stats://``, ``git://``) that
+        parse the same query string as both params and filters should pass
+        ``skip_filter_keys=True`` so filter expressions aren't flagged.
+
+        Args:
+            query_params: parsed ``{key: value}`` dict.
+            skip_filter_keys: skip keys carrying a filter operator (mixed adapters).
+            extra_known_keys: additional recognized keys not in the schema —
+                e.g. an adapter that also honors the cross-cutting result-control
+                params (``sort``/``limit``/``offset``) passes those here so they
+                aren't flagged. Adapters that do *not* support them omit this, so
+                an unsupported ``?limit=5`` still warns.
+        """
+        schema = type(self).get_schema()
+        if not isinstance(schema, dict):
+            return
+        declared = schema.get('query_params')
+        if not declared:
+            return
+        known = set(declared.keys())
+        if extra_known_keys:
+            known |= set(extra_known_keys)
+        from ..utils.query import warn_unknown_query_params
+        warn_unknown_query_params(
+            query_params,
+            known,
+            adapter=schema.get('adapter', ''),
+            skip_filter_keys=skip_filter_keys,
+        )

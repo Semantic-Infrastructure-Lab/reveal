@@ -889,6 +889,26 @@ reveal claude://session/infernal-earth-0118?tokens
 
 ---
 
+### ?patches
+
+**Description**: Include file patch/diff content in the files-touched view
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>/files?patches=true
+```
+
+**Example**:
+```bash
+reveal claude://session/infernal-earth-0118/files?patches=true
+```
+
+**Output**: The files-touched list, each entry augmented with its patch/diff content
+
+**Use when**: Review exactly what changed in a session's edits, not just which files
+
+---
+
 ### ?errors
 
 **Description**: Filter for messages containing errors

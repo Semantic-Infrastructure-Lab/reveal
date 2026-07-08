@@ -235,6 +235,7 @@ class SSLAdapter(ResourceAdapter):
         if '?' in uri:
             uri, query_string = uri.split('?', 1)
             self.query_params = parse_query_params(query_string)
+            self._warn_unknown_query_params(self.query_params)  # BACK-507
 
         # Check for nginx:// special syntax (ssl://nginx:///path/to/config)
         # This syntax is useful for batch audits with built-in aggregation

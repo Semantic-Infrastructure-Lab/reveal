@@ -185,6 +185,7 @@ class AutosslAdapter(ResourceAdapter):
         if '?' in connection_string:
             _, query_string = connection_string.split('?', 1)
             self.query_params = parse_query_params(query_string)
+            self._warn_unknown_query_params(self.query_params)  # BACK-507
         self._parse_connection_string(connection_string)
 
     def _parse_connection_string(self, uri: str) -> None:

@@ -544,6 +544,7 @@ class CpanelAdapter(ResourceAdapter):
             element_part, query_string = element_raw.split('?', 1)
             self.element = element_part or None
             self.query_params = parse_query_params(query_string)
+            self._warn_unknown_query_params(self.query_params)  # BACK-507
         else:
             self.element = element_raw
             self.query_params = {}

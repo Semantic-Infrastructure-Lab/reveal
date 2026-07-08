@@ -224,6 +224,7 @@ class ClaudeAdapter(ResourceAdapter):
         self.resource = resource
         self.query = query
         self.query_params = parse_query_params(query or "")
+        self._warn_unknown_query_params(self.query_params)  # BACK-507
         self.session_name = self._parse_session_name(resource) or "unknown"
         self.conversation_path = self._find_conversation()
         self.messages: Optional[List[Dict]] = None  # Lazy load

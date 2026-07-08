@@ -61,6 +61,11 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'Token usage breakdown by message role (input/output/cache)',
         'examples': ['?tokens']
     },
+    'patches': {
+        'type': 'boolean',
+        'description': 'Include file patch/diff content in the files-touched view (?patches=true)',
+        'examples': ['?patches=true']
+    },
 }
 
 _SCHEMA_CLI_FLAGS = {

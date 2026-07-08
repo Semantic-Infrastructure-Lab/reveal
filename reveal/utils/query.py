@@ -9,6 +9,7 @@ Split into focused modules (BACK-184):
 from .query_parser import (  # noqa: F401
     coerce_value,
     parse_query_params,
+    warn_unknown_query_params,
     QueryFilter,
     _try_parse_negation_filter,
     _try_parse_two_char_operators,

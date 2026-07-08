@@ -109,6 +109,10 @@ _SCHEMA: Dict[str, Any] = {
         'depth':    {'type': 'integer', 'description': 'Transitive depth 1-5 (default 1), applies to ?target'},
         'format':   {'type': 'string',  'description': 'Output format: text (default), dot (Graphviz), or json'},
         'builtins': {'type': 'boolean', 'description': 'Include Python builtins in callees output (default: false)'},
+        'root':     {'type': 'string',  'description': 'Root function name for a recursive callee-tree traversal'},
+        'modules':  {'type': 'boolean', 'description': 'Build a module-level dependency graph instead of function-level'},
+        'external': {'type': 'boolean', 'description': 'Include external (non-project) modules in the ?modules graph (default: false)'},
+        'test-framework': {'type': 'boolean', 'description': 'Include test-framework entrypoints as callers in ?rank=callers (default: false)'},
     },
     'elements': {},
     'supports_batch': False,
@@ -268,6 +272,7 @@ class CallsAdapter(ResourceAdapter):
         expanded = os.path.expanduser(path)  # raises TypeError for non-str path (contract)
         qs = query_string if isinstance(query_string, str) else ''
         self.query_params = parse_query_params(qs, coerce=True)
+        self._warn_unknown_query_params(self.query_params)  # BACK-507
         # Support 'path:target' colon shorthand (e.g. calls://src/file.py:my_fn).
         # Only apply when the portion before ':' is an existing path and the portion
         # after ':' looks like a bare name (no slashes → not a file path).

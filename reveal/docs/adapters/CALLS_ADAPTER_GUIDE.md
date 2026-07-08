@@ -158,8 +158,12 @@ callee → [(file, caller_func, line), ...]
 | `depth` | integer | 1 | Transitive levels for `?target` (1 = direct only, max 5) |
 | `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` and `?rank=callers`) |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot` |
+| `root` | string | — | Root function name for a recursive callee-tree traversal |
+| `modules` | boolean | `false` | Build a module-level dependency graph instead of function-level |
+| `external` | boolean | `false` | Include external (non-project) modules in the `?modules` graph |
+| `test-framework` | boolean | `false` | Include test-framework entrypoints as callers in `?rank=callers` |
 
-> One of `target`, `callees`, `rank`, or `uncalled` is required. If `rank=callers` is given, it takes precedence.
+> One of `target`, `callees`, `rank`, `uncalled`, `root`, or `modules` is required. If `rank=callers` is given, it takes precedence.
 
 ### `target`
 

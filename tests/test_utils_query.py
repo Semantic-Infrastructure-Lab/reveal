@@ -1,9 +1,12 @@
 """Tests for query parsing utilities."""
 
+import io
+
 import pytest
 from reveal.utils.query import (
     coerce_value,
     parse_query_params,
+    warn_unknown_query_params,
     parse_query_filters,
     QueryFilter,
     apply_filter,
@@ -12,6 +15,55 @@ from reveal.utils.query import (
     apply_result_control,
     ResultControl,
 )
+
+
+class TestWarnUnknownQueryParams:
+    """The BACK-507 helper: warn (not error) on params an adapter doesn't know."""
+
+    def test_unknown_param_warns_and_is_returned(self):
+        buf = io.StringIO()
+        unknown = warn_unknown_query_params(
+            {'complexity': True}, ['hotspots', 'churn'], adapter='stats', stream=buf)
+        assert unknown == ['complexity']
+        assert "Unknown query param 'complexity' for stats://" in buf.getvalue()
+        assert 'churn, hotspots' in buf.getvalue()  # valid list, sorted
+
+    def test_known_params_silent(self):
+        buf = io.StringIO()
+        unknown = warn_unknown_query_params(
+            {'hotspots': True, 'churn': True}, ['hotspots', 'churn'], stream=buf)
+        assert unknown == []
+        assert buf.getvalue() == ''
+
+    def test_empty_query_params_silent(self):
+        buf = io.StringIO()
+        assert warn_unknown_query_params({}, ['a', 'b'], stream=buf) == []
+        assert buf.getvalue() == ''
+
+    def test_skip_filter_keys_ignores_filter_expressions(self):
+        """Mixed adapters: a key carrying a filter operator is a filter, not a param."""
+        qp = parse_query_params('hotspots=true&complexity>10&bogus=1', coerce=True)
+        # complexity>10 lands in params as the whole-string key 'complexity>10'
+        assert 'complexity>10' in qp
+        buf = io.StringIO()
+        unknown = warn_unknown_query_params(
+            qp, ['hotspots'], skip_filter_keys=True, stream=buf)
+        assert unknown == ['bogus']  # filter expr skipped, only real unknown flagged
+        assert "'bogus'" in buf.getvalue()
+        assert 'complexity>10' not in buf.getvalue()
+
+    def test_without_skip_filter_keys_flags_filter_expressions(self):
+        qp = parse_query_params('complexity>10', coerce=True)
+        buf = io.StringIO()
+        unknown = warn_unknown_query_params(qp, ['hotspots'], stream=buf)
+        assert unknown == ['complexity>10']  # not skipped when flag is off
+
+    def test_one_warning_line_per_unknown(self):
+        buf = io.StringIO()
+        warn_unknown_query_params(
+            {'a': 1, 'b': 2, 'good': 3}, ['good'], stream=buf)
+        lines = [ln for ln in buf.getvalue().splitlines() if ln.strip()]
+        assert len(lines) == 2  # one per unknown, not for 'good'
 
 
 class TestCoerceValue:

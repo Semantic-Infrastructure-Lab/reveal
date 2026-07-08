@@ -1,8 +1,14 @@
 """Query string parsing: query params, filter expressions, QueryFilter dataclass."""
 
 import re as _re  # noqa: F401 — imported for use by query_eval, kept here for consumers
+import sys
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, TextIO, Union
+
+# Characters that only appear in a *filter* key (e.g. `complexity>10`, `msg~=x`),
+# never in a fixed param key. Used to distinguish the two in adapters that parse
+# the same query string as both params and filters (stats://, git://).
+_FILTER_OP_CHARS = frozenset('<>~!')
 
 
 def coerce_value(value: str) -> Union[bool, int, float, str]:
@@ -44,6 +50,61 @@ def parse_query_params(query: str, coerce: bool = False) -> Dict[str, Any]:
             params[part] = True
 
     return params
+
+
+def warn_unknown_query_params(
+    query_params: Dict[str, Any],
+    known_keys: Iterable[str],
+    *,
+    adapter: str = '',
+    skip_filter_keys: bool = False,
+    stream: Optional[TextIO] = None,
+) -> List[str]:
+    """Warn (to stderr) about query params an adapter doesn't recognize.
+
+    Closed-param adapters read a fixed key set via ``.get()`` and silently
+    ignore everything else, so a typo'd or unsupported param (the BACK-507
+    repro ``stats://?complexity=true``) returns a valid-looking-but-wrong
+    result with no signal. This surfaces that: it emits one stderr warning per
+    unrecognized key and returns the list, but does *not* raise — the result is
+    still produced (a warning contract, not an error contract).
+
+    Args:
+        query_params: parsed ``{key: value}`` dict from ``parse_query_params``.
+        known_keys: the adapter's recognized param names (its closed set,
+            usually ``get_schema()['query_params'].keys()``).
+        adapter: scheme name for the message (e.g. ``'stats'``).
+        skip_filter_keys: for *mixed* adapters (``stats://``, ``git://``) that
+            parse the same query string as both params and filters — skip any
+            key carrying a filter operator (``< > ~ !``), since those are filter
+            expressions (``complexity>10``), not fixed params, and are handled
+            by the filter parser.
+        stream: output stream (defaults to ``sys.stderr``; injectable for tests).
+
+    Returns:
+        The list of unrecognized keys (empty if all recognized).
+    """
+    out = stream if stream is not None else sys.stderr
+    known = set(known_keys)
+    unknown = []
+    for key in query_params:
+        if key in known:
+            continue
+        if skip_filter_keys and any(c in _FILTER_OP_CHARS for c in key):
+            continue  # a filter expression, not a fixed param — handled elsewhere
+        unknown.append(key)
+
+    if unknown:
+        prefix = f"{adapter}://" if adapter else "this resource"
+        valid = ', '.join(sorted(known)) if known else '(none)'
+        for key in unknown:
+            print(
+                f"⚠ Unknown query param '{key}' for {prefix} — ignored. "
+                f"Valid params: {valid}",
+                file=out,
+            )
+
+    return unknown
 
 
 @dataclass

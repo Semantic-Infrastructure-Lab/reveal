@@ -719,6 +719,7 @@ class ImportsAdapter(ResourceAdapter):
         # - absolute path (imports:///absolute/path → '/absolute/path')
         self._target_path: Optional[Path] = Path(path).resolve() if path else None
         self._query_params = parse_query_params(query or '')
+        self._warn_unknown_query_params(self._query_params)  # BACK-507
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Analyze imports in directory or file.

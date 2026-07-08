@@ -22,6 +22,7 @@ class PatchesAdapter(ResourceAdapter):
     def __init__(self, path: str, query_string: Optional[str] = None):
         self.path = str(Path(path).expanduser())
         self.query_params = parse_query_params(query_string or '', coerce=True)
+        self._warn_unknown_query_params(self.query_params)  # BACK-507
 
     @staticmethod
     def get_help() -> Dict[str, Any]:

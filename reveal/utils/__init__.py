@@ -27,6 +27,7 @@ from .parallel import grep_files
 from .query import (
     coerce_value,
     parse_query_params,
+    warn_unknown_query_params,
     parse_query_filters,
     QueryFilter,
     apply_filter,
@@ -56,6 +57,7 @@ __all__ = [
     'grep_files',
     'coerce_value',
     'parse_query_params',
+    'warn_unknown_query_params',
     'parse_query_filters',
     'QueryFilter',
     'apply_filter',

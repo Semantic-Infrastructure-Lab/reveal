@@ -199,6 +199,7 @@ class LetsEncryptAdapter(ResourceAdapter):
         if connection_string and '?' in connection_string:
             _, query_string = connection_string.split('?', 1)
             self.query_params = parse_query_params(query_string)
+            self._warn_unknown_query_params(self.query_params)  # BACK-507
 
     def get_structure(
         self,

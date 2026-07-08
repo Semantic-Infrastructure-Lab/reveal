@@ -184,6 +184,16 @@ class StatsAdapter(ResourceAdapter):
         # Load quality scoring config (with defaults)
         self._quality_config = get_quality_config(self.path)
 
+        # BACK-507: warn on unrecognized params (e.g. ?complexity=true, which
+        # isn't a stats param — the real ones are min_complexity/max_complexity).
+        # Mixed adapter: skip filter expressions (complexity>10) and the
+        # cross-cutting result-control params this adapter honors.
+        self._warn_unknown_query_params(
+            self.query_params,
+            skip_filter_keys=True,
+            extra_known_keys={'sort', 'limit', 'offset'},
+        )
+
     def _merge_query_params(self, hotspots, code_only, min_lines, max_lines,
                            min_complexity, max_complexity, min_functions) -> tuple:
         """Merge query params with flag params (query params take precedence)."""
