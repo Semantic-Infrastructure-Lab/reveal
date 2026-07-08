@@ -55,6 +55,7 @@ class ResultBuilder:
         source: Union[str, Path],
         data: Optional[Dict[str, Any]] = None,
         contract_version: str = '1.0',
+        source_type: Optional[str] = None,
         parse_mode: Optional[str] = None,
         confidence: Optional[float] = None,
         warnings: Optional[List[WarningEntry]] = None,
@@ -68,6 +69,12 @@ class ResultBuilder:
             source: Source path (file or directory)
             data: Adapter-specific data fields to include
             contract_version: Contract version ('1.0' or '1.1')
+            source_type: Explicit source-type override. When ``None`` (default)
+                it is auto-detected as ``'directory'`` / ``'file'`` from whether
+                ``source`` is a real directory. Adapters whose ``source`` is not
+                a plain filesystem path (e.g. git's ``path@ref`` sources, or a
+                non-filesystem value like ``'repository'`` / ``'network'``) must
+                pass this explicitly — auto-detection would mislabel them.
             parse_mode: Parse mode for v1.1 meta (tree_sitter_full, regex, etc.)
             confidence: Confidence score 0.0-1.0 for v1.1 meta
             warnings: Warning list for v1.1 meta
@@ -91,12 +98,20 @@ class ResultBuilder:
         """
         source_path = Path(source) if isinstance(source, str) else source
 
+        # Explicit override wins; otherwise auto-detect directory vs file.
+        # Auto-detection only sees real filesystem paths — adapters with
+        # synthetic sources (git's `path@ref`, 'repository', 'network', ...)
+        # must pass source_type explicitly or they'd be mislabeled 'file'.
+        resolved_source_type = source_type if source_type is not None else (
+            'directory' if source_path.is_dir() else 'file'
+        )
+
         # Build base result
         result: Dict[str, Any] = {
             'contract_version': contract_version,
             'type': result_type,
             'source': str(source),
-            'source_type': 'directory' if source_path.is_dir() else 'file',
+            'source_type': resolved_source_type,
         }
 
         # Add v1.1 meta if metadata provided

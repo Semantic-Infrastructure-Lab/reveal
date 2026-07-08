@@ -574,15 +574,30 @@ class TestEdgeCases:
         """extra_fields cannot overwrite contract fields — raises ValueError."""
         test_file = tmp_path / "test.py"
         test_file.write_text("# test")
-        # Only 'type', 'source_type', 'meta' can land in **extra_fields;
-        # 'source' and 'contract_version' are named parameters.
-        for field in ('type', 'source_type', 'meta'):
+        # Only 'type' and 'meta' can land in **extra_fields; 'source',
+        # 'source_type', and 'contract_version' are named parameters
+        # (source_type became one so adapters with synthetic sources —
+        # git's path@ref / 'repository' — can set it explicitly).
+        for field in ('type', 'meta'):
             with pytest.raises(ValueError, match="contract fields"):
                 ResultBuilder.create(
                     result_type='query',
                     source=test_file,
                     **{field: 'collider'}
                 )
+
+    def test_source_type_named_param_overrides_autodetect(self, tmp_path):
+        """The source_type named param overrides directory/file auto-detection."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("# test")
+        # A real file, but an adapter declares it a synthetic type.
+        result = ResultBuilder.create(
+            result_type='git_timeline', source=test_file, source_type='repository'
+        )
+        assert result['source_type'] == 'repository'
+        # Omitted → auto-detects from the path (file here).
+        auto = ResultBuilder.create(result_type='x', source=test_file)
+        assert auto['source_type'] == 'file'
 
     def test_create_error_extra_fields_contract_collision_raises(self, tmp_path):
         """create_error extra_fields cannot overwrite contract fields."""

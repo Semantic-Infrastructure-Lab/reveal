@@ -6,6 +6,8 @@ import sys
 from datetime import datetime
 from typing import Dict, Any, List, Optional, cast, TYPE_CHECKING
 
+from ...utils.results import ResultBuilder
+
 _LINE_RANGE_RE = re.compile(r'^[Ll](\d+)-[Ll]?(\d+)$')
 
 _BLAME_NOISE_RE = re.compile(
@@ -330,18 +332,17 @@ def get_file_timeline(
 
         buckets = bucket_commits_func(matched, bucket)
 
-        return {
-            'contract_version': '1.0',
-            'type': 'git_timeline',
-            'source': f"{subpath}@{ref}",
-            'source_type': 'file',
-            'path': subpath,
-            'ref': ref,
-            'bucket': bucket,
-            'buckets': buckets,
-            'commit_count': len(matched),
-            'distinct_author_count': len({c.get('email') or c.get('author') for c in matched}),
-        }
+        return ResultBuilder.create(
+            result_type='git_timeline',
+            source=f"{subpath}@{ref}",
+            source_type='file',
+            path=subpath,
+            ref=ref,
+            bucket=bucket,
+            buckets=buckets,
+            commit_count=len(matched),
+            distinct_author_count=len({c.get('email') or c.get('author') for c in matched}),
+        )
 
     except (KeyError, pygit2.GitError) as e:
         raise ValueError(f"Failed to get file timeline: {subpath}") from e

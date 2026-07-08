@@ -3,6 +3,8 @@
 from datetime import datetime
 from typing import Dict, Any, List, cast, TYPE_CHECKING
 
+from ...utils.results import ResultBuilder
+
 if TYPE_CHECKING:
     import pygit2
 
@@ -69,15 +71,14 @@ def get_ref_timeline(
         commit_obj = cast('pygit2.Commit', obj)
         timeline = get_commit_timeline_func(repo, commit_obj)
 
-        return {
-            'contract_version': '1.0',
-            'type': 'git_timeline',
-            'source': f"{repo.workdir or repo.path}@{ref}",
-            'source_type': 'repository',
-            'path': None,
-            'ref': ref,
+        return ResultBuilder.create(
+            result_type='git_timeline',
+            source=f"{repo.workdir or repo.path}@{ref}",
+            source_type='repository',
+            path=None,
+            ref=ref,
             **timeline,
-        }
+        )
 
     except (KeyError, pygit2.GitError) as e:
         raise ValueError(f"Invalid ref: {ref}") from e
