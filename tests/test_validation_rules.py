@@ -32,6 +32,7 @@ from reveal.rules.validation.V020 import V020
 from reveal.rules.validation.V021 import V021
 from reveal.rules.validation.V022 import V022
 from reveal.rules.validation.V023 import V023
+from reveal.rules.validation.V027 import V027
 from reveal.rules.validation.utils import find_reveal_root
 
 
@@ -2322,6 +2323,149 @@ class TestV025AdapterRelationshipCoverage(unittest.TestCase):
         self.assertEqual(len(detections), 0,
                          f"Adapters not in relationship map: "
                          f"{[d.message for d in detections]}")
+
+
+class TestV027AdapterGuideSchemaCoherence(unittest.TestCase):
+    """Test V027: adapter guide docs vs. live get_schema() query params."""
+
+    def setUp(self):
+        self.rule = V027()
+
+    def test_metadata(self):
+        self.assertEqual(self.rule.code, "V027")
+        self.assertEqual(self.rule.severity.name, "MEDIUM")
+        self.assertIn("query-param", self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        detections = self.rule.check(
+            file_path="/some/file.py", structure=None, content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        detections = self.rule.check(file_path="reveal://", structure=None, content="")
+        self.assertIsInstance(detections, list)
+
+    def test_live_registry_zero_detections(self):
+        """Integration: today's real adapter guides match their live schemas — V027 fires zero times."""
+        detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(
+            len(detections), 0,
+            f"Adapter guide / schema drift found: {[d.message for d in detections]}"
+        )
+
+    def test_guess_guide_file_matches_adapter_suffix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            guides_dir = Path(tmp)
+            (guides_dir / 'WIDGET_ADAPTER_GUIDE.md').write_text('# Widget\n')
+            found = self.rule._guess_guide_file('widget', guides_dir)
+            self.assertEqual(found.name, 'WIDGET_ADAPTER_GUIDE.md')
+
+    def test_guess_guide_file_matches_bare_guide_suffix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            guides_dir = Path(tmp)
+            (guides_dir / 'WIDGETGUIDE.md').write_text('# Widget\n')
+            found = self.rule._guess_guide_file('widget', guides_dir)
+            self.assertEqual(found.name, 'WIDGETGUIDE.md')
+
+    def test_guess_guide_file_returns_none_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            found = self.rule._guess_guide_file('nonexistent', Path(tmp))
+            self.assertIsNone(found)
+
+    def test_documented_in_text_query_string_form(self):
+        self.assertTrue(self.rule._documented_in_text('bucket', 'reveal git://x?type=history&bucket=month'))
+
+    def test_documented_in_text_backtick_form(self):
+        self.assertTrue(self.rule._documented_in_text('bucket', 'The `bucket` parameter controls grouping.'))
+
+    def test_documented_in_text_cli_flag_form(self):
+        self.assertTrue(self.rule._documented_in_text('summary', 'reveal ssl://x --summary'))
+
+    def test_documented_in_text_absent(self):
+        self.assertFalse(self.rule._documented_in_text('until', 'No mention of that word anywhere here.'))
+
+    def test_documented_in_text_common_word_not_false_positive(self):
+        """A generic English word appearing in prose must not count as documentation."""
+        prose = 'The overall goal of this project is code quality, not a specific goal metric.'
+        self.assertFalse(self.rule._documented_in_text('goal', prose))
+
+    def test_iter_param_column_entries_only_reads_parameter_column(self):
+        """Regression: a naive backtick-anywhere scan would also pick up enum
+        values from an unrelated 'Operator'/'Values' column. Real table
+        parsing must only read the column whose header names it as the
+        parameter column.
+        """
+        from tree_sitter_language_pack import get_parser
+        from reveal.rules.validation.V027 import _iter_param_column_entries
+
+        markdown = (
+            "| Parameter | Type | Description |\n"
+            "|-----------|------|-------------|\n"
+            "| `foo` | string | does a thing |\n"
+            "| `bar` | int | does another |\n"
+            "\n"
+            "| Operator | Meaning | Example |\n"
+            "|----------|---------|---------|\n"
+            "| `>` | Greater than | `lines>50` |\n"
+        )
+        parser = get_parser('markdown')
+        tree = parser.parse(markdown)
+        entries = list(_iter_param_column_entries(tree.root_node(), markdown))
+        names = {name for name, _line in entries}
+        self.assertEqual(names, {'foo', 'bar'})
+        self.assertNotIn('>', names)
+        self.assertNotIn('lines', names)
+
+    def test_iter_param_column_entries_line_numbers(self):
+        from tree_sitter_language_pack import get_parser
+        from reveal.rules.validation.V027 import _iter_param_column_entries
+
+        markdown = (
+            "intro line\n"
+            "| Parameter | Description |\n"
+            "|-----------|-------------|\n"
+            "| `alpha` | first |\n"
+            "| `beta` | second |\n"
+        )
+        parser = get_parser('markdown')
+        tree = parser.parse(markdown)
+        entries = dict(
+            (name, line) for name, line in _iter_param_column_entries(tree.root_node(), markdown)
+        )
+        self.assertEqual(entries['alpha'], 4)
+        self.assertEqual(entries['beta'], 5)
+
+    def test_forward_and_reverse_detect_synthetic_drift(self):
+        """End-to-end: a fake adapter whose schema and guide disagree in both
+        directions produces exactly the two expected detections.
+        """
+        class FakeAdapter:
+            @staticmethod
+            def get_schema():
+                return {'query_params': {'live_only': {'type': 'string'}}}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            reveal_root = Path(tmp) / 'reveal'
+            guides_dir = reveal_root / 'reveal' / 'docs' / 'adapters'
+            guides_dir.mkdir(parents=True)
+            (guides_dir / 'WIDGET_ADAPTER_GUIDE.md').write_text(
+                "# Widget\n\n"
+                "## Query Parameters\n\n"
+                "| Parameter | Description |\n"
+                "|-----------|-------------|\n"
+                "| `doc_only` | a stale, removed param |\n"
+            )
+
+            with patch('reveal.rules.validation.V027.find_reveal_root', return_value=reveal_root), \
+                 patch.dict('reveal.adapters.base._ADAPTER_REGISTRY',
+                             {'widget': FakeAdapter}, clear=True):
+                detections = self.rule.check('reveal://', None, '')
+
+        messages = [d.message for d in detections]
+        self.assertEqual(len(detections), 2, messages)
+        self.assertTrue(any('live_only' in m and 'undocumented' in m for m in messages), messages)
+        self.assertTrue(any('doc_only' in m and 'not in the live schema' in m for m in messages), messages)
 
 
 if __name__ == '__main__':

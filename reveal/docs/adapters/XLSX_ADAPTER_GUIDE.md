@@ -155,6 +155,7 @@ Summary sheet:
 | `powerquery` | string | Power Query M code mode: `list`, `show`, or query name | `?powerquery=list` |
 | `names` | string | Show named ranges / defined names | `?names=list` |
 | `connections` | string | External connections mode: `list` or `show` | `?connections=list` |
+| `formulas` | boolean | Show formulas instead of computed values | `?formulas=true` |
 
 **Parameter combinations:**
 ```bash

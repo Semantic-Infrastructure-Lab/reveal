@@ -253,7 +253,12 @@ Complete reference of all supported query parameters:
 | `decorator` | string | Decorator pattern with wildcards or regex | `decorator=property`, `decorator=*cache*` |
 | `calls` | string | Find functions that call a given name (wildcard supported) | `calls=validate_item`, `calls=*send*` |
 | `callee_of` | string | Find functions called by a given name (within-file reverse) | `callee_of=main`, `callee_of=process_*` |
-| `show` | string | Display mode — `show=calls` renders a compact call graph view | `show=calls` |
+| `callers` | integer | Number of inbound callers within the scanned files (length of `called_by`). High values find high-coupling functions | `callers>5`, `callers>3&complexity>10`, `callers==0` |
+| `param_type` | string | Find functions where any parameter has a given type annotation (parses the signature string; glob supported; bare type name matches generics too) | `param_type=dict`, `param_type=Dict*`, `param_type=Optional*` |
+| `return_type` | string | Find functions with a given return type annotation (parses the `-> TYPE` suffix; glob supported) | `return_type=bool`, `return_type=List*` |
+| `has_annotations` | boolean | Filter by presence of type annotations — `has_annotations=false` finds fully unannotated functions | `has_annotations=false`, `has_annotations=true` |
+| `reveal_type` | string | Show all type evidence for a named variable: parameter annotations, inferred assignment shapes, for-loop bindings — works on unannotated code, no mypy `reveal_type()` needed | `reveal_type=trade`, `reveal_type=config` |
+| `show` | string | Display mode — `show=calls` renders a compact call graph view; `show=dict-heatmap` ranks bare-dict params by key access count | `show=calls`, `show=dict-heatmap` |
 
 **Parameter capabilities:**
 

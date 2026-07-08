@@ -280,6 +280,73 @@ def get_file_history(
         raise ValueError(f"Failed to get file history: {subpath}") from e
 
 
+def get_file_timeline(
+    repo: 'pygit2.Repository',
+    ref: str,
+    subpath: str,
+    query: Dict[str, str],
+    format_commit_func,
+    matches_all_filters_func,
+    commit_touches_file_func,
+    bucket_commits_func,
+) -> Dict[str, Any]:
+    """Bucket commit history for a file or directory by week/month.
+
+    Same walk/filter semantics as get_file_history (works on files and
+    directories via the subtree-oid touch check), but returns aggregated
+    period counts instead of a flat commit list. Uses a much higher default
+    limit than get_file_history since a meaningful timeline needs the full
+    matching range, not a 50-commit page.
+    """
+    import pygit2
+
+    bucket = query.get('bucket', 'month')
+    if bucket not in ('week', 'month'):
+        raise ValueError(f"Invalid bucket: {bucket!r} (expected 'week' or 'month')")
+
+    try:
+        limit = int(query.get('limit', 20000))
+        no_merges = query.get('no_merges') in ('1', 'true', 'yes')
+        matched: List[Dict[str, Any]] = []
+
+        obj = repo.revparse_single(ref)
+        while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
+            obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
+
+        commit = cast('pygit2.Commit', obj)
+        walker = repo.walk(commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
+
+        for commit in walker:
+            if no_merges and len(commit.parents) > 1:
+                continue
+            if not commit_touches_file_func(repo, commit, subpath):
+                continue
+            commit_dict = format_commit_func(commit)
+            if not matches_all_filters_func(commit_dict):
+                continue
+            matched.append(commit_dict)
+            if len(matched) >= limit:
+                break
+
+        buckets = bucket_commits_func(matched, bucket)
+
+        return {
+            'contract_version': '1.0',
+            'type': 'git_timeline',
+            'source': f"{subpath}@{ref}",
+            'source_type': 'file',
+            'path': subpath,
+            'ref': ref,
+            'bucket': bucket,
+            'buckets': buckets,
+            'commit_count': len(matched),
+            'distinct_author_count': len({c.get('email') or c.get('author') for c in matched}),
+        }
+
+    except (KeyError, pygit2.GitError) as e:
+        raise ValueError(f"Failed to get file timeline: {subpath}") from e
+
+
 def _commit_diff_contains(
     repo: 'pygit2.Repository',
     commit: 'pygit2.Commit',

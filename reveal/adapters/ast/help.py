@@ -263,6 +263,13 @@ _SCHEMA_QUERY_PARAMS = {
         'operators': ['=='],
         'examples': ['reveal_type=trade', 'reveal_type=result', 'reveal_type=config']
     },
+    'show': {
+        'type': 'string',
+        'description': 'Display mode (not a filter): show=calls renders a compact call graph view; show=dict-heatmap ranks bare-dict params by key access count (TypedDict migration priority list).',
+        'operators': ['=='],
+        'valid_values': ['calls', 'dict-heatmap'],
+        'examples': ['show=calls', 'show=dict-heatmap']
+    },
 }
 
 _SCHEMA_OUTPUT_TYPES = [

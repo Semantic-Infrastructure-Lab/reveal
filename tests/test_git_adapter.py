@@ -2621,3 +2621,166 @@ class TestOwnership:
         assert 'Ownership' in out
         assert 'Alice' in out
         assert 'commit-share' in out.lower()
+
+
+@pytest.fixture
+def git_repo_timeline(tmp_path):
+    """Git repo with commits spread across months/weeks for BACK-484 timeline tests.
+
+    Commits (chronological, explicit timestamps):
+      1. Alice — src/app.py   — 2026-01-05
+      2. Bob   — src/app.py   — 2026-01-20
+      3. Alice — src/app.py   — 2026-02-10
+      4. Bob   — src/app.py   — 2026-02-25
+      5. Alice — README.md    — 2026-03-01  (repo-only, outside src/)
+
+    Expectations:
+      src/app.py (file or src/ dir), bucket=month: 2026-01 (2 commits, 2 authors),
+        2026-02 (2 commits, 2 authors) — 4 commits total, README excluded.
+      repo, bucket=month: adds 2026-03 (1 commit, 1 author) — 5 commits total.
+      src/app.py, bucket=week: 4 distinct weeks, 1 commit/1 author each.
+    """
+    if not PYGIT2_AVAILABLE:
+        pytest.skip("pygit2 not available")
+
+    import time
+
+    repo_path = tmp_path / "timeline_repo"
+    repo_path.mkdir()
+    repo = pygit2.init_repository(str(repo_path))
+
+    def epoch(y, m, d):
+        return int(time.mktime((y, m, d, 12, 0, 0, 0, 0, -1)))
+
+    def sig(name, email, t):
+        return pygit2.Signature(name, email, time=t, offset=0)
+
+    alice = lambda t: sig("Alice", "alice@example.com", t)
+    bob = lambda t: sig("Bob", "bob@example.com", t)
+    idx = repo.index
+
+    def commit(author_sig, msg, parent_refs):
+        idx.write()
+        tree = idx.write_tree()
+        ref = "refs/heads/master" if not parent_refs else "HEAD"
+        repo.create_commit(ref, author_sig, author_sig, msg, tree, parent_refs)
+        if not parent_refs:
+            repo.set_head("refs/heads/master")
+
+    (repo_path / "src").mkdir()
+
+    (repo_path / "src" / "app.py").write_text("v1\n")
+    idx.add("src/app.py")
+    commit(alice(epoch(2026, 1, 5)), "app v1", [])
+
+    (repo_path / "src" / "app.py").write_text("v2\n")
+    idx.add("src/app.py")
+    commit(bob(epoch(2026, 1, 20)), "app v2", [repo.head.target])
+
+    (repo_path / "src" / "app.py").write_text("v3\n")
+    idx.add("src/app.py")
+    commit(alice(epoch(2026, 2, 10)), "app v3", [repo.head.target])
+
+    (repo_path / "src" / "app.py").write_text("v4\n")
+    idx.add("src/app.py")
+    commit(bob(epoch(2026, 2, 25)), "app v4", [repo.head.target])
+
+    (repo_path / "README.md").write_text("# Project\n")
+    idx.add("README.md")
+    commit(alice(epoch(2026, 3, 1)), "add readme", [repo.head.target])
+
+    yield repo_path
+    shutil.rmtree(repo_path, ignore_errors=True)
+
+
+class TestTimeline:
+    """Test git://<path>?type=history&bucket=week|month (BACK-484)."""
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_file_timeline_monthly(self, git_repo_timeline):
+        adapter = GitAdapter(path=str(git_repo_timeline), subpath='src/app.py',
+                              query={'type': 'history', 'bucket': 'month'})
+        r = adapter.get_structure()
+        assert r['type'] == 'git_timeline'
+        assert r['contract_version'] == '1.0'
+        assert r['source_type'] == 'file'
+        assert r['path'] == 'src/app.py'
+        assert r['bucket'] == 'month'
+        assert r['commit_count'] == 4
+        assert r['distinct_author_count'] == 2
+        periods = {b['period']: b for b in r['buckets']}
+        assert set(periods) == {'2026-01', '2026-02'}
+        assert periods['2026-01']['commit_count'] == 2
+        assert periods['2026-01']['author_count'] == 2
+        assert periods['2026-02']['commit_count'] == 2
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_directory_timeline_monthly(self, git_repo_timeline):
+        adapter = GitAdapter(path=str(git_repo_timeline), subpath='src/',
+                              query={'type': 'history', 'bucket': 'month'})
+        r = adapter.get_structure()
+        assert r['source_type'] == 'file'  # directory shares the file-timeline code path
+        assert r['commit_count'] == 4  # README excluded, only src/app.py commits
+        assert {b['period'] for b in r['buckets']} == {'2026-01', '2026-02'}
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_repo_timeline_monthly(self, git_repo_timeline):
+        adapter = GitAdapter(path=str(git_repo_timeline),
+                              query={'type': 'history', 'bucket': 'month'})
+        r = adapter.get_structure()
+        assert r['type'] == 'git_timeline'
+        assert r['source_type'] == 'repository'
+        assert r['path'] is None
+        assert r['commit_count'] == 5  # includes the README commit
+        periods = {b['period']: b for b in r['buckets']}
+        assert set(periods) == {'2026-01', '2026-02', '2026-03'}
+        assert periods['2026-03']['commit_count'] == 1
+        assert periods['2026-03']['author_count'] == 1
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_file_timeline_weekly_has_four_distinct_weeks(self, git_repo_timeline):
+        adapter = GitAdapter(path=str(git_repo_timeline), subpath='src/app.py',
+                              query={'type': 'history', 'bucket': 'week'})
+        r = adapter.get_structure()
+        assert r['bucket'] == 'week'
+        assert len(r['buckets']) == 4
+        assert all(b['commit_count'] == 1 and b['author_count'] == 1 for b in r['buckets'])
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_file_timeline_invalid_bucket_raises(self, git_repo_timeline):
+        adapter = GitAdapter(path=str(git_repo_timeline), subpath='src/app.py',
+                              query={'type': 'history', 'bucket': 'year'})
+        with pytest.raises(ValueError):
+            adapter.get_structure()
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_repo_timeline_invalid_bucket_raises(self, git_repo_timeline):
+        adapter = GitAdapter(path=str(git_repo_timeline),
+                              query={'type': 'history', 'bucket': 'year'})
+        with pytest.raises(ValueError):
+            adapter.get_structure()
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_file_timeline_author_filter_composes(self, git_repo_timeline):
+        adapter = GitAdapter(path=str(git_repo_timeline), subpath='src/app.py',
+                              query={'type': 'history', 'bucket': 'month', 'author': 'Alice'})
+        r = adapter.get_structure()
+        assert r['commit_count'] == 2  # Alice's two app.py commits (Jan + Feb)
+        assert r['distinct_author_count'] == 1
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_file_timeline_limit_caps_walk(self, git_repo_timeline):
+        # GIT_SORT_TIME walks newest-first; limit=1 keeps only the Feb v4 commit (Bob)
+        adapter = GitAdapter(path=str(git_repo_timeline), subpath='src/app.py',
+                              query={'type': 'history', 'bucket': 'month', 'limit': '1'})
+        r = adapter.get_structure()
+        assert r['commit_count'] == 1
+        assert r['buckets'] == [{'period': '2026-02', 'commit_count': 1, 'author_count': 1}]
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_plain_history_unaffected_by_bucket_support(self, git_repo_timeline):
+        adapter = GitAdapter(path=str(git_repo_timeline), subpath='src/app.py',
+                              query={'type': 'history'})
+        r = adapter.get_structure()
+        assert r['type'] == 'git_file_history'
+        assert len(r['commits']) == 4

@@ -50,6 +50,39 @@ def get_ref_structure(
         raise ValueError(f"Invalid ref: {ref}") from e
 
 
+def get_ref_timeline(
+    repo: 'pygit2.Repository',
+    ref: str,
+    get_commit_timeline_func,
+) -> Dict[str, Any]:
+    """Bucket repo-wide commit history (no subpath) by week/month."""
+    try:
+        import pygit2
+
+        obj = repo.revparse_single(ref)
+        while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
+            obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
+
+        if not isinstance(obj, pygit2.Commit):
+            raise ValueError(f"Cannot resolve ref to commit: {ref}")
+
+        commit_obj = cast('pygit2.Commit', obj)
+        timeline = get_commit_timeline_func(repo, commit_obj)
+
+        return {
+            'contract_version': '1.0',
+            'type': 'git_timeline',
+            'source': f"{repo.workdir or repo.path}@{ref}",
+            'source_type': 'repository',
+            'path': None,
+            'ref': ref,
+            **timeline,
+        }
+
+    except (KeyError, pygit2.GitError) as e:
+        raise ValueError(f"Invalid ref: {ref}") from e
+
+
 def get_head_info(repo: 'pygit2.Repository') -> Dict[str, Any]:
     """Get HEAD information."""
     if repo.is_empty or repo.head_is_unborn:

@@ -996,6 +996,38 @@ reveal claude://session/infernal-earth-0118?role=assistant
 
 ---
 
+### ?tail=N
+
+**Description**: Show the last N assistant turns — fast session recovery ("where did it stop?")
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>?tail=N
+```
+
+**Examples**:
+```bash
+reveal claude://session/infernal-earth-0118?tail=3
+reveal claude://session/infernal-earth-0118?tail=1
+```
+
+**Use when**: Resuming a session and only need the most recent turns, not the full history
+
+---
+
+### ?last
+
+**Description**: Show the last assistant turn only — shorthand for `?tail=1`
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>?last
+```
+
+**Use when**: The fastest way to check "what did the assistant just say/do" — cheaper than a full session read
+
+---
+
 ### Composite Queries
 
 Combine multiple query parameters:
@@ -1816,8 +1848,10 @@ reveal 'claude://sessions/?search=auth&word'
 |-------|--------|
 | `?search=TERM` | Term to find (case-insensitive substring by default) |
 | `?since=DATE` | ISO date or `today` — narrows the corpus before scanning (faster) |
+| `?until=DATE` | ISO 8601 upper bound date — pairs with `?since=` for a date range (`?since=2026-06-10&until=2026-06-12`) |
 | `?word` | Whole-word match — prevents substring hits |
 | `?snippet=N` | Characters of context around each match. Default `120`, clamped to `60–500`. Use a larger value when the 120-char default doesn't show enough to understand why the term matched. |
+| `?filter=SUBSTRING` | Filter the session *list* (not content search) by name substring — alias of `?search=` for list-filtering mode (`?filter=auth-refactor`) |
 
 ---
 

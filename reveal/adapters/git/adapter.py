@@ -24,11 +24,13 @@ _SCHEMA_QUERY_PARAMS = {
     'merges': {'type': 'string', 'description': 'For ownership: "1" includes merge commits (excluded by default)', 'examples': ['?type=ownership&merges=1']},
     'detail': {'type': 'string', 'description': 'Detail level for blame', 'values': ['full', 'summary'], 'examples': ['?type=blame&detail=full']},
     'element': {'type': 'string', 'description': 'Semantic element for blame (function/class name)', 'examples': ['?type=blame&element=load_config']},
+    'context': {'type': 'integer', 'description': 'For diff: number of context lines around each hunk (default: 3)', 'examples': ['?type=diff&context=10']},
     'author': {'type': 'string', 'description': 'Filter commits by author name (case-insensitive)', 'examples': ['?author=John', '?author~=john']},
     'email': {'type': 'string', 'description': 'Filter commits by author email (case-insensitive)', 'examples': ['?email=john@example.com', '?email~=@example.com']},
     'message': {'type': 'string', 'description': 'Filter commits by message (supports regex with ~=)', 'examples': ['?message~=bug', '?message=Initial commit']},
     'hash': {'type': 'string', 'description': 'Filter commits by hash prefix', 'examples': ['?hash=a1b2c3d']},
     'ref': {'type': 'string', 'description': 'Override starting ref — alias for @ref in the URI (branch, tag, or commit)', 'examples': ['?type=history&ref=v0.63.0', '?ref=main']},
+    'bucket': {'type': 'string', 'description': 'Modifier on type=history: bucket commits into periods (commit_count + distinct author_count per period) instead of a flat list. Works on a file, directory, or the whole repo.', 'values': ['week', 'month'], 'examples': ['?type=history&bucket=month', '?type=history&bucket=week']},
 }
 
 def _git_output_type(type_name: str, description: str, extra_props: dict) -> dict:
@@ -59,6 +61,13 @@ _SCHEMA_OUTPUT_TYPES = [
         'path': {'type': 'string'}, 'ref': {'type': 'string'},
         'count': {'type': 'integer'}, 'commits': {'type': 'array'}
     }),
+    _git_output_type('git_timeline', 'Bucketed commit/author counts over time for a file, directory, or repo', {
+        'source_type': {'type': 'string', 'enum': ['file', 'directory', 'repository']},
+        'path': {'type': ['string', 'null']}, 'ref': {'type': 'string'},
+        'bucket': {'type': 'string', 'enum': ['week', 'month']},
+        'buckets': {'type': 'array'},
+        'commit_count': {'type': 'integer'}, 'distinct_author_count': {'type': 'integer'}
+    }),
     _git_output_type('git_file_blame', 'File blame with author attribution', {
         'path': {'type': 'string'}, 'ref': {'type': 'string'},
         'lines': {'type': 'integer'}, 'element': {'type': ['string', 'null']},
@@ -84,6 +93,9 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'git://src/app.py?type=blame&element=load_config', 'description': 'Semantic blame (who wrote this function)', 'query_param': '?type=blame&element=load_config', 'output_type': 'git_file_blame'},
     {'uri': 'git://src/app.py?type=ownership', 'description': 'Commit-share ownership of a file (primary author, contributors, last touch)', 'query_param': '?type=ownership', 'output_type': 'git_ownership'},
     {'uri': 'git://src/?type=ownership', 'description': 'Commit-share ownership of a directory', 'query_param': '?type=ownership', 'output_type': 'git_ownership'},
+    {'uri': 'git://src/app.py?type=history&bucket=month', 'description': 'Monthly commit/author counts for a file', 'query_param': '?type=history&bucket=month', 'output_type': 'git_timeline'},
+    {'uri': 'git://src/?type=history&bucket=week', 'description': 'Weekly commit/author counts for a directory', 'query_param': '?type=history&bucket=week', 'output_type': 'git_timeline'},
+    {'uri': 'git://.?type=history&bucket=month', 'description': 'Monthly commit/author counts for the whole repo', 'query_param': '?type=history&bucket=month', 'output_type': 'git_timeline'},
 ]
 
 _SCHEMA_NOTES = [
@@ -221,7 +233,7 @@ class GitAdapter(ResourceAdapter):
                 result_control_parts.append(f"{k}={v}")
             # Operational parameters (exclude from both)
             elif k in ['type', 'detail', 'element', 'ignore', 'raw', 'context',
-                       'no_merges', 'content', 'content~']:
+                       'no_merges', 'content', 'content~', 'bucket']:
                 continue
             # ?ref= overrides the starting ref (alias for @ref in the URI)
             elif k == 'ref':
@@ -451,6 +463,16 @@ class GitAdapter(ResourceAdapter):
                         files.commit_touches_element(repo, commit, subpath, _en)
                 else:
                     touch_func = files.commit_touches_file
+
+                if 'bucket' in self.query:
+                    return files.get_file_timeline(
+                        repo, self.ref, git_subpath, self.query,
+                        commits.format_commit,
+                        lambda cd: queries.matches_all_filters(cd, self.query_filters),
+                        touch_func,
+                        commits.bucket_commits,
+                    )
+
                 result = files.get_file_history(
                     repo, self.ref, git_subpath, self.query,
                     self.result_control, self.query_filters,
@@ -471,6 +493,21 @@ class GitAdapter(ResourceAdapter):
             else:
                 raw = self.query.get('raw') in ('1', 'true', 'yes')
                 return files.get_file_at_ref(repo, self.ref, git_subpath, raw=raw)
+        elif query_type == 'history' and 'bucket' in self.query:
+            bucket = self.query.get('bucket', 'month')
+            if bucket not in ('week', 'month'):
+                raise ValueError(f"Invalid bucket: {bucket!r} (expected 'week' or 'month')")
+            limit = int(self.query.get('limit', 20000))
+            return refs.get_ref_timeline(
+                repo, self.ref,
+                lambda repo, start_commit, _b=bucket, _lim=limit, _nm=no_merges: \
+                    commits.get_commit_timeline(
+                        repo, start_commit, _b, _lim,
+                        commits.format_commit,
+                        lambda cd: queries.matches_all_filters(cd, self.query_filters),
+                        no_merges=_nm,
+                    )
+            )
         elif self.ref != 'HEAD' or query_type:
             return refs.get_ref_structure(
                 repo, self.ref, self.query, self.query_filters,
@@ -594,16 +631,21 @@ class GitAdapter(ResourceAdapter):
                 {'uri': 'git://.?content~=SmLogs', 'description': 'Repo-wide: find any commit whose diff contains "SmLogs"'},
                 {'uri': 'git://src/app.py?type=history&no_merges=1', 'description': 'File history excluding merge commits'},
                 {'uri': 'git://.@main?no_merges=1', 'description': 'Branch history without merge noise'},
+                {'uri': 'git://src/app.py?type=history&bucket=month', 'description': 'Monthly commit/author counts for a file (is activity trending up or down?)'},
+                {'uri': 'git://src/?type=history&bucket=week', 'description': 'Weekly commit/author counts for a directory'},
+                {'uri': 'git://.?type=history&bucket=month', 'description': 'Monthly commit/author counts for the whole repo'},
+                {'uri': 'git://.?type=history&bucket=month&author=John', 'description': 'Monthly timeline filtered to one author'},
             ],
             'query_parameters': {
                 'type': 'Operation type: history, blame, diff, or ownership. Default (no type): structural view of file at ref.',
+                'bucket': 'Modifier on type=history: "week" or "month" — buckets commits into periods (commit_count + distinct author_count per period) instead of returning a flat list. Works on a file, directory, or the whole repo. Rendering (bars, charts) is consumer-side.',
                 'merges': 'For ownership: "1" includes merge commits (excluded by default, since merges rarely represent authorship).',
                 'raw': 'For file-at-ref: "1" returns raw file contents instead of structural view',
                 'detail': 'For blame: "full" shows line-by-line (default is summary)',
                 'element': 'For blame/diff/history: function/class name to scope output to that element. For ?type=history, runs the analyzer at each commit — use ?limit=N on files with deep history.',
                 'ignore': 'For blame: comma-separated commit hash prefixes to suppress (e.g. ignore=69b0093,f5fcac0). Any prefix length works — 4–7 chars is typical.',
                 'context': 'For diff: number of context lines (default 3)',
-                'limit': 'Limit number of results (default: 50 for history, 20 for refs)',
+                'limit': 'Limit number of results (default: 50 for history, 20 for refs, 20000 for bucket= timelines — timelines need the full matching range, not a short page)',
                 'author': 'Filter commits by author name (case-insensitive, use ~= for regex)',
                 'email': 'Filter commits by author email (case-insensitive, use ~= for regex)',
                 'message': 'Filter commits by message (use ~= for regex matching)',

@@ -481,6 +481,60 @@ Combining `message~=` with a directory target is how to answer "what fixes
 landed in this subsystem" without a dedicated query type — filters compose
 with directory scoping the same way they do with file scoping.
 
+### Timeline: Bucketed Commit/Author Counts
+
+`?type=history` returns a flat commit list. Add `&bucket=week` or
+`&bucket=month` to get **aggregated period counts** instead — commit count
+and distinct author count per period — for a file, directory, or the whole
+repo. This is the primitive behind "is activity on this file/subsystem
+trending up or down": rendering (bars, charts) is left to the consumer.
+
+```bash
+reveal git://src/app.py?type=history&bucket=month     # monthly commit/author counts for a file
+reveal git://src/auth?type=history&bucket=week         # weekly counts for a directory
+reveal git://.?type=history&bucket=month               # monthly counts repo-wide
+reveal git://.?type=history&bucket=month&author=Alice  # scoped to one author's activity
+```
+
+**Returns**:
+
+```json
+{
+  "contract_version": "1.0",
+  "type": "git_timeline",
+  "source_type": "file",
+  "path": "src/app.py",
+  "ref": "HEAD",
+  "bucket": "month",
+  "buckets": [
+    {"period": "2026-05", "commit_count": 4, "author_count": 2},
+    {"period": "2026-06", "commit_count": 7, "author_count": 3}
+  ],
+  "commit_count": 11,
+  "distinct_author_count": 3
+}
+```
+
+Periods are `YYYY-MM` for `bucket=month` and ISO week `YYYY-Www` for
+`bucket=week`, sorted chronologically ascending. `author_count` per bucket
+counts distinct authors (by email, falling back to name) active in that
+period — not the same as `distinct_author_count`, which is the total across
+all buckets.
+
+**Query parameters**:
+- `?bucket=week|month` (required to activate timeline mode)
+- `?limit=N` — commits scanned before bucketing (default: 20000, much higher
+  than the flat-list default of 50, since a meaningful timeline needs the
+  full matching range)
+- All the usual commit filters (`author`, `email`, `message~=`, `since`,
+  `no_merges`, etc.) compose with `bucket=` the same way they do with plain
+  `type=history`
+
+**Use cases**:
+- "Is this file/subsystem's commit activity increasing or decreasing?"
+- Contributor-count trend over time (growing/shrinking bus factor)
+- Feeding a consumer-side chart without hand-rolling client-side bucketing
+
 ---
 
 ## Blame Analysis
@@ -761,6 +815,7 @@ that shares are limited to the fetched history. Run `git fetch --unshallow` firs
 | `context` | integer | lines | Context lines around each hunk for `type=diff` |
 | `ref` | string | branch/tag/commit | Override the starting ref — alias for `@ref` in the URI (e.g., `?ref=v0.63.0`) |
 | `merges` | string | `1` | Include merge commits in ownership walk (default: excluded) |
+| `bucket` | string | `week`, `month` | Modifier on `type=history`: bucket commits into periods (commit_count + distinct author_count per period) instead of a flat list |
 
 ### Filter Parameters
 
@@ -808,6 +863,9 @@ reveal git://.?author=John&message~=fix
 
 # Pagination
 reveal git://.@main?limit=50&offset=100
+
+# Timeline: monthly commit/author counts for a file
+reveal git://src/app.py?type=history&bucket=month
 ```
 
 ---
@@ -1122,6 +1180,36 @@ reveal git://.?message~=bug&limit=100&sort=date
 ```
 
 `source_type` is `"file"`, `"directory"`, or `"repository"` depending on the path. The `shallow_clone: true` key is added when the repository is a shallow clone.
+
+### 7. git_timeline
+
+**Use case**: Bucketed commit/author counts over time for a file, directory, or repository (`?type=history&bucket=week|month`)
+
+**Schema**:
+```json
+{
+  "contract_version": "1.0",
+  "type": "git_timeline",
+  "source": "src/app.py@HEAD",
+  "source_type": "file",
+  "path": "src/app.py",
+  "ref": "HEAD",
+  "bucket": "month",
+  "buckets": [
+    {"period": "2026-05", "commit_count": 4, "author_count": 2},
+    {"period": "2026-06", "commit_count": 7, "author_count": 3}
+  ],
+  "commit_count": 11,
+  "distinct_author_count": 3
+}
+```
+
+`source_type` is `"file"`, `"directory"`, or `"repository"` depending on the
+path (a directory resolves via the same subtree-oid mechanism as `git_file_history`).
+`path` is `null` for the whole-repo case. Periods are `YYYY-MM` (`bucket=month`)
+or ISO week `YYYY-Www` (`bucket=week`), sorted chronologically ascending.
+Rendering (bars, charts, trend lines) is left to the consumer — this output
+type is aggregated data only.
 
 ---
 

@@ -270,7 +270,6 @@ Default penalties:
 | `min_complexity` | float | Filter files with avg complexity ≥ N | `?min_complexity=5.0` |
 | `max_complexity` | float | Filter files with avg complexity ≤ N | `?max_complexity=10.0` |
 | `min_functions` | integer | Filter files with ≥ N functions | `?min_functions=5` |
-| `type` | string | Filter by file type | `?type=python` |
 
 **Note**: Legacy parameters still work but unified query syntax (below) is preferred for new queries.
 

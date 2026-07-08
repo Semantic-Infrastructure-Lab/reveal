@@ -136,6 +136,84 @@ def get_commit_history(
     return commits
 
 
+def bucket_commits(commit_dicts: List[Dict[str, Any]], bucket: str) -> List[Dict[str, Any]]:
+    """Group formatted commits into week/month buckets.
+
+    Each bucket reports commit_count and the count of distinct authors
+    (by email, falling back to name) touching that period. Buckets are
+    returned sorted chronologically ascending.
+    """
+    groups: Dict[str, Dict[str, Any]] = {}
+
+    for commit_dict in commit_dicts:
+        dt = datetime.fromtimestamp(commit_dict['timestamp'])
+        if bucket == 'week':
+            iso_year, iso_week, _ = dt.isocalendar()
+            period = f"{iso_year}-W{iso_week:02d}"
+        else:  # month
+            period = f"{dt.year}-{dt.month:02d}"
+
+        author_key = commit_dict.get('email') or commit_dict.get('author')
+        group = groups.setdefault(period, {'period': period, 'commit_count': 0, '_authors': set()})
+        group['commit_count'] += 1
+        group['_authors'].add(author_key)
+
+    buckets = []
+    for period in sorted(groups.keys()):
+        group = groups[period]
+        buckets.append({
+            'period': group['period'],
+            'commit_count': group['commit_count'],
+            'author_count': len(group['_authors']),
+        })
+    return buckets
+
+
+def get_commit_timeline(
+    repo: 'pygit2.Repository',
+    start_commit: 'pygit2.Commit',
+    bucket: str,
+    limit: int,
+    format_commit_func,
+    matches_all_filters_func,
+    no_merges: bool = False,
+) -> Dict[str, Any]:
+    """Walk history from start_commit and bucket it by week/month.
+
+    Unlike get_commit_history, this collects up to `limit` matching commits
+    (a much higher default than the flat-list view, since a meaningful
+    timeline needs the full range) and returns aggregated period counts
+    rather than a commit list.
+    """
+    import pygit2
+
+    matched: List[Dict[str, Any]] = []
+
+    try:
+        walker = repo.walk(start_commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
+
+        for commit in walker:
+            if no_merges and len(commit.parents) > 1:
+                continue
+            commit_dict = format_commit_func(commit)
+            if not matches_all_filters_func(commit_dict):
+                continue
+            matched.append(commit_dict)
+            if len(matched) >= limit:
+                break
+    except Exception:
+        pass  # return whatever commits were collected before the error
+
+    buckets = bucket_commits(matched, bucket)
+
+    return {
+        'bucket': bucket,
+        'buckets': buckets,
+        'commit_count': len(matched),
+        'distinct_author_count': len({c.get('email') or c.get('author') for c in matched}),
+    }
+
+
 def format_commit(commit: 'pygit2.Commit', detailed: bool = False) -> Dict[str, Any]:
     """Format commit information."""
     basic_info = {
