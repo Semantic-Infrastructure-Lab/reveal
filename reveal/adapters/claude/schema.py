@@ -1,8 +1,5 @@
 """Schema constants for the claude:// adapter — query params, elements, output types, examples."""
 
-from typing import Dict, Any
-
-
 _SCHEMA_QUERY_PARAMS = {
     'summary': {'type': 'flag', 'description': 'Session summary (overview + key events)'},
     'errors': {'type': 'flag', 'description': 'Filter for messages containing errors'},

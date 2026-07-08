@@ -16,7 +16,6 @@ Examples:
 """
 
 import re
-from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity

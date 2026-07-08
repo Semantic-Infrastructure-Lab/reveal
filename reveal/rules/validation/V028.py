@@ -21,7 +21,6 @@ V024/V027.
 See internal-docs/design/HELP_SYSTEM_ARCHITECTURE.md §5 for the full surface map.
 """
 
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
