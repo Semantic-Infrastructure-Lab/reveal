@@ -315,6 +315,42 @@ class SSLAdapter(ResourceAdapter):
             'domain_count': len(all_domains),
         }
 
+    @staticmethod
+    def _health_status(days: int) -> tuple[str, str]:
+        """Map days-until-expiry to a (health_status, health_icon) pair."""
+        if days < 0:
+            return 'EXPIRED', '\u274c'  # Red X
+        if days < 7:
+            return 'CRITICAL', '\u274c'
+        if days < 30:
+            return 'WARNING', '\u26a0\ufe0f'  # Warning
+        return 'HEALTHY', '\u2705'  # Green check
+
+    def _build_next_steps(self, cert: CertificateInfo, is_file_mode: bool) -> List[str]:
+        """Suggest follow-up reveal commands based on file vs. network mode."""
+        next_steps = []
+        if is_file_mode:
+            file_uri = f'ssl://file://{self._cert_file_path}'
+            next_steps.append(f"reveal {file_uri}/san  # View all SANs")
+            next_steps.append(f"reveal {file_uri}/chain  # View cert chain")
+            if cert.san:
+                primary = cert.san[0].lstrip('*').lstrip('.')
+                next_steps.append(
+                    f"reveal ssl://{primary} --check  # Compare with live cert"
+                )
+        elif self.element is None:
+            next_steps.append(f"reveal ssl://{self.host}/san  # View all domain names")
+            next_steps.append(f"reveal ssl://{self.host}/issuer  # Issuer details")
+            next_steps.append(f"reveal ssl://{self.host} --check  # Run health checks")
+        return next_steps
+
+    def _build_verification(self) -> Dict[str, Any]:
+        return {
+            'chain_valid': self._verification.get('verified', False) if self._verification else False,
+            'hostname_match': self._verification.get('hostname_match', False) if self._verification else False,
+            'error': self._verification.get('error') if self._verification else None,
+        }
+
     def get_structure(self, probe_http: bool = False, **kwargs) -> Dict[str, Any]:
         """Get SSL certificate overview.
 
@@ -352,36 +388,8 @@ class SSLAdapter(ResourceAdapter):
                 result['http_probe'] = probe_http_redirect(self.host)
             return result
 
-        # Determine health status
         days = cert.days_until_expiry
-        if days < 0:
-            health_status = 'EXPIRED'
-            health_icon = '\u274c'  # Red X
-        elif days < 7:
-            health_status = 'CRITICAL'
-            health_icon = '\u274c'
-        elif days < 30:
-            health_status = 'WARNING'
-            health_icon = '\u26a0\ufe0f'  # Warning
-        else:
-            health_status = 'HEALTHY'
-            health_icon = '\u2705'  # Green check
-
-        # Build next steps
-        next_steps = []
-        if is_file_mode:
-            file_uri = f'ssl://file://{self._cert_file_path}'
-            next_steps.append(f"reveal {file_uri}/san  # View all SANs")
-            next_steps.append(f"reveal {file_uri}/chain  # View cert chain")
-            if cert.san:
-                primary = cert.san[0].lstrip('*').lstrip('.')
-                next_steps.append(
-                    f"reveal ssl://{primary} --check  # Compare with live cert"
-                )
-        elif self.element is None:
-            next_steps.append(f"reveal ssl://{self.host}/san  # View all domain names")
-            next_steps.append(f"reveal ssl://{self.host}/issuer  # Issuer details")
-            next_steps.append(f"reveal ssl://{self.host} --check  # Run health checks")
+        health_status, health_icon = self._health_status(days)
 
         result = {
             'contract_version': '1.0',
@@ -396,7 +404,7 @@ class SSLAdapter(ResourceAdapter):
             'health_status': health_status,
             'health_icon': health_icon,
             'san_count': len(cert.san),
-            'next_steps': next_steps,
+            'next_steps': self._build_next_steps(cert, is_file_mode),
         }
         if is_file_mode:
             result['file_path'] = self._cert_file_path
@@ -406,11 +414,7 @@ class SSLAdapter(ResourceAdapter):
         else:
             result['host'] = self.host
             result['port'] = self.port
-            result['verification'] = {
-                'chain_valid': self._verification.get('verified', False) if self._verification else False,
-                'hostname_match': self._verification.get('hostname_match', False) if self._verification else False,
-                'error': self._verification.get('error') if self._verification else None,
-            }
+            result['verification'] = self._build_verification()
 
         if probe_http and self.host and not is_file_mode:
             result['http_probe'] = probe_http_redirect(self.host)

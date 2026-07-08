@@ -257,15 +257,7 @@ class NginxUriRenderer(TypeDispatchRenderer):
                 print(f"  • {step}")
 
     @staticmethod
-    def _render_nginx_fleet_audit(result: dict) -> None:
-        site_count = result.get('site_count', 0)
-        date = result.get('date', '')
-        matrix = result.get('matrix', [])
-        snippets = result.get('snippet_consistency', [])
-        nginx_conf = result.get('nginx_conf')
-        only_failures = result.get('only_failures', False)
-        has_gaps = result.get('has_gaps', False)
-
+    def _print_fleet_header(site_count: int, date: str, nginx_conf) -> None:
         print(f"\nFleet Audit — ({site_count} sites, {date})\n")
         if nginx_conf:
             print(f"  nginx.conf: {nginx_conf}")
@@ -273,11 +265,8 @@ class NginxUriRenderer(TypeDispatchRenderer):
             print("  nginx.conf: not found — global column unavailable")
         print()
 
-        if not matrix:
-            print("  No site configs found.")
-            return
-
-        # Column widths
+    @staticmethod
+    def _print_fleet_matrix_rows(matrix: list, only_failures: bool) -> None:
         col_directive = max(len(e['label']) for e in matrix)
         col_directive = max(col_directive, len('Directive'))
 
@@ -318,10 +307,10 @@ class NginxUriRenderer(TypeDispatchRenderer):
 
         if only_failures and printed == 0:
             print("  ✅ No gaps found.")
-
         print()
 
-        # Consolidation opportunities summary
+    @staticmethod
+    def _print_consolidation_summary(matrix: list) -> None:
         consol_entries = [e for e in matrix if e.get('consolidation_opportunity')]
         if consol_entries:
             directives = ', '.join(e['label'] for e in consol_entries)
@@ -329,7 +318,8 @@ class NginxUriRenderer(TypeDispatchRenderer):
             print("    Move these to nginx.conf http{} — one change fixes all sites.")
             print()
 
-        # Snippet consistency
+    @staticmethod
+    def _print_snippet_consistency(snippets: list) -> None:
         if snippets:
             print("  Snippet Consistency:")
             for snip in snippets:
@@ -342,6 +332,26 @@ class NginxUriRenderer(TypeDispatchRenderer):
                     extra = f' (+{len(missing) - 6} more)' if len(missing) > 6 else ''
                     print(f"       Missing from: {missing_str}{extra}")
             print()
+
+    @staticmethod
+    def _render_nginx_fleet_audit(result: dict) -> None:
+        site_count = result.get('site_count', 0)
+        date = result.get('date', '')
+        matrix = result.get('matrix', [])
+        snippets = result.get('snippet_consistency', [])
+        nginx_conf = result.get('nginx_conf')
+        only_failures = result.get('only_failures', False)
+        has_gaps = result.get('has_gaps', False)
+
+        NginxUriRenderer._print_fleet_header(site_count, date, nginx_conf)
+
+        if not matrix:
+            print("  No site configs found.")
+            return
+
+        NginxUriRenderer._print_fleet_matrix_rows(matrix, only_failures)
+        NginxUriRenderer._print_consolidation_summary(matrix)
+        NginxUriRenderer._print_snippet_consistency(snippets)
 
         if has_gaps:
             sys.exit(2)

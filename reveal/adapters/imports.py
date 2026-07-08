@@ -15,7 +15,7 @@ Usage:
 import os
 import sys
 from pathlib import Path
-from typing import Callable, Dict, Any, List, Optional
+from typing import Callable, Dict, Any, List, Optional, Tuple
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
@@ -880,64 +880,24 @@ class ImportsAdapter(ResourceAdapter):
             ):
                 yield Path(fp_str), imports, symbols, structure
 
-    def _build_graph(
-        self,
-        target_path: Path,
-        on_file_processed: Optional[Callable[[Path], None]] = None,
-        collect_structures: bool = False,
-    ) -> None:
-        """Build import graph from target path (multi-language).
+    @staticmethod
+    def _discover_candidate_files(
+        target_path: Path, supported_exts: frozenset, code_exts: frozenset
+    ) -> Tuple[List[Path], Dict[str, List[Path]]]:
+        """Walk target_path for candidate code files (serial, cheap: no parsing).
 
-        Uses plugin-based architecture to automatically detect and use
-        appropriate extractor for each file type.
+        Preserves the original walk semantics exactly (skip-dirs, hidden dirs,
+        supported-or-code extension filter).
 
-        Only static imports are captured. Dynamic dispatch — Python's
-        importlib.import_module, JS require(), Java Class.forName, Ruby autoload,
-        and similar patterns — is invisible to this graph. All query modes
-        (fan-in, entrypoints, unused, circular, violations) share this limitation.
-
-        Per-file import/symbol extraction (and, when requested, AST structure
-        analysis) is independent across files and runs in parallel across
-        processes on large repos — see `_extract_one_file` / the module-level
-        BACK-489 P1 note. The graph assembly that follows is a cheap serial
-        reduce; results are consumed in file order so output is identical to a
-        serial run.
-
-        Args:
-            target_path: Directory or file to analyze
-            on_file_processed: Optional callback invoked once per code file
-                (import-extractable or not), in deterministic file order, after
-                that file's extraction. A lightweight per-file notification hook
-                (structure is delivered via ``collect_structures`` below, not
-                this callback).
-            collect_structures: When True, also run AST structure analysis
-                (`analyze_file`) on every code file during the same parallel
-                pass and store the truthy results in ``self._structures`` — lets
-                `reveal architecture` get per-file complexity structures without
-                a second full-repo walk/parse. When False (default), no
-                structure analysis is done.
+        BACK-491: during this same walk, build a `basename -> [full paths]`
+        index of *every* file under the tree (not just candidates — C/C++
+        include targets such as .inc/.tcc headers are not code-extension
+        files and must still be resolvable). Handed to include-resolving
+        extractors below so `#include` edge resolution is a dict lookup
+        instead of a full os.walk(root) per include. Built in walk order with
+        the same skip-dir/hidden filter, so it's byte-identical to the walk it
+        replaces in generic.py:resolve_import.
         """
-        supported_exts = frozenset(get_all_extensions())
-        # Recognized-code extensions that lack an import extractor — used to warn
-        # honestly (instead of a silent 0) when a scan hits, e.g., Swift or Scala.
-        code_exts = get_code_extensions()
-        unextractable: Dict[str, int] = {}
-        files: List[Path] = []
-        all_imports: List[ImportStatement] = []
-        structures: List[Dict[str, Any]] = []
-
-        # Phase 1 — discover candidate code files (serial, cheap: no parsing).
-        # Preserves the original walk semantics exactly (skip-dirs, hidden dirs,
-        # supported-or-code extension filter).
-        #
-        # BACK-491: during this same walk, build a `basename -> [full paths]`
-        # index of *every* file under the tree (not just candidates — C/C++
-        # include targets such as .inc/.tcc headers are not code-extension
-        # files and must still be resolvable). Handed to include-resolving
-        # extractors below so `#include` edge resolution is a dict lookup
-        # instead of a full os.walk(root) per include. Built in walk order with
-        # the same skip-dir/hidden filter, so it's byte-identical to the walk it
-        # replaces in generic.py:resolve_import.
         candidates: List[Path] = []
         file_index: Dict[str, List[Path]] = {}
         if target_path.is_file():
@@ -952,9 +912,26 @@ class ImportsAdapter(ResourceAdapter):
                     file_index.setdefault(fname, []).append(fp)
                     if fp.suffix in supported_exts or fp.suffix.lower() in code_exts:
                         candidates.append(fp)
+        return candidates, file_index
 
-        # Phase 2 — per-file extraction (parallel on large repos, else serial),
-        # consumed in candidate order so assembly is deterministic.
+    def _process_extracted_files(
+        self,
+        candidates: List[Path],
+        collect_structures: bool,
+        on_file_processed: Optional[Callable[[Path], None]],
+        supported_exts: frozenset,
+        code_exts: frozenset,
+    ) -> List[ImportStatement]:
+        """Run per-file extraction (parallel on large repos, else serial),
+        consumed in candidate order so assembly is deterministic. Populates
+        self._symbols_by_file/_scanned_files/_unsupported_extensions/_structures
+        and returns the collected import statements.
+        """
+        files: List[Path] = []
+        all_imports: List[ImportStatement] = []
+        structures: List[Dict[str, Any]] = []
+        unextractable: Dict[str, int] = {}
+
         for fp, imports, symbols, structure in self._extract_files(candidates, collect_structures):
             if fp.suffix in supported_exts:
                 files.append(fp)
@@ -973,11 +950,10 @@ class ImportsAdapter(ResourceAdapter):
         self._scanned_files = set(files)
         self._unsupported_extensions = unextractable
         self._structures = structures
+        return all_imports
 
-        # Build graph
-        self._graph = ImportGraph.from_imports(all_imports)
-
-        # Resolve imports to build dependency edges (language-specific)
+    def _resolve_dependencies(self, target_path: Path, file_index: Dict[str, List[Path]]) -> None:
+        """Resolve each file's imports to dependency edges (language-specific)."""
         for file_path, imports in self._graph.files.items():
             extractor = get_extractor(file_path)
             if not extractor:
@@ -1019,6 +995,55 @@ class ImportsAdapter(ResourceAdapter):
                 if resolved and resolved != file_path:
                     self._graph.add_dependency(file_path, resolved)
                     self._graph.resolved_paths[stmt.module_name] = resolved
+
+    def _build_graph(
+        self,
+        target_path: Path,
+        on_file_processed: Optional[Callable[[Path], None]] = None,
+        collect_structures: bool = False,
+    ) -> None:
+        """Build import graph from target path (multi-language).
+
+        Uses plugin-based architecture to automatically detect and use
+        appropriate extractor for each file type.
+
+        Only static imports are captured. Dynamic dispatch — Python's
+        importlib.import_module, JS require(), Java Class.forName, Ruby autoload,
+        and similar patterns — is invisible to this graph. All query modes
+        (fan-in, entrypoints, unused, circular, violations) share this limitation.
+
+        Per-file import/symbol extraction (and, when requested, AST structure
+        analysis) is independent across files and runs in parallel across
+        processes on large repos — see `_extract_one_file` / the module-level
+        BACK-489 P1 note. The graph assembly that follows is a cheap serial
+        reduce; results are consumed in file order so output is identical to a
+        serial run.
+
+        Args:
+            target_path: Directory or file to analyze
+            on_file_processed: Optional callback invoked once per code file
+                (import-extractable or not), in deterministic file order, after
+                that file's extraction. A lightweight per-file notification hook
+                (structure is delivered via ``collect_structures`` below, not
+                this callback).
+            collect_structures: When True, also run AST structure analysis
+                (`analyze_file`) on every code file during the same parallel
+                pass and store the truthy results in ``self._structures`` — lets
+                `reveal architecture` get per-file complexity structures without
+                a second full-repo walk/parse. When False (default), no
+                structure analysis is done.
+        """
+        supported_exts = frozenset(get_all_extensions())
+        # Recognized-code extensions that lack an import extractor — used to warn
+        # honestly (instead of a silent 0) when a scan hits, e.g., Swift or Scala.
+        code_exts = get_code_extensions()
+
+        candidates, file_index = self._discover_candidate_files(target_path, supported_exts, code_exts)
+        all_imports = self._process_extracted_files(
+            candidates, collect_structures, on_file_processed, supported_exts, code_exts)
+
+        self._graph = ImportGraph.from_imports(all_imports)
+        self._resolve_dependencies(target_path, file_index)
 
     def _build_response(self, response_type: str, **data_fields) -> Dict[str, Any]:
         """Build standardized adapter response with common structure.

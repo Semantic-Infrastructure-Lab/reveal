@@ -682,14 +682,8 @@ def _build_snippet_consistency(site_records: List[Dict], site_count: int) -> Lis
     return result
 
 
-def _run_fleet_audit(
-    search_dirs: List[str],
-    main_configs: List[str],
-) -> Dict[str, Any]:
-    """Build the fleet consistency matrix across all enabled nginx site configs."""
-    from datetime import date as _date
-
-    # --- Collect site configs ---
+def _collect_site_records(search_dirs: List[str]) -> List[Dict]:
+    """Read every enabled nginx site config under search_dirs into a record."""
     site_records: List[Dict] = []
     for search_dir in search_dirs:
         if not os.path.isdir(search_dir):
@@ -705,10 +699,11 @@ def _run_fleet_audit(
                 'checks': _audit_site_content(content),
                 'includes': _extract_includes(content),
             })
+    return site_records
 
-    site_count = len(site_records)
 
-    # --- Read global directives from nginx.conf ---
+def _read_global_directives(main_configs: List[str]) -> Tuple[Optional[str], Dict[str, bool]]:
+    """Find nginx.conf and audit its global directives, if readable."""
     nginx_conf_path = _find_nginx_conf(main_configs)
     global_checks: Dict[str, bool] = {}
     if nginx_conf_path:
@@ -719,15 +714,21 @@ def _run_fleet_audit(
                 global_checks[finding['id']] = finding['present']
         except Exception:  # noqa: BLE001 — nginx.conf may be unreadable; skip global checks
             pass
+    return nginx_conf_path, global_checks
 
-    # --- Build matrix ---
+
+def _fleet_site_label(r: Dict) -> str:
+    return r['domains'][0] if r['domains'] else os.path.basename(r['file'])
+
+
+def _build_fleet_matrix(
+    site_records: List[Dict], site_count: int, global_checks: Dict[str, bool]
+) -> List[Dict]:
+    """Cross-reference every fleet check against every site + the global config."""
     matrix = []
     for check_id, label, severity, _pattern, consol_eligible, deprecated, action_template in _FLEET_CHECK_DEFS:
         sites_with = [r for r in site_records if r['checks'].get(check_id)]
         sites_without = [r for r in site_records if not r['checks'].get(check_id)]
-
-        def _site_label(r: Dict) -> str:
-            return r['domains'][0] if r['domains'] else os.path.basename(r['file'])
 
         global_present = global_checks.get(check_id)  # None if nginx.conf not found
 
@@ -756,20 +757,38 @@ def _run_fleet_audit(
             'deprecated': deprecated,
             'sites_with': len(sites_with),
             'sites_without': len(sites_without),
-            'sites_with_names': [_site_label(r) for r in sites_with],
-            'sites_without_names': [_site_label(r) for r in sites_without],
+            'sites_with_names': [_fleet_site_label(r) for r in sites_with],
+            'sites_without_names': [_fleet_site_label(r) for r in sites_without],
             'consolidation_opportunity': consolidation_opportunity,
             'action': action,
         })
+    return matrix
 
-    # has_gaps: any missing directive that isn't a "deprecated header present" check
-    has_gaps = any(
+
+def _fleet_has_gaps(matrix: List[Dict]) -> bool:
+    """Any missing directive that isn't a "deprecated header present" check."""
+    return any(
         e['sites_without'] > 0 and not e['deprecated']
         for e in matrix
     ) or any(
         e['deprecated'] and e['sites_with'] > 0
         for e in matrix
     )
+
+
+def _run_fleet_audit(
+    search_dirs: List[str],
+    main_configs: List[str],
+) -> Dict[str, Any]:
+    """Build the fleet consistency matrix across all enabled nginx site configs."""
+    from datetime import date as _date
+
+    site_records = _collect_site_records(search_dirs)
+    site_count = len(site_records)
+
+    nginx_conf_path, global_checks = _read_global_directives(main_configs)
+
+    matrix = _build_fleet_matrix(site_records, site_count, global_checks)
 
     return {
         'contract_version': '1.0',
@@ -780,7 +799,7 @@ def _run_fleet_audit(
         'date': _date.today().isoformat(),
         'matrix': matrix,
         'snippet_consistency': _build_snippet_consistency(site_records, site_count),
-        'has_gaps': has_gaps,
+        'has_gaps': _fleet_has_gaps(matrix),
     }
 
 

@@ -163,6 +163,43 @@ def _collect_type_params(
 
 # ─────────────────────────── guard classification ────────────────────────────
 
+def _classify_isinstance_guard(
+    node: Any, var_name: str, get_text: Callable, negated: bool
+) -> Optional[Dict[str, Any]]:
+    """Classify `isinstance(var_name, T)` (optionally negated) as a type guard."""
+    callee = node.child(0) if _children(node) else None
+    if callee is None or callee.kind() != 'identifier':
+        return None
+    if get_text(callee) != 'isinstance':
+        return None
+    args = next((c for c in _children(node) if c.kind() == 'argument_list'), None)
+    if args is None:
+        return None
+    arg_ids = [c for c in _children(args) if c.kind() == 'identifier']
+    if len(arg_ids) < 2 or get_text(arg_ids[0]) != var_name:
+        return None
+    return {'kind': 'isinstance', 'type': get_text(arg_ids[1]), 'negated': negated}
+
+
+def _classify_is_none_guard(node: Any, var_name: str, get_text: Callable) -> Optional[Dict[str, Any]]:
+    """Classify `var_name is [not] None` as a None guard."""
+    children = _children(node)
+    if len(children) < 3:
+        return None
+    subj = children[0]
+    if subj.kind() != 'identifier' or get_text(subj) != var_name:
+        return None
+    op_type = children[1].kind()  # 'is' or 'is not'
+    rhs = children[-1]
+    if rhs.kind() != 'none':
+        return None
+    if op_type == 'is':
+        return {'kind': 'is_none', 'negated': False}
+    if op_type == 'is not':
+        return {'kind': 'is_none', 'negated': True}
+    return None
+
+
 def _classify_guard(
     cond_node: Any, var_name: str, get_text: Callable
 ) -> Optional[Dict[str, Any]]:
@@ -177,34 +214,10 @@ def _classify_guard(
             return None
 
     if node.kind() == 'call':
-        callee = node.child(0) if _children(node) else None
-        if callee is None or callee.kind() != 'identifier':
-            return None
-        if get_text(callee) != 'isinstance':
-            return None
-        args = next((c for c in _children(node) if c.kind() == 'argument_list'), None)
-        if args is None:
-            return None
-        arg_ids = [c for c in _children(args) if c.kind() == 'identifier']
-        if len(arg_ids) < 2 or get_text(arg_ids[0]) != var_name:
-            return None
-        return {'kind': 'isinstance', 'type': get_text(arg_ids[1]), 'negated': negated}
+        return _classify_isinstance_guard(node, var_name, get_text, negated)
 
     if node.kind() == 'comparison_operator' and not negated:
-        children = _children(node)
-        if len(children) < 3:
-            return None
-        subj = children[0]
-        if subj.kind() != 'identifier' or get_text(subj) != var_name:
-            return None
-        op_type = children[1].kind()  # 'is' or 'is not'
-        rhs = children[-1]
-        if rhs.kind() != 'none':
-            return None
-        if op_type == 'is':
-            return {'kind': 'is_none', 'negated': False}
-        if op_type == 'is not':
-            return {'kind': 'is_none', 'negated': True}
+        return _classify_is_none_guard(node, var_name, get_text)
 
     return None
 

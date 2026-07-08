@@ -940,6 +940,80 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return sibling
         return node
 
+    def _struct_type_name(self, node) -> Optional[str]:
+        """BACK-478: Go `type Foo struct { ... }` parses the struct body as a
+        `struct_type` node with no name-shaped child at all — the name
+        (`type_identifier`) is a *sibling* under the shared parent
+        `type_spec` (`type_declaration -> type_spec -> [type_identifier,
+        struct_type]`), not a descendant. Every other STRUCT_NODE_TYPES
+        member carries its own name as a child, so this needs its own
+        lookup before the generic child-scanning (which would find nothing
+        and return None).
+        """
+        parent = node.parent()
+        if parent is not None:
+            for sibling in _children(parent):
+                if sibling.kind() == 'type_identifier':
+                    return self._get_node_text(sibling)
+        return None
+
+    def _name_via_declarator(self, kids) -> Optional[str]:
+        # PRIORITY 1: For C/C++ functions, look inside declarators FIRST —
+        # these contain the actual function/variable name, not the type.
+        for child in kids:
+            if child.kind() in ('function_declarator', 'pointer_declarator', 'declarator'):
+                # Recursively search for identifier (may be nested deep)
+                name = self._find_identifier_in_tree(child)
+                if name:
+                    return name
+        return None
+
+    def _name_via_param_adjacent(self, kids) -> Optional[str]:
+        # PRIORITY 2 (BACK-413): name-kind child immediately preceding a
+        # parameter list — the node actually attached to the argument list,
+        # not an unrelated identifier-shaped sibling (return type, receiver,
+        # etc. — e.g. C# `Task Close()`, Go `func (s *T) Name()`).
+        for i, child in enumerate(kids):
+            if child.kind() in _PARAM_LIST_KINDS and i > 0 and kids[i - 1].kind() in _NAME_KINDS:
+                return self._get_node_text(kids[i - 1])
+        return None
+
+    def _name_via_identifier_kind(self, kids) -> Optional[str]:
+        # PRIORITY 2b: no adjacent parameter list — first identifier/name child
+        # (classes, fields, variables; excludes field_identifier, see PRIORITY 4)
+        for child in kids:
+            if child.kind() in ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier'):
+                return self._get_node_text(child)
+        return None
+
+    def _name_via_dot_index(self, kids) -> Optional[str]:
+        # PRIORITY 2c: Lua `function table.name(...)` / `function tbl.a.b(...)`
+        # — an extremely common module-method idiom (BACK-431 Issue G tier B
+        # dogfood audit: found via real Kong source, `kong/concurrency.lua`'s
+        # entire public API is declared this way). The name is a
+        # `dot_index_expression` ("concurrency.with_worker_mutex"), a kind
+        # absent from every check above; return just the final segment,
+        # matching how every other bare-name function lookup in reveal works.
+        for child in kids:
+            if child.kind() == 'dot_index_expression':
+                return self._get_node_text(child).rsplit('.', 1)[-1]
+        return None
+
+    def _name_via_type_identifier(self, kids) -> Optional[str]:
+        # PRIORITY 3: type_identifier (fallback for structs, classes) — only
+        # used if no name was found in declarators.
+        for child in kids:
+            if child.kind() == 'type_identifier':
+                return self._get_node_text(child)
+        return None
+
+    def _name_via_field_identifier(self, kids) -> Optional[str]:
+        # PRIORITY 4: field_identifier (for struct fields)
+        for child in kids:
+            if child.kind() == 'field_identifier':
+                return self._get_node_text(child)
+        return None
+
     def _get_node_name(self, node) -> Optional[str]:
         """Get the name of a node (function/class/struct name).
 
@@ -952,77 +1026,26 @@ class TreeSitterAnalyzer(FileAnalyzer):
         We must search declarators BEFORE looking at type_identifier to avoid
         extracting the return type instead of the function name.
 
-        CRITICAL (BACK-413): some grammars put more than one name-shaped node
-        among a method's direct children — a bare non-generic return type
-        (C# `Task Close()`) or a receiver (Go `func (s *T) Name()`) parses as
-        an `identifier`/`field_identifier` sibling of the real name. Picking
-        the first match (old behavior) grabs the return type/receiver instead
-        of the name. The real name is always the one immediately preceding
-        the parameter list, so that pairing is checked first.
-
-        BACK-478: Go `type Foo struct { ... }` parses the struct body as a
-        `struct_type` node with no name-shaped child at all — the name
-        (`type_identifier`) is a *sibling* under the shared parent
-        `type_spec` (`type_declaration -> type_spec -> [type_identifier,
-        struct_type]`), not a descendant. Every other STRUCT_NODE_TYPES
-        member carries its own name as a child, so this needs its own
-        lookup before the generic child-scanning below (which would find
-        nothing and return None).
+        Tries each `_name_via_*` strategy in priority order (see each
+        strategy's own comment for its rationale) and returns the first
+        match; `_struct_type_name` is a special case with no name-shaped
+        descendant at all, so it's checked before any of them.
         """
         if node.kind() == 'struct_type':
-            parent = node.parent()
-            if parent is not None:
-                for sibling in _children(parent):
-                    if sibling.kind() == 'type_identifier':
-                        return self._get_node_text(sibling)
-            return None
+            return self._struct_type_name(node)
 
         kids = _children(node)
-
-        # PRIORITY 1: For C/C++ functions, look inside declarators FIRST
-        # These contain the actual function/variable name, not the type
-        for child in kids:
-            if child.kind() in ('function_declarator', 'pointer_declarator', 'declarator'):
-                # Recursively search for identifier (may be nested deep)
-                name = self._find_identifier_in_tree(child)
-                if name:
-                    return name
-
-        # PRIORITY 2: name-kind child immediately preceding a parameter list —
-        # the node actually attached to the argument list, not an unrelated
-        # identifier-shaped sibling (return type, receiver, etc.)
-        for i, child in enumerate(kids):
-            if child.kind() in _PARAM_LIST_KINDS and i > 0 and kids[i - 1].kind() in _NAME_KINDS:
-                return self._get_node_text(kids[i - 1])
-
-        # PRIORITY 2b: no adjacent parameter list — first identifier/name child
-        # (classes, fields, variables; excludes field_identifier, see PRIORITY 4)
-        for child in kids:
-            if child.kind() in ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier'):
-                return self._get_node_text(child)
-
-        # PRIORITY 2c: Lua `function table.name(...)` / `function tbl.a.b(...)`
-        # — an extremely common module-method idiom (BACK-431 Issue G tier B
-        # dogfood audit: found via real Kong source, `kong/concurrency.lua`'s
-        # entire public API is declared this way). The name is a
-        # `dot_index_expression` ("concurrency.with_worker_mutex"), a kind
-        # absent from every check above; return just the final segment,
-        # matching how every other bare-name function lookup in reveal works.
-        for child in kids:
-            if child.kind() == 'dot_index_expression':
-                return self._get_node_text(child).rsplit('.', 1)[-1]
-
-        # PRIORITY 3: type_identifier (fallback for structs, classes)
-        # Only use this if we haven't found a name in declarators
-        for child in kids:
-            if child.kind() == 'type_identifier':
-                return self._get_node_text(child)
-
-        # PRIORITY 4: field_identifier (for struct fields)
-        for child in kids:
-            if child.kind() == 'field_identifier':
-                return self._get_node_text(child)
-
+        for strategy in (
+            self._name_via_declarator,
+            self._name_via_param_adjacent,
+            self._name_via_identifier_kind,
+            self._name_via_dot_index,
+            self._name_via_type_identifier,
+            self._name_via_field_identifier,
+        ):
+            name = strategy(kids)
+            if name:
+                return name
         return None
 
     def _find_identifier_in_tree(self, node) -> Optional[str]:
@@ -1134,47 +1157,34 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Compute cyclomatic complexity and max nesting depth."""
         return calculate_complexity_and_depth(node)
 
-    def _get_callee_name(self, call_node) -> Optional[str]:
-        """Extract the callee name from a call expression node.
-
-        Handles five forms:
-          - Simple:         foo()             → "foo"
-          - Attribute:      self.bar()        → "self.bar"
-          - Chained:        a.b.c()           → "a.b.c"
-          - Starred:        *foo(bar)         → "foo"
-          - PHP method:     $obj->method()    → "$obj->method"
-          - PHP new:        new ClassName()   → "new ClassName"
-        """
-        if not call_node.child_count():
-            return None
-
+    def _callee_name_php_method(self, call_node) -> Optional[str]:
         # PHP: $obj->method() — member_call_expression children are:
         #   receiver (->|?->) name arguments
-        if call_node.kind() == 'member_call_expression':
-            receiver_text = None
-            method_name = None
-            seen_arrow = False
-            for child in _children(call_node):
-                if child.kind() in ('->', '?->'):
-                    seen_arrow = True
-                    continue
-                if child.kind() == 'arguments':
-                    break
-                if not seen_arrow:
-                    receiver_text = self._get_node_text(child)
-                else:
-                    method_name = self._get_node_text(child)
-            if method_name:
-                return f"{receiver_text}->{method_name}" if receiver_text else method_name
-            return None
+        receiver_text = None
+        method_name = None
+        seen_arrow = False
+        for child in _children(call_node):
+            if child.kind() in ('->', '?->'):
+                seen_arrow = True
+                continue
+            if child.kind() == 'arguments':
+                break
+            if not seen_arrow:
+                receiver_text = self._get_node_text(child)
+            else:
+                method_name = self._get_node_text(child)
+        if method_name:
+            return f"{receiver_text}->{method_name}" if receiver_text else method_name
+        return None
 
+    def _callee_name_php_new(self, call_node) -> Optional[str]:
         # PHP: new ClassName() — object_creation_expression
-        if call_node.kind() == 'object_creation_expression':
-            for child in _children(call_node):
-                if child.kind() not in ('new', 'arguments'):
-                    return f"new {self._get_node_text(child)}"
-            return None
+        for child in _children(call_node):
+            if child.kind() not in ('new', 'arguments'):
+                return f"new {self._get_node_text(child)}"
+        return None
 
+    def _callee_name_generic(self, call_node) -> Optional[str]:
         callee_node = call_node.child(0)
         if callee_node.kind() == 'identifier':
             return self._get_node_text(callee_node)
@@ -1189,6 +1199,25 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     return self._get_node_text(child).lstrip('*')
         text = self._get_node_text(callee_node).strip().lstrip('*')
         return text if text else None
+
+    def _get_callee_name(self, call_node) -> Optional[str]:
+        """Extract the callee name from a call expression node.
+
+        Handles five forms:
+          - Simple:         foo()             → "foo"
+          - Attribute:      self.bar()        → "self.bar"
+          - Chained:        a.b.c()           → "a.b.c"
+          - Starred:        *foo(bar)         → "foo"
+          - PHP method:     $obj->method()    → "$obj->method"
+          - PHP new:        new ClassName()   → "new ClassName"
+        """
+        if not call_node.child_count():
+            return None
+        if call_node.kind() == 'member_call_expression':
+            return self._callee_name_php_method(call_node)
+        if call_node.kind() == 'object_creation_expression':
+            return self._callee_name_php_new(call_node)
+        return self._callee_name_generic(call_node)
 
     def _extract_calls_in_function(self, func_node) -> List[str]:
         """Walk function body subtree and return unique callee name strings.
