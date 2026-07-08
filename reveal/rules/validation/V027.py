@@ -16,23 +16,36 @@ Method:
       positives (common English words coincidentally appearing in prose)
       and false negatives (template-style schema keys like markdown://'s
       "field=value"), so template keys are excluded and matches require
-      query/flag/code-span context.
+      query/flag/code-span context. NOTE: this is deliberately a lenient
+      text match, NOT the same tree-sitter table extraction the reverse
+      direction uses — and that asymmetry is correct, not a shortcut.
+      Forward asks "is this param documented *anywhere* in the guide?",
+      and guides legitimately document params in prose, example URIs, and
+      code blocks rather than only a "Parameter" table (claude:// documents
+      all 16 of its params with none in a param-column table). Restricting
+      forward to table-column extraction was measured against the live
+      24-adapter corpus and produced 45 false positives vs. the text
+      check's 0 misses — so the lenient direction stays lenient by design.
     - Reverse direction: real tree-sitter markdown parsing (pipe_table /
       pipe_table_header / pipe_table_row nodes), not backtick regex over
       the whole file — a naive regex scan conflates a table's "Parameter"
       column with adjacent "Values"/"Example" columns (e.g. enum values
       like `class`/`true`/`json` misread as param names). Reading the
       header row to find the actual "Parameter" column removes that
-      ambiguity entirely. Universal result-control params (limit, offset,
-      sort) are excluded — they're handled by shared plumbing outside each
-      adapter's own query_params schema, not per-adapter drift.
-
+      ambiguity entirely. A table is a *strong structured claim* ("this is
+      a real param"), so verifying it strictly against the schema is right;
+      the asymmetry with the lenient forward check is intentional.
+      Universal result-control params (limit, offset, sort) are excluded —
+      they're handled by shared plumbing outside each adapter's own
+      query_params schema, not per-adapter drift.
 Scope:
     - reveal:// self-check only (internal=True), like V012/V013.
     - Adapter → guide file mapping is a simple naming convention
       (SCHEME_ADAPTER_GUIDE.md / SCHEME_GUIDE.md / SCHEMEGUIDE.md); an
-      adapter with no matching guide file is silently skipped (not this
-      rule's job to flag a missing guide).
+      adapter with no matching guide file is skipped here because *guide
+      existence* is V024's job (V024 flags any registered public adapter
+      lacking a guide). V027 stays narrowly about param coherence within a
+      guide that exists, so the two rules don't double-report the same gap.
 """
 
 import re
@@ -48,6 +61,12 @@ from .utils import find_reveal_root
 # not declared in any individual adapter's get_schema()['query_params'] —
 # legitimately absent from the schema even though guides document them.
 _UNIVERSAL_RESULT_CONTROL = {'limit', 'offset', 'sort'}
+
+# Adapter schemes with no adapter guide, skipped when pairing schemes to
+# guides: help:// *is* the guide/help system itself (documented in-band, not
+# via a *_GUIDE.md), and test/demo are test-fixture schemes. Guide *existence*
+# for real adapters is V024's responsibility, not V027's — see module docstring.
+_GUIDELESS_SCHEMES = {'help', 'test', 'demo'}
 
 # Schema query-param keys that are generic filter-operator syntax templates
 # (markdown://'s shared query DSL: "field=value", "field~=pattern", ...)
@@ -81,20 +100,28 @@ class V027(BaseRule):
         except Exception:
             return []
 
+        # find_reveal_root() returns the reveal *package* dir (the one holding
+        # analyzers/ and rules/), so the guides live directly under it at
+        # docs/adapters — NOT reveal/docs/adapters. The earlier extra 'reveal'
+        # segment pointed at a path that never exists, silently early-returning
+        # here and making the whole rule a no-op (guarded now by the
+        # test_live_registry_actually_ran regression test).
         reveal_root = find_reveal_root()
         if not reveal_root:
             return []
-        guides_dir = reveal_root / 'reveal' / 'docs' / 'adapters'
+        guides_dir = reveal_root / 'docs' / 'adapters'
         if not guides_dir.exists():
             return []
 
         parser = get_parser('markdown')
         detections: List[Detection] = []
 
-        schemes = sorted(set(_ADAPTER_REGISTRY.keys()) - {'help', 'test', 'demo'})
+        schemes = sorted(set(_ADAPTER_REGISTRY.keys()) - _GUIDELESS_SCHEMES)
         for scheme in schemes:
             guide_path = self._guess_guide_file(scheme, guides_dir)
             if guide_path is None:
+                # Guide existence is V024's job; V027 only checks coherence
+                # within a guide that exists. Skip (don't double-report).
                 continue
 
             try:

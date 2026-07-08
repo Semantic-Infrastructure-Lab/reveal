@@ -209,6 +209,19 @@ class TestV002AnalyzerRegistration(unittest.TestCase):
     def setUp(self):
         self.rule = V002()
 
+    def test_not_silent_noop_against_real_tree(self):
+        """Guard against a V027-style silent no-op: prove check() reaches its
+        scan loop against the real checkout instead of early-returning on an
+        unresolved analyzers/ path. (V027 shipped as a no-op precisely because
+        its path never resolved, yet its zero-assertion test passed vacuously.)
+        """
+        root = find_reveal_root()
+        self.assertIsNotNone(root, "find_reveal_root() must resolve in the dev checkout")
+        real = [p for p in (root / 'analyzers').glob('*.py') if not p.stem.startswith('_')]
+        self.assertTrue(
+            real, f"V002 scans no analyzer files -> check() is a no-op ({root / 'analyzers'})"
+        )
+
     def test_metadata(self):
         """Test rule metadata."""
         self.assertEqual(self.rule.code, "V002")
@@ -482,6 +495,17 @@ class TestV005StaticHelpSync(unittest.TestCase):
     def setUp(self):
         self.rule = V005()
 
+    def test_not_silent_noop_against_real_tree(self):
+        """Guard against a V027-style silent no-op: prove check() actually parses
+        STATIC_HELP and resolves docs/ against the real checkout rather than
+        early-returning with zero detections.
+        """
+        root = self.rule._find_reveal_root()
+        self.assertIsNotNone(root, "V005 could not resolve reveal root")
+        static_help = self.rule._get_static_help(root)
+        self.assertTrue(static_help, "V005 parsed no STATIC_HELP entries -> check() is a no-op")
+        self.assertTrue((root / 'docs').exists(), "V005 docs/ path does not resolve -> no-op")
+
     def test_metadata(self):
         """Test rule metadata."""
         self.assertEqual(self.rule.code, "V005")
@@ -612,6 +636,20 @@ class TestV007VersionConsistency(unittest.TestCase):
 
     def setUp(self):
         self.rule = V007()
+
+    def test_not_silent_noop_against_real_tree(self):
+        """Guard against a V027-style silent no-op: V007 skips all version checks
+        unless is_dev_checkout(root) is True, so a regression there would make
+        every zero-detection assertion pass vacuously. Prove the dev checkout is
+        recognized as one.
+        """
+        from reveal.rules.validation.utils import is_dev_checkout
+        root = find_reveal_root()
+        self.assertIsNotNone(root)
+        self.assertTrue(
+            is_dev_checkout(root),
+            "V007 treats the dev checkout as non-dev -> version checks silently skip",
+        )
 
     def test_metadata(self):
         """Test rule metadata."""
@@ -807,6 +845,20 @@ class TestV009DocumentationCrossReferences(unittest.TestCase):
     def setUp(self):
         self.rule = V009()
 
+    def test_not_silent_noop_fires_on_broken_link(self):
+        """Positive-firing guard: a broken relative link must produce a detection,
+        proving check() runs end-to-end rather than silently returning [] (the
+        failure mode that let V027 ship as a no-op with green tests).
+        """
+        detections = self.rule.check(
+            'reveal://README.md', None, '[bad](./does_not_exist_zzz.md)\n'
+        )
+        self.assertTrue(
+            any('Broken link' in d.message for d in detections),
+            f"V009 did not fire on a broken link -> possible silent no-op: "
+            f"{[d.message for d in detections]}",
+        )
+
     def test_metadata(self):
         """Test rule metadata."""
         self.assertEqual(self.rule.code, "V009")
@@ -917,6 +969,19 @@ class TestV011ReleaseReadiness(unittest.TestCase):
 
     def setUp(self):
         self.rule = V011()
+
+    def test_not_silent_noop_against_real_tree(self):
+        """Guard against a V027-style silent no-op: V011 skips all release-readiness
+        checks unless is_dev_checkout(root) is True. Prove the dev checkout is
+        recognized so zero-detection assertions aren't vacuous.
+        """
+        from reveal.rules.validation.utils import is_dev_checkout
+        root = find_reveal_root()
+        self.assertIsNotNone(root)
+        self.assertTrue(
+            is_dev_checkout(root),
+            "V011 treats the dev checkout as non-dev -> release-readiness checks silently skip",
+        )
 
     def test_metadata(self):
         """Test rule metadata."""
@@ -1467,6 +1532,18 @@ class TestV016AdapterHelp(unittest.TestCase):
 
     def setUp(self):
         self.rule = V016()
+
+    def test_not_silent_noop_against_real_tree(self):
+        """Guard against a V027-style silent no-op: prove the reveal:// self-scan
+        reaches real adapter files instead of early-returning on an unresolved
+        adapters/ path.
+        """
+        root = find_reveal_root()
+        self.assertIsNotNone(root)
+        adapters = list((root / 'adapters').glob('*.py'))
+        self.assertTrue(
+            adapters, "V016 finds no adapter files -> _check_reveal_adapters() is a no-op"
+        )
 
     def test_metadata(self):
         """Test rule metadata."""
@@ -2446,8 +2523,12 @@ class TestV027AdapterGuideSchemaCoherence(unittest.TestCase):
                 return {'query_params': {'live_only': {'type': 'string'}}}
 
         with tempfile.TemporaryDirectory() as tmp:
+            # find_reveal_root() returns the reveal *package* dir; guides live
+            # directly under it at docs/adapters (NOT reveal/docs/adapters).
+            # This fixture must mirror that real layout or it silently tests
+            # nothing — see test_live_registry_actually_ran.
             reveal_root = Path(tmp) / 'reveal'
-            guides_dir = reveal_root / 'reveal' / 'docs' / 'adapters'
+            guides_dir = reveal_root / 'docs' / 'adapters'
             guides_dir.mkdir(parents=True)
             (guides_dir / 'WIDGET_ADAPTER_GUIDE.md').write_text(
                 "# Widget\n\n"
@@ -2466,6 +2547,69 @@ class TestV027AdapterGuideSchemaCoherence(unittest.TestCase):
         self.assertEqual(len(detections), 2, messages)
         self.assertTrue(any('live_only' in m and 'undocumented' in m for m in messages), messages)
         self.assertTrue(any('doc_only' in m and 'not in the live schema' in m for m in messages), messages)
+
+    def test_live_registry_actually_ran(self):
+        """Regression guard: prove check() reaches the real guides dir instead of
+        silently early-returning on a mis-joined path.
+
+        Before this guard, guides_dir was built as reveal_root/'reveal'/'docs'/
+        'adapters' (an extra 'reveal' segment) which never exists, so check()
+        returned [] every time — and test_live_registry_zero_detections passed
+        vacuously (0 == 0 for the wrong reason). We inject an undocumented param
+        into a REAL registered adapter (no find_reveal_root mock) and require the
+        forward check to fire, which can only happen if the real guides dir
+        resolved and the loop actually executed.
+        """
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+
+        # Pick a real adapter that has a guide, and wrap its schema to add a
+        # param that no guide documents.
+        real_scheme = 'git'
+        self.assertIn(real_scheme, _ADAPTER_REGISTRY)
+        real_adapter = _ADAPTER_REGISTRY[real_scheme]
+
+        class Wrapped:
+            @staticmethod
+            def get_schema():
+                schema = dict(real_adapter.get_schema())
+                params = dict(schema.get('query_params') or {})
+                params['zzz_synthetic_undocumented'] = {'type': 'string'}
+                schema['query_params'] = params
+                return schema
+
+        with patch.dict('reveal.adapters.base._ADAPTER_REGISTRY',
+                        {real_scheme: Wrapped}):
+            detections = self.rule.check('reveal://', None, '')
+
+        messages = [d.message for d in detections]
+        self.assertTrue(
+            any('zzz_synthetic_undocumented' in m for m in messages),
+            f"Forward check did not fire against real guides — check() likely "
+            f"early-returned on a bad guides_dir path. Detections: {messages}",
+        )
+
+    def test_missing_guide_is_not_v027s_job(self):
+        """V027 must NOT flag missing guides — that's V024's responsibility.
+
+        An adapter with no guide file is skipped by V027 (guide *existence* is
+        covered by V024); V027 stays narrowly about param coherence within a
+        guide that exists, so the two rules don't double-report the same gap.
+        """
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+
+        class NoGuideAdapter:
+            @staticmethod
+            def get_schema():
+                return {'query_params': {'foo': {'type': 'string'}}}
+
+        with patch.dict('reveal.adapters.base._ADAPTER_REGISTRY',
+                        {'zzznoguideadapter': NoGuideAdapter}):
+            detections = self.rule.check('reveal://', None, '')
+
+        self.assertFalse(
+            any('zzznoguideadapter' in d.message for d in detections),
+            "V027 should skip guideless adapters, leaving them to V024",
+        )
 
 
 if __name__ == '__main__':
