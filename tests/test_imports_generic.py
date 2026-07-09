@@ -37,6 +37,14 @@ class TestRegistration:
         for ext in ('.c', '.h', '.cpp', '.java', '.cs', '.php', '.rb'):
             assert ext in exts
 
+    def test_back514_languages_registered(self):
+        langs = get_supported_languages()
+        for lang in ('Scala', 'Dart', 'GDScript', 'Lua', 'Zig'):
+            assert lang in langs
+        exts = get_all_extensions()
+        for ext in ('.scala', '.dart', '.gd', '.lua', '.zig'):
+            assert ext in exts
+
 
 class TestC:
     def test_local_and_system_includes(self):
@@ -161,6 +169,87 @@ class TestRuby:
         assert set(by_mod) == {'json', 'yaml', './helper', 'config.rb'}
         assert by_mod['./helper'].is_relative is True
         assert by_mod['json'].is_relative is False
+
+
+class TestScala:
+    def test_import_forms(self):
+        code = (
+            'import scala.collection.mutable.Map\n'
+            'import scala.util.{Try, Success}\n'
+            'import scala.util._\n'
+        )
+        imports, _ = _extract(code, '.scala')
+        mods = {i.module_name for i in imports}
+        assert mods == {
+            'scala.collection.mutable.Map',
+            'scala.util.{Try, Success}',
+            'scala.util._',
+        }
+
+
+class TestDart:
+    def test_import_forms_exclude_export(self):
+        code = (
+            'import "package:flutter/material.dart";\n'
+            "import './helper.dart';\n"
+            "export './other.dart';\n"  # not an import — out of scope for v1
+        )
+        imports, _ = _extract(code, '.dart')
+        by_mod = {i.module_name: i for i in imports}
+        assert set(by_mod) == {'package:flutter/material.dart', './helper.dart'}
+        assert by_mod['./helper.dart'].is_relative is True
+
+
+class TestGDScript:
+    def test_extends_preload_load(self):
+        code = (
+            'extends "res://base.gd"\n'
+            'const Helper = preload("res://helper.gd")\n'
+            'var x = load("res://other.gd")\n'
+        )
+        imports, _ = _extract(code, '.gd')
+        mods = {i.module_name for i in imports}
+        assert mods == {'res://base.gd', 'res://helper.gd', 'res://other.gd'}
+
+    def test_non_resource_load_not_an_import(self):
+        """A `load` call whose callee isn't the preload/load builtin (e.g. a
+        variable named `load`) must not be picked up."""
+        code = 'var load = 5\nvar y = load\n'
+        imports, _ = _extract(code, '.gd')
+        assert imports == []
+
+
+class TestLua:
+    def test_require_forms(self):
+        code = (
+            'local a = require("a.b")\n'
+            "local b = require 'a.c'\n"
+        )
+        imports, _ = _extract(code, '.lua')
+        mods = {i.module_name for i in imports}
+        assert mods == {'a.b', 'a.c'}
+
+    def test_require_shadowed_as_variable_not_an_import(self):
+        """`local require = 5` is a variable, not a call — must not be
+        mistaken for an import (no `function_call` node is produced)."""
+        code = 'local require = 5\n'
+        imports, _ = _extract(code, '.lua')
+        assert imports == []
+
+
+class TestZig:
+    def test_import_forms(self):
+        code = (
+            'const std = @import("std");\n'
+            'const foo = @import("foo.zig");\n'
+        )
+        imports, _ = _extract(code, '.zig')
+        mods = {i.module_name for i in imports}
+        assert mods == {'std', 'foo.zig'}
+        by_mod = {i.module_name: i for i in imports}
+        assert all(i.skip_unused for i in imports)
+        assert by_mod['std'].line_number == 1
+        assert by_mod['foo.zig'].line_number == 2
 
 
 class TestResolution:
@@ -324,6 +413,74 @@ class TestModuleResolution:
         (tmp_path / 'Main.swift').write_text('import Helper\n')
         res = self._resolve(tmp_path, 'Main.swift', '.')
         assert res['Helper'] is None
+
+    def test_scala_import_resolves_via_package_dir(self, tmp_path):
+        (tmp_path / 'a/b').mkdir(parents=True)
+        (tmp_path / 'a/b/Helper.scala').write_text('package a.b\nclass Helper\n')
+        (tmp_path / 'Main.scala').write_text(
+            'import a.b.Helper\n'
+            'import a.b.{Foo, Bar}\n'
+            'import a.b._\n'
+        )
+        res = self._resolve(tmp_path, 'Main.scala', '.')
+        assert res['a.b.Helper'] == (tmp_path / 'a/b/Helper.scala').resolve()
+        assert res['a.b.{Foo, Bar}'] is None  # selector import — skip, not fabricate
+        assert res['a.b._'] is None           # wildcard import — skip
+
+    def test_dart_relative_import_resolves_package_import_skips(self, tmp_path):
+        (tmp_path / 'helper.dart').write_text('class Helper {}\n')
+        (tmp_path / 'main.dart').write_text(
+            "import './helper.dart';\n"
+            'import "package:flutter/material.dart";\n'
+        )
+        res = self._resolve(tmp_path, 'main.dart', '.')
+        assert res['./helper.dart'] == (tmp_path / 'helper.dart').resolve()
+        assert res['package:flutter/material.dart'] is None
+
+    def test_gdscript_res_uri_resolves_against_project_root(self, tmp_path):
+        """`res://` is project-root-relative, not file-relative — resolving it
+        against the importing file's own directory must NOT work; only the
+        project root (passed as a search path) should."""
+        (tmp_path / 'project.godot').write_text('')
+        (tmp_path / 'sub').mkdir()
+        (tmp_path / 'sub/helper.gd').write_text('extends Node\n')
+        (tmp_path / 'sub/main.gd').write_text(
+            'const Helper = preload("res://sub/helper.gd")\n')
+        entry = tmp_path / 'sub/main.gd'
+        extractor = get_extractor(entry)
+        stmt = extractor.extract_imports(entry)[0]
+        # File-relative resolution (wrong root) must fail.
+        assert extractor.resolve_import(stmt, base_path=entry.parent, search_paths=[]) is None
+        # Project-root resolution (correct root) must succeed.
+        resolved = extractor.resolve_import(
+            stmt, base_path=entry.parent, search_paths=[tmp_path])
+        assert resolved == (tmp_path / 'sub/helper.gd').resolve()
+
+    def test_lua_require_dotted_path_resolves(self, tmp_path):
+        (tmp_path / 'a/b').mkdir(parents=True)
+        (tmp_path / 'a/b/helper.lua').write_text('return {}\n')
+        (tmp_path / 'main.lua').write_text(
+            'local h = require("a.b.helper")\n'
+            'local j = require("json")\n'
+        )
+        res = self._resolve(tmp_path, 'main.lua', '.')
+        assert res['a.b.helper'] == (tmp_path / 'a/b/helper.lua').resolve()
+        assert res['json'] is None  # not an in-tree file — skip
+
+    def test_zig_relative_import_resolves_stdlib_skips(self, tmp_path):
+        (tmp_path / 'helper.zig').write_text('pub const x = 1;\n')
+        (tmp_path / 'main.zig').write_text(
+            'const std = @import("std");\n'
+            'const helper = @import("helper.zig");\n'
+        )
+        entry = tmp_path / 'main.zig'
+        extractor = get_extractor(entry)
+        by_mod = {}
+        for stmt in extractor.extract_imports(entry):
+            by_mod[stmt.module_name] = extractor.resolve_import(
+                stmt, base_path=tmp_path, search_paths=[tmp_path])
+        assert by_mod['helper.zig'] == (tmp_path / 'helper.zig').resolve()
+        assert by_mod['std'] is None
 
     def test_resolution_matches_with_and_without_file_index(self, tmp_path):
         """The file_index fast path (BACK-491) must resolve byte-identically to

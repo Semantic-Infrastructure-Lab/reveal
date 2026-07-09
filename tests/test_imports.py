@@ -1057,19 +1057,20 @@ class TestImportsRenderer:
         """BACK-431 feature-breadth pass: a language with no import extractor
         was never analyzed, so count == 0 means "not checked," not "clean." The
         text renderer used to print the same "✅ No unused imports found!" for
-        both cases. Uses Scala — a recognized *code* extension that still has no
-        import extractor (Kotlin/Swift gained one in BACK-488, so `.kt`/`.swift`
-        are now genuinely supported and no longer exercise the warn path)."""
+        both cases. Uses Haskell — a recognized *code* extension that still has
+        no import extractor (Kotlin/Swift gained one in BACK-488, Scala/Dart/
+        GDScript/Lua/Zig in BACK-514, so those are now genuinely supported and
+        no longer exercise the warn path)."""
         from reveal.adapters.imports import ImportsRenderer
         from io import StringIO
         import sys
 
-        test_file = tmp_path / "test.scala"
-        test_file.write_text("import scala.collection.mutable\n\ndef f() = 1\n")
+        test_file = tmp_path / "test.hs"
+        test_file.write_text("import Data.List\n\nf :: Int\nf = 1\n")
 
         adapter = ImportsAdapter(str(test_file), 'unused')
         result = adapter.get_structure()
-        assert result['metadata']['unsupported_extensions'] == {'.scala': 1}
+        assert result['metadata']['unsupported_extensions'] == {'.hs': 1}
 
         old_stdout = sys.stdout
         sys.stdout = captured_output = StringIO()
@@ -1078,7 +1079,7 @@ class TestImportsRenderer:
         output = captured_output.getvalue()
 
         assert 'No unused imports found' not in output
-        assert '.scala' in output
+        assert '.hs' in output
 
     def test_renderer_shows_clean_for_supported_file_with_zero_imports(self, tmp_path):
         """A file whose language IS supported but which happens to have zero

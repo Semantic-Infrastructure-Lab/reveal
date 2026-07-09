@@ -76,8 +76,11 @@ class _ImportSpec:
             ``using``, ``static``, ``#include``).
         call_import_names: For languages that express imports as ordinary calls
             (Ruby ``require 'json'``), the callee names that count as imports.
-            Nodes of kind ``call`` are matched only when their first token is in
-            this set. Empty for languages with dedicated import nodes.
+            Nodes of kind ``call_node_type`` are matched only when their first
+            token is in this set. Empty for languages with dedicated import nodes.
+        call_node_type: The tree-sitter node ``kind()`` for a call expression.
+            Defaults to ``'call'`` (Ruby, GDScript); Lua's grammar names it
+            ``'function_call'`` instead.
         alias_assignment: True when ``ALIAS = MODULE`` syntax assigns an alias
             (C#/C++ ``using X = Y``). The token left of ``=`` becomes the alias,
             the right side the module.
@@ -96,15 +99,22 @@ class _ImportSpec:
             "listing only, no edge resolution" (the pre-BACK-487 default). A
             non-empty set is the master switch that turns on
             :meth:`_resolve_module`.
+        project_relative_prefix: A URI-style prefix (GDScript ``'res://'``)
+            that names a path relative to the *project root*, not the
+            importing file. When set and a module starts with this prefix,
+            resolution strips it and tries only ``search_paths`` (never
+            ``base_path``-relative) — see :meth:`_resolve_module`.
     """
 
     import_node_types: FrozenSet[str]
     keywords: FrozenSet[str]
     call_import_names: FrozenSet[str] = field(default_factory=frozenset)
+    call_node_type: str = 'call'
     alias_assignment: bool = False
     resolve_includes: bool = False
     module_separator: Optional[str] = None
     source_extensions: FrozenSet[str] = field(default_factory=frozenset)
+    project_relative_prefix: Optional[str] = None
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -130,9 +140,10 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 if stmt is not None:
                     imports.append(stmt)
 
-        # Call-style imports (Ruby require/require_relative/load).
+        # Call-style imports (Ruby require/require_relative/load; Lua require;
+        # GDScript preload/load).
         if self.spec.call_import_names:
-            for node in analyzer._find_nodes_by_type('call'):
+            for node in analyzer._find_nodes_by_type(self.spec.call_node_type):
                 stmt = self._call_to_import(node, analyzer, file_path)
                 if stmt is not None:
                     imports.append(stmt)
@@ -430,8 +441,9 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
           * A single-token module (Swift ``import Foo``) is tried as a bare
             basename (``Foo.swift``) via the dotted path with one component.
 
-        Wildcards (Java ``import a.b.*``) and anything that resolves to a
-        package/namespace rather than one file return None.
+        Wildcards (Java ``import a.b.*``, Scala ``import a.b._``) and selector
+        imports (Scala ``import a.b.{C, D}``) name a package or multiple types
+        rather than one file, and return None.
         """
         module = stmt.module_name
         if not module or module.endswith('*'):
@@ -439,9 +451,22 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
         sep = self.spec.module_separator
         exts = self.spec.source_extensions
+        prefix = self.spec.project_relative_prefix
+
+        if prefix and module.startswith(prefix):
+            # Project-root-relative virtual path (GDScript `res://...`) — never
+            # file-relative, so resolve only against search_paths (the scan
+            # root), skipping the base_path-relative attempt entirely.
+            target = module[len(prefix):]
+            return self._resolve_path_target(target, None, search_paths, exts)
 
         if sep and sep in module:
             parts = [p for p in module.split(sep) if p]
+            # Scala selector `{C, D}` / wildcard `_` name multiple targets or a
+            # whole package, not one file — skip rather than leak `{...}`/`_`
+            # into a bogus path.
+            if parts and (parts[-1] == '_' or '{' in parts[-1]):
+                return None
             return self._resolve_dotted(parts, exts, search_paths, file_index)
 
         if self._looks_like_path(module, exts):
@@ -522,7 +547,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
     def _resolve_path_target(
         self,
         module: str,
-        base_path: Path,
+        base_path: Optional[Path],
         search_paths: Optional[List[Path]],
         exts: FrozenSet[str],
     ) -> Optional[Path]:
@@ -530,10 +555,11 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
         Tries the target verbatim and with each source extension appended
         (Ruby ``require_relative './helper'`` → ``helper.rb``), relative to the
-        including file first, then each project root.
+        including file first, then each project root. ``base_path=None`` (GDScript
+        ``res://``) skips the file-relative attempt and tries only project roots.
         """
         names = [module] + [module + e for e in exts if not module.endswith(e)]
-        roots = [base_path] + list(search_paths or [])
+        roots = ([base_path] if base_path is not None else []) + list(search_paths or [])
         for root in roots:
             for name in names:
                 candidate = (root / name).resolve()
@@ -651,6 +677,57 @@ _KOTLIN_SPEC = _ImportSpec(
     source_extensions=frozenset({'.kt'}),
 )
 
+# BACK-514: Lua/Scala/Dart/Zig/GDScript were absent from the table entirely —
+# `imports://`, `architecture`, `surface`, and `pack` silently built their
+# picture from zero files of these five languages. Node kinds verified against
+# real parses (2026-07-09, session apricot-tapestry-0709); see
+# internal-docs/planning/BACK-514-import-coverage-implementation.md.
+_SCALA_SPEC = _ImportSpec(
+    # `import a.b.C` / `import a.b.{C, D}` / `import a.b._` are all one node
+    # kind; selector/wildcard forms are recognised and skipped in
+    # _resolve_module (they name multiple targets, not one file).
+    import_node_types=frozenset({'import_declaration'}),
+    keywords=frozenset({'import'}),
+    module_separator='.',
+    source_extensions=frozenset({'.scala'}),
+)
+
+_DART_SPEC = _ImportSpec(
+    # `export`/`part` directives are separate node kinds (library_export,
+    # part_directive) and are intentionally not matched here — out of scope
+    # for v1 (imports only).
+    import_node_types=frozenset({'import_specification'}),
+    keywords=frozenset({'import'}),
+    # Dart imports are path-style literals (relative `./x.dart` or a
+    # `package:x/y.dart` reference) — no qualified-name separator. A
+    # `package:` reference resolves only if it happens to name a real in-tree
+    # path; otherwise it is honestly skipped (never fabricated).
+    source_extensions=frozenset({'.dart'}),
+)
+
+_GDSCRIPT_SPEC = _ImportSpec(
+    # Two independent import shapes in one spec: `extends "res://base.gd"`
+    # (dedicated node) and `preload(...)`/`load(...)` (call-style).
+    import_node_types=frozenset({'extends_statement'}),
+    keywords=frozenset({'extends'}),
+    call_import_names=frozenset({'preload', 'load'}),
+    source_extensions=frozenset({'.gd'}),
+    # `res://` is Godot's project-root-relative virtual filesystem, not
+    # file-relative — resolved only against search_paths (see _resolve_module).
+    project_relative_prefix='res://',
+)
+
+_LUA_SPEC = _ImportSpec(
+    import_node_types=frozenset(),  # no dedicated node — matched as calls
+    keywords=frozenset({'require'}),
+    call_import_names=frozenset({'require'}),
+    call_node_type='function_call',  # Lua's call node kind, unlike Ruby's `call`
+    # `require("a.b")` uses `.` as a path separator by Lua convention →
+    # a/b.lua, resolved the same way Java's dotted package names are.
+    module_separator='.',
+    source_extensions=frozenset({'.lua'}),
+)
+
 
 @register_extractor
 class CImportExtractor(_GenericTreeSitterImportExtractor):
@@ -708,6 +785,34 @@ class KotlinImportExtractor(_GenericTreeSitterImportExtractor):
     spec = _KOTLIN_SPEC
 
 
+@register_extractor
+class ScalaImportExtractor(_GenericTreeSitterImportExtractor):
+    extensions = {'.scala'}
+    language_name = 'Scala'
+    spec = _SCALA_SPEC
+
+
+@register_extractor
+class DartImportExtractor(_GenericTreeSitterImportExtractor):
+    extensions = {'.dart'}
+    language_name = 'Dart'
+    spec = _DART_SPEC
+
+
+@register_extractor
+class GDScriptImportExtractor(_GenericTreeSitterImportExtractor):
+    extensions = {'.gd'}
+    language_name = 'GDScript'
+    spec = _GDSCRIPT_SPEC
+
+
+@register_extractor
+class LuaImportExtractor(_GenericTreeSitterImportExtractor):
+    extensions = {'.lua'}
+    language_name = 'Lua'
+    spec = _LUA_SPEC
+
+
 __all__ = [
     '_ImportSpec',
     '_GenericTreeSitterImportExtractor',
@@ -719,4 +824,8 @@ __all__ = [
     'RubyImportExtractor',
     'SwiftImportExtractor',
     'KotlinImportExtractor',
+    'ScalaImportExtractor',
+    'DartImportExtractor',
+    'GDScriptImportExtractor',
+    'LuaImportExtractor',
 ]

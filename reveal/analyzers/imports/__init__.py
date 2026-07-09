@@ -21,7 +21,9 @@ from .python import PythonExtractor, extract_python_imports, extract_python_symb
 from .javascript import JavaScriptExtractor, extract_js_imports
 from .go import GoExtractor, extract_go_imports
 from .rust import RustExtractor, extract_rust_imports
-# Data-driven tree-sitter extractors (C, C++, Java, C#, PHP, Ruby)
+from .zig import ZigImportExtractor
+# Data-driven tree-sitter extractors (C, C++, Java, C#, PHP, Ruby, Swift,
+# Kotlin, Scala, Dart, GDScript, Lua)
 from .generic import (
     CImportExtractor,
     CppImportExtractor,
@@ -29,6 +31,12 @@ from .generic import (
     CSharpImportExtractor,
     PhpImportExtractor,
     RubyImportExtractor,
+    SwiftImportExtractor,
+    KotlinImportExtractor,
+    ScalaImportExtractor,
+    DartImportExtractor,
+    GDScriptImportExtractor,
+    LuaImportExtractor,
 )
 
 # Import base registry functions
@@ -58,6 +66,7 @@ __all__ = [
     'JavaScriptExtractor',
     'GoExtractor',
     'RustExtractor',
+    'ZigImportExtractor',
     # Data-driven tree-sitter extractors
     'CImportExtractor',
     'CppImportExtractor',
@@ -65,6 +74,12 @@ __all__ = [
     'CSharpImportExtractor',
     'PhpImportExtractor',
     'RubyImportExtractor',
+    'SwiftImportExtractor',
+    'KotlinImportExtractor',
+    'ScalaImportExtractor',
+    'DartImportExtractor',
+    'GDScriptImportExtractor',
+    'LuaImportExtractor',
     # Deprecated function-based API (backward compatibility)
     'extract_python_imports',
     'extract_python_symbols',
