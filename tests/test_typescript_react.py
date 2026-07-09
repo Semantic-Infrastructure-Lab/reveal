@@ -325,6 +325,92 @@ class TestBack334TestCallbacks:
         assert 'handleClick' in names
 
 
+# ─── BACK-519: class-field arrow-function methods (`foo = () => {}`) ─────────
+# `public_field_definition` (TS/TSX) / `field_definition` (JS) class members
+# were entirely absent from FUNCTION_NODE_TYPES, silently dropping every
+# class method written as an arrow-function field (a common React
+# class-component pattern for binding `this`) from get_structure(),
+# calls://, check, hotspots, testability, and element-nav alike, with no
+# warning. Found via a real 426KB excalidraw file where this hid 113
+# methods class-wide.
+
+class TestBack519ClassFieldArrowFunctions:
+    def test_class_field_arrow_function_extracted_from_tsx(self, tmp_path):
+        f = tmp_path / 'Component.tsx'
+        f.write_text(
+            "class MyComponent {\n"
+            "  private handleClick = (event: MouseEvent) => {\n"
+            "    return event;\n"
+            "  };\n"
+            "}\n"
+        )
+        structure = TSXAnalyzer(str(f)).get_structure()
+        names = [fn['name'] for fn in structure.get('functions', [])]
+        assert 'handleClick' in names
+
+    def test_class_field_arrow_function_extracted_from_ts(self, tmp_path):
+        f = tmp_path / 'Service.ts'
+        f.write_text(
+            "class Service {\n"
+            "  private load = async () => {\n"
+            "    return null;\n"
+            "  };\n"
+            "}\n"
+        )
+        structure = TypeScriptAnalyzer(str(f)).get_structure()
+        names = [fn['name'] for fn in structure.get('functions', [])]
+        assert 'load' in names
+
+    def test_class_field_arrow_function_extracted_from_plain_js(self, tmp_path):
+        from reveal.analyzers.javascript import JavaScriptAnalyzer
+        f = tmp_path / 'component.js'
+        f.write_text(
+            "class Component {\n"
+            "  handleClick = () => {\n"
+            "    return 1;\n"
+            "  };\n"
+            "}\n"
+        )
+        structure = JavaScriptAnalyzer(str(f)).get_structure()
+        names = [fn['name'] for fn in structure.get('functions', [])]
+        assert 'handleClick' in names
+
+    def test_non_function_class_field_not_extracted_as_function(self, tmp_path):
+        f = tmp_path / 'Component.tsx'
+        f.write_text(
+            "class MyComponent {\n"
+            "  count = 0;\n"
+            "  render() { return null; }\n"
+            "}\n"
+        )
+        structure = TSXAnalyzer(str(f)).get_structure()
+        names = [fn['name'] for fn in structure.get('functions', [])]
+        assert 'count' not in names
+        assert 'render' in names
+
+    def test_class_field_arrow_method_call_resolves_via_calls_index(self, tmp_path):
+        """Regression for the original symptom: calls:// found 0 callers because
+        both real call sites lived inside class-field arrow methods reveal
+        never walked into."""
+        f = tmp_path / 'Component.tsx'
+        f.write_text(
+            "class MyComponent {\n"
+            "  private maybeHandleCrop = () => {\n"
+            "    snapResizingElements();\n"
+            "  };\n"
+            "  private maybeHandleResize = () => {\n"
+            "    snapResizingElements();\n"
+            "  };\n"
+            "}\n"
+        )
+        structure = TSXAnalyzer(str(f)).get_structure()
+        callers = [
+            fn['name'] for fn in structure.get('functions', [])
+            if 'snapResizingElements' in fn.get('calls', [])
+        ]
+        assert set(callers) == {'maybeHandleCrop', 'maybeHandleResize'}
+
+
 # ─── BACK-335: Type-annotation-only imports not flagged as unused ─────────────
 
 class TestBack335TypeAnnotationImports:

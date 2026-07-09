@@ -394,8 +394,38 @@ class TreeSitterAnalyzer(FileAnalyzer):
         functions.extend(undecorated_funcs)
 
         functions.extend(self._extract_arrow_functions())
+        functions.extend(self._extract_class_field_functions())
 
         return functions
+
+    # ── JS-family class-field arrow method (`foo = (...) => {}`) ────────────
+    # BACK-519: `public_field_definition` (TS/TSX) / `field_definition` (JS)
+    # class members were entirely absent from FUNCTION_NODE_TYPES, so every
+    # class method written as an arrow-function field (a common pattern for
+    # binding `this`, e.g. React class components) was invisible to
+    # get_structure()/calls://check/hotspots/testability/element-nav with no
+    # warning. Verified on a real 426KB TSX file (excalidraw's App.tsx): 113
+    # such fields class-wide, 0 extracted pre-fix. Only node kinds unique to
+    # JS-family grammars, so this is a no-op for every other language.
+
+    _CLASS_FIELD_NODE_TYPES = ('public_field_definition', 'field_definition')
+
+    def _extract_class_field_functions(self) -> List[Dict[str, Any]]:
+        """Extract class-field arrow/function-expression methods (`foo = () => {}`)."""
+        funcs = []
+        for field_type in self._CLASS_FIELD_NODE_TYPES:
+            for field_node in self._find_nodes_by_type(field_type):
+                name_node = value_node = None
+                for ch in _children(field_node):
+                    if ch.kind() in ('property_identifier', 'private_property_identifier') and name_node is None:
+                        name_node = ch
+                    elif ch.kind() in ('arrow_function', 'function_expression'):
+                        value_node = ch
+                if name_node and value_node:
+                    funcs.append(self._build_function_dict(
+                        value_node, self._get_node_text(name_node), []
+                    ))
+        return funcs
 
     # ── JS-family arrow-function-as-const (`const f = (...) => {}`) ─────────
     # BACK-431 Issue G tier B dogfood audit (mysterious-probe-0703, real
