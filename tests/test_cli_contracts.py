@@ -303,6 +303,38 @@ class TestRenderReport(unittest.TestCase):
         out = self._capture(self._empty_report())
         self.assertIn('No contracts', out)
 
+    def test_coverage_warning_shown_on_false_clean(self):
+        # BACK-518: total==0 on a mostly-unsupported tree (stray .py with no
+        # contracts) is a false-clean, not a real "no contracts" verdict — the
+        # coverage warning fires and replaces the "No contracts or seams" line.
+        rep = self._empty_report(coverage={'warning': '⚠ Analyzed 15 of 1,384 '
+                                 "source files. Dominant language 'Lua' is not "
+                                 'supported by `contracts` — the rest of the '
+                                 'tree was not analyzed.'})
+        out = self._capture(rep)
+        self.assertIn('⚠ Analyzed 15 of 1,384', out)
+        self.assertNotIn('No contracts or seams', out)
+
+    def test_coverage_warning_shown_with_results(self):
+        abc = {
+            'name': 'MyBase', 'file': 'x.py', 'line': 1,
+            'bases': ['ABC'], 'abstract_methods': ['run'], 'implementations': [],
+        }
+        rep = self._empty_report(total_contracts=1, abcs=[abc],
+                                 coverage={'warning': '⚠ Analyzed 1 of 900 '
+                                 "source files. Dominant language 'Zig' is not "
+                                 'supported by `contracts` — the rest of the '
+                                 'tree was not analyzed.'})
+        out = self._capture(rep)
+        self.assertIn('⚠ Analyzed 1 of 900', out)
+        self.assertIn('MyBase', out)  # results still shown
+
+    def test_no_warning_when_coverage_clean(self):
+        rep = self._empty_report(coverage={'warning': ''})
+        out = self._capture(rep)
+        self.assertNotIn('⚠', out)
+        self.assertIn('No contracts', out)
+
     def test_shows_path(self):
         out = self._capture(self._empty_report(path='/myproject'))
         self.assertIn('/myproject', out)

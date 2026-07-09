@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Set
 
 from ...defaults import SKIP_DIRECTORIES
-from ...utils.path_utils import detect_non_python_language
+from ...utils.path_utils import assess_language_coverage, detect_non_python_language
 
 _SKIP_DIRS: frozenset = SKIP_DIRECTORIES
 
@@ -109,10 +109,24 @@ def _scan_contracts(
     if not _has_python_files(path) and not is_typescript:
         unsupported_language = detect_non_python_language(path)
 
+    # BACK-518: guard against a few stray supported-language files standing in
+    # for a mostly-unsupported tree (see surface.py / assess_language_coverage).
+    coverage = assess_language_coverage(path, {'python', 'typescript', 'tsx'})
+    coverage_dict = {
+        'total_code_files': coverage.total_code_files,
+        'analyzed_files': coverage.analyzed_files,
+        'dominant_language': coverage.dominant_language,
+        'dominant_count': coverage.dominant_count,
+        'dominant_supported': coverage.dominant_supported,
+        'warning': coverage.warning_line('contracts'),
+    }
+
     structures = collect_structures(str(path))
 
     if is_typescript:
-        return _scan_contracts_ts(path, structures, abstract_only, show_implementations)
+        result = _scan_contracts_ts(path, structures, abstract_only, show_implementations)
+        result['coverage'] = coverage_dict
+        return result
 
     all_classes = _extract_all_classes(structures)
 
@@ -171,6 +185,7 @@ def _scan_contracts(
         'basemodels': basemodels,
         'path_heuristic': path_heuristic,
         'unsupported_language': unsupported_language,
+        'coverage': coverage_dict,
     }
 
 
@@ -407,21 +422,31 @@ def _render_report(report: Dict[str, Any]) -> None:
     print()
     print(f"Contracts: {path}")
     print("━" * 50)
+    # BACK-518: warn when reveal only understood a minority of the tree — the
+    # results (total>0) are a supported-language subset, or the emptiness
+    # (total==0) is a false-clean on a mostly-unsupported repo (e.g. 15 stray
+    # .py files in a Lua tree yielding "no contracts"), not a real verdict. The
+    # coverage warning supersedes the legacy detect_non_python_language decline.
+    warning = report.get('coverage', {}).get('warning', '')
+    if warning:
+        print(warning)
+        print()
     print(f"Total contracts found: {total}")
     print()
 
     if total == 0:
-        lang = report.get('unsupported_language', '')
-        if lang:
-            print(f"  reveal contracts currently supports Python and TypeScript.")
-            print(f"  No supported files found — detected {lang}.")
-        else:
-            print("  No contracts or seams found.")
-            if ts_mode:
-                print("  Try widening the path or checking for interface/abstract class usage.")
+        if not warning:
+            lang = report.get('unsupported_language', '')
+            if lang:
+                print(f"  reveal contracts currently supports Python and TypeScript.")
+                print(f"  No supported files found — detected {lang}.")
             else:
-                print("  Try widening the path or checking imports for ABC/Protocol usage.")
-        print()
+                print("  No contracts or seams found.")
+                if ts_mode:
+                    print("  Try widening the path or checking for interface/abstract class usage.")
+                else:
+                    print("  Try widening the path or checking imports for ABC/Protocol usage.")
+            print()
         return
 
     if ts_mode:

@@ -326,6 +326,36 @@ class TestRenderReport(unittest.TestCase):
         out = self._capture(self._empty_report())
         self.assertIn('No external surfaces', out)
 
+    def test_coverage_warning_shown_with_results(self):
+        # BACK-518: total>0 but built from a supported-language minority.
+        rep = self._report_with_env(3)
+        rep['coverage'] = {'warning': '⚠ Analyzed 15 of 1,384 source files. '
+                           "Dominant language 'Lua' (1,305 files) is not "
+                           'supported by `surface` — the rest of the tree was '
+                           'not analyzed.'}
+        out = self._capture(rep)
+        self.assertIn('⚠ Analyzed 15 of 1,384', out)
+        self.assertIn('Lua', out)
+
+    def test_coverage_warning_shown_on_false_clean(self):
+        # BACK-518: total==0 that is a false-clean (stray supported files in a
+        # mostly-unsupported tree), not a real "no surfaces" verdict. The
+        # warning replaces the legacy "No external surfaces" line.
+        rep = self._empty_report(coverage={'warning': '⚠ Analyzed 15 of 1,384 '
+                                 "source files. Dominant language 'Lua' is not "
+                                 'supported by `surface` — the rest of the tree '
+                                 'was not analyzed.'})
+        out = self._capture(rep)
+        self.assertIn('⚠ Analyzed 15 of 1,384', out)
+        self.assertNotIn('No external surfaces', out)
+
+    def test_no_warning_when_coverage_clean(self):
+        # A supported-majority (or empty coverage) report renders unchanged.
+        rep = self._empty_report(coverage={'warning': ''})
+        out = self._capture(rep)
+        self.assertNotIn('⚠', out)
+        self.assertIn('No external surfaces', out)
+
     def test_shows_path(self):
         out = self._capture(self._empty_report(path='/myproject'))
         self.assertIn('/myproject', out)

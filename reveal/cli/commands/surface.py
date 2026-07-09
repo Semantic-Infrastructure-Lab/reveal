@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from ...defaults import SKIP_DIRECTORIES
-from ...utils.path_utils import detect_non_python_language
+from ...utils.path_utils import assess_language_coverage, detect_non_python_language
 
 # Canonical skip set lives in reveal.defaults (shared by every directory walk).
 _SKIP_DIRS: frozenset = SKIP_DIRECTORIES
@@ -111,6 +111,12 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
     if not py_files and not ts_files:
         unsupported_language = detect_non_python_language(path)
 
+    # BACK-518: a handful of stray supported-language files (e.g. 15 .py tooling
+    # scripts in a 1,300-file Lua repo) used to be silently presented as the
+    # whole project's surface. Assess how much of the tree is actually in a
+    # language `surface` analyzes so _render_report can warn on the substitution.
+    coverage = assess_language_coverage(path, {'python', 'typescript', 'tsx'})
+
     for file_path in py_files:
         for cat, entries in scan_file_surface(str(file_path)).items():
             surfaces[cat].extend(entries)
@@ -128,6 +134,14 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
         'total': total,
         'surfaces': surfaces,
         'unsupported_language': unsupported_language,
+        'coverage': {
+            'total_code_files': coverage.total_code_files,
+            'analyzed_files': coverage.analyzed_files,
+            'dominant_language': coverage.dominant_language,
+            'dominant_count': coverage.dominant_count,
+            'dominant_supported': coverage.dominant_supported,
+            'warning': coverage.warning_line('surface'),
+        },
         '_meta': {
             'analysis_kind': 'surface-scan',
             'confidence': 'medium',
@@ -194,19 +208,29 @@ def _render_report(report: Dict[str, Any], top: int = None) -> None:
     print()
     print(f"Surface: {path}")
     print("━" * 50)
+    # BACK-518: warn when reveal only understood a minority of the tree — the
+    # results (total>0) are a supported-language subset, or the emptiness
+    # (total==0) is a false-clean on a mostly-unsupported repo, not a real
+    # "no surfaces" verdict. The coverage warning is the authoritative signal
+    # and supersedes the legacy detect_non_python_language decline below.
+    warning = report.get('coverage', {}).get('warning', '')
+    if warning:
+        print(warning)
+        print()
     print(f"Total surface entries: {total}")
     if top is not None:
         print(f"Showing top {top} per category  (use --top N or omit for all)")
     print()
 
     if total == 0:
-        lang = report.get('unsupported_language', '')
-        if lang:
-            print(f"  reveal surface currently supports Python and TypeScript.")
-            print(f"  No Python or TypeScript files found — detected {lang}.")
-        else:
-            print("  No external surfaces detected.")
-        print()
+        if not warning:
+            lang = report.get('unsupported_language', '')
+            if lang:
+                print(f"  reveal surface currently supports Python and TypeScript.")
+                print(f"  No Python or TypeScript files found — detected {lang}.")
+            else:
+                print("  No external surfaces detected.")
+            print()
         print("ℹ Taxonomy-based — project-specific clients outside known libraries not detected.")
         print()
         return

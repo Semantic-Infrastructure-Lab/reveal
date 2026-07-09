@@ -5,8 +5,9 @@ Consolidates common patterns for searching up directory trees.
 
 import os
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path, PurePath
-from typing import Callable, Dict, Optional, List, Union
+from typing import Callable, Dict, Optional, List, Set, Union
 
 from ..defaults import SKIP_DIRECTORIES
 from ..registry import language_for_extension, LANGUAGE_DISPLAY_NAMES
@@ -117,6 +118,116 @@ def detect_non_python_language(path: Path) -> str:
             if lang:
                 counts[lang] = counts.get(lang, 0) + 1
     return max(counts, key=counts.__getitem__) if counts else ''
+
+
+@dataclass(frozen=True)
+class LanguageCoverage:
+    """How much of a directory a language-limited command can actually analyze.
+
+    Commands like ``surface`` and ``contracts`` only understand a fixed set of
+    languages (Python + TypeScript). When pointed at a tree whose dominant
+    language is *not* in that set, they used to silently build their whole
+    report from whatever handful of supported-language files happened to share
+    the directory — e.g. ``surface`` on Kong (a 1,300-file Lua gateway with 15
+    stray ``.py`` tooling scripts) confidently reported the surface of those 15
+    scripts as if it were the project's. This census lets a command detect that
+    case and warn (BACK-518).
+
+    Attributes:
+        total_code_files: Count of all code files in the tree (registry
+            ``get_code_extensions()``; data/markup/config excluded so the ratio
+            is meaningful).
+        analyzed_files: Code files in a language the command supports.
+        dominant_language: Display name of the tree's single most common code
+            language ('' when there are no code files).
+        dominant_count: File count of ``dominant_language``.
+        dominant_supported: Whether the dominant language is one the command can
+            analyze.
+    """
+
+    total_code_files: int
+    analyzed_files: int
+    dominant_language: str
+    dominant_count: int
+    dominant_supported: bool
+
+    @property
+    def should_warn(self) -> bool:
+        """True when the results don't represent the codebase.
+
+        Threshold-free by design: warn only when the tree's dominant language is
+        one the command *cannot* analyze **and** the supported-language files it
+        did analyze are outnumbered by that single dominant language. A repo
+        whose majority language is supported never warns (so a genuine Python
+        project with a few stray ``.lua`` files is silent — no false positives);
+        only a repo built mostly in an unsupported language does.
+        """
+        return (
+            self.total_code_files > 0
+            and not self.dominant_supported
+            and self.analyzed_files < self.dominant_count
+        )
+
+    def warning_line(self, command: str) -> str:
+        """One-line coverage warning for the text renderer (empty if no warn)."""
+        if not self.should_warn:
+            return ''
+        return (
+            f"⚠ Analyzed {self.analyzed_files:,} of {self.total_code_files:,} "
+            f"source files. Dominant language '{self.dominant_language}' "
+            f"({self.dominant_count:,} files) is not supported by `{command}` "
+            f"— the rest of the tree was not analyzed."
+        )
+
+
+def assess_language_coverage(path: Path, supported_languages: Set[str]) -> LanguageCoverage:
+    """Census *path*'s code files by language and compare against a command's
+    supported set (registry language keys, e.g. ``{'python', 'typescript', 'tsx'}``).
+
+    Counts only extensions in the registry's ``get_code_extensions()`` so
+    markdown/JSON/YAML/config never dilute the denominator. See
+    :class:`LanguageCoverage` for how the result is used.
+    """
+    from ..registry import get_code_extensions
+
+    code_exts = get_code_extensions()
+    counts: Dict[str, int] = {}  # registry language key -> file count
+
+    def _tally(ext: str) -> None:
+        ext = ext.lower()
+        if ext not in code_exts:
+            return
+        lang = language_for_extension(ext)
+        if lang:
+            counts[lang] = counts.get(lang, 0) + 1
+
+    if path.is_file():
+        _tally(path.suffix)
+    else:
+        for root, dirs, filenames in os.walk(str(path)):
+            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+            for fname in filenames:
+                _tally(Path(fname).suffix)
+
+    total = sum(counts.values())
+    analyzed = sum(c for lang, c in counts.items() if lang in supported_languages)
+
+    if counts:
+        dominant_key = max(counts, key=counts.__getitem__)
+        dominant_count = counts[dominant_key]
+        dominant_supported = dominant_key in supported_languages
+        dominant_display = LANGUAGE_DISPLAY_NAMES.get(
+            dominant_key, dominant_key.capitalize())
+    else:
+        dominant_count, dominant_supported, dominant_display = 0, True, ''
+
+    return LanguageCoverage(
+        total_code_files=total,
+        analyzed_files=analyzed,
+        dominant_language=dominant_display,
+        dominant_count=dominant_count,
+        dominant_supported=dominant_supported,
+    )
 
 def find_file_in_parents(
     start: Path,
