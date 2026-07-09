@@ -4,9 +4,13 @@ Tests for main CLI functionality (reveal/main.py).
 Tests command-line interface, flags, and output formatting.
 """
 
-import unittest
+import json
+import os
 import subprocess
 import sys
+import tempfile
+import unittest
+from pathlib import Path
 
 
 class TestCLIFlags(unittest.TestCase):
@@ -160,6 +164,52 @@ class TestOutputFormats(unittest.TestCase):
         self.assertIn(".rs", result.stdout)
         self.assertIn("Python", result.stdout)
         self.assertIn("Rust", result.stdout)
+
+
+class TestPerfLogging(unittest.TestCase):
+    """Test --perf invocation logging (reveal/main.py PERF_LOG_PATH)."""
+
+    def run_reveal(self, *args, log_path):
+        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
+        env = {**os.environ, "REVEAL_PERF_LOG_PATH": str(log_path)}
+        return subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', env=env)
+
+    def test_perf_flag_logs_one_json_line(self):
+        """--perf on the main (non-subcommand) path should append one JSON record."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "perf.jsonl"
+            result = self.run_reveal(__file__, "--perf", log_path=log_path)
+
+            self.assertEqual(result.returncode, 0)
+            lines = log_path.read_text().strip().splitlines()
+            self.assertEqual(len(lines), 1)
+            record = json.loads(lines[0])
+            self.assertIn("elapsed_s", record)
+            self.assertIn("peak_rss_kb", record)
+            self.assertEqual(record["exit_code"], 0)
+            self.assertNotIn("--perf", record["argv"])
+
+    def test_perf_flag_logs_subcommand_invocations_too(self):
+        """--perf must also cover the subcommand dispatch path (e.g. `check`), not just
+        the main file/URI path — subcommands use their own separate argparse parsers."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "perf.jsonl"
+            result = self.run_reveal("check", __file__, "--perf", log_path=log_path)
+
+            lines = log_path.read_text().strip().splitlines()
+            self.assertEqual(len(lines), 1)
+            record = json.loads(lines[0])
+            self.assertEqual(record["argv"][0], "check")
+            self.assertIn(result.returncode, (0, 1))
+            self.assertEqual(record["exit_code"], result.returncode)
+
+    def test_no_perf_flag_writes_nothing(self):
+        """Without --perf, no log file should be created at all."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "perf.jsonl"
+            self.run_reveal(__file__, log_path=log_path)
+
+            self.assertFalse(log_path.exists())
 
 
 if __name__ == '__main__':

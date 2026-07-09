@@ -5,6 +5,10 @@ import os
 import logging
 import io
 import re
+import json
+import time
+import resource
+from pathlib import Path
 from typing import Optional, Tuple, Any, List
 from collections.abc import Callable
 
@@ -13,6 +17,52 @@ from .registry import get_all_analyzers, TREESITTER_EXTENSION_MAP
 from . import __version__
 from .utils import copy_to_clipboard, check_for_updates
 from .config import disable_breadcrumbs_permanently
+
+
+PERF_LOG_PATH = Path(os.environ.get('REVEAL_PERF_LOG_PATH', str(Path.home() / '.reveal' / 'perf.jsonl')))
+
+
+def _perf_flag_present() -> bool:
+    """Check for --perf without going through argparse (must work before
+    subcommand dispatch, which uses its own per-command parsers)."""
+    return '--perf' in sys.argv or os.environ.get('REVEAL_PERF_LOG') == '1'
+
+
+def _strip_perf_flag() -> None:
+    if '--perf' in sys.argv:
+        sys.argv.remove('--perf')
+
+
+def _log_perf(start: float, argv_snapshot: List[str], exit_code: int) -> None:
+    """Append one JSON line describing this invocation to PERF_LOG_PATH.
+
+    Never raises — perf logging must not break normal operation.
+    """
+    try:
+        ru_self = resource.getrusage(resource.RUSAGE_SELF)
+        ru_children = resource.getrusage(resource.RUSAGE_CHILDREN)
+        peak_rss_kb = ru_self.ru_maxrss + ru_children.ru_maxrss
+        if sys.platform == 'darwin':
+            peak_rss_kb //= 1024  # macOS reports ru_maxrss in bytes, not KB
+    except Exception:
+        peak_rss_kb = None
+
+    record = {
+        'ts': time.time(),
+        'pid': os.getpid(),
+        'argv': argv_snapshot,
+        'elapsed_s': round(time.perf_counter() - start, 3),
+        'peak_rss_kb': peak_rss_kb,
+        'exit_code': exit_code,
+        'max_workers_env': os.environ.get('REVEAL_MAX_WORKERS'),
+    }
+
+    try:
+        PERF_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(PERF_LOG_PATH, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(record) + '\n')
+    except Exception:
+        pass
 
 
 class TeeWriter:
@@ -174,6 +224,28 @@ def main() -> None:
     _setup_windows_console()
     _preprocess_sort_arg()
 
+    perf_enabled = _perf_flag_present()
+    if perf_enabled:
+        _strip_perf_flag()
+        argv_snapshot = list(sys.argv[1:])
+        start = time.perf_counter()
+
+    exit_code = 0
+    try:
+        _dispatch_and_run()
+    except SystemExit as e:
+        exit_code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+        raise
+    except BaseException:
+        exit_code = 1
+        raise
+    finally:
+        if perf_enabled:
+            _log_perf(start, argv_snapshot, exit_code)
+
+
+def _dispatch_and_run() -> None:
+    """Route to a subcommand, or fall through to the main path (URI/file/dir)."""
     # Handle subcommands early (before copy mode setup and argparse)
     if _dispatch_subcommand():
         return
