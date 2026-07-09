@@ -563,18 +563,24 @@ Support comes in tiers — be aware of which query modes actually work per langu
 | Ruby | `.rb` | 📦 Listing + graph | `require_relative './x'` → `x.rb`; `load`/`require` of a real in-tree `.rb`; bare `require 'gem'` skips |
 | Kotlin | `.kt`, `.kts` | 📦 Listing + graph | `import com.pkg.Bar` → `com/pkg/Bar.kt` when the file is named for the class (best-effort; Kotlin doesn't enforce filename==class) |
 | Swift | `.swift` | 📦 Listing + graph | `import Foo` → `Foo.swift` where a module maps 1:1 to a lone file; system frameworks skip (sparse fan-in by nature) |
+| Scala | `.scala` | 📦 Listing + graph | `import a.b.C` → `a/b/C.scala` (package==dir); selector `import a.b.{C, D}` and wildcard `import a.b._` list but skip file resolution (name multiple targets) |
+| Dart | `.dart` | 📦 Listing + graph | relative `import './x.dart'` resolves; `package:x/y.dart` names a pub package (skipped unless it maps into the tree). `export`/`part` are out of scope for v1 |
+| Lua | `.lua` | 📦 Listing + graph | `require("a.b")` → `a/b.lua` (`.`-separated path); bare stdlib/rock names with no in-tree file skip |
+| Zig | `.zig` | 📦 Listing + graph | `@import("foo.zig")` → relative to the importing file; `@import("std")`/`"builtin"` and other non-`.zig` names skip |
+| GDScript | `.gd` | 📦 Listing + graph | `preload`/`load`/`extends "res://path.gd"` — `res://` resolves against the Godot **project root** (nearest `project.godot`, or scan root), not the importing file |
 | C# | `.cs` | 📝 Listing (+ sparse graph) | `using` directives (incl. `global using`, `using X = Y` aliases). `using X.Y` names a *namespace* (a directory), not a file, so an edge resolves only when a matching `Y.cs` exists — full C# fan-in needs a namespace index |
 
 Every resolver above resolves **only to a file that exists in the tree** and
 skips (never fabricates) when the import names a package/namespace/gem/system
 module with no single backing file — the same honest-skip contract as C/C++
 angle-bracket includes. (Java/PHP/Ruby edge resolution added in BACK-487;
-Swift/Kotlin in BACK-488.)
+Swift/Kotlin in BACK-488; Scala/Dart/Lua/Zig/GDScript in BACK-514.)
 
-> **Note on the long tail:** other tree-sitter-parseable code files (Scala, Lua,
-> Dart, …) have no import extractor yet. Rather than silently reporting zero
-> imports for them, `imports://` prints a "code file(s) skipped — no import
-> support for: …" note so a low count is never mistaken for a clean result.
+> **Note on the long tail:** the coverage above is broad but not exhaustive —
+> other tree-sitter-parseable code files may not have an import extractor yet.
+> Rather than silently reporting zero imports for such a file, `imports://`
+> prints a "code file(s) skipped — no import support for: …" note so a low count
+> is never mistaken for a clean result.
 
 ### Language-Specific Examples
 
