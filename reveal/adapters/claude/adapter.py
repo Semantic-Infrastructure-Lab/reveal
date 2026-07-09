@@ -96,6 +96,8 @@ from .analysis import (
     get_token_breakdown,
     get_session_agents,
     get_message_range,
+    get_digest,
+    get_exchanges,
 )
 
 
@@ -385,6 +387,8 @@ class ClaudeAdapter(ResourceAdapter):
         """Route to handler by query parameter. Returns None if no query matches."""
         if self._has_query_flag('summary'):
             return get_summary(messages, self.session_name, conversation_path_str, contract_base)
+        if self._has_query_flag('digest'):
+            return get_digest(messages, self.session_name, conversation_path_str, contract_base)
         if self._has_query_flag('timeline'):
             return get_timeline(messages, self.session_name, contract_base)
         if self._has_query_flag('errors'):
@@ -436,11 +440,17 @@ class ClaudeAdapter(ResourceAdapter):
             return get_context_changes(messages, self.session_name, contract_base)
         if '/prompts' in self.resource:
             return get_human_prompts(messages, self.session_name, contract_base)
-        # Path aliases for query-routed views (BACK-270): /errors, /summary, /timeline, /tokens
+        if '/exchanges' in self.resource:
+            result = get_exchanges(messages, self.session_name, contract_base)
+            result['full'] = 'full' in self.query_params
+            return result
+        # Path aliases for query-routed views (BACK-270): /errors, /summary, /timeline, /tokens, /digest
         if '/errors' in self.resource:
             return get_errors(messages, self.session_name, contract_base)
         if '/summary' in self.resource:
             return get_summary(messages, self.session_name, conversation_path_str, contract_base)
+        if '/digest' in self.resource:
+            return get_digest(messages, self.session_name, conversation_path_str, contract_base)
         if '/timeline' in self.resource:
             return get_timeline(messages, self.session_name, contract_base)
         if '/tokens' in self.resource:

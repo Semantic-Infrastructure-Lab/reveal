@@ -248,6 +248,8 @@ def _render_claude_user_messages(result: dict) -> None:
     count = result.get('message_count', 0)
 
     print(f"User Messages: {session} ({count} total)")
+    if 'hint' in result:
+        print(f"Note: {result['hint']}")
     print()
 
     for i, msg in enumerate(result.get('messages', [])):
@@ -369,7 +371,9 @@ def _render_claude_message(result: dict) -> None:
         print(f"Error: {result['error']}")
         return
 
-    print(f"Message {msg_idx}: {session}")
+    turn = result.get('turn')
+    turn_suffix = f" (turn {turn})" if turn is not None else ''
+    print(f"Message {msg_idx}{turn_suffix}: {session}")
     print(f"Role: {role}  |  {ts}")
     print()
 
@@ -583,3 +587,74 @@ def _render_claude_timeline(result: dict) -> None:
         else:
             preview = (event.get('content_preview') or '')[:80]
             print(f"[{i:3}] {label}  msg={idx}  {ts}  {preview}")
+
+
+def _render_claude_digest(result: dict) -> None:
+    """Render the composed overview + prompts + assistant-narrative digest."""
+    session = result.get('session', 'unknown')
+    title = result.get('title')
+
+    print(f"Digest: {session}" + (f" — {title}" if title else ''))
+    print(f"Duration: {result.get('duration', '?')}  |  "
+          f"{result.get('message_count', 0)} messages  |  "
+          f"{result.get('files_touched_count', 0)} files touched")
+    print()
+
+    print(f"--- Prompts ({result.get('prompt_count', 0)}) ---")
+    for msg in result.get('prompts', []):
+        msg_idx = msg.get('message_index', '?')
+        ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
+        text_parts = [b.get('text', '') for b in msg.get('content', [])
+                      if isinstance(b, dict) and b.get('type') == 'text']
+        text = '\n'.join(text_parts).strip()
+        print(f"[msg {msg_idx}] {ts}")
+        if len(text) > 500:
+            print(text[:500])
+            print(f"  ... ({len(text) - 500} more chars, use /message/{msg_idx} for full text)")
+        else:
+            print(text)
+        print()
+
+    print(f"--- Assistant narrative ({result.get('narrative_turn_count', 0)} turns) ---")
+    for turn in result.get('assistant_narrative', []):
+        msg_idx = turn.get('message_index', '?')
+        ts = turn.get('timestamp', '')
+        text = turn.get('text', '')
+        print(f"[msg {msg_idx}] {ts}")
+        if len(text) > 500:
+            print(text[:500])
+            print(f"  ... ({len(text) - 500} more chars, use /message/{msg_idx} for full text)")
+        else:
+            print(text)
+        print()
+
+
+def _render_claude_exchanges(result: dict) -> None:
+    """Render prompt → final-answer pairs."""
+    session = result.get('session', 'unknown')
+    count = result.get('exchange_count', 0)
+    full = result.get('full', False)
+
+    print(f"Exchanges: {session} ({count} total)")
+    print()
+
+    for ex in result.get('exchanges', []):
+        msg_idx = ex.get('message_index', '?')
+        ts = (ex.get('timestamp') or '')[:16].replace('T', ' ')
+        prompt = (ex.get('prompt') or '').strip()
+
+        print(f"[msg {msg_idx}] {ts}")
+        print(f"Q: {prompt[:300]}{'...' if len(prompt) > 300 else ''}")
+
+        answer = ex.get('answer')
+        answer_idx = ex.get('answer_message_index', '?')
+        if answer is None:
+            print("A: [no text answer found before the next prompt]")
+        else:
+            limit = None if full else 600
+            if limit and len(answer) > limit:
+                print(f"A: {answer[:limit]}")
+                print(f"  ... ({len(answer) - limit} more chars, use /message/{answer_idx} for full text)")
+            else:
+                print(f"A: {answer}")
+        print()

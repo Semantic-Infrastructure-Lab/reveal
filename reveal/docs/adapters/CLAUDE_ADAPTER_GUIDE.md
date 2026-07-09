@@ -4,7 +4,7 @@ category: guide
 ---
 # Claude Adapter Guide (claude://)
 
-**Last Updated**: 2026-03-30
+**Last Updated**: 2026-07-09
 **Version**: 1.1
 **Adapter Version**: reveal 0.68.0+
 
@@ -727,6 +727,8 @@ reveal claude://session/infernal-earth-0118/user
 
 **Note**: User message content in Claude Code JSONL can be a bare string (initial prompt) or a list of tool_result blocks. This view normalizes both.
 
+**Note**: If any tool-result-only turns are present, the response includes a `hint` field pointing at `/prompts` — this surfaces at call time, not just here in the guide.
+
 ---
 
 ### 10. assistant
@@ -769,7 +771,11 @@ reveal claude://session/infernal-earth-0118/message/-1
 
 **Output**: Full message content. For `tool_use` blocks: shows name + key params (`file_path`, `command`, `content` size). For `tool_result` blocks: shows content preview (first 500 chars).
 
-**Use when**: Read a long assistant response in full, inspect what a Write/Edit tool call actually wrote, read agent tool_result output
+**Notes**:
+- Index is 0-indexed over raw JSONL records (see [`/message` (range)](#12-message-range) below for the *other* indexing scheme this resource family uses)
+- For `user`/`assistant` messages, the response includes a `turn` field — the 1-indexed conversation-turn number that `/message --range` uses, so you can go from a raw index straight to the range number without a second call
+
+**Use when**: Read a long assistant response in full, inspect what a Write/Edit tool call actually wrote, read agent tool_result output, or find the `turn` number to jump into `/message --range`
 
 ---
 
@@ -847,6 +853,53 @@ reveal claude://session/revealed-sphinx-0407/chain --base-path ~/projects/my-ses
 
 ---
 
+### 15. digest
+
+**Description**: Composed readable view — session overview + human prompts + assistant narrative in one call. Exists so getting a clean picture of what happened doesn't take 3 separate calls (`?summary`, `/prompts`, `/messages`).
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>/digest
+reveal 'claude://session/<session-name>?digest'   # query-param alias, same result
+```
+
+**Example**:
+```bash
+reveal claude://session/infernal-earth-0118/digest
+```
+
+**Output**: Title, duration, message/file counts, then every human prompt, then every assistant narrative turn — each with its `message_index` so you can drill in with `/message/N`.
+
+**Use when**: This is the resource to reach for first when picking up a session cold — "what was asked, what happened, what did it find" in one shot. Drill into `/workflow`, `/tools`, `/thinking`, etc. only once the digest points at something specific.
+
+---
+
+### 16. exchanges
+
+**Description**: Each real human prompt paired with the assistant's final text answer to it — skips `thinking`-only and tool-only turns in between, returning the last text block found before the next prompt. Distinct from `/digest`: `/digest` composes whole-session sections; `/exchanges` joins a specific prompt to its specific answer.
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>/exchanges
+reveal 'claude://session/<session-name>/exchanges?full'   # disable 600-char truncation on answers
+```
+
+**Example**:
+```bash
+reveal claude://session/infernal-earth-0118/exchanges
+```
+
+**Output**: One entry per real prompt: `message_index`, `timestamp`, `prompt`, `answer_message_index`, `answer_timestamp`, `answer` (`null` if no assistant text was found before the next prompt or end of session — e.g. a purely tool-driven exchange).
+
+**Notes**:
+- Walks the JSONL `parentUuid` chain, not message order — `type: progress` records (bash/hook progress heartbeats) fork a parallel side-chain off the same parent as the real continuation; the walk always prefers the non-`progress` sibling, so it reaches the true final answer rather than dead-ending in a progress chain or stopping at a premature acknowledgment.
+- A prompt is "real" if it has typed text (bare string, or a text block — e.g. a pasted screenshot with a caption) and is not a synthetic text block riding on a `tool_result` turn (matches `/prompts`' definition exactly).
+- Known limitation: a genuine multi-branch case (an edited/regenerated message producing more than one non-`progress` sibling) takes the first one in file order — this was not observed in practice and is a documented gap, not a silently wrong one.
+
+**Use when**: You need "what did I ask, what did it finally say" for a specific turn or set of turns, without eyeballing timestamps between `/prompts` and `/assistant` or binary-searching `/message/<n>` by hand.
+
+---
+
 ## Query Parameters
 
 ### ?summary
@@ -866,6 +919,26 @@ reveal claude://session/infernal-earth-0118?summary
 **Output**: Overview + timeline + critical events + recommendations
 
 **Use when**: Quick session understanding, post-session review
+
+---
+
+### ?digest
+
+**Description**: Query-param alias for [`/digest`](#15-digest) — composed overview + prompts + assistant narrative in one call
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>?digest
+```
+
+**Example**:
+```bash
+reveal claude://session/infernal-earth-0118?digest
+```
+
+**Output**: Same as `/digest` — see that section for full output shape.
+
+**Use when**: Same as `/digest`; use whichever form (path or query param) fits your URI more naturally.
 
 ---
 

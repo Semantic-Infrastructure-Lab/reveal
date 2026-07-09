@@ -66,6 +66,11 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'Include file patch/diff content in the files-touched view (?patches=true)',
         'examples': ['?patches=true']
     },
+    'digest': {
+        'type': 'flag',
+        'description': 'Composed readable view: overview + human prompts + assistant narrative in one call (path alias: /digest)',
+        'examples': ['?digest']
+    },
 }
 
 _SCHEMA_CLI_FLAGS = {
@@ -91,10 +96,12 @@ _SCHEMA_ELEMENTS = {
     'tokens': 'Token usage breakdown (path alias for ?tokens)',
     'context': 'Context window changes over session',
     'messages': 'All assistant narrative turns (text only, no tool calls) — best for reading what was said',
-    'prompts': 'Human-typed prompts only — excludes tool-result wrapper turns',
-    'user': 'User messages: initial prompt full text + tool-result turn summaries',
+    'prompts': 'Human-typed prompts only — excludes tool-result wrapper turns. Prefer this over /user for reading intent.',
+    'user': 'User messages: initial prompt full text + tool-result turn summaries. WARNING: the Claude API encodes tool-result turns as role: user too, so this mixes them in — prefer /prompts unless you specifically need tool-result turn boundaries. Response includes a `hint` field when tool-result-only turns are present.',
     'assistant': 'Assistant messages: text blocks only (skips thinking/tool_use)',
-    'message/<n>': 'Single message by zero-based index (or negative: message/-1 = last message)'
+    'message/<n>': 'Single message by zero-based index over raw JSONL records (or negative: message/-1 = last message). NOTE: this is a different counting scheme than /message --range, which is 1-based over conversation turns — the response includes a `turn` field to cross-reference.',
+    'digest': 'Composed readable view: overview + human prompts + assistant narrative in one call (path alias for ?digest) — removes the need for 3 separate calls to get a readable picture of a session.',
+    'exchanges': 'Each real human prompt paired with the assistant\'s final text answer to it (skips thinking/tool-only turns in between) — for "what did I ask, what did it finally say back," one pair at a time. Distinct from /digest, which composes whole-session sections rather than joining prompt to answer.',
 }
 
 
@@ -124,25 +131,35 @@ _SCHEMA_OUTPUT_TYPES = [
     _make_output_type('claude_errors', 'All errors and exceptions in session', {
         'errors': {'type': 'array'}, 'count': {'type': 'integer'}
     }),
-    _make_output_type('claude_user_messages', 'User messages: initial prompt + tool-result turn summaries', {'messages': {'type': 'array'}}),
+    _make_output_type('claude_user_messages', 'User messages: initial prompt + tool-result turn summaries. May include a `hint` field pointing at /prompts when tool-result-only turns are present.', {
+        'messages': {'type': 'array'}, 'hint': {'type': 'string'}
+    }),
     _make_output_type('claude_user_prompts', 'Human-typed prompts only — excludes tool-result wrapper messages (use /prompts)', {'messages': {'type': 'array'}}),
     _make_output_type('claude_assistant_messages', 'Assistant messages: text responses (thinking/tool blocks excluded)', {'messages': {'type': 'array'}}),
     _make_output_type('claude_thinking', 'All thinking blocks with content previews and token estimates', {
         'blocks': {'type': 'array'}, 'total_tokens': {'type': 'integer'}
     }),
-    {
-        'type': 'claude_message',
-        'description': 'Single message by zero-based index with full content',
-        'schema': {'type': 'object', 'properties': {
-            'contract_version': {'type': 'string'},
-            'type': {'type': 'string', 'const': 'claude_message'},
-            'session_name': {'type': 'string'},
-            'index': {'type': 'integer'},
-            'role': {'type': 'string', 'enum': ['user', 'assistant']},
-            'content': {'type': 'array'}
-        }}
-    },
+    _make_output_type('claude_message', 'Single message by zero-based JSONL index with full content', {
+        # Corrected to match get_message()'s actual returned keys (was declaring
+        # index/role/content, which never matched the real output — BACK-513).
+        'message_index': {'type': 'integer'},
+        'message_type': {'type': 'string', 'enum': ['user', 'assistant']},
+        'message': {'type': 'object'},
+        'text': {'type': 'string'},
+        'turn': {'type': 'integer', 'description': '1-based conversation turn number, for cross-referencing with /message --range (present only for user/assistant messages)'},
+        'hint': {'type': 'string'},
+    }),
     _make_output_type('claude_messages', 'Assistant narrative turns (text only, no tool calls) — used by /messages, ?tail=N, ?last', {'messages': {'type': 'array'}, 'total_turns': {'type': 'integer'}}),
+    _make_output_type('claude_digest', 'Composed readable view: overview + human prompts + assistant narrative in one call (path alias /digest, or ?digest)', {
+        'title': {'type': 'string'}, 'duration': {'type': 'string'},
+        'message_count': {'type': 'integer'}, 'files_touched_count': {'type': 'integer'},
+        'prompt_count': {'type': 'integer'}, 'prompts': {'type': 'array'},
+        'narrative_turn_count': {'type': 'integer'}, 'assistant_narrative': {'type': 'array'},
+    }),
+    _make_output_type('claude_exchanges', 'Each real human prompt paired with the assistant\'s final text answer to it', {
+        'exchange_count': {'type': 'integer'},
+        'exchanges': {'type': 'array', 'description': 'Each entry: message_index, timestamp, prompt, answer_message_index, answer_timestamp, answer (null if no text answer was found before the next prompt)'},
+    }),
     _make_output_type('claude_timeline', 'Chronological message timeline with timestamps and turn types', {'events': {'type': 'array'}}),
     _make_output_type('claude_context', 'Context window usage and changes over the session', {
         'snapshots': {'type': 'array'}, 'peak_tokens': {'type': 'integer'}
@@ -213,11 +230,13 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'claude://session/infernal-earth-0118?tools=Bash', 'description': 'Filter for Bash tool usage', 'query_param': '?tools=Bash', 'output_type': 'claude_overview'},
     {'uri': 'claude://session/infernal-earth-0118?errors', 'description': 'Filter for error messages', 'query_param': '?errors', 'output_type': 'claude_overview'},
     {'uri': 'claude://session/infernal-earth-0118?summary', 'description': 'Session summary with key events', 'query_param': '?summary', 'output_type': 'claude_overview'},
+    {'uri': 'claude://session/infernal-earth-0118/digest', 'description': 'Composed readable view: overview + human prompts + assistant narrative in one call — start here for "what happened in this session"', 'element': 'digest', 'output_type': 'claude_digest'},
+    {'uri': 'claude://session/infernal-earth-0118/exchanges', 'description': 'Each human prompt paired with the assistant\'s final answer to it — use when you need "what was asked, what did it finally say" per turn, not a whole-session dump', 'element': 'exchanges', 'output_type': 'claude_exchanges'},
     {'uri': 'claude://session/infernal-earth-0118/messages', 'description': 'All assistant narrative turns (text only) — best resource for reading what was said', 'element': 'messages', 'output_type': 'claude_messages'},
-    {'uri': 'claude://session/infernal-earth-0118/user', 'description': 'User messages: initial prompt + tool-result turn summaries', 'element': 'user', 'output_type': 'claude_user_messages'},
+    {'uri': 'claude://session/infernal-earth-0118/user', 'description': 'User messages: initial prompt + tool-result turn summaries — prefer /prompts for reading intent, this mixes in tool-result turns', 'element': 'user', 'output_type': 'claude_user_messages'},
     {'uri': 'claude://session/infernal-earth-0118/assistant', 'description': 'Assistant messages: text responses (thinking/tools hidden)', 'element': 'assistant', 'output_type': 'claude_assistant_messages'},
     {'uri': 'claude://session/infernal-earth-0118/thinking', 'description': 'All thinking blocks with content and token estimates', 'element': 'thinking', 'output_type': 'claude_thinking'},
-    {'uri': 'claude://session/infernal-earth-0118/message/5', 'description': 'Read a specific message by zero-based index', 'element': 'message/<n>', 'output_type': 'claude_message'},
+    {'uri': 'claude://session/infernal-earth-0118/message/5', 'description': 'Read a specific message by zero-based JSONL index — response includes a `turn` field (1-based) for cross-referencing with /message --range', 'element': 'message/<n>', 'output_type': 'claude_message'},
     {'uri': 'claude://session/infernal-earth-0118/timeline', 'description': 'Chronological message timeline with timestamps and turn types', 'element': 'timeline', 'output_type': 'claude_timeline'},
     {'uri': 'claude://session/infernal-earth-0118/context', 'description': 'Context window usage and changes over the session', 'element': 'context', 'output_type': 'claude_context'},
     {
@@ -260,4 +279,5 @@ _SCHEMA_NOTES = [
     'File tracking shows all Read/Write/Edit operations',
     'Tool success rates calculated from result vs error status',
     'Cross-session search: claude://sessions/?search=term scans all JSONL files (parallel grep + snippet extraction). Default 20 results; use --all for full scan. ?since=DATE narrows corpus.',
+    'Two message-indexing schemes coexist by design: /message/<n> is 0-based over raw JSONL records (Python-style negative indexing supported, e.g. -1 = last); /message --range is 1-based over conversation turns (matches reveal\'s system-wide --range/--head/--tail convention). /message/<n> responses include a `turn` field and /message --range responses include a `message_index` field so either number can be converted to the other without a second call.',
 ]

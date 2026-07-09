@@ -29,6 +29,8 @@ from .render_messages import (
     _render_claude_filtered_results,
     _render_claude_messages,
     _render_claude_timeline,
+    _render_claude_digest,
+    _render_claude_exchanges,
 )
 from .render_system import (
     _render_claude_info,
@@ -85,6 +87,8 @@ class ClaudeRenderer(TypeDispatchRenderer):
     _render_claude_filtered_results = staticmethod(_render_claude_filtered_results)
     _render_claude_messages = staticmethod(_render_claude_messages)
     _render_claude_timeline = staticmethod(_render_claude_timeline)
+    _render_claude_digest = staticmethod(_render_claude_digest)
+    _render_claude_exchanges = staticmethod(_render_claude_exchanges)
 
     # System renderers
     _render_claude_info = staticmethod(_render_claude_info)

@@ -1575,19 +1575,158 @@ class TestGetHumanPrompts:
         result = get_human_prompts(messages, 'sess', self._cb())
         assert result['message_count'] == 1
 
-    def test_message_with_text_and_tool_result_blocks_is_included(self):
-        # Edge case: a user message with both text and tool_result blocks should be included
+    def test_message_with_text_and_tool_result_blocks_is_excluded(self):
+        # Corrected (BACK-513 follow-up): a real corpus scan found this exact shape
+        # (text + tool_result in one user-role message) is produced by Claude Code's
+        # own synthetic "Tool loaded." text riding on a tool_result turn, never by a
+        # human typing alongside a tool_result block (tool_result blocks are always
+        # turn-continuation artifacts, not something a human hand-composes next to
+        # their own text). Excluding it removes a false positive from /prompts and
+        # keeps /exchanges' prompt detection consistent with /prompts.
         from reveal.adapters.claude.analysis.messages import get_human_prompts
         msg = {
             'type': 'user',
             'timestamp': '2026-01-01T00:00:00Z',
             'message': {'content': [
-                {'type': 'text', 'text': 'also typed this'},
+                {'type': 'text', 'text': 'Tool loaded.'},
                 {'type': 'tool_result', 'tool_use_id': 'x', 'content': 'result'},
             ]},
         }
         result = get_human_prompts([msg], 'sess', self._cb())
-        assert result['message_count'] == 1
+        assert result['message_count'] == 0
+
+
+class TestGetExchanges:
+    """Regression coverage for BACK-513's /exchanges element.
+
+    Message builders here carry explicit uuid/parentUuid chains (unlike
+    _user_msg/_assistant_msg/_tool_result_msg above) since get_exchanges walks
+    that chain, not just message order.
+    """
+
+    def _cb(self):
+        return {'contract_version': '1.0', 'source': 'test', 'source_type': 'file'}
+
+    def _msg(self, type_, uuid, parent, timestamp='2026-01-01T00:00:00Z', content=None, extra=None):
+        m = {
+            'type': type_,
+            'uuid': uuid,
+            'parentUuid': parent,
+            'timestamp': timestamp,
+            'message': {'content': content if content is not None else []},
+        }
+        if extra:
+            m.update(extra)
+        return m
+
+    def test_simple_prompt_answer_pairing(self):
+        from reveal.adapters.claude.analysis.messages import get_exchanges
+        messages = [
+            self._msg('user', 'p1', None, content='hello'),
+            self._msg('assistant', 'a1', 'p1', content=[{'type': 'text', 'text': 'hi there'}]),
+        ]
+        result = get_exchanges(messages, 'sess', self._cb())
+        assert result['type'] == 'claude_exchanges'
+        assert result['exchange_count'] == 1
+        ex = result['exchanges'][0]
+        assert ex['prompt'] == 'hello'
+        assert ex['answer'] == 'hi there'
+        assert ex['answer_message_index'] == 1
+
+    def test_no_answer_before_next_prompt(self):
+        # Only tool calls after the prompt, no text — answer stays None, not a crash.
+        from reveal.adapters.claude.analysis.messages import get_exchanges
+        messages = [
+            self._msg('user', 'p1', None, content='do a thing'),
+            self._msg('assistant', 'a1', 'p1', content=[{'type': 'tool_use', 'name': 'Bash', 'input': {}}]),
+        ]
+        result = get_exchanges(messages, 'sess', self._cb())
+        assert result['exchanges'][0]['answer'] is None
+
+    def test_last_exchange_terminates_at_end_of_session(self):
+        from reveal.adapters.claude.analysis.messages import get_exchanges
+        messages = [
+            self._msg('user', 'p1', None, content='first'),
+            self._msg('assistant', 'a1', 'p1', content=[{'type': 'text', 'text': 'first answer'}]),
+            self._msg('user', 'p2', 'a1', content='second'),
+            self._msg('assistant', 'a2', 'p2', content=[{'type': 'text', 'text': 'second answer'}]),
+        ]
+        result = get_exchanges(messages, 'sess', self._cb())
+        assert result['exchange_count'] == 2
+        assert result['exchanges'][1]['answer'] == 'second answer'
+
+    def test_tool_result_only_user_message_not_treated_as_prompt(self):
+        # _is_real_prompt excludes synthetic "Tool loaded."-style text+tool_result blends.
+        from reveal.adapters.claude.analysis.messages import get_exchanges
+        messages = [
+            self._msg('user', 'p1', None, content='real prompt'),
+            self._msg('assistant', 'a1', 'p1', content=[{'type': 'tool_use', 'name': 'Bash', 'input': {}}]),
+            self._msg('user', 'synthetic', 'a1', content=[
+                {'type': 'text', 'text': 'Tool loaded.'},
+                {'type': 'tool_result', 'tool_use_id': 'x', 'content': 'ok'},
+            ]),
+            self._msg('assistant', 'a2', 'synthetic', content=[{'type': 'text', 'text': 'final answer'}]),
+        ]
+        result = get_exchanges(messages, 'sess', self._cb())
+        assert result['exchange_count'] == 1
+        assert result['exchanges'][0]['answer'] == 'final answer'
+
+    def test_progress_sibling_does_not_derail_the_walk(self):
+        # BACK-513 regression: confirmed against real sessions that `type: progress`
+        # records (bash_progress heartbeats, hook_progress callbacks) fork a
+        # self-contained side-chain off the SAME parent as the real continuation.
+        # A naive "first child in file order" walk follows the progress chain to
+        # its dead end and misses the real final answer beyond it. This test
+        # reproduces that exact shape: an assistant node with two children — a
+        # progress tick (which itself chains further) and the real tool-result
+        # continuation that leads to the actual final answer.
+        from reveal.adapters.claude.analysis.messages import get_exchanges
+        messages = [
+            self._msg('user', 'p1', None, content='do a bash thing'),
+            self._msg('assistant', 'a1', 'p1', content=[
+                {'type': 'text', 'text': "I'll run that now"},
+                {'type': 'tool_use', 'name': 'Bash', 'input': {}},
+            ]),
+            # progress side-chain (sibling of the real continuation, both parented to a1)
+            self._msg('progress', 'prog1', 'a1', content=None),
+            self._msg('progress', 'prog2', 'prog1', content=None),
+            # real continuation, also parented to a1, appears after the progress chain in file order
+            self._msg('user', 'tr1', 'a1', content=[{'type': 'tool_result', 'tool_use_id': 'x', 'content': 'done'}]),
+            self._msg('assistant', 'a2', 'tr1', content=[{'type': 'text', 'text': 'Real final answer'}]),
+        ]
+        result = get_exchanges(messages, 'sess', self._cb())
+        assert result['exchange_count'] == 1
+        ex = result['exchanges'][0]
+        # Must reach the real final answer, not stop at the premature "I'll run that now"
+        # (which would happen if 'a1' were picked up as the answer) or None (dead-ending
+        # in the progress chain).
+        assert ex['answer'] == 'Real final answer'
+        assert ex['answer_message_index'] == 5
+
+    def test_truncation_respects_full_flag(self):
+        from reveal.adapters.claude.render_messages import _render_claude_exchanges
+        import io
+        import contextlib
+
+        long_answer = 'x' * 1000
+        result = {
+            'type': 'claude_exchanges', 'session': 'sess', 'exchange_count': 1, 'full': False,
+            'exchanges': [{
+                'message_index': 0, 'timestamp': '2026-01-01T00:00:00Z',
+                'prompt': 'hi', 'answer_message_index': 1, 'answer_timestamp': None,
+                'answer': long_answer,
+            }],
+        }
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            _render_claude_exchanges(result)
+        assert 'more chars' in buf.getvalue()
+
+        result['full'] = True
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            _render_claude_exchanges(result)
+        assert 'more chars' not in buf.getvalue()
 
 
 class TestPromptsRoute:
