@@ -1473,3 +1473,25 @@ class TestModuleLabel:
     def test_bare_filename_no_dir(self):
         from reveal.adapters.imports import _module_label
         assert _module_label('mymodule.py') == 'mymodule.py'
+
+
+class TestCoverageWarningLine:
+    """BACK-518 part 2: shared warning formatter reused by architecture/overview."""
+
+    from reveal.adapters.imports import coverage_warning_line
+
+    def test_empty_returns_empty_string(self):
+        from reveal.adapters.imports import coverage_warning_line
+        assert coverage_warning_line({}) == ''
+
+    def test_single_extension(self):
+        from reveal.adapters.imports import coverage_warning_line
+        line = coverage_warning_line({'.hs': 3})
+        assert '3 code file(s)' in line
+        assert '.hs (3)' in line
+
+    def test_multiple_extensions_sorted(self):
+        from reveal.adapters.imports import coverage_warning_line
+        line = coverage_warning_line({'.rb': 2, '.ex': 5})
+        assert line.index('.ex') < line.index('.rb')
+        assert '7 code file(s)' in line

@@ -34,6 +34,20 @@ def _module_label(path: str) -> str:
     return '/'.join(p.parts[-2:]) if p.name == '__init__.py' else p.name
 
 
+def coverage_warning_line(unsupported: Dict[str, int]) -> str:
+    """One-line 'N files skipped, no import support for X' warning (empty if none).
+
+    Shared by imports:// and every downstream command (architecture, overview)
+    that builds an ImportGraph and needs to disclose the same gap (BACK-518
+    part 2) instead of silently presenting a partial graph as the whole tree.
+    """
+    if not unsupported:
+        return ''
+    skipped_total = sum(unsupported.values())
+    exts = ', '.join(f"{ext} ({n})" for ext, n in sorted(unsupported.items()))
+    return f"⚠ {skipped_total} code file(s) not analyzed — no import support for: {exts}"
+
+
 _SCHEMA_QUERY_PARAMS = {
     'unused': {
         'type': 'flag',

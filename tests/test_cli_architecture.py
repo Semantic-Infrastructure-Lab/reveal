@@ -594,6 +594,54 @@ class TestRunImportsAnalysis(unittest.TestCase):
         ep_files = [e['file'] for e in result.get('entry_points', [])]
         self.assertNotIn('/p/tests/test_main.py', ep_files)
 
+    def test_propagates_unsupported_extensions(self):
+        """BACK-518 part 2: the coverage signal ImportsAdapter already computes
+        must reach the caller, not just live unread in adapter.get_metadata()."""
+        mock_adapter = MagicMock()
+        mock_adapter._format_fan_in.return_value = {'entries': []}
+        mock_adapter._format_entrypoints.return_value = {'entries': []}
+        mock_adapter._format_components.return_value = {'components': []}
+        mock_adapter._format_circular.return_value = {'cycles': [], 'count': 0}
+        mock_adapter.get_metadata.return_value = {'unsupported_extensions': {'.hs': 3}}
+
+        with patch('reveal.adapters.imports.ImportsAdapter', return_value=mock_adapter):
+            result = _run_imports_analysis(Path('/p'))
+
+        self.assertEqual(result['unsupported_extensions'], {'.hs': 3})
+
+
+# ── Coverage warning (BACK-518 part 2) ──────────────────────────────────────────
+
+class TestCoverageWarning(unittest.TestCase):
+    """An unsupported-dominant-language repo must disclose it in run_architecture's
+    text and JSON output, not render a blank/misleading brief (see surface/contracts'
+    part-1 fix in path_utils.assess_language_coverage / imports.coverage_warning_line)."""
+
+    _EMPTY_IMPORTS = {
+        'entry_points': [], 'core_abstractions': [], 'components': [],
+        'circular_groups': [], 'unsupported_extensions': {'.hs': 3},
+    }
+
+    def test_text_shows_warning_even_with_no_facts(self):
+        args = _args(path='.')
+        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=([], self._EMPTY_IMPORTS)):
+            out = _capture(run_architecture, args)
+        self.assertIn('not analyzed', out)
+        self.assertIn('.hs', out)
+
+    def test_json_includes_unsupported_extensions(self):
+        args = _args(path='.', format='json')
+        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=([], self._EMPTY_IMPORTS)):
+            out = _capture(run_architecture, args)
+        data = json.loads(out)
+        self.assertEqual(data['unsupported_extensions'], {'.hs': 3})
+
+    def test_no_warning_when_fully_supported(self):
+        args = _args(path='.')
+        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
+            out = _capture(run_architecture, args)
+        self.assertNotIn('not analyzed', out)
+
 
 if __name__ == '__main__':
     unittest.main()

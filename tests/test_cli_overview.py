@@ -650,6 +650,20 @@ class TestRunImportsAnalysis(unittest.TestCase):
         self.assertEqual(result['entrypoints'], [])
         self.assertEqual(result['components'], [])
         self.assertEqual(result['circular_count'], 0)
+        self.assertEqual(result['unsupported_extensions'], {})
+
+    @patch('reveal.cli.commands.overview.ImportsAdapter')
+    def test_propagates_unsupported_extensions(self, MockAdapter):
+        """BACK-518 part 2: the coverage signal ImportsAdapter already computes
+        must reach the caller, not just live unread in adapter.get_metadata()."""
+        instance = MockAdapter.return_value
+        instance._format_fan_in.return_value = {'entries': []}
+        instance._format_entrypoints.return_value = {'entries': []}
+        instance._format_components.return_value = {'components': []}
+        instance._format_circular.return_value = {'count': 0}
+        instance.get_metadata.return_value = {'unsupported_extensions': {'.hs': 3}}
+        result = _run_imports_analysis(Path('/proj'))
+        self.assertEqual(result['unsupported_extensions'], {'.hs': 3})
 
 
 class TestRenderArchitecture(unittest.TestCase):
@@ -662,6 +676,26 @@ class TestRenderArchitecture(unittest.TestCase):
     def test_empty_arch_produces_no_output(self):
         out = _capture(_render_architecture, {}, [], 5)
         self.assertEqual(out, '')
+
+    def test_unsupported_only_still_shows_warning(self):
+        """BACK-518 part 2: an all-unsupported-language repo has empty
+        fan_in/entrypoints/components — must not fall through the old
+        all-empty early-return and render nothing (the false-clean bug)."""
+        out = _capture(
+            _render_architecture,
+            {'unsupported_extensions': {'.hs': 3}}, [], 5,
+        )
+        self.assertIn('not analyzed', out)
+        self.assertIn('.hs', out)
+
+    def test_coverage_warning_shown_alongside_real_data(self):
+        out = _capture(_render_architecture, self._arch(unsupported_extensions={'.hs': 1}), [], 5)
+        self.assertIn('not analyzed', out)
+        self.assertIn('main.py', out)
+
+    def test_no_warning_when_fully_supported(self):
+        out = _capture(_render_architecture, self._arch(), [], 5)
+        self.assertNotIn('not analyzed', out)
 
     def test_shows_architecture_header(self):
         out = _capture(_render_architecture, self._arch(), [], 5)

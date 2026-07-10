@@ -151,10 +151,16 @@ def _run_imports_analysis(path: Path) -> Dict[str, Any]:
             'entrypoints': entrypoints.get('entries', []),
             'components': components.get('components', []),
             'circular_count': circular.get('count', 0),
+            # BACK-518 part 2: disclose files the import graph couldn't cover,
+            # same signal imports:// itself already gives — otherwise an
+            # unsupported-language repo (all fan_in/entrypoints/components
+            # empty) renders as a blank Architecture section, which reads as
+            # "nothing here" rather than "not analyzed".
+            'unsupported_extensions': adapter.get_metadata().get('unsupported_extensions', {}),
         }
     except Exception as exc:
         logger.warning("imports analysis failed for %s: %s", path, exc)
-        return {'fan_in': [], 'entrypoints': [], 'components': [], 'circular_count': 0}
+        return {'fan_in': [], 'entrypoints': [], 'components': [], 'circular_count': 0, 'unsupported_extensions': {}}
 
 
 def _language_breakdown(files: List[Dict[str, Any]]) -> List[tuple]:
@@ -339,11 +345,20 @@ def _render_architecture(
     entrypoints = arch.get('entrypoints', [])
     components = arch.get('components', [])
     circular_count = arch.get('circular_count', 0)
+    unsupported = arch.get('unsupported_extensions', {})
 
-    if not fan_in and not entrypoints and not components:
+    if not fan_in and not entrypoints and not components and not unsupported:
         return
 
     print("\nArchitecture")
+
+    from reveal.adapters.imports import coverage_warning_line
+    warning = coverage_warning_line(unsupported)
+    if warning:
+        print(f"  {warning}")
+
+    if not fan_in and not entrypoints and not components:
+        return
 
     parts = [f"circulars: {circular_count}"]
     if complex_fns:

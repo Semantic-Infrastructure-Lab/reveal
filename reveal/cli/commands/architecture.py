@@ -84,6 +84,7 @@ def run_architecture(args: Namespace) -> None:
         },
         'risks': risks,
         'next_commands': next_commands,
+        'unsupported_extensions': imports_data.get('unsupported_extensions', {}),
     }
 
     if args.format == 'json':
@@ -138,6 +139,11 @@ def _format_imports_data(adapter, path: Path) -> Dict[str, Any]:
         'core_abstractions': core_abstractions,
         'components': components,
         'circular_groups': cycle_groups,
+        # BACK-518 part 2: same coverage disclosure imports:// itself already
+        # gives — without it, an unsupported-language repo (e.g. all-Lua) with
+        # zero entry points/abstractions renders a blank "Architecture Brief"
+        # that reads as "nothing here" rather than "not analyzed".
+        'unsupported_extensions': adapter.get_metadata().get('unsupported_extensions', {}),
     }
 
 
@@ -274,6 +280,11 @@ def _render_brief(report: Dict[str, Any], top: int, base_path: Path, no_imports:
     facts = report['facts']
 
     print(f"Architecture Brief: {path}\n")
+
+    from reveal.adapters.imports import coverage_warning_line
+    warning = coverage_warning_line(report.get('unsupported_extensions', {}))
+    if warning:
+        print(f"{warning}\n")
 
     _render_entry_points(facts.get('entry_points', []), top, base_path)
     _render_core_abstractions(facts.get('core_abstractions', []), top, base_path)
