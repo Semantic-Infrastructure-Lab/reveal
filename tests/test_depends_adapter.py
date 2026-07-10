@@ -496,6 +496,69 @@ class TestDependsAdapterScanRootResolution:
         assert _resolve_project_root(target) == tmp_path
 
 
+class TestDependsAdapterLanguageScoping:
+    """BACK-525 layer 4: a single-file target only parses files in its own
+    extractor's extension family — a Python target must not pay to
+    tree-sitter-parse sibling files in unrelated languages."""
+
+    def test_other_language_files_excluded_from_scan_count(self, tmp_path):
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "test"\n')
+        _write(tmp_path / 'pkg/utils.py', 'def helper(): pass\n')
+        _write(tmp_path / 'pkg/models.py', 'from .utils import helper\n')
+        # Decoy: an unrelated Go file living right alongside the Python
+        # package, *with an import statement* so it would register in
+        # graph.files (get_file_count counts only files with imports) if
+        # it were wrongly parsed. Pre-BACK-525, every supported language
+        # under scan_root got tree-sitter-parsed looking for importers;
+        # layer 4 should skip this entirely for a .py target.
+        _write(tmp_path / 'pkg/other.go', 'package pkg\nimport "fmt"\n')
+
+        a = DependsAdapter(str(tmp_path / 'pkg' / 'utils.py'))
+        r = a.get_structure()
+
+        assert r['count'] == 1
+        # Only models.py has an import statement (utils.py has none); the
+        # Go decoy — despite having its own import — must never register.
+        assert r['metadata']['total_files_scanned'] == 1
+
+    def test_c_target_still_scans_its_own_header_family(self, tmp_path):
+        """C's family is {.c, .h} — narrowing to the target's own extension
+        alone (not its extractor's full family) would wrongly drop header
+        dependents/dependencies."""
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / '.git').mkdir()
+        _write(tmp_path / 'src/foo.h', 'void foo(void);\n')
+        _write(tmp_path / 'src/foo.c', '#include "foo.h"\nvoid foo(void) {}\n')
+
+        a = DependsAdapter(str(tmp_path / 'src' / 'foo.h'))
+        r = a.get_structure()
+
+        assert r['count'] == 1
+        assert 'foo.c' in r['dependents'][0]['file']
+
+    def test_directory_target_stays_unscoped_across_languages(self, tmp_path):
+        """A directory target isn't tied to one extractor family — it must
+        still see dependents across every supported language, unchanged
+        from pre-BACK-525 behavior."""
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "test"\n')
+        _write(tmp_path / 'pkg/utils.py', 'def helper(): pass\n')
+        _write(tmp_path / 'pkg/models.py', 'from .utils import helper\n')
+        _write(tmp_path / 'pkg/other.go', 'package pkg\nimport "fmt"\n')
+
+        a = DependsAdapter(str(tmp_path / 'pkg'))
+        r = a.get_structure()
+
+        assert r['type'] == 'dependency_summary'
+        # models.py (Python import) and other.go (Go import) both register —
+        # a directory target spans every supported language, unscoped.
+        assert r['metadata']['total_files_scanned'] == 2
+
+
 class TestDependsAdapterScanCap:
     """BACK-524: _build_graph must bound the walk instead of unbounded-scanning
     a huge marker-legit ancestor repo — warn-and-continue with partial results,

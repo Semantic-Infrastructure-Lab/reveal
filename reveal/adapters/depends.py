@@ -429,7 +429,18 @@ class DependsAdapter(ResourceAdapter):
                 src_root = search_parents(target_path, lambda p: p.name == 'src')
                 project_root = src_root if src_root else target_path.parent
         self._target_path = target_path
-        self._build_graph(project_root)
+        # BACK-525 layer 4: for a single-file target, only files in its own
+        # extractor's `extensions` family (e.g. C's .c+.h) can ever satisfy
+        # resolve_import's extension-qualified lookup (verified read-only,
+        # gate G1) — parsing every other supported language's files under
+        # scan_root just to build the dependency graph is pure waste. A
+        # directory target may span languages, so it stays unscoped.
+        scan_extensions = None
+        if target_path.is_file():
+            target_extractor = get_extractor(target_path)
+            if target_extractor is not None:
+                scan_extensions = frozenset(target_extractor.extensions)
+        self._build_graph(project_root, scan_extensions=scan_extensions)
 
         fmt = self._query_params.get('format', 'text')
         if not isinstance(fmt, str):
@@ -470,9 +481,26 @@ class DependsAdapter(ResourceAdapter):
 
     # ── Graph building (mirrors ImportsAdapter._build_graph) ──────────────
 
-    def _build_graph(self, scan_root: Path) -> None:
-        """Build import graph from scan_root."""
-        supported_exts = frozenset(get_all_extensions())
+    def _build_graph(self, scan_root: Path, scan_extensions: Optional[frozenset] = None) -> None:
+        """Build import graph from scan_root.
+
+        ``scan_extensions`` (BACK-525 layer 4): when given, restricts the
+        *parse corpus* (``files`` — what actually gets tree-sitter'd for
+        import statements) to this extension set, the target's own
+        extractor family (e.g. C's ``.c``/``.h``). This is where the cost
+        lives, so it's where the win is; ``file_index`` (the resolution
+        basename map) stays extension-agnostic regardless, since it needs
+        to hold non-source-extension include targets too (BACK-491:
+        ``.inc``/``.tcc``). A basename lookup only ever matches a file whose
+        name is extension-qualified to the *importing* language (verified
+        read-only, gate G1), so a file outside the target's family could
+        never satisfy a resolution anyway — narrowing the parse corpus to
+        it is correct-by-construction, not a heuristic, and dissolves the
+        file-count cap's non-determinism for single-language targets
+        (``None`` — directory targets, which may span languages — stays
+        unscoped across every supported extension, the pre-BACK-525 shape).
+        """
+        supported_exts = scan_extensions if scan_extensions is not None else frozenset(get_all_extensions())
         self._scan_root = scan_root
         self._scan_capped = False
 
@@ -497,12 +525,18 @@ class DependsAdapter(ResourceAdapter):
                 capped = False
                 for fname in filenames:
                     fp = Path(root) / fname
+                    # file_index stays extension-agnostic (BACK-491: quoted
+                    # C/C++ #include targets can be non-source extensions
+                    # like .inc/.tcc) even when scan_extensions narrows what
+                    # actually gets *parsed* below — only the parse corpus
+                    # is the expensive part language-scoping needs to cut.
                     file_index.setdefault(fname, []).append(fp)
-                    if fp.suffix in supported_exts:
-                        if len(files) >= self._SCAN_FILE_CAP:
-                            capped = True
-                            break
-                        files.append(fp)
+                    if fp.suffix not in supported_exts:
+                        continue
+                    if len(files) >= self._SCAN_FILE_CAP:
+                        capped = True
+                        break
+                    files.append(fp)
                 if capped:
                     self._scan_capped = True
                     break
