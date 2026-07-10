@@ -65,7 +65,10 @@ class L004(BaseRule):
         if not (readme.exists() or index.exists()):
             # Only report once per directory (use a marker file)
             # To avoid duplicate reports for every file in docs/
-            if path.name == sorted(docs_dir.glob("*.md"))[0].name:
+            # glob("*.md") is non-recursive, so a docs_dir holding only
+            # subdirectories yields an empty list — guard before indexing.
+            top_level_md = sorted(docs_dir.glob("*.md"))
+            if top_level_md and path.name == top_level_md[0].name:
                 detections.append(self.create_detection(
                     file_path=str(docs_dir),
                     line=1,

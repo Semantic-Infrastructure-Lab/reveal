@@ -84,6 +84,30 @@ class TestL004:
             assert len(detections) == 1
             assert "index" in detections[0].message.lower() or "missing" in detections[0].message.lower()
 
+    def test_l004_no_crash_when_docs_dir_has_no_top_level_md(self):
+        """L004 must not crash when the resolved docs/ dir contains only
+        subdirectories and no top-level *.md files (BACK-528).
+
+        glob('*.md') is non-recursive, so a nested file whose docs ancestor
+        holds only subdirs yields an empty list — indexing [0] used to raise
+        IndexError.
+        """
+        rule = L004()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            docs_dir = Path(tmpdir) / "docs"
+            docs_dir.mkdir()
+
+            # Only a subdirectory with a nested .md — no top-level *.md in docs/
+            nested = docs_dir / "api" / "utils"
+            nested.mkdir(parents=True)
+            nested_md = nested / "intro.md"
+            nested_md.write_text("# Intro\n")
+
+            # Must return cleanly (no exception), not report a false index-miss
+            detections = rule.check(str(nested_md), None, "# Intro\n")
+            assert detections == []
+
     def test_l004_suggestion_is_helpful(self):
         """L004 provides helpful suggestion for adding index."""
         rule = L004()
