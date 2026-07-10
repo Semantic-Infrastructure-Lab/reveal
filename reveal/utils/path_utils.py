@@ -305,6 +305,47 @@ def search_parents(
     return None
 
 
+def search_parents_within_ceiling(
+    start: Path,
+    condition: Callable[[Path], bool],
+    max_depth: int = 20
+) -> Optional[Path]:
+    """Like ``search_parents``, but the climb is bounded by a *hard ceiling*
+    that can never itself be promoted to a match (BACK-525 layer 2).
+
+    The ceiling is: a filesystem/mount boundary (mirrors git's own default,
+    ``GIT_DISCOVERY_ACROSS_FILESYSTEM``) and ``is_unsafe_scan_root`` (the
+    filesystem anchor, ``$HOME``, OS temp dir, classic POSIX system dirs).
+    Splitting "how far may I climb" from "is this a project unit" (the
+    condition) is what makes promoting a distant ancestor ``.git`` into a
+    scan root structurally impossible — the climb simply stops before it can
+    reach an unrelated ancestor repo (BACK-515's failure mode) instead of
+    relying on the caller to reject the result after the fact.
+    """
+    current = start if start.is_dir() else start.parent
+    depth = 0
+    try:
+        start_dev: Optional[int] = os.stat(current).st_dev
+    except OSError:
+        start_dev = None
+
+    while current != current.parent and depth < max_depth:
+        if is_unsafe_scan_root(current):
+            return None
+        if start_dev is not None:
+            try:
+                if os.stat(current).st_dev != start_dev:
+                    return None
+            except OSError:
+                return None
+        if condition(current):
+            return current
+        current = current.parent
+        depth += 1
+
+    return None
+
+
 def find_project_root(
     start: Path,
     markers: Optional[List[str]] = None

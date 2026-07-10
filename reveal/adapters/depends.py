@@ -20,7 +20,7 @@ from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
 from ..defaults import SKIP_DIRECTORIES
 from ..utils.query import parse_query_params
-from ..utils.path_utils import search_parents, is_unsafe_scan_root
+from ..utils.path_utils import search_parents, search_parents_within_ceiling
 
 # BACK-498: find_project_root()'s built-in default markers (pyproject.toml,
 # setup.py/.cfg, .git, Cargo.toml, package.json, go.mod) are Python/JS/Rust/Go-
@@ -50,8 +50,15 @@ from ..utils.path_utils import search_parents, is_unsafe_scan_root
 # like 'pom.xml'/'composer.json' they may resolve to a submodule root rather
 # than the monorepo root — a bounded, correct-enough scope, and vastly better
 # than climbing to an unrelated ancestor repo.
-_PROJECT_ROOT_MARKERS = [
-    'pyproject.toml', 'setup.py', 'setup.cfg', '.git', 'Cargo.toml',
+# BACK-525: split into two tiers — a package/build marker is *positive
+# project-unit evidence*; a VCS root (`.git`) is checked only if no package
+# marker exists anywhere in the climb. Conflating them (the old flat
+# `_PROJECT_ROOT_MARKERS`) is what let a distant ancestor `.git` get promoted
+# to a scan root when nothing closer existed — the marker was "found" but was
+# really just a climb-ceiling signal, not a project unit. See
+# internal-docs/design/SCAN_ROOT_RESOLUTION_2026-07-09.md.
+_PACKAGE_ROOT_MARKERS = [
+    'pyproject.toml', 'setup.py', 'setup.cfg', 'Cargo.toml',
     'package.json', 'go.mod',
     'settings.gradle', 'settings.gradle.kts',  # Java/Kotlin (Gradle)
     'pom.xml',  # Java (Maven)
@@ -63,20 +70,54 @@ _PROJECT_ROOT_MARKERS = [
     'project.godot',  # GDScript (Godot)             — BACK-515
 ]
 
+_VCS_ROOT_MARKERS = ['.git']
 
-def _has_project_marker(directory: Path) -> bool:
-    """True if *directory* holds a depends:// project-root marker.
+# Back-compat union — every marker (package or VCS) `_has_project_marker`
+# recognized before BACK-525's tiering split. Still used where "is there any
+# marker at all in this one directory" is the actual question (tests).
+_PROJECT_ROOT_MARKERS = _PACKAGE_ROOT_MARKERS + _VCS_ROOT_MARKERS
 
-    Extends the literal-filename check `find_project_root` uses with two
-    repo-specific-name globs: `*.sln` (C# solution files) and `*.rockspec`
-    (Lua/LuaRocks package specs) — neither can be a fixed literal in
-    `_PROJECT_ROOT_MARKERS` because both carry a project-specific name.
-    See the BACK-515 note on `_PROJECT_ROOT_MARKERS` for why a missing
-    marker is a hang, not a cosmetic gap.
+
+def _has_package_marker(directory: Path) -> bool:
+    """True if *directory* holds positive project-unit evidence (BACK-525
+    tier 1) — a package/build marker, never a bare VCS root.
+
+    Extends the literal-filename check with two repo-specific-name globs:
+    `*.sln` (C# solution files) and `*.rockspec` (Lua/LuaRocks package
+    specs) — neither can be a fixed literal in `_PACKAGE_ROOT_MARKERS`
+    because both carry a project-specific name.
     """
-    if any((directory / marker).exists() for marker in _PROJECT_ROOT_MARKERS):
+    if any((directory / marker).exists() for marker in _PACKAGE_ROOT_MARKERS):
         return True
     return any(directory.glob('*.sln')) or any(directory.glob('*.rockspec'))
+
+
+def _has_vcs_marker(directory: Path) -> bool:
+    """True if *directory* is a VCS root (BACK-525 tier 2) — checked only
+    when no package marker exists anywhere in the climb."""
+    return any((directory / marker).exists() for marker in _VCS_ROOT_MARKERS)
+
+
+def _has_project_marker(directory: Path) -> bool:
+    """True if *directory* holds a depends:// project-root marker (package
+    or VCS, union of both tiers). See the BACK-515 note above for why a
+    missing marker is a hang, not a cosmetic gap; see BACK-525 for why the
+    tiers matter for *which* marker gets promoted to a scan root.
+    """
+    return _has_package_marker(directory) or _has_vcs_marker(directory)
+
+
+def _resolve_project_root(target_path: Path) -> Optional[Path]:
+    """Tiered nearest-marker resolution (BACK-525 layers 1+2): a near
+    package/build marker beats a distant VCS root, and the climb is bounded
+    by a hard ceiling it can never promote to a root. Returns ``None`` if
+    neither tier finds anything before the ceiling — the caller falls back
+    to the inferred-project scope (layer 3).
+    """
+    package_root = search_parents_within_ceiling(target_path, _has_package_marker)
+    if package_root is not None:
+        return package_root
+    return search_parents_within_ceiling(target_path, _has_vcs_marker)
 
 _SCHEMA_QUERY_PARAMS = {
     'top': {
@@ -344,6 +385,7 @@ class DependsAdapter(ResourceAdapter):
         self._warn_unknown_query_params(self._query_params)  # BACK-507
         self._scan_root: Optional[Path] = None
         self._scan_capped = False
+        self._root_inferred = False
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Build import graph and return reverse-dependency view.
@@ -371,10 +413,16 @@ class DependsAdapter(ResourceAdapter):
         # Composer convention that all four affected languages share) when one
         # exists above the file; only fall back to the bare parent dir if even
         # that isn't found.
-        project_root = search_parents(target_path, _has_project_marker)
-        if project_root is not None and is_unsafe_scan_root(project_root):
-            project_root = None
+        # BACK-525 layers 1+2: tiered nearest-marker climb, bounded by a hard
+        # ceiling it can never itself become the answer to.
+        project_root = _resolve_project_root(target_path)
         if project_root is None:
+            # BACK-525 layer 3: inferred-project fallback (tsserver's model)
+            # — no marker found before the ceiling, so don't scan the
+            # ceiling itself. Scope to the target's own subtree and say so,
+            # rather than silently pulling in whatever unrelated sibling
+            # happens to share that ceiling (the `~/src/{p1,p2}` case).
+            self._root_inferred = True
             if target_path.is_dir():
                 project_root = target_path
             else:
@@ -417,6 +465,7 @@ class DependsAdapter(ResourceAdapter):
             'total_import_edges': sum(len(v) for v in self._graph.reverse_deps.values()),
             'analyzer': 'depends',
             'scan_capped': self._scan_capped,
+            'root_inferred': self._root_inferred,
         }
 
     # ── Graph building (mirrors ImportsAdapter._build_graph) ──────────────
@@ -500,6 +549,10 @@ class DependsAdapter(ResourceAdapter):
         if self._scan_capped:
             known_limits.append(
                 f'scan capped at {self._SCAN_FILE_CAP:,} files — BACK-524, results may be partial')
+        if self._root_inferred:
+            known_limits.append(
+                "no project marker found above the target before the scan-root ceiling — "
+                "BACK-525, scope inferred from the target's own directory")
         return {
             'analysis_kind': 'import-graph',
             'confidence': 'high',
@@ -520,6 +573,24 @@ class DependsAdapter(ResourceAdapter):
             "results may be incomplete. Scope depends:// to a narrower path "
             "for a complete scan."
         )
+
+    def _root_inferred_warning(self) -> str:
+        """BACK-525 layer 3: one-line disclosure when no project marker was
+        found above the target before the scan-root ceiling, so the scan was
+        scoped to the target's own directory instead of climbing further."""
+        if not self._root_inferred:
+            return ''
+        root = self._scan_root
+        return (
+            f"⚠ Couldn't determine this file's project boundary — scanning only "
+            f"{root}. Pass an explicit root or cd into the project for full coverage."
+        )
+
+    def _warnings(self) -> str:
+        """Join every active disclosure (scan cap, inferred root) into one
+        warning string, in priority order."""
+        parts = [w for w in (self._scan_cap_warning(), self._root_inferred_warning()) if w]
+        return '\n'.join(parts)
 
     # ── Formatters ─────────────────────────────────────────────────────────
 
@@ -555,8 +626,8 @@ class DependsAdapter(ResourceAdapter):
             'metadata': self.get_metadata(),
             '_meta': self._build_meta(),
         }
-        if self._scan_capped:
-            result['warning'] = self._scan_cap_warning()
+        if self._scan_capped or self._root_inferred:
+            result['warning'] = self._warnings()
         return result
 
     def _format_directory_summary(self, directory: Path, top_n: Optional[int], fmt: str) -> Dict[str, Any]:
@@ -590,8 +661,8 @@ class DependsAdapter(ResourceAdapter):
             'metadata': self.get_metadata(),
             '_meta': self._build_meta(),
         }
-        if self._scan_capped:
-            result['warning'] = self._scan_cap_warning()
+        if self._scan_capped or self._root_inferred:
+            result['warning'] = self._warnings()
         return result
 
     @staticmethod

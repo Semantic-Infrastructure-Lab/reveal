@@ -6,6 +6,7 @@ from pathlib import Path, PureWindowsPath
 from reveal.utils.path_utils import (
     find_file_in_parents,
     search_parents,
+    search_parents_within_ceiling,
     find_project_root,
     get_relative_to_root,
     detect_non_python_language,
@@ -273,6 +274,67 @@ class TestSearchParents:
         result = search_parents(nested, has_multiple_py_files)
 
         assert result == src
+
+
+class TestSearchParentsWithinCeiling:
+    """BACK-525 layer 2: search_parents_within_ceiling never climbs past (or
+    promotes) a hard ceiling — is_unsafe_scan_root or a mount-boundary
+    crossing — even when the condition would otherwise match there."""
+
+    def test_finds_match_below_ceiling(self, tmp_path):
+        """Behaves like search_parents when the match is well within bounds."""
+        target = tmp_path / "proj"
+        target.mkdir()
+        (target / "marker").write_text("x")
+        nested = target / "src"
+        nested.mkdir()
+
+        result = search_parents_within_ceiling(nested, lambda p: (p / "marker").exists())
+
+        assert result == target
+
+    def test_stops_at_unsafe_root_without_matching(self, tmp_path, monkeypatch):
+        """A condition that would match at an unsafe root (here: tmp_path
+        itself, monkeypatched as unsafe) must never be honored there —
+        the climb stops at the ceiling and returns None."""
+        monkeypatch.setattr(
+            "reveal.utils.path_utils.is_unsafe_scan_root",
+            lambda p: str(p) == str(tmp_path),
+        )
+        nested = tmp_path / "a" / "b"
+        nested.mkdir(parents=True)
+
+        result = search_parents_within_ceiling(nested, lambda p: p == tmp_path)
+
+        assert result is None
+
+    def test_unsafe_root_never_returned_even_as_intermediate(self, tmp_path, monkeypatch):
+        """The ceiling check applies at every level of the climb, not just
+        the final candidate — a marker one level above the ceiling is still
+        found, but nothing at or beyond the ceiling ever is."""
+        monkeypatch.setattr(
+            "reveal.utils.path_utils.is_unsafe_scan_root",
+            lambda p: str(p) == str(tmp_path),
+        )
+        proj = tmp_path / "proj"
+        (proj / "src").mkdir(parents=True)
+        (proj / "marker").write_text("x")
+
+        result = search_parents_within_ceiling(proj / "src", lambda p: (p / "marker").exists())
+
+        assert result == proj
+
+    def test_respects_max_depth(self, tmp_path):
+        deep = tmp_path
+        for i in range(10):
+            deep = deep / f"level{i}"
+            deep.mkdir()
+
+        result = search_parents_within_ceiling(
+            deep, lambda p: p.name == tmp_path.name, max_depth=5
+        )
+
+        assert result is None
 
 
 class TestFindProjectRoot:

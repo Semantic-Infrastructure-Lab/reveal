@@ -432,6 +432,70 @@ class TestDependsAdapterCrossModuleRoot:
         assert 'foo.lua' in r['dependents'][0]['file']
 
 
+class TestDependsAdapterScanRootResolution:
+    """BACK-525 layers 1-3: tiered nearest-marker climb, hard ceiling, and
+    the inferred-project fallback that replaces the flat marker-climb."""
+
+    def test_package_marker_beats_nearer_vcs_root(self, tmp_path):
+        """A package/build marker several levels up must be preferred over a
+        *nearer* VCS root — package evidence is a project-unit signal, a bare
+        `.git` is only a climb ceiling, and being nearer doesn't promote it
+        (the core insight the flat nearest-match marker list couldn't
+        express: it always picked whichever marker was nearest, regardless
+        of kind)."""
+        from reveal.adapters.depends import _resolve_project_root
+
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "monorepo"\n')
+        nested = tmp_path / 'packages' / 'foo'
+        (nested / '.git').mkdir(parents=True)
+        target = nested / 'src' / 'target.py'
+        _write(target, 'x = 1\n')
+
+        assert _resolve_project_root(target) == tmp_path
+
+    def test_no_marker_before_ceiling_returns_none(self, tmp_path):
+        """No package or VCS marker anywhere between the target and the hard
+        ceiling (here: tmp_path's own ancestry crosses the OS temp dir) —
+        the climb must stop at the ceiling, not silently pick some unrelated
+        ancestor up past it."""
+        from reveal.adapters.depends import _resolve_project_root
+
+        target = tmp_path / 'no_markers' / 'target.py'
+        _write(target, 'x = 1\n')
+
+        assert _resolve_project_root(target) is None
+
+    def test_inferred_fallback_scopes_to_target_dir_and_warns(self, tmp_path):
+        """When no marker is found before the ceiling, depends:// must scope
+        to the target's own directory (never scan the ceiling) and disclose
+        it via a warning + metadata flag, not silently degrade."""
+        from reveal.adapters.depends import DependsAdapter
+
+        pkg = tmp_path / 'no_markers' / 'pkg'
+        _write(pkg / 'utils.py', 'def helper(): pass\n')
+        _write(pkg / 'models.py', 'from .utils import helper\n')
+
+        a = DependsAdapter(str(pkg / 'utils.py'))
+        r = a.get_structure()
+
+        assert r['count'] == 1
+        assert r['metadata']['root_inferred'] is True
+        assert 'warning' in r
+        assert "couldn't determine this file's project boundary" in r['warning'].lower()
+
+    def test_vcs_root_still_used_when_no_package_marker_exists(self, tmp_path):
+        """No package marker anywhere, but a `.git` exists before the
+        ceiling — tier 2 (VCS root) still applies; a real repo boundary is
+        legitimate project evidence, not something layer 3 should override."""
+        from reveal.adapters.depends import _resolve_project_root
+
+        (tmp_path / '.git').mkdir()
+        target = tmp_path / 'src' / 'target.py'
+        _write(target, 'x = 1\n')
+
+        assert _resolve_project_root(target) == tmp_path
+
+
 class TestDependsAdapterScanCap:
     """BACK-524: _build_graph must bound the walk instead of unbounded-scanning
     a huge marker-legit ancestor repo — warn-and-continue with partial results,
