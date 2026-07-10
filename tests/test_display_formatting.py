@@ -12,6 +12,7 @@ from reveal.display.formatting import (
     _filter_list_items,
     _filter_toplevel_structure,
     filter_fields,
+    _format_standard_items,
 )
 
 
@@ -1487,6 +1488,29 @@ class TestFormatMarkdownHeadings:
         _format_markdown_headings(items, Path('x.md'), 'grep')
         out = capsys.readouterr().out
         assert 'x.md:1:Title' in out
+
+
+class TestFormatStandardItemsLineFallback:
+    """BACK-521: items with only 'line_start' (INI/TOML sections) shouldn't render ':?'."""
+
+    def test_falls_back_to_line_start_when_line_missing(self, capsys):
+        items = [{'name': 'Unit', 'line_start': 1}]
+        _format_standard_items(items, Path('x.conf'), 'text')
+        out = capsys.readouterr().out
+        assert ':1' in out
+        assert ':?' not in out
+
+    def test_prefers_line_over_line_start(self, capsys):
+        items = [{'name': 'foo', 'line': 5, 'line_start': 1}]
+        _format_standard_items(items, Path('x.py'), 'text')
+        out = capsys.readouterr().out
+        assert ':5' in out
+
+    def test_falls_back_to_question_mark_when_neither_present(self, capsys):
+        items = [{'name': 'foo'}]
+        _format_standard_items(items, Path('x.py'), 'text')
+        out = capsys.readouterr().out
+        assert ':?' in out
 
 
 if __name__ == '__main__':

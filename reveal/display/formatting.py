@@ -671,7 +671,7 @@ def _format_standard_items(
     """Format and display standard items (functions, classes, etc.)."""
     for item in items:
         _print_item_line(
-            line=item.get('line', '?'),
+            line=item.get('line', item.get('line_start', '?')),
             name=item.get('name', ''),
             signature=item.get('signature', ''),
             content=item.get('content', ''),

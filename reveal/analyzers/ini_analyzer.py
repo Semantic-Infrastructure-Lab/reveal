@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 @register('.cfg', name='Config', icon='⚙️', category='config')
 @register('.conf', name='Config', icon='⚙️', category='config')
 @register('.properties', name='Properties', icon='⚙️', category='config')
+@register('.service', name='SystemdUnit', icon='⚙️', category='config')
+@register('.timer', name='SystemdUnit', icon='⚙️', category='config')
 class IniAnalyzer(FileAnalyzer):
     """INI/Properties file analyzer.
 
@@ -81,7 +83,7 @@ class IniAnalyzer(FileAnalyzer):
         Returns:
             Dict with sections, keys, and statistics
         """
-        config = configparser.ConfigParser()
+        config = configparser.ConfigParser(strict=False)
 
         try:
             # Parse INI file
@@ -220,7 +222,7 @@ class IniAnalyzer(FileAnalyzer):
         Returns:
             Dict with section data or specific value, or None if not found
         """
-        config = configparser.ConfigParser()
+        config = configparser.ConfigParser(strict=False)
 
         try:
             config.read_string(self.content)

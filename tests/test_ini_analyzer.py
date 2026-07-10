@@ -320,6 +320,46 @@ description = This is a long
         # configparser automatically handles multiline values
         self.assertIn('description', keys)
 
+    def test_duplicate_key_does_not_drop_all_sections(self):
+        """BACK-520: a repeated key (e.g. systemd's Environment=) must not collapse
+        the whole file to a single fake '(no section)' bucket."""
+        content = """[Unit]
+Description=test
+
+[Service]
+Type=simple
+Environment=A=1
+Environment=B=2"""
+
+        path = self.create_ini_file(content)
+        analyzer = IniAnalyzer(path)
+        structure = analyzer.get_structure()
+
+        self.assertEqual(structure['section_count'], 2)
+        sections = {s['name'] for s in structure['sections']}
+        self.assertEqual(sections, {'Unit', 'Service'})
+
+    def test_service_and_timer_extensions_registered(self):
+        """BACK-523: .service/.timer must dispatch to IniAnalyzer, like .conf/.ini."""
+        from reveal.registry import get_analyzer
+
+        self.assertIs(get_analyzer('unit.service'), IniAnalyzer)
+        self.assertIs(get_analyzer('unit.timer'), IniAnalyzer)
+
+    def test_service_extension_parses_sections(self):
+        """BACK-523: a .service file parses through the same code path as .conf."""
+        content = """[Unit]
+Description=test
+
+[Service]
+Type=simple"""
+
+        path = self.create_ini_file(content, "test.service")
+        analyzer = IniAnalyzer(path)
+        structure = analyzer.get_structure()
+
+        self.assertEqual(structure['section_count'], 2)
+
 
 if __name__ == '__main__':
     unittest.main()
