@@ -432,5 +432,62 @@ class TestDependsAdapterCrossModuleRoot:
         assert 'foo.lua' in r['dependents'][0]['file']
 
 
+class TestDependsAdapterScanCap:
+    """BACK-524: _build_graph must bound the walk instead of unbounded-scanning
+    a huge marker-legit ancestor repo — warn-and-continue with partial results,
+    not a silent hang. Caps _SCAN_FILE_CAP down via monkeypatch so the test
+    corpus itself stays small; real default is 5,000."""
+
+    @pytest.fixture
+    def wide_pkg(self, tmp_path):
+        """5 sibling modules, each imported by the next — bigger than a
+        monkeypatched cap of 3, so the walk must stop mid-tree."""
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "test"\n')
+        for i in range(5):
+            imp = f'from .mod{i - 1} import x\n' if i > 0 else ''
+            _write(tmp_path / 'pkg' / f'mod{i}.py', f"{imp}x = {i}\n")
+        return tmp_path
+
+    def test_cap_sets_scan_capped_flag(self, wide_pkg, monkeypatch):
+        from reveal.adapters.depends import DependsAdapter
+        monkeypatch.setattr(DependsAdapter, '_SCAN_FILE_CAP', 3)
+        a = DependsAdapter(str(wide_pkg / 'pkg' / 'mod0.py'))
+        r = a.get_structure()
+        assert r['metadata']['scan_capped'] is True
+
+    def test_cap_emits_warning_in_result(self, wide_pkg, monkeypatch):
+        from reveal.adapters.depends import DependsAdapter
+        monkeypatch.setattr(DependsAdapter, '_SCAN_FILE_CAP', 3)
+        a = DependsAdapter(str(wide_pkg / 'pkg' / 'mod0.py'))
+        r = a.get_structure()
+        assert 'warning' in r
+        assert 'capped at 3 files' in r['warning']
+
+    def test_cap_warning_in_known_limits(self, wide_pkg, monkeypatch):
+        from reveal.adapters.depends import DependsAdapter
+        monkeypatch.setattr(DependsAdapter, '_SCAN_FILE_CAP', 3)
+        a = DependsAdapter(str(wide_pkg / 'pkg' / 'mod0.py'))
+        r = a.get_structure()
+        assert any('BACK-524' in limit for limit in r['_meta']['known_limits'])
+
+    def test_no_cap_hit_below_threshold(self, wide_pkg):
+        """Default cap (5,000) is nowhere near this fixture's 5 files — no
+        warning, no flag, unaffected by the BACK-524 guard."""
+        from reveal.adapters.depends import DependsAdapter
+        a = DependsAdapter(str(wide_pkg / 'pkg' / 'mod0.py'))
+        r = a.get_structure()
+        assert r['metadata']['scan_capped'] is False
+        assert 'warning' not in r
+
+    def test_render_structure_shows_warning(self, wide_pkg, monkeypatch, capsys):
+        from reveal.adapters.depends import DependsAdapter, DependsRenderer
+        monkeypatch.setattr(DependsAdapter, '_SCAN_FILE_CAP', 3)
+        a = DependsAdapter(str(wide_pkg / 'pkg'))
+        r = a.get_structure()
+        DependsRenderer.render_structure(r, format='text')
+        captured = capsys.readouterr()
+        assert 'Scan capped at 3 files' in captured.out
+
+
 if __name__ == '__main__':
     unittest.main()

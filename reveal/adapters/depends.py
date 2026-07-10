@@ -212,6 +212,10 @@ class DependsRenderer:
         print(f"Dependents of: {target}")
         print(f"{'='*60}\n")
 
+        warning = result.get('warning')
+        if warning:
+            print(f"{warning}\n")
+
         if not dependents:
             print("  No dependents found (nothing imports this module)")
             print()
@@ -253,6 +257,10 @@ class DependsRenderer:
         print(f"\n{'='*60}")
         print(f"Reverse Dependency Summary: {source}")
         print(f"{'='*60}\n")
+
+        warning = result.get('warning')
+        if warning:
+            print(f"{warning}\n")
 
         if not modules:
             print("  No internal imports found.")
@@ -313,6 +321,15 @@ class DependsAdapter(ResourceAdapter):
     depend on it.
     """
 
+    # BACK-524: bound the tree-sitter-parsed file set so a scan_root that
+    # resolves to a genuinely huge (but marker-legit) ancestor repo degrades
+    # to a warned, partial result instead of an unbounded parse — the residual
+    # class BACK-515's marker fix couldn't close (a file with no marker above
+    # it at all, or a future depends://-supported language whose marker isn't
+    # in _PROJECT_ROOT_MARKERS yet). Counts only extractor-supported files
+    # (what's actually expensive to parse), not every file os.walk visits.
+    _SCAN_FILE_CAP = 5000
+
     def __init__(self, path: str = '.', query: Optional[str] = None):
         """Initialize depends adapter.
 
@@ -325,6 +342,8 @@ class DependsAdapter(ResourceAdapter):
         self._target_path: Optional[Path] = Path(path).resolve() if path else None
         self._query_params = parse_query_params(query or '')
         self._warn_unknown_query_params(self._query_params)  # BACK-507
+        self._scan_root: Optional[Path] = None
+        self._scan_capped = False
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Build import graph and return reverse-dependency view.
@@ -397,6 +416,7 @@ class DependsAdapter(ResourceAdapter):
             'total_files_scanned': self._graph.get_file_count(),
             'total_import_edges': sum(len(v) for v in self._graph.reverse_deps.values()),
             'analyzer': 'depends',
+            'scan_capped': self._scan_capped,
         }
 
     # ── Graph building (mirrors ImportsAdapter._build_graph) ──────────────
@@ -404,6 +424,8 @@ class DependsAdapter(ResourceAdapter):
     def _build_graph(self, scan_root: Path) -> None:
         """Build import graph from scan_root."""
         supported_exts = frozenset(get_all_extensions())
+        self._scan_root = scan_root
+        self._scan_capped = False
 
         # BACK-498: discover files the same way ImportsAdapter._build_graph does —
         # os.walk honoring SKIP_DIRECTORIES/hidden dirs (not a raw rglob, which
@@ -423,11 +445,18 @@ class DependsAdapter(ResourceAdapter):
         else:
             for root, dirs, filenames in os.walk(str(scan_root)):
                 dirs[:] = [d for d in dirs if d not in SKIP_DIRECTORIES and not d.startswith('.')]
+                capped = False
                 for fname in filenames:
                     fp = Path(root) / fname
                     file_index.setdefault(fname, []).append(fp)
                     if fp.suffix in supported_exts:
+                        if len(files) >= self._SCAN_FILE_CAP:
+                            capped = True
+                            break
                         files.append(fp)
+                if capped:
+                    self._scan_capped = True
+                    break
 
         all_imports: List[ImportStatement] = []
         for file_path in files:
@@ -462,6 +491,36 @@ class DependsAdapter(ResourceAdapter):
                     self._graph.add_dependency(file_path, resolved)
                     self._graph.resolved_paths[stmt.module_name] = resolved
 
+    def _build_meta(self) -> Dict[str, Any]:
+        known_limits = [
+            'dynamic imports (importlib, __import__) not followed',
+            'conditional imports may not reflect runtime state',
+            'TYPE_CHECKING-only imports are excluded',
+        ]
+        if self._scan_capped:
+            known_limits.append(
+                f'scan capped at {self._SCAN_FILE_CAP:,} files — BACK-524, results may be partial')
+        return {
+            'analysis_kind': 'import-graph',
+            'confidence': 'high',
+            'known_limits': known_limits,
+        }
+
+    def _scan_cap_warning(self) -> str:
+        """BACK-524: one-line disclosure when _build_graph stopped early.
+
+        Mirrors imports.py's coverage_warning_line — a partial graph must say
+        so, not present itself as complete (same principle as BACK-518 part 2).
+        """
+        if not self._scan_capped:
+            return ''
+        root = self._scan_root
+        return (
+            f"⚠ Scan capped at {self._SCAN_FILE_CAP:,} files under {root} — "
+            "results may be incomplete. Scope depends:// to a narrower path "
+            "for a complete scan."
+        )
+
     # ── Formatters ─────────────────────────────────────────────────────────
 
     def _format_file_dependents(self, target: Path) -> Dict[str, Any]:
@@ -485,7 +544,7 @@ class DependsAdapter(ResourceAdapter):
             for importer in sorted(importer_files):
                 dependents.append({'file': str(importer), 'line': 0, 'module': '', 'names': [], 'type': 'unknown', 'is_relative': False, 'alias': None})
 
-        return {
+        result = {
             'contract_version': '1.1',
             'type': 'module_dependents',
             'source': str(self._target_path),
@@ -494,16 +553,11 @@ class DependsAdapter(ResourceAdapter):
             'dependents': dependents,
             'count': len(dependents),
             'metadata': self.get_metadata(),
-            '_meta': {
-                'analysis_kind': 'import-graph',
-                'confidence': 'high',
-                'known_limits': [
-                    'dynamic imports (importlib, __import__) not followed',
-                    'conditional imports may not reflect runtime state',
-                    'TYPE_CHECKING-only imports are excluded',
-                ],
-            },
+            '_meta': self._build_meta(),
         }
+        if self._scan_capped:
+            result['warning'] = self._scan_cap_warning()
+        return result
 
     def _format_directory_summary(self, directory: Path, top_n: Optional[int], fmt: str) -> Dict[str, Any]:
         """Format most-imported modules in directory, sorted by dependent count."""
@@ -534,16 +588,10 @@ class DependsAdapter(ResourceAdapter):
             '_format': fmt,
             'modules': modules,
             'metadata': self.get_metadata(),
-            '_meta': {
-                'analysis_kind': 'import-graph',
-                'confidence': 'high',
-                'known_limits': [
-                    'dynamic imports (importlib, __import__) not followed',
-                    'conditional imports may not reflect runtime state',
-                    'TYPE_CHECKING-only imports are excluded',
-                ],
-            },
+            '_meta': self._build_meta(),
         }
+        if self._scan_capped:
+            result['warning'] = self._scan_cap_warning()
         return result
 
     @staticmethod
