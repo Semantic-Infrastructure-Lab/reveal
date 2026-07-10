@@ -478,9 +478,20 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return funcs
 
     def _find_named_arrow_function(self, name: str):
-        """Resolve a module-scope `const name = (...) => {}` declaration to
-        its function node, for nav-flag lookup by bare name
-        (file_handler._find_element_node)."""
+        """Resolve a named arrow/function-expression value to its function
+        node, for bare-name lookup by both the plain element extractor
+        (display.element._try_treesitter_extraction) and nav-flag lookup
+        (file_handler._find_element_node).
+
+        Covers two JS-family shapes that carry their name on a parent node
+        rather than the (anonymous) arrow node itself:
+          1. module-scope `const name = (...) => {}` (lexical_declaration), and
+          2. class-field methods `name = (...) => {}` (public_field_definition
+             / field_definition) — BACK-527: previously only get_structure()
+             saw these (via _extract_class_field_functions), so they listed in
+             --outline but `reveal file.tsx name` returned "not found".
+        """
+        # 1. module-scope `const name = (...) => {}`
         for decl_node in self._find_nodes_by_type('lexical_declaration'):
             if not self._is_module_scope_decl(decl_node):
                 continue
@@ -488,6 +499,18 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 if child.kind() != 'variable_declarator':
                     continue
                 name_node, value_node = self._arrow_or_fn_value(child)
+                if name_node and value_node and self._get_node_text(name_node) == name:
+                    return value_node
+
+        # 2. class-field arrow method `name = (...) => {}`
+        for field_type in self._CLASS_FIELD_NODE_TYPES:
+            for field_node in self._find_nodes_by_type(field_type):
+                name_node = value_node = None
+                for ch in _children(field_node):
+                    if ch.kind() in ('property_identifier', 'private_property_identifier') and name_node is None:
+                        name_node = ch
+                    elif ch.kind() in ('arrow_function', 'function_expression'):
+                        value_node = ch
                 if name_node and value_node and self._get_node_text(name_node) == name:
                     return value_node
         return None

@@ -411,6 +411,68 @@ class TestBack519ClassFieldArrowFunctions:
         assert set(callers) == {'maybeHandleCrop', 'maybeHandleResize'}
 
 
+# ─── BACK-527: by-name extraction of class-field arrow methods ────────────────
+# BACK-519 restored these to get_structure()/--outline, but the by-name
+# resolver (_find_named_arrow_function, used by both plain element extraction
+# and nav-flag lookup) only handled module-scope `const f = () => {}`, not
+# class-field `foo = () => {}`. So a method that listed in --outline still
+# returned "Element not found" for `reveal file.tsx foo`. Found re-checking
+# BACK-519 during the 2026-07-10 DD feature sweep on excalidraw's App.tsx.
+
+class TestBack527ClassFieldArrowByName:
+    def test_tsx_class_field_arrow_resolves_by_name(self, tmp_path):
+        f = tmp_path / 'Component.tsx'
+        f.write_text(
+            "class MyComponent {\n"
+            "  regularMethod(x: number): number { return x; }\n"
+            "  private handleClick = (event: MouseEvent) => {\n"
+            "    return event;\n"
+            "  };\n"
+            "}\n"
+        )
+        analyzer = TSXAnalyzer(str(f))
+        node = analyzer._find_named_arrow_function('handleClick')
+        assert node is not None
+
+    def test_ts_class_field_arrow_resolves_by_name(self, tmp_path):
+        f = tmp_path / 'Service.ts'
+        f.write_text(
+            "class Service {\n"
+            "  private load = async () => { return null; };\n"
+            "}\n"
+        )
+        node = TypeScriptAnalyzer(str(f))._find_named_arrow_function('load')
+        assert node is not None
+
+    def test_plain_js_class_field_arrow_resolves_by_name(self, tmp_path):
+        from reveal.analyzers.javascript import JavaScriptAnalyzer
+        f = tmp_path / 'component.js'
+        f.write_text(
+            "class Component {\n"
+            "  handleClick = () => { return 1; };\n"
+            "}\n"
+        )
+        node = JavaScriptAnalyzer(str(f))._find_named_arrow_function('handleClick')
+        assert node is not None
+
+    def test_module_scope_const_arrow_still_resolves(self, tmp_path):
+        """Regression guard: the pre-existing module-scope path must still work."""
+        f = tmp_path / 'util.ts'
+        f.write_text("const doThing = (x: number): number => x + 1;\n")
+        node = TypeScriptAnalyzer(str(f))._find_named_arrow_function('doThing')
+        assert node is not None
+
+    def test_unknown_name_returns_none(self, tmp_path):
+        f = tmp_path / 'Component.tsx'
+        f.write_text(
+            "class MyComponent {\n"
+            "  private handleClick = () => { return 1; };\n"
+            "}\n"
+        )
+        node = TSXAnalyzer(str(f))._find_named_arrow_function('nonexistent')
+        assert node is None
+
+
 # ─── BACK-335: Type-annotation-only imports not flagged as unused ─────────────
 
 class TestBack335TypeAnnotationImports:
