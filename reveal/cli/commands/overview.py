@@ -88,6 +88,11 @@ def run_overview(args: Namespace) -> None:
 
     stats = _run_stats(path)
     git_log = [] if no_git else _run_git_log(path, top)
+    git_foreign_root: Optional[Path] = None
+    if git_log:
+        git_root = _resolve_git_root(path)
+        if git_root is not None and git_root != path:
+            git_foreign_root = git_root
     complex_fns = _run_complex_functions(path, top)
     architecture = {} if no_imports else _run_imports_analysis(path)
 
@@ -95,6 +100,7 @@ def run_overview(args: Namespace) -> None:
         'path': str(path),
         'stats': stats,
         'git_log': git_log,
+        'git_foreign_root': str(git_foreign_root) if git_foreign_root else None,
         'complex_functions': complex_fns,
         'architecture': architecture,
     }
@@ -115,6 +121,24 @@ def _run_stats(path: Path) -> Dict[str, Any]:
     except Exception as exc:
         logger.warning("stats collection failed for %s: %s", path, exc)
         return {}
+
+
+def _resolve_git_root(path: Path) -> Optional[Path]:
+    """Discover the git repo root enclosing *path* (BACK-516).
+
+    ``GitAdapter``/pygit2 walk up to the nearest ancestor ``.git`` unconditionally
+    (correct git behavior), so a directory with no ``.git`` of its own — a vendored
+    tree, a sample corpus, a submodule checked out without its own ``.git`` — silently
+    inherits its enclosing repo's history. Returns the discovered root so callers can
+    detect and disclose that mismatch; returns ``None`` if *path* isn't inside a repo
+    at all.
+    """
+    try:
+        metadata = GitAdapter(path=str(path)).get_metadata()
+        root = metadata.get('path')
+        return Path(root).resolve() if root else None
+    except Exception:
+        return None
 
 
 def _run_git_log(path: Path, limit: int) -> List[Dict[str, Any]]:
@@ -220,7 +244,7 @@ def _render_overview(report: Dict[str, Any], top: int) -> None:
     _render_hotspots(hotspots, top)
     _render_complex_functions(complex_fns, base_path=path)
     _render_architecture(architecture, complex_fns, top, base_path=path)
-    _render_git_log(git_log)
+    _render_git_log(git_log, report.get('git_foreign_root'))
     _render_next_steps()
 
 
@@ -412,10 +436,12 @@ def _relpath(file_str: str, base_path: Optional[Path]) -> str:
     return file_str
 
 
-def _render_git_log(history: List[Dict[str, Any]]) -> None:
+def _render_git_log(history: List[Dict[str, Any]], foreign_root: Optional[str] = None) -> None:
     if not history:
         return
     print("\nRecent changes")
+    if foreign_root:
+        print(f"  ⚠ this directory has no .git of its own — history is from the enclosing repo {foreign_root}")
     for commit in history:
         ts = commit.get('timestamp')
         age = _age_label(ts)

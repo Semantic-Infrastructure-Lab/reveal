@@ -22,6 +22,7 @@ from reveal.cli.commands.overview import (
     _render_language_breakdown,
     _render_next_steps,
     _render_quality_pulse,
+    _resolve_git_root,
     _run_complex_functions,
     _run_git_log,
     _run_imports_analysis,
@@ -262,6 +263,28 @@ class TestRunGitLog(unittest.TestCase):
         MockAdapter.assert_called_once_with(path=str(Path('/project')), query={'type': 'log', 'limit': '7'})
 
 
+class TestResolveGitRoot(unittest.TestCase):
+    """BACK-516: discover the repo root actually backing a target directory."""
+
+    @patch('reveal.cli.commands.overview.GitAdapter')
+    def test_returns_discovered_root(self, MockAdapter):
+        MockAdapter.return_value.get_metadata.return_value = {'path': '/enclosing/repo', 'type': 'git_repository'}
+        result = _resolve_git_root(Path('/enclosing/repo/samples/csharp'))
+        self.assertEqual(result, Path('/enclosing/repo').resolve())
+
+    @patch('reveal.cli.commands.overview.GitAdapter')
+    def test_no_path_in_metadata_returns_none(self, MockAdapter):
+        MockAdapter.return_value.get_metadata.return_value = {'type': 'git_repository'}
+        result = _resolve_git_root(Path('/not/a/repo'))
+        self.assertIsNone(result)
+
+    @patch('reveal.cli.commands.overview.GitAdapter')
+    def test_exception_returns_none(self, MockAdapter):
+        MockAdapter.return_value.get_metadata.side_effect = Exception('fail')
+        result = _resolve_git_root(Path('/whatever'))
+        self.assertIsNone(result)
+
+
 class TestRunComplexFunctions(unittest.TestCase):
 
     @patch('reveal.cli.commands.overview.AstAdapter')
@@ -487,6 +510,15 @@ class TestRenderGitLog(unittest.TestCase):
         self.assertIn('msg1', out)
         self.assertIn('msg2', out)
 
+    def test_foreign_root_shows_disclosure_warning(self):
+        out = _capture(_render_git_log, [self._commit('msg')], '/enclosing/repo')
+        self.assertIn('enclosing repo', out)
+        self.assertIn('/enclosing/repo', out)
+
+    def test_no_foreign_root_shows_no_warning(self):
+        out = _capture(_render_git_log, [self._commit('msg')], None)
+        self.assertNotIn('enclosing repo', out)
+
 
 # ── Integration: run_overview ──────────────────────────────────────────────────
 
@@ -591,6 +623,52 @@ class TestRunOverview(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp:
                 out = _capture(run_overview, _args(path=tmp))
                 self.assertIn('Overview:', out)  # Header always shows
+
+    def test_foreign_git_root_disclosed_in_text_output(self):
+        """BACK-516: target dir with no .git of its own discloses the enclosing repo."""
+        import tempfile
+        p_stats, p_git, p_ast, p_arch = self._patch_runners()
+        with tempfile.TemporaryDirectory() as tmp:
+            enclosing_root = Path(tmp).parent.resolve()
+            with p_stats, p_git, p_ast, p_arch, \
+                    patch('reveal.cli.commands.overview._resolve_git_root', return_value=enclosing_root):
+                out = _capture(run_overview, _args(path=tmp))
+                self.assertIn('enclosing repo', out)
+                self.assertIn(str(enclosing_root), out)
+
+    def test_matching_git_root_no_disclosure(self):
+        """Target dir IS its own repo root: no false-positive warning."""
+        import tempfile
+        p_stats, p_git, p_ast, p_arch = self._patch_runners()
+        with tempfile.TemporaryDirectory() as tmp:
+            own_root = Path(tmp).resolve()
+            with p_stats, p_git, p_ast, p_arch, \
+                    patch('reveal.cli.commands.overview._resolve_git_root', return_value=own_root):
+                out = _capture(run_overview, _args(path=tmp))
+                self.assertNotIn('enclosing repo', out)
+
+    def test_foreign_git_root_in_json_output(self):
+        import tempfile
+        p_stats, p_git, p_ast, p_arch = self._patch_runners()
+        with tempfile.TemporaryDirectory() as tmp:
+            enclosing_root = Path(tmp).parent.resolve()
+            with p_stats, p_git, p_ast, p_arch, \
+                    patch('reveal.cli.commands.overview._resolve_git_root', return_value=enclosing_root):
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_overview(_args(path=tmp, format='json'))
+                data = json.loads(buf.getvalue())
+                self.assertEqual(data['git_foreign_root'], str(enclosing_root))
+
+    def test_no_git_log_skips_root_resolution(self):
+        """Empty git_log (e.g. no_git or no history) shouldn't trigger a root lookup."""
+        import tempfile
+        p_stats, p_git, p_ast, p_arch = self._patch_runners(git=[])
+        with tempfile.TemporaryDirectory() as tmp:
+            with p_stats, p_git, p_ast, p_arch, \
+                    patch('reveal.cli.commands.overview._resolve_git_root') as mock_resolve:
+                run_overview(_args(path=tmp))
+                mock_resolve.assert_not_called()
 
 
 class TestIsTestFile(unittest.TestCase):
