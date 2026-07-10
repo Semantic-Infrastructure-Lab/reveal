@@ -367,6 +367,70 @@ class TestDependsAdapterCrossModuleRoot:
         r = a.get_structure()
         assert r['count'] == 1
 
+    # BACK-515: every language depends:// builds an import graph for must have
+    # its project-root marker recognized by `_has_project_marker`. A missing
+    # marker is not cosmetic — search_parents climbs past the real root to some
+    # ancestor `.git`, and _build_graph then scans every file under it (the
+    # reported "hang" was a full monorepo scan, not an infinite loop). This
+    # matrix guards the BACK-514 language set (Lua/Scala/Dart/Zig/GDScript);
+    # add a row whenever depends:// gains another language.
+    #
+    # Each row: (marker filename or '*.ext' glob, module-file extension,
+    # `require`/import line importing `bar`, `bar` module body).
+    _ROOT_MARKER_CASES = [
+        ('mylib-1.0.rockspec', 'lua', 'local bar = require("bar")', 'return {}'),
+        ('build.sbt', 'scala', 'import bar.Thing', 'package bar\nclass Thing'),
+        ('pubspec.yaml', 'dart', "import 'bar.dart';", 'class Bar {}'),
+        ('build.zig', 'zig', 'const bar = @import("bar.zig");', 'pub const x = 1;'),
+        ('project.godot', 'gd', 'const Bar = preload("bar.gd")', 'extends Node'),
+    ]
+
+    @pytest.mark.parametrize(
+        'marker,ext,importer_body,module_body',
+        _ROOT_MARKER_CASES,
+        ids=[c[1] for c in _ROOT_MARKER_CASES],
+    )
+    def test_language_root_marker_stops_ancestor_climb(
+        self, tmp_path, marker, ext, importer_body, module_body
+    ):
+        """A per-language root marker at the true project root must stop
+        search_parents there, not climb past it to a decoy `.git` several
+        levels up. Regression matrix for the BACK-515 hang across every
+        depends://-supported language BACK-514 added."""
+        from reveal.adapters.depends import _has_project_marker
+
+        # Decoy marker several levels above the real project root.
+        (tmp_path / '.git').mkdir()
+        proj = tmp_path / 'vendor' / 'lib'
+        proj.mkdir(parents=True)
+        (proj / marker).write_text('# marker\n')
+        _write(proj / f'src/foo.{ext}', importer_body + '\n')
+        _write(proj / f'src/bar.{ext}', module_body + '\n')
+
+        # The marker dir is recognized; the src dir below it is not.
+        assert _has_project_marker(proj)
+        assert not _has_project_marker(proj / 'src')
+
+    def test_rockspec_resolves_lua_dependent(self, tmp_path):
+        """End-to-end companion to the marker matrix: with a `*.rockspec`
+        root, the Lua importer is actually resolved (not just that the scan
+        is bounded)."""
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / '.git').mkdir()
+        (tmp_path / 'vendor' / 'lua-lib').mkdir(parents=True)
+        (tmp_path / 'vendor' / 'lua-lib' / 'mylib-1.0.rockspec').write_text('package = "mylib"\n')
+        _write(tmp_path / 'vendor/lua-lib/src/foo.lua', """\
+            local bar = require("bar")
+        """)
+        _write(tmp_path / 'vendor/lua-lib/src/bar.lua', """\
+            return {}
+        """)
+        a = DependsAdapter(str(tmp_path / 'vendor/lua-lib/src/bar.lua'))
+        r = a.get_structure()
+        assert r['count'] == 1
+        assert 'foo.lua' in r['dependents'][0]['file']
+
 
 if __name__ == '__main__':
     unittest.main()

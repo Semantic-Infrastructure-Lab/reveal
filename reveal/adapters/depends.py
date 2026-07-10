@@ -37,6 +37,19 @@ from ..utils.path_utils import search_parents, is_unsafe_scan_root
 # multi-module tree — those two are still net improvements over the bare
 # parent-dir fallback even when they resolve to a submodule root rather than
 # the monorepo root.
+#
+# BACK-515: this list MUST cover the root marker of every language depends://
+# builds an import graph for — a missing marker isn't a cosmetic gap, it's a
+# hang. When no marker is found, search_parents climbs until it hits ANY
+# ancestor marker (commonly a `.git` far above the real project), and
+# _build_graph then tries to parse every file under it. BACK-514 added
+# import-graph coverage for Lua/Scala/Dart/Zig/GDScript but only Lua's marker
+# reached this list initially; Scala and Dart then reproduced the identical
+# "hang" (a full monorepo scan) — see RESOLVED_LEDGER. The five markers below
+# close that. Each is one-per-package and can nest in a multi-module tree, so
+# like 'pom.xml'/'composer.json' they may resolve to a submodule root rather
+# than the monorepo root — a bounded, correct-enough scope, and vastly better
+# than climbing to an unrelated ancestor repo.
 _PROJECT_ROOT_MARKERS = [
     'pyproject.toml', 'setup.py', 'setup.cfg', '.git', 'Cargo.toml',
     'package.json', 'go.mod',
@@ -44,19 +57,26 @@ _PROJECT_ROOT_MARKERS = [
     'pom.xml',  # Java (Maven)
     'Package.swift',  # Swift (SPM)
     'composer.json',  # PHP
+    'build.sbt', 'build.sc',  # Scala (sbt / Mill)  — BACK-515
+    'pubspec.yaml',  # Dart (pub)                    — BACK-515
+    'build.zig',  # Zig                              — BACK-515
+    'project.godot',  # GDScript (Godot)             — BACK-515
 ]
 
 
 def _has_project_marker(directory: Path) -> bool:
     """True if *directory* holds a depends:// project-root marker.
 
-    Extends the literal-filename check `find_project_root` uses with a
-    `*.sln` glob (C# solution files carry a repo-specific name, so they can't
-    be a fixed literal in `_PROJECT_ROOT_MARKERS`).
+    Extends the literal-filename check `find_project_root` uses with two
+    repo-specific-name globs: `*.sln` (C# solution files) and `*.rockspec`
+    (Lua/LuaRocks package specs) — neither can be a fixed literal in
+    `_PROJECT_ROOT_MARKERS` because both carry a project-specific name.
+    See the BACK-515 note on `_PROJECT_ROOT_MARKERS` for why a missing
+    marker is a hang, not a cosmetic gap.
     """
     if any((directory / marker).exists() for marker in _PROJECT_ROOT_MARKERS):
         return True
-    return any(directory.glob('*.sln'))
+    return any(directory.glob('*.sln')) or any(directory.glob('*.rockspec'))
 
 _SCHEMA_QUERY_PARAMS = {
     'top': {
