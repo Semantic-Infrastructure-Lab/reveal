@@ -317,6 +317,8 @@ reveal depends://src/auth.py
 
 **Language support**: Same as `imports://`. Run `reveal depends://src --format=json | jq '.metadata'` to see the scan result. Language support is determined by available import extractors — Python is fully supported; support for other languages depends on extractor availability.
 
+**Scan-root disclosure**: when the scan can't give a complete answer, the result carries a `warning` field and `metadata` flags saying so — it never silently presents a partial graph as complete. `metadata.scan_capped` (+ a `⚠ Scan capped at N files...` warning) means the scan hit the 5,000-file safety cap under a genuinely huge project root. `metadata.root_inferred` (+ a `⚠ Couldn't determine this file's project boundary...` warning) means no project marker (`pyproject.toml`, `.git`, etc.) was found above the target before the filesystem/`$HOME` boundary, so the scan was scoped to the target's own directory only — pass an explicit root, or run from inside the project, for full coverage.
+
 ---
 
 ## FAQ
