@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-07-08 (warded-hammer-0708 — v0.106.0 release: --section markdown bug fix, unknown-query-param warnings, git activity timelines + churn-aware hotspots, Kotlin/Swift/Ruby/PHP promoted to tier-1)
+> **Last updated**: 2026-07-09 (oceanic-gargoyle-0709 — v0.107.0 release: import-graph coverage for 5 more languages, coverage-warning disclosure, depends:// scan-root resolution rewrite, claude:// digest/exchanges views)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,15 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.107.0 — Import-graph coverage for 5 more languages + coverage-warning disclosure + depends:// scan-root resolution rewrite
+- ✅ Import-graph coverage added for Scala, Dart, GDScript, Lua, and Zig — these five previously built a confidently-wrong graph out of vendored/incidental files with no warning (BACK-514).
+- ✅ Coverage-warning disclosure when a project's dominant language has no import-graph support, across `surface`/`contracts`/`architecture`/`overview` (BACK-518).
+- ✅ `depends://`'s "hang" on some files root-caused as an unbounded ancestor-repo scan, fixed via a widened project-root marker table, a scan-file cap safety net, and a full rewrite to tiered, ceiling-bounded, deterministic scan-root resolution (BACK-515/524/525).
+- ✅ `overview`'s "Recent changes" now discloses when the shown git history belongs to an enclosing repo rather than the target directory itself (BACK-516).
+- ✅ Class-field arrow-function methods (`private foo = () => {}`) were invisible file-wide to structure extraction — fixed (BACK-519).
+- ✅ INI/TOML fixes: repeated-key data loss, `:?` line-number rendering bug, `.service`/`.timer` extension mapping (BACK-520/521/523).
+- ✅ `/digest` and `/exchanges` composed views added to `claude://` (BACK-513); new `--perf` flag for CLI timing/RSS logging.
 
 ### v0.106.0 — --section bug fix + unknown-query-param warnings + git activity timelines + tier-1 language expansion
 - ✅ `reveal file.md --section NAME` fixed — was silently dumping the whole file instead of the named section, a user-reported CLI-only regression (BACK-508).
