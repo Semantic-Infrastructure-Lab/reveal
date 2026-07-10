@@ -240,7 +240,9 @@ def _get_open_mode(node: ast.Call) -> str:
     return 'r'
 
 
-def _extract_first_arg(node: ast.Call) -> Optional[str]:
+def _extract_first_arg(node: ast.expr) -> Optional[str]:
+    if not isinstance(node, ast.Call):
+        return None
     if node.args:
         arg = node.args[0]
         if isinstance(arg, ast.Constant):
@@ -249,7 +251,9 @@ def _extract_first_arg(node: ast.Call) -> Optional[str]:
     return None
 
 
-def _extract_kwarg(node: ast.Call, key: str) -> Optional[str]:
+def _extract_kwarg(node: ast.expr, key: str) -> Optional[str]:
+    if not isinstance(node, ast.Call):
+        return None
     for kw in node.keywords:
         if kw.arg == key:
             if isinstance(kw.value, ast.Constant):

@@ -229,6 +229,22 @@ class TestScanSurface(unittest.TestCase):
         self.assertIn('--verbose', names)
         self.assertIn('--output', names)
 
+    def test_bare_name_decorator_matching_command_does_not_crash(self):
+        _write(self.tmp, 'entity.py', '''\
+            def command(func):
+                return func
+
+            class Thing:
+                @property
+                @command
+                def value(self):
+                    return 1
+        ''')
+        report = _scan_surface(Path(self.tmp))
+        cli = report['surfaces']['cli']
+        names = [e['name'] for e in cli]
+        self.assertIn('value', names)
+
     def test_finds_fs_writes(self):
         _write(self.tmp, 'writer.py', '''\
             def save(path, data):
