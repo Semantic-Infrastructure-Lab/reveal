@@ -143,6 +143,44 @@ class TestComputePriority(unittest.TestCase):
             score = _compute_priority(path, rel, focus=None)
             self.assertEqual(score, 0.0)
 
+    def test_top_level_test_dir_penalized(self):
+        """BACK-526: a top-level tests/ dir must be penalized like a nested one.
+        The old '/tests/' substring check missed a path starting with 'tests/',
+        letting test-model DTOs surface in the 'Key modules' tier."""
+        with tempfile.TemporaryDirectory() as d:
+            # Under a top-level tests/ dir AND in a 'models' key-dir — the
+            # key-dir +2 must be cancelled by the test penalty.
+            path, rel = self._make_file(Path(d), "tests/Foo.Tests/models/Dto.cs")
+            score = _compute_priority(path, rel, focus=None)
+            self.assertEqual(score, 0.0)
+
+    def test_data_file_in_key_dir_not_key_module(self):
+        """BACK-526: a localization/data blob in a key-named dir must not reach
+        the Key-modules tier (priority >= 2) the way real source does."""
+        with tempfile.TemporaryDirectory() as d:
+            json_path, json_rel = self._make_file(Path(d), "core/si.json")
+            code_path, code_rel = self._make_file(Path(d), "core/engine.py")
+            json_score = _compute_priority(json_path, json_rel, focus=None)
+            code_score = _compute_priority(code_path, code_rel, focus=None)
+            self.assertLess(json_score, 2.0)      # demoted below Key-modules tier
+            self.assertGreaterEqual(code_score, 2.0)  # real source still qualifies
+
+    def test_data_file_with_fan_in_keeps_signal(self):
+        """--architecture: a genuinely central data file (non-zero fan-in) keeps
+        its boost and is NOT demoted by the BACK-526 data penalty."""
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "core/schema.json")
+            score = _compute_priority(path, rel, focus=None, fan_in=20)
+            self.assertGreaterEqual(score, 2.0)
+
+    def test_entry_point_config_not_demoted(self):
+        """package.json is a recognized entry point — the data penalty must not
+        knock it out of the entry-point tier."""
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "package.json")
+            score = _compute_priority(path, rel, focus=None)
+            self.assertGreaterEqual(score, 10.0)
+
     def test_large_file_penalized(self):
         with tempfile.TemporaryDirectory() as d:
             # Use a key-dir file so baseline score is 2.0; large penalty (-1) → 1.0

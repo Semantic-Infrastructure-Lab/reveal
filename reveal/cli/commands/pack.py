@@ -32,6 +32,13 @@ _APPROX_CHARS_PER_TOKEN = 4
 # like 'main' inside 'maintainability' or 'core' inside 'decorator'.
 _KEY_DIR_SEGMENTS = {'main', 'core', 'api', 'routes', 'models', 'schema', 'auth', 'config'}
 
+# Non-source data/markup extensions (BACK-526): supporting material, not
+# "key modules" of the codebase's logic. Penalized in _compute_priority so a
+# data blob sitting in a key-named directory can't masquerade as a core module.
+_DATA_MARKUP_EXTENSIONS = {
+    '.json', '.yaml', '.yml', '.csv', '.md', '.html', '.css', '.scss', '.sql', '.toml',
+}
+
 
 def create_pack_parser() -> argparse.ArgumentParser:
     """Create parser for reveal pack subcommand."""
@@ -435,10 +442,32 @@ def _compute_priority(
     elif fan_in >= 1:
         score += 1.0
 
-    # Penalize test/vendor/docs files
-    for penalty in ('test_', '_test', '/tests/', '/vendor/', '/docs/', '/.', '__pycache__'):
+    # Penalize test/vendor/docs files. Directory markers are matched as whole
+    # path components (via rel_parts) so a *top-level* tests/ or vendor/ dir is
+    # penalized the same as a nested one — BACK-526: the old '/tests/' substring
+    # check missed a path starting with 'tests/', letting test-model DTOs under
+    # a top-level tests/ tree surface in the "Key modules" tier.
+    if rel_parts & {'test', 'tests', 'vendor', 'docs', '__pycache__', 'node_modules'}:
+        score -= 3.0
+    for penalty in ('test_', '_test', '/.'):
         if penalty in rel_str:
             score -= 3.0
+            break
+
+    # BACK-526: non-source data/markup files (localization tables, data blobs,
+    # standalone docs) are supporting material, not "key modules" of the code.
+    # Without this, a file like Localization/Core/si.json scored +2.0 purely
+    # from the 'core' key-dir segment and surfaced in the "Key modules" tier
+    # ahead of real source. Demote them below the Key-modules threshold unless
+    # they carry a genuine structural signal — a recognized entry-point config
+    # (package.json, pyproject.toml, …) or a non-zero fan-in (--architecture),
+    # both of which mark a data file that really is central.
+    if (
+        path.suffix.lower() in _DATA_MARKUP_EXTENSIONS
+        and fan_in == 0
+        and name not in _ENTRY_POINT_PATTERNS
+    ):
+        score -= 2.0
 
     # Penalize very large files (noisy)
     if path.stat().st_size > 50_000:
