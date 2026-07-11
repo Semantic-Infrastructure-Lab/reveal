@@ -24,9 +24,13 @@ _TS_EXTENSIONS: frozenset = frozenset({'.ts', '.tsx'})
 # BACK-403 pt 2: languages whose grammar has a distinct interface/abstract-class
 # shape close enough to TS's ('interfaces'/'types'/'classes' categories, an
 # is_abstract flag on classes) that they share _scan_contracts_ts's classifier
-# rather than needing their own. Java/C# added — each analyzer
-# (analyzers/java.py, analyzers/csharp.py) now emits the same shape TS does.
-_INTERFACE_FAMILY_EXTENSIONS: frozenset = frozenset({'.ts', '.tsx', '.java', '.cs'})
+# rather than needing their own. Java/C#/PHP/Swift/Kotlin added — each analyzer
+# (analyzers/java.py, csharp.py, php.py, swift.py, kotlin.py) now emits the same
+# shape TS does (interfaces/protocols → 'interfaces'; abstract classes flagged
+# is_abstract; concrete classes carry their bases).
+_INTERFACE_FAMILY_EXTENSIONS: frozenset = frozenset({
+    '.ts', '.tsx', '.java', '.cs', '.php', '.swift', '.kt', '.kts',
+})
 
 
 def _has_python_files(path: Path) -> bool:
@@ -118,7 +122,10 @@ def _scan_contracts(
 
     # BACK-518: guard against a few stray supported-language files standing in
     # for a mostly-unsupported tree (see surface.py / assess_language_coverage).
-    coverage = assess_language_coverage(path, {'python', 'typescript', 'tsx', 'java', 'csharp'})
+    coverage = assess_language_coverage(
+        path,
+        {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin'},
+    )
     coverage_dict = {
         'total_code_files': coverage.total_code_files,
         'analyzed_files': coverage.analyzed_files,
@@ -447,7 +454,7 @@ def _render_report(report: Dict[str, Any]) -> None:
         if not warning:
             lang = report.get('unsupported_language', '')
             if lang:
-                print(f"  reveal contracts currently supports Python, TypeScript, Java, and C#.")
+                print(f"  reveal contracts currently supports Python, TypeScript, Java, C#, PHP, Swift, and Kotlin.")
                 print(f"  No supported files found — detected {lang}.")
             else:
                 print("  No contracts or seams found.")

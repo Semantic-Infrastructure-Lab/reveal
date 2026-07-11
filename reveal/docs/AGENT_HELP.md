@@ -1596,7 +1596,7 @@ reveal contracts src/ --format=json        # Machine-readable, for diffing acros
 reveal contracts src/services/             # Scope to a subsystem
 ```
 
-**What it finds:** Abstract base classes (ABC, ABCMeta), `typing.Protocol` definitions, `TypedDict` schemas, `@dataclass` declarations, NamedTuple classes — the structural contracts a codebase exposes between modules. *(Python only — TypeScript support tracked in BACK-372; returns an explicit note on non-Python paths rather than a silent zero.)*
+**What it finds:** Abstract base classes (ABC, ABCMeta), `typing.Protocol` definitions, `TypedDict` schemas, `@dataclass` declarations, NamedTuple classes — the structural contracts a codebase exposes between modules. In TypeScript/Java/C#/PHP/Swift/Kotlin it classifies interfaces (Swift protocols, Kotlin interfaces) as the contract, `abstract`-modifier classes as abstract contracts, and implementing classes as the types satisfying each. *(Supported: Python, TypeScript, Java, C#, PHP, Swift, Kotlin. On other languages it returns an explicit "not supported" note rather than a silent zero.)*
 
 **Use case:** Before refactoring or extending a module, see the *interfaces* it ships rather than the implementation. Pairs well with `reveal architecture` (entry points + abstractions) and `reveal surface` (external boundaries) to build a 3-pass mental model: **architecture** → **contracts** → **surface**.
 

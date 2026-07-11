@@ -736,5 +736,305 @@ class TestScanContractsCSharp(unittest.TestCase):
         self.assertEqual(report['total_contracts'], 0)
 
 
+class TestScanContractsPhp(unittest.TestCase):
+    """Tests for PHP contract detection (BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write_php(self, filename: str, content: str) -> str:
+        return _write(self.tmp, filename, content)
+
+    def test_interface_classified_as_protocol(self):
+        self._write_php('Reader.php', '''\
+            <?php
+            interface Reader {
+                public function read(): string;
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['protocols']), 1)
+        self.assertEqual(report['protocols'][0]['name'], 'Reader')
+
+    def test_interface_with_extends_has_bases(self):
+        self._write_php('Interfaces.php', '''\
+            <?php
+            interface Base {
+                public function base(): void;
+            }
+            interface Derived extends Base {
+                public function extra(): void;
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        derived = next(p for p in report['protocols'] if p['name'] == 'Derived')
+        self.assertIn('Base', derived['bases'])
+
+    def test_abstract_class_classified_as_abc(self):
+        self._write_php('AbstractService.php', '''\
+            <?php
+            abstract class AbstractService {
+                abstract public function execute(): void;
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['abcs']), 1)
+        self.assertEqual(report['abcs'][0]['name'], 'AbstractService')
+
+    def test_implementing_class_classified_as_dataclass(self):
+        self._write_php('Service.php', '''\
+            <?php
+            interface Service {
+                public function run(): void;
+            }
+            class ConcreteService implements Service {
+                public function run(): void {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl_names = [c['name'] for c in report['dataclasses']]
+        self.assertIn('ConcreteService', impl_names)
+
+    def test_implementations_populated_for_interface(self):
+        self._write_php('Service.php', '''\
+            <?php
+            interface Service {
+                public function run(): void;
+            }
+            class ConcreteService implements Service {
+                public function run(): void {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        iface = next(p for p in report['protocols'] if p['name'] == 'Service')
+        impl_names = [i['name'] for i in iface['implementations']]
+        self.assertIn('ConcreteService', impl_names)
+
+    def test_class_extends_and_implements_both_captured(self):
+        self._write_php('Dog.php', '''\
+            <?php
+            interface Derived {
+                public function d(): void;
+            }
+            class Animal {}
+            class Dog extends Animal implements Derived {
+                public function d(): void {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl = next(c for c in report['dataclasses'] if c['name'] == 'Dog')
+        self.assertIn('Animal', impl['bases'])
+        self.assertIn('Derived', impl['bases'])
+
+    def test_plain_class_no_bases_not_a_contract(self):
+        self._write_php('Plain.php', '''\
+            <?php
+            class Plain {
+                public function doThing(): void {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(report['total_contracts'], 0)
+
+
+class TestScanContractsSwift(unittest.TestCase):
+    """Tests for Swift contract detection (BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write_swift(self, filename: str, content: str) -> str:
+        return _write(self.tmp, filename, content)
+
+    def test_protocol_classified_as_protocol(self):
+        self._write_swift('Reader.swift', '''\
+            protocol Reader {
+                func read() -> String
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['protocols']), 1)
+        self.assertEqual(report['protocols'][0]['name'], 'Reader')
+
+    def test_protocol_with_inheritance_has_bases(self):
+        self._write_swift('Protocols.swift', '''\
+            protocol Base {
+                func base()
+            }
+            protocol Derived: Base {
+                func extra()
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        derived = next(p for p in report['protocols'] if p['name'] == 'Derived')
+        self.assertIn('Base', derived['bases'])
+
+    def test_conforming_class_classified_as_implementation(self):
+        self._write_swift('Service.swift', '''\
+            protocol Service {
+                func run()
+            }
+            class ConcreteService: Service {
+                func run() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl_names = [c['name'] for c in report['dataclasses']]
+        self.assertIn('ConcreteService', impl_names)
+
+    def test_implementations_populated_for_protocol(self):
+        self._write_swift('Service.swift', '''\
+            protocol Service {
+                func run()
+            }
+            class ConcreteService: Service {
+                func run() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        iface = next(p for p in report['protocols'] if p['name'] == 'Service')
+        impl_names = [i['name'] for i in iface['implementations']]
+        self.assertIn('ConcreteService', impl_names)
+
+    def test_class_multiple_conformances_captured(self):
+        self._write_swift('Circle.swift', '''\
+            protocol Drawable { func draw() }
+            class Base {}
+            class Circle: Base, Drawable {
+                func draw() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl = next(c for c in report['dataclasses'] if c['name'] == 'Circle')
+        self.assertIn('Base', impl['bases'])
+        self.assertIn('Drawable', impl['bases'])
+
+    def test_plain_class_no_bases_not_a_contract(self):
+        self._write_swift('Plain.swift', '''\
+            class Plain {
+                func doThing() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(report['total_contracts'], 0)
+
+
+class TestScanContractsKotlin(unittest.TestCase):
+    """Tests for Kotlin contract detection (BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write_kt(self, filename: str, content: str) -> str:
+        return _write(self.tmp, filename, content)
+
+    def test_interface_classified_as_protocol(self):
+        self._write_kt('Reader.kt', '''\
+            interface Reader {
+                fun read(): String
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['protocols']), 1)
+        self.assertEqual(report['protocols'][0]['name'], 'Reader')
+
+    def test_interface_with_inheritance_has_bases(self):
+        self._write_kt('Interfaces.kt', '''\
+            interface Base {
+                fun base()
+            }
+            interface Derived : Base {
+                fun extra()
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        derived = next(p for p in report['protocols'] if p['name'] == 'Derived')
+        self.assertIn('Base', derived['bases'])
+
+    def test_abstract_class_classified_as_abc(self):
+        self._write_kt('AbstractService.kt', '''\
+            abstract class AbstractService {
+                abstract fun execute()
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['abcs']), 1)
+        self.assertEqual(report['abcs'][0]['name'], 'AbstractService')
+
+    def test_interface_not_miscounted_as_implementation(self):
+        """A Kotlin interface parses as class_declaration; it must be
+        repartitioned into 'interfaces', not left in the implementing bucket."""
+        self._write_kt('Shapes.kt', '''\
+            interface Shape { fun area(): Double }
+            interface Drawable : Shape { fun draw() }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        proto_names = {p['name'] for p in report['protocols']}
+        impl_names = {c['name'] for c in report['dataclasses']}
+        self.assertIn('Drawable', proto_names)
+        self.assertNotIn('Drawable', impl_names)
+
+    def test_implementing_class_classified_as_dataclass(self):
+        self._write_kt('Service.kt', '''\
+            interface Service {
+                fun run()
+            }
+            class ConcreteService : Service {
+                override fun run() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl_names = [c['name'] for c in report['dataclasses']]
+        self.assertIn('ConcreteService', impl_names)
+
+    def test_implementations_populated_for_interface(self):
+        self._write_kt('Service.kt', '''\
+            interface Service {
+                fun run()
+            }
+            class ConcreteService : Service {
+                override fun run() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        iface = next(p for p in report['protocols'] if p['name'] == 'Service')
+        impl_names = [i['name'] for i in iface['implementations']]
+        self.assertIn('ConcreteService', impl_names)
+
+    def test_class_extends_and_implements_both_captured(self):
+        self._write_kt('Circle.kt', '''\
+            interface Drawable { fun draw() }
+            open class Base
+            class Circle : Base(), Drawable {
+                override fun draw() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl = next(c for c in report['dataclasses'] if c['name'] == 'Circle')
+        self.assertIn('Base', impl['bases'])
+        self.assertIn('Drawable', impl['bases'])
+
+    def test_plain_class_no_bases_not_a_contract(self):
+        self._write_kt('Plain.kt', '''\
+            class Plain {
+                fun doThing() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(report['total_contracts'], 0)
+
+
 if __name__ == '__main__':
     unittest.main()
