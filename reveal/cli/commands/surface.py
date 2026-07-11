@@ -104,36 +104,39 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
     from reveal.adapters.ast.nav_surface_ts import scan_file_surface_ts
     from reveal.adapters.ast.nav_surface_java import scan_file_surface_java
     from reveal.adapters.ast.nav_surface_csharp import scan_file_surface_csharp
-    py_files, ts_files, java_files, cs_files = _collect_source_files(path, source_only=source_only)
+    from reveal.adapters.ast.nav_surface_php import scan_file_surface_php
+    from reveal.adapters.ast.nav_surface_swift import scan_file_surface_swift
+    from reveal.adapters.ast.nav_surface_kotlin import scan_file_surface_kotlin
+    collected = _collect_source_files(path, source_only=source_only)
+    py_files, ts_files, java_files, cs_files, php_files, swift_files, kt_files = collected
     surfaces: Dict[str, List[Dict[str, Any]]] = {
         k: [] for k in ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
     }
 
     unsupported_language = ''
-    if not py_files and not ts_files and not java_files and not cs_files:
+    if not any(collected):
         unsupported_language = detect_non_python_language(path)
 
     # BACK-518: a handful of stray supported-language files (e.g. 15 .py tooling
     # scripts in a 1,300-file Lua repo) used to be silently presented as the
     # whole project's surface. Assess how much of the tree is actually in a
     # language `surface` analyzes so _render_report can warn on the substitution.
-    coverage = assess_language_coverage(path, {'python', 'typescript', 'tsx', 'java', 'csharp'})
+    coverage = assess_language_coverage(
+        path, {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin'})
 
-    for file_path in py_files:
-        for cat, entries in scan_file_surface(str(file_path)).items():
-            surfaces[cat].extend(entries)
-
-    for file_path in ts_files:
-        for cat, entries in scan_file_surface_ts(str(file_path)).items():
-            surfaces[cat].extend(entries)
-
-    for file_path in java_files:
-        for cat, entries in scan_file_surface_java(str(file_path)).items():
-            surfaces[cat].extend(entries)
-
-    for file_path in cs_files:
-        for cat, entries in scan_file_surface_csharp(str(file_path)).items():
-            surfaces[cat].extend(entries)
+    scanners = (
+        (py_files, scan_file_surface),
+        (ts_files, scan_file_surface_ts),
+        (java_files, scan_file_surface_java),
+        (cs_files, scan_file_surface_csharp),
+        (php_files, scan_file_surface_php),
+        (swift_files, scan_file_surface_swift),
+        (kt_files, scan_file_surface_kotlin),
+    )
+    for file_list, scanner in scanners:
+        for file_path in file_list:
+            for cat, entries in scanner(str(file_path)).items():
+                surfaces[cat].extend(entries)
 
     if type_filter:
         surfaces = {k: v for k, v in surfaces.items() if k == type_filter}
@@ -182,27 +185,31 @@ def _is_test_file(fpath: Path) -> bool:
 
 
 def _collect_source_files(path: Path, source_only: bool = False):
-    """Return (py_files, ts_files, java_files, cs_files) lists for the given path."""
-    _PY_EXTS = frozenset({'.py'})
-    _TS_EXTS = frozenset({'.ts', '.tsx'})
-    _JAVA_EXTS = frozenset({'.java'})
-    _CS_EXTS = frozenset({'.cs'})
+    """Return (py, ts, java, cs, php, swift, kotlin) file lists for the given path."""
+    _EXT_BUCKETS = (
+        (frozenset({'.py'}), 0),
+        (frozenset({'.ts', '.tsx'}), 1),
+        (frozenset({'.java'}), 2),
+        (frozenset({'.cs'}), 3),
+        (frozenset({'.php'}), 4),
+        (frozenset({'.swift'}), 5),
+        (frozenset({'.kt', '.kts'}), 6),
+    )
+
+    def _bucket_for(suffix: str):
+        for exts, idx in _EXT_BUCKETS:
+            if suffix in exts:
+                return idx
+        return None
+
+    buckets: List[List[Path]] = [[] for _ in _EXT_BUCKETS]
 
     if path.is_file():
-        if path.suffix in _PY_EXTS:
-            return [path], [], [], []
-        if path.suffix in _TS_EXTS:
-            return [], [path], [], []
-        if path.suffix in _JAVA_EXTS:
-            return [], [], [path], []
-        if path.suffix in _CS_EXTS:
-            return [], [], [], [path]
-        return [], [], [], []
+        idx = _bucket_for(path.suffix)
+        if idx is not None:
+            buckets[idx].append(path)
+        return tuple(buckets)
 
-    py_files: List[Path] = []
-    ts_files: List[Path] = []
-    java_files: List[Path] = []
-    cs_files: List[Path] = []
     for root, dirs, filenames in os.walk(str(path)):
         dirs[:] = [
             d for d in dirs
@@ -213,15 +220,10 @@ def _collect_source_files(path: Path, source_only: bool = False):
             fpath = Path(os.path.join(root, fname))
             if source_only and _is_test_file(fpath):
                 continue
-            if fpath.suffix in _PY_EXTS:
-                py_files.append(fpath)
-            elif fpath.suffix in _TS_EXTS:
-                ts_files.append(fpath)
-            elif fpath.suffix in _JAVA_EXTS:
-                java_files.append(fpath)
-            elif fpath.suffix in _CS_EXTS:
-                cs_files.append(fpath)
-    return py_files, ts_files, java_files, cs_files
+            idx = _bucket_for(fpath.suffix)
+            if idx is not None:
+                buckets[idx].append(fpath)
+    return tuple(buckets)
 
 
 def _render_report(report: Dict[str, Any], top: int = None) -> None:
@@ -250,7 +252,7 @@ def _render_report(report: Dict[str, Any], top: int = None) -> None:
         if not warning:
             lang = report.get('unsupported_language', '')
             if lang:
-                print(f"  reveal surface currently supports Python, TypeScript, Java, and C#.")
+                print("  reveal surface currently supports Python, TypeScript, Java, C#, PHP, Swift, and Kotlin.")
                 print(f"  No supported files found — detected {lang}.")
             else:
                 print("  No external surfaces detected.")

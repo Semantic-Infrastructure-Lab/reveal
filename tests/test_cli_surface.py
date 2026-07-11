@@ -943,5 +943,212 @@ class TestNavSurfaceCSharp(unittest.TestCase):
         self.assertEqual(len(result['cli']), 0)
 
 
+class TestNavSurfacePhp(unittest.TestCase):
+    """Unit tests for the PHP surface scanner (nav_surface_php, BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _scan_php(self, filename: str, content: str):
+        from reveal.adapters.ast.nav_surface_php import scan_file_surface_php
+        path = _write(self.tmp, filename, content)
+        return scan_file_surface_php(path)
+
+    def test_php_network_use(self):
+        result = self._scan_php('Client.php', '<?php\nuse GuzzleHttp\\Client;\n')
+        names = [e['name'] for e in result['network']]
+        self.assertIn('GuzzleHttp\\Client', names)
+
+    def test_php_db_use(self):
+        result = self._scan_php('Db.php', '<?php\nuse Doctrine\\ORM\\EntityManager;\n')
+        names = [e['name'] for e in result['db']]
+        self.assertIn('Doctrine\\ORM\\EntityManager', names)
+
+    def test_php_sdk_use(self):
+        result = self._scan_php('Pay.php', '<?php\nuse Stripe\\StripeClient;\n')
+        names = [e['name'] for e in result['sdk']]
+        self.assertIn('Stripe\\StripeClient', names)
+
+    def test_php_env_getenv(self):
+        result = self._scan_php('c.php', "<?php\n$k = getenv('API_KEY');\n")
+        self.assertIn('API_KEY', [e['name'] for e in result['env']])
+
+    def test_php_env_superglobal(self):
+        result = self._scan_php('c.php', "<?php\n$k = $_ENV['DB_HOST'];\n")
+        self.assertIn('DB_HOST', [e['name'] for e in result['env']])
+
+    def test_php_server_superglobal_excluded(self):
+        """$_SERVER is a request superglobal, not env config — must not be surfaced."""
+        result = self._scan_php('c.php', "<?php\n$h = $_SERVER['HTTP_HOST'];\n")
+        self.assertEqual(len(result['env']), 0)
+
+    def test_php_laravel_route(self):
+        result = self._scan_php('routes.php', "<?php\nRoute::get('/users/{id}', 'C@show');\n")
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/users/{id}')
+        self.assertEqual(entries[0]['methods'], 'GET')
+
+    def test_php_symfony_route_attribute(self):
+        result = self._scan_php('Ctrl.php', '''\
+            <?php
+            class Ctrl {
+                #[Route('/api/tasks', methods: ['GET', 'POST'])]
+                public function list() {}
+            }
+        ''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/api/tasks')
+        self.assertEqual(entries[0]['methods'], 'GET|POST')
+
+    def test_php_wordpress_rest_route(self):
+        result = self._scan_php('plugin.php',
+                                "<?php\nregister_rest_route('myplugin/v1', '/data', array());\n")
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/myplugin/v1/data')
+
+    def test_php_plain_static_call_not_a_route(self):
+        """A non-Route static call must not be misclassified as an HTTP route."""
+        result = self._scan_php('x.php', "<?php\nLogger::get('channel');\n")
+        self.assertEqual(len(result['http']), 0)
+
+
+class TestNavSurfaceSwift(unittest.TestCase):
+    """Unit tests for the Swift surface scanner (nav_surface_swift, BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _scan_swift(self, filename: str, content: str):
+        from reveal.adapters.ast.nav_surface_swift import scan_file_surface_swift
+        path = _write(self.tmp, filename, content)
+        return scan_file_surface_swift(path)
+
+    def test_swift_network_import(self):
+        result = self._scan_swift('C.swift', 'import Alamofire\n')
+        self.assertIn('Alamofire', [e['name'] for e in result['network']])
+
+    def test_swift_db_import(self):
+        result = self._scan_swift('D.swift', 'import FluentKit\n')
+        self.assertIn('FluentKit', [e['name'] for e in result['db']])
+
+    def test_swift_sdk_import(self):
+        result = self._scan_swift('P.swift', 'import Stripe\n')
+        self.assertIn('Stripe', [e['name'] for e in result['sdk']])
+
+    def test_swift_foundation_not_network(self):
+        """Foundation is imported ~everywhere — must not flood the network read."""
+        result = self._scan_swift('F.swift', 'import Foundation\n')
+        self.assertEqual(len(result['network']), 0)
+
+    def test_swift_vapor_route(self):
+        result = self._scan_swift('r.swift', 'app.get("users", ":id") { req in return "x" }\n')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/users/:id')
+        self.assertEqual(entries[0]['methods'], 'GET')
+
+    def test_swift_member_get_without_closure_not_a_route(self):
+        """`someMap.get(0)` is an ordinary member call, not a Vapor route."""
+        result = self._scan_swift('x.swift', 'let v = someMap.get(0)\n')
+        self.assertEqual(len(result['http']), 0)
+
+    def test_swift_env_environment_get(self):
+        result = self._scan_swift('e.swift', 'let k = Environment.get("API_KEY")\n')
+        self.assertIn('API_KEY', [e['name'] for e in result['env']])
+
+    def test_swift_env_processinfo(self):
+        result = self._scan_swift('e.swift',
+                                  'let h = ProcessInfo.processInfo.environment["HOME"]\n')
+        self.assertIn('HOME', [e['name'] for e in result['env']])
+
+    def test_swift_main_attribute(self):
+        result = self._scan_swift('App.swift', '@main\nstruct App { static func main() {} }\n')
+        self.assertEqual(len(result['cli']), 1)
+        self.assertEqual(result['cli'][0]['type'], 'main')
+
+
+class TestNavSurfaceKotlin(unittest.TestCase):
+    """Unit tests for the Kotlin surface scanner (nav_surface_kotlin, BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _scan_kt(self, filename: str, content: str):
+        from reveal.adapters.ast.nav_surface_kotlin import scan_file_surface_kotlin
+        path = _write(self.tmp, filename, content)
+        return scan_file_surface_kotlin(path)
+
+    def test_kotlin_network_import(self):
+        result = self._scan_kt('C.kt', 'import okhttp3.OkHttpClient\n')
+        self.assertIn('okhttp3.OkHttpClient', [e['name'] for e in result['network']])
+
+    def test_kotlin_db_import(self):
+        result = self._scan_kt('D.kt', 'import org.jetbrains.exposed.sql.Database\n')
+        self.assertIn('org.jetbrains.exposed.sql.Database', [e['name'] for e in result['db']])
+
+    def test_kotlin_sdk_import(self):
+        result = self._scan_kt('P.kt', 'import com.stripe.Stripe\n')
+        self.assertIn('com.stripe.Stripe', [e['name'] for e in result['sdk']])
+
+    def test_kotlin_ktor_route(self):
+        result = self._scan_kt('r.kt', '''\
+            fun Application.routes() {
+                routing {
+                    get("/users/{id}") { call.respond("x") }
+                }
+            }
+        ''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/users/{id}')
+        self.assertEqual(entries[0]['methods'], 'GET')
+
+    def test_kotlin_member_get_not_a_route(self):
+        """`list.get(0)` is an ordinary member call, not a Ktor route."""
+        result = self._scan_kt('x.kt', 'val v = list.get(0)\n')
+        self.assertEqual(len(result['http']), 0)
+
+    def test_kotlin_spring_annotation_route(self):
+        result = self._scan_kt('Ctrl.kt', '''\
+            class Ctrl {
+                @GetMapping("/spring")
+                fun handler() {}
+            }
+        ''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/spring')
+        self.assertEqual(entries[0]['methods'], 'GET')
+
+    def test_kotlin_env_getenv(self):
+        result = self._scan_kt('e.kt', 'val k = System.getenv("API_KEY")\n')
+        self.assertIn('API_KEY', [e['name'] for e in result['env']])
+
+    def test_kotlin_top_level_main_is_cli(self):
+        result = self._scan_kt('App.kt', 'fun main(args: Array<String>) {}\n')
+        self.assertEqual(len(result['cli']), 1)
+        self.assertEqual(result['cli'][0]['type'], 'main')
+
+    def test_kotlin_class_method_main_not_cli(self):
+        """A class method named main is not the top-level entrypoint."""
+        result = self._scan_kt('T.kt', 'class Thing { fun main() {} }\n')
+        self.assertEqual(len(result['cli']), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

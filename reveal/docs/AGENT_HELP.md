@@ -211,8 +211,8 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal architecture [path]` | Architectural brief: entry points, core abstractions, risks | `reveal architecture --help` |
 | `reveal deps [path]` | Dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
 | `reveal hotspots [path]` | High-complexity files and functions that need attention | `reveal hotspots --help` |
-| `reveal contracts [path]` | Architectural seams: ABCs, Protocols, TypedDicts, dataclasses *(Python only — BACK-372)* | `reveal contracts --help` |
-| `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes *(Python only — BACK-373)* | `reveal surface --help` |
+| `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(7 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin)* | `reveal contracts --help` |
+| `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes *(7 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin)* | `reveal surface --help` |
 | `reveal testability [path]` | Test patch pressure joined with production boundary fan-out *(patch half Python only — BACK-374)* | `reveal testability --help` |
 | `reveal trace --from FUNC` | Walk call graph from a named entry point; depth-indented narrative with side-effect classification | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
