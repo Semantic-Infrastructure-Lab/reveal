@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-07-09 (oceanic-gargoyle-0709 — v0.107.0 release: import-graph coverage for 5 more languages, coverage-warning disclosure, depends:// scan-root resolution rewrite, claude:// digest/exchanges views)
+> **Last updated**: 2026-07-11 (sultry-vortex-0710 — v0.107.1 release: Windows crash fix, due-diligence-sweep bugfixes, check --limit/--profile-rules)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,13 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.107.1 — Windows crash fix + due-diligence-sweep bugfixes + check --limit/--profile-rules
+- ✅ **0.107.0 crashed on every Windows invocation** (even `--version`) due to an unconditional POSIX-only `import resource` — fixed (BACK-541).
+- ✅ `check`'s per-tree I002 warning deduped across `ProcessPoolExecutor` workers, and its import-graph build parallelized (2.3x on large trees) (BACK-531, BACK-536).
+- ✅ `reveal review <git-range>` now scopes its quality pass to the diff's changed files instead of the whole auto-walked tree (BACK-538).
+- ✅ `surface` crash on bare-name decorators (e.g. `@property`) fixed; `pack` no longer misprioritizes data/test files; arrow-function class properties now resolve; L004 `IndexError` on docs-only directories fixed (BACK-533, BACK-526, BACK-527, BACK-528).
+- ✅ New `check --limit N` caps unbounded text output on huge corpora (default 50, `--limit 0` disables); new `check --profile-rules` prints a per-rule wall-time cost breakdown (BACK-539, BACK-540).
 
 ### v0.107.0 — Import-graph coverage for 5 more languages + coverage-warning disclosure + depends:// scan-root resolution rewrite
 - ✅ Import-graph coverage added for Scala, Dart, GDScript, Lua, and Zig — these five previously built a confidently-wrong graph out of vendored/incidental files with no warning (BACK-514).
