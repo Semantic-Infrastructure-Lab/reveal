@@ -101,6 +101,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
              'print 100K+ lines). Set to 0 to disable the cap. Ignored for --format json.',
     )
     parser.add_argument(
+        '--profile-rules', action='store_true', dest='profile_rules',
+        help='Print a per-rule wall-time cost breakdown instead of the normal issue report '
+             '(BACK-540): which rule(s) dominate check\'s cost on this tree. Runs serially, '
+             'one real pass — use this instead of a manual --ignore RULE A/B or cProfile.',
+    )
+    parser.add_argument(
         '--rules', action='store_true',
         help='List all available quality rules',
     )
@@ -175,9 +181,13 @@ def run_check(args: Namespace) -> None:
         sys.exit(1)
 
     if path.is_dir():
-        from reveal.cli.file_checker import handle_recursive_check
         args.recursive = True
-        handle_recursive_check(path, args)
+        if getattr(args, 'profile_rules', False):
+            from reveal.cli.file_checker import handle_profile_rules
+            handle_profile_rules(path, args)
+        else:
+            from reveal.cli.file_checker import handle_recursive_check
+            handle_recursive_check(path, args)
     else:
         from reveal.file_handler import _get_analyzer_or_exit, _build_file_cli_overrides
         from reveal.checks import run_pattern_detection

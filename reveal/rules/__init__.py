@@ -6,6 +6,7 @@ Industry-aligned pattern detection following Ruff, ESLint, and Semgrep patterns.
 import importlib
 import logging
 import re
+import time
 from pathlib import Path
 from typing import List, Type, Optional, Dict, Any
 
@@ -467,7 +468,8 @@ class RuleRegistry:
                    structure: Optional[Dict[str, Any]],
                    content: str,
                    select: Optional[List[str]] = None,
-                   ignore: Optional[List[str]] = None) -> List[Detection]:
+                   ignore: Optional[List[str]] = None,
+                   profile: Optional[Dict[str, float]] = None) -> List[Detection]:
         """
         Run all applicable rules against a file.
 
@@ -477,6 +479,12 @@ class RuleRegistry:
             content: File content
             select: Rules to include (CLI override)
             ignore: Rules to exclude (CLI override)
+            profile: When given, accumulates each rule's wall-clock seconds into
+                profile[rule.code] (BACK-540). A single real pass, not a serial
+                A/B — a rule's cost lands on whichever call actually paid it
+                (e.g. I002 gets charged for building its import graph on the
+                file that first triggers it), so there is no cross-run cache
+                state to contaminate the comparison.
 
         Returns:
             List of all detections from all rules
@@ -516,7 +524,12 @@ class RuleRegistry:
                 if rule_config and isinstance(rule_config, dict):
                     cls._apply_rule_config(rule, rule_config)
 
-                rule_detections = rule.check(file_path, structure, content)
+                if profile is not None:
+                    start = time.perf_counter()
+                    rule_detections = rule.check(file_path, structure, content)
+                    profile[rule_class.code] = profile.get(rule_class.code, 0.0) + (time.perf_counter() - start)
+                else:
+                    rule_detections = rule.check(file_path, structure, content)
                 detections.extend(rule_detections)
                 num_issues = len(rule_detections)
                 logger.debug(

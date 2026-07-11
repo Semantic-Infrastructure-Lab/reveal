@@ -934,3 +934,76 @@ class TestCheckSubcommandURIDetection:
         with pytest.raises(SystemExit) as exc:
             run_check(args)
         assert exc.value.code == 0
+
+
+class TestProfileRules:
+    """BACK-540: `check --profile-rules` prints a per-rule wall-time breakdown
+    instead of the normal issue report, so isolating which rule dominates
+    check's cost on a tree no longer needs a manual --ignore RULE A/B or a
+    cProfile session (the two-wrong-turns cost paid manually in BACK-536).
+    """
+
+    def test_check_file_accumulates_per_rule_timing(self, tmp_path):
+        """RuleRegistry.check_file's profile= param sums each rule's own
+        check() wall time, keyed by rule code."""
+        from reveal.rules import RuleRegistry
+        f = tmp_path / "bad.py"
+        f.write_text("try:\n    pass\nexcept:\n    pass\n")
+
+        profile: dict = {}
+        detections = RuleRegistry.check_file(
+            str(f), None, f.read_text(), select=["B001"], profile=profile
+        )
+        assert detections  # B001: bare except
+        assert "B001" in profile
+        assert profile["B001"] >= 0.0
+
+    def test_check_file_profile_none_is_default_noop(self, tmp_path):
+        """Without profile=, check_file must behave exactly as before (no
+        timing overhead, no new required argument)."""
+        from reveal.rules import RuleRegistry
+        f = tmp_path / "bad.py"
+        f.write_text("try:\n    pass\nexcept:\n    pass\n")
+        detections = RuleRegistry.check_file(str(f), None, f.read_text(), select=["B001"])
+        assert detections
+
+    def test_handle_profile_rules_prints_breakdown(self, tmp_path, capsys):
+        from reveal.cli.file_checker import handle_profile_rules
+        import argparse
+
+        (tmp_path / "bad.py").write_text("try:\n    pass\nexcept:\n    pass\n")
+        args = argparse.Namespace(select="B001", ignore=None)
+
+        handle_profile_rules(tmp_path, args)
+
+        out = capsys.readouterr().out
+        assert "Profiled 1 files, 1 issues" in out
+        assert "RULE" in out and "TIME" in out and "WHAT" in out
+        assert "B001" in out
+        assert "Bare except clause" in out
+
+    def test_handle_profile_rules_no_files_found(self, tmp_path, capsys):
+        from reveal.cli.file_checker import handle_profile_rules
+        import argparse
+
+        args = argparse.Namespace(select=None, ignore=None)
+        handle_profile_rules(tmp_path, args)  # empty dir: must not raise
+        # _handle_no_files_found prints its own message; just confirm no crash.
+
+    def test_profile_rules_flag_dispatches_to_handle_profile_rules(self, tmp_path):
+        """`reveal check <dir> --profile-rules` must route to
+        handle_profile_rules, not the normal handle_recursive_check."""
+        from reveal.cli.commands.check import run_check
+        import argparse
+
+        (tmp_path / "bad.py").write_text("x = 1\n")
+        args = argparse.Namespace(
+            rules=False, explain=None, path=str(tmp_path),
+            format='text', select=None, ignore=None, severity=None,
+            no_group=False, limit=50, profile_rules=True,
+        )
+        with patch('reveal.cli.file_checker.handle_profile_rules') as mock_profile, \
+             patch('reveal.cli.file_checker.handle_recursive_check') as mock_recursive:
+            run_check(args)
+        mock_profile.assert_called_once()
+        mock_recursive.assert_not_called()

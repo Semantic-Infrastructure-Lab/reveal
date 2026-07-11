@@ -9,10 +9,11 @@ This module handles quality checking of files in a directory tree:
 import sys
 import os
 import logging
+import time
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List, Dict, TYPE_CHECKING
 
 from ..defaults import SKIP_DIRECTORIES
 from ..utils.path_utils import to_posix
@@ -369,7 +370,8 @@ def check_and_collect_file(
     file_path: Path,
     directory: Path,
     select: Optional[list[str]],
-    ignore: Optional[list[str]]
+    ignore: Optional[list[str]],
+    profile: Optional[dict] = None,
 ) -> tuple[int, list]:
     """Check a single file and return structured results.
 
@@ -378,6 +380,8 @@ def check_and_collect_file(
         directory: Base directory for relative paths
         select: Rule codes to select (None = all)
         ignore: Rule codes to ignore
+        profile: When given, accumulates each rule's wall-clock seconds into
+            profile[rule.code] (BACK-540). See RuleRegistry.check_file.
 
     Returns:
         Tuple of (issue_count, detections_list)
@@ -401,7 +405,7 @@ def check_and_collect_file(
             return 0, []
 
         detections = RuleRegistry.check_file(
-            str(file_path), structure, content, select=select, ignore=ignore
+            str(file_path), structure, content, select=select, ignore=ignore, profile=profile
         )
 
         return len(detections), detections
@@ -707,6 +711,61 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
 
     # Exit with appropriate code
     sys.exit(1 if total_issues > 0 else 0)
+
+
+def handle_profile_rules(directory: Path, args: 'Namespace') -> None:
+    """Handle `reveal check <dir> --profile-rules`: a per-rule wall-time
+    breakdown of `check`, instead of the normal issue report (BACK-540).
+
+    Filed after BACK-536's I002 investigation burned significant effort on two
+    profiling wrong turns (cumulative-vs-self cProfile misread; module-level
+    parse/graph-cache contamination comparing *separate* runs). This sidesteps
+    both traps by instrumenting a single real pass instead of diffing two runs:
+    each rule's check() call is individually timed as it actually executes, so
+    a rule's cost lands on whichever file really paid it (e.g. I002 is charged
+    for building its import graph on the first file that triggers it) — there
+    is no second run and no cache state to contaminate a comparison against.
+
+    Runs serially by design (not through the parallel/streaming path): a
+    diagnostic report needs one coherent timing table, not times scattered
+    across worker processes that would need re-aggregating.
+
+    Args:
+        directory: Directory to check recursively
+        args: Parsed arguments
+    """
+    directory = directory.resolve()
+
+    gitignore_patterns = load_gitignore_patterns(directory)
+    files_to_check = collect_files_to_check(directory, gitignore_patterns)
+    if not files_to_check:
+        _handle_no_files_found(directory, 'text')
+        return
+
+    select = args.select.split(',') if args.select else None
+    ignore = args.ignore.split(',') if args.ignore else None
+
+    from reveal.rules import RuleRegistry
+    rules_in_scope = RuleRegistry.get_rules(select=select, ignore=ignore)
+    rule_message = {r.code: r.message for r in rules_in_scope}
+
+    profile: Dict[str, float] = {}
+    total_issues = 0
+    start = time.perf_counter()
+    for file_path in sorted(files_to_check):
+        issue_count, _detections = check_and_collect_file(
+            file_path, directory, select, ignore, profile=profile
+        )
+        total_issues += issue_count
+    wall_time = time.perf_counter() - start
+
+    profiled_time = sum(profile.values())
+    print(f"\nProfiled {len(files_to_check)} files, {total_issues} issues, {wall_time:.2f}s wall time\n")
+    print(f"{'RULE':<8} {'TIME':>10} {'%':>6}  WHAT")
+    print("-" * 70)
+    for code, seconds in sorted(profile.items(), key=lambda kv: kv[1], reverse=True):
+        pct = (seconds / profiled_time * 100) if profiled_time else 0.0
+        print(f"{code:<8} {seconds:>9.2f}s {pct:>5.1f}%  {rule_message.get(code, '')}")
 
 
 # Legacy underscore-prefixed names for backwards compatibility
