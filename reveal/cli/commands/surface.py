@@ -102,20 +102,22 @@ def run_surface(args: Namespace) -> None:
 def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) -> Dict[str, Any]:
     from reveal.adapters.ast.nav_surface import scan_file_surface
     from reveal.adapters.ast.nav_surface_ts import scan_file_surface_ts
-    py_files, ts_files = _collect_source_files(path, source_only=source_only)
+    from reveal.adapters.ast.nav_surface_java import scan_file_surface_java
+    from reveal.adapters.ast.nav_surface_csharp import scan_file_surface_csharp
+    py_files, ts_files, java_files, cs_files = _collect_source_files(path, source_only=source_only)
     surfaces: Dict[str, List[Dict[str, Any]]] = {
         k: [] for k in ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
     }
 
     unsupported_language = ''
-    if not py_files and not ts_files:
+    if not py_files and not ts_files and not java_files and not cs_files:
         unsupported_language = detect_non_python_language(path)
 
     # BACK-518: a handful of stray supported-language files (e.g. 15 .py tooling
     # scripts in a 1,300-file Lua repo) used to be silently presented as the
     # whole project's surface. Assess how much of the tree is actually in a
     # language `surface` analyzes so _render_report can warn on the substitution.
-    coverage = assess_language_coverage(path, {'python', 'typescript', 'tsx'})
+    coverage = assess_language_coverage(path, {'python', 'typescript', 'tsx', 'java', 'csharp'})
 
     for file_path in py_files:
         for cat, entries in scan_file_surface(str(file_path)).items():
@@ -123,6 +125,14 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
 
     for file_path in ts_files:
         for cat, entries in scan_file_surface_ts(str(file_path)).items():
+            surfaces[cat].extend(entries)
+
+    for file_path in java_files:
+        for cat, entries in scan_file_surface_java(str(file_path)).items():
+            surfaces[cat].extend(entries)
+
+    for file_path in cs_files:
+        for cat, entries in scan_file_surface_csharp(str(file_path)).items():
             surfaces[cat].extend(entries)
 
     if type_filter:
@@ -166,23 +176,33 @@ def _is_test_file(fpath: Path) -> bool:
         return name.startswith('test_') or stem.endswith('_test') or name in _TEST_FILE_PY_NAMES
     if suffix in ('.ts', '.tsx', '.js', '.jsx'):
         return any(infix in name for infix in _TEST_FILE_TS_INFIX)
+    if suffix in ('.java', '.cs'):
+        return stem.endswith('Test') or stem.endswith('Tests')
     return False
 
 
 def _collect_source_files(path: Path, source_only: bool = False):
-    """Return (py_files, ts_files) lists for the given path."""
+    """Return (py_files, ts_files, java_files, cs_files) lists for the given path."""
     _PY_EXTS = frozenset({'.py'})
     _TS_EXTS = frozenset({'.ts', '.tsx'})
+    _JAVA_EXTS = frozenset({'.java'})
+    _CS_EXTS = frozenset({'.cs'})
 
     if path.is_file():
         if path.suffix in _PY_EXTS:
-            return [path], []
+            return [path], [], [], []
         if path.suffix in _TS_EXTS:
-            return [], [path]
-        return [], []
+            return [], [path], [], []
+        if path.suffix in _JAVA_EXTS:
+            return [], [], [path], []
+        if path.suffix in _CS_EXTS:
+            return [], [], [], [path]
+        return [], [], [], []
 
     py_files: List[Path] = []
     ts_files: List[Path] = []
+    java_files: List[Path] = []
+    cs_files: List[Path] = []
     for root, dirs, filenames in os.walk(str(path)):
         dirs[:] = [
             d for d in dirs
@@ -197,7 +217,11 @@ def _collect_source_files(path: Path, source_only: bool = False):
                 py_files.append(fpath)
             elif fpath.suffix in _TS_EXTS:
                 ts_files.append(fpath)
-    return py_files, ts_files
+            elif fpath.suffix in _JAVA_EXTS:
+                java_files.append(fpath)
+            elif fpath.suffix in _CS_EXTS:
+                cs_files.append(fpath)
+    return py_files, ts_files, java_files, cs_files
 
 
 def _render_report(report: Dict[str, Any], top: int = None) -> None:
@@ -226,8 +250,8 @@ def _render_report(report: Dict[str, Any], top: int = None) -> None:
         if not warning:
             lang = report.get('unsupported_language', '')
             if lang:
-                print(f"  reveal surface currently supports Python and TypeScript.")
-                print(f"  No Python or TypeScript files found — detected {lang}.")
+                print(f"  reveal surface currently supports Python, TypeScript, Java, and C#.")
+                print(f"  No supported files found — detected {lang}.")
             else:
                 print("  No external surfaces detected.")
             print()
@@ -264,6 +288,8 @@ def _render_entry(surface_type: str, entry: Dict[str, Any]) -> None:
             print(f"  {name}{loc}")
         elif kind == 'subcommand':
             print(f"  subcommand: {name}{loc}")
+        elif kind == 'main':
+            print(f"  entrypoint: {name}{loc}")
         else:
             print(f"  @{entry.get('decorator', '?')}  {name}{loc}")
 

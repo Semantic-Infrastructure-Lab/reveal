@@ -772,5 +772,176 @@ class TestSourceOnly(unittest.TestCase):
         self.assertNotIn('NESTED_TEST_KEY', env_names)
 
 
+class TestNavSurfaceJava(unittest.TestCase):
+    """Unit tests for the Java surface scanner (nav_surface_java, BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _scan_java(self, filename: str, content: str):
+        from reveal.adapters.ast.nav_surface_java import scan_file_surface_java
+        path = _write(self.tmp, filename, content)
+        return scan_file_surface_java(path)
+
+    def test_java_network_import(self):
+        result = self._scan_java('Client.java', 'import java.net.http.HttpClient;\n')
+        names = [e['name'] for e in result['network']]
+        self.assertIn('java.net.http.HttpClient', names)
+
+    def test_java_db_import(self):
+        result = self._scan_java('Db.java', 'import com.mongodb.client.MongoClient;\n')
+        names = [e['name'] for e in result['db']]
+        self.assertIn('com.mongodb.client.MongoClient', names)
+
+    def test_java_sdk_import(self):
+        result = self._scan_java('Pay.java', 'import com.stripe.Stripe;\n')
+        names = [e['name'] for e in result['sdk']]
+        self.assertIn('com.stripe.Stripe', names)
+
+    def test_java_env_getenv(self):
+        result = self._scan_java('Config.java', '''\
+            class Config {
+                void load() {
+                    String k = System.getenv("API_KEY");
+                }
+            }
+        ''')
+        names = [e['name'] for e in result['env']]
+        self.assertIn('API_KEY', names)
+
+    def test_java_http_route_get_mapping(self):
+        result = self._scan_java('Controller.java', '''\
+            class UserController {
+                @GetMapping("/users/{id}")
+                public String getUser(String id) { return "x"; }
+            }
+        ''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/users/{id}')
+        self.assertEqual(entries[0]['methods'], 'GET')
+
+    def test_java_http_route_post_mapping_value_kwarg(self):
+        result = self._scan_java('Controller.java', '''\
+            class UserController {
+                @PostMapping(value = "/users")
+                public void createUser() {}
+            }
+        ''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/users')
+        self.assertEqual(entries[0]['methods'], 'POST')
+
+    def test_java_cli_main_entrypoint(self):
+        result = self._scan_java('App.java', '''\
+            class App {
+                public static void main(String[] args) {}
+            }
+        ''')
+        entries = result['cli']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['type'], 'main')
+
+    def test_java_non_static_method_named_main_not_cli(self):
+        """A non-static method happening to be named 'main' isn't a CLI entrypoint."""
+        result = self._scan_java('NotEntry.java', '''\
+            class Thing {
+                public void main() {}
+            }
+        ''')
+        self.assertEqual(len(result['cli']), 0)
+
+
+class TestNavSurfaceCSharp(unittest.TestCase):
+    """Unit tests for the C# surface scanner (nav_surface_csharp, BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _scan_cs(self, filename: str, content: str):
+        from reveal.adapters.ast.nav_surface_csharp import scan_file_surface_csharp
+        path = _write(self.tmp, filename, content)
+        return scan_file_surface_csharp(path)
+
+    def test_csharp_network_using(self):
+        result = self._scan_cs('Client.cs', 'using System.Net.Http;\n')
+        names = [e['name'] for e in result['network']]
+        self.assertIn('System.Net.Http', names)
+
+    def test_csharp_db_using(self):
+        result = self._scan_cs('Db.cs', 'using Npgsql;\n')
+        names = [e['name'] for e in result['db']]
+        self.assertIn('Npgsql', names)
+
+    def test_csharp_sdk_using(self):
+        result = self._scan_cs('Pay.cs', 'using Stripe;\n')
+        names = [e['name'] for e in result['sdk']]
+        self.assertIn('Stripe', names)
+
+    def test_csharp_env_getenvironmentvariable(self):
+        result = self._scan_cs('Config.cs', '''\
+            class Config {
+                void Load() {
+                    string k = Environment.GetEnvironmentVariable("API_KEY");
+                }
+            }
+        ''')
+        names = [e['name'] for e in result['env']]
+        self.assertIn('API_KEY', names)
+
+    def test_csharp_http_route_get(self):
+        result = self._scan_cs('Controller.cs', '''\
+            class UserController {
+                [HttpGet("/users/{id}")]
+                public string GetUser(string id) { return "x"; }
+            }
+        ''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/users/{id}')
+        self.assertEqual(entries[0]['methods'], 'GET')
+
+    def test_csharp_http_route_verb_and_route_merge_into_one_entry(self):
+        """[HttpPost] + [Route(...)] on the same method is one endpoint, not two."""
+        result = self._scan_cs('Controller.cs', '''\
+            class UserController {
+                [HttpPost]
+                [Route("/users")]
+                public void CreateUser() {}
+            }
+        ''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/users')
+        self.assertEqual(entries[0]['methods'], 'POST')
+
+    def test_csharp_cli_main_entrypoint(self):
+        result = self._scan_cs('Program.cs', '''\
+            class Program {
+                public static void Main(string[] args) {}
+            }
+        ''')
+        entries = result['cli']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['type'], 'main')
+
+    def test_csharp_non_static_method_named_main_not_cli(self):
+        result = self._scan_cs('NotEntry.cs', '''\
+            class Thing {
+                public void Main() {}
+            }
+        ''')
+        self.assertEqual(len(result['cli']), 0)
+
+
 if __name__ == '__main__':
     unittest.main()
