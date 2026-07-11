@@ -616,5 +616,65 @@ class TestDependsAdapterScanCap:
         assert 'Scan capped at 3 files' in captured.out
 
 
+class TestSubmoduleImportIdiom:
+    """BACK-542: `from pkg import submodule` must create a dependency edge to
+    the submodule file, not only to pkg/__init__.py."""
+
+    @pytest.fixture
+    def submodule_pkg(self, tmp_path):
+        _write(tmp_path / 'pkg' / '__init__.py', '')
+        _write(tmp_path / 'pkg' / 'intent.py', 'def match(): return 1\n')
+        _write(tmp_path / 'pkg' / 'mod.py', 'def foo(): return 2\n')
+        # `from pkg import submodule` idiom (was silently missed)
+        _write(tmp_path / 'user_a.py',
+               'from pkg import intent\ndef go(): return intent.match()\n')
+        # `from pkg.mod import name` idiom (already worked)
+        _write(tmp_path / 'user_b.py',
+               'from pkg.mod import foo\ndef go(): return foo()\n')
+        # multi-name: both are submodules
+        _write(tmp_path / 'user_c.py',
+               'from pkg import intent, mod\ndef go(): return intent.match() + mod.foo()\n')
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "t"\n')
+        return tmp_path
+
+    def test_from_pkg_import_submodule_creates_edge(self, submodule_pkg):
+        from reveal.adapters.depends import DependsAdapter
+        a = DependsAdapter(str(submodule_pkg / 'pkg' / 'intent.py'))
+        r = a.get_structure()
+        importers = {Path(d['file']).name for d in r['dependents']}
+        assert 'user_a.py' in importers  # the regression: was missing
+
+    def test_multi_name_from_import_resolves_each_submodule(self, submodule_pkg):
+        from reveal.adapters.depends import DependsAdapter
+        intent_importers = {
+            Path(d['file']).name
+            for d in DependsAdapter(str(submodule_pkg / 'pkg' / 'intent.py')).get_structure()['dependents']
+        }
+        mod_importers = {
+            Path(d['file']).name
+            for d in DependsAdapter(str(submodule_pkg / 'pkg' / 'mod.py')).get_structure()['dependents']
+        }
+        # user_c imports both submodules in one statement → edge to each
+        assert 'user_c.py' in intent_importers
+        assert 'user_c.py' in mod_importers
+
+    def test_dotted_import_still_resolves(self, submodule_pkg):
+        """`from pkg.mod import foo` must keep resolving to mod.py (no regression)."""
+        from reveal.adapters.depends import DependsAdapter
+        importers = {
+            Path(d['file']).name
+            for d in DependsAdapter(str(submodule_pkg / 'pkg' / 'mod.py')).get_structure()['dependents']
+        }
+        assert 'user_b.py' in importers
+
+    def test_submodule_edge_display_names(self, submodule_pkg):
+        """The dependent record names the imported submodule, not a bare fallback."""
+        from reveal.adapters.depends import DependsAdapter
+        r = DependsAdapter(str(submodule_pkg / 'pkg' / 'intent.py')).get_structure()
+        dep = next(d for d in r['dependents'] if Path(d['file']).name == 'user_a.py')
+        assert 'intent' in dep['names']
+        assert dep['line'] == 1
+
+
 if __name__ == '__main__':
     unittest.main()

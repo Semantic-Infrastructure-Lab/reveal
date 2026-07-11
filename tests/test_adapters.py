@@ -473,7 +473,7 @@ class TestHelpAdapter(unittest.TestCase):
     def test_examples_all_tasks_valid(self):
         """All help://examples/<task> routes return valid data."""
         adapter = HelpAdapter()
-        tasks = ['security', 'codebase', 'debugging', 'infrastructure', 'quality', 'documentation']
+        tasks = ['security', 'codebase', 'due-diligence', 'debugging', 'infrastructure', 'quality', 'documentation']
         for task in tasks:
             result = adapter.get_element(f'examples/{task}')
             self.assertIsNotNone(result, f'examples/{task} returned None')

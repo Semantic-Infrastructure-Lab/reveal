@@ -194,3 +194,25 @@ class LanguageExtractor(ABC):
             return Path('/project/src/utils.js')
         """
         return None
+
+    def resolve_import_targets(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
+    ) -> List[Path]:
+        """Resolve an import statement to *all* files it depends on.
+
+        A single import statement can pull in more than one file — most
+        commonly ``from pkg import a, b`` where ``a`` and ``b`` are each
+        submodules (BACK-542). :meth:`resolve_import` returns only the single
+        primary target (the module named in the statement), so consumers that
+        need the complete dependency set (``depends://``) use this instead.
+
+        Default implementation wraps :meth:`resolve_import` in a one-element
+        list (or empty), so languages without multi-target imports need no
+        override. Python overrides this to add ``from pkg import submodule``
+        edges.
+        """
+        primary = self.resolve_import(stmt, base_path, search_paths=search_paths)
+        return [primary] if primary is not None else []

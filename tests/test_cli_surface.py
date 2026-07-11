@@ -12,7 +12,6 @@ from unittest.mock import patch
 
 from reveal.adapters.ast.nav_surface import (
     _get_open_mode,
-    _is_cli_command,
     _is_env_access,
     _is_fs_write,
     _is_http_route,
@@ -100,12 +99,8 @@ class TestClassifiers(unittest.TestCase):
     def test_is_mock_patch_decorator_real_route_false(self):
         self.assertFalse(_is_mock_patch_decorator("app.patch('/endpoint')"))
 
-    def test_is_cli_command_click(self):
-        self.assertTrue(_is_cli_command("click.command()"))
-        self.assertTrue(_is_cli_command("app.command()"))
-
-    def test_is_cli_command_false(self):
-        self.assertFalse(_is_cli_command("app.route('/x')"))
+    # CLI-command classification is provenance-based (BACK-534), not a string
+    # heuristic — covered by TestCliCommandProvenance below.
 
     def test_is_mcp_tool(self):
         self.assertTrue(_is_mcp_tool("mcp.tool()"))
@@ -229,7 +224,10 @@ class TestScanSurface(unittest.TestCase):
         self.assertIn('--verbose', names)
         self.assertIn('--output', names)
 
-    def test_bare_name_decorator_matching_command_does_not_crash(self):
+    def test_bare_name_decorator_matching_command_is_not_a_cli_surface(self):
+        # BACK-533: must not crash on a bare @command decorator.
+        # BACK-534: a locally-defined (non-click/typer) @command is NOT a CLI
+        # surface — name-only matching used to report it (the 39%-FP class).
         _write(self.tmp, 'entity.py', '''\
             def command(func):
                 return func
@@ -243,7 +241,7 @@ class TestScanSurface(unittest.TestCase):
         report = _scan_surface(Path(self.tmp))
         cli = report['surfaces']['cli']
         names = [e['name'] for e in cli]
-        self.assertIn('value', names)
+        self.assertNotIn('value', names)
 
     def test_finds_fs_writes(self):
         _write(self.tmp, 'writer.py', '''\
@@ -311,6 +309,95 @@ class TestScanSurface(unittest.TestCase):
         self.assertIn('REAL_KEY', env_names)
         self.assertNotIn('VENV_KEY', env_names)
         self.assertNotIn('SITE_PACKAGES_KEY', env_names)
+
+
+class TestCliCommandProvenance(unittest.TestCase):
+    """BACK-534: @command is a CLI surface only with click/typer provenance."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _cli_names(self):
+        report = _scan_surface(Path(self.tmp))
+        return [e['name'] for e in report['surfaces']['cli'] if e.get('type') == 'command']
+
+    def test_click_and_typer_and_subgroups_detected(self):
+        _write(self.tmp, 'app.py', '''\
+            import click
+            import typer
+
+            app = typer.Typer()
+
+            @click.group()
+            def cli():
+                pass
+
+            @cli.command()
+            def deploy():
+                pass
+
+            @cli.group()
+            def db():
+                pass
+
+            @db.command()
+            def migrate():
+                pass
+
+            @app.command()
+            def serve():
+                pass
+        ''')
+        names = self._cli_names()
+        self.assertIn('deploy', names)
+        self.assertIn('migrate', names)   # sub-group command
+        self.assertIn('serve', names)     # typer
+
+    def test_unrelated_command_decorator_excluded(self):
+        # An entity-style @command from a non-CLI framework (the home-assistant
+        # 39%-false-positive case) must not be reported as a CLI surface.
+        _write(self.tmp, 'entity.py', '''\
+            from homeassistant.core import command
+
+            class Light:
+                @command
+                def turn_on(self):
+                    pass
+
+                @command
+                def turn_off(self):
+                    pass
+        ''')
+        self.assertEqual(self._cli_names(), [])
+
+    def test_command_on_unknown_object_excluded(self):
+        # `.command()` on an object of unresolved provenance is not a CLI surface.
+        _write(self.tmp, 'thing.py', '''\
+            class Registry:
+                def command(self, fn):
+                    return fn
+
+            reg = Registry()
+
+            @reg.command()
+            def handle():
+                pass
+        ''')
+        self.assertEqual(self._cli_names(), [])
+
+    def test_aliased_click_import_detected(self):
+        _write(self.tmp, 'aliased.py', '''\
+            from click import command as ccmd
+
+            @ccmd()
+            def run():
+                pass
+        ''')
+        self.assertIn('run', self._cli_names())
 
 
 class TestRenderReport(unittest.TestCase):

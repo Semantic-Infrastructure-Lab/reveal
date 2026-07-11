@@ -48,13 +48,19 @@ def _scan_tree(
     file_path: str,
 ) -> Dict[str, List[Dict[str, Any]]]:
     surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _EMPTY}
+    # BACK-534: resolve @command decorators against real click/typer provenance,
+    # not the decorator name alone (which mistakes any project's own @command
+    # for a CLI surface). Both maps are collected in a full pre-pass so a group
+    # object or import defined after its first use still resolves.
     aliases: Dict[str, str] = {}
+    _collect_aliases(tree, aliases)
+    cli_groups = _collect_cli_groups(tree, aliases)
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             _process_import(node, file_path, aliases, surfaces)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            _process_function_def(node, file_path, surfaces)
+            _process_function_def(node, file_path, surfaces, aliases, cli_groups)
         elif isinstance(node, ast.Call):
             _process_call(node, file_path, aliases, surfaces)
 
@@ -101,7 +107,11 @@ def _process_function_def(
     node: ast.FunctionDef,
     file_path: str,
     surfaces: Dict[str, List[Dict[str, Any]]],
+    aliases: Optional[Dict[str, str]] = None,
+    cli_groups: Optional[set] = None,
 ) -> None:
+    aliases = aliases or {}
+    cli_groups = cli_groups or set()
     for decorator in node.decorator_list:
         deco_str = _unparse_expr(decorator)
 
@@ -117,7 +127,7 @@ def _process_function_def(
                 'file': file_path,
                 'line': node.lineno,
             })
-        elif _is_cli_command(deco_str):
+        elif _cli_command_has_provenance(decorator, aliases, cli_groups):
             name_arg = _extract_kwarg(decorator, 'name') or node.name
             surfaces['cli'].append({
                 'type': 'command',
@@ -210,8 +220,106 @@ def _infer_http_method(deco: str) -> str:
     return 'ANY'
 
 
-def _is_cli_command(deco: str) -> bool:
-    return '.command(' in deco.lower() or deco.lower() in ('command', 'click.command')
+# BACK-534: a decorator only names a real CLI surface when it resolves to the
+# click or typer frameworks — either imported directly, or invoked on a group
+# object those frameworks construct (`typer.Typer()`, a `@click.group()`-
+# decorated function). Anything else (`@command` from an entity API, a
+# same-named local decorator) is not a command-line entry point.
+_CLI_FRAMEWORK_ROOTS: frozenset = frozenset({'click', 'typer'})
+_GROUP_CONSTRUCTORS: frozenset = frozenset({'Group', 'group', 'Typer'})
+
+
+def _collect_aliases(tree: ast.Module, aliases: Dict[str, str]) -> None:
+    """Full import map (asname → dotted source) for provenance resolution."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                aliases[alias.asname or alias.name.split('.')[0]] = alias.name
+        elif isinstance(node, ast.ImportFrom):
+            mod = node.module or ''
+            for alias in node.names:
+                full = f"{mod}.{alias.name}" if mod else alias.name
+                aliases[alias.asname or alias.name] = full
+
+
+def _leftmost_name(node: ast.expr) -> Optional[str]:
+    """Root identifier of an attribute/call chain (`click.testing.foo` → 'click')."""
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    if isinstance(node, ast.Call):
+        return _leftmost_name(node.func)
+    return node.id if isinstance(node, ast.Name) else None
+
+
+def _resolves_to_cli_framework(name: Optional[str], aliases: Dict[str, str]) -> bool:
+    if not name:
+        return False
+    return aliases.get(name, name).split('.')[0] in _CLI_FRAMEWORK_ROOTS
+
+
+def _is_group_constructor(call: ast.expr, aliases: Dict[str, str]) -> bool:
+    """`click.Group(...)` / `click.group(...)` / `typer.Typer(...)` (or the
+    bare form of each when imported directly)."""
+    if not isinstance(call, ast.Call):
+        return False
+    func = call.func
+    if isinstance(func, ast.Attribute) and func.attr in _GROUP_CONSTRUCTORS:
+        return _resolves_to_cli_framework(_leftmost_name(func.value), aliases)
+    if isinstance(func, ast.Name) and func.id in _GROUP_CONSTRUCTORS:
+        return _resolves_to_cli_framework(func.id, aliases)
+    return False
+
+
+def _is_group_decorator(deco: ast.expr, aliases: Dict[str, str], cli_groups: set) -> bool:
+    """`@click.group()`, `@typer_app.group()`, or `@existing_group.group()`."""
+    func = deco.func if isinstance(deco, ast.Call) else deco
+    if isinstance(func, ast.Attribute) and func.attr == 'group':
+        base = func.value
+        if isinstance(base, ast.Name) and base.id in cli_groups:
+            return True
+        return _resolves_to_cli_framework(_leftmost_name(base), aliases)
+    if isinstance(func, ast.Name) and func.id == 'group':
+        return _resolves_to_cli_framework(func.id, aliases)
+    return False
+
+
+def _collect_cli_groups(tree: ast.Module, aliases: Dict[str, str]) -> set:
+    """Variable names bound to a click/typer command group — the base of the
+    common `@cli.command()` / `@app.command()` pattern. Iterated to a fixpoint
+    so sub-groups (`@cli.group()` def sub → `@sub.command()`) resolve regardless
+    of definition order."""
+    groups: set = set()
+    for _ in range(6):  # bounded fixpoint; deeper nesting is vanishingly rare
+        changed = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and _is_group_constructor(node.value, aliases):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id not in groups:
+                        groups.add(target.id)
+                        changed = True
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name in groups:
+                    continue
+                if any(_is_group_decorator(d, aliases, groups) for d in node.decorator_list):
+                    groups.add(node.name)
+                    changed = True
+        if not changed:
+            break
+    return groups
+
+
+def _cli_command_has_provenance(deco: ast.expr, aliases: Dict[str, str], cli_groups: set) -> bool:
+    """True when a command-shaped decorator actually resolves to click/typer."""
+    func = deco.func if isinstance(deco, ast.Call) else deco
+    if isinstance(func, ast.Name):
+        # bare @command / @cmd (e.g. `from click import command as cmd`)
+        return _resolves_to_cli_framework(func.id, aliases)
+    if isinstance(func, ast.Attribute) and func.attr == 'command':
+        base = func.value
+        if isinstance(base, ast.Name) and base.id in cli_groups:
+            return True
+        return _resolves_to_cli_framework(_leftmost_name(base), aliases)
+    return False
 
 
 def _is_mcp_tool(deco: str) -> bool:

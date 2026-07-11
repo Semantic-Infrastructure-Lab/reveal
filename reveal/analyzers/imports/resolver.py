@@ -155,6 +155,81 @@ def _try_resolve_module(base: Path, parts: List[str]) -> Optional[Path]:
     return _try_resolve_module(package_dir, rest)
 
 
+def resolve_python_from_import_submodules(
+    import_stmt: ImportStatement,
+    base_path: Path,
+    search_paths: Optional[List[Path]] = None,
+) -> List[Path]:
+    """Resolve the submodule files pulled in by ``from pkg import name`` (BACK-542).
+
+    ``resolve_python_import`` resolves only ``import_stmt.module_name`` — for
+    ``from homeassistant.helpers import intent`` that is ``homeassistant.helpers``,
+    which resolves to ``helpers/__init__.py`` (the package), never to
+    ``helpers/intent.py``. But ``from pkg import intent`` (with ``intent.foo()``
+    usage) executes and depends on ``pkg/intent.py`` when ``intent`` is a
+    submodule — one of the most common Python import idioms. This returns those
+    submodule files so the dependency graph records the real edge.
+
+    Only ``from`` imports whose ``pkg`` resolves to a *package directory* yield
+    submodules; ``from pkg.mod import foo`` (``mod.py`` is a module, ``foo`` a
+    name inside it) yields nothing here, correctly. Names that don't match a
+    sibling ``.py``/package are attributes of ``__init__.py`` and are already
+    covered by the primary resolution.
+    """
+    if import_stmt.import_type != 'from_import':
+        return []
+
+    pkg_dir = _from_import_package_dir(import_stmt, base_path, search_paths or [])
+    if pkg_dir is None:
+        return []
+
+    targets: List[Path] = []
+    for raw_name in import_stmt.imported_names:
+        name = raw_name.split()[0]  # 'intent as i' → 'intent'
+        if not name or name == '*':
+            continue
+        submodule = pkg_dir / f"{name}.py"
+        if submodule.exists():
+            targets.append(submodule)
+            continue
+        sub_pkg_init = pkg_dir / name / "__init__.py"
+        if sub_pkg_init.exists():
+            targets.append(sub_pkg_init)
+    return targets
+
+
+def _from_import_package_dir(
+    import_stmt: ImportStatement,
+    base_path: Path,
+    search_paths: List[Path],
+) -> Optional[Path]:
+    """Return the package directory a ``from <pkg> import ...`` resolves names in.
+
+    ``None`` when ``pkg`` isn't an in-tree package directory (external/stdlib,
+    or a plain module rather than a package).
+    """
+    parts = import_stmt.module_name.split('.') if import_stmt.module_name else []
+
+    if import_stmt.is_relative:
+        target = base_path
+        for _ in range(max(0, import_stmt.level - 1)):
+            target = target.parent
+        for part in parts:
+            target = target / part
+        return target if target.is_dir() else None
+
+    if not parts:
+        return None
+    for search_path in [base_path] + search_paths:
+        candidate = search_path
+        for part in parts:
+            candidate = candidate / part
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
 __all__ = [
     'resolve_python_import',
+    'resolve_python_from_import_submodules',
 ]

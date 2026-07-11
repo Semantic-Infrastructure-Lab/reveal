@@ -108,6 +108,22 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Find complex code', 'query': 'ast://src?complexity>15', 'description': 'Locate high-complexity functions', 'output_type': 'ast_query'},
         ]
     },
+    'due-diligence': {
+        'type': 'query_recipes',
+        'task': 'due-diligence',
+        'description': 'Technical due-diligence workflow — orient, find risk, quantify coupling, blast-radius, dead code, test honesty (run in order)',
+        'recipes': [
+            {'goal': '1. Orient in 60 seconds', 'query': 'reveal overview <repo>', 'description': 'Counts, language mix, quality, top hotspots, architecture summary in one command. On multi-million-line repos this can take minutes (BACK-529) — skip to the targeted steps below', 'output_type': 'reveal_overview'},
+            {'goal': '2. Where is the risk concentrated', 'query': "reveal 'ast://<repo>?complexity>25&sort=-complexity'", 'description': 'The files/functions carrying disproportionate complexity — where future incidents will trace back to (also: reveal hotspots <repo>)', 'output_type': 'ast_query'},
+            {'goal': '3. How coupled is it', 'query': "reveal 'imports://<repo>?circular=true'", 'description': 'Circular-dependency groups — a concrete, checkable architectural-debt number for a DD memo', 'output_type': 'imports_circular'},
+            {'goal': '4. What is everything built on', 'query': 'reveal pack <repo> --architecture', 'description': 'Fan-in ranking names the true core abstractions — changing their contracts is the highest-blast-radius work (also: reveal architecture <repo>)', 'output_type': 'pack_context'},
+            {'goal': '5. If I touch this, what breaks', 'query': "reveal 'depends://<repo>/<module>'", 'description': 'Who imports this module (blast radius). For a function: reveal <repo>/<file> <fn> --sideeffects (note: intra-procedural only — "none" means none in this body, not safe to change)', 'output_type': 'module_dependents'},
+            {'goal': "6. What's dead or duplicated", 'query': "reveal 'calls://<repo>?uncalled=true&type=function'", 'description': 'Statically-uncalled functions (test-runner entry points excluded by default; add &test-framework=true to include). Also: reveal check <repo> --select B,C,D,I,U for duplicates', 'output_type': 'calls_uncalled'},
+            {'goal': '7. Is the test suite honest', 'query': "reveal 'patches://<repo>/tests?group=target&limit=15'", 'description': 'Mock/patch-pressure grouped by target (Python/TS-JS) — which boundaries are over-mocked, a test-trust smell', 'output_type': 'patches_summary'},
+            {'goal': '8. Did recent changes hold up', 'query': 'reveal review <old-tag>..<new-tag>', 'description': 'Quality + structural assessment over a git range (or main..feature for an open PR)', 'output_type': 'review_summary'},
+            {'goal': '9. Diff structure across two revisions', 'query': "reveal 'diff://<repo>/<file>@<refA>::<repo>/<file>@<refB>'", 'description': 'Structural diff between two revisions of a file (full architecture-level release diff is BACK-441, not yet built)', 'output_type': 'diff_structure'},
+        ]
+    },
     'debugging': {
         'type': 'query_recipes',
         'task': 'debugging',

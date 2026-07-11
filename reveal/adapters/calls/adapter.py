@@ -112,7 +112,7 @@ _SCHEMA: Dict[str, Any] = {
         'root':     {'type': 'string',  'description': 'Root function name for a recursive callee-tree traversal'},
         'modules':  {'type': 'boolean', 'description': 'Build a module-level dependency graph instead of function-level'},
         'external': {'type': 'boolean', 'description': 'Include external (non-project) modules in the ?modules graph (default: false)'},
-        'test-framework': {'type': 'boolean', 'description': 'Include test-framework entrypoints as callers in ?rank=callers (default: false)'},
+        'test-framework': {'type': 'boolean', 'description': 'Include test-framework entrypoints: as callers in ?rank=callers, and as dead-code candidates in ?uncalled (default: false)'},
     },
     'elements': {},
     'supports_batch': False,
@@ -328,7 +328,11 @@ class CallsAdapter(ResourceAdapter):
             top = int(self.query_params.get('top', 0))
             type_filter = self.query_params.get('type', '')
             only_functions = type_filter == 'function'
-            result_data = find_uncalled(self.path, only_functions=only_functions, top=top)
+            include_test_framework = bool(self.query_params.get('test-framework', False))
+            result_data = find_uncalled(
+                self.path, only_functions=only_functions, top=top,
+                include_test_framework=include_test_framework,
+            )
             query_format = self.query_params.get('format', '')
             if query_format:
                 result_data['_query_format'] = query_format

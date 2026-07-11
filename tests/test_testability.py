@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from argparse import Namespace
 from io import StringIO
 from pathlib import Path
@@ -226,6 +227,51 @@ def test_one():
     assert 'Testability:' in text
     assert 'service.fetch_price' in text
     assert 'Boundary Fan-Out Hotspots' in text
+
+
+def test_run_testability_ts_note_points_to_patches_adapter(tmp_path):
+    """BACK-543: TS suites get an accurate note pointing to patches://, not the
+    stale 'Jest/Vitest tracked in BACK-374' (support shipped; BACK resolved)."""
+    _write(tmp_path / 'src' / 'service.ts', 'export const f = () => 1;\n')
+    _write(tmp_path / 'tests' / 'service.test.ts',
+           "import { jest } from '@jest/globals';\nit('x', () => {});\n")
+    args = Namespace(
+        path=str(tmp_path / 'src'),
+        tests=[str(tmp_path / 'tests')],
+        top=10, min_patches=1, min_categories=1,
+        include_unresolved=True, format='json',
+    )
+    out = StringIO()
+    with patch('sys.stdout', out):
+        run_testability(args)
+    report = json.loads(out.getvalue())
+    note = report['_patch_note']
+    assert 'BACK-374' not in note
+    assert 'Python only' not in note
+    assert 'TypeScript' in note
+    assert 'patches://' in note
+
+
+def test_run_testability_note_unsupported_lang_has_no_patches_pointer(tmp_path):
+    """BACK-543: a genuinely unsupported language (Go) gets the Python-only note
+    without misdirecting the user to patches:// (which is Python+TS only)."""
+    _write(tmp_path / 'src' / 'service.go', 'package main\nfunc F() int { return 1 }\n')
+    _write(tmp_path / 'tests' / 'service_test.go',
+           'package main\nimport "testing"\nfunc TestF(t *testing.T) {}\n')
+    args = Namespace(
+        path=str(tmp_path / 'src'),
+        tests=[str(tmp_path / 'tests')],
+        top=10, min_patches=1, min_categories=1,
+        include_unresolved=True, format='json',
+    )
+    out = StringIO()
+    with patch('sys.stdout', out):
+        run_testability(args)
+    report = json.loads(out.getvalue())
+    note = report['_patch_note']
+    assert 'BACK-374' not in note
+    assert 'Go' in note
+    assert 'patches://' not in note
 
 
 def test_suppressed_targets_excluded_by_default(tmp_path):

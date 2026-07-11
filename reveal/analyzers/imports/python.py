@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 from .types import ImportStatement
 from .base import LanguageExtractor, register_extractor
-from .resolver import resolve_python_import
+from .resolver import resolve_python_import, resolve_python_from_import_submodules
 from ...registry import get_analyzer
 
 # Module-level cache for extract_imports results keyed by (file_path_str, mtime_ns).
@@ -454,6 +454,29 @@ class PythonExtractor(LanguageExtractor):
             Absolute path to the imported file, or None if not resolvable
         """
         return resolve_python_import(stmt, base_path, search_paths=search_paths or [])
+
+    def resolve_import_targets(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
+    ) -> List[Path]:
+        """All files a Python import statement depends on (BACK-542).
+
+        Extends the single primary resolution with the submodule files pulled
+        in by ``from pkg import submodule`` — one of the most common Python
+        import idioms, which the primary resolution (resolving only the
+        ``pkg`` part → ``pkg/__init__.py``) silently misses.
+        """
+        paths = search_paths or []
+        targets: List[Path] = []
+        primary = resolve_python_import(stmt, base_path, search_paths=paths)
+        if primary is not None:
+            targets.append(primary)
+        for sub in resolve_python_from_import_submodules(stmt, base_path, search_paths=paths):
+            if sub not in targets:
+                targets.append(sub)
+        return targets
 
 
 # Backward compatibility: Keep old function-based API

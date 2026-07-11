@@ -161,12 +161,16 @@ def _render_uncalled_text(data: Dict[str, Any]) -> None:
     path = data.get('path', '.')
     total_defined = data.get('total_defined', 0)
     total_uncalled = data.get('total_uncalled', 0)
+    test_excluded = data.get('test_entrypoints_excluded', 0)
     entries = data.get('entries', [])
 
     print(f"Dead code candidates: {path}")
     print(f"Total defined:        {total_defined} functions/methods")
     print(f"Uncalled:             {total_uncalled}")
     print(f"Note: excludes __dunder__ methods and @property/@classmethod/@staticmethod")
+    if test_excluded:
+        print(f"Note: excluded {test_excluded} test-runner entrypoint(s) "
+              f"([Fact]/@Test/test_*, etc.) — add ?test-framework=true to include")
     print()
 
     if not entries:

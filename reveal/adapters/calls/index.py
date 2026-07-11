@@ -31,6 +31,32 @@ _INDEX_CACHE_MAX = 8
 # never appear as explicit call expressions in source code.
 _IMPLICIT_DECORATORS: frozenset = frozenset({'property', 'classmethod', 'staticmethod'})
 
+# BACK-446: test methods are invoked by a test runner via reflection/collection,
+# not by an explicit call expression — so they always show up as "uncalled" and
+# swamp the dead-code signal (1,577 false positives on Jellyfin/C#, nearly all
+# xUnit [Fact]/[Theory] methods). Excluded by default; opt back in with
+# ?test-framework=true.
+#
+# C#/.NET and Java mark tests with attributes/annotations that Reveal's
+# structure pass does NOT surface as `decorators`, so these are matched by a
+# scoped source-scan of the annotation lines immediately preceding the def.
+_TEST_ANNOTATION_MARKERS: tuple = (
+    # C# / .NET — xUnit, NUnit, MSTest
+    '[Fact', '[Theory', '[Test', '[SetUp', '[TearDown',
+    '[OneTimeSetUp', '[OneTimeTearDown',
+    # Java / JVM — JUnit 4/5, TestNG
+    '@Test', '@ParameterizedTest', '@RepeatedTest', '@TestFactory',
+    '@BeforeEach', '@AfterEach', '@BeforeAll', '@AfterAll',
+    '@Before', '@After', '@BeforeClass', '@AfterClass',
+)
+# Python test entry points Reveal *does* capture as decorators (pytest).
+_TEST_DECORATOR_NAMES: frozenset = frozenset({'fixture'})
+# Python name conventions collected by pytest/unittest without an explicit call.
+_PY_UNITTEST_LIFECYCLE: frozenset = frozenset({
+    'setUp', 'tearDown', 'setUpClass', 'tearDownClass',
+    'setUpModule', 'tearDownModule',
+})
+
 # Tree-sitter language slug → coarse family, for scoping callee resolution to
 # the caller's language (BACK-405). C/C++ share one family since headers (.h)
 # are ambiguous between the two and both target the same symbol namespace.
@@ -525,6 +551,17 @@ def _parent_hint_scan_is_cheap(parent: str) -> bool:
     return True
 
 
+def _read_lines(file_path: str, cache: Dict[str, List[str]]) -> List[str]:
+    """Return (cached) source lines for *file_path*; empty list on read error."""
+    if file_path not in cache:
+        try:
+            with open(file_path, encoding='utf-8', errors='replace') as fh:
+                cache[file_path] = fh.readlines()
+        except OSError:
+            cache[file_path] = []
+    return cache[file_path]
+
+
 def _has_noqa_uncalled(
     file_path: str,
     line_no: int,
@@ -536,23 +573,66 @@ def _has_noqa_uncalled(
     often report the first decorator line as the function's start, while the
     noqa comment lives on the ``def`` line one or two lines later.
     """
-    if file_path not in cache:
-        try:
-            with open(file_path, encoding='utf-8', errors='replace') as fh:
-                cache[file_path] = fh.readlines()
-        except OSError:
-            cache[file_path] = []
-    lines = cache[file_path]
+    lines = _read_lines(file_path, cache)
     for ln in range(line_no, min(line_no + 4, len(lines) + 1)):
         if 1 <= ln <= len(lines) and '# noqa: uncalled' in lines[ln - 1]:
             return True
     return False
 
 
+def _has_test_annotation(
+    file_path: str,
+    line_no: int,
+    cache: Dict[str, List[str]],
+) -> bool:
+    """True if a test attribute/annotation (``[Fact]``, ``@Test``, …) sits on or
+    immediately above the def at ``line_no``.
+
+    Scans only the contiguous block of attribute/annotation/blank lines directly
+    preceding the definition (and the def line itself), so a marker is
+    associated with *its own* method — never a neighbour's — avoiding the
+    false-exclusion trap of a fixed look-back window over adjacent methods.
+    """
+    lines = _read_lines(file_path, cache)
+    texts: List[str] = []
+    if 1 <= line_no <= len(lines):
+        texts.append(lines[line_no - 1])
+    j = line_no - 1
+    while j >= 1:
+        stripped = lines[j - 1].strip()
+        if stripped == '' or stripped.startswith('[') or stripped.startswith('@'):
+            texts.append(lines[j - 1])
+            j -= 1
+        else:
+            break
+    blob = ''.join(texts)
+    return any(marker in blob for marker in _TEST_ANNOTATION_MARKERS)
+
+
+def _is_test_entry_point(
+    name: str,
+    file_path: str,
+    line_no: int,
+    decorator_names: Set[str],
+    cache: Dict[str, List[str]],
+) -> bool:
+    """True if *name* is invoked by a test runner rather than an explicit call
+    (BACK-446) — a pytest fixture/test, a unittest lifecycle hook, or a
+    C#/Java method carrying a test attribute/annotation."""
+    if decorator_names & _TEST_DECORATOR_NAMES:
+        return True
+    if _lang_family(file_path) == 'python' and (
+        name.startswith('test_') or name in _PY_UNITTEST_LIFECYCLE
+    ):
+        return True
+    return bool(line_no) and _has_test_annotation(file_path, line_no, cache)
+
+
 def find_uncalled(
     path: str,
     only_functions: bool = False,
     top: int = 0,
+    include_test_framework: bool = False,
 ) -> Dict[str, Any]:
     """Find functions/methods defined but never called within the project.
 
@@ -563,6 +643,9 @@ def find_uncalled(
     Automatically excluded (implicitly invoked, not statically reachable):
     - ``__dunder__`` methods (``__init__``, ``__str__``, etc.)
     - Functions decorated with ``@property``, ``@classmethod``, ``@staticmethod``
+    - Test-runner entry points (pytest/unittest, xUnit ``[Fact]``/``[Theory]``,
+      JUnit ``@Test``, …) — invoked by reflection, not a call (BACK-446).
+      Set ``include_test_framework=True`` to keep them in the result.
 
     Args:
         path: Root directory (or file) to analyse.
@@ -570,10 +653,13 @@ def find_uncalled(
             to focus on module-level dead code.
         top: If > 0, limit results to this many entries sorted by file mtime
             descending (most-recently-added uncalled first).
+        include_test_framework: If True, do not exclude test-runner entry
+            points (default False — they are noise for a dead-code read).
 
     Returns:
-        Dict with ``path``, ``total_defined``, ``total_uncalled``, and
-        ``entries`` (list of uncalled symbols).
+        Dict with ``path``, ``total_defined``, ``total_uncalled``,
+        ``test_entrypoints_excluded``, and ``entries`` (list of uncalled
+        symbols).
     """
     path_obj = Path(path)
     is_file = path_obj.is_file()
@@ -589,6 +675,7 @@ def find_uncalled(
     structures = collect_structures(str(directory))
 
     total_defined = 0
+    test_entrypoints_excluded = 0
     entries = []
 
     for file_struct in structures:
@@ -613,6 +700,11 @@ def find_uncalled(
                 continue
             if line_no and _has_noqa_uncalled(file_path, line_no, file_lines):
                 continue
+            if not include_test_framework and _is_test_entry_point(
+                name, file_path, line_no, decorator_names, file_lines
+            ):
+                test_entrypoints_excluded += 1
+                continue
 
             entries.append({
                 'name': name,
@@ -631,6 +723,7 @@ def find_uncalled(
         'path': path,
         'total_defined': total_defined,
         'total_uncalled': len(entries),
+        'test_entrypoints_excluded': test_entrypoints_excluded,
         'entries': entries,
     }
 

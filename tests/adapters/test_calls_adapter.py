@@ -1573,6 +1573,94 @@ class TestFindUncalled(unittest.TestCase):
         names = [e['name'] for e in result['entries']]
         self.assertNotIn('helper', names)
 
+    # BACK-446: test-runner entry points are not dead code -------------------
+
+    def test_csharp_fact_theory_excluded_by_default(self):
+        """xUnit [Fact]/[Theory] methods are runner-invoked, not dead code."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('MyTests.cs', '''\
+            using Xunit;
+            public class MyTests
+            {
+                [Fact]
+                public void ItWorks() { Assert.True(true); }
+
+                [Theory]
+                [InlineData(1)]
+                public void ItWorksWith(int x) { Assert.True(x > 0); }
+
+                private void GenuinelyDead() { }
+            }
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = {e['name'] for e in result['entries']}
+        self.assertNotIn('ItWorks', names)
+        self.assertNotIn('ItWorksWith', names)
+        self.assertIn('GenuinelyDead', names)          # real dead code survives
+        self.assertEqual(result['test_entrypoints_excluded'], 2)
+
+    def test_java_test_annotation_excluded(self):
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('FooTest.java', '''\
+            import org.junit.jupiter.api.Test;
+            class FooTest {
+                @Test
+                void shouldWork() { }
+
+                void deadHelper() { }
+            }
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = {e['name'] for e in result['entries']}
+        self.assertNotIn('shouldWork', names)
+        self.assertIn('deadHelper', names)
+
+    def test_python_test_name_convention_excluded(self):
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('test_thing.py', '''\
+            def test_alpha():
+                assert True
+
+            def helper_dead():
+                pass
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = {e['name'] for e in result['entries']}
+        self.assertNotIn('test_alpha', names)
+        self.assertIn('helper_dead', names)
+
+    def test_include_test_framework_opt_in(self):
+        """?test-framework=true restores test entry points to the result."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('MyTests.cs', '''\
+            using Xunit;
+            public class MyTests
+            {
+                [Fact]
+                public void ItWorks() { Assert.True(true); }
+            }
+        ''')
+        included = find_uncalled(self.tmpdir, include_test_framework=True)
+        names = {e['name'] for e in included['entries']}
+        self.assertIn('ItWorks', names)
+
+    def test_adjacent_method_not_falsely_excluded(self):
+        """A [Fact] above method A must not tag the following method B."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('Adj.cs', '''\
+            using Xunit;
+            public class Adj
+            {
+                [Fact]
+                public void Tested() { }
+                public void NotTested() { }
+            }
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = {e['name'] for e in result['entries']}
+        self.assertNotIn('Tested', names)
+        self.assertIn('NotTested', names)   # marker belongs to Tested only
+
 
 # ---------------------------------------------------------------------------
 # Integration: CallsAdapter ?uncalled query param

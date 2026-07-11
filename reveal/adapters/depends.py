@@ -380,6 +380,10 @@ class DependsAdapter(ResourceAdapter):
         """
         self._graph: Optional[ImportGraph] = None
         self._symbols_by_file: Dict[Path, set] = {}
+        # BACK-542: (importer, target) → the exact ImportStatement that produced
+        # the edge, so display resolves the right import line even when one
+        # statement resolves to several targets (`from pkg import a, b`).
+        self._edge_stmts: Dict[tuple, 'ImportStatement'] = {}
         self._target_path: Optional[Path] = Path(path).resolve() if path else None
         self._query_params = parse_query_params(query or '')
         self._warn_unknown_query_params(self._query_params)  # BACK-507
@@ -566,13 +570,24 @@ class DependsAdapter(ResourceAdapter):
                 if stmt.is_type_checking:
                     continue
                 if uses_file_index:
+                    # Generic extractors' resolve_import needs the file_index
+                    # kwarg the base resolve_import_targets can't pass, and
+                    # don't have the `from pkg import submodule` idiom — single
+                    # resolution is correct for them.
                     resolved = extractor.resolve_import(
                         stmt, base_path, search_paths=extra_paths, file_index=file_index)
+                    targets = [resolved] if resolved else []
                 else:
-                    resolved = extractor.resolve_import(stmt, base_path, search_paths=extra_paths)
-                if resolved and resolved != file_path:
-                    self._graph.add_dependency(file_path, resolved)
-                    self._graph.resolved_paths[stmt.module_name] = resolved
+                    # BACK-542: one statement can pull in several files
+                    # (`from pkg import a, b` where a/b are submodules), so
+                    # resolve to the full target set, not just the primary.
+                    targets = extractor.resolve_import_targets(
+                        stmt, base_path, search_paths=extra_paths)
+                for resolved in targets:
+                    if resolved and resolved != file_path:
+                        self._graph.add_dependency(file_path, resolved)
+                        self._graph.resolved_paths[stmt.module_name] = resolved
+                        self._edge_stmts[(file_path, resolved)] = stmt
 
     def _build_meta(self) -> Dict[str, Any]:
         known_limits = [
@@ -635,18 +650,22 @@ class DependsAdapter(ResourceAdapter):
 
         importer_files: Set[Path] = self._graph.reverse_deps.get(target, set())
 
-        # Gather the actual ImportStatements pointing to target
+        # Gather the actual ImportStatements pointing to target. Prefer the
+        # precise per-edge map (BACK-542: correct even when one statement
+        # resolves to several targets); fall back to resolved_paths, then to a
+        # bare importer entry if neither matches.
         dependents = []
         for importer in sorted(importer_files):
-            stmts = self._graph.files.get(importer, [])
-            for stmt in stmts:
-                resolved = self._graph.resolved_paths.get(stmt.module_name)
-                if resolved == target:
+            edge_stmt = self._edge_stmts.get((importer, target))
+            if edge_stmt is not None:
+                dependents.append(_format_import_stmt(edge_stmt))
+                continue
+            matched = False
+            for stmt in self._graph.files.get(importer, []):
+                if self._graph.resolved_paths.get(stmt.module_name) == target:
                     dependents.append(_format_import_stmt(stmt))
-
-        # If we couldn't match via resolved_paths, fall back to raw importer list
-        if not dependents and importer_files:
-            for importer in sorted(importer_files):
+                    matched = True
+            if not matched:
                 dependents.append({'file': str(importer), 'line': 0, 'module': '', 'names': [], 'type': 'unknown', 'is_relative': False, 'alias': None})
 
         result = {

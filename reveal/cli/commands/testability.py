@@ -94,10 +94,16 @@ def run_testability(args: Namespace) -> None:
     if report.get('summary', {}).get('total_patch_uses', 0) == 0:
         lang = detect_non_python_language(test_paths[0])
         if lang:
-            report['_patch_note'] = (
-                f'patch pressure unavailable for {lang} test suites '
-                '(Python only) — Jest/Vitest support tracked in BACK-374'
+            note = (
+                f'patch pressure not computed for {lang} test suites — '
+                "`reveal testability`'s boundary-profile pipeline is Python-only."
             )
+            if lang in ('TypeScript', 'JavaScript'):
+                note += (
+                    ' For JS/TS mock pressure use `reveal patches://<tests>` '
+                    '(jest/vitest supported).'
+                )
+            report['_patch_note'] = note
 
     if args.format == 'json':
         print(json.dumps(report, indent=2, default=str))
