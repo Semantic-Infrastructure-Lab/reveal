@@ -7,7 +7,10 @@ import io
 import re
 import json
 import time
-import resource
+try:
+    import resource  # POSIX-only; used for --perf RSS reporting
+except ImportError:  # Windows CPython has no `resource` module
+    resource = None  # type: ignore[assignment]
 from pathlib import Path
 from typing import Optional, Tuple, Any, List
 from collections.abc import Callable
@@ -39,11 +42,14 @@ def _log_perf(start: float, argv_snapshot: List[str], exit_code: int) -> None:
     Never raises — perf logging must not break normal operation.
     """
     try:
-        ru_self = resource.getrusage(resource.RUSAGE_SELF)
-        ru_children = resource.getrusage(resource.RUSAGE_CHILDREN)
-        peak_rss_kb = ru_self.ru_maxrss + ru_children.ru_maxrss
-        if sys.platform == 'darwin':
-            peak_rss_kb //= 1024  # macOS reports ru_maxrss in bytes, not KB
+        if resource is None:
+            peak_rss_kb = None  # Windows: no resource-usage API
+        else:
+            ru_self = resource.getrusage(resource.RUSAGE_SELF)
+            ru_children = resource.getrusage(resource.RUSAGE_CHILDREN)
+            peak_rss_kb = ru_self.ru_maxrss + ru_children.ru_maxrss
+            if sys.platform == 'darwin':
+                peak_rss_kb //= 1024  # macOS reports ru_maxrss in bytes, not KB
     except Exception:
         peak_rss_kb = None
 

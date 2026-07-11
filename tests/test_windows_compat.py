@@ -1,7 +1,11 @@
 """Tests for Windows compatibility features."""
 
+import json
 import os
+import subprocess
 import sys
+import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -116,6 +120,56 @@ class TestWindowsCompatibility(unittest.TestCase):
         # Should have at least 27 system variables (11 Unix + 16 Windows)
         self.assertGreaterEqual(len(adapter.SYSTEM_VARS), 27,
                                "Should have at least 27 system variables for cross-platform support")
+
+
+class TestResourceModuleWindows(unittest.TestCase):
+    """The POSIX-only `resource` module must not break Windows.
+
+    0.107.0 added an unconditional top-level `import resource` in main.py for
+    --perf RSS logging. `resource` does not exist on Windows CPython, so every
+    reveal invocation (even `--version`) crashed with ModuleNotFoundError before
+    argument parsing even started. Regression guard: main must import, and the
+    perf logger must no-op the RSS field, when `resource` is unavailable.
+    """
+
+    def test_main_imports_without_resource_module(self):
+        """reveal.main imports even when `resource` is unavailable (Windows).
+
+        Reproduces the Windows condition hermetically: seeding
+        sys.modules['resource'] = None makes `import resource` raise
+        ModuleNotFoundError, exactly as on Windows. Run in a subprocess (a fresh
+        interpreter) so the block doesn't perturb the test process, pinned to the
+        same reveal package under test via PYTHONPATH.
+        """
+        import reveal
+        pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(reveal.__file__)))
+        code = (
+            "import sys; sys.modules['resource'] = None; "
+            "import reveal.main; print('IMPORT_OK')"
+        )
+        env = dict(os.environ)
+        env['PYTHONPATH'] = pkg_parent + os.pathsep + env.get('PYTHONPATH', '')
+        result = subprocess.run(
+            [sys.executable, '-c', code],
+            capture_output=True, text=True, env=env,
+        )
+        self.assertEqual(
+            result.returncode, 0,
+            f"reveal.main failed to import without `resource`:\n{result.stderr}",
+        )
+        self.assertIn('IMPORT_OK', result.stdout)
+
+    def test_log_perf_no_ops_rss_without_resource(self):
+        """_log_perf records peak_rss_kb=None (not a crash) when resource is None."""
+        import reveal.main as main_mod
+        with tempfile.TemporaryDirectory() as d:
+            log_path = Path(d) / 'perf.jsonl'
+            with patch.object(main_mod, 'resource', None), \
+                 patch.object(main_mod, 'PERF_LOG_PATH', log_path):
+                main_mod._log_perf(time.perf_counter(), ['reveal', '--version'], 0)
+            lines = log_path.read_text(encoding='utf-8').strip().splitlines()
+            self.assertEqual(len(lines), 1)
+            self.assertIsNone(json.loads(lines[0])['peak_rss_kb'])
 
 
 if __name__ == '__main__':
