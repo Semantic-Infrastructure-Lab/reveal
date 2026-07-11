@@ -553,5 +553,188 @@ class TestScanContractsTypeScript(unittest.TestCase):
         self.assertNotIn('Protocols', out)
 
 
+class TestScanContractsJava(unittest.TestCase):
+    """Tests for Java contract detection (BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write_java(self, filename: str, content: str) -> str:
+        return _write(self.tmp, filename, content)
+
+    def test_interface_classified_as_protocol(self):
+        self._write_java('IReader.java', '''\
+            public interface IReader {
+                String read();
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['protocols']), 1)
+        self.assertEqual(report['protocols'][0]['name'], 'IReader')
+
+    def test_interface_with_extends_has_bases(self):
+        self._write_java('Interfaces.java', '''\
+            public interface IBase {
+                void base();
+            }
+            public interface IDerived extends IBase {
+                void extra();
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        derived = next(p for p in report['protocols'] if p['name'] == 'IDerived')
+        self.assertIn('IBase', derived['bases'])
+
+    def test_abstract_class_classified_as_abc(self):
+        self._write_java('AbstractService.java', '''\
+            public abstract class AbstractService {
+                abstract void execute();
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['abcs']), 1)
+        self.assertEqual(report['abcs'][0]['name'], 'AbstractService')
+
+    def test_implementing_class_classified_as_dataclass(self):
+        self._write_java('Service.java', '''\
+            interface IService {
+                void run();
+            }
+            class ConcreteService implements IService {
+                public void run() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl_names = [c['name'] for c in report['dataclasses']]
+        self.assertIn('ConcreteService', impl_names)
+
+    def test_implementations_populated_for_interface(self):
+        self._write_java('Service.java', '''\
+            interface IService {
+                void run();
+            }
+            class ConcreteService implements IService {
+                public void run() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        iface = next(p for p in report['protocols'] if p['name'] == 'IService')
+        impl_names = [i['name'] for i in iface['implementations']]
+        self.assertIn('ConcreteService', impl_names)
+
+    def test_class_extends_and_implements_both_captured(self):
+        self._write_java('Dog.java', '''\
+            interface Derived {
+                void d();
+            }
+            class Animal {}
+            class Dog extends Animal implements Derived {
+                public void d() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl = next(c for c in report['dataclasses'] if c['name'] == 'Dog')
+        self.assertIn('Animal', impl['bases'])
+        self.assertIn('Derived', impl['bases'])
+
+    def test_plain_class_no_bases_not_a_contract(self):
+        """A concrete class with no interface/extends is not a contract."""
+        self._write_java('Plain.java', '''\
+            public class Plain {
+                void doThing() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(report['total_contracts'], 0)
+
+
+class TestScanContractsCSharp(unittest.TestCase):
+    """Tests for C# contract detection (BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write_cs(self, filename: str, content: str) -> str:
+        return _write(self.tmp, filename, content)
+
+    def test_interface_classified_as_protocol(self):
+        self._write_cs('IReader.cs', '''\
+            public interface IReader {
+                string Read();
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['protocols']), 1)
+        self.assertEqual(report['protocols'][0]['name'], 'IReader')
+
+    def test_interface_with_extends_has_bases(self):
+        self._write_cs('Interfaces.cs', '''\
+            public interface IBase {
+                void Base();
+            }
+            public interface IDerived : IBase {
+                void Extra();
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        derived = next(p for p in report['protocols'] if p['name'] == 'IDerived')
+        self.assertIn('IBase', derived['bases'])
+
+    def test_abstract_class_classified_as_abc(self):
+        self._write_cs('AbstractService.cs', '''\
+            public abstract class AbstractService {
+                public abstract void Execute();
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['abcs']), 1)
+        self.assertEqual(report['abcs'][0]['name'], 'AbstractService')
+
+    def test_implementing_class_classified_as_dataclass(self):
+        self._write_cs('Service.cs', '''\
+            interface IService {
+                void Run();
+            }
+            class ConcreteService : IService {
+                public void Run() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl_names = [c['name'] for c in report['dataclasses']]
+        self.assertIn('ConcreteService', impl_names)
+
+    def test_class_extends_and_implements_both_captured(self):
+        self._write_cs('Dog.cs', '''\
+            interface IDerived {
+                void D();
+            }
+            class Animal {}
+            class Dog : Animal, IDerived {
+                public void D() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl = next(c for c in report['dataclasses'] if c['name'] == 'Dog')
+        self.assertIn('Animal', impl['bases'])
+        self.assertIn('IDerived', impl['bases'])
+
+    def test_plain_class_no_bases_not_a_contract(self):
+        self._write_cs('Plain.cs', '''\
+            public class Plain {
+                void DoThing() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(report['total_contracts'], 0)
+
+
 if __name__ == '__main__':
     unittest.main()

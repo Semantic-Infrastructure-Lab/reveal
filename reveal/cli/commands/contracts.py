@@ -21,6 +21,13 @@ _CONTRACT_PATH_HINTS: frozenset = frozenset({
 
 _TS_EXTENSIONS: frozenset = frozenset({'.ts', '.tsx'})
 
+# BACK-403 pt 2: languages whose grammar has a distinct interface/abstract-class
+# shape close enough to TS's ('interfaces'/'types'/'classes' categories, an
+# is_abstract flag on classes) that they share _scan_contracts_ts's classifier
+# rather than needing their own. Java/C# added — each analyzer
+# (analyzers/java.py, analyzers/csharp.py) now emits the same shape TS does.
+_INTERFACE_FAMILY_EXTENSIONS: frozenset = frozenset({'.ts', '.tsx', '.java', '.cs'})
+
 
 def _has_python_files(path: Path) -> bool:
     if path.is_file():
@@ -33,13 +40,13 @@ def _has_python_files(path: Path) -> bool:
     return False
 
 
-def _has_typescript_files(path: Path) -> bool:
+def _has_interface_family_files(path: Path) -> bool:
     if path.is_file():
-        return path.suffix.lower() in _TS_EXTENSIONS
+        return path.suffix.lower() in _INTERFACE_FAMILY_EXTENSIONS
     for root, dirs, filenames in os.walk(str(path)):
         dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
         for fname in filenames:
-            if Path(fname).suffix.lower() in _TS_EXTENSIONS:
+            if Path(fname).suffix.lower() in _INTERFACE_FAMILY_EXTENSIONS:
                 return True
     return False
 
@@ -104,14 +111,14 @@ def _scan_contracts(
     from reveal.adapters.ast.analysis import collect_structures
 
     unsupported_language = ''
-    is_typescript = _has_typescript_files(path)
+    is_interface_family = _has_interface_family_files(path)
 
-    if not _has_python_files(path) and not is_typescript:
+    if not _has_python_files(path) and not is_interface_family:
         unsupported_language = detect_non_python_language(path)
 
     # BACK-518: guard against a few stray supported-language files standing in
     # for a mostly-unsupported tree (see surface.py / assess_language_coverage).
-    coverage = assess_language_coverage(path, {'python', 'typescript', 'tsx'})
+    coverage = assess_language_coverage(path, {'python', 'typescript', 'tsx', 'java', 'csharp'})
     coverage_dict = {
         'total_code_files': coverage.total_code_files,
         'analyzed_files': coverage.analyzed_files,
@@ -123,7 +130,7 @@ def _scan_contracts(
 
     structures = collect_structures(str(path))
 
-    if is_typescript:
+    if is_interface_family:
         result = _scan_contracts_ts(path, structures, abstract_only, show_implementations)
         result['coverage'] = coverage_dict
         return result
@@ -225,15 +232,17 @@ def _classify_ts(element: Dict[str, Any]) -> str:
 
 
 def _extract_ts_elements(structures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Extract TypeScript contract elements from collect_structures output.
+    """Extract interface-family contract elements from collect_structures output.
 
-    Collects elements of categories: 'interfaces', 'types', and 'classes'.
-    For 'classes' in TypeScript files, also marks abstract classes.
+    Collects elements of categories: 'interfaces', 'types', and 'classes', for
+    any language in _INTERFACE_FAMILY_EXTENSIONS (TS/TSX, Java, C#). Name kept
+    as _ts_elements for now — TS was the first and the classifier/render path
+    it built (interfaces→contract, is_abstract→abstract_class) is shared as-is.
     """
     elements = []
     for file_struct in structures:
         file_path = file_struct.get('file', '')
-        if Path(file_path).suffix.lower() not in _TS_EXTENSIONS:
+        if Path(file_path).suffix.lower() not in _INTERFACE_FAMILY_EXTENSIONS:
             continue
         for elem in file_struct.get('elements', []):
             cat = elem.get('category', '')
@@ -438,7 +447,7 @@ def _render_report(report: Dict[str, Any]) -> None:
         if not warning:
             lang = report.get('unsupported_language', '')
             if lang:
-                print(f"  reveal contracts currently supports Python and TypeScript.")
+                print(f"  reveal contracts currently supports Python, TypeScript, Java, and C#.")
                 print(f"  No supported files found — detected {lang}.")
             else:
                 print("  No contracts or seams found.")

@@ -814,6 +814,33 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return bases
         return []
 
+    def _extract_interface_declarations(self, node_kind: str = 'interface_declaration') -> List[Dict[str, Any]]:
+        """Extract interface declarations as a standalone list (name, line range, bases).
+
+        Shared by any language whose grammar has a distinct interface node kind
+        (Java, C# both use 'interface_declaration', same node name as TS but with
+        different heritage-clause shapes — see each analyzer's own
+        `_extract_class_bases` override for the real per-language bases logic).
+        Mirrors `_TypeScriptBase._extract_ts_types`'s interfaces bucket, generalized
+        so BACK-403 pt 2 additions don't each reinvent this walk.
+        """
+        entries: List[Dict[str, Any]] = []
+        for node in self._find_nodes_by_type(node_kind):
+            name = self._get_node_name(node)
+            if not name:
+                continue
+            line_start = node.start_position().row + 1
+            line_end = node.end_position().row + 1
+            entries.append({
+                'line': line_start,
+                'line_end': line_end,
+                'name': name,
+                'line_count': line_end - line_start + 1,
+                'decorators': [],
+                'bases': self._extract_class_bases(node),
+            })
+        return entries
+
     def _build_class_dict(self, node, name: str, decorators: List[str],
                          decorated_node=None) -> Dict[str, Any]:
         """Build class dictionary.
@@ -838,9 +865,20 @@ class TreeSitterAnalyzer(FileAnalyzer):
         }
         # TypeScript abstract classes use a distinct node type — flag them so
         # consumers (e.g. contracts command) can distinguish from concrete classes.
-        if node.kind() == 'abstract_class_declaration':
+        # Other languages (Java, C#) share 'class_declaration' for both and mark
+        # abstractness via a modifier keyword instead — see _is_abstract_class_node.
+        if node.kind() == 'abstract_class_declaration' or self._is_abstract_class_node(node):
             result['is_abstract'] = True
         return result
+
+    def _is_abstract_class_node(self, node) -> bool:
+        """Per-language hook: does this class node carry an 'abstract' modifier?
+
+        Base implementation is a no-op (Python/TS don't need it — Python has no
+        abstract-class keyword, TS uses a distinct node kind, handled above).
+        Java/C# override this to scan their modifier children.
+        """
+        return False
 
     def _extract_structs(self) -> List[Dict[str, Any]]:
         """Extract struct definitions (for languages that have them)."""
