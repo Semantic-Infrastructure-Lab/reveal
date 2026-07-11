@@ -810,6 +810,89 @@ class TestCheckFilesTextSeverity:
         assert files_with == 1
 
 
+class TestCheckFilesTextLimit:
+    """BACK-539: _check_files_text caps full per-file detail at `limit` files with
+    issues, printing a summary footer for the rest instead of continuing —
+    `check --select B,C,D,I,U` on a Kubernetes-scale tree emitted 178K+ lines /
+    17MB with no cap. total_issues/files_with_issues must still reflect every
+    file, not just the ones shown in full.
+    """
+
+    def _make_detection(self) -> Mock:
+        d = Mock()
+        d.line = 1
+        d.column = 0
+        d.rule_code = 'F001'
+        d.message = 'test'
+        d.severity = Mock()
+        d.severity.value = 'high'
+        d.suggestion = ''
+        d.context = ''
+        return d
+
+    def _files_with_issues(self, tmp_path, n):
+        files = []
+        for i in range(n):
+            f = tmp_path / f"f{i}.py"
+            f.write_text("x = 1")
+            files.append(f)
+        return files
+
+    def test_limit_caps_printed_files_and_prints_footer(self, tmp_path, capsys):
+        from reveal.cli.file_checker import _check_files_text
+        files = self._files_with_issues(tmp_path, 10)
+        det = self._make_detection()
+
+        with patch('reveal.cli.file_checker._PARALLEL_THRESHOLD', 999), \
+             patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det])):
+            total, files_with = _check_files_text(files, tmp_path, None, None, limit=3)
+
+        # Counts reflect ALL files, not just the ones printed in full.
+        assert total == 10
+        assert files_with == 10
+
+        out = capsys.readouterr().out
+        assert out.count("Found 1 issue") == 3
+        assert "+7 more files with 7 issues hidden (--limit 3)" in out
+
+    def test_limit_zero_disables_cap(self, tmp_path, capsys):
+        from reveal.cli.file_checker import _check_files_text
+        files = self._files_with_issues(tmp_path, 10)
+        det = self._make_detection()
+
+        with patch('reveal.cli.file_checker._PARALLEL_THRESHOLD', 999), \
+             patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det])):
+            total, files_with = _check_files_text(files, tmp_path, None, None, limit=0)
+
+        assert total == 10
+        assert files_with == 10
+        out = capsys.readouterr().out
+        assert out.count("Found 1 issue") == 10
+        assert "more files" not in out
+
+    def test_limit_above_file_count_prints_no_footer(self, tmp_path, capsys):
+        from reveal.cli.file_checker import _check_files_text
+        files = self._files_with_issues(tmp_path, 5)
+        det = self._make_detection()
+
+        with patch('reveal.cli.file_checker._PARALLEL_THRESHOLD', 999), \
+             patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det])):
+            total, files_with = _check_files_text(files, tmp_path, None, None, limit=50)
+
+        assert total == 5
+        assert files_with == 5
+        out = capsys.readouterr().out
+        assert out.count("Found 1 issue") == 5
+        assert "more files" not in out
+
+    def test_default_limit_is_50(self, tmp_path):
+        """The check subcommand parser defaults --limit to 50 (matches file_checker's default)."""
+        from reveal.cli.commands.check import create_check_parser
+        parser = create_check_parser()
+        args = parser.parse_args([str(tmp_path)])
+        assert args.limit == 50
+
+
 class TestCheckSubcommandURIDetection:
     """BACK-261: reveal check ssl://domain should emit a redirect hint."""
 

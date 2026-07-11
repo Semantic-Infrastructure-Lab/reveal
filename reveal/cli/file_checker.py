@@ -535,6 +535,7 @@ def _check_files_text(
     ignore: Optional[List[str]],
     no_group: bool = False,
     severity: Optional[str] = None,
+    limit: int = 50,
 ) -> tuple:
     """Check files with text output.
 
@@ -545,12 +546,17 @@ def _check_files_text(
         ignore: Rule codes to ignore
         no_group: Disable collapsing of repeated rule detections
         severity: Minimum severity level to report (low/medium/high/critical)
+        limit: Stop printing full per-file detail after this many files-with-
+            issues and print a "+N more files" summary footer instead (BACK-539).
+            0 (or negative) disables the cap — print every file in full.
 
     Returns:
         Tuple of (total_issues, files_with_issues)
     """
     total_issues = 0
     files_with_issues = 0
+    hidden_files = 0
+    hidden_issues = 0
     sorted_files = sorted(files)
 
     # Use streaming parallel execution so results are processed as they complete
@@ -577,12 +583,23 @@ def _check_files_text(
         if issue_count > 0:
             total_issues += issue_count
             files_with_issues += 1
+            if limit > 0 and files_with_issues > limit:
+                hidden_files += 1
+                hidden_issues += issue_count
+                continue
             try:
                 relative = file_path.relative_to(cwd)
             except ValueError:
                 relative = file_path.relative_to(directory)
             print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
             _print_grouped_detections(detections, relative, no_group=no_group)
+
+    if hidden_files:
+        print(
+            f"\n… +{hidden_files} more file{'s' if hidden_files != 1 else ''} "
+            f"with {hidden_issues} issue{'s' if hidden_issues != 1 else ''} hidden "
+            f"(--limit {limit}) — narrow with --select, or raise/disable with --limit N/--limit 0"
+        )
 
     return total_issues, files_with_issues
 
@@ -674,6 +691,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     ignore = args.ignore.split(',') if args.ignore else None
     no_group = getattr(args, 'no_group', False)
     severity = getattr(args, 'severity', None)
+    limit = getattr(args, 'limit', 50)
 
     # Check files based on output format
     if output_format == 'json':
@@ -683,7 +701,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         _print_json_output(file_results, len(files_to_check), files_with_issues, total_issues)
     else:
         total_issues, files_with_issues = _check_files_text(
-            files_to_check, directory, select, ignore, no_group=no_group, severity=severity
+            files_to_check, directory, select, ignore, no_group=no_group, severity=severity, limit=limit
         )
         _print_text_summary(len(files_to_check), files_with_issues, total_issues, directory, config)
 
