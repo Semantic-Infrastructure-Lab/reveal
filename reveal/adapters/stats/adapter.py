@@ -40,6 +40,39 @@ def _analyze_file_worker(args: tuple):
     )
 
 
+def _i002_preload(directory: Path) -> dict:
+    """Build the I002 import graph once in the main process before spawning workers.
+
+    Without this, each ProcessPoolExecutor worker below hits a cold I002
+    `_graph_cache` and independently re-runs (and, on a mis-detected root,
+    independently re-logs the BACK-338 ceiling warning) — up to one copy per
+    worker (BACK-531). Mirrors cli/file_checker.py's `_i002_preload`/
+    `_i002_init_worker` pair used by the `check` command. Returns {} on any
+    error so callers degrade gracefully to the old per-worker build behavior.
+    """
+    try:
+        from reveal.rules.imports.I002 import I002, _find_project_root, _graph_cache
+        root = _find_project_root(directory.resolve())
+        I002()._build_import_graph(root)   # populates _graph_cache in main process
+        return dict(_graph_cache)          # plain dict is picklable
+    except Exception:
+        return {}
+
+
+def _i002_init_worker(graph_cache: dict) -> None:
+    """ProcessPoolExecutor initializer: seed each worker's I002 cache.
+
+    Runs once per worker process, before any files are analyzed.
+    """
+    if not graph_cache:
+        return
+    try:
+        from reveal.rules.imports.I002 import _graph_cache
+        _graph_cache.update(graph_cache)
+    except Exception:  # I002 module unavailable in some configs; worker continues without cache
+        pass
+
+
 _SCHEMA_QUERY_PARAMS = {
     'hotspots': {'type': 'boolean', 'description': 'Include hotspot analysis (files needing attention)', 'examples': ['hotspots=true']},
     'code_only': {'type': 'boolean', 'description': 'Exclude data/config files from analysis', 'examples': ['code_only=true']},
@@ -224,7 +257,12 @@ class StatsAdapter(ResourceAdapter):
         # process-spawn overhead.
         workers = min(8, max(1, len(files) // 10))
         if workers > 1:
-            with ProcessPoolExecutor(max_workers=workers) as executor:
+            graph_cache = _i002_preload(self.path)
+            with ProcessPoolExecutor(
+                max_workers=workers,
+                initializer=_i002_init_worker,
+                initargs=(graph_cache,),
+            ) as executor:
                 all_stats = list(executor.map(_analyze_file_worker, args))
         else:
             all_stats = [_analyze_file_worker(a) for a in args]
