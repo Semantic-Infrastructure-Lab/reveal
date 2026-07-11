@@ -41,6 +41,54 @@ _PROJECT_MARKERS = (
 # a silent multi-minute hang. Override with REVEAL_I002_MAX_FILES for monorepos.
 _DEFAULT_MAX_GRAPH_FILES = 20000
 
+# BACK-536: the Pass-B parse loop in _collect_raw_imports is the dominant cost of
+# `check` on large trees (measured ~97% of `check samples/go` — one tree-sitter
+# parse per source file under the project root). Per-file extraction is
+# independent, so fan it out across processes, reusing BACK-489 P1's pattern and
+# its REVEAL_MAX_WORKERS override. The graph is built in the main process (see
+# file_checker._i002_preload) before the check worker pool spawns, so this pool
+# never nests inside another; ProcessPoolExecutor.map preserves order, so the
+# assembled graph is identical to the serial path.
+_GRAPH_PARALLEL_MIN_FILES = 200   # below this, pool startup/IPC outweighs the win
+_GRAPH_PARALLEL_MAX_WORKERS = 16  # cap so huge core counts don't oversubscribe
+
+
+def _graph_worker_count(n_files: int) -> int:
+    """Workers for the Pass-B parse; 1 means run serially (no pool).
+
+    REVEAL_MAX_WORKERS overrides everything (set to 1 to force the serial path —
+    used by tests and for byte-identical verification); otherwise parallelize
+    only above _GRAPH_PARALLEL_MIN_FILES, capped at _GRAPH_PARALLEL_MAX_WORKERS
+    and the CPU count.
+    """
+    override = os.environ.get('REVEAL_MAX_WORKERS')
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
+    if n_files < _GRAPH_PARALLEL_MIN_FILES:
+        return 1
+    return max(1, min(os.cpu_count() or 1, _GRAPH_PARALLEL_MAX_WORKERS))
+
+
+def _extract_imports_for_file(fp_str: str) -> list:
+    """Extract imports for one file. Module-level and picklable so it runs
+    unchanged under a ProcessPoolExecutor (fork or spawn).
+
+    Swallows per-file extraction errors and returns [] for files with no
+    extractor — mirroring _collect_raw_imports's serial per-file try/except so
+    the parallel and serial paths produce identical results.
+    """
+    fp = Path(fp_str)
+    extractor = get_extractor(fp)
+    if not extractor:
+        return []
+    try:
+        return list(extractor.extract_imports(fp))
+    except Exception:
+        return []
+
 
 def _max_graph_files() -> int:
     """Read the import-graph file ceiling, honoring REVEAL_I002_MAX_FILES."""
@@ -247,18 +295,33 @@ class I002(BaseRule):
                 )
                 return []
 
-        # Pass B: parse the (now bounded) set of files.
-        all_imports = []
-        for file_path in source_files:
-            extractor = get_extractor(file_path)
-            if not extractor:
-                continue
-            try:
-                all_imports.extend(extractor.extract_imports(file_path))
-            except Exception as e:
-                logger.debug(f"Failed to extract imports from {file_path}: {e}")
+        # Pass B: parse the (now bounded) set of files. Independent per file, so
+        # fan out across processes on large trees (BACK-536). map() preserves
+        # submission order, so the assembled graph is identical to the serial path.
+        file_strs = [str(f) for f in source_files]
+        workers = _graph_worker_count(len(file_strs))
 
-        return all_imports
+        if workers <= 1:
+            all_imports: list = []
+            for fp_str in file_strs:
+                all_imports.extend(_extract_imports_for_file(fp_str))
+            return all_imports
+
+        try:
+            from concurrent.futures import ProcessPoolExecutor
+            all_imports = []
+            with ProcessPoolExecutor(max_workers=workers) as executor:
+                for imports in executor.map(_extract_imports_for_file, file_strs):
+                    all_imports.extend(imports)
+            return all_imports
+        except Exception as e:
+            # Degrade to serial on any pool failure (restricted/forbidden-fork
+            # environments) rather than losing the analysis entirely.
+            logger.debug("I002: parallel import extraction failed (%s); running serially", e)
+            all_imports = []
+            for fp_str in file_strs:
+                all_imports.extend(_extract_imports_for_file(fp_str))
+            return all_imports
 
     def _resolve_graph_dependencies(self, graph: ImportGraph) -> None:
         """Phase 2: Resolve import statements to actual file paths and add edges."""
