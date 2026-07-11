@@ -22,7 +22,7 @@ from reveal.cli.commands.review import (
     _run_check,
     _run_hotspots,
     _run_complexity,
-    _detect_source_root,
+    _changed_files,
     _extract_complexity_spikes,
     run_review,
 )
@@ -222,35 +222,34 @@ class TestRenderReport(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _detect_source_root
+# _changed_files (BACK-538: diff-scoped review)
 # ---------------------------------------------------------------------------
 
-class TestDetectSourceRoot(unittest.TestCase):
-
-    def test_returns_path(self):
-        result = _detect_source_root()
-        self.assertIsInstance(result, Path)
+class TestChangedFiles(unittest.TestCase):
 
     @patch('reveal.cli.commands.review.subprocess.run')
-    def test_finds_git_root(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout='/tmp/myproject\n')
+    def test_returns_existing_changed_files_only(self, mock_run):
         with tempfile.TemporaryDirectory() as d:
-            # No src/lib/app subdir → returns root
-            with patch('pathlib.Path.is_dir', return_value=False):
-                result = _detect_source_root()
-        self.assertIsInstance(result, Path)
+            (Path(d) / 'a.py').write_text('x = 1\n')
+
+            def fake_run(cmd, **kwargs):
+                if 'diff' in cmd:
+                    # a.py exists; deleted.py does not → must be dropped
+                    return MagicMock(returncode=0, stdout='a.py\ndeleted.py\n')
+                return MagicMock(returncode=0, stdout=d + '\n')
+
+            mock_run.side_effect = fake_run
+            result = _changed_files('main..feature')
+        self.assertEqual([p.name for p in result], ['a.py'])
 
     @patch('reveal.cli.commands.review.subprocess.run')
-    def test_falls_back_on_git_failure(self, mock_run):
+    def test_git_diff_failure_returns_empty(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout='')
-        result = _detect_source_root()
-        self.assertEqual(result, Path('.'))
+        self.assertEqual(_changed_files('x..y'), [])
 
-    @patch('reveal.cli.commands.review.subprocess.run')
-    def test_exception_falls_back(self, mock_run):
-        mock_run.side_effect = Exception("no git")
-        result = _detect_source_root()
-        self.assertEqual(result, Path('.'))
+    @patch('reveal.cli.commands.review.subprocess.run', side_effect=Exception("no git"))
+    def test_exception_returns_empty(self, _mock):
+        self.assertEqual(_changed_files('x..y'), [])
 
 
 # ---------------------------------------------------------------------------
@@ -308,6 +307,30 @@ class TestRunCheck(unittest.TestCase):
         result = _run_check(Path('/tmp'), 'B,S')
         self.assertEqual(result, [])
 
+    @patch('reveal.cli.file_checker._check_files_json')
+    def test_files_param_scopes_to_existing_files(self, mock_check):
+        mock_check.return_value = (1, 1, [{
+            'file': 'a.py',
+            'detections': [{'rule_code': 'B001', 'severity': 'error', 'line': 1, 'message': 'x'}],
+        }])
+        with tempfile.TemporaryDirectory() as d:
+            existing = Path(d) / 'a.py'
+            existing.write_text('x = 1\n')
+            missing = Path(d) / 'gone.py'  # deleted-in-diff file, should be dropped
+            result = _run_check(None, 'B,S', files=[existing, missing])
+        self.assertEqual(len(result), 1)
+        passed_files = mock_check.call_args[0][0]
+        self.assertEqual([p.name for p in passed_files], ['a.py'])
+
+    @patch('reveal.cli.file_checker._check_files_json')
+    def test_empty_files_list_returns_empty_without_checking(self, mock_check):
+        result = _run_check(None, 'B,S', files=[])
+        self.assertEqual(result, [])
+        mock_check.assert_not_called()
+
+    def test_no_path_and_no_files_returns_empty(self):
+        self.assertEqual(_run_check(None, 'B,S'), [])
+
 
 class TestRunHotspots(unittest.TestCase):
 
@@ -321,6 +344,24 @@ class TestRunHotspots(unittest.TestCase):
     @patch('reveal.adapters.stats.adapter.StatsAdapter', side_effect=Exception("fail"))
     def test_exception_returns_empty(self, _mock):
         self.assertEqual(_run_hotspots(Path('/tmp')), [])
+
+    @patch('reveal.adapters.stats.adapter.StatsAdapter')
+    def test_files_merged_and_ranked_by_score(self, MockAdapter):
+        MockAdapter.return_value.get_structure.side_effect = [
+            {'hotspots': [{'file': 'a.py', 'score': 5}]},
+            {'hotspots': [{'file': 'b.py', 'score': 9}]},
+        ]
+        result = _run_hotspots(None, files=[Path('a.py'), Path('b.py')])
+        self.assertEqual([h['file'] for h in result], ['b.py', 'a.py'])
+
+    @patch('reveal.adapters.stats.adapter.StatsAdapter')
+    def test_one_bad_file_does_not_sink_others(self, MockAdapter):
+        MockAdapter.return_value.get_structure.side_effect = [
+            Exception("unparseable"),
+            {'hotspots': [{'file': 'b.py', 'score': 3}]},
+        ]
+        result = _run_hotspots(None, files=[Path('a.md'), Path('b.py')])
+        self.assertEqual([h['file'] for h in result], ['b.py'])
 
 
 class TestRunComplexity(unittest.TestCase):
@@ -344,6 +385,15 @@ class TestRunComplexity(unittest.TestCase):
     @patch('reveal.adapters.ast.adapter.AstAdapter', side_effect=Exception("fail"))
     def test_exception_returns_empty(self, _mock):
         self.assertEqual(_run_complexity(Path('/tmp')), [])
+
+    @patch('reveal.adapters.ast.adapter.AstAdapter')
+    def test_files_merged_and_ranked_by_complexity(self, MockAdapter):
+        MockAdapter.return_value.get_structure.side_effect = [
+            {'results': [{'name': 'fa', 'complexity': 11}]},
+            {'results': [{'name': 'fb', 'complexity': 20}]},
+        ]
+        result = _run_complexity(None, files=[Path('a.py'), Path('b.py')])
+        self.assertEqual([r['name'] for r in result], ['fb', 'fa'])
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +441,29 @@ class TestRunReview(unittest.TestCase):
                 with self.assertRaises(SystemExit) as ctx:
                     run_review(args)
             self.assertEqual(ctx.exception.code, 1)
+
+    @patch('reveal.cli.commands.review._changed_files',
+           return_value=[Path('/tmp/a.py')])
+    @patch('reveal.cli.commands.review._run_diff',
+           return_value={'status': 'ok', 'count': 1, 'changed_files': ['a.py']})
+    @patch('reveal.cli.commands.review._run_check', return_value=[])
+    @patch('reveal.cli.commands.review._run_hotspots', return_value=[])
+    @patch('reveal.cli.commands.review._run_complexity', return_value=[])
+    def test_git_range_scopes_quality_to_changed_files(
+            self, mock_cx, mock_hs, mock_chk, mock_diff, mock_changed):
+        args = self._args('main..feature', fmt='json')
+        buf = io.StringIO()
+        with redirect_stdout(buf), redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                run_review(args)
+        data = json.loads(buf.getvalue())
+        self.assertTrue(data['is_diff'])
+        self.assertEqual(data['scoped_files'], 1)
+        mock_changed.assert_called_once_with('main..feature')
+        # Each quality section must receive the diff-scoped file list, not a tree root.
+        self.assertEqual(mock_chk.call_args.kwargs.get('files'), [Path('/tmp/a.py')])
+        self.assertEqual(mock_hs.call_args.kwargs.get('files'), [Path('/tmp/a.py')])
+        self.assertEqual(mock_cx.call_args.kwargs.get('files'), [Path('/tmp/a.py')])
 
     @patch('reveal.cli.commands.review._run_check', return_value=[])
     @patch('reveal.cli.commands.review._run_hotspots', return_value=[])
