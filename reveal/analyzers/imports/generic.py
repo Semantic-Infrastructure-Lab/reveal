@@ -36,10 +36,12 @@ Scope (honest about what this delivers):
     wildcards, C# ``using`` of a multi-file namespace, unresolved PSR-4 prefixes)
     the import is **skipped, never fabricated** — same honest-skip contract the
     C/C++ angle-bracket case has always had.
-  * **C# note**: ``using X.Y`` imports a *namespace* (a directory of files), not a
-    single type, so it resolves a file only in the rare case a matching
-    ``Y.cs`` exists — otherwise skipped. Full C# fan-in needs a
-    namespace-declaration index (not filename matching); tracked separately.
+  * **C#** — ``using X.Y`` imports a *namespace* (a directory of files), not a
+    single type. A dotted-name match still resolves the rare case a matching
+    ``Y.cs`` exists; BACK-544 additionally indexes every file's declared
+    ``namespace``/file-scoped-namespace and fans out an edge to *every* file
+    declaring the imported namespace, closing the silent `imports://?circular`
+    false-negative on C#.
   * **Unused-import detection is not claimed** for these languages — the imports
     are flagged ``skip_unused`` so they are never falsely reported as unused
     (textual ``#include`` and namespace/require imports lack reliable
@@ -104,6 +106,16 @@ class _ImportSpec:
             importing file. When set and a module starts with this prefix,
             resolution strips it and tries only ``search_paths`` (never
             ``base_path``-relative) — see :meth:`_resolve_module`.
+        resolve_namespaces: True when a qualified import names a *namespace*
+            (a directory's worth of files) rather than one type, so
+            filename-suffix matching alone under-resolves (C# ``using X.Y``,
+            BACK-544). Callers with a cross-file namespace→file(s) index
+            (built by scanning ``namespace_declaration``/
+            ``file_scoped_namespace_declaration`` nodes, see
+            :meth:`_GenericTreeSitterImportExtractor.extract_namespaces`) can
+            resolve these to *every* file declaring that namespace via
+            :meth:`_GenericTreeSitterImportExtractor.resolve_namespace_targets`,
+            fanning out to multiple dependency edges instead of skipping.
     """
 
     import_node_types: FrozenSet[str]
@@ -115,6 +127,7 @@ class _ImportSpec:
     module_separator: Optional[str] = None
     source_extensions: FrozenSet[str] = field(default_factory=frozenset)
     project_relative_prefix: Optional[str] = None
+    resolve_namespaces: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -159,6 +172,59 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         extractor set ``skip_unused=True`` so they are never falsely flagged.
         """
         return set()
+
+    # --- BACK-544: namespace-based edge resolution (C#) -------------------
+
+    _NAMESPACE_NODE_TYPES: ClassVar[FrozenSet[str]] = frozenset({
+        'namespace_declaration', 'file_scoped_namespace_declaration',
+    })
+
+    def extract_namespaces(self, file_path: Path) -> List[str]:
+        """Namespaces this file declares (C# ``namespace X.Y { }`` / ``namespace
+        X.Y;``), for the cross-file namespace→file(s) index that
+        :meth:`resolve_namespace_targets` looks up.
+
+        A file may declare more than one namespace (sequential or nested
+        blocks); all are returned. No-op (``[]``) unless
+        ``spec.resolve_namespaces`` is set — other languages have no such
+        node kind, so this would return empty for them anyway, but the gate
+        avoids a pointless extra parse pass over every non-C# file.
+        """
+        if not self.spec.resolve_namespaces:
+            return []
+        analyzer = self._get_analyzer(file_path)
+        if analyzer is None:
+            return []
+        namespaces: List[str] = []
+        for node_type in self._NAMESPACE_NODE_TYPES:
+            for node in analyzer._find_nodes_by_type(node_type):
+                for child in _children(node):
+                    if child.kind() in ('qualified_name', 'identifier'):
+                        namespaces.append(analyzer._get_node_text(child))
+                        break
+        return namespaces
+
+    def resolve_namespace_targets(
+        self,
+        stmt: ImportStatement,
+        namespace_index: Dict[str, List[Path]],
+    ) -> List[Path]:
+        """Every in-tree file declaring the namespace ``stmt`` imports (BACK-544).
+
+        Unlike :meth:`_resolve_module`'s single-file, uniqueness-gated match,
+        a namespace legitimately spans many files — ``using Foo.Bar`` depends
+        on the whole namespace, not one type, so this fans out to every file
+        that declares it rather than skipping when there's more than one
+        (the honest-skip contract still holds: an unknown namespace returns
+        ``[]``, never a guessed path). Wildcards/wildcard-shaped selectors are
+        rejected the same way :meth:`_resolve_module` rejects them.
+        """
+        if not self.spec.resolve_namespaces:
+            return []
+        module = stmt.module_name
+        if not module or module.endswith('*'):
+            return []
+        return list(namespace_index.get(module, ()))
 
     # --- internals -------------------------------------------------------
 
@@ -619,12 +685,15 @@ _CSHARP_SPEC = _ImportSpec(
     import_node_types=frozenset({'using_directive'}),
     keywords=frozenset({'using', 'global', 'static'}),
     alias_assignment=True,
-    # `using X.Y` names a namespace (a directory of files), not one type, so a
-    # dotted-name lookup resolves an edge only when a same-named `Y.cs` happens
-    # to exist — otherwise skipped. Full C# fan-in needs a namespace-declaration
-    # index, not filename matching (see module docstring).
+    # `using X.Y` names a namespace (a directory of files), not one type. The
+    # dotted-name path below still runs first (resolves the rare case a
+    # same-named `Y.cs` exists), but BACK-544 adds a namespace-declaration
+    # index (`resolve_namespaces`) so the common case — a namespace spanning
+    # several files — fans out to every declaring file instead of being
+    # silently skipped (see resolve_namespace_targets).
     module_separator='.',
     source_extensions=frozenset({'.cs'}),
+    resolve_namespaces=True,
 )
 
 _PHP_SPEC = _ImportSpec(

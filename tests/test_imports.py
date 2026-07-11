@@ -521,6 +521,23 @@ class TestImportsAdapter:
         # Both should produce same results
         assert result_flag.get('count') == result_kv.get('count')
 
+    def test_csharp_namespace_circular_dependency_detected(self, tmp_path):
+        """BACK-544: a genuine C# cross-file cycle expressed only through
+        namespace-level `using` (no filename ever matches the used
+        namespace, which is the common real-world case) must be reported —
+        previously this was a silent false negative (`imports://?circular`
+        read clean on real cyclic C# namespaces)."""
+        (tmp_path / 'Foo').mkdir()
+        (tmp_path / 'Foo/Widget.cs').write_text(
+            'using Bar;\n\nnamespace Foo {\n    class Widget {}\n}\n')
+        (tmp_path / 'Bar').mkdir()
+        (tmp_path / 'Bar/Gadget.cs').write_text(
+            'using Foo;\n\nnamespace Bar {\n    class Gadget {}\n}\n')
+
+        result = ImportsAdapter(str(tmp_path), 'circular=true').get_structure()
+        assert result['type'] == 'circular_dependencies'
+        assert result['count'] >= 1
+
     def test_deferred_imports_are_not_circular(self, tmp_path):
         """BACK-445: function-body (deferred/lazy) imports must not be reported
         as circular dependencies — they run only after all top-level imports

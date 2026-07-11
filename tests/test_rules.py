@@ -876,6 +876,30 @@ def func_b():
         finally:
             self.teardown_module(temp_dir)
 
+    def test_csharp_namespace_circular_dependency(self):
+        """BACK-544: I002 (used by `reveal check`) must also detect a C#
+        cycle expressed only through namespace-level `using`, not just the
+        imports:// adapter — same false negative, same fix."""
+        # Flat layout (not Foo/Bar subdirs): C# namespaces don't need to match
+        # directory structure, and _find_project_root falls back to
+        # `path.parent` with no project markers present — a subdir layout
+        # would scope the scan to one file's own directory and miss its
+        # sibling, which isn't the thing under test here.
+        files = {
+            'Widget.cs': 'using Bar;\n\nnamespace Foo {\n    class Widget {}\n}\n',
+            'Gadget.cs': 'using Foo;\n\nnamespace Bar {\n    class Gadget {}\n}\n',
+        }
+        temp_dir = self.create_temp_module(files)
+        try:
+            from reveal.rules.imports.I002 import I002
+            rule = I002()
+
+            file_a = str(temp_dir / 'Widget.cs')
+            detections_a = rule.check(file_a, None, files['Widget.cs'])
+            self.assertGreater(len(detections_a), 0, "Should detect circular dependency via C# namespace using")
+        finally:
+            self.teardown_module(temp_dir)
+
     def test_three_file_circular_dependency(self):
         """Test detection of A -> B -> C -> A circular dependency."""
         files = {

@@ -327,8 +327,20 @@ class I002(BaseRule):
         """Phase 2: Resolve import statements to actual file paths and add edges."""
         from dataclasses import replace as dc_replace
 
+        extractors = {fp: get_extractor(fp) for fp in graph.files}
+        # BACK-544: C#'s `using X.Y` names a namespace, not one type — a
+        # namespace index (built once, same as the imports:// adapter's
+        # _build_namespace_index) lets a genuine cross-file cycle through
+        # C#'s namespace imports be detected here too, not just via imports://.
+        namespace_index: Dict[str, List[Path]] = {}
+        for file_path, extractor in extractors.items():
+            if not getattr(getattr(extractor, 'spec', None), 'resolve_namespaces', False):
+                continue
+            for ns in extractor.extract_namespaces(file_path):
+                namespace_index.setdefault(ns, []).append(file_path)
+
         for file_path, imports in graph.files.items():
-            extractor = get_extractor(file_path)
+            extractor = extractors[file_path]
             if not extractor:
                 continue
             base_path = file_path.parent
@@ -354,6 +366,19 @@ class I002(BaseRule):
                     # should not create logging.py → logging.py dependency)
                     if resolved and resolved != file_path:
                         graph.add_dependency(file_path, resolved)
+                    else:
+                        self._add_namespace_dependencies(graph, file_path, extractor, stmt, namespace_index)
+
+    @staticmethod
+    def _add_namespace_dependencies(graph, file_path, extractor, stmt, namespace_index) -> None:
+        """BACK-544 fallback: fan out an edge to every file declaring the
+        namespace ``stmt`` imports (C#'s ``using X.Y``), when the single-file
+        dotted match above didn't resolve one."""
+        if not namespace_index or not getattr(getattr(extractor, 'spec', None), 'resolve_namespaces', False):
+            return
+        for target in extractor.resolve_namespace_targets(stmt, namespace_index):
+            if target != file_path:
+                graph.add_dependency(file_path, target)
 
     def _format_cycle(self, cycle: List[Path]) -> str:
         """Format a cycle for human-readable display.

@@ -126,6 +126,34 @@ class TestCSharp:
         assert imports[0].alias == 'MyList'
         assert imports[0].module_name == 'System.Collections.Generic.List<int>'
 
+    def test_extract_namespaces_block_scoped(self, tmp_path):
+        """BACK-544: block-scoped `namespace X.Y { }` is indexed."""
+        f = tmp_path / 'A.cs'
+        f.write_text('namespace Foo.Bar {\n    class A {}\n}\n')
+        extractor = get_extractor(f)
+        assert extractor.extract_namespaces(f) == ['Foo.Bar']
+
+    def test_extract_namespaces_file_scoped(self, tmp_path):
+        """BACK-544: file-scoped `namespace X.Y;` (C# 10) is indexed too."""
+        f = tmp_path / 'A.cs'
+        f.write_text('namespace Foo.Baz;\n\nclass B {}\n')
+        extractor = get_extractor(f)
+        assert extractor.extract_namespaces(f) == ['Foo.Baz']
+
+    def test_extract_namespaces_multiple_blocks(self, tmp_path):
+        """A single file may declare more than one namespace block."""
+        f = tmp_path / 'A.cs'
+        f.write_text('namespace Foo { class A {} }\nnamespace Bar { class B {} }\n')
+        extractor = get_extractor(f)
+        assert set(extractor.extract_namespaces(f)) == {'Foo', 'Bar'}
+
+    def test_extract_namespaces_non_csharp_is_noop(self, tmp_path):
+        """Other languages have no such node kind; gated by spec.resolve_namespaces."""
+        f = tmp_path / 'a.java'
+        f.write_text('package foo.bar;\nclass A {}\n')
+        extractor = get_extractor(f)
+        assert extractor.extract_namespaces(f) == []
+
 
 class TestPhp:
     def test_use_require_include(self):
@@ -347,6 +375,34 @@ class TestModuleResolution:
         res = self._resolve(tmp_path, 'p/A.java', 'p')
         assert res['p.other.*'] is None      # wildcard package import
         assert res['p.M.X'] is None          # static member, no p/M/X.java
+
+    def test_csharp_namespace_fans_out_to_every_declaring_file(self, tmp_path):
+        """BACK-544: `using Foo.Bar` names a namespace, not one type — a
+        namespace declared across several files must resolve an edge to
+        *every* declaring file (never fabricated, never skipped just because
+        it's not unique)."""
+        (tmp_path / 'Widgets').mkdir()
+        (tmp_path / 'Widgets/Widget.cs').write_text('namespace Foo.Widgets {\n    class Widget {}\n}\n')
+        (tmp_path / 'Widgets/Gadget.cs').write_text('namespace Foo.Widgets {\n    class Gadget {}\n}\n')
+        (tmp_path / 'Main.cs').write_text('using Foo.Widgets;\n\nclass Program {}\n')
+
+        entry = tmp_path / 'Main.cs'
+        extractor = get_extractor(entry)
+        namespace_index = {}
+        for f in [tmp_path / 'Widgets/Widget.cs', tmp_path / 'Widgets/Gadget.cs', entry]:
+            for ns in extractor.extract_namespaces(f):
+                namespace_index.setdefault(ns, []).append(f)
+        stmt = [s for s in extractor.extract_imports(entry) if s.module_name == 'Foo.Widgets'][0]
+        targets = set(extractor.resolve_namespace_targets(stmt, namespace_index))
+        assert targets == {
+            (tmp_path / 'Widgets/Widget.cs').resolve(),
+            (tmp_path / 'Widgets/Gadget.cs').resolve(),
+        }
+
+    def test_csharp_namespace_unknown_skips_not_fabricates(self, tmp_path):
+        extractor = get_extractor(tmp_path / 'Main.cs')
+        stmt_imports, _ = _extract('using Some.Unknown.Namespace;\n', '.cs')
+        assert extractor.resolve_namespace_targets(stmt_imports[0], {}) == []
 
     def test_php_use_resolves_through_psr4_prefix(self, tmp_path):
         """PHP `use App\\Models\\User` resolves to src/Models/User.php even though

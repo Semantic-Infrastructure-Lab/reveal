@@ -967,10 +967,34 @@ class ImportsAdapter(ResourceAdapter):
         self._structures = structures
         return all_imports
 
+    @staticmethod
+    def _build_namespace_index(
+        files_and_extractors: List[Tuple[Path, Any]]
+    ) -> Dict[str, List[Path]]:
+        """namespace -> [declaring files], for languages where a qualified
+        import names a namespace rather than one type (C#, BACK-544).
+
+        Built only from extractors whose spec opts in
+        (``resolve_namespaces``), so this is a no-op scan for trees with no
+        such language present.
+        """
+        namespace_index: Dict[str, List[Path]] = {}
+        for file_path, extractor in files_and_extractors:
+            if not getattr(getattr(extractor, 'spec', None), 'resolve_namespaces', False):
+                continue
+            for ns in extractor.extract_namespaces(file_path):
+                namespace_index.setdefault(ns, []).append(file_path)
+        return namespace_index
+
     def _resolve_dependencies(self, target_path: Path, file_index: Dict[str, List[Path]]) -> None:
         """Resolve each file's imports to dependency edges (language-specific)."""
-        for file_path, imports in self._graph.files.items():
-            extractor = get_extractor(file_path)
+        files_and_extractors = [
+            (fp, get_extractor(fp)) for fp in self._graph.files
+        ]
+        namespace_index = self._build_namespace_index(files_and_extractors)
+
+        for file_path, extractor in files_and_extractors:
+            imports = self._graph.files[file_path]
             if not extractor:
                 continue
 
@@ -1010,6 +1034,17 @@ class ImportsAdapter(ResourceAdapter):
                 if resolved and resolved != file_path:
                     self._graph.add_dependency(file_path, resolved)
                     self._graph.resolved_paths[stmt.module_name] = resolved
+                    continue
+
+                # BACK-544: the single-file dotted match above only catches a
+                # namespace that coincidentally names one matching file. The
+                # common case — a namespace declared across several files —
+                # needs the namespace index instead, fanning out to every
+                # declaring file (skipping the importing file itself).
+                if namespace_index and getattr(getattr(extractor, 'spec', None), 'resolve_namespaces', False):
+                    for target in extractor.resolve_namespace_targets(stmt, namespace_index):
+                        if target != file_path:
+                            self._graph.add_dependency(file_path, target)
 
     def _build_graph(
         self,
