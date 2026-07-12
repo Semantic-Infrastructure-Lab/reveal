@@ -726,5 +726,134 @@ class TestSideEffectsTransitive(unittest.TestCase):
         self.assertEqual(result['findings'], [])
 
 
+class TestBoundaryTransitive(TestSideEffectsTransitive):
+    """--boundary --transitive: same interprocedural walk, on the boundary report (BACK-546).
+
+    Subclasses TestSideEffectsTransitive purely to reuse its setUp/tearDown/
+    _write/_make_args/_dispatch helpers — tests below exercise boundary=True
+    instead of sideeffects=True.
+    """
+
+    def test_direct_only_misses_helper_effect(self):
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(order)\n"
+        ))
+        self._write('helper.py', (
+            "def _save(order):\n"
+            "    db.execute('insert into orders values (?)', order)\n"
+        ))
+        args = self._make_args(boundary=True)
+        out = self._dispatch(entry_path, 'handle_request', args)
+        self.assertIn('EFFECTS:\n  none', out)
+
+    def test_transitive_finds_helper_effect(self):
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(order)\n"
+        ))
+        self._write('helper.py', (
+            "def _save(order):\n"
+            "    db.execute('insert into orders values (?)', order)\n"
+        ))
+        args = self._make_args(boundary=True, transitive=True)
+        out = self._dispatch(entry_path, 'handle_request', args)
+        self.assertIn('db', out)
+        self.assertIn('_save', out)
+
+    def test_transitive_json_tags_hop_and_chain(self):
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(order)\n"
+        ))
+        self._write('helper.py', (
+            "def _save(order):\n"
+            "    db.execute('insert into orders values (?)', order)\n"
+        ))
+        args = self._make_args(boundary=True, transitive=True)
+        result = self._dispatch(entry_path, 'handle_request', args, as_json=True)
+        effect_findings = [f for f in result['findings'] if f['kind'] not in ('input', 'superglobal')]
+        self.assertTrue(effect_findings)
+        self.assertEqual(effect_findings[0]['hop'], 1)
+        self.assertEqual(effect_findings[0]['chain'], ['handle_request', '_save'])
+
+    def test_transitive_depth_limits_traversal(self):
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(order)\n"
+        ))
+        self._write('helper_a.py', (
+            "def _save(order):\n"
+            "    _persist(order)\n"
+        ))
+        self._write('helper_b.py', (
+            "def _persist(order):\n"
+            "    db.execute('insert into orders values (?)', order)\n"
+        ))
+        args = self._make_args(boundary=True, transitive=True, depth=1)
+        result = self._dispatch(entry_path, 'handle_request', args, as_json=True)
+        effect_findings = [f for f in result['findings'] if f['kind'] not in ('input', 'superglobal')]
+        self.assertEqual(effect_findings, [])
+
+    def test_transitive_two_hops_reaches_nested_effect(self):
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(order)\n"
+        ))
+        self._write('helper_a.py', (
+            "def _save(order):\n"
+            "    _persist(order)\n"
+        ))
+        self._write('helper_b.py', (
+            "def _persist(order):\n"
+            "    db.execute('insert into orders values (?)', order)\n"
+        ))
+        args = self._make_args(boundary=True, transitive=True, depth=3)
+        result = self._dispatch(entry_path, 'handle_request', args, as_json=True)
+        chains = [tuple(f['chain']) for f in result['findings'] if f['kind'] not in ('input', 'superglobal')]
+        self.assertIn(('handle_request', '_save', '_persist'), chains)
+
+    def test_transitive_cycle_does_not_hang(self):
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(order)\n"
+        ))
+        self._write('helper.py', (
+            "def _save(order):\n"
+            "    db.execute('x', order)\n"
+            "    handle_request(order)\n"
+        ))
+        args = self._make_args(boundary=True, transitive=True, depth=5)
+        result = self._dispatch(entry_path, 'handle_request', args, as_json=True)
+        kinds = {f['kind'] for f in result['findings']}
+        self.assertIn('db', kinds)
+
+    def test_transitive_unresolved_call_terminates_branch(self):
+        """A call with no project-local definition must not crash the walk (EFFECTS section only)."""
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    totally_unknown_external_fn(order)\n"
+        ))
+        args = self._make_args(boundary=True, transitive=True)
+        result = self._dispatch(entry_path, 'handle_request', args, as_json=True)
+        effect_findings = [f for f in result['findings'] if f['kind'] not in ('input', 'superglobal')]
+        self.assertEqual(effect_findings, [])
+
+    def test_inputs_and_superglobals_stay_intra_procedural(self):
+        """INPUTS/ENVIRONMENT describe the entry function's own signature — unaffected by --transitive."""
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(unbound_var)\n"
+        ))
+        self._write('helper.py', (
+            "def _save(order):\n"
+            "    db.execute('x', order)\n"
+        ))
+        args = self._make_args(boundary=True, transitive=True)
+        result = self._dispatch(entry_path, 'handle_request', args, as_json=True)
+        inputs = [f for f in result['findings'] if f['kind'] == 'input']
+        self.assertEqual({f['var'] for f in inputs}, {'order', '_save', 'unbound_var'})
+
+
 if __name__ == '__main__':
     unittest.main()

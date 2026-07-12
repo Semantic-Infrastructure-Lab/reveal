@@ -79,6 +79,8 @@ from .nav_keys import (  # noqa: F401
 from .nav_boundary import (  # noqa: F401
     collect_boundary,
     render_boundary,
+    collect_boundary_transitive,
+    render_boundary_transitive,
 )
 from .nav_cross_varflow import (  # noqa: F401
     cross_var_flow,

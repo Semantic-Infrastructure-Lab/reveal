@@ -386,9 +386,9 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
                         help='Show classified side effects (db/http/cache/log/file/sleep/hard_stop) in a function or line range '
                              '(e.g., reveal file.php :477-531 --sideeffects  or  reveal file.py myfunc --sideeffects)')
     parser.add_argument('--transitive', action='store_true',
-                        help='With --sideeffects: follow calls into project-local helper functions (blast-radius/agentic-'
-                             'exposure read) instead of only the entry function\'s own body; combine with --depth to control '
-                             'how many hops (default 2, max 5) '
+                        help='With --sideeffects or --boundary: follow calls into project-local helper functions (blast-radius/'
+                             'agentic-exposure read) instead of only the entry function\'s own body; combine with --depth to '
+                             'control how many hops (default 2, max 5) '
                              '(e.g., reveal file.py handle_request --sideeffects --transitive --depth 3)')
     parser.add_argument('--loopmap', action='store_true',
                         help='Show loop skeleton (FOR/WHILE/LOOP/DO) for a function or line range, with nesting depth '

@@ -1,7 +1,7 @@
 from typing import Any, Callable, Dict, List, Optional
 
 from .nav_exits import collect_deps
-from .nav_effects import collect_effects
+from .nav_effects import collect_effects, collect_effects_transitive, render_effects_transitive
 
 
 _PHP_SUPERGLOBALS = frozenset({
@@ -36,12 +36,17 @@ def collect_boundary(
     return {'inputs': inputs, 'superglobals': superglobals, 'effects': classified}
 
 
-def render_boundary(
+def _render_boundary_header(
     result: Dict[str, List[Dict[str, Any]]],
     from_line: int,
     to_line: int,
-) -> str:
-    """Render collect_boundary output as a three-section boundary contract."""
+) -> List[str]:
+    """Render the INPUTS/ENVIRONMENT sections shared by both boundary renderers.
+
+    These describe the entry function's own signature (undefined reads,
+    superglobal reads) and stay intra-procedural even under --transitive —
+    only EFFECTS follows calls into callees.
+    """
     sections: List[str] = []
 
     inputs = result['inputs']
@@ -61,6 +66,17 @@ def render_boundary(
             lines.append(f'  {d["var"]:<30}  first read L{d["first_read_line"]}')
         sections.append('\n'.join(lines))
 
+    return sections
+
+
+def render_boundary(
+    result: Dict[str, List[Dict[str, Any]]],
+    from_line: int,
+    to_line: int,
+) -> str:
+    """Render collect_boundary output as a three-section boundary contract."""
+    sections = _render_boundary_header(result, from_line, to_line)
+
     effects = result['effects']
     if effects:
         kind_width = max(len(e['kind']) for e in effects)
@@ -77,5 +93,54 @@ def render_boundary(
         sections.append('\n'.join(lines))
     else:
         sections.append(f'EFFECTS:\n  none in L{from_line}–L{to_line}')
+
+    return '\n\n'.join(sections)
+
+
+def collect_boundary_transitive(
+    path: str,
+    root_name: str,
+    scope_node: Any,
+    from_line: int,
+    to_line: int,
+    get_text: Callable,
+    language: Optional[str] = None,
+    depth: int = 2,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Collect INPUTS, ENVIRONMENT, and transitive EFFECTS for a boundary report.
+
+    Same three-section contract as collect_boundary, but EFFECTS follows calls
+    into project-local helpers (BACK-546 — the same interprocedural walk
+    BACK-545 added for --sideeffects). INPUTS/ENVIRONMENT stay intra-procedural
+    since they describe the entry function's own signature, not its callees.
+    """
+    deps = collect_deps(scope_node, from_line, to_line, get_text)
+    inputs = [d for d in deps if not _is_superglobal(d['var'])]
+    superglobals = [d for d in deps if _is_superglobal(d['var'])]
+    effects = collect_effects_transitive(
+        path, root_name, scope_node, from_line, to_line, get_text,
+        language=language, depth=depth,
+    )
+    classified = [e for e in effects if e['kind'] is not None]
+    return {'inputs': inputs, 'superglobals': superglobals, 'effects': classified}
+
+
+def render_boundary_transitive(
+    result: Dict[str, List[Dict[str, Any]]],
+    root_name: str,
+    from_line: int,
+    to_line: int,
+    depth: int,
+) -> str:
+    """Render collect_boundary_transitive output, EFFECTS grouped by hop/call chain."""
+    sections = _render_boundary_header(result, from_line, to_line)
+
+    effects = result['effects']
+    header = f'EFFECTS (--transitive, depth={depth}):'
+    if effects:
+        body = render_effects_transitive(effects, root_name, depth)
+        sections.append(f'{header}\n' + '\n'.join(f'  {line}' for line in body.split('\n')))
+    else:
+        sections.append(f'{header}\n  none in {root_name} or its callees')
 
     return '\n\n'.join(sections)

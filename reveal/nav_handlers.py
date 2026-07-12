@@ -333,12 +333,28 @@ def _nav_returns(ctx: _NavCtx) -> None:
 
 
 def _nav_boundary(ctx: _NavCtx) -> None:
-    from .adapters.ast.nav import collect_boundary, render_boundary  # noqa: I006
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    boundary = collect_boundary(
-        ctx.func_node, from_line, to_line, ctx.get_text,
-        language=getattr(ctx.analyzer, 'language', None),
+    from .adapters.ast.nav import (  # noqa: I006
+        collect_boundary, collect_boundary_transitive, render_boundary, render_boundary_transitive,
     )
+    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    language = getattr(ctx.analyzer, 'language', None)
+    transitive = getattr(ctx.args, 'transitive', False)
+
+    if transitive:
+        # --depth is shared with directory-tree/markdown-outline depth; None
+        # here means "not explicitly set" so it falls back to a fixed default
+        # rather than inheriting _NavCtx.depth's unrelated default of 3.
+        raw_depth = getattr(ctx.args, 'depth', None)
+        depth = raw_depth if raw_depth else 2
+        boundary = collect_boundary_transitive(
+            ctx.analyzer.path, ctx.element, ctx.func_node, from_line, to_line, ctx.get_text,
+            language=language, depth=depth,
+        )
+    else:
+        boundary = collect_boundary(
+            ctx.func_node, from_line, to_line, ctx.get_text, language=language,
+        )
+
     if ctx.as_json:
         findings = (
             [{'kind': 'input', 'var': d['var'], 'line': d['first_read_line'],
@@ -347,10 +363,13 @@ def _nav_boundary(ctx: _NavCtx) -> None:
             + [{'kind': 'superglobal', 'var': d['var'], 'line': d['first_read_line']}
                for d in boundary['superglobals']]
             + [{'kind': e['kind'], 'line': e['line'], 'callee': e['callee'],
-                'first_arg': e.get('first_arg')}
+                'first_arg': e.get('first_arg'),
+                **({'hop': e['hop'], 'chain': e['chain']} if transitive else {})}
                for e in boundary['effects'] if e['kind'] is not None]
         )
         _nav_json('boundary', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
+    elif transitive:
+        print(render_boundary_transitive(boundary, ctx.element, from_line, to_line, depth))
     else:
         print(render_boundary(boundary, from_line, to_line))
 
