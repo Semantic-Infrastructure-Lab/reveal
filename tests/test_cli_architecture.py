@@ -8,6 +8,8 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from reveal.cli.commands.architecture import (
     _build_next_commands,
     _compute_risks,
@@ -26,6 +28,12 @@ from reveal.cli.commands.architecture import (
     run_architecture,
 )
 
+try:
+    import pygit2
+    PYGIT2_AVAILABLE = True
+except ImportError:
+    PYGIT2_AVAILABLE = False
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +44,7 @@ def _args(**kwargs):
         'no_imports': False,
         'format': 'text',
         'verbose': False,
+        'against': None,
     }
     defaults.update(kwargs)
     return Namespace(**defaults)
@@ -110,6 +119,16 @@ class TestCreateArchitectureParser(unittest.TestCase):
         parser = create_architecture_parser()
         args = parser.parse_args(['--format', 'json'])
         self.assertEqual(args.format, 'json')
+
+    def test_against_defaults_to_none(self):
+        parser = create_architecture_parser()
+        args = parser.parse_args([])
+        self.assertIsNone(args.against)
+
+    def test_against_flag(self):
+        parser = create_architecture_parser()
+        args = parser.parse_args(['src/', '--against', 'v1.0.0'])
+        self.assertEqual(args.against, 'v1.0.0')
 
 
 # ── _is_test_file ──────────────────────────────────────────────────────────────
@@ -641,6 +660,125 @@ class TestCoverageWarning(unittest.TestCase):
         with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
             out = _capture(run_architecture, args)
         self.assertNotIn('not analyzed', out)
+
+
+# ── --against integration (BACK-441) ────────────────────────────────────────
+
+def _commit_all(repo, message, parents=None):
+    signature = pygit2.Signature("Test User", "test@example.com")
+    index = repo.index
+    index.add_all()
+    index.write()
+    tree = index.write_tree()
+    if parents is None:
+        parents = [repo.head.target] if not repo.head_is_unborn else []
+    ref = "HEAD" if not repo.head_is_unborn else "refs/heads/master"
+    oid = repo.create_commit(ref, signature, signature, message, tree, parents)
+    if repo.head_is_unborn:
+        repo.set_head("refs/heads/master")
+    return oid
+
+
+class TestArchitectureDiffIntegration(unittest.TestCase):
+    """End-to-end: reveal architecture <path> --against <ref>.
+
+    Fixture shape (see _arch_diff_repo_fixture):
+      1. two files, no cross-import.
+      2. introduces a circular import between them.
+      3. (working tree, uncommitted) adds a new load-bearing file with high
+         fan-in, imported by two other new files.
+    """
+
+    def test_reports_introduced_cycle_and_new_load_bearing_file(self):
+        from reveal.diff.architecture_diff import run_architecture_diff
+
+        fixture = _arch_diff_repo_fixture()
+        try:
+            report = run_architecture_diff(
+                fixture['src_path'], fixture['commit_no_cycle'], top_n=20,
+            )
+
+            self.assertEqual(report['type'], 'architecture_diff')
+            self.assertEqual(report['base_ref'], fixture['commit_no_cycle'])
+
+            deltas = report['deltas']
+
+            introduced = deltas['circular_groups']['introduced']
+            self.assertEqual(len(introduced), 1)
+            self.assertEqual(sorted(introduced[0]), ['a.py', 'b.py'])
+            self.assertEqual(deltas['circular_groups']['resolved'], [])
+
+            fan_in_by_file = {e['file']: e for e in deltas['fan_in']}
+            self.assertIn('c.py', fan_in_by_file)
+            self.assertIsNone(fan_in_by_file['c.py']['base'])
+            self.assertEqual(fan_in_by_file['c.py']['head'], 2)
+            self.assertIsNone(fan_in_by_file['c.py']['change'])
+        finally:
+            fixture['cleanup']()
+
+    def test_fast_exit_returns_empty_deltas_when_nothing_changed(self):
+        from reveal.diff.architecture_diff import run_architecture_diff
+
+        fixture = _arch_diff_repo_fixture(dirty=False)
+        try:
+            report = run_architecture_diff(
+                fixture['src_path'], fixture['commit_with_cycle'], top_n=20,
+            )
+            self.assertEqual(report['deltas']['fan_in'], [])
+            self.assertEqual(report['deltas']['fan_out'], [])
+            self.assertEqual(
+                report['deltas']['circular_groups'], {'introduced': [], 'resolved': []},
+            )
+        finally:
+            fixture['cleanup']()
+
+    def test_cli_json_output_shape(self):
+        fixture = _arch_diff_repo_fixture()
+        try:
+            args = _args(path=str(fixture['src_path']), against=fixture['commit_no_cycle'], format='json')
+            out = _capture(run_architecture, args)
+            report = json.loads(out)
+            self.assertEqual(report['type'], 'architecture_diff')
+            self.assertIn('deltas', report)
+        finally:
+            fixture['cleanup']()
+
+
+def _arch_diff_repo_fixture(dirty=True):
+    """Non-pytest-fixture variant of arch_diff_repo, usable from unittest.TestCase
+    methods (which don't take pytest fixture args). Mirrors arch_diff_repo above.
+    """
+    if not PYGIT2_AVAILABLE:
+        raise unittest.SkipTest("pygit2 not available")
+
+    import shutil
+    import tempfile
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix='reveal-archdiff-test-'))
+    repo_path = tmp_dir / "repo"
+    src = repo_path / "src"
+    src.mkdir(parents=True)
+    repo = pygit2.init_repository(str(repo_path))
+
+    (src / "a.py").write_text("import b\n\ndef foo():\n    return b.bar()\n")
+    (src / "b.py").write_text("def bar():\n    return 1\n")
+    commit_no_cycle = _commit_all(repo, "initial: no cycle")
+
+    (src / "b.py").write_text("import a\n\ndef bar():\n    return a.foo()\n")
+    commit_with_cycle = _commit_all(repo, "introduce circular import")
+
+    if dirty:
+        (src / "c.py").write_text("def util():\n    return 42\n")
+        (src / "d.py").write_text("import c\n\ndef use_c():\n    return c.util()\n")
+        (src / "e.py").write_text("import c\n\ndef use_c2():\n    return c.util()\n")
+
+    return {
+        'repo_path': repo_path,
+        'src_path': src,
+        'commit_no_cycle': str(commit_no_cycle),
+        'commit_with_cycle': str(commit_with_cycle),
+        'cleanup': lambda: shutil.rmtree(tmp_dir, ignore_errors=True),
+    }
 
 
 if __name__ == '__main__':

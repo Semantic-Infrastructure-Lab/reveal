@@ -53,6 +53,17 @@ def create_architecture_parser() -> argparse.ArgumentParser:
         default=5,
         help='Number of items to show per section (default: 5)',
     )
+    parser.add_argument(
+        '--against',
+        metavar='REF',
+        default=None,
+        help=(
+            'Diff architecture against a git ref (branch, tag, or commit). '
+            'Base = REF (materialized read-only via git), head = the current '
+            'working tree. Deltas are only meaningful for graph-backed '
+            'languages (Python/JS/TS/Go/Rust/C/C++ today) — see BACK-487/488.'
+        ),
+    )
     return parser
 
 
@@ -61,6 +72,11 @@ def run_architecture(args: Namespace) -> None:
     if not path.exists():
         print(f"Error: path '{args.path}' does not exist", file=sys.stderr)
         sys.exit(1)
+
+    against = getattr(args, 'against', None)
+    if against:
+        _run_architecture_diff(path, against, args)
+        return
 
     top = args.top
     no_imports = getattr(args, 'no_imports', False)
@@ -92,6 +108,27 @@ def run_architecture(args: Namespace) -> None:
         return
 
     _render_brief(report, top, path, no_imports=no_imports)
+
+
+def _run_architecture_diff(path: Path, against: str, args: Namespace) -> None:
+    """BACK-441: `reveal architecture <path> --against <ref>` branch.
+
+    Delegates all diff logic to reveal.diff.architecture_diff — see that
+    module for the materialization + delta-computation implementation.
+    """
+    from reveal.diff.architecture_diff import run_architecture_diff, render_diff_brief
+
+    try:
+        report = run_architecture_diff(path, against, top_n=max(args.top, 1) * 4)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.format == 'json':
+        print(json.dumps(report, indent=2, default=str))
+        return
+
+    render_diff_brief(report)
 
 
 def _run_complex_functions(path: Path, limit: int) -> List[Dict[str, Any]]:
