@@ -1036,5 +1036,148 @@ class TestScanContractsKotlin(unittest.TestCase):
         self.assertEqual(report['total_contracts'], 0)
 
 
+class TestScanContractsRuby(unittest.TestCase):
+    """Tests for Ruby contract detection — the mixin model (BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write_rb(self, filename: str, content: str) -> str:
+        return _write(self.tmp, filename, content)
+
+    def test_module_classified_as_protocol(self):
+        self._write_rb('greetable.rb', '''\
+            module Greetable
+              def greet
+                "hi"
+              end
+            end
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['protocols']), 1)
+        self.assertEqual(report['protocols'][0]['name'], 'Greetable')
+
+    def test_including_class_classified_as_dataclass(self):
+        self._write_rb('user.rb', '''\
+            module Greetable
+              def greet
+                "hi"
+              end
+            end
+
+            class User
+              include Greetable
+            end
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl_names = [c['name'] for c in report['dataclasses']]
+        self.assertIn('User', impl_names)
+
+    def test_implementations_populated_for_module(self):
+        self._write_rb('user.rb', '''\
+            module Greetable
+              def greet
+                "hi"
+              end
+            end
+
+            class User
+              include Greetable
+            end
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        mod = next(p for p in report['protocols'] if p['name'] == 'Greetable')
+        impl_names = [i['name'] for i in mod['implementations']]
+        self.assertIn('User', impl_names)
+
+    def test_extend_also_counts_as_implementation(self):
+        self._write_rb('trackable.rb', '''\
+            module Trackable
+            end
+
+            class Widget
+              extend Trackable
+            end
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        mod = next(p for p in report['protocols'] if p['name'] == 'Trackable')
+        impl_names = [i['name'] for i in mod['implementations']]
+        self.assertIn('Widget', impl_names)
+
+    def test_superclass_and_mixin_both_captured(self):
+        self._write_rb('animal.rb', '''\
+            module Derived
+            end
+
+            class Animal
+            end
+
+            class Dog < Animal
+              include Derived
+            end
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl = next(c for c in report['dataclasses'] if c['name'] == 'Dog')
+        self.assertIn('Animal', impl['bases'])
+        self.assertIn('Derived', impl['bases'])
+
+    def test_namespaced_include_resolves_to_tail_name(self):
+        self._write_rb('concern.rb', '''\
+            module MyApp
+              module Greetable
+              end
+            end
+
+            class User
+              include MyApp::Greetable
+            end
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        mod = next(p for p in report['protocols'] if p['name'] == 'Greetable')
+        impl_names = [i['name'] for i in mod['implementations']]
+        self.assertIn('User', impl_names)
+
+    def test_plain_class_no_bases_not_a_contract(self):
+        self._write_rb('plain.rb', '''\
+            class Plain
+              def do_thing
+              end
+            end
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(report['total_contracts'], 0)
+        self.assertEqual(len(report['dataclasses']), 0)
+
+    def test_plain_superclass_no_module_not_a_contract(self):
+        self._write_rb('application_record.rb', '''\
+            class ApplicationRecord
+            end
+
+            class User < ApplicationRecord
+            end
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(report['total_contracts'], 0)
+
+    def test_include_inside_method_body_not_counted(self):
+        self._write_rb('dynamic.rb', '''\
+            module Greetable
+            end
+
+            class User
+              def self.enable_greeting
+                include Greetable
+              end
+            end
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl_names = [c['name'] for c in report['dataclasses']]
+        self.assertNotIn('User', impl_names)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -55,6 +55,29 @@ def _has_interface_family_files(path: Path) -> bool:
     return False
 
 
+def _has_ruby_files(path: Path) -> bool:
+    if path.is_file():
+        return path.suffix.lower() == '.rb'
+    for root, dirs, filenames in os.walk(str(path)):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+        for fname in filenames:
+            if fname.endswith('.rb'):
+                return True
+    return False
+
+
+def _collect_ruby_files(path: Path) -> List[Path]:
+    if path.is_file():
+        return [path] if path.suffix.lower() == '.rb' else []
+    files: List[Path] = []
+    for root, dirs, filenames in os.walk(str(path)):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+        for fname in filenames:
+            if fname.endswith('.rb'):
+                files.append(Path(os.path.join(root, fname)))
+    return files
+
+
 def create_contracts_parser() -> argparse.ArgumentParser:
     from reveal.cli.parser import _build_global_options_parser
     parser = argparse.ArgumentParser(
@@ -116,15 +139,16 @@ def _scan_contracts(
 
     unsupported_language = ''
     is_interface_family = _has_interface_family_files(path)
+    is_ruby = not is_interface_family and _has_ruby_files(path)
 
-    if not _has_python_files(path) and not is_interface_family:
+    if not _has_python_files(path) and not is_interface_family and not is_ruby:
         unsupported_language = detect_non_python_language(path)
 
     # BACK-518: guard against a few stray supported-language files standing in
     # for a mostly-unsupported tree (see surface.py / assess_language_coverage).
     coverage = assess_language_coverage(
         path,
-        {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin'},
+        {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby'},
     )
     coverage_dict = {
         'total_code_files': coverage.total_code_files,
@@ -134,6 +158,11 @@ def _scan_contracts(
         'dominant_supported': coverage.dominant_supported,
         'warning': coverage.warning_line('contracts'),
     }
+
+    if is_ruby:
+        result = _scan_contracts_ruby(path, abstract_only, show_implementations)
+        result['coverage'] = coverage_dict
+        return result
 
     structures = collect_structures(str(path))
 
@@ -320,6 +349,47 @@ def _scan_contracts_ts(
     }
 
 
+def _scan_contracts_ruby(
+    path: Path,
+    abstract_only: bool,
+    show_implementations: bool,
+) -> Dict[str, Any]:
+    """Ruby-specific contract scanner — the mixin model.
+
+    Ruby has no interface keyword, so it doesn't share `_scan_contracts_ts`'s
+    classifier. A `module` is the contract; a class `include`/`extend`-ing it
+    (or subclassing it, folded into the same `bases` list) is the
+    implementation — see `nav_contracts_ruby.py` for the AST-walk detail.
+    """
+    from reveal.adapters.ast.nav_contracts_ruby import scan_file_contracts_ruby
+
+    modules: List[Dict[str, Any]] = []
+    classes: List[Dict[str, Any]] = []
+    for file_path in _collect_ruby_files(path):
+        scanned = scan_file_contracts_ruby(str(file_path))
+        modules.extend(scanned['modules'])
+        classes.extend(scanned['classes'])
+
+    implementations = [] if abstract_only else [c for c in classes if c['bases']]
+    contract_names: Set[str] = {m['name'] for m in modules}
+
+    if show_implementations:
+        _add_implementations(classes, contract_names, modules)
+
+    return {
+        'path': str(path),
+        'total_contracts': len(modules),
+        'abcs': [],
+        'protocols': modules,
+        'typeddicts': [],
+        'dataclasses': implementations,
+        'basemodels': [],
+        'path_heuristic': [],
+        'unsupported_language': '',
+        '_ruby_mode': True,
+    }
+
+
 def _extract_all_classes(structures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Extract class dicts from collect_structures output.
 
@@ -434,6 +504,7 @@ def _render_report(report: Dict[str, Any]) -> None:
     path = report['path']
     total = report['total_contracts']
     ts_mode = report.get('_ts_mode', False)
+    ruby_mode = report.get('_ruby_mode', False)
 
     print()
     print(f"Contracts: {path}")
@@ -454,12 +525,14 @@ def _render_report(report: Dict[str, Any]) -> None:
         if not warning:
             lang = report.get('unsupported_language', '')
             if lang:
-                print(f"  reveal contracts currently supports Python, TypeScript, Java, C#, PHP, Swift, and Kotlin.")
+                print(f"  reveal contracts currently supports Python, TypeScript, Java, C#, PHP, Swift, Kotlin, and Ruby.")
                 print(f"  No supported files found — detected {lang}.")
             else:
                 print("  No contracts or seams found.")
                 if ts_mode:
                     print("  Try widening the path or checking for interface/abstract class usage.")
+                elif ruby_mode:
+                    print("  Try widening the path or checking for module/include/extend (mixin) usage.")
                 else:
                     print("  Try widening the path or checking imports for ABC/Protocol usage.")
             print()
@@ -470,6 +543,9 @@ def _render_report(report: Dict[str, Any]) -> None:
         _render_group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
         _render_group("Type Aliases", report['typeddicts'], show_methods=False, show_impls=False)
         _render_group("Implementing Classes", report['dataclasses'], show_methods=False, show_impls=False)
+    elif ruby_mode:
+        _render_group("Mixins (Modules)", report['protocols'], show_methods=False, show_impls=True)
+        _render_group("Including Classes", report['dataclasses'], show_methods=False, show_impls=False)
     else:
         _render_group("Abstract Base Classes", report['abcs'], show_methods=True, show_impls=True)
         _render_group("Protocols", report['protocols'], show_methods=True, show_impls=True)
