@@ -238,19 +238,38 @@ def _nav_mutations(ctx: _NavCtx) -> None:
 
 
 def _nav_sideeffects(ctx: _NavCtx) -> None:
-    from .adapters.ast.nav import collect_effects, render_effects  # noqa: I006
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    effects = collect_effects(
-        ctx.func_node, from_line, to_line, ctx.get_text,
-        language=getattr(ctx.analyzer, 'language', None),
+    from .adapters.ast.nav import (  # noqa: I006
+        collect_effects, collect_effects_transitive, render_effects, render_effects_transitive,
     )
+    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    language = getattr(ctx.analyzer, 'language', None)
+    transitive = getattr(ctx.args, 'transitive', False)
+
+    if transitive:
+        # --depth is shared with directory-tree/markdown-outline depth; None
+        # here means "not explicitly set" so it falls back to a fixed default
+        # rather than inheriting _NavCtx.depth's unrelated default of 3.
+        raw_depth = getattr(ctx.args, 'depth', None)
+        depth = raw_depth if raw_depth else 2
+        effects = collect_effects_transitive(
+            ctx.analyzer.path, ctx.element, ctx.func_node, from_line, to_line, ctx.get_text,
+            language=language, depth=depth,
+        )
+    else:
+        effects = collect_effects(
+            ctx.func_node, from_line, to_line, ctx.get_text, language=language,
+        )
+
     if ctx.as_json:
         findings = [
             {'kind': e['kind'], 'line': e['line'], 'callee': e['callee'],
-             'first_arg': e.get('first_arg'), 'has_more_args': e.get('has_more_args', False)}
+             'first_arg': e.get('first_arg'), 'has_more_args': e.get('has_more_args', False),
+             **({'hop': e['hop'], 'chain': e['chain']} if transitive else {})}
             for e in effects if e['kind'] is not None
         ]
         _nav_json('sideeffects', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
+    elif transitive:
+        print(render_effects_transitive(effects, ctx.element, depth))
     else:
         print(render_effects(effects, from_line, to_line))
 

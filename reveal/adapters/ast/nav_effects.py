@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+from collections import OrderedDict
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .nav_calls import range_calls
@@ -303,6 +305,123 @@ def collect_effects(
     return results
 
 
+def _resolve_definition_node(file_path: str, name: str, analyzer_cache: Dict[str, Any]):
+    """Best-effort: find *name*'s function node in *file_path*, caching the analyzer.
+
+    Returns (node, start_line, end_line, get_text, language) or None if the
+    file isn't tree-sitter analysable or the name can't be located — callers
+    should skip that hop rather than treat it as fatal (this walk is a
+    best-effort blast-radius read, not a correctness-critical resolution).
+    """
+    from ...file_handler import _find_element_node  # noqa: I006 — deferred, avoids cli/adapters cycle
+    from ...registry import get_analyzer  # noqa: I006
+    from ...treesitter import TreeSitterAnalyzer  # noqa: I006
+
+    analyzer = analyzer_cache.get(file_path)
+    if analyzer is None:
+        analyzer_class = get_analyzer(file_path, allow_fallback=True)
+        if analyzer_class is None:
+            analyzer_cache[file_path] = False
+        else:
+            try:
+                analyzer = analyzer_class(file_path)
+            except Exception:
+                analyzer = False
+            analyzer_cache[file_path] = analyzer
+    if not analyzer or not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
+        return None
+
+    node = _find_element_node(analyzer, name)
+    if node is None:
+        return None
+    start = node.start_position().row + 1
+    end_node = getattr(analyzer, '_function_end_node', lambda n: n)(node)
+    end = end_node.end_position().row + 1
+    return end_node, start, end, analyzer._get_node_text, getattr(analyzer, 'language', None)
+
+
+def collect_effects_transitive(
+    path: str,
+    root_name: str,
+    root_node: Any,
+    from_line: int,
+    to_line: int,
+    get_text: Callable,
+    language: Optional[str] = None,
+    depth: int = 2,
+) -> List[Dict[str, Any]]:
+    """Follow calls into project-local helpers, classifying effects across hops.
+
+    Hop 0 is the entry function's own body (identical to collect_effects). Each
+    subsequent hop resolves calls that land on a project-local definition —
+    reusing the same bare-name + language-family scoping the calls:// recursive
+    walk (find_callees_recursive) already relies on — and classifies that
+    definition's own body too. An unresolved or cross-language call terminates
+    that branch: it's already covered by collect_effects's direct name-pattern
+    match at the hop that made it (BACK-545 design doc), so nothing is lost by
+    not chasing it further.
+
+    Each returned effect carries 'hop' (0-indexed) and 'chain' (the call path
+    that reached it, e.g. ['handle_request', '_save', 'db_execute']).
+    """
+    from .analysis import collect_structures  # noqa: I006
+    from ..calls.index import _build_forward_index, _bare_callee_name, _lang_family  # noqa: I006
+
+    depth = max(1, min(depth, 5))
+
+    hop0 = collect_effects(root_node, from_line, to_line, get_text, language)
+    for e in hop0:
+        e['hop'] = 0
+        e['chain'] = [root_name]
+    results: List[Dict[str, Any]] = list(hop0)
+
+    path_obj = Path(path)
+    directory = path_obj if path_obj.is_dir() else path_obj.parent
+    structures = collect_structures(str(directory))
+    forward = _build_forward_index(structures, include_builtins=False)
+
+    root_family = _lang_family(path) if path else ''
+    visited = {root_name}
+    frontier = [(root_name, root_family, [root_name])]
+    analyzer_cache: Dict[str, Any] = {}
+
+    for hop in range(1, depth + 1):
+        next_frontier: List[Tuple[str, str, List[str]]] = []
+        for name, family, chain in frontier:
+            defs = forward.get(name, [])
+            if family:
+                defs = [d for d in defs if _lang_family(d['file']) == family]
+            for defn in defs:
+                for callee in defn['calls']:
+                    tail = _bare_callee_name(callee)
+                    if tail in visited:
+                        continue
+                    candidates = forward.get(tail, [])
+                    if family:
+                        candidates = [c for c in candidates if _lang_family(c['file']) == family]
+                    if not candidates:
+                        continue
+                    visited.add(tail)
+                    callee_file = candidates[0]['file']
+                    resolved = _resolve_definition_node(callee_file, tail, analyzer_cache)
+                    if resolved is None:
+                        continue
+                    node, start, end, callee_get_text, callee_language = resolved
+                    new_chain = chain + [tail]
+                    hop_effects = collect_effects(node, start, end, callee_get_text, callee_language)
+                    for e in hop_effects:
+                        e['hop'] = hop
+                        e['chain'] = new_chain
+                        e['file'] = callee_file
+                    results.extend(hop_effects)
+                    next_frontier.append((tail, family or _lang_family(callee_file), new_chain))
+        if not next_frontier:
+            break
+        frontier = next_frontier
+
+    return results
+
+
 def render_effects(
     effects: List[Dict[str, Any]],
     from_line: int,
@@ -328,3 +447,43 @@ def render_effects(
             arg_str = '()'
         lines.append(f'L{lineno:<6}  {kind:<{kind_width}}  {callee}{arg_str}')
     return '\n'.join(lines)
+
+
+def render_effects_transitive(
+    effects: List[Dict[str, Any]],
+    root_name: str,
+    depth: int,
+    include_unclassified: bool = False,
+) -> str:
+    """Render collect_effects_transitive output, grouped by hop/call chain."""
+    visible = [e for e in effects if e['kind'] is not None or include_unclassified]
+    if not visible:
+        return (
+            f'No classified side effects found in {root_name} '
+            f'or its callees (--transitive, depth={depth})'
+        )
+
+    kind_width = max(len(e['kind'] or '?') for e in visible)
+    groups: Dict[Tuple[str, ...], List[Dict[str, Any]]] = OrderedDict()
+    for e in visible:
+        key = tuple(e.get('chain') or [root_name])
+        groups.setdefault(key, []).append(e)
+
+    blocks = []
+    for chain, group_effects in groups.items():
+        hop = group_effects[0].get('hop', 0)
+        if hop == 0:
+            header = f'[hop 0] {root_name} (own body)'
+        else:
+            header = f"[hop {hop}] via {' → '.join(chain)}"
+        lines = [header]
+        for e in group_effects:
+            kind = e['kind'] or '?'
+            callee = e['callee'] or '(unknown)'
+            lineno = e['line']
+            first_arg = e.get('first_arg')
+            has_more = e.get('has_more_args', False)
+            arg_str = f'({first_arg}{"..." if has_more else ""})' if first_arg else '()'
+            lines.append(f'  L{lineno:<6}  {kind:<{kind_width}}  {callee}{arg_str}')
+        blocks.append('\n'.join(lines))
+    return '\n'.join(blocks)

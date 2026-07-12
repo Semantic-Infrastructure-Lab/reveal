@@ -570,5 +570,161 @@ class TestNavJsonOutput(unittest.TestCase):
         self.assertIsInstance(result['meta']['file'], str)
 
 
+class TestSideEffectsTransitive(unittest.TestCase):
+    """--sideeffects --transitive: follow calls into project-local helpers (BACK-545).
+
+    Each test gets its own tmp directory so the call-graph forward index built
+    per test never sees another test's same-named fixture functions.
+    """
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmpdir.name)
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _write(self, name, content):
+        path = self.dir / name
+        path.write_text(content)
+        return str(path)
+
+    def _make_args(self, **kwargs):
+        import argparse
+        defaults = dict(
+            scope=False, around=None, outline=False, varflow=None, calls=None,
+            ifmap=False, catchmap=False, exits=False, flowto=False,
+            deps=False, mutations=False, sideeffects=False, transitive=False, loopmap=False,
+            fanout=False, statewrites=False, keys=None, returns=False,
+            boundary=False, depth=None, range=None,
+        )
+        defaults.update(kwargs)
+        return argparse.Namespace(**defaults)
+
+    def _dispatch(self, path, element, args, as_json=False):
+        import io
+        import sys
+        import json
+        from reveal.file_handler import _dispatch_nav
+        from reveal.analyzers.python import PythonAnalyzer
+        analyzer = PythonAnalyzer(path)
+        analyzer.get_structure()
+        buf = io.StringIO()
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            _dispatch_nav(analyzer, element, 'json' if as_json else 'text', args)
+        finally:
+            sys.stdout = old
+        out = buf.getvalue()
+        return json.loads(out) if as_json else out
+
+    def test_direct_only_misses_helper_effect(self):
+        """Without --transitive, dispatch-only body reports no effects — the BACK-545 gap."""
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(order)\n"
+        ))
+        self._write('helper.py', (
+            "def _save(order):\n"
+            "    db.execute('insert into orders values (?)', order)\n"
+        ))
+        args = self._make_args(sideeffects=True)
+        out = self._dispatch(entry_path, 'handle_request', args)
+        self.assertIn('No classified side effects', out)
+
+    def test_transitive_finds_helper_effect(self):
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(order)\n"
+        ))
+        self._write('helper.py', (
+            "def _save(order):\n"
+            "    db.execute('insert into orders values (?)', order)\n"
+        ))
+        args = self._make_args(sideeffects=True, transitive=True)
+        out = self._dispatch(entry_path, 'handle_request', args)
+        self.assertIn('db', out)
+        self.assertIn('_save', out)
+
+    def test_transitive_json_tags_hop_and_chain(self):
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(order)\n"
+        ))
+        self._write('helper.py', (
+            "def _save(order):\n"
+            "    db.execute('insert into orders values (?)', order)\n"
+        ))
+        args = self._make_args(sideeffects=True, transitive=True)
+        result = self._dispatch(entry_path, 'handle_request', args, as_json=True)
+        findings = result['findings']
+        self.assertTrue(findings)
+        self.assertEqual(findings[0]['hop'], 1)
+        self.assertEqual(findings[0]['chain'], ['handle_request', '_save'])
+
+    def test_transitive_depth_limits_traversal(self):
+        """depth=1 (direct callees only) must not reach a second-hop effect."""
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(order)\n"
+        ))
+        self._write('helper_a.py', (
+            "def _save(order):\n"
+            "    _persist(order)\n"
+        ))
+        self._write('helper_b.py', (
+            "def _persist(order):\n"
+            "    db.execute('insert into orders values (?)', order)\n"
+        ))
+        args = self._make_args(sideeffects=True, transitive=True, depth=1)
+        result = self._dispatch(entry_path, 'handle_request', args, as_json=True)
+        self.assertEqual(result['findings'], [])
+
+    def test_transitive_two_hops_reaches_nested_effect(self):
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(order)\n"
+        ))
+        self._write('helper_a.py', (
+            "def _save(order):\n"
+            "    _persist(order)\n"
+        ))
+        self._write('helper_b.py', (
+            "def _persist(order):\n"
+            "    db.execute('insert into orders values (?)', order)\n"
+        ))
+        args = self._make_args(sideeffects=True, transitive=True, depth=3)
+        result = self._dispatch(entry_path, 'handle_request', args, as_json=True)
+        chains = [tuple(f['chain']) for f in result['findings']]
+        self.assertIn(('handle_request', '_save', '_persist'), chains)
+
+    def test_transitive_cycle_does_not_hang(self):
+        """A→B→A must terminate via the visited-name set, not hang or double-count."""
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    _save(order)\n"
+        ))
+        self._write('helper.py', (
+            "def _save(order):\n"
+            "    db.execute('x', order)\n"
+            "    handle_request(order)\n"
+        ))
+        args = self._make_args(sideeffects=True, transitive=True, depth=5)
+        result = self._dispatch(entry_path, 'handle_request', args, as_json=True)
+        kinds = {f['kind'] for f in result['findings']}
+        self.assertIn('db', kinds)
+
+    def test_transitive_unresolved_call_terminates_branch(self):
+        """A call with no project-local definition must not crash the walk."""
+        entry_path = self._write('entry.py', (
+            "def handle_request(order):\n"
+            "    totally_unknown_external_fn(order)\n"
+        ))
+        args = self._make_args(sideeffects=True, transitive=True)
+        result = self._dispatch(entry_path, 'handle_request', args, as_json=True)
+        self.assertEqual(result['findings'], [])
+
+
 if __name__ == '__main__':
     unittest.main()

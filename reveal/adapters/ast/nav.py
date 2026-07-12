@@ -58,7 +58,9 @@ from .nav_exits import (  # noqa: F401
 from .nav_effects import (  # noqa: F401
     classify_call,
     collect_effects,
+    collect_effects_transitive,
     render_effects,
+    render_effects_transitive,
 )
 from .nav_loops import (  # noqa: F401
     collect_loops,
