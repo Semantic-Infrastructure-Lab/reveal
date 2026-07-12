@@ -1150,5 +1150,86 @@ class TestNavSurfaceKotlin(unittest.TestCase):
         self.assertEqual(len(result['cli']), 0)
 
 
+class TestNavSurfaceRuby(unittest.TestCase):
+    """Unit tests for the Ruby surface scanner (nav_surface_ruby, BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _scan_rb(self, filename: str, content: str):
+        from reveal.adapters.ast.nav_surface_ruby import scan_file_surface_ruby
+        path = _write(self.tmp, filename, content)
+        return scan_file_surface_ruby(path)
+
+    def test_ruby_network_require(self):
+        result = self._scan_rb('c.rb', "require 'net/http'\n")
+        self.assertIn('net/http', [e['name'] for e in result['network']])
+
+    def test_ruby_db_require(self):
+        result = self._scan_rb('d.rb', "require 'pg'\n")
+        self.assertIn('pg', [e['name'] for e in result['db']])
+
+    def test_ruby_sdk_require(self):
+        result = self._scan_rb('p.rb', "require 'aws-sdk-s3'\n")
+        self.assertIn('aws-sdk-s3', [e['name'] for e in result['sdk']])
+
+    def test_ruby_env_bracket(self):
+        result = self._scan_rb('e.rb', "key = ENV['API_KEY']\n")
+        self.assertIn('API_KEY', [e['name'] for e in result['env']])
+
+    def test_ruby_env_fetch(self):
+        result = self._scan_rb('e.rb', "key = ENV.fetch('API_KEY')\n")
+        self.assertIn('API_KEY', [e['name'] for e in result['env']])
+
+    def test_ruby_sinatra_route(self):
+        result = self._scan_rb('app.rb', '''\
+            class App < Sinatra::Base
+              get "/users/:id" do
+              end
+            end
+        ''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/users/:id')
+        self.assertEqual(entries[0]['methods'], 'GET')
+
+    def test_ruby_rails_route(self):
+        result = self._scan_rb('routes.rb', '''\
+            Rails.application.routes.draw do
+              get "/health", to: "health#index"
+            end
+        ''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/health')
+        self.assertEqual(entries[0]['methods'], 'GET')
+        self.assertEqual(entries[0]['target'], 'health#index')
+
+    def test_ruby_resources_not_a_route(self):
+        """`resources :posts` fans out into many routes with no single explicit
+        path, so it must not be surfaced as one (wrong-path) entry."""
+        result = self._scan_rb('routes.rb', '''\
+            Rails.application.routes.draw do
+              resources :posts
+            end
+        ''')
+        self.assertEqual(len(result['http']), 0)
+
+    def test_ruby_member_get_not_a_route(self):
+        """`http.get(url)` is a receiver call, not a bare DSL route invocation."""
+        result = self._scan_rb('x.rb', "http.get(url)\n")
+        self.assertEqual(len(result['http']), 0)
+
+    def test_ruby_get_without_leading_slash_not_a_route(self):
+        """A bare `get(key)` helper with a non-path string must not be misread
+        as a route — the leading-`/` check is load-bearing here."""
+        result = self._scan_rb('x.rb', "value = get('some_key')\n")
+        self.assertEqual(len(result['http']), 0)
+
+
 if __name__ == '__main__':
     unittest.main()
