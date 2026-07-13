@@ -201,6 +201,7 @@ reveal dev new-adapter <name>  # scaffold new adapters/rules
 - **[CI/CD Recipes](reveal/docs/guides/CI_RECIPES.md)** — GitHub Actions and GitLab CI ready-to-paste YAML
 - **[Benchmarks](reveal/docs/BENCHMARKS.md)** — measured 3.9–15x token reduction on real scenarios
 - **[Recipes](reveal/docs/guides/RECIPES.md)** — task-based workflows
+- **[Validation](VALIDATION.md)** — measured import/dependency-graph recall against real corpora, with reproducible harnesses
 - **[All Docs](reveal/docs/INDEX.md)** — complete documentation index
 - **AI Agents**: `reveal --agent-help`
 
