@@ -405,6 +405,72 @@ class TestDependsAdapterHonestDecline:
         assert r['_meta']['confidence'] == 'high'
 
 
+class TestDependsAdapterCSharpNamespaceFanout:
+    """BACK-554: depends:// must resolve a C# `using X.Y` naming a namespace
+    declared across several files (or a file with NO local `using` at all —
+    the shape a C# 10 `global using` produces) via the BACK-544 namespace
+    index, the same way `imports://` already does. Before this fix,
+    `resolve_import`'s dotted-name match only caught the coincidental case
+    where the namespace's last component happened to equal a filename
+    (`using X.Y` -> `Y.cs`); the common multi-file-namespace case fell
+    through to the honest-decline caveat instead of a resolved edge, and a
+    file with zero local imports (the `global using` shape) was invisible to
+    the namespace index entirely regardless of that gap — a second, deeper
+    bug this loop found (see the sibling fix in
+    `ImportsAdapter._resolve_dependencies`, same root cause)."""
+
+    def test_namespace_spanning_files_resolves(self, tmp_path):
+        """`using MyApp.Services;` names a namespace, not the file `Services.cs`
+        (which doesn't exist) — must still resolve via the namespace index."""
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'MyApp' / 'Services' / 'UserService.cs',
+               "namespace MyApp.Services\n{\n    public class UserService {}\n}\n")
+        _write(tmp_path / 'Consumer.cs',
+               "using MyApp.Services;\n\nnamespace MyApp\n{\n"
+               "    public class Consumer { UserService s; }\n}\n")
+        (tmp_path / 'App.sln').write_text('')
+        r = DependsAdapter(str(tmp_path / 'MyApp' / 'Services' / 'UserService.cs')).get_structure()
+        assert r['count'] == 1
+        assert Path(r['dependents'][0]['file']).name == 'Consumer.cs'
+        assert r['_meta']['confidence'] == 'high'
+
+    def test_global_using_file_with_no_local_imports_is_reachable(self, tmp_path):
+        """C# 10 `global using MyApp.Services;` (conventionally in
+        GlobalUsings.cs) makes the namespace available project-wide without a
+        local `using` in every consuming file. The declaring file
+        (UserService.cs) itself has ZERO import statements of its own — it
+        must still be indexed as a namespace declarer so GlobalUsings.cs's
+        edge to it resolves (this is the part that was silently invisible:
+        a zero-import file never appeared in the graph the namespace index
+        was built from)."""
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'MyApp' / 'Services' / 'UserService.cs',
+               "namespace MyApp.Services\n{\n    public class UserService {}\n}\n")
+        _write(tmp_path / 'GlobalUsings.cs', "global using MyApp.Services;\n")
+        _write(tmp_path / 'Program.cs',
+               "namespace MyApp\n{\n    public class Program { static void Main() {} }\n}\n")
+        (tmp_path / 'App.sln').write_text('')
+        r = DependsAdapter(str(tmp_path / 'MyApp' / 'Services' / 'UserService.cs')).get_structure()
+        assert r['count'] == 1
+        assert Path(r['dependents'][0]['file']).name == 'GlobalUsings.cs'
+        assert r['_meta']['confidence'] == 'high'
+
+    def test_unresolved_nested_namespace_still_caveated(self, tmp_path):
+        """Sanity guard: the namespace index is an exact-key lookup, not a
+        prefix match — an import naming an undeclared sub-namespace must
+        still fall through to the honest-decline caveat (BACK-547), not a
+        fabricated edge. Mirrors
+        TestDependsAdapterHonestDecline.test_csharp_intra_project_namespace_miss_is_caveated."""
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'Core.cs', "namespace MyApp.Core { public class Thing {} }\n")
+        _write(tmp_path / 'App.cs',
+               "using MyApp.Core.Missing;\nnamespace MyApp.App { public class App {} }\n")
+        r = DependsAdapter(str(tmp_path / 'Core.cs')).get_structure()
+        assert r['count'] == 0
+        assert r['undercount_possible'] is True
+        assert r['_meta']['confidence'] == 'reduced'
+
+
 class TestDependsAdapterDirectoryTarget:
     """Directory target: depends://pkg/ — reverse dependency summary."""
 

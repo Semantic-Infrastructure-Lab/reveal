@@ -602,6 +602,29 @@ class TestImportsAdapter:
         assert result['type'] == 'circular_dependencies'
         assert result['count'] >= 1
 
+    def test_csharp_zero_import_file_reachable_via_namespace_fanin(self, tmp_path):
+        """BACK-554: a C# file with NO local `using` directives of its own
+        (the shape produced by relying purely on a C# 10 `global using`, or
+        simply a leaf class that imports nothing) must still show up as a
+        fan-in target when another file's `using` names its namespace.
+        Previously `_build_namespace_index` was built only from
+        `self._graph.files` (files that themselves emitted >=1 import
+        statement) — a zero-import file never became a key there, so its own
+        `namespace X.Y` declaration was invisible to the fan-out index
+        entirely, making it structurally unreachable via namespace `using`
+        no matter how many other files declared `using X.Y;`."""
+        (tmp_path / 'MyApp' / 'Services').mkdir(parents=True)
+        (tmp_path / 'MyApp/Services/UserService.cs').write_text(
+            'namespace MyApp.Services {\n    class UserService {}\n}\n')
+        # Consumer.cs is the only file with a local `using` — UserService.cs
+        # has zero import statements of its own (global-using-reliant shape).
+        (tmp_path / 'Consumer.cs').write_text(
+            'using MyApp.Services;\n\nnamespace MyApp {\n    class Consumer {}\n}\n')
+
+        result = ImportsAdapter(str(tmp_path), 'rank=fan-in').get_structure()
+        entries = {Path(e['file']).name: e['fan_in'] for e in result['entries']}
+        assert entries.get('UserService.cs') == 1
+
     def test_deferred_imports_are_not_circular(self, tmp_path):
         """BACK-445: function-body (deferred/lazy) imports must not be reported
         as circular dependencies — they run only after all top-level imports

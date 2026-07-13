@@ -570,6 +570,19 @@ class DependsAdapter(ResourceAdapter):
         # contribute (no-op scan otherwise); Swift has no such declaration to
         # scan and stays on the conservative None verdict.
         project_namespaces: Set[str] = set()
+        # BACK-554: namespace -> [declaring files], the C# edge-fanout index
+        # (BACK-544) that ImportsAdapter._build_namespace_index builds but
+        # depends:// never wired in — resolve_import's dotted-name match only
+        # catches a namespace that coincidentally names one file (`using
+        # X.Y` -> `Y.cs`); the common case, a namespace declared across
+        # several files (or a file with NO local `using` at all, e.g. one
+        # that relies purely on a project-wide C# 10 `global using`), needs
+        # this fan-out instead. Built from `files` (every scanned file, not
+        # just the ones that emit an import statement) so a zero-import leaf
+        # file's own namespace declaration is still indexed — the
+        # `self._graph.files`-only scope ImportsAdapter's version uses is
+        # itself a sibling bug this loop found (BACK-554, fixed there too).
+        namespace_index: Dict[str, List[Path]] = {}
         # BACK-547 Kotlin measurement loop: (package, symbol) -> [declaring
         # files], the top-level free-function/property index that
         # resolve_member_targets looks up. `import a.b.foo` for a top-level
@@ -591,6 +604,9 @@ class DependsAdapter(ResourceAdapter):
             if getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None):
                 declared = extractor.extract_namespaces(file_path)
                 project_namespaces.update(declared)
+                if getattr(spec, 'resolve_namespaces', False):
+                    for ns in declared:
+                        namespace_index.setdefault(ns, []).append(file_path)
                 if getattr(spec, 'member_symbol_fallback', False) and declared:
                     for symbol in extractor.extract_top_level_members(file_path):
                         for ns in declared:
@@ -633,6 +649,20 @@ class DependsAdapter(ResourceAdapter):
                         self._graph.resolved_paths[stmt.module_name] = resolved
                         self._edge_stmts[(file_path, resolved)] = stmt
                         added = True
+                if not added and namespace_index and getattr(
+                        getattr(extractor, 'spec', None), 'resolve_namespaces', False):
+                    # BACK-554: the single-file dotted match above only catches a
+                    # namespace that coincidentally names one matching file — the
+                    # common case (a namespace declared across several files, or
+                    # a file reachable only via a project-wide `global using`)
+                    # needs the namespace index instead, fanning out to every
+                    # declaring file (mirrors ImportsAdapter._resolve_dependencies,
+                    # BACK-544).
+                    for resolved in extractor.resolve_namespace_targets(stmt, namespace_index):
+                        if resolved != file_path:
+                            self._graph.add_dependency(file_path, resolved)
+                            self._edge_stmts[(file_path, resolved)] = stmt
+                            added = True
                 if not added and member_index and getattr(
                         getattr(extractor, 'spec', None), 'member_symbol_fallback', False):
                     # BACK-547 Kotlin measurement loop: `import a.b.foo` for a
