@@ -226,24 +226,43 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
             return
 
 
+def _find_hierarchical_element_node(analyzer, element: str):
+    """Resolve 'Parent.child' syntax to a tree-sitter node, or None.
+
+    Split out of _find_element_node to keep that dispatcher short; also the
+    natural home for language-specific fallbacks like Go's receiver methods.
+    """
+    from .treesitter import PARENT_NODE_TYPES  # noqa: I006
+    from .display.element import _find_child_in_subtree, _go_receiver_method_node  # noqa: I006
+
+    parent_name, child_name = element.split('.', 1)
+    for node_type in PARENT_NODE_TYPES:
+        for parent_node in analyzer._find_nodes_by_type(node_type):
+            if analyzer._get_node_name(parent_node) == parent_name:
+                child = _find_child_in_subtree(analyzer, parent_node, child_name)
+                if child:
+                    return child
+
+    # Go receiver methods (BACK-451): method_declaration is a top-level
+    # node, not an AST child of its receiver struct, so the containment
+    # walk above can never find it — matched by receiver-type text instead.
+    # Same resolver display/element.py uses for plain element extraction,
+    # shared here so the two by-name paths can't drift (BACK-530 precedent).
+    if getattr(analyzer, 'language', None) == 'go':
+        return _go_receiver_method_node(analyzer, parent_name, child_name)
+    return None
+
+
 def _find_element_node(analyzer, element: str):
     """Find and return the tree-sitter node for a named function/method.
 
     Supports bare names ('my_func') and Class.method syntax ('MyClass.my_method').
     Returns the node or None if not found.
     """
-    from .treesitter import ELEMENT_TYPE_MAP, PARENT_NODE_TYPES  # noqa: I006
-    from .display.element import _find_child_in_subtree  # noqa: I006
+    from .treesitter import ELEMENT_TYPE_MAP  # noqa: I006
 
     if '.' in element:
-        parent_name, child_name = element.split('.', 1)
-        for node_type in PARENT_NODE_TYPES:
-            for parent_node in analyzer._find_nodes_by_type(node_type):
-                if analyzer._get_node_name(parent_node) == parent_name:
-                    child = _find_child_in_subtree(analyzer, parent_node, child_name)
-                    if child:
-                        return child
-        return None
+        return _find_hierarchical_element_node(analyzer, element)
 
     for category in ('function', 'class'):
         for node_type in ELEMENT_TYPE_MAP.get(category, []):

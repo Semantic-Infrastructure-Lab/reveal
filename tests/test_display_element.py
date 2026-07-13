@@ -532,6 +532,131 @@ class TestHierarchicalExtraction:
         finally:
             os.unlink(temp_path)
 
+    def test_hierarchical_go_pointer_receiver_method(self):
+        """Go `func (b *Batch) Run(...)` — BACK-451: Go has no Class.method
+        OOP shape at all; the method_declaration is a top-level node, not an
+        AST child of the struct, so the generic PARENT_NODE_TYPES/
+        CHILD_NODE_TYPES containment walk can never find it. Matched instead
+        by receiver-type text (unwrapping the `*Batch` pointer_type)."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.go', delete=False) as f:
+            f.write(
+                'package sample\n\n'
+                'type Batch struct {\n\tTotal int\n}\n\n'
+                'func (b *Batch) Run(items []int) {\n\tb.Total = len(items)\n}\n'
+            )
+            f.flush()
+            temp_path = f.name
+
+        try:
+            from reveal.registry import get_analyzer
+            analyzer_class = get_analyzer(temp_path)
+            analyzer = analyzer_class(temp_path)
+
+            result = _extract_hierarchical_element(analyzer, 'Batch.Run')
+            assert result is not None
+            assert 'Run' in result['name']
+            assert 'func (b *Batch) Run' in result['source']
+        finally:
+            os.unlink(temp_path)
+
+    def test_hierarchical_go_value_receiver_method(self):
+        """Go value receiver `func (c Counter) Value()` — no pointer_type to
+        unwrap, the receiver's type_identifier is a direct child."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.go', delete=False) as f:
+            f.write(
+                'package sample\n\n'
+                'type Counter struct {\n\tN int\n}\n\n'
+                'func (c Counter) Value() int {\n\treturn c.N\n}\n'
+            )
+            f.flush()
+            temp_path = f.name
+
+        try:
+            from reveal.registry import get_analyzer
+            analyzer_class = get_analyzer(temp_path)
+            analyzer = analyzer_class(temp_path)
+
+            result = _extract_hierarchical_element(analyzer, 'Counter.Value')
+            assert result is not None
+            assert 'Value' in result['name']
+            assert 'func (c Counter) Value' in result['source']
+        finally:
+            os.unlink(temp_path)
+
+    def test_hierarchical_go_wrong_receiver_type_not_found(self):
+        """A method name that exists, but not on the named receiver type,
+        must not match — receiver-type text has to be exact."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.go', delete=False) as f:
+            f.write(
+                'package sample\n\n'
+                'type Batch struct {\n\tTotal int\n}\n\n'
+                'func (b *Batch) Run(items []int) {\n\tb.Total = len(items)\n}\n'
+            )
+            f.flush()
+            temp_path = f.name
+
+        try:
+            from reveal.registry import get_analyzer
+            analyzer_class = get_analyzer(temp_path)
+            analyzer = analyzer_class(temp_path)
+
+            result = _extract_hierarchical_element(analyzer, 'Wrong.Run')
+            assert result is None
+        finally:
+            os.unlink(temp_path)
+
+    def test_hierarchical_go_free_function_unaffected(self):
+        """A free (non-receiver) function with the same name as a receiver
+        method must not be matched by the Go receiver-method fallback —
+        Class.method syntax should only ever resolve the receiver method."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.go', delete=False) as f:
+            f.write(
+                'package sample\n\n'
+                'func Run(order string) string {\n\treturn order\n}\n\n'
+                'type Batch struct {\n\tTotal int\n}\n\n'
+                'func (b *Batch) Run(items []int) {\n\tb.Total = len(items)\n}\n'
+            )
+            f.flush()
+            temp_path = f.name
+
+        try:
+            from reveal.registry import get_analyzer
+            analyzer_class = get_analyzer(temp_path)
+            analyzer = analyzer_class(temp_path)
+
+            result = _extract_hierarchical_element(analyzer, 'Batch.Run')
+            assert result is not None
+            assert 'func (b *Batch) Run' in result['source']
+        finally:
+            os.unlink(temp_path)
+
+    def test_hierarchical_go_nav_flag_lookup_matches_element_extraction(self):
+        """`--loopmap`/`--fanout`/etc. resolve Class.method via a *separate*
+        by-name path (file_handler._find_element_node), not this module's
+        _extract_hierarchical_element — BACK-530 precedent showed the two
+        can drift. Both must resolve Go receiver methods identically."""
+        from reveal.file_handler import _find_element_node
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.go', delete=False) as f:
+            f.write(
+                'package sample\n\n'
+                'type Batch struct {\n\tTotal int\n}\n\n'
+                'func (b *Batch) Run(items []int) {\n\tb.Total = len(items)\n}\n'
+            )
+            f.flush()
+            temp_path = f.name
+
+        try:
+            from reveal.registry import get_analyzer
+            analyzer_class = get_analyzer(temp_path)
+            analyzer = analyzer_class(temp_path)
+
+            node = _find_element_node(analyzer, 'Batch.Run')
+            assert node is not None
+            assert analyzer._get_node_name(node) == 'Run'
+        finally:
+            os.unlink(temp_path)
+
 
 # ============================================================================
 # Task #5: Test line-based extraction (lines 330-361, 441-460)

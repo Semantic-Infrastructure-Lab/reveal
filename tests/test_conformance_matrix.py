@@ -377,8 +377,8 @@ def test_loopmap_finds_loop(lang):
     conformance-matrix pass), not the shared entry_function — same precedent
     as Rust's count_down (BACK-427/430): a loop + field write + call effect
     that doesn't disturb any existing line-numbered assertion. Named
-    Class.method extraction fails for cpp/go (BACK-451, filed not fixed);
-    their batch_element is a :LINE-RANGE workaround instead."""
+    Class.method extraction still fails for cpp (BACK-451, Go RESOLVED
+    jiwasobi-0712); its batch_element is a :LINE-RANGE workaround instead."""
     element = EXPECTED[lang]["batch_element"]
     out = _run(str(_sample_path(lang)), element, "--loopmap", "--format", "json")
     data = json.loads(out)

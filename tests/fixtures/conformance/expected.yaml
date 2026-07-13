@@ -361,9 +361,10 @@ go:
   - {line: 22, gate_lines: [21]}
   - {line: 26, gate_lines: [25]}
   - {line: 31, gate_lines: []}
-  # `Batch.Run` named extraction fails for Go (BACK-451, filed not fixed) —
-  # a :LINE-RANGE covering the whole method is the workaround.
-  batch_element: ":45-49"
+  # `Batch.Run` named extraction (BACK-451 RESOLVED jiwasobi-0712) — matched
+  # by receiver-type text since Go's method_declaration isn't an AST child
+  # of its receiver struct (no containment relationship to walk).
+  batch_element: Batch.Run
   loopmap:
   - {keyword: FOR, line_start: 46}
   fanout_effects:

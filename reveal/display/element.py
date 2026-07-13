@@ -382,6 +382,47 @@ def _find_child_in_subtree(analyzer, node, target_name: str):
     return None
 
 
+def _go_receiver_method_node(analyzer, parent_name: str, child_name: str):
+    """Find a Go receiver method by receiver-type text match (BACK-451).
+
+    Go has no `Class.method` OOP shape: `func (b *Batch) Run(...)` is a
+    top-level `method_declaration`, not an AST child of the `Batch` struct's
+    node — the generic PARENT_NODE_TYPES/CHILD_NODE_TYPES containment walk
+    that works for every other class-shaped language can never find it.
+    Instead, scan `method_declaration` nodes directly and match the
+    receiver's type name (first `parameter_list`, unwrapping `pointer_type`
+    for `*Batch` receivers) against `parent_name`.
+    """
+    for node in analyzer._find_nodes_by_type('method_declaration'):
+        if analyzer._get_node_name(node) != child_name:
+            continue
+        receiver_type = _go_receiver_type_name(analyzer, node)
+        if receiver_type == parent_name:
+            return node
+    return None
+
+
+def _go_receiver_type_name(analyzer, method_node) -> Optional[str]:
+    """Extract the receiver's type identifier from a Go method_declaration."""
+    for child in _children(method_node):
+        if child.kind() != 'parameter_list':
+            continue
+        for param in _children(child):
+            if param.kind() != 'parameter_declaration':
+                continue
+            for part in _children(param):
+                kind = part.kind()
+                if kind == 'type_identifier':
+                    return analyzer._get_node_text(part)
+                if kind == 'pointer_type':
+                    for inner in _children(part):
+                        if inner.kind() == 'type_identifier':
+                            return analyzer._get_node_text(inner)
+        # Only the first parameter_list is the receiver.
+        break
+    return None
+
+
 def _extract_hierarchical_element(analyzer, element: str):
     """Extract an element using hierarchical syntax (Class.method).
 
@@ -409,6 +450,15 @@ def _extract_hierarchical_element(analyzer, element: str):
             break
 
     if not parent_node:
+        if getattr(analyzer, 'language', None) == 'go':
+            child_node = _go_receiver_method_node(analyzer, parent_name, child_name)
+            if child_node:
+                return {
+                    'name': element,
+                    'line_start': child_node.start_position().row + 1,
+                    'line_end': child_node.end_position().row + 1,
+                    'source': analyzer._get_node_text(child_node),
+                }
         return None
 
     child_node = _find_child_in_subtree(analyzer, parent_node, child_name)
