@@ -663,10 +663,13 @@ class TestModuleResolution:
         assert res['bar.php'] == (tmp_path / 'bar.php').resolve()
 
     def test_php_require_framework_constant_concat_honest_skip(self, tmp_path):
-        """`require_once ABSPATH . WPINC . '/version.php';` — WordPress's
-        framework-constant concatenation. Out of scope for BACK-564 (needs a
-        separate framework-aware opt-in): must not crash and must not
-        fabricate an edge, just honestly extract nothing for this statement."""
+        """`require_once ABSPATH . WPINC . '/version.php';` with NO
+        `constant_index` supplied (the default, and every caller before
+        BACK-565's opt-in `constant_index` kwarg existed): `ABSPATH`/`WPINC`
+        are never defined anywhere in this tiny fixture, so there is nothing
+        to substitute — must not crash and must not fabricate an edge, just
+        honestly extract nothing for this statement. See TestPhpConstantDefines
+        below for the BACK-565 case where these constants ARE indexed."""
         (tmp_path / 'wp-includes').mkdir()
         (tmp_path / 'wp-includes/version.php').write_text('<?php\n$wp_version = "1";\n')
         (tmp_path / 'main.php').write_text(
@@ -814,3 +817,149 @@ class TestModuleResolution:
         assert extractor.resolve_import(
             stmt, base_path=tmp_path / 'src/com/app', search_paths=[tmp_path],
             file_index=index) == expected
+
+
+class TestPhpConstantDefines:
+    """BACK-565: `define()`-declared framework constants (`ABSPATH`, `WPINC`,
+    ...) substituted into require/include concatenation chains.
+
+    Mirrors ``DependsAdapter._build_constant_index``'s fixed-point shape at
+    unit-test scale: extract every ``define()`` in the fixture tree via
+    :meth:`extract_constant_defines`, fold into a ``name -> value`` dict, then
+    pass that dict as ``constant_index`` to :meth:`extract_imports` — exactly
+    what the real adapter does across a whole project.
+    """
+
+    @staticmethod
+    def _constant_index(extractor, *file_paths):
+        index = {}
+        for _ in range(4):  # small fixed point, mirrors the real builder
+            candidates = {}
+            for fp in file_paths:
+                for name, value in extractor.extract_constant_defines(fp, index):
+                    candidates.setdefault(name, set()).add(value)
+            new_index = {n: next(iter(v)) for n, v in candidates.items() if len(v) == 1}
+            if new_index == index:
+                break
+            index = new_index
+        return index
+
+    def test_two_hop_constant_then_require_resolves(self, tmp_path):
+        """`define('BASE_DIR', __DIR__ . '/lib')` then `require BASE_DIR .
+        '/y.php'` — the constant itself resolves via BACK-564's `__DIR__`
+        idiom, and the require resolves via BACK-565's substitution of that
+        constant. Two hops, neither of which is a bare literal."""
+        (tmp_path / 'lib').mkdir()
+        (tmp_path / 'lib/y.php').write_text('<?php\n$x = 1;\n')
+        (tmp_path / 'define.php').write_text(
+            "<?php\ndefine( 'BASE_DIR', __DIR__ . '/lib' );\n")
+        (tmp_path / 'main.php').write_text(
+            "<?php\nrequire BASE_DIR . '/y.php';\n")
+        extractor = get_extractor(tmp_path / 'main.php')
+        index = self._constant_index(
+            extractor, tmp_path / 'define.php', tmp_path / 'main.php')
+        assert index['BASE_DIR'] == ('absolute', str((tmp_path / 'lib').resolve()))
+
+        imports = extractor.extract_imports(tmp_path / 'main.php', constant_index=index)
+        assert len(imports) == 1
+        stmt = imports[0]
+        assert stmt.is_relative is False
+        resolved = extractor.resolve_import(
+            stmt, base_path=tmp_path, search_paths=[tmp_path])
+        assert resolved == (tmp_path / 'lib/y.php').resolve()
+
+    def test_wordpress_three_operand_abspath_wpinc_chain_resolves(self, tmp_path):
+        """`ABSPATH . WPINC . '/version.php'` — the real WordPress-core shape
+        BACK-565 was filed for. `ABSPATH` is directory-relative via `__DIR__`,
+        `WPINC` is a bare literal fragment; both must substitute into the
+        3-operand chain for the whole require to resolve."""
+        (tmp_path / 'wp-includes').mkdir()
+        (tmp_path / 'wp-includes/version.php').write_text('<?php\n$wp_version = "1";\n')
+        (tmp_path / 'wp-load.php').write_text(
+            "<?php\n"
+            "define( 'ABSPATH', __DIR__ . '/' );\n"
+            "define( 'WPINC', 'wp-includes' );\n"
+            "require_once ABSPATH . WPINC . '/version.php';\n"
+        )
+        entry = tmp_path / 'wp-load.php'
+        extractor = get_extractor(entry)
+        index = self._constant_index(extractor, entry)
+        assert index['ABSPATH'] == ('absolute', str(tmp_path.resolve()))
+        assert index['WPINC'] == ('literal', 'wp-includes')
+
+        imports = extractor.extract_imports(entry, constant_index=index)
+        assert len(imports) == 1
+        resolved = extractor.resolve_import(
+            imports[0], base_path=tmp_path, search_paths=[tmp_path])
+        assert resolved == (tmp_path / 'wp-includes/version.php').resolve()
+
+    def test_unknown_constant_still_honest_skips(self, tmp_path):
+        """`require UNKNOWN_CONST . '/x.php';` where no `define()` for
+        `UNKNOWN_CONST` exists anywhere in scope — even with a non-empty
+        `constant_index` built from the rest of the tree, an absent name
+        must not fabricate an edge."""
+        (tmp_path / 'x.php').write_text('<?php\n$x = 1;\n')
+        (tmp_path / 'define.php').write_text(
+            "<?php\ndefine( 'OTHER_CONST', __DIR__ . '/other' );\n")
+        (tmp_path / 'main.php').write_text(
+            "<?php\nrequire UNKNOWN_CONST . '/x.php';\n")
+        extractor = get_extractor(tmp_path / 'main.php')
+        index = self._constant_index(
+            extractor, tmp_path / 'define.php', tmp_path / 'main.php')
+        assert 'UNKNOWN_CONST' not in index
+
+        imports = extractor.extract_imports(tmp_path / 'main.php', constant_index=index)
+        assert imports == []
+
+    def test_ambiguous_constant_excluded_never_fabricates(self, tmp_path):
+        """Two `define()` sites for the same name resolving to two genuinely
+        different absolute directories (real WordPress shape: conditional
+        `WP_MEMORY_LIMIT`/`WP_LANG_DIR` definitions) — the constant must be
+        excluded from the index entirely, and a require built from it must
+        honest-skip rather than pick one of the two candidates."""
+        (tmp_path / 'a').mkdir()
+        (tmp_path / 'b').mkdir()
+        (tmp_path / 'a/one.php').write_text(
+            "<?php\ndefine( 'AMBIG_DIR', __DIR__ . '/x' );\n")
+        (tmp_path / 'b/two.php').write_text(
+            "<?php\ndefine( 'AMBIG_DIR', __DIR__ . '/y' );\n")
+        (tmp_path / 'main.php').write_text(
+            "<?php\nrequire AMBIG_DIR . '/z.php';\n")
+        extractor = get_extractor(tmp_path / 'main.php')
+        index = self._constant_index(
+            extractor, tmp_path / 'a/one.php', tmp_path / 'b/two.php', tmp_path / 'main.php')
+        assert 'AMBIG_DIR' not in index
+
+        imports = extractor.extract_imports(tmp_path / 'main.php', constant_index=index)
+        assert imports == []
+
+    def test_consistent_multi_site_constant_not_ambiguous(self, tmp_path):
+        """Two `define()` sites for the same name that both reduce to the
+        SAME real absolute directory (real WordPress shape: `ABSPATH` via
+        `__DIR__ . '/'` at the project root vs. `dirname( __DIR__ ) . '/'`
+        one level down) must agree, not be flagged ambiguous."""
+        (tmp_path / 'admin').mkdir()
+        (tmp_path / 'root_define.php').write_text(
+            "<?php\ndefine( 'ABSPATH', __DIR__ . '/' );\n")
+        (tmp_path / 'admin/nested_define.php').write_text(
+            "<?php\ndefine( 'ABSPATH', dirname( __DIR__ ) . '/' );\n")
+        extractor = get_extractor(tmp_path / 'root_define.php')
+        index = self._constant_index(
+            extractor, tmp_path / 'root_define.php', tmp_path / 'admin/nested_define.php')
+        assert index['ABSPATH'] == ('absolute', str(tmp_path.resolve()))
+
+    def test_dirname_with_levels_argument_resolves(self, tmp_path):
+        """`dirname( __DIR__, 2 )` — real WordPress idiom
+        (`wp-admin/maint/repair.php`) walking up two directory levels from
+        `__DIR__` in one call, not the single-level `dirname(__DIR__)` form."""
+        (tmp_path / 'wp-load.php').write_text('<?php\n$x = 1;\n')
+        (tmp_path / 'wp-admin/maint').mkdir(parents=True)
+        (tmp_path / 'wp-admin/maint/repair.php').write_text(
+            "<?php\nrequire_once dirname( __DIR__, 2 ) . '/wp-load.php';\n")
+        entry = tmp_path / 'wp-admin/maint/repair.php'
+        extractor = get_extractor(entry)
+        imports = extractor.extract_imports(entry)
+        assert len(imports) == 1
+        resolved = extractor.resolve_import(
+            imports[0], base_path=entry.parent, search_paths=[tmp_path])
+        assert resolved == (tmp_path / 'wp-load.php').resolve()

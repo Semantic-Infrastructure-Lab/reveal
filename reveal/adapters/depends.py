@@ -445,6 +445,12 @@ class DependsAdapter(ResourceAdapter):
         # BACK-557 direction a: count of edges added purely from Zeitwerk
         # constant-path inference (no backing require/import statement).
         self._zeitwerk_edges = 0
+        # BACK-565: PHP framework-constant (`define('ABSPATH', ...)`) index
+        # size and the count of constant names found ambiguous (different
+        # define() sites resolving to different absolute values) and
+        # therefore excluded from resolution.
+        self._constants_indexed = 0
+        self._constants_ambiguous = 0
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Build import graph and return reverse-dependency view.
@@ -537,6 +543,8 @@ class DependsAdapter(ResourceAdapter):
             'scan_capped': self._scan_capped,
             'root_inferred': self._root_inferred,
             'zeitwerk_edges_inferred': self._zeitwerk_edges,
+            'php_constants_indexed': self._constants_indexed,
+            'php_constants_ambiguous': self._constants_ambiguous,
         }
 
     # ── Graph building (mirrors ImportsAdapter._build_graph) ──────────────
@@ -566,6 +574,8 @@ class DependsAdapter(ResourceAdapter):
         self._unresolved_intra = 0
         self._unresolved_examples = []
         self._zeitwerk_edges = 0
+        self._constants_indexed = 0
+        self._constants_ambiguous = 0
 
         # BACK-498: discover files the same way ImportsAdapter._build_graph does —
         # os.walk honoring SKIP_DIRECTORIES/hidden dirs (not a raw rglob, which
@@ -645,11 +655,28 @@ class DependsAdapter(ResourceAdapter):
         # zero require statements by design, so gating this on
         # self._graph.files (import-derived) would miss almost all of them.
         zeitwerk_index: Dict[str, Path] = {}
+        # BACK-565: name -> ('literal', str) | ('absolute', str), the
+        # project-wide PHP framework-constant index (`define('ABSPATH',
+        # __DIR__ . '/')`) that `_concat_to_import`'s `ABSPATH . WPINC .
+        # '/version.php'`-shaped resolution looks up. Built to a fixed point
+        # over `files` (not a single pass): real WordPress code chains
+        # constants through each other (`WP_CONTENT_DIR = ABSPATH .
+        # 'wp-content'`, `WP_PLUGIN_DIR = WP_CONTENT_DIR . '/plugins'`), and
+        # `files` is walk-ordered, not dependency-ordered, so a constant
+        # defined later in the walk than a file that references it needs a
+        # second pass to resolve — capped at a small iteration count since
+        # real chains are only 2-3 levels deep, never unbounded.
+        constant_index, constant_ambiguous = self._build_constant_index(files)
+        self._constants_indexed = len(constant_index)
+        self._constants_ambiguous = len(constant_ambiguous)
         for file_path in files:
             extractor = get_extractor(file_path)
             if not extractor:
                 continue
-            file_imports = extractor.extract_imports(file_path)
+            if getattr(extractor, 'spec', None) is not None:
+                file_imports = extractor.extract_imports(file_path, constant_index=constant_index)
+            else:
+                file_imports = extractor.extract_imports(file_path)
             all_imports.extend(file_imports)
             spec = getattr(extractor, 'spec', None)
             # BACK-557: require-statement coverage for the convention-autoloaded
@@ -813,6 +840,88 @@ class DependsAdapter(ResourceAdapter):
                             import_type='zeitwerk_convention',
                             skip_unused=True,
                         )
+
+    @staticmethod
+    def _build_constant_index(
+        files: List[Path],
+    ) -> Tuple[Dict[str, Tuple[str, str]], Set[str]]:
+        """BACK-565: project-wide PHP `define()` constant index, to a fixed
+        point.
+
+        Real WordPress code chains framework constants through each other
+        (`WP_CONTENT_DIR = ABSPATH . 'wp-content'`, `WP_PLUGIN_DIR =
+        WP_CONTENT_DIR . '/plugins'`), and `files` is walk order, not
+        dependency order — a single pass would miss any constant defined in
+        a file visited after the one that references it. Re-scanning with
+        the previous pass's result as `known_constants` converges once no
+        pass changes the index; real chains measured at most 2-3 levels deep
+        (ABSPATH -> WP_CONTENT_DIR -> WP_PLUGIN_DIR), so 6 passes is a wide
+        safety margin, not a tuned constant — this is a bounded fixed point,
+        not an unbounded loop.
+
+        Ambiguity (BACK-565's explicit requirement): if a constant name
+        resolves to more than one *distinct* value across `define()` sites
+        in the corpus (confirmed real shape — WordPress's own `ABSPATH` is
+        defined via `__DIR__ . '/'` in `wp-load.php` at the project root and
+        via `dirname( __DIR__ ) . '/'` in `wp-admin/*.php`, but both
+        resolve to the *same* real absolute directory, so they agree and
+        are NOT ambiguous), the name is excluded from the returned index
+        entirely — never guessed at, and never left holding an arbitrary
+        "first one wins" value. Returns ``(index, ambiguous_names)`` so the
+        caller can report both counts.
+
+        Performance: `extract_constant_defines` re-parses its file from
+        scratch every call (no analyzer cache in this module), so scanning
+        every file in a large tree up to 6 times would multiply an already
+        non-trivial parse cost. A file with no `define(`-family callee
+        anywhere in its raw text can never contribute a constant, so a cheap
+        substring pre-filter (real corpus: 89/1927 WordPress files call
+        `define(` at all) narrows the fixed-point loop to the files that can
+        possibly matter, before any tree-sitter parse — same "cheap check
+        before the expensive one" shape as `is_skippable_dir`.
+        """
+        candidate_files: List[Path] = []
+        for file_path in files:
+            extractor = get_extractor(file_path)
+            if not extractor:
+                continue
+            spec = getattr(extractor, 'spec', None)
+            call_names = getattr(spec, 'constant_define_call_names', None)
+            if not call_names:
+                continue
+            try:
+                text = file_path.read_text(errors='ignore')
+            except OSError:
+                continue
+            # `name + '('` (not bare `name`), so `defined(` — extremely
+            # common in real WordPress code checking a constant it doesn't
+            # declare — doesn't false-positive the filter into scanning
+            # files that can never contain a `define(` call. PHP call syntax
+            # never puts whitespace between a callee name and its `(`.
+            if any(f'{name}(' in text for name in call_names):
+                candidate_files.append(file_path)
+
+        index: Dict[str, Tuple[str, str]] = {}
+        ambiguous: Set[str] = set()
+        for _ in range(6):
+            candidates: Dict[str, Set[Tuple[str, str]]] = {}
+            for file_path in candidate_files:
+                extractor = get_extractor(file_path)
+                if not extractor:
+                    continue
+                for name, value in extractor.extract_constant_defines(file_path, index):
+                    candidates.setdefault(name, set()).add(value)
+            new_index: Dict[str, Tuple[str, str]] = {}
+            ambiguous: Set[str] = set()
+            for name, values in candidates.items():
+                if len(values) == 1:
+                    new_index[name] = next(iter(values))
+                else:
+                    ambiguous.add(name)
+            if new_index == index:
+                return new_index, ambiguous
+            index = new_index
+        return index, ambiguous
 
     def _build_meta(self) -> Dict[str, Any]:
         known_limits = [

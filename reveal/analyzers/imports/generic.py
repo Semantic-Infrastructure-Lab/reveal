@@ -265,6 +265,28 @@ class _ImportSpec:
             literal, still legal PHP) falls through unchanged to the
             existing :meth:`_build` text path. Empty means no language uses
             this idiom (every language but PHP).
+
+            BACK-565 extends this: when the ``__DIR__``/``dirname(__FILE__)``
+            single-operand idiom above doesn't match (multi-operand chains
+            whose leading operand is itself a nested concatenation, e.g.
+            ``ABSPATH . WPINC . '/version.php'``), :meth:`_concat_to_import`
+            falls back to :meth:`_resolve_concat_operand`, which can
+            substitute a *known project constant* (see
+            ``constant_define_call_names`` below) for any operand and keep
+            walking the chain. Still never a guess: an operand that is
+            neither a literal, the magic-constant idiom, nor a constant
+            already proven unambiguous project-wide is an honest skip of the
+            whole statement.
+        constant_define_call_names: Callee name(s) that declare a global
+            constant — PHP's ``define`` (``define('ABSPATH', __DIR__ . '/')``,
+            BACK-565). Feeds :meth:`_GenericTreeSitterImportExtractor.extract_constant_defines`,
+            which scans every ``define()`` call in the tree once (mirroring
+            the "build once, pass down" shape ``extract_namespaces``/
+            ``extract_top_level_members`` already use) into a project-wide
+            ``name -> ('literal', str) | ('absolute', str)`` index that
+            :meth:`_resolve_concat_operand` looks up when a concatenation's
+            operand is an identifier it doesn't otherwise recognize. Empty
+            means no language uses this idiom (every language but PHP).
     """
 
     import_node_types: FrozenSet[str]
@@ -288,6 +310,7 @@ class _ImportSpec:
     convention_autoloaded: bool = False
     zeitwerk_convention: bool = False
     concat_relative_node_types: FrozenSet[str] = field(default_factory=frozenset)
+    constant_define_call_names: FrozenSet[str] = field(default_factory=frozenset)
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -300,7 +323,24 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
     # Subclasses MUST set these.
     spec: ClassVar[_ImportSpec]
 
-    def extract_imports(self, file_path: Path) -> List[ImportStatement]:
+    def extract_imports(
+        self,
+        file_path: Path,
+        constant_index: Optional[Dict[str, Tuple[str, str]]] = None,
+    ) -> List[ImportStatement]:
+        """Extract this file's import statements.
+
+        ``constant_index`` (BACK-565, optional): a project-wide
+        ``name -> ('literal', str) | ('absolute', str)`` map of PHP
+        ``define()``-declared constants (see
+        :meth:`extract_constant_defines`), built once by the caller and
+        passed down the same way ``file_index`` is for resolution — used
+        only by :meth:`_concat_to_import` to substitute a known constant
+        into a require/include concatenation chain. ``None`` (the default,
+        and every non-PHP caller) behaves exactly as before this session:
+        constant-involving concatenations are honestly skipped, not
+        fabricated.
+        """
         analyzer = self._get_analyzer(file_path)
         if analyzer is None:
             return []
@@ -309,7 +349,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
         for node_type in self.spec.import_node_types:
             for node in analyzer._find_nodes_by_type(node_type):
-                stmt = self._node_to_import(node, analyzer, file_path)
+                stmt = self._node_to_import(node, analyzer, file_path, constant_index)
                 if stmt is not None:
                     imports.append(stmt)
 
@@ -640,10 +680,13 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             logger.debug("generic import analyzer failed for %s: %s", file_path, e)
             return None
 
-    def _node_to_import(self, node, analyzer, file_path: Path) -> Optional[ImportStatement]:
+    def _node_to_import(
+        self, node, analyzer, file_path: Path,
+        constant_index: Optional[Dict[str, Tuple[str, str]]] = None,
+    ) -> Optional[ImportStatement]:
         """Turn a dedicated import-statement node into an ImportStatement."""
         if node.kind() in self.spec.concat_relative_node_types:
-            result = self._concat_to_import(node, analyzer, file_path)
+            result = self._concat_to_import(node, analyzer, file_path, constant_index)
             if result is not _NOT_CONCAT:
                 return result
         raw = analyzer._get_node_text(node)
@@ -661,21 +704,25 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
     _DIRNAME_CALLEE: ClassVar[str] = 'dirname'
     _FILE_CONST_NAME: ClassVar[str] = '__FILE__'
 
-    def _concat_to_import(self, node, analyzer, file_path: Path):
+    def _concat_to_import(
+        self, node, analyzer, file_path: Path,
+        constant_index: Optional[Dict[str, Tuple[str, str]]] = None,
+    ):
         """Structural extraction for a require/include node whose target is a
         concatenation expression (``binary_expression`` chained on ``.``).
 
         Returns:
-          * an :class:`ImportStatement` when the concatenation's leading
-            operand reduces to PHP's directory-relative magic-constant idiom
-            (``__DIR__`` or ``dirname( __FILE__ )``) — the trailing string
-            fragment becomes ``module_name``, ``is_relative=True``, so it
-            flows through the same ``_resolve_module``/``_resolve_path_target``
-            machinery as Ruby's ``require_relative``.
-          * ``None`` (honest skip, never a fabricated edge) when the leading
-            operand is anything else — a framework constant (``ABSPATH``,
-            ``WPINC``), a variable, or any shape this doesn't recognize.
-          * the module-level ``_NOT_CONCAT`` sentinel when the node's argument
+          * an :class:`ImportStatement` when the concatenation resolves —
+            either BACK-564's single-operand ``__DIR__``/``dirname(__FILE__)``
+            idiom (``module_name`` is the trailing fragment, ``is_relative=
+            True``, resolved file-relative exactly as before), or BACK-565's
+            constant-substitution chain (``module_name`` is the fully
+            resolved absolute path, ``is_relative=False`` — see
+            :meth:`_resolve_concat_operand`).
+          * ``None`` (honest skip, never a fabricated edge) when neither
+            shape applies — an unknown/ambiguous framework constant, a
+            variable, or any shape this doesn't recognize.
+          * the module-level ``_NOT_CONCAT`` sentinel when the node's target
             isn't a concatenation at all (a bare string literal, e.g.
             ``require 'lib/foo.php';``) — the caller falls back to the
             existing text-based ``_build`` path unchanged, so that
@@ -685,29 +732,60 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         if concat is None:
             return _NOT_CONCAT
 
+        # BACK-564 idiom, tried first and unchanged: a single-operand
+        # `__DIR__ . 'x.php'` / `dirname( __FILE__ ) . 'x.php'` concatenation
+        # resolves file-relative via the same machinery as Ruby's
+        # `require_relative`. Checked structurally exactly as before this
+        # session so this path's output (module_name/is_relative) is
+        # byte-identical for every case it already handled.
         fragment = self._trailing_string_fragment(concat, analyzer)
-        if fragment is None:
-            # Trailing operand isn't a plain string literal (e.g. a variable
-            # or a further function call) — can't safely name a file.
-            return None
-
         leading = self._leading_operand(concat)
-        if leading is None or not self._is_dir_relative_operand(leading, analyzer):
-            # ABSPATH-family framework constants, or any other shape reveal
-            # can't classify — deliberately out of scope (BACK-564), needs a
-            # separate framework-aware opt-in. Never guess.
-            return None
+        if fragment is not None and leading is not None and self._is_dir_relative_operand(leading, analyzer):
+            module_name = fragment.lstrip('/')
+            if not module_name:
+                return None
+            return ImportStatement(
+                file_path=file_path,
+                line_number=node.start_position().row + 1,
+                module_name=module_name,
+                imported_names=[],
+                is_relative=True,
+                import_type='include',
+                alias=None,
+                source_line=analyzer._get_node_text(node).strip(),
+                skip_unused=True,
+            )
 
-        module_name = fragment.lstrip('/')
-        if not module_name:
+        # BACK-565: not the single-operand idiom above (e.g. a 3-operand
+        # `ABSPATH . WPINC . '/version.php'` chain, whose leading operand is
+        # itself a nested `binary_expression`) — try resolving the whole
+        # chain against `constant_index`, substituting any operand that
+        # names a project constant proven to have exactly one absolute
+        # value. Still never a guess: any operand that doesn't reduce to a
+        # literal, the magic-constant idiom, or an indexed constant fails
+        # the whole statement.
+        resolved = self._resolve_concat_operand(concat, analyzer, file_path, constant_index or {})
+        if resolved is None:
             return None
+        anchor, tail = resolved
+        if anchor is None:
+            # Every operand in the chain reduced to plain text with no
+            # absolute anchor anywhere (e.g. two unrecognized/ambiguous
+            # constants) — nothing to resolve a file against, and this is a
+            # different idiom than the file-relative one above, so don't
+            # guess base_path here either.
+            return None
+        remainder = tail.lstrip('/')
+        if not remainder:
+            return None
+        module_name = str(anchor / remainder)
 
         return ImportStatement(
             file_path=file_path,
             line_number=node.start_position().row + 1,
             module_name=module_name,
             imported_names=[],
-            is_relative=True,
+            is_relative=False,
             import_type='include',
             alias=None,
             source_line=analyzer._get_node_text(node).strip(),
@@ -779,6 +857,251 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             arg_text = cls._first_descendant_text(args, analyzer, ('name',))
             return arg_text is not None and arg_text.strip() == cls._FILE_CONST_NAME
         return False
+
+    # BACK-565: PHP framework-constant substitution (`ABSPATH`, `WPINC`, ...).
+    # WordPress's own corpus defines these via `define()` at each bootstrap
+    # file's top level, anchored at *that file's own location* — never a
+    # single universal value guessed from the constant name. These three
+    # helpers build (extract_constant_defines) and consume
+    # (_resolve_concat_operand/_resolve_leaf_operand) a project-wide index of
+    # such constants, reusing _leading_operand/_trailing_string_fragment's
+    # single-level shape one level deeper for arbitrary-length chains.
+
+    @classmethod
+    def _operand_anchor(cls, operand, analyzer, file_path: Path) -> Optional[Path]:
+        """The absolute directory PHP's ``__DIR__``/``dirname(__FILE__)``/
+        ``dirname(__DIR__)`` magic-constant idiom names when used as a
+        concatenation operand, anchored at ``file_path``'s own location —
+        ``None`` when ``operand`` isn't one of these shapes (a framework
+        constant, a variable, or anything else :meth:`_resolve_leaf_operand`
+        must instead try against the constant index).
+
+        ``dirname(__DIR__)`` (one directory above the current file, real
+        WordPress idiom: ``wp-admin/load-scripts.php`` defines ``ABSPATH``
+        this way) is new relative to :meth:`_is_dir_relative_operand`, which
+        only ever needed the single-level ``__DIR__``/``dirname(__FILE__)``
+        case for a *require target* directly. Both are equally derivable
+        from the file's own path — no guessing involved — so recognizing it
+        here is a strict widening, never a fabrication risk.
+
+        Also handles PHP's ``dirname($path, $levels)`` two-argument form
+        (real WordPress idiom: ``wp-admin/maint/repair.php`` requires
+        ``dirname( __DIR__, 2 ) . '/wp-load.php'``) — ``$levels`` is a
+        literal integer applying ``dirname()`` that many times, so it's
+        exactly as derivable as the single-level form, just walking that
+        many extra parents.
+        """
+        kind = operand.kind()
+        if kind == 'name':
+            if analyzer._get_node_text(operand).strip() == cls._DIR_RELATIVE_NAME:
+                return file_path.parent
+            return None
+        if kind == 'function_call_expression':
+            callee = cls._first_child_of_kind(operand, 'name')
+            if callee is None or analyzer._get_node_text(callee).strip() != cls._DIRNAME_CALLEE:
+                return None
+            args = cls._first_child_of_kind(operand, 'arguments')
+            if args is None:
+                return None
+            arg_nodes = [c for c in _children(args) if c.kind() == 'argument']
+            if not arg_nodes:
+                return None
+            arg_text = cls._first_descendant_text(arg_nodes[0], analyzer, ('name',))
+            if arg_text is None:
+                return None
+            arg_text = arg_text.strip()
+            if arg_text == cls._FILE_CONST_NAME:
+                base = file_path.parent
+            elif arg_text == cls._DIR_RELATIVE_NAME:
+                base = file_path.parent.parent
+            else:
+                return None
+            levels = 1
+            if len(arg_nodes) >= 2:
+                levels_text = cls._first_descendant_text(arg_nodes[1], analyzer, ('integer',))
+                if levels_text is None or not levels_text.strip().isdigit():
+                    # A non-literal levels argument (a variable, an
+                    # expression) can't be resolved without guessing.
+                    return None
+                levels = int(levels_text.strip())
+                if levels < 1:
+                    return None
+            for _ in range(levels - 1):
+                base = base.parent
+            return base
+        return None
+
+    def _resolve_leaf_operand(
+        self, node, analyzer, file_path: Path,
+        known_constants: Dict[str, Tuple[str, str]],
+    ) -> Optional[Tuple[Optional[Path], str]]:
+        """Resolve a single (non-``.``-chained) concatenation operand.
+
+        Returns ``(anchor, fragment)`` — ``anchor`` is the absolute
+        directory the operand names (``__DIR__``-family idiom or an indexed
+        ``('absolute', ...)`` constant), or ``None`` when the operand
+        contributes only relative text (a bare string literal, or an
+        indexed ``('literal', ...)`` constant). Returns ``None`` (not a
+        tuple) when the operand can't be classified at all — a variable, an
+        unrecognized call, or an identifier absent from (or ambiguous in,
+        see :meth:`extract_constant_defines`) ``known_constants``: the
+        caller must treat that as an honest skip of the whole statement.
+        """
+        kind = node.kind()
+        if kind == 'string':
+            content = self._first_descendant_text(node, analyzer, ('string_content',))
+            if content is None:
+                return None
+            return (None, content)
+        anchor = self._operand_anchor(node, analyzer, file_path)
+        if anchor is not None:
+            return (anchor, '')
+        if kind == 'name':
+            name = analyzer._get_node_text(node).strip()
+            if name in (self._DIR_RELATIVE_NAME, self._FILE_CONST_NAME):
+                # A bare __DIR__/__FILE__ that _operand_anchor already
+                # rejected (e.g. bare __FILE__ names a whole file path, not
+                # a directory) — not the idiom, and not a constant lookup
+                # either.
+                return None
+            value = known_constants.get(name)
+            if value is None:
+                return None
+            value_kind, value_data = value
+            if value_kind == 'literal':
+                return (None, value_data)
+            return (Path(value_data), '')
+        return None
+
+    def _resolve_concat_operand(
+        self, node, analyzer, file_path: Path,
+        known_constants: Dict[str, Tuple[str, str]],
+    ) -> Optional[Tuple[Optional[Path], str]]:
+        """Resolve a (possibly chained) ``.`` concatenation expression to
+        ``(anchor, fragment)`` by walking it structurally, substituting any
+        operand found in ``known_constants``.
+
+        ``anchor`` is ``None`` when nothing in the chain set an absolute
+        base (pure literal/constant text — the caller decides what, if
+        anything, to resolve that relative to); otherwise it's the single
+        absolute directory the chain is anchored to. ``fragment`` is the
+        concatenation of every operand's text, in order, with the anchor's
+        own contribution folded to ``''`` (the anchor names a directory, not
+        text to append). A second anchor appearing anywhere but the very
+        start of the chain is a shape this doesn't model (which operand
+        actually applies is ambiguous) — honest skip, ``None``.
+        """
+        kind = node.kind()
+        if kind == 'string':
+            return self._resolve_leaf_operand(node, analyzer, file_path, known_constants)
+        if kind != 'binary_expression':
+            return self._resolve_leaf_operand(node, analyzer, file_path, known_constants)
+        children = _children(node)
+        if len(children) < 2:
+            return None
+        left, right = children[0], children[-1]
+        left_result = self._resolve_concat_operand(left, analyzer, file_path, known_constants)
+        if left_result is None:
+            return None
+        anchor, fragment = left_result
+        right_result = self._resolve_leaf_operand(right, analyzer, file_path, known_constants)
+        if right_result is None:
+            return None
+        right_anchor, right_fragment = right_result
+        if right_anchor is not None:
+            if anchor is not None:
+                # Two anchors in one chain (e.g. `ABSPATH . WP_CONTENT_DIR`)
+                # — which one the resulting path is actually relative to is
+                # ambiguous. Never guess.
+                return None
+            anchor = right_anchor
+        return (anchor, fragment + right_fragment)
+
+    @staticmethod
+    def _first_argument_value(argument_node):
+        """The real expression a PHP ``argument`` wrapper node holds — tree-
+        sitter's grammar wraps each call argument in its own ``argument``
+        node (e.g. ``define('X', __DIR__ . '/')``'s ``arguments`` node has
+        two ``argument`` children, each with exactly one meaningful child:
+        the ``string``/``binary_expression``/... the caller actually wants).
+        """
+        for child in _children(argument_node):
+            return child
+        return None
+
+    def extract_constant_defines(
+        self, file_path: Path,
+        known_constants: Optional[Dict[str, Tuple[str, str]]] = None,
+    ) -> List[Tuple[str, Tuple[str, str]]]:
+        """``(name, ('literal', str) | ('absolute', str))`` pairs for every
+        ``define('NAME', <expr>)`` call in this file (BACK-565), feeding the
+        project-wide constant index :meth:`_resolve_concat_operand` looks up
+        to resolve WordPress-style framework-constant require/include
+        concatenations (``ABSPATH . WPINC . '/version.php'``).
+
+        ``<expr>`` is classified the same way :meth:`_resolve_concat_operand`
+        classifies any concatenation operand:
+          * a bare string literal (``'wp-includes'``) → ``('literal', ...)``,
+            a relative fragment anchored nowhere;
+          * ``__DIR__``/``dirname(__FILE__)``/``dirname(__DIR__)``, alone or
+            concatenated onto a literal tail → ``('absolute', ...)``,
+            anchored at *this defining file's own location* (never a
+            universal value guessed from the constant's name — the real
+            corpus defines ``ABSPATH`` differently in different files, see
+            BACK-565's backlog writeup);
+          * a further constant reference already present in
+            ``known_constants`` (real WordPress shape:
+            ``WP_CONTENT_DIR = ABSPATH . 'wp-content'``,
+            ``WP_PLUGIN_DIR = WP_CONTENT_DIR . '/plugins'``) → substituted
+            and folded in, so the caller's fixed-point re-scan (constants
+            are declared in file-walk order, not dependency order) converges
+            on multi-level chains too.
+
+        Anything else (a variable, a function call other than ``dirname``,
+        a ternary, ...) is skipped for that one ``define()`` — no entry is
+        produced, never a guessed one.
+
+        No-op (``[]``) unless ``spec.constant_define_call_names`` is set —
+        every language but PHP.
+        """
+        if not self.spec.constant_define_call_names:
+            return []
+        analyzer = self._get_analyzer(file_path)
+        if analyzer is None:
+            return []
+        known = known_constants or {}
+        results: List[Tuple[str, Tuple[str, str]]] = []
+        for node in analyzer._find_nodes_by_type('function_call_expression'):
+            callee = self._first_child_of_kind(node, 'name')
+            if callee is None:
+                continue
+            if analyzer._get_node_text(callee).strip() not in self.spec.constant_define_call_names:
+                continue
+            args_node = self._first_child_of_kind(node, 'arguments')
+            if args_node is None:
+                continue
+            arg_wrappers = [c for c in _children(args_node) if c.kind() == 'argument']
+            if len(arg_wrappers) < 2:
+                continue
+            name_expr = self._first_argument_value(arg_wrappers[0])
+            value_expr = self._first_argument_value(arg_wrappers[1])
+            if name_expr is None or value_expr is None or name_expr.kind() != 'string':
+                continue
+            const_name = self._first_descendant_text(name_expr, analyzer, ('string_content',))
+            if not const_name:
+                continue
+            resolved = self._resolve_concat_operand(value_expr, analyzer, file_path, known)
+            if resolved is None:
+                continue
+            anchor, fragment = resolved
+            if anchor is not None:
+                value: Tuple[str, str] = ('absolute', str(anchor / fragment.lstrip('/')))
+            else:
+                if not fragment:
+                    continue
+                value = ('literal', fragment)
+            results.append((const_name, value))
+        return results
 
     def _call_to_import(self, node, analyzer, file_path: Path) -> Optional[ImportStatement]:
         """Turn a ``require``-style call node into an ImportStatement, if it is one.
@@ -1359,6 +1682,14 @@ _PHP_SPEC = _ImportSpec(
         'require_expression', 'require_once_expression',
         'include_expression', 'include_once_expression',
     }),
+    # BACK-565: the ABSPATH/WPINC-family residual left after BACK-564 —
+    # WordPress bootstraps these via `define('ABSPATH', __DIR__ . '/')` in
+    # wp-load.php/wp-settings.php/wp-admin/*.php. See extract_constant_defines
+    # and _resolve_concat_operand for the resolution rules (only a constant
+    # proven to have exactly one absolute value project-wide substitutes;
+    # multiple distinct values or an unrecognized expression shape is an
+    # honest skip, never fabricated).
+    constant_define_call_names=frozenset({'define'}),
 )
 
 _RUBY_SPEC = _ImportSpec(
