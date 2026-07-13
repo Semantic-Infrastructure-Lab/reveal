@@ -988,13 +988,29 @@ class ImportsAdapter(ResourceAdapter):
 
     def _resolve_dependencies(self, target_path: Path, file_index: Dict[str, List[Path]]) -> None:
         """Resolve each file's imports to dependency edges (language-specific)."""
+        # BACK-554: the namespace index (below) must be built from every
+        # scanned file (`self._scanned_files`), not just `self._graph.files`
+        # (files that themselves emitted >=1 import statement). A C# leaf
+        # file with zero local `using` directives — the common shape for a
+        # file that relies purely on a project-wide C# 10 `global using`, or
+        # simply a class that imports nothing — never appears in
+        # `self._graph.files` (ImportGraph.from_imports only registers files
+        # present in the imports list), so its own `namespace X.Y` was
+        # silently invisible to the namespace fan-out that resolves edges
+        # *to* it: every C# file with no local usings was structurally
+        # unreachable via `using`-of-a-namespace, regardless of how many
+        # other files declared `using X.Y;`.
         files_and_extractors = [
-            (fp, get_extractor(fp)) for fp in self._graph.files
+            (fp, get_extractor(fp)) for fp in self._scanned_files
         ]
         namespace_index = self._build_namespace_index(files_and_extractors)
 
         for file_path, extractor in files_and_extractors:
-            imports = self._graph.files[file_path]
+            # BACK-554: file_path may be a zero-import file (present now that
+            # files_and_extractors is sourced from self._scanned_files, not
+            # self._graph.files) — nothing to resolve *from*, but it still
+            # needed to enter the namespace_index above so edges *to* it work.
+            imports = self._graph.files.get(file_path, [])
             if not extractor:
                 continue
 

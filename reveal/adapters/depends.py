@@ -12,7 +12,7 @@ Usage:
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional, Set, Tuple
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import safe_json_dumps
@@ -570,6 +570,18 @@ class DependsAdapter(ResourceAdapter):
         # contribute (no-op scan otherwise); Swift has no such declaration to
         # scan and stays on the conservative None verdict.
         project_namespaces: Set[str] = set()
+        # BACK-547 Kotlin measurement loop: (package, symbol) -> [declaring
+        # files], the top-level free-function/property index that
+        # resolve_member_targets looks up. `import a.b.foo` for a top-level
+        # `fun foo`/`val foo` has no enclosing type anywhere in the import
+        # string, so neither the direct dotted match nor BACK-551's
+        # enclosing-class peel can find the declaring file — only a
+        # content-scanned index over each package's files can. Built the same
+        # way ImportsAdapter._build_namespace_index builds its namespace
+        # index (every scanned file, not just ones with their own imports),
+        # gated per-language via `spec.member_symbol_fallback` so this is a
+        # no-op scan for trees with no such language present.
+        member_index: Dict[Tuple[str, str], List[Path]] = {}
         for file_path in files:
             extractor = get_extractor(file_path)
             if not extractor:
@@ -577,7 +589,12 @@ class DependsAdapter(ResourceAdapter):
             all_imports.extend(extractor.extract_imports(file_path))
             spec = getattr(extractor, 'spec', None)
             if getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None):
-                project_namespaces.update(extractor.extract_namespaces(file_path))
+                declared = extractor.extract_namespaces(file_path)
+                project_namespaces.update(declared)
+                if getattr(spec, 'member_symbol_fallback', False) and declared:
+                    for symbol in extractor.extract_top_level_members(file_path):
+                        for ns in declared:
+                            member_index.setdefault((ns, symbol), []).append(file_path)
 
         self._graph = ImportGraph.from_imports(all_imports)
 
@@ -616,6 +633,19 @@ class DependsAdapter(ResourceAdapter):
                         self._graph.resolved_paths[stmt.module_name] = resolved
                         self._edge_stmts[(file_path, resolved)] = stmt
                         added = True
+                if not added and member_index and getattr(
+                        getattr(extractor, 'spec', None), 'member_symbol_fallback', False):
+                    # BACK-547 Kotlin measurement loop: `import a.b.foo` for a
+                    # top-level fun/val/var — the direct dotted match above
+                    # looked for `foo.kt` and failed, and BACK-551's
+                    # enclosing-class peel can't help either (there is no
+                    # enclosing type in the import path to peel down to).
+                    # Fall back to the content-scanned member index.
+                    for resolved in extractor.resolve_member_targets(stmt, member_index):
+                        if resolved != file_path:
+                            self._graph.add_dependency(file_path, resolved)
+                            self._edge_stmts[(file_path, resolved)] = stmt
+                            added = True
                 if not added:
                     # BACK-547 honest-decline: an extracted import that produced
                     # no edge is only a false-negative risk if it points

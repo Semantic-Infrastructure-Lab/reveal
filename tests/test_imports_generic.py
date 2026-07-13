@@ -467,6 +467,85 @@ class TestModuleResolution:
             (tmp_path / 'Widgets/Gadget.cs').resolve(),
         }
 
+    def test_kotlin_top_level_function_import_resolves_via_member_index(self, tmp_path):
+        """BACK-547 Kotlin measurement loop: `import a.b.foo` where `foo` is a
+        top-level (free) function has NO enclosing type anywhere in the import
+        string — unlike `import a.b.Outer.member` (BACK-551), there is no
+        `Outer` component to peel down to, so the direct dotted match (looks
+        for `foo.kt`) and the nested_member_fallback peel both fail. Real
+        corpus measurement (tivi, samples/kotlin) found this class of miss at
+        12% recall before the member-index fallback (99.14% after)."""
+        (tmp_path / 'a/b').mkdir(parents=True)
+        (tmp_path / 'a/b/Utils.kt').write_text(
+            'package a.b\nfun foo(x: Int): Int = x + 1\n')
+        (tmp_path / 'a/b/User.kt').write_text(
+            'package a.b\nimport a.b.foo\nfun useIt() = foo(1)\n')
+
+        entry = tmp_path / 'a/b/User.kt'
+        declaring = tmp_path / 'a/b/Utils.kt'
+        extractor = get_extractor(entry)
+        member_index = {}
+        for f in [declaring, entry]:
+            declared_ns = extractor.extract_namespaces(f)
+            for symbol in extractor.extract_top_level_members(f):
+                for ns in declared_ns:
+                    member_index.setdefault((ns, symbol), []).append(f)
+        stmt = [s for s in extractor.extract_imports(entry) if s.module_name == 'a.b.foo'][0]
+
+        # Direct dotted match must fail (no foo.kt in-tree) — this is the bug
+        # BACK-551's peel doesn't cover, confirming the fallback is load-bearing.
+        assert extractor.resolve_import(stmt, base_path=tmp_path / 'a/b', search_paths=[tmp_path]) is None
+
+        targets = extractor.resolve_member_targets(stmt, member_index)
+        assert targets == [declaring.resolve()]
+
+    def test_kotlin_top_level_extension_property_import_resolves(self, tmp_path):
+        """Same idiom, extension property form (`val Receiver.foo: T get() = ...`)
+        — the name sits inside a `variable_declaration` child, one level deeper
+        than a plain function's `simple_identifier`, which
+        `_top_level_member_name` must still find."""
+        (tmp_path / 'a/b').mkdir(parents=True)
+        (tmp_path / 'a/b/Extensions.kt').write_text(
+            'package a.b\nval Int.sqlValue: Long get() = this.toLong()\n')
+        (tmp_path / 'a/b/User.kt').write_text(
+            'package a.b\nimport a.b.sqlValue\nfun useIt() = 1.sqlValue\n')
+
+        entry = tmp_path / 'a/b/User.kt'
+        declaring = tmp_path / 'a/b/Extensions.kt'
+        extractor = get_extractor(entry)
+        member_index = {}
+        for f in [declaring, entry]:
+            declared_ns = extractor.extract_namespaces(f)
+            for symbol in extractor.extract_top_level_members(f):
+                for ns in declared_ns:
+                    member_index.setdefault((ns, symbol), []).append(f)
+        stmt = [s for s in extractor.extract_imports(entry) if s.module_name == 'a.b.sqlValue'][0]
+        targets = extractor.resolve_member_targets(stmt, member_index)
+        assert targets == [declaring.resolve()]
+
+    def test_kotlin_member_index_does_not_index_class_members(self, tmp_path):
+        """A method/property nested inside a class must NOT enter the
+        top-level member index — it's reached via the class's own name (the
+        existing nested_member_fallback path), and indexing it here would
+        risk a spurious extra edge for an unrelated same-named top-level
+        import elsewhere in the same package."""
+        (tmp_path / 'a/b').mkdir(parents=True)
+        (tmp_path / 'a/b/Widget.kt').write_text(
+            'package a.b\nclass Widget {\n    fun render() {}\n}\n')
+        extractor = get_extractor(tmp_path / 'a/b/Widget.kt')
+        assert extractor.extract_top_level_members(tmp_path / 'a/b/Widget.kt') == []
+
+    def test_java_has_no_member_symbol_fallback(self, tmp_path):
+        """Java has no top-level-function idiom — `member_symbol_fallback`
+        must stay off so `resolve_member_targets` is always a no-op, never a
+        surprise new edge for a language whose members are always class-owned."""
+        (tmp_path / 'a/b').mkdir(parents=True)
+        (tmp_path / 'a/b/User.java').write_text(
+            'package a.b;\nimport a.b.foo;\npublic class User {}\n')
+        extractor = get_extractor(tmp_path / 'a/b/User.java')
+        stmt = extractor.extract_imports(tmp_path / 'a/b/User.java')[0]
+        assert extractor.resolve_member_targets(stmt, {('a.b', 'foo'): [tmp_path / 'a/b/Elsewhere.java']}) == []
+
     def test_csharp_namespace_unknown_skips_not_fabricates(self, tmp_path):
         extractor = get_extractor(tmp_path / 'Main.cs')
         stmt_imports, _ = _extract('using Some.Unknown.Namespace;\n', '.cs')

@@ -55,7 +55,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, Dict, FrozenSet, List, Optional, Set
+from typing import ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from ...core import node_children as _children
 from ...defaults import SKIP_DIRECTORIES
@@ -140,6 +140,26 @@ class _ImportSpec:
             PHP (``\\`` namespaces whose components are also StudlyCaps, so the
             Uppercase-type gate can't safely tell package from type) and Swift/
             Lua (no such idiom) — pending their own real-corpus measurement.
+        member_node_types: Node ``kind()`` value(s) for a *top-level* member
+            declaration this language allows outside any class — Kotlin
+            ``function_declaration``/``property_declaration`` directly under
+            ``source_file`` (unlike Java, Kotlin permits free functions and
+            properties at file scope). Feeds the cross-file
+            ``(package, symbol) -> [files]`` index that
+            :meth:`extract_top_level_members` builds and
+            :meth:`resolve_member_targets` looks up. Empty means the language
+            has no such idiom (Java/C#/PHP: every importable symbol is a type,
+            already covered by :meth:`_resolve_dotted`).
+        member_symbol_fallback: True to use the top-level-member index as a
+            last-resort fallback when both the direct dotted match and the
+            ``nested_member_fallback`` enclosing-class peel fail. BACK-547
+            Kotlin measurement loop: ``import a.b.foo`` where ``foo`` is a
+            top-level function/property has *no* enclosing type anywhere in
+            the import string (unlike ``import a.b.Outer.Inner``), so peeling
+            trailing components can never find the real declaring file (e.g.
+            ``Utils.kt``) — only a content-level index over ``a.b``'s files
+            can. Kotlin-only for now (Scala 3 also permits top-level defs but
+            is unmeasured; PHP/Swift/Lua have no such idiom).
     """
 
     import_node_types: FrozenSet[str]
@@ -154,6 +174,8 @@ class _ImportSpec:
     resolve_namespaces: bool = False
     package_node_types: FrozenSet[str] = field(default_factory=frozenset)
     nested_member_fallback: bool = False
+    member_node_types: FrozenSet[str] = field(default_factory=frozenset)
+    member_symbol_fallback: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -255,6 +277,98 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         if not module or module.endswith('*'):
             return []
         return list(namespace_index.get(module, ()))
+
+    def extract_top_level_members(self, file_path: Path) -> List[str]:
+        """Names of top-level (file-scope, not class-scope) function/property
+        declarations in this file — Kotlin's free-function idiom.
+
+        BACK-547 Kotlin measurement loop: ``import a.b.foo`` where ``foo`` is
+        a top-level ``fun``/``val``/``var`` has no enclosing class anywhere in
+        the import string, so the file that declares it can only be found by
+        scanning file *contents*, not by any transformation of the import
+        path. This feeds the ``(package, symbol) -> [files]`` index
+        :meth:`resolve_member_targets` looks up, paired with
+        :meth:`extract_namespaces` for the declaring package.
+
+        No-op (``[]``) unless ``spec.member_node_types`` is set. A node only
+        counts when its immediate parent is ``source_file`` — the same node
+        kinds (``function_declaration``, ``property_declaration``) also match
+        methods/properties nested in a ``class_body``/``object_declaration``,
+        which are reached via their class name, not a bare import, and must
+        not pollute the top-level index.
+        """
+        if not self.spec.member_node_types:
+            return []
+        analyzer = self._get_analyzer(file_path)
+        if analyzer is None:
+            return []
+        names: List[str] = []
+        for node_type in self.spec.member_node_types:
+            for node in analyzer._find_nodes_by_type(node_type):
+                parent = node.parent()
+                if parent is None or parent.kind() != 'source_file':
+                    continue
+                name = self._top_level_member_name(node, analyzer)
+                if name:
+                    names.append(name)
+        return names
+
+    @staticmethod
+    def _top_level_member_name(node, analyzer) -> Optional[str]:
+        """The declared symbol name for a top-level function/property node.
+
+        A plain ``fun foo()`` (or ``fun <T> foo()``) exposes ``foo`` as a
+        direct ``simple_identifier`` child. An extension function
+        (``fun Receiver.foo()``) exposes the *same* shape — the receiver type
+        is its own ``receiver_type``/``.`` children, never a
+        ``simple_identifier`` — so "first direct ``simple_identifier`` child"
+        is correct for both. A property (``val``/``var``) nests its name one
+        level deeper, inside a ``variable_declaration`` child (Kotlin's
+        grammar: ``val Receiver.name: Type`` → ``variable_declaration`` wraps
+        ``name: Type``), so that child is checked first when present.
+        """
+        for child in _children(node):
+            if child.kind() == 'variable_declaration':
+                for grandchild in _children(child):
+                    if grandchild.kind() == 'simple_identifier':
+                        return analyzer._get_node_text(grandchild)
+                return None
+        for child in _children(node):
+            if child.kind() == 'simple_identifier':
+                return analyzer._get_node_text(child)
+        return None
+
+    def resolve_member_targets(
+        self,
+        stmt: ImportStatement,
+        member_index: Dict[Tuple[str, str], List[Path]],
+    ) -> List[Path]:
+        """Every in-tree file declaring the top-level symbol ``stmt`` imports.
+
+        Last-resort fallback for Kotlin's free-function/property import idiom
+        (BACK-547 measurement loop): splits ``stmt.module_name`` into
+        ``(package, symbol)`` on ``spec.module_separator`` and looks up the
+        content-scanned index built from :meth:`extract_top_level_members` +
+        :meth:`extract_namespaces`. Fans out to every declaring file the same
+        way :meth:`resolve_namespace_targets` does — a same-named top-level
+        overload can legitimately be declared in more than one file (e.g. one
+        ``asImageModel`` extension per receiver type in a shared package), and
+        without type inference there is no principled way to pick one, so
+        this reports all of them rather than guessing or skipping. Honest-skip
+        contract holds: an unindexed ``(package, symbol)`` returns ``[]``.
+        """
+        if not self.spec.member_symbol_fallback:
+            return []
+        sep = self.spec.module_separator
+        module = stmt.module_name
+        if not sep or not module or sep not in module:
+            return []
+        parts = [p for p in module.split(sep) if p]
+        if len(parts) < 2:
+            return []
+        symbol = parts[-1]
+        package = sep.join(parts[:-1])
+        return list(member_index.get((package, symbol), ()))
 
     # --- internals -------------------------------------------------------
 
@@ -886,6 +1000,12 @@ _KOTLIN_SPEC = _ImportSpec(
     # BACK-547 scale-out: `package_header` → `identifier` (`package a.b.c`)
     # feeds the honest-decline package inventory, same as Java/PHP.
     package_node_types=frozenset({'package_header'}),
+    # BACK-547 Kotlin measurement loop: `import a.b.foo` for a top-level
+    # fun/val/var has no enclosing type in the import path at all (unlike
+    # nested_member_fallback's `Outer.Inner` shape), so only a content-scanned
+    # (package, symbol) index can find the declaring file.
+    member_node_types=frozenset({'function_declaration', 'property_declaration'}),
+    member_symbol_fallback=True,
 )
 
 # BACK-514: Lua/Scala/Dart/Zig/GDScript were absent from the table entirely —
