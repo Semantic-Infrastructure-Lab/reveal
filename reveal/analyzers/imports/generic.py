@@ -224,6 +224,13 @@ class _ImportSpec:
             caveat (even on *positive* results, unlike the ⚠ honest-decline
             which is empty-only) when require density falls below a threshold —
             containment first, before any convention-inference recall feature.
+        zeitwerk_convention: True when this language's convention-autoloaded
+            references (see ``convention_autoloaded``) can additionally be
+            *inferred* as edges — not just caveated — by extracting bare
+            constant references from the file body and mapping each to an
+            in-tree file via the path→constant convention. BACK-557 direction
+            a (the recall half): gates :meth:`extract_constant_references`,
+            a no-op for every language without it.
     """
 
     import_node_types: FrozenSet[str]
@@ -245,6 +252,7 @@ class _ImportSpec:
     container_member_fallback: bool = False
     same_module_undetectable: bool = False
     convention_autoloaded: bool = False
+    zeitwerk_convention: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -530,6 +538,55 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         symbol = parts[-1]
         package = sep.join(parts[:-1])
         return list(member_index.get((package, symbol), ()))
+
+    _CONSTANT_KINDS: ClassVar[FrozenSet[str]] = frozenset({'constant', 'scope_resolution'})
+
+    def extract_constant_references(self, file_path: Path) -> List[Tuple[int, str]]:
+        """``(line_number, dotted_constant_path)`` for every bare-constant
+        reference in this file's body — Ruby's Zeitwerk idiom (BACK-557
+        direction a). ``Topic.find(1)`` and ``User::Anonymizer.new`` reference
+        other in-tree classes with **no** ``require``/``require_relative``
+        statement anywhere; Zeitwerk resolves them lazily by a file-path
+        naming convention instead (:meth:`extract_imports` structurally
+        cannot see these — there is no import node to find). This walks the
+        whole tree collecting every ``constant``/``scope_resolution`` node,
+        so the caller can look each dotted path up against a path→constant
+        index built from the tree's own file layout and add an edge when it
+        matches an in-tree file.
+
+        Only the *outermost* node of a chain is kept — ``Foo::Bar::Baz`` is
+        one ``scope_resolution`` nesting two more; descending into its
+        children would also emit ``Foo::Bar`` and ``Bar``/``Baz`` fragments
+        that don't name the actual referenced constant. A reference to the
+        file's own declared class/module name resolves back to this same
+        file and is filtered out by the caller (``resolved == file_path``),
+        so no separate declaration-vs-usage distinction is needed here.
+
+        No-op (``[]``) unless ``spec.zeitwerk_convention`` is set — every
+        other language returns immediately, no extra parse pass incurred.
+        """
+        if not self.spec.zeitwerk_convention:
+            return []
+        analyzer = self._get_analyzer(file_path)
+        if analyzer is None:
+            return []
+        refs: List[Tuple[int, str]] = []
+
+        def walk(node) -> None:
+            kind = node.kind()
+            if kind in self._CONSTANT_KINDS:
+                parent = node.parent()
+                if parent is not None and parent.kind() in self._CONSTANT_KINDS:
+                    return  # nested fragment of an already-captured outer chain
+                text = analyzer._get_node_text(node)
+                if text:
+                    refs.append((node.start_position().row + 1, text))
+                return  # don't descend into a captured chain's own fragments
+            for child in _children(node):
+                walk(child)
+
+        walk(analyzer.tree.root_node())
+        return refs
 
     # --- internals -------------------------------------------------------
 
@@ -1134,6 +1191,9 @@ _RUBY_SPEC = _ImportSpec(
     # convention with no require statement, so low require density means
     # depends:// undercounts — emit a coverage caveat.
     convention_autoloaded=True,
+    # BACK-557 direction a: infer those convention-resolved edges instead of
+    # only caveating their absence.
+    zeitwerk_convention=True,
 )
 
 # BACK-488: Swift and Kotlin were absent from the table entirely — `imports://`,

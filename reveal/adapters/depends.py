@@ -442,6 +442,9 @@ class DependsAdapter(ResourceAdapter):
         # scanned; with_imports = those declaring ≥1 import/require.
         self._autoload_total = 0
         self._autoload_with_imports = 0
+        # BACK-557 direction a: count of edges added purely from Zeitwerk
+        # constant-path inference (no backing require/import statement).
+        self._zeitwerk_edges = 0
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Build import graph and return reverse-dependency view.
@@ -533,6 +536,7 @@ class DependsAdapter(ResourceAdapter):
             'analyzer': 'depends',
             'scan_capped': self._scan_capped,
             'root_inferred': self._root_inferred,
+            'zeitwerk_edges_inferred': self._zeitwerk_edges,
         }
 
     # ── Graph building (mirrors ImportsAdapter._build_graph) ──────────────
@@ -561,6 +565,7 @@ class DependsAdapter(ResourceAdapter):
         self._scan_capped = False
         self._unresolved_intra = 0
         self._unresolved_examples = []
+        self._zeitwerk_edges = 0
 
         # BACK-498: discover files the same way ImportsAdapter._build_graph does —
         # os.walk honoring SKIP_DIRECTORIES/hidden dirs (not a raw rglob, which
@@ -633,6 +638,13 @@ class DependsAdapter(ResourceAdapter):
         # gated per-language via `spec.member_symbol_fallback` so this is a
         # no-op scan for trees with no such language present.
         member_index: Dict[Tuple[str, str], List[Path]] = {}
+        # BACK-557 direction a: constant-path -> declaring file, the Zeitwerk
+        # path->constant convention index. Built from EVERY scanned file
+        # under a recognized autoload root (app/<component>/...), not just
+        # ones with import statements — most Zeitwerk-resolved files have
+        # zero require statements by design, so gating this on
+        # self._graph.files (import-derived) would miss almost all of them.
+        zeitwerk_index: Dict[str, Path] = {}
         for file_path in files:
             extractor = get_extractor(file_path)
             if not extractor:
@@ -648,6 +660,14 @@ class DependsAdapter(ResourceAdapter):
                 self._autoload_total += 1
                 if file_imports:
                     self._autoload_with_imports += 1
+            if getattr(spec, 'zeitwerk_convention', False):
+                const_path = _zeitwerk_constant_path(file_path)
+                if const_path:
+                    # First declaration wins on a naming collision (two
+                    # autoload roots producing the same constant is a
+                    # pre-existing Zeitwerk-app misconfiguration, not
+                    # something to guess between).
+                    zeitwerk_index.setdefault(const_path, file_path)
             if getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None):
                 declared = extractor.extract_namespaces(file_path)
                 project_namespaces.update(declared)
@@ -755,6 +775,44 @@ class DependsAdapter(ResourceAdapter):
                         self._unresolved_intra += 1
                         if len(self._unresolved_examples) < 5:
                             self._unresolved_examples.append((file_path, stmt))
+
+        # BACK-557 direction a: Zeitwerk convention-inferred edges. A second
+        # pass over EVERY scanned file (not self._graph.files — most
+        # Zeitwerk-resolved files have no import statement, so they never
+        # entered that import-derived dict) whose extractor opts in via
+        # spec.zeitwerk_convention. Exact-match only against zeitwerk_index
+        # (built above from the tree's own file layout): a reference that
+        # doesn't land on a real in-tree file's conventional constant name
+        # is simply not added, never guessed at — the same honest-skip
+        # contract every other resolver in this module holds to.
+        if zeitwerk_index:
+            for file_path in files:
+                extractor = get_extractor(file_path)
+                if extractor is None:
+                    continue
+                spec = getattr(extractor, 'spec', None)
+                if not getattr(spec, 'zeitwerk_convention', False):
+                    continue
+                for line_no, const_path in extractor.extract_constant_references(file_path):
+                    target = zeitwerk_index.get(const_path)
+                    if target is None or target == file_path:
+                        continue
+                    self._graph.add_dependency(file_path, target)
+                    self._zeitwerk_edges += 1
+                    if (file_path, target) not in self._edge_stmts:
+                        # No real statement backs this edge — synthesize one
+                        # so file-dependents display still shows a module
+                        # name and line rather than falling through to the
+                        # generic 'unknown'-type dependent entry.
+                        self._edge_stmts[(file_path, target)] = ImportStatement(
+                            file_path=file_path,
+                            line_number=line_no,
+                            module_name=const_path,
+                            imported_names=[],
+                            is_relative=False,
+                            import_type='zeitwerk_convention',
+                            skip_unused=True,
+                        )
 
     def _build_meta(self) -> Dict[str, Any]:
         known_limits = [
@@ -1065,3 +1123,53 @@ def _path_is_under(path: Path, directory: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _camelize(segment: str) -> str:
+    """Rails ``String#camelize``-equivalent for one path segment: default
+    inflection only (``foo_bar`` -> ``FooBar``). Does not consult
+    ``config/initializers/inflections.rb`` overrides (acronyms like ``HTTP``
+    camelize to ``Http``, not ``HTTP``) — a recall gap, not a correctness
+    one: a wrong guess here only ever means a missed edge (BACK-557's
+    zeitwerk_convention index is exact-match only, see
+    :func:`_zeitwerk_constant_path`), never a fabricated one.
+    """
+    return ''.join(part[:1].upper() + part[1:] for part in segment.split('_') if part)
+
+
+def _zeitwerk_constant_path(file_path: Path) -> Optional[str]:
+    """The constant Zeitwerk would resolve ``file_path`` to, or ``None`` if
+    it isn't under a recognized autoload root.
+
+    Scope (BACK-557 direction a): only ``app/<component>/...`` trees are
+    treated as autoload roots — each direct child of ``app/`` (``models``,
+    ``controllers``, ``jobs``, ...) is by convention its own Zeitwerk root,
+    so ``app/models/foo/bar.rb`` maps to ``Foo::Bar`` with the ``app/models``
+    prefix dropped. This is the exact shape measured on the real Discourse
+    corpus (the ruby-autoload-oracle README's low-density evidence) and
+    deliberately narrower than Zeitwerk's full ``lib/``/custom-root
+    configurability — a project's actual ``config/application.rb`` autoload
+    paths aren't visible to a structural file scan, so widening past the one
+    universal Rails convention would trade a bounded, principled scope for
+    guesses. ``concerns/`` collapsing (Rails' default autoload_paths include
+    each ``app/*/concerns`` directly, so ``app/models/concerns/x.rb`` is
+    ``X``, not ``Concerns::X``) is also not modeled — another recall-only
+    gap, not a soundness one.
+    """
+    parts = file_path.parts
+    try:
+        app_idx = len(parts) - 1 - parts[::-1].index('app')
+    except ValueError:
+        return None
+    if app_idx + 1 >= len(parts) - 1:
+        return None  # 'app' with no component subdir before the filename
+    root_end = app_idx + 2  # 'app', '<component>' — both dropped from the constant
+    relative_parts = parts[root_end:]
+    if not relative_parts:
+        return None
+    *dirs, filename = relative_parts
+    stem = Path(filename).stem
+    segments = [*dirs, stem]
+    if not segments:
+        return None
+    return '::'.join(_camelize(seg) for seg in segments)

@@ -1291,5 +1291,121 @@ class TestConventionAutoloadCaveat:
         assert 'autoload_note' not in r
 
 
+class TestZeitwerkConventionInference:
+    """BACK-557 direction a — teach depends:// the Zeitwerk path->constant
+    convention as a new implicit-edge source, on top of (not replacing)
+    statement-based edges. Containment (the coverage caveat, above) makes the
+    gap honest; this makes it smaller by inferring the edges Zeitwerk itself
+    would resolve at runtime with no require statement anywhere."""
+
+    def _rails_app(self, tmp_path):
+        (tmp_path / 'Gemfile').write_text('gem "rails"\n')
+        # Gemfile isn't a recognized _PACKAGE_ROOT_MARKERS entry (a
+        # pre-existing gap, not part of this feature) — a .git root ensures
+        # project_root resolves to tmp_path itself so cross-directory edges
+        # (app/models -> app/controllers) are actually scanned.
+        (tmp_path / '.git').mkdir()
+        _write(tmp_path / 'app' / 'models' / 'topic.rb', 'class Topic < ActiveRecord::Base\nend\n')
+        _write(
+            tmp_path / 'app' / 'models' / 'post.rb',
+            '''\
+            require "archetype"
+
+            class Post < ActiveRecord::Base
+              def notify
+                Topic.find(1)
+                User::Anonymizer.new.run
+              end
+            end
+            ''')
+        _write(tmp_path / 'app' / 'models' / 'user' / 'anonymizer.rb',
+               'class User::Anonymizer\n  def run; end\nend\n')
+        _write(tmp_path / 'app' / 'controllers' / 'posts_controller.rb',
+               'class PostsController\n  def index\n    Post.all\n  end\nend\n')
+        return tmp_path
+
+    def test_bare_constant_reference_found_with_no_require(self, tmp_path):
+        """The Discourse evidence case: Post references Topic with zero
+        require statements — pre-fix this was a confident false negative."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._rails_app(tmp_path)
+        r = DependsAdapter(str(root / 'app' / 'models' / 'topic.rb')).get_structure()
+        files = {d['file'] for d in r['dependents']}
+        assert str(root / 'app' / 'models' / 'post.rb') in files
+        assert r['count'] >= 1
+
+    def test_namespaced_constant_reference_resolved(self, tmp_path):
+        """`User::Anonymizer.new` (scope_resolution, not a bare `constant`)
+        must resolve to app/models/user/anonymizer.rb."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._rails_app(tmp_path)
+        r = DependsAdapter(str(root / 'app' / 'models' / 'user' / 'anonymizer.rb')).get_structure()
+        files = {d['file'] for d in r['dependents']}
+        assert str(root / 'app' / 'models' / 'post.rb') in files
+
+    def test_cross_directory_reference_resolved(self, tmp_path):
+        """A controller (app/controllers) referencing a model (app/models) by
+        bare constant — each app/* subdir is its own Zeitwerk root."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._rails_app(tmp_path)
+        r = DependsAdapter(str(root / 'app' / 'models' / 'post.rb')).get_structure()
+        files = {d['file'] for d in r['dependents']}
+        assert str(root / 'app' / 'controllers' / 'posts_controller.rb') in files
+
+    def test_explicit_require_edge_still_reported(self, tmp_path):
+        """Zeitwerk inference is additive — an explicit require_relative edge
+        must still show up unchanged alongside inferred ones."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._rails_app(tmp_path)
+        _write(root / 'app' / 'models' / 'importer.rb',
+               'require_relative "topic"\nclass Importer; end\n')
+        r = DependsAdapter(str(root / 'app' / 'models' / 'topic.rb')).get_structure()
+        files = {d['file'] for d in r['dependents']}
+        assert str(root / 'app' / 'models' / 'importer.rb') in files
+        assert str(root / 'app' / 'models' / 'post.rb') in files
+
+    def test_no_edge_for_undeclared_constant(self, tmp_path):
+        """A reference to a constant with no matching in-tree file (an
+        external gem/stdlib class, or a typo) must never fabricate an edge —
+        the honest-skip contract every other resolver in this module holds."""
+        from reveal.adapters.depends import DependsAdapter
+        root = tmp_path
+        (root / 'Gemfile').write_text('gem "rails"\n')
+        _write(root / 'app' / 'models' / 'post.rb',
+               'class Post < ActiveRecord::Base\n  def go\n    NoSuchClass.new\n  end\nend\n')
+        r = DependsAdapter(str(root / 'app' / 'models' / 'post.rb')).get_structure()
+        assert r['count'] == 0
+
+    def test_self_reference_not_counted_as_dependent(self, tmp_path):
+        """A file referencing its own declared class name (or a sibling
+        method on itself) must not appear as its own dependent."""
+        from reveal.adapters.depends import DependsAdapter
+        root = tmp_path
+        (root / 'Gemfile').write_text('gem "rails"\n')
+        _write(root / 'app' / 'models' / 'topic.rb',
+               'class Topic < ActiveRecord::Base\n  def clone_self\n    Topic.new\n  end\nend\n')
+        r = DependsAdapter(str(root / 'app' / 'models' / 'topic.rb')).get_structure()
+        assert r['count'] == 0
+
+    def test_non_app_directory_not_treated_as_autoload_root(self, tmp_path):
+        """lib/, config/, spec/ aren't Zeitwerk-managed app/* roots in this
+        scoped implementation — a bare-constant reference there must not be
+        inferred (BACK-557 direction a's documented scope limit)."""
+        from reveal.adapters.depends import DependsAdapter
+        root = tmp_path
+        (root / 'Gemfile').write_text('gem "rails"\n')
+        _write(root / 'lib' / 'topic.rb', 'class Topic\nend\n')
+        _write(root / 'lib' / 'post.rb', 'class Post\n  def go\n    Topic.new\n  end\nend\n')
+        r = DependsAdapter(str(root / 'lib' / 'topic.rb')).get_structure()
+        assert r['count'] == 0
+
+    def test_metadata_reports_zeitwerk_edge_count(self, tmp_path):
+        from reveal.adapters.depends import DependsAdapter
+        root = self._rails_app(tmp_path)
+        a = DependsAdapter(str(root / 'app' / 'models' / 'topic.rb'))
+        a.get_structure()
+        assert a.get_metadata()['zeitwerk_edges_inferred'] >= 3
+
+
 if __name__ == '__main__':
     unittest.main()
