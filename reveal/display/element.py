@@ -215,6 +215,20 @@ def _try_treesitter_extraction(analyzer, element: str):
                 'line_end': node.end_position().row + 1,
                 'source': analyzer._get_node_text(node),
             }
+
+    # TS/TSX Jest/Vitest test-callback labels (`describe(foo)`, `test(...)`) —
+    # get_structure()/--outline lists them (typescript._extract_test_callbacks),
+    # so by-name extraction must resolve the same label (BACK-530).
+    find_test_cb = getattr(analyzer, '_find_named_test_callback', None)
+    if find_test_cb is not None:
+        node = find_test_cb(element)
+        if node is not None:
+            return {
+                'name': element,
+                'line_start': node.start_position().row + 1,
+                'line_end': node.end_position().row + 1,
+                'source': analyzer._get_node_text(node),
+            }
     return None
 
 

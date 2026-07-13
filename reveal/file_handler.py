@@ -261,6 +261,15 @@ def _find_element_node(analyzer, element: str):
         if node is not None:
             return node
 
+    # TS/TSX Jest/Vitest test-callback labels (`describe(foo)`, `test(...)`) —
+    # listed by get_structure()/--outline, so nav-flag lookup must resolve the
+    # same label too (BACK-530, same divergence class as the arrow case above).
+    find_test_cb = getattr(analyzer, '_find_named_test_callback', None)
+    if find_test_cb is not None:
+        node = find_test_cb(element)
+        if node is not None:
+            return node
+
     return None
 
 
