@@ -85,7 +85,18 @@ def _has_package_marker(directory: Path) -> bool:
     `*.sln` (C# solution files) and `*.rockspec` (Lua/LuaRocks package
     specs) — neither can be a fixed literal in `_PACKAGE_ROOT_MARKERS`
     because both carry a project-specific name.
+
+    A directory that is itself an importable Python package (`__init__.py`
+    present) is never a project root, even if it holds a marker: absolute
+    self-package imports (`from homeassistant.core import X`) resolve relative
+    to the package's *parent*, so promoting the package dir to scan root
+    leaves every such import unresolved — a silent fan-in collapse (measured
+    9% recall on Home Assistant `core.py`, whose `homeassistant/setup.py`
+    source module — not a setuptools script — was mis-read as a root marker).
+    The real root lives above the top of the package chain, so keep climbing.
     """
+    if (directory / '__init__.py').exists():
+        return False
     if any((directory / marker).exists() for marker in _PACKAGE_ROOT_MARKERS):
         return True
     return any(directory.glob('*.sln')) or any(directory.glob('*.rockspec'))

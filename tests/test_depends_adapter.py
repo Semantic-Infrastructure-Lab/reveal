@@ -1143,5 +1143,85 @@ class TestDependsAdapterGoPackageGranularity:
         assert 'b1.go' in module['dependents'][0]
 
 
+class TestPythonPackageRootAndResolution:
+    """BACK-561/562/563 — found by the Home Assistant `depends://` recall-oracle
+    measurement loop (Python; 36.7%→100% recall, 0 false positives).
+
+    A Python *package* directory (one with ``__init__.py``) is not a sys.path
+    root: the parent is. All three bugs stem from treating a package interior
+    as a root, in three different code paths.
+    """
+
+    @pytest.fixture
+    def ha_like(self, tmp_path):
+        """Mirror the real HA layout that triggered every bug:
+          root/                    <- true project root (pyproject.toml)
+            app/                   <- the importable package (__init__.py)
+              setup.py             <- a SOURCE module named setup.py, NOT a build
+                                      script (HA's homeassistant/setup.py)
+              core.py              <- absolute-import target
+              absuser.py           <- `from app.core import X`  (BACK-561)
+              sub/
+                __init__.py
+                typing.py          <- shadows stdlib `typing` + multi-seg target
+                stduser.py         <- `from typing import Any` (BACK-562), a
+                                      sibling of the shadowing typing.py
+              reluser.py           <- `from .sub.typing import T` (BACK-563)
+        """
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "proj"\n')
+        _write(tmp_path / 'app' / '__init__.py', '')
+        _write(tmp_path / 'app' / 'setup.py',
+               '"""A source module that happens to be named setup.py."""\n'
+               'def async_setup(): return 1\n')
+        _write(tmp_path / 'app' / 'core.py', 'class HomeAssistant: ...\n')
+        _write(tmp_path / 'app' / 'absuser.py',
+               'from app.core import HomeAssistant\n')
+        _write(tmp_path / 'app' / 'sub' / '__init__.py', '')
+        _write(tmp_path / 'app' / 'sub' / 'typing.py', 'ConfigType = dict\n')
+        # stdlib `typing`, imported from a file whose package sibling is a
+        # same-named `typing.py` — the shadow only manifests intra-package.
+        _write(tmp_path / 'app' / 'sub' / 'stduser.py', 'from typing import Any\n')
+        # multi-segment relative import of the in-tree module
+        _write(tmp_path / 'app' / 'reluser.py',
+               'from .sub.typing import ConfigType\n')
+        return tmp_path
+
+    def test_setup_py_source_module_is_not_a_project_root(self, ha_like):
+        """BACK-561: a package dir holding a `setup.py` *source module* must not
+        be promoted to scan root — else every absolute `from app.X import Y`
+        goes unresolved (the confident false-negative: absolute imports return
+        None from is_intra_project_import, so no honest-decline caveat fires)."""
+        from reveal.adapters.depends import _resolve_project_root, DependsAdapter
+        assert _resolve_project_root((ha_like / 'app' / 'core.py').resolve()) == ha_like
+        importers = {
+            Path(d['file']).name
+            for d in DependsAdapter(str(ha_like / 'app' / 'core.py')).get_structure()['dependents']
+        }
+        assert 'absuser.py' in importers  # the regression: was silently missing
+
+    def test_stdlib_import_not_shadowed_by_sibling_module(self, ha_like):
+        """BACK-562: `from typing import Any` is the *stdlib* typing; it must not
+        resolve to a same-named sibling `sub/typing.py` (a false-positive edge
+        breaking the 'never false positives' invariant). Absolute imports never
+        consult the importing file's own package directory."""
+        from reveal.adapters.depends import DependsAdapter
+        importers = {
+            Path(d['file']).name
+            for d in DependsAdapter(str(ha_like / 'app' / 'sub' / 'typing.py')).get_structure()['dependents']
+        }
+        assert 'stduser.py' not in importers  # false positive pre-fix
+
+    def test_multi_segment_relative_import_targets_leaf_module(self, ha_like):
+        """BACK-563: `from .sub.typing import ConfigType` depends on
+        sub/typing.py, not sub/__init__.py — the old parts[0]-only relative
+        resolver stopped at the first package and mis-targeted the edge."""
+        from reveal.adapters.depends import DependsAdapter
+        importers = {
+            Path(d['file']).name
+            for d in DependsAdapter(str(ha_like / 'app' / 'sub' / 'typing.py')).get_structure()['dependents']
+        }
+        assert 'reluser.py' in importers  # was landing on sub/__init__.py pre-fix
+
+
 if __name__ == '__main__':
     unittest.main()

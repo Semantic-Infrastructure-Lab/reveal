@@ -69,22 +69,14 @@ def _resolve_relative(import_stmt: ImportStatement, base_path: Path) -> Optional
         init = target_path / "__init__.py"
         return init if init.exists() else None
 
-    # Try module.py
-    module_file = target_path / f"{parts[0]}.py"
-    if module_file.exists():
-        return module_file
-
-    # Try module/__init__.py
-    package_init = target_path / parts[0] / "__init__.py"
-    if package_init.exists():
-        return package_init
-
-    # Try module/ directory (namespace package)
-    package_dir = target_path / parts[0]
-    if package_dir.is_dir():
-        return package_dir
-
-    return None
+    # Descend the *full* dotted module path, not just its first segment:
+    # `from .helpers.typing import X` depends on helpers/typing.py, not
+    # helpers/__init__.py. The old parts[0]-only lookup stopped at the first
+    # package and silently mis-targeted every multi-segment relative import
+    # (helpers/__init__.py absorbed the edge, so the real module's fan-in was
+    # undercounted). _try_resolve_module handles the single-part case
+    # identically (module.py -> package/__init__.py -> namespace dir).
+    return _try_resolve_module(target_path, parts)
 
 
 def _resolve_absolute(
@@ -101,8 +93,19 @@ def _resolve_absolute(
     """
     module_parts = import_stmt.module_name.split('.')
 
-    # Build search paths: current dir + provided paths
-    all_paths = [base_path] + search_paths
+    # Build search paths: current dir + provided paths.  A Python 3 absolute
+    # import never consults the importing file's own *package* directory (only
+    # sys.path roots): when base_path is a package interior (`__init__.py`
+    # present), searching it shadows stdlib/third-party names with a same-named
+    # sibling module — `from typing import X` in a package that also holds a
+    # `typing.py` would resolve to that sibling, a false-positive edge that
+    # breaks the "never false positives" invariant. Only treat base_path as a
+    # search root in the rootless single-dir fallback (no __init__.py), where
+    # it legitimately stands in for the project root.
+    if (base_path / "__init__.py").exists():
+        all_paths = list(search_paths)
+    else:
+        all_paths = [base_path] + list(search_paths)
 
     for search_path in all_paths:
         # Try to resolve as module file or package
@@ -220,7 +223,14 @@ def _from_import_package_dir(
 
     if not parts:
         return None
-    for search_path in [base_path] + search_paths:
+    # Same package-interior guard as _resolve_absolute: a `from typing import X`
+    # whose base_path package also holds a `typing/` dir must not shadow the
+    # stdlib name via the importer's own directory.
+    if (base_path / "__init__.py").exists():
+        roots = list(search_paths)
+    else:
+        roots = [base_path] + list(search_paths)
+    for search_path in roots:
         candidate = search_path
         for part in parts:
             candidate = candidate / part
