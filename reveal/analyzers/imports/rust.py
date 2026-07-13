@@ -183,7 +183,21 @@ class RustExtractor(LanguageExtractor):
     def _parse_scoped_use_list(
         self, node, file_path: Path, line_number: int, analyzer, is_reexport: bool = False
     ) -> List[ImportStatement]:
-        """Parse scoped_use_list node: std::{fs, io}"""
+        """Parse scoped_use_list node: std::{fs, io}
+
+        BACK-XXX: `use crate::{a, b, c};` / `use super::{a, b};` / `use self::{a, b};`
+        — a grouped-import directly off the `crate`/`super`/`self` path root with no
+        intermediate segment — has tree-sitter-rust represent that root as a bare
+        keyword node whose `.kind()` is literally `'crate'`/`'super'`/`'self'` (not
+        `'identifier'` or `'scoped_identifier'`, which only cover `std::{..}`-style
+        named-crate/module roots). The base-path scan below only matched
+        identifier/scoped_identifier, so it silently found no `base_path`, returned
+        an empty list, and the ENTIRE `use` statement's imports vanished with no
+        error — confirmed on real code (Meilisearch `samples/rust`:
+        `scheduler/enterprise_edition/network.rs:30`'s
+        `use crate::{processing, Error, IndexScheduler, Result};` produced zero
+        extracted imports, so `processing.rs` never counted this file as a dependent).
+        """
         imports: List[ImportStatement] = []
 
         # Extract base path (before ::)
@@ -191,7 +205,7 @@ class RustExtractor(LanguageExtractor):
         use_list_node = None
 
         for child in _children(node):
-            if child.kind() in ('identifier', 'scoped_identifier'):
+            if child.kind() in ('identifier', 'scoped_identifier', 'crate', 'super', 'self'):
                 base_path = analyzer._get_node_text(child)
             elif child.kind() == 'use_list':
                 use_list_node = child
@@ -434,8 +448,8 @@ class RustExtractor(LanguageExtractor):
             # Absolute from crate root
             return self._resolve_from_root(use_path[7:], src_dir)  # Remove 'crate::'
         elif use_path.startswith('super::'):
-            # Relative to parent module - complex, skip for now
-            return None
+            # Relative to parent module.
+            return self._resolve_super(use_path[7:], base_path)  # Remove 'super::'
         elif use_path.startswith('self::'):
             # Relative to current module
             return self._resolve_from_dir(use_path[6:], base_path)  # Remove 'self::'
@@ -462,54 +476,90 @@ class RustExtractor(LanguageExtractor):
 
         return None
 
+    @staticmethod
+    def _deepest_module_match(parts: List[str], base_dir: Path) -> Optional[Path]:
+        """Find the DEEPEST existing module file matching a prefix of `parts`.
+
+        BACK-XXX: A `use` path like `crate::search::facet::filter::index_filter::foo`
+        names a real *file* only down to wherever the last actual module boundary is
+        (here, `search/facet/filter/index_filter.rs`) — everything after that is an
+        item name (function/struct/const), not a further directory. The previous
+        implementation only ever consumed `parts[0]`, so any path with 2+ module
+        segments before the item name silently resolved to the wrong (too-shallow)
+        file or nothing at all — a confirmed silent false negative on real code
+        (Meilisearch `samples/rust`: `search/facet/filter/tests.rs`'s
+        `use crate::search::facet::filter::index_filter::serialize_index_filter_to_filter_string`
+        was never counted as a dependent of `index_filter.rs`).
+
+        Rust supports BOTH module-per-file (`a/b.rs`) and module-per-directory
+        (`a/b/mod.rs`) at every level, so both forms are tried at every prefix depth,
+        starting from the longest prefix (most specific) and shortening until a real
+        file is found. This mirrors Go's package-directory fallback (BACK-553) and
+        TS's index-vs-dir handling (BACK-556) — same shape of bug, different language.
+        """
+        for n in range(len(parts), 0, -1):
+            prefix = parts[:n]
+            module_file = base_dir.joinpath(*prefix).with_suffix('.rs')
+            if module_file.exists():
+                return module_file.resolve()
+            mod_file = base_dir.joinpath(*prefix, 'mod.rs')
+            if mod_file.exists():
+                return mod_file.resolve()
+        return None
+
     def _resolve_from_root(self, path: str, src_dir: Path) -> Optional[Path]:
         """Resolve use path from crate root (src/).
 
         Examples:
             'utils' -> src/utils.rs or src/utils/mod.rs
             'models::User' -> src/models.rs or src/models/mod.rs (User is item in file)
+            'search::facet::filter::index_filter::foo' ->
+                src/search/facet/filter/index_filter.rs (deepest real module file)
         """
-        # Take first component (module name)
         parts = path.split('::')
         if not parts:
             return None
-
-        module_name = parts[0]
-
-        # Try module_name.rs
-        module_file = src_dir / f"{module_name}.rs"
-        if module_file.exists():
-            return module_file.resolve()
-
-        # Try module_name/mod.rs
-        mod_file = src_dir / module_name / 'mod.rs'
-        if mod_file.exists():
-            return mod_file.resolve()
-
-        return None
+        return self._deepest_module_match(parts, src_dir)
 
     def _resolve_from_dir(self, path: str, module_dir: Path) -> Optional[Path]:
         """Resolve use path from current module directory.
 
         Examples:
             'config' -> ./config.rs or ./config/mod.rs
+            'a::b::Item' -> ./a/b.rs or ./a/b/mod.rs (deepest real module file)
         """
         parts = path.split('::')
         if not parts:
             return None
+        return self._deepest_module_match(parts, module_dir)
 
-        module_name = parts[0]
+    def _resolve_super(self, path: str, current_file_dir: Path) -> Optional[Path]:
+        """Resolve `super::path` — relative to the PARENT module of the current file.
 
-        # Try module_name.rs in current directory
-        module_file = module_dir / f"{module_name}.rs"
-        if module_file.exists():
-            return module_file.resolve()
-
-        # Try module_name/mod.rs
-        mod_file = module_dir / module_name / 'mod.rs'
-        if mod_file.exists():
-            return mod_file.resolve()
-
+        Rust's two valid module-declaration styles give two different parent-module
+        locations for a file at `<dir>/<name>.rs`:
+        - 2018+-style ("mod-per-file"): `<dir>/<name>.rs` is a submodule of the module
+          whose own file is `<dir>/<parent_name>.rs` (a *sibling* of `<dir>`, one level
+          up) — e.g. `search/facet.rs` and `search/facet/x.rs` co-exist; `super::` from
+          `x.rs` means "look in `search/facet` first" i.e. this file's own directory.
+        - 2015-style ("mod-per-directory"): `<dir>/mod.rs` IS the parent module file,
+          and siblings in the same `<dir>` (e.g. `<dir>/x.rs`) reach their parent via
+          `<dir>` itself too.
+        In both styles, the parent module's own namespace for resolving further `::`
+        segments is `current_file_dir` (this file's own directory) UNLESS this file
+        *is* a `mod.rs`, in which case its parent module's namespace is one directory
+        further up (`current_file_dir.parent`).
+        """
+        parts = path.split('::')
+        if not parts:
+            return None
+        bases = [current_file_dir]
+        if current_file_dir != current_file_dir.parent:
+            bases.append(current_file_dir.parent)
+        for base in bases:
+            result = self._deepest_module_match(parts, base)
+            if result:
+                return result
         return None
 
 

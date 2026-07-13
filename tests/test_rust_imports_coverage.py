@@ -355,6 +355,177 @@ class TestResolveFromDir:
         assert result is None
 
 
+class TestDeepestModuleMatch:
+    """BACK-547 Rust recall-oracle loop: multi-segment `crate::a::b::c` paths must
+    resolve to the DEEPEST real module file (`a/b/c.rs` or `a/b/c/mod.rs`), not just
+    the first path component. Confirmed as a real silent false negative on real code
+    (Meilisearch `samples/rust`: `search/facet/filter/tests.rs`'s
+    `use crate::search::facet::filter::index_filter::serialize_index_filter_to_filter_string`
+    was never resolved to `index_filter.rs`, only mattering as far as `search/mod.rs`).
+    """
+
+    def _make_stmt(self, module_name: str, tmp_path: Path) -> ImportStatement:
+        return ImportStatement(
+            file_path=tmp_path / 'main.rs',
+            line_number=1,
+            module_name=module_name,
+            imported_names=[module_name.split('::')[-1]],
+            is_relative=module_name.startswith(('self::', 'super::', 'crate::')),
+            import_type='rust_use',
+            alias=None,
+        )
+
+    def test_two_segment_path_resolves_to_nested_file(self, tmp_path):
+        """crate::a::b::Item -> src/a/b.rs, not src/a.rs or src/a/mod.rs."""
+        (tmp_path / 'Cargo.toml').write_text('[package]\nname = "test"\n')
+        src = tmp_path / 'src'
+        (src / 'a').mkdir(parents=True)
+        (src / 'a.rs').write_text('pub mod b;\n')  # a is ALSO a file (would wrongly match first-segment-only logic)
+        b_rs = src / 'a' / 'b.rs'
+        b_rs.write_text('pub fn item() {}\n')
+
+        extractor = RustExtractor()
+        stmt = self._make_stmt('crate::a::b::Item', tmp_path)
+        result = extractor.resolve_import(stmt, tmp_path)
+        assert result == b_rs.resolve(), (
+            f"expected deepest match src/a/b.rs, got {result} "
+            "(first-component-only resolution would wrongly return src/a.rs)"
+        )
+
+    def test_four_segment_path_resolves_to_deeply_nested_mod_file(self, tmp_path):
+        """crate::a::b::c::Item -> src/a/b/c/mod.rs when that's the deepest real file."""
+        (tmp_path / 'Cargo.toml').write_text('[package]\nname = "test"\n')
+        src = tmp_path / 'src'
+        (src / 'a' / 'b' / 'c').mkdir(parents=True)
+        (src / 'a' / 'b' / 'mod.rs').write_text('pub mod c;\n')
+        c_mod = src / 'a' / 'b' / 'c' / 'mod.rs'
+        c_mod.write_text('pub fn item() {}\n')
+
+        extractor = RustExtractor()
+        stmt = self._make_stmt('crate::a::b::c::Item', tmp_path)
+        result = extractor.resolve_import(stmt, tmp_path)
+        assert result == c_mod.resolve()
+
+    def test_self_multi_segment_resolves_to_nested_file(self, tmp_path):
+        """self::a::b::Item -> ./a/b.rs relative to the importing file's directory."""
+        (tmp_path / 'Cargo.toml').write_text('[package]\nname = "test"\n')
+        base = tmp_path / 'src' / 'mod_dir'
+        (base / 'a').mkdir(parents=True)
+        b_rs = base / 'a' / 'b.rs'
+        b_rs.write_text('pub fn item() {}\n')
+
+        extractor = RustExtractor()
+        stmt = self._make_stmt('self::a::b::Item', tmp_path)
+        result = extractor.resolve_import(stmt, base)
+        assert result == b_rs.resolve()
+
+
+class TestResolveSuper:
+    """BACK-547: `super::` was previously unconditionally unresolved (`return None`),
+    a systematic false negative for every `use super::x` in the corpus. Now resolves
+    relative to the importing file's parent module.
+    """
+
+    def _make_stmt(self, module_name: str, tmp_path: Path) -> ImportStatement:
+        return ImportStatement(
+            file_path=tmp_path / 'main.rs',
+            line_number=1,
+            module_name=module_name,
+            imported_names=[module_name.split('::')[-1]],
+            is_relative=True,
+            import_type='rust_use',
+            alias=None,
+        )
+
+    def test_super_resolves_sibling_in_same_directory(self, tmp_path):
+        """2015-style: file at src/a/x.rs, `super::y` -> src/a/y.rs (sibling)."""
+        (tmp_path / 'Cargo.toml').write_text('[package]\nname = "test"\n')
+        a_dir = tmp_path / 'src' / 'a'
+        a_dir.mkdir(parents=True)
+        (a_dir / 'mod.rs').write_text('pub mod x;\npub mod y;\n')
+        y_rs = a_dir / 'y.rs'
+        y_rs.write_text('pub fn item() {}\n')
+
+        extractor = RustExtractor()
+        stmt = self._make_stmt('super::y', tmp_path)
+        result = extractor.resolve_import(stmt, a_dir)
+        assert result == y_rs.resolve()
+
+    def test_super_resolves_one_level_up_for_mod_rs_file(self, tmp_path):
+        """A file that IS a/mod.rs has its parent module one directory further up."""
+        (tmp_path / 'Cargo.toml').write_text('[package]\nname = "test"\n')
+        src = tmp_path / 'src'
+        top_rs = src / 'top.rs'
+        top_rs.parent.mkdir(parents=True)
+        top_rs.write_text('pub fn thing() {}\n')
+        a_dir = src / 'a'
+        a_dir.mkdir()
+        (a_dir / 'mod.rs').write_text('use super::top;\n')
+
+        extractor = RustExtractor()
+        stmt = self._make_stmt('super::top', tmp_path)
+        result = extractor.resolve_import(stmt, a_dir)
+        assert result == top_rs.resolve()
+
+    def test_super_with_no_match_returns_none(self, tmp_path):
+        (tmp_path / 'Cargo.toml').write_text('[package]\nname = "test"\n')
+        (tmp_path / 'src').mkdir()
+        extractor = RustExtractor()
+        stmt = self._make_stmt('super::nonexistent', tmp_path)
+        result = extractor.resolve_import(stmt, tmp_path / 'src')
+        assert result is None
+
+
+class TestScopedUseListCrateSuperSelfRoot:
+    """BACK-547: `use crate::{a, b, c};` / `use super::{a, b};` / `use self::{a, b};`
+    — a grouped import directly off the `crate`/`super`/`self` keyword root with no
+    intermediate path segment — was silently dropped in its ENTIRETY (zero imports
+    extracted for the whole `use` statement, not just an unresolved item), because
+    tree-sitter-rust represents that root as a bare keyword node (`.kind()` literally
+    `'crate'`/`'super'`/`'self'`), which the base-path scan didn't recognize (it only
+    matched `identifier`/`scoped_identifier`, covering `std::{..}`-style named roots).
+    Confirmed on real code (Meilisearch `samples/rust`:
+    `scheduler/enterprise_edition/network.rs:30`'s
+    `use crate::{processing, Error, IndexScheduler, Result};` produced zero extracted
+    imports).
+    """
+
+    def test_crate_grouped_import_extracts_all_items(self, tmp_path):
+        code = "use crate::{processing, Error, IndexScheduler, Result};\n"
+        p = _write_rs(tmp_path, 'network.rs', code)
+        extractor = RustExtractor()
+        imports = extractor.extract_imports(p)
+        names = {i.module_name for i in imports}
+        assert names == {
+            'crate::processing', 'crate::Error', 'crate::IndexScheduler', 'crate::Result',
+        }
+
+    def test_super_grouped_import_extracts_all_items(self, tmp_path):
+        code = (
+            "use super::{\n"
+            "    content_part::ContentPart, conversation::Conversation,\n"
+            "    error::RealtimeAPIError,\n"
+            "};\n"
+        )
+        p = _write_rs(tmp_path, 'server_event.rs', code)
+        extractor = RustExtractor()
+        imports = extractor.extract_imports(p)
+        names = {i.module_name for i in imports}
+        assert names == {
+            'super::content_part::ContentPart',
+            'super::conversation::Conversation',
+            'super::error::RealtimeAPIError',
+        }
+
+    def test_self_grouped_import_extracts_all_items(self, tmp_path):
+        code = "use self::{foo, bar};\n"
+        p = _write_rs(tmp_path, 'lib.rs', code)
+        extractor = RustExtractor()
+        imports = extractor.extract_imports(p)
+        names = {i.module_name for i in imports}
+        assert names == {'self::foo', 'self::bar'}
+
+
 class TestCreateImport:
     """Test _create_import classification logic."""
 
