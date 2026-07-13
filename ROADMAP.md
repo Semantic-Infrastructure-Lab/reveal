@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-07-11 (sultry-vortex-0710 — v0.107.1 release: Windows crash fix, due-diligence-sweep bugfixes, check --limit/--profile-rules)
+> **Last updated**: 2026-07-13 (enchanted-gargoyle-0713 — v0.108.0 release: contracts/surface 8-language coverage, --transitive blast-radius, architecture --against, BACK-547 recall-oracle program complete)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,13 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.108.0 — contracts/surface 8-language coverage + --transitive blast-radius + architecture --against + BACK-547 recall-oracle program complete
+- ✅ `contracts`/`surface` extended from 2 to 8 languages — Java, C#, PHP, Swift, Kotlin, Ruby added, matching Python/TypeScript (BACK-403 pt 2).
+- ✅ `--sideeffects --transitive` / `--boundary --transitive` — interprocedural blast-radius walk into project-local helpers (BACK-545/546).
+- ✅ `reveal architecture <path> --against REF` — architectural diff against a git ref (BACK-441).
+- ✅ **BACK-547 DD-correctness recall-oracle program complete** — 11 independent-oracle measurement loops (TS, Java, Go, Python, Ruby, Kotlin, Scala, Rust, C#, PHP, Swift), all 11 found and fixed real false-negative bugs; worst were Swift SwiftPM module resolution (~0%→100%, BACK-567) and PHP require/include concatenation (0%→100% on WordPress core, BACK-564/565). See [VALIDATION.md](VALIDATION.md).
+- ✅ `_build_graph` complexity 68→21 decomposition, `nav_surface_*.py` duplicate-helper cleanup (BACK-566, BACK-570).
 
 ### v0.107.1 — Windows crash fix + due-diligence-sweep bugfixes + check --limit/--profile-rules
 - ✅ **0.107.0 crashed on every Windows invocation** (even `--version`) due to an unconditional POSIX-only `import resource` — fixed (BACK-541).
