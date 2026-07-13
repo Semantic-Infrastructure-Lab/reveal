@@ -23,11 +23,8 @@ from ..utils import safe_json_dumps
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
-from ..defaults import SKIP_DIRECTORIES
 from ..registry import get_code_extensions
-from ..utils.path_utils import to_posix
-
-_SKIP_DIRS = SKIP_DIRECTORIES
+from ..utils.path_utils import is_skippable_dir, to_posix
 
 def _module_label(path: str) -> str:
     p = Path(path)
@@ -921,7 +918,7 @@ class ImportsAdapter(ResourceAdapter):
                 candidates.append(target_path)
         else:
             for root, dirs, filenames in os.walk(str(target_path)):
-                dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+                dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
                 for fname in filenames:
                     fp = Path(root) / fname
                     file_index.setdefault(fname, []).append(fp)

@@ -9,10 +9,49 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Callable, Dict, Optional, List, Set, Union
 
-from ..defaults import SKIP_DIRECTORIES
+from ..defaults import SKIP_DIRECTORIES, AMBIGUOUS_SKIP_DIRECTORIES
 from ..registry import language_for_extension, LANGUAGE_DISPLAY_NAMES
 
 _SKIP_DIRS: frozenset = SKIP_DIRECTORIES
+_AMBIGUOUS_SKIP_DIRS: frozenset = AMBIGUOUS_SKIP_DIRECTORIES
+
+
+def is_skippable_dir(parent: Path, name: str) -> bool:
+    """True if directory *name* under *parent* is a build/vendor/cache dir a
+    walk should exclude — the SKIP_DIRECTORIES membership check, made
+    context-sensitive for ambiguous names.
+
+    Callers combine this with their own hidden-dir (``startswith('.')``)
+    filtering as before; this function does not itself treat dot-dirs
+    specially, so it's a drop-in replacement for ``name in SKIP_DIRECTORIES``
+    without changing hidden-dir behavior at any call site.
+
+    Unconditional names (SKIP_DIRECTORIES) always skip. Ambiguous names
+    (AMBIGUOUS_SKIP_DIRECTORIES — ``env``/``venv``/``build``/``dist``) only
+    skip when the directory has no source-code file directly at its own top
+    level — a real virtualenv or build-output directory never does (a venv's
+    Python files live many `site-packages/pkg/` levels down; setuptools'
+    `build/` holds `lib/`/`bdist.*/` subdirs, not source at the top). A
+    same-named source package does (BACK-552: Elasticsearch's
+    ``org.elasticsearch.env``, 297 `.java` files directly inside, was
+    silently excluded from every walk by bare-name match alone before this
+    check existed). Not recursive — deliberately cheap, one `os.scandir` per
+    ambiguous name encountered, not a sub-walk.
+    """
+    if name in _SKIP_DIRS:
+        return True
+    if name not in _AMBIGUOUS_SKIP_DIRS:
+        return False
+    from ..registry import get_code_extensions
+    code_exts = get_code_extensions()
+    try:
+        with os.scandir(parent / name) as entries:
+            for entry in entries:
+                if entry.is_file() and Path(entry.name).suffix.lower() in code_exts:
+                    return False
+    except OSError:
+        return True
+    return True
 
 
 def to_posix(path: Union[str, PurePath]) -> str:

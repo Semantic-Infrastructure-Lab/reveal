@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Iterator, cast
 
-from ...defaults import SKIP_DIRECTORIES
 from ...registry import get_analyzer
+from ...utils.path_utils import is_skippable_dir
 
 
 def _is_excluded_code_only(file_path: Path) -> bool:
@@ -24,10 +24,6 @@ def _is_large_json(file_path: Path) -> bool:
         return file_path.stat().st_size > 10240
     except (OSError, PermissionError):
         return False
-
-
-# Canonical skip set lives in reveal.defaults (shared by every directory walk).
-_ALWAYS_SKIP_DIRS = SKIP_DIRECTORIES
 
 
 def find_analyzable_files(
@@ -60,7 +56,7 @@ def find_analyzable_files(
         # Prune well-known and gitignored directories in-place so os.walk
         # never descends into them.
         def _keep_dir(d: str) -> bool:
-            if d in _ALWAYS_SKIP_DIRS:
+            if is_skippable_dir(root_path, d):
                 return False
             if gitignore_patterns:
                 from ...cli.file_checker import should_skip_file  # deferred: cli cycle

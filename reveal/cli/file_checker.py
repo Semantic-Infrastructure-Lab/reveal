@@ -15,8 +15,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Optional, List, Dict, TYPE_CHECKING
 
-from ..defaults import SKIP_DIRECTORIES
-from ..utils.path_utils import to_posix
+from ..utils.path_utils import is_skippable_dir, to_posix
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -282,11 +281,13 @@ def collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> Li
     from ..registry import get_analyzer
 
     files_to_check = []
-    excluded_dirs = SKIP_DIRECTORIES
 
     for root, dirs, files in os.walk(directory):
         # Filter out excluded directories and *.egg-info build artifacts
-        dirs[:] = [d for d in dirs if d not in excluded_dirs and not d.endswith('.egg-info')]
+        dirs[:] = [
+            d for d in dirs
+            if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
+        ]
 
         root_path = Path(root)
         for filename in files:

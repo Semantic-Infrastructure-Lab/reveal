@@ -12,6 +12,7 @@ from reveal.utils.path_utils import (
     detect_non_python_language,
     to_posix,
     is_unsafe_scan_root,
+    is_skippable_dir,
 )
 
 
@@ -632,3 +633,44 @@ class TestIsUnsafeScanRoot:
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
         assert is_unsafe_scan_root(str(fake_home)) is True
         assert is_unsafe_scan_root(str(fake_home / "code" / "proj")) is False
+
+
+class TestIsSkippableDir:
+    """BACK-552: env/venv/build/dist are ambiguous names — context-sensitive,
+    not a bare-name membership check. A directory-walk pruning helper."""
+
+    def test_unconditional_names_always_skip(self, tmp_path):
+        assert is_skippable_dir(tmp_path, '.git') is True
+        assert is_skippable_dir(tmp_path, 'node_modules') is True
+        assert is_skippable_dir(tmp_path, '__pycache__') is True
+
+    def test_unrelated_name_never_skips(self, tmp_path):
+        assert is_skippable_dir(tmp_path, 'src') is False
+        assert is_skippable_dir(tmp_path, 'lib') is False
+
+    def test_ambiguous_name_with_source_files_not_skipped(self, tmp_path):
+        for name in ('env', 'venv', 'build', 'dist'):
+            d = tmp_path / name
+            d.mkdir()
+            (d / 'Real.java').write_text('class Real {}')
+            assert is_skippable_dir(tmp_path, name) is False, name
+
+    def test_ambiguous_name_with_no_source_files_skipped(self, tmp_path):
+        for name in ('env', 'venv', 'build', 'dist'):
+            d = tmp_path / name
+            d.mkdir()
+            (d / 'nested').mkdir()
+            assert is_skippable_dir(tmp_path, name) is True, name
+
+    def test_ambiguous_name_missing_dir_skipped(self, tmp_path):
+        # Directory doesn't exist on disk (e.g. a stale walk entry) — fail safe.
+        assert is_skippable_dir(tmp_path, 'venv') is True
+
+    def test_ambiguous_name_with_only_data_files_skipped(self, tmp_path):
+        # A real venv/build dir with non-source files (configs, binaries) at
+        # its top level still has no *code* files there, so it's skipped.
+        d = tmp_path / 'dist'
+        d.mkdir()
+        (d / 'package-1.0.whl').write_bytes(b'')
+        (d / 'pyvenv.cfg').write_text('')
+        assert is_skippable_dir(tmp_path, 'dist') is True

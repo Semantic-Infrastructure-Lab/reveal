@@ -12,15 +12,11 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from ..core.treesitter_compat import suppress_treesitter_warnings
-from ..defaults import SKIP_DIRECTORIES
+from ..utils.path_utils import is_skippable_dir
 
 suppress_treesitter_warnings()
 
 logger = logging.getLogger(__name__)
-
-
-# Canonical skip set lives in reveal.defaults (shared by every directory walk).
-_SKIP_DIRS = SKIP_DIRECTORIES
 
 # I/O handles that are always noisy — patching them says nothing about production design.
 # Suppressed by default in group_patches; pass suppress=False to include them.
@@ -108,7 +104,7 @@ def iter_test_files(
                 files.append(path)
         elif path.is_dir():
             for root, dirs, names in os.walk(path):
-                dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+                dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
                 for name in names:
                     fp = Path(root) / name
                     if _file_matches(fp, extensions):

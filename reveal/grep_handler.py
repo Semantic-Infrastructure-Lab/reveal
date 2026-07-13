@@ -13,14 +13,12 @@ from pathlib import Path
 from argparse import Namespace
 from typing import Any, Dict, List, Optional
 
-from .defaults import SKIP_DIRECTORIES
 from .utils import safe_json_dumps
+from .utils.path_utils import is_skippable_dir
 
 _BINARY_EXTENSIONS = frozenset({
     '.pyc', '.pyo', '.pyd', '.so', '.dylib', '.dll', '.exe', '.bin', '.o', '.a',
 })
-# Canonical skip set lives in reveal.defaults (shared by every directory walk).
-_SKIP_DIRS = SKIP_DIRECTORIES
 
 
 def handle_grep(path: str, pattern: str, args: Namespace) -> None:
@@ -266,7 +264,7 @@ def _collect_dir_results(
     for root, dirs, files in os.walk(str(dir_path)):
         dirs[:] = sorted(
             d for d in dirs
-            if d not in _SKIP_DIRS and not d.startswith('.')
+            if not is_skippable_dir(Path(root), d) and not d.startswith('.')
         )
         for fname in sorted(files):
             fpath = Path(root) / fname

@@ -8,10 +8,11 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from ...defaults import SKIP_DIRECTORIES
-from ...utils.path_utils import assess_language_coverage, detect_non_python_language
-
-_SKIP_DIRS: frozenset = SKIP_DIRECTORIES
+from ...utils.path_utils import (
+    assess_language_coverage,
+    detect_non_python_language,
+    is_skippable_dir,
+)
 
 _CONTRACT_PATH_HINTS: frozenset = frozenset({
     'base', 'schema', 'contract', 'protocol', 'interface',
@@ -37,7 +38,7 @@ def _has_python_files(path: Path) -> bool:
     if path.is_file():
         return path.suffix == '.py'
     for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
         for fname in filenames:
             if fname.endswith('.py'):
                 return True
@@ -48,7 +49,7 @@ def _has_interface_family_files(path: Path) -> bool:
     if path.is_file():
         return path.suffix.lower() in _INTERFACE_FAMILY_EXTENSIONS
     for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
         for fname in filenames:
             if Path(fname).suffix.lower() in _INTERFACE_FAMILY_EXTENSIONS:
                 return True
@@ -59,7 +60,7 @@ def _has_ruby_files(path: Path) -> bool:
     if path.is_file():
         return path.suffix.lower() == '.rb'
     for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
         for fname in filenames:
             if fname.endswith('.rb'):
                 return True
@@ -71,7 +72,7 @@ def _collect_ruby_files(path: Path) -> List[Path]:
         return [path] if path.suffix.lower() == '.rb' else []
     files: List[Path] = []
     for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
         for fname in filenames:
             if fname.endswith('.rb'):
                 files.append(Path(os.path.join(root, fname)))

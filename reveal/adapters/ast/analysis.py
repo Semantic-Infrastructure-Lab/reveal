@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
-from ...defaults import SKIP_DIRECTORIES
+from ...utils.path_utils import is_skippable_dir
 from .call_graph import build_symbol_map, resolve_callees
 
 # All public names in the Python builtins module — used to filter noise from
@@ -17,10 +17,6 @@ from .call_graph import build_symbol_map, resolve_callees
 PYTHON_BUILTINS: frozenset = frozenset(
     name for name in dir(_builtins_module) if not name.startswith('_')
 )
-
-# Directories to skip when recursively collecting code files.
-# Canonical set lives in reveal.defaults (shared by every directory walk).
-_SKIP_DIRS = SKIP_DIRECTORIES
 
 
 def try_add_file_structure(file_path: str, structures: List[Dict[str, Any]]) -> None:
@@ -52,7 +48,10 @@ def collect_structures(path: str) -> List[Dict[str, Any]]:
     elif path_obj.is_dir():
         # Recursively find all code files, pruning well-known non-project dirs.
         for root, dirs, files in os.walk(str(path_obj)):
-            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.endswith('.egg-info')]
+            dirs[:] = [
+                d for d in dirs
+                if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
+            ]
             for name in files:
                 fp = Path(root) / name
                 if is_code_file(fp):

@@ -8,11 +8,11 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any, Dict, List
 
-from ...defaults import SKIP_DIRECTORIES
-from ...utils.path_utils import assess_language_coverage, detect_non_python_language
-
-# Canonical skip set lives in reveal.defaults (shared by every directory walk).
-_SKIP_DIRS: frozenset = SKIP_DIRECTORIES
+from ...utils.path_utils import (
+    assess_language_coverage,
+    detect_non_python_language,
+    is_skippable_dir,
+)
 
 # Test directory names pruned by --source-only (prefix-match covers tests/, testing/, etc.)
 _TEST_DIR_PREFIX = 'test'
@@ -218,7 +218,7 @@ def _collect_source_files(path: Path, source_only: bool = False):
     for root, dirs, filenames in os.walk(str(path)):
         dirs[:] = [
             d for d in dirs
-            if d not in _SKIP_DIRS and not d.startswith('.')
+            if not is_skippable_dir(Path(root), d) and not d.startswith('.')
             and not (source_only and _is_test_dir(d))
         ]
         for fname in filenames:

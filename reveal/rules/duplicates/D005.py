@@ -30,7 +30,7 @@ from typing import Dict, List, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
-from ...defaults import SKIP_DIRECTORIES
+from ...utils.path_utils import is_skippable_dir
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +88,18 @@ def _canonical_key(values: frozenset) -> str:
 
 
 def _should_skip_path(path: Path) -> bool:
-    """True if any path component is a skip-directory or hidden directory."""
+    """True if any path component is a skip-directory or hidden directory.
+
+    BACK-552: ambiguous names (env/venv/build/dist) checked against actual
+    directory content via is_skippable_dir(), not bare name alone.
+    """
+    accumulated = Path(path.anchor) if path.is_absolute() else Path()
     for part in path.parts:
-        if part in SKIP_DIRECTORIES or (part.startswith('.') and part != '.'):
+        if part == path.anchor:
+            continue
+        if (part.startswith('.') and part != '.') or is_skippable_dir(accumulated, part):
             return True
+        accumulated = accumulated / part
     return False
 
 

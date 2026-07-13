@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ...core import suppress_treesitter_warnings  # noqa: F401 — called at scan time
 from ...core import node_children as _children
-from ...defaults import SKIP_DIRECTORIES
+from ...utils.path_utils import is_skippable_dir
 
 
 # ─────────────────────────── public entry point ──────────────────────────────
@@ -34,13 +34,14 @@ def collect_type_evidence(path: str, var_name: str) -> List[Dict[str, Any]]:
     path_obj = Path(path)
     evidence: List[Dict[str, Any]] = []
 
-    _SKIP_DIRS = SKIP_DIRECTORIES
-
     if path_obj.is_file():
         _scan_file(str(path_obj), var_name, evidence)
     elif path_obj.is_dir():
         for root, dirs, files in os.walk(str(path_obj)):
-            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.endswith('.egg-info')]
+            dirs[:] = [
+                d for d in dirs
+                if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
+            ]
             for name in files:
                 fp = str(Path(root) / name)
                 if _is_python_file(fp):

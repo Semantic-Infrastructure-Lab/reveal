@@ -22,11 +22,9 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from ...defaults import SKIP_DIRECTORIES
+from ...utils.path_utils import is_skippable_dir
 
 _BARE_DICT_NAMES = frozenset({'dict', 'Dict'})
-# Canonical skip set lives in reveal.defaults (shared by every directory walk).
-_SKIP_DIRS = SKIP_DIRECTORIES
 
 
 # ─────────────────────────── public entry point ──────────────────────────────
@@ -40,7 +38,10 @@ def collect_dict_heatmap(path: str) -> List[Dict[str, Any]]:
         _scan_file(str(path_obj), items)
     elif path_obj.is_dir():
         for root, dirs, files in os.walk(str(path_obj)):
-            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.endswith('.egg-info')]
+            dirs[:] = [
+                d for d in dirs
+                if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
+            ]
             for name in files:
                 if name.endswith(('.py', '.pyi')):
                     _scan_file(str(Path(root) / name), items)

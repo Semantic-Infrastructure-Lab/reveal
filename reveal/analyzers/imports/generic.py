@@ -58,8 +58,8 @@ from pathlib import Path
 from typing import ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from ...core import node_children as _children
-from ...defaults import SKIP_DIRECTORIES
 from ...registry import get_analyzer
+from ...utils.path_utils import is_skippable_dir
 from .base import LanguageExtractor, register_extractor
 from .types import ImportStatement
 
@@ -793,7 +793,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             for dirpath, dirnames, filenames in os.walk(root):
                 dirnames[:] = [
                     d for d in dirnames
-                    if d not in SKIP_DIRECTORIES and not d.startswith('.')
+                    if not is_skippable_dir(Path(dirpath), d) and not d.startswith('.')
                 ]
                 for fname in filenames:
                     candidate = Path(dirpath) / fname
@@ -1006,7 +1006,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             for dirpath, dirnames, filenames in os.walk(root):
                 dirnames[:] = [
                     d for d in dirnames
-                    if d not in SKIP_DIRECTORIES and not d.startswith('.')
+                    if not is_skippable_dir(Path(dirpath), d) and not d.startswith('.')
                 ]
                 if basename in filenames:
                     found.append(Path(dirpath) / basename)

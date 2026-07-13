@@ -9,8 +9,7 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Dict, Any, Generator, List, Optional, Set, Tuple
 
-from ...defaults import SKIP_DIRECTORIES
-from ...utils.path_utils import to_posix
+from ...utils.path_utils import is_skippable_dir, to_posix
 
 
 # Entry point filename patterns (highest priority)
@@ -517,7 +516,6 @@ def _apply_budget(
 
 def _walk_files(path: Path) -> Generator[Path, None, None]:
     """Yield code/config files under *path* (respects common ignores)."""
-    _SKIP_DIRS = SKIP_DIRECTORIES
     _CODE_EXTENSIONS = {
         '.py', '.js', '.ts', '.jsx', '.tsx', '.rb', '.go', '.rs', '.java',
         '.c', '.cpp', '.h', '.cs', '.php', '.swift', '.kt', '.scala',
@@ -534,8 +532,16 @@ def _walk_files(path: Path) -> Generator[Path, None, None]:
     for item in path.rglob('*'):
         if item.is_dir():
             continue
-        # Skip hidden/ignored dirs
-        if any(part.startswith('.') or part in _SKIP_DIRS for part in item.parts):
+        # Skip hidden/ignored dirs (BACK-552: env/venv/build/dist checked
+        # against actual directory content, not just bare name)
+        accumulated = path
+        skip = False
+        for part in item.relative_to(path).parts[:-1]:
+            if part.startswith('.') or is_skippable_dir(accumulated, part):
+                skip = True
+                break
+            accumulated = accumulated / part
+        if skip:
             continue
         # Include root config files
         if item.parent == path and item.name in _ROOT_FILES:

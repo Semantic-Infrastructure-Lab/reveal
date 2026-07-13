@@ -191,12 +191,12 @@ def _dir_cache_key(directory: Path) -> Any:
 
     Fallback: if all stats fail, walk code-file mtimes (slow but correct).
     """
-    from ..ast.analysis import _SKIP_DIRS
+    from ...utils.path_utils import is_skippable_dir
     try:
         mtimes = [os.stat(directory).st_mtime_ns]
         with os.scandir(directory) as it:
             for entry in it:
-                if entry.is_dir(follow_symlinks=False) and entry.name not in _SKIP_DIRS:
+                if entry.is_dir(follow_symlinks=False) and not is_skippable_dir(directory, entry.name):
                     try:
                         mtimes.append(os.stat(entry).st_mtime_ns)
                     except OSError:
@@ -537,12 +537,15 @@ def _parent_hint_scan_is_cheap(parent: str) -> bool:
     crosses the ceiling, so it stays fast even when the answer is "no". Also
     refuses outright on system/home roots (e.g. a tempdir whose parent is /tmp).
     """
-    from ..ast.analysis import _SKIP_DIRS
+    from ...utils.path_utils import is_skippable_dir
     if is_unsafe_scan_root(parent):
         return False
     count = 0
     for root, dirs, files in os.walk(parent):
-        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.endswith('.egg-info')]
+        dirs[:] = [
+            d for d in dirs
+            if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
+        ]
         for name in files:
             if is_code_file(Path(name)):
                 count += 1

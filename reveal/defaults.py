@@ -45,17 +45,29 @@ SKIP_DIRECTORIES = frozenset({
     # Python caches / build
     '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache',
     '.cache', '.hypothesis',
-    # Virtual environments
-    '.venv', 'venv', '.env', 'env',
+    # Virtual environments (dotted form only — bare `venv`/`env` are ambiguous,
+    # see AMBIGUOUS_SKIP_DIRECTORIES)
+    '.venv', '.env',
     # Installed packages
     'node_modules', 'site-packages', 'dist-packages',
     # Test/CI runners
     '.tox', '.nox', 'htmlcov',
     # Build / packaging artifacts
-    '.eggs', 'sdist', 'dist', 'build',
+    '.eggs', 'sdist',
     # Benchmark / eval tooling
     '.benchmarks', '.deepeval',
 })
+
+# BACK-552: `env`/`venv`/`build`/`dist` are conventional virtualenv/build-output
+# names, but they are not *reserved* — a real source package can legitimately
+# be named any of them (confirmed on Elasticsearch: `org.elasticsearch.env`,
+# 297 files, was silently excluded from every directory walk by bare-name
+# match alone). Unlike SKIP_DIRECTORIES, membership here is not sufficient to
+# skip a directory — callers must also check
+# ``reveal.utils.path_utils.is_skippable_dir()``, which only skips these names
+# when the directory itself carries no direct evidence of being real source
+# (no source-code files at its own top level).
+AMBIGUOUS_SKIP_DIRECTORIES = frozenset({'env', 'venv', 'build', 'dist'})
 
 
 class RuleDefaults:

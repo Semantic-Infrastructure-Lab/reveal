@@ -172,8 +172,9 @@ class TestCollectFilesToCheck:
 
     def test_excluded_directories(self, tmp_path):
         """Test that excluded directories are skipped."""
-        # Create excluded directories
-        for dirname in ['.git', '__pycache__', 'node_modules', '.venv', 'venv']:
+        # Create excluded directories (bare-name-unconditional set only —
+        # 'venv'/'env' are ambiguous since BACK-552, see TestAmbiguousSkipDirectories)
+        for dirname in ['.git', '__pycache__', 'node_modules', '.venv']:
             subdir = tmp_path / dirname
             subdir.mkdir()
             (subdir / 'file.py').write_text('# Should be skipped')
@@ -191,12 +192,62 @@ class TestCollectFilesToCheck:
 
     def test_additional_excluded_directories(self, tmp_path):
         """Test that additional cache/artifact directories are also excluded (BACK-093)."""
-        for dirname in ['.pytest_cache', '.tox', '.eggs', 'env', '.benchmarks',
+        for dirname in ['.pytest_cache', '.tox', '.eggs', '.benchmarks',
                         '.deepeval', '.mypy_cache', '.ruff_cache', '.cache', '.hypothesis']:
             subdir = tmp_path / dirname
             subdir.mkdir()
             (subdir / 'file.py').write_text('# Should be skipped')
 
+        (tmp_path / 'included.py').write_text('# Should be included')
+
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+            files = collect_files_to_check(tmp_path, [])
+
+        assert len(files) == 1
+        assert files[0].name == 'included.py'
+
+
+class TestAmbiguousSkipDirectories:
+    """BACK-552: env/venv/build/dist are ambiguous names, not unconditional
+    skips — a real venv/build dir is excluded, but a same-named real source
+    package (e.g. Elasticsearch's org.elasticsearch.env) is not."""
+
+    def test_real_venv_still_excluded(self, tmp_path):
+        """A directory with venv markers (pyvenv.cfg) is still skipped."""
+        venv = tmp_path / 'venv'
+        venv.mkdir()
+        (venv / 'pyvenv.cfg').write_text('home = /usr/bin')
+        (venv / 'lib').mkdir()
+        (venv / 'lib' / 'site_pkg.py').write_text('# venv-installed package')
+        (tmp_path / 'included.py').write_text('# Should be included')
+
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+            files = collect_files_to_check(tmp_path, [])
+
+        assert len(files) == 1
+        assert files[0].name == 'included.py'
+
+    def test_source_package_named_env_not_excluded(self, tmp_path):
+        """A real source dir bare-named 'env' (no venv markers) is scanned."""
+        env_pkg = tmp_path / 'env'
+        env_pkg.mkdir()
+        (env_pkg / 'Environment.py').write_text('class Environment: pass')
+        (tmp_path / 'included.py').write_text('# Should be included')
+
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+            files = collect_files_to_check(tmp_path, [])
+
+        names = {f.name for f in files}
+        assert names == {'included.py', 'Environment.py'}
+
+    def test_empty_build_dir_excluded(self, tmp_path):
+        """A 'build' dir with no source files at its top level is skipped."""
+        build = tmp_path / 'build'
+        build.mkdir()
+        (build / 'lib').mkdir()
         (tmp_path / 'included.py').write_text('# Should be included')
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:

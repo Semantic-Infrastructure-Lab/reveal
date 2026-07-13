@@ -18,9 +18,8 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import safe_json_dumps
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
-from ..defaults import SKIP_DIRECTORIES
 from ..utils.query import parse_query_params
-from ..utils.path_utils import search_parents, search_parents_within_ceiling
+from ..utils.path_utils import is_skippable_dir, search_parents, search_parents_within_ceiling
 
 # BACK-498: find_project_root()'s built-in default markers (pyproject.toml,
 # setup.py/.cfg, .git, Cargo.toml, package.json, go.mod) are Python/JS/Rust/Go-
@@ -541,7 +540,7 @@ class DependsAdapter(ResourceAdapter):
                 files.append(scan_root)
         else:
             for root, dirs, filenames in os.walk(str(scan_root)):
-                dirs[:] = [d for d in dirs if d not in SKIP_DIRECTORIES and not d.startswith('.')]
+                dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
                 capped = False
                 for fname in filenames:
                     fp = Path(root) / fname
