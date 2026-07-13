@@ -722,7 +722,30 @@ class DependsAdapter(ResourceAdapter):
         if not self._graph:
             return {'error': 'Graph not built'}
 
-        importer_files: Set[Path] = self._graph.reverse_deps.get(target, set())
+        importer_files: Set[Path] = set(self._graph.reverse_deps.get(target, set()))
+
+        # BACK-553: package-granularity languages (Go) resolve an import to
+        # the package DIRECTORY, not the individual file — `import "pkg/x"`
+        # pulls in every .go file under x's directory as one package
+        # (go.py's resolve_import returns the directory by design), so
+        # add_dependency/reverse_deps is keyed by that directory, never by
+        # any single file inside it. Without this fallback, EVERY file-level
+        # depends://<file>.go query hits the exact-file lookup above, finds
+        # nothing (the key that exists is the directory, not this file), and
+        # confidently reports zero dependents even when the package has
+        # hundreds of real importers — the archetypal BACK-542/BACK-547
+        # silent false negative, and it fires on 100% of Go file targets.
+        # Falling back to the containing directory is safe for every
+        # language: reverse_deps keys are never arbitrary directories, only
+        # values some extractor's resolve_import actually returned, so a hit
+        # here only ever means "an import resolved to this exact directory
+        # as its package."
+        dir_target = target.parent
+        dir_importers = self._graph.reverse_deps.get(dir_target)
+        used_dir_fallback = False
+        if dir_importers:
+            importer_files |= dir_importers
+            used_dir_fallback = True
 
         # Gather the actual ImportStatements pointing to target. Prefer the
         # precise per-edge map (BACK-542: correct even when one statement
@@ -731,12 +754,15 @@ class DependsAdapter(ResourceAdapter):
         dependents = []
         for importer in sorted(importer_files):
             edge_stmt = self._edge_stmts.get((importer, target))
+            if edge_stmt is None and used_dir_fallback:
+                edge_stmt = self._edge_stmts.get((importer, dir_target))
             if edge_stmt is not None:
                 dependents.append(_format_import_stmt(edge_stmt))
                 continue
             matched = False
             for stmt in self._graph.files.get(importer, []):
-                if self._graph.resolved_paths.get(stmt.module_name) == target:
+                resolved = self._graph.resolved_paths.get(stmt.module_name)
+                if resolved == target or (used_dir_fallback and resolved == dir_target):
                     dependents.append(_format_import_stmt(stmt))
                     matched = True
             if not matched:

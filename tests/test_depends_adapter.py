@@ -922,5 +922,108 @@ class TestSubmoduleImportIdiom:
         assert dep['line'] == 1
 
 
+class TestDependsAdapterGoPackageGranularity:
+    """BACK-553: Go resolves an import to the package DIRECTORY (every .go
+    file in a dir shares one import path/package), so go.py's
+    resolve_import() returns a directory, never a file. _build_graph then
+    adds an edge keyed by that directory. A file-level
+    depends://path/to/file.go query used to do an exact `reverse_deps[target]`
+    lookup where target is always a file — a key that can never exist for
+    Go — so EVERY single-file Go query silently returned zero dependents,
+    unconditionally, even when the package had real importers. Confirmed on
+    real Kubernetes source (BACK-547 Go recall-oracle loop,
+    internal-docs/planning/dogfood-findings/go-recall-oracle/): a
+    284-importer target reported 0 before the fix."""
+
+    @pytest.fixture
+    def go_pkg(self, tmp_path):
+        """
+        go.mod            — module example.com/proj
+        pkg/alpha/a1.go    — package alpha; no imports of beta
+        pkg/alpha/a2.go    — package alpha; second file, same package
+        pkg/beta/b1.go     — package beta; imports example.com/proj/pkg/alpha
+        pkg/gamma/g1.go    — package gamma; imports nothing intra-project
+        """
+        (tmp_path / 'go.mod').write_text('module example.com/proj\n\ngo 1.21\n')
+        _write(tmp_path / 'pkg/alpha/a1.go', """\
+            package alpha
+
+            func Helper() {}
+        """)
+        _write(tmp_path / 'pkg/alpha/a2.go', """\
+            package alpha
+
+            func Other() {}
+        """)
+        _write(tmp_path / 'pkg/beta/b1.go', """\
+            package beta
+
+            import "example.com/proj/pkg/alpha"
+
+            func UseHelper() { alpha.Helper() }
+        """)
+        _write(tmp_path / 'pkg/gamma/g1.go', """\
+            package gamma
+
+            import "fmt"
+
+            func Noop() { fmt.Println("noop") }
+        """)
+        return tmp_path
+
+    def test_single_file_target_finds_package_importer(self, go_pkg):
+        """The exact regression: depends://pkg/alpha/a1.go (a single FILE)
+        must find b1.go, even though go.py's resolve_import() only ever
+        records the edge against the alpha DIRECTORY, not a1.go itself."""
+        from reveal.adapters.depends import DependsAdapter
+        a = DependsAdapter(str(go_pkg / 'pkg' / 'alpha' / 'a1.go'))
+        r = a.get_structure()
+        importer_names = {Path(d['file']).name for d in r['dependents']}
+        assert 'b1.go' in importer_names
+        assert r['count'] == 1
+
+    def test_sibling_file_in_same_package_also_finds_importer(self, go_pkg):
+        """a2.go shares alpha's directory with a1.go — same package, same
+        resolved edge target — must resolve identically."""
+        from reveal.adapters.depends import DependsAdapter
+        a = DependsAdapter(str(go_pkg / 'pkg' / 'alpha' / 'a2.go'))
+        r = a.get_structure()
+        importer_names = {Path(d['file']).name for d in r['dependents']}
+        assert 'b1.go' in importer_names
+
+    def test_unrelated_package_has_no_importers(self, go_pkg):
+        """gamma isn't imported by anyone — must stay a real (non-caveated)
+        empty result, not accidentally picking up unrelated directory edges."""
+        from reveal.adapters.depends import DependsAdapter
+        a = DependsAdapter(str(go_pkg / 'pkg' / 'gamma' / 'g1.go'))
+        r = a.get_structure()
+        assert r['count'] == 0
+        assert r['dependents'] == []
+
+    def test_import_line_reported_correctly(self, go_pkg):
+        """The directory-fallback path must still resolve the right
+        ImportStatement for display (line number, module name) — not just
+        an 'unknown' bare importer entry."""
+        from reveal.adapters.depends import DependsAdapter
+        a = DependsAdapter(str(go_pkg / 'pkg' / 'alpha' / 'a1.go'))
+        r = a.get_structure()
+        dep = next(d for d in r['dependents'] if Path(d['file']).name == 'b1.go')
+        assert dep['type'] != 'unknown'
+        assert dep['module'] == 'example.com/proj/pkg/alpha'
+        assert dep['line'] == 3
+
+    def test_directory_target_unaffected_by_fallback(self, go_pkg):
+        """Querying the directory itself (already worked pre-fix) must keep
+        working identically — the fallback must not double-count or change
+        directory-target behavior."""
+        from reveal.adapters.depends import DependsAdapter
+        a = DependsAdapter(str(go_pkg / 'pkg' / 'alpha'))
+        r = a.get_structure()
+        assert r['type'] == 'dependency_summary'
+        module = r['modules'][0]
+        assert module['dependent_count'] == 1
+        assert 'b1.go' in module['dependents'][0]
+
+
 if __name__ == '__main__':
     unittest.main()
