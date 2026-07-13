@@ -364,6 +364,25 @@ class GoExtractor(LanguageExtractor):
 
         return None
 
+    def is_intra_project_import(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
+        project_namespaces: Optional[Set[str]] = None,
+    ) -> Optional[bool]:
+        """Go classification is precise: an import is intra-project iff its
+        package path starts with the module name from go.mod (the same test
+        resolve_import uses to decide local-vs-external). If there's no go.mod
+        we can't tell (None)."""
+        module_root = self._find_go_module_root(base_path)
+        if not module_root:
+            return None
+        module_name = self._get_module_name(module_root)
+        if not module_name:
+            return None
+        return stmt.module_name.startswith(module_name)
+
     def _find_go_module_root(self, start_path: Path) -> Optional[Path]:
         """Find go.mod file by walking up directory tree.
 

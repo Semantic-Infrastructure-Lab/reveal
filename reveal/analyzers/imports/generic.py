@@ -116,6 +116,30 @@ class _ImportSpec:
             resolve these to *every* file declaring that namespace via
             :meth:`_GenericTreeSitterImportExtractor.resolve_namespace_targets`,
             fanning out to multiple dependency edges instead of skipping.
+        package_node_types: Node ``kind()`` value(s) for this language's
+            package/namespace *declaration* statement (Java
+            ``package_declaration``, Kotlin ``package_header``, PHP
+            ``namespace_definition``; C# reuses this field for
+            ``resolve_namespaces`` too, see :data:`_CSHARP_SPEC`). Unlike
+            ``resolve_namespaces``, this alone does **not** enable edge
+            fan-out — Java/Kotlin/PHP imports still name one type, resolved
+            by :meth:`_resolve_module` as before. It only feeds the
+            project-wide package index (BACK-547) that
+            :meth:`is_intra_project_import` uses to turn an unresolved
+            dotted import's ``None`` verdict into a precise ``True``/``False``
+            instead of the honest-but-blunt "can't tell". Empty means no
+            per-file package declaration to scan (Swift: modules aren't
+            declared in source, so it stays ``None`` forever — correctly, not
+            a gap to close).
+        nested_member_fallback: True for languages whose imports can name a
+            *member of* an enclosing top-level type (Java/Kotlin/Scala nested
+            types ``import a.b.Outer.Inner`` and static-member imports
+            ``import static a.b.Outer.CONST``). Enables :meth:`_resolve_dotted`
+            to peel the trailing member/nested component down to the enclosing
+            class (``Outer``) when the direct match fails (BACK-551). Off for
+            PHP (``\\`` namespaces whose components are also StudlyCaps, so the
+            Uppercase-type gate can't safely tell package from type) and Swift/
+            Lua (no such idiom) — pending their own real-corpus measurement.
     """
 
     import_node_types: FrozenSet[str]
@@ -128,6 +152,8 @@ class _ImportSpec:
     source_extensions: FrozenSet[str] = field(default_factory=frozenset)
     project_relative_prefix: Optional[str] = None
     resolve_namespaces: bool = False
+    package_node_types: FrozenSet[str] = field(default_factory=frozenset)
+    nested_member_fallback: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -173,33 +199,37 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         """
         return set()
 
-    # --- BACK-544: namespace-based edge resolution (C#) -------------------
+    # --- BACK-544/547: package/namespace declaration scanning -------------
 
-    _NAMESPACE_NODE_TYPES: ClassVar[FrozenSet[str]] = frozenset({
-        'namespace_declaration', 'file_scoped_namespace_declaration',
+    _PACKAGE_NAME_CHILD_KINDS: ClassVar[FrozenSet[str]] = frozenset({
+        'qualified_name', 'identifier', 'scoped_identifier', 'namespace_name',
     })
 
     def extract_namespaces(self, file_path: Path) -> List[str]:
-        """Namespaces this file declares (C# ``namespace X.Y { }`` / ``namespace
-        X.Y;``), for the cross-file namespace→file(s) index that
-        :meth:`resolve_namespace_targets` looks up.
+        """Package/namespace names this file declares — C# ``namespace X.Y``,
+        Java ``package a.b.c;``, Kotlin ``package a.b.c``, PHP
+        ``namespace App\\Models;`` — for the cross-file index that
+        :meth:`resolve_namespace_targets` (C# edge fan-out, BACK-544) and
+        :meth:`is_intra_project_import` (honest-decline classification,
+        BACK-547) both look up.
 
-        A file may declare more than one namespace (sequential or nested
+        A file may declare more than one namespace (C# sequential/nested
         blocks); all are returned. No-op (``[]``) unless
-        ``spec.resolve_namespaces`` is set — other languages have no such
-        node kind, so this would return empty for them anyway, but the gate
-        avoids a pointless extra parse pass over every non-C# file.
+        ``spec.package_node_types`` is set — languages with no such
+        declaration node (Swift) would return empty anyway, but the gate
+        avoids a pointless extra parse pass over every file of those
+        languages.
         """
-        if not self.spec.resolve_namespaces:
+        if not self.spec.package_node_types:
             return []
         analyzer = self._get_analyzer(file_path)
         if analyzer is None:
             return []
         namespaces: List[str] = []
-        for node_type in self._NAMESPACE_NODE_TYPES:
+        for node_type in self.spec.package_node_types:
             for node in analyzer._find_nodes_by_type(node_type):
                 for child in _children(node):
-                    if child.kind() in ('qualified_name', 'identifier'):
+                    if child.kind() in self._PACKAGE_NAME_CHILD_KINDS:
                         namespaces.append(analyzer._get_node_text(child))
                         break
         return namespaces
@@ -417,6 +447,53 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             return self._resolve_module(stmt, base_path, search_paths, file_index)
         return None
 
+    def is_intra_project_import(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
+        project_namespaces: Optional[Set[str]] = None,
+    ) -> Optional[bool]:
+        """Honest-decline classification (BACK-547) by language shape:
+
+          * C/C++ (`resolve_includes`): a quoted `#include "x"` (is_relative) is
+            intra-project; an angle-bracket `<stdio.h>` system include is
+            external — the same split `_resolve_include` uses. Precise.
+          * Package/namespace languages (`resolve_namespaces` C#, or
+            `package_node_types` Java/Kotlin/PHP): when the caller supplies
+            ``project_namespaces`` (the tree's declared packages/namespaces,
+            BACK-544/547's index), an import is intra-project iff the project
+            declares a package equal to, nested under, or an ancestor of it —
+            otherwise it's an external framework/dependency (`System.Text`,
+            `java.util`, `Illuminate\\Support`, …). A trailing wildcard
+            (Java `a.b.*`) is matched as an exact/ancestor package, never a
+            recursive-descendant one — Java wildcard imports only reach
+            classes declared directly in that package.
+          * Swift: no per-file package declaration exists to scan (modules
+            are a build-system concept, not a source construct), so this
+            stays None (don't guess — never cry wolf)."""
+        if self.spec.resolve_includes:
+            return bool(stmt.is_relative)
+        if (self.spec.resolve_namespaces or self.spec.package_node_types) and project_namespaces is not None:
+            ns = stmt.module_name
+            if not ns:
+                return None
+            sep = self.spec.module_separator or '.'
+            wildcard = ns.endswith(sep + '*')
+            if wildcard:
+                # A wildcard (`import a.b.*`) only pulls in classes declared
+                # directly in a.b — a declared *subpackage* (a.b.c) proves the
+                # directory exists but not that a.b itself has any class, so
+                # only an exact match counts here (never cry wolf on the
+                # weaker signal).
+                ns = ns[:-(len(sep) + 1)]
+                return ns in project_namespaces
+            for declared in project_namespaces:
+                if declared == ns or declared.startswith(ns + sep) or ns.startswith(declared + sep):
+                    return True
+            return False
+        return None
+
     def _resolve_include(
         self,
         stmt: ImportStatement,
@@ -569,9 +646,50 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         unqualified default-package import still resolves without colliding
         across same-named types in different packages. Ambiguity at the most
         specific suffix → skip (never guess).
+
+        BACK-551: when the direct match fails, the trailing component may name a
+        *member of* an enclosing top-level type rather than a file of its own —
+        Java ``import a.b.Outer.Inner`` (nested type) and
+        ``import static a.b.Outer.CONST`` (static member, the ``static`` keyword
+        already stripped so it arrives here as ``a.b.Outer.CONST``). The Java
+        measurement loop (dogfood-findings/java-recall-oracle) found these
+        silently dropped: the resolver looked for ``Inner.java``/``CONST.java``,
+        which don't exist, and never fell back to ``Outer.java``. Peel trailing
+        components down to the enclosing class and retry — gated to languages
+        where the idiom exists (``spec.nested_member_fallback``) and by the
+        Java/Kotlin/Scala convention that a *type* component is Uppercase while a
+        *package* component is not, so we stop before peeling into the package
+        and matching a stray lowercase-named file (never fabricate an edge).
         """
         if not parts:
             return None
+        match = self._match_dotted(parts, exts, search_paths, file_index)
+        if match is not None:
+            return match
+        if not getattr(self.spec, 'nested_member_fallback', False):
+            return None
+        peeled = list(parts)
+        for _ in range(2):  # Outer.Inner, Outer.Inner.Deeper — rare beyond 2.
+            if len(peeled) < 2:
+                break
+            peeled = peeled[:-1]
+            # New trailing component must still look like a type (Uppercase); a
+            # lowercase component means we've reached the package path — stop.
+            if not peeled[-1][:1].isupper():
+                break
+            match = self._match_dotted(peeled, exts, search_paths, file_index)
+            if match is not None:
+                return match
+        return None
+
+    def _match_dotted(
+        self,
+        parts: List[str],
+        exts: FrozenSet[str],
+        search_paths: Optional[List[Path]],
+        file_index: Optional[Dict[str, List[Path]]],
+    ) -> Optional[Path]:
+        """Longest-unique-suffix match of ``parts`` (last = type) across exts."""
         for ext in exts:
             target_parts = parts[:-1] + [parts[-1] + ext]
             match = self._longest_unique_suffix(target_parts, search_paths, file_index)
@@ -679,6 +797,15 @@ _JAVA_SPEC = _ImportSpec(
     keywords=frozenset({'import', 'static'}),
     module_separator='.',
     source_extensions=frozenset({'.java'}),
+    # BACK-551: `import a.b.Outer.Inner` / `import static a.b.Outer.CONST` name a
+    # member of Outer, not a file — peel to Outer.java when the direct match fails.
+    nested_member_fallback=True,
+    # BACK-547 scale-out: `package_declaration` → `scoped_identifier` gives a
+    # cheap project-wide package inventory, turning the honest-decline verdict
+    # for an unresolved `import` from an unconditional None (no inventory) into a
+    # precise True (intra-project, a real resolver miss) or False (external, e.g.
+    # `java.util.List`).
+    package_node_types=frozenset({'package_declaration'}),
 )
 
 _CSHARP_SPEC = _ImportSpec(
@@ -694,6 +821,11 @@ _CSHARP_SPEC = _ImportSpec(
     module_separator='.',
     source_extensions=frozenset({'.cs'}),
     resolve_namespaces=True,
+    # BACK-547: the same declared-namespace index also backs the honest-decline
+    # classification for C#.
+    package_node_types=frozenset({
+        'namespace_declaration', 'file_scoped_namespace_declaration',
+    }),
 )
 
 _PHP_SPEC = _ImportSpec(
@@ -710,6 +842,11 @@ _PHP_SPEC = _ImportSpec(
     }),
     module_separator='\\',  # `use App\Models\User`
     source_extensions=frozenset({'.php'}),
+    # BACK-547 scale-out: `namespace_definition` → `namespace_name` (PSR-4
+    # `namespace App\Models;`) feeds the same honest-decline inventory as
+    # Java/Kotlin. (No nested_member_fallback: `\` namespace components are
+    # StudlyCaps, so the Uppercase gate can't tell package from type.)
+    package_node_types=frozenset({'namespace_definition'}),
 )
 
 _RUBY_SPEC = _ImportSpec(
@@ -744,6 +881,11 @@ _KOTLIN_SPEC = _ImportSpec(
     keywords=frozenset({'import'}),
     module_separator='.',  # `import com.foo.Bar`
     source_extensions=frozenset({'.kt'}),
+    # BACK-551: Kotlin member imports `import a.b.Outer.member` peel to Outer.kt.
+    nested_member_fallback=True,
+    # BACK-547 scale-out: `package_header` → `identifier` (`package a.b.c`)
+    # feeds the honest-decline package inventory, same as Java/PHP.
+    package_node_types=frozenset({'package_header'}),
 )
 
 # BACK-514: Lua/Scala/Dart/Zig/GDScript were absent from the table entirely —
@@ -759,6 +901,8 @@ _SCALA_SPEC = _ImportSpec(
     keywords=frozenset({'import'}),
     module_separator='.',
     source_extensions=frozenset({'.scala'}),
+    # BACK-551: `import a.b.Outer.Inner` names a member of Outer — peel to Outer.scala.
+    nested_member_fallback=True,
 )
 
 _DART_SPEC = _ImportSpec(

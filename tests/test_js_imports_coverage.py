@@ -204,6 +204,80 @@ class TestExtractImportsRealJS:
         assert len(result) >= 1
 
 
+# ─── ES module re-exports (barrels) — BACK-548 ───────────────────────────────
+
+class TestReExports:
+    def test_star_reexport_is_import_edge(self, tmp_path):
+        code = "export * from './target';\n"
+        f = _write_js(tmp_path, 'index.ts', code)
+        result = JavaScriptExtractor().extract_imports(f)
+        re = [r for r in result if r.import_type == 're_export']
+        assert len(re) == 1
+        assert re[0].module_name == './target'
+        assert re[0].imported_names == ['*']
+        assert re[0].is_relative is True
+
+    def test_named_reexport_captures_source_names(self, tmp_path):
+        code = "export { Foo, Bar } from './foo';\n"
+        f = _write_js(tmp_path, 'index.ts', code)
+        result = JavaScriptExtractor().extract_imports(f)
+        re = [r for r in result if r.import_type == 're_export']
+        assert len(re) == 1
+        assert set(re[0].imported_names) == {'Foo', 'Bar'}
+
+    def test_aliased_reexport_uses_source_name(self, tmp_path):
+        # `Baz as Qux` — the name pulled FROM the module is Baz, not the alias.
+        code = "export { Baz as Qux } from './baz';\n"
+        f = _write_js(tmp_path, 'index.ts', code)
+        result = JavaScriptExtractor().extract_imports(f)
+        re = [r for r in result if r.import_type == 're_export']
+        assert len(re) == 1
+        assert re[0].imported_names == ['Baz']
+
+    def test_namespace_reexport_is_import_edge(self, tmp_path):
+        code = "export * as ns from './ns';\n"
+        f = _write_js(tmp_path, 'index.ts', code)
+        result = JavaScriptExtractor().extract_imports(f)
+        re = [r for r in result if r.import_type == 're_export']
+        assert len(re) == 1
+        assert re[0].module_name == './ns'
+
+    def test_local_export_is_not_an_import(self, tmp_path):
+        # `export const` / `export function` have no source module — not an edge.
+        code = "export const x = 1;\nexport function f() { return 2; }\n"
+        f = _write_js(tmp_path, 'index.ts', code)
+        result = JavaScriptExtractor().extract_imports(f)
+        assert [r for r in result if r.import_type == 're_export'] == []
+
+    def test_reexport_skips_unused_detection(self, tmp_path):
+        # A re-export IS the usage (public API) — must not be flagged unused.
+        code = "export * from './target';\n"
+        f = _write_js(tmp_path, 'index.ts', code)
+        result = JavaScriptExtractor().extract_imports(f)
+        re = [r for r in result if r.import_type == 're_export']
+        assert re[0].skip_unused is True
+
+
+# ─── is_intra_project_import classification (honest-decline, BACK-547) ────────
+
+class TestIsIntraProjectImport:
+    def _stmt(self, module_name):
+        return ImportStatement(
+            file_path=Path('/p/a.ts'), line_number=1, module_name=module_name,
+            imported_names=[], is_relative=module_name.startswith('.'),
+            import_type='es6_import')
+
+    def test_relative_is_intra_project(self):
+        e = JavaScriptExtractor()
+        assert e.is_intra_project_import(self._stmt('./util'), Path('/p')) is True
+        assert e.is_intra_project_import(self._stmt('../lib/x'), Path('/p')) is True
+
+    def test_bare_specifier_is_external(self):
+        e = JavaScriptExtractor()
+        assert e.is_intra_project_import(self._stmt('react'), Path('/p')) is False
+        assert e.is_intra_project_import(self._stmt('@angular/core'), Path('/p')) is False
+
+
 # ─── _parse_destructured_names ────────────────────────────────────────────────
 
 class TestParseDestructuredNames:
@@ -472,6 +546,29 @@ class TestResolveImport:
         result = e.resolve_import(stmt, tmp_path)
         assert result is None
 
+    def test_parent_relative_resolves_one_level_up(self, tmp_path):
+        """BACK-549: '../foo' must navigate up, not collapse to 'foo'."""
+        sibling_dir = tmp_path / 'a'
+        sibling_dir.mkdir()
+        target = tmp_path / 'shared.js'
+        target.write_text('export const x = 1;')
+        e = JavaScriptExtractor()
+        stmt = self._make_stmt('../shared', sibling_dir)
+        result = e.resolve_import(stmt, sibling_dir)
+        assert result == target.resolve()
+
+    def test_parent_relative_resolves_two_levels_up(self, tmp_path):
+        """BACK-549: '../../foo' (the dominant idiom in deep trees like
+        VS Code's src/vs/...) must navigate up two levels, not collapse."""
+        nested_dir = tmp_path / 'a' / 'b'
+        nested_dir.mkdir(parents=True)
+        target = tmp_path / 'nls.js'
+        target.write_text('export const x = 1;')
+        e = JavaScriptExtractor()
+        stmt = self._make_stmt('../../nls', nested_dir)
+        result = e.resolve_import(stmt, nested_dir)
+        assert result == target.resolve()
+
 
 # ─── _resolve_relative_js ────────────────────────────────────────────────────
 
@@ -523,6 +620,44 @@ class TestResolveRelativeJs:
         result = e._resolve_relative_js('./nope', tmp_path)
         assert result is None
 
+    def test_one_level_parent_navigates_up(self, tmp_path):
+        """BACK-549: str.lstrip('./') stripped '../' entirely (character-set
+        strip, not prefix strip), collapsing '../shared' to 'shared' and
+        resolving in the wrong directory."""
+        sibling_dir = tmp_path / 'a'
+        sibling_dir.mkdir()
+        target = tmp_path / 'shared.js'
+        target.write_text('export const x = 1;')
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('../shared', sibling_dir)
+        assert result == target.resolve()
+
+    def test_two_level_parent_navigates_up(self, tmp_path):
+        """BACK-549: '../../nls' — the dominant relative-import idiom in
+        deeply-nested real trees (e.g. VS Code's src/vs/**) — must resolve
+        two directories up, not collapse to a same-directory 'nls' lookup."""
+        nested_dir = tmp_path / 'a' / 'b'
+        nested_dir.mkdir(parents=True)
+        target = tmp_path / 'nls.js'
+        target.write_text('export const x = 1;')
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('../../nls', nested_dir)
+        assert result == target.resolve()
+
+    def test_parent_with_subdirectory_navigates_up_then_down(self, tmp_path):
+        """BACK-549: '../common/cursor/x' must go up one level, then back
+        down through common/cursor/, not collapse to 'common/cursor/x'
+        resolved in the original directory."""
+        nested_dir = tmp_path / 'browser'
+        nested_dir.mkdir()
+        target_dir = tmp_path / 'common' / 'cursor'
+        target_dir.mkdir(parents=True)
+        target = target_dir / 'cursorColumnSelection.js'
+        target.write_text('export const x = 1;')
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('../common/cursor/cursorColumnSelection', nested_dir)
+        assert result == target.resolve()
+
     def test_js_extension_falls_back_to_ts(self, tmp_path):
         """BACK-410: TS ESM idiom — `import './position.js'` resolves to position.ts."""
         f = tmp_path / 'position.ts'
@@ -560,6 +695,19 @@ class TestResolveRelativeJs:
         e = JavaScriptExtractor()
         result = e._resolve_relative_js('./position.js', tmp_path)
         assert result == js_file.resolve()
+
+    def test_js_extension_falls_back_to_ts_with_multidot_filename(self, tmp_path):
+        """BACK-549: 'foo.contribution.js' -> 'foo.contribution.ts', a real
+        VS Code naming convention. Path.with_suffix('') on the target only
+        strips the LAST dot-segment of the whole name, so chaining
+        with_suffix('') then with_suffix('.ts') mangled 'automations
+        .contribution.js' into 'automations.ts' (silently dropping
+        '.contribution'), not 'automations.contribution.ts'."""
+        f = tmp_path / 'automations.contribution.ts'
+        f.write_text('export const x = 1;')
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('./automations.contribution.js', tmp_path)
+        assert result == f.resolve()
 
     def test_js_extension_no_ts_file_returns_none(self, tmp_path):
         e = JavaScriptExtractor()

@@ -258,7 +258,12 @@ class DependsRenderer:
             print(f"{warning}\n")
 
         if not dependents:
-            print("  No dependents found (nothing imports this module)")
+            if result.get('undercount_possible'):
+                # BACK-547: the caveat (⚠) already printed above; do not assert
+                # the confident "nothing imports this module" that contradicts it.
+                print("  No dependents resolved — but see the ⚠ above: this may be incomplete.")
+            else:
+                print("  No dependents found (nothing imports this module)")
             print()
             print("ℹ Import-graph analysis — dynamic imports not followed.")
             return
@@ -304,7 +309,10 @@ class DependsRenderer:
             print(f"{warning}\n")
 
         if not modules:
-            print("  No internal imports found.")
+            if result.get('undercount_possible'):
+                print("  No internal imports resolved — but see the ⚠ above: this may be incomplete.")
+            else:
+                print("  No internal imports found.")
             print()
             print("ℹ Import-graph analysis — dynamic imports not followed.")
             return
@@ -390,6 +398,12 @@ class DependsAdapter(ResourceAdapter):
         self._scan_root: Optional[Path] = None
         self._scan_capped = False
         self._root_inferred = False
+        # BACK-547 honest-decline: import statements that were extracted and
+        # point intra-project (per the extractor's is_intra_project_import) but
+        # produced no graph edge — the false-negative risk a blast-radius
+        # negative must disclose rather than assert a confident "nothing here".
+        self._unresolved_intra = 0
+        self._unresolved_examples: List[tuple] = []
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Build import graph and return reverse-dependency view.
@@ -507,6 +521,8 @@ class DependsAdapter(ResourceAdapter):
         supported_exts = scan_extensions if scan_extensions is not None else frozenset(get_all_extensions())
         self._scan_root = scan_root
         self._scan_capped = False
+        self._unresolved_intra = 0
+        self._unresolved_examples = []
 
         # BACK-498: discover files the same way ImportsAdapter._build_graph does —
         # os.walk honoring SKIP_DIRECTORIES/hidden dirs (not a raw rglob, which
@@ -546,12 +562,22 @@ class DependsAdapter(ResourceAdapter):
                     break
 
         all_imports: List[ImportStatement] = []
+        # BACK-547/544/549: the set of packages/namespaces the tree declares,
+        # for honest-decline classification of package-declaring languages
+        # (C#, and since this session, Java/Kotlin/PHP) — an unresolved
+        # dotted import is intra-project iff the project declares a matching
+        # package/namespace. Only files whose extractor supports it
+        # contribute (no-op scan otherwise); Swift has no such declaration to
+        # scan and stays on the conservative None verdict.
+        project_namespaces: Set[str] = set()
         for file_path in files:
             extractor = get_extractor(file_path)
             if not extractor:
                 continue
-            imports = extractor.extract_imports(file_path)
-            all_imports.extend(imports)
+            all_imports.extend(extractor.extract_imports(file_path))
+            spec = getattr(extractor, 'spec', None)
+            if getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None):
+                project_namespaces.update(extractor.extract_namespaces(file_path))
 
         self._graph = ImportGraph.from_imports(all_imports)
 
@@ -583,11 +609,26 @@ class DependsAdapter(ResourceAdapter):
                     # resolve to the full target set, not just the primary.
                     targets = extractor.resolve_import_targets(
                         stmt, base_path, search_paths=extra_paths)
+                added = False
                 for resolved in targets:
                     if resolved and resolved != file_path:
                         self._graph.add_dependency(file_path, resolved)
                         self._graph.resolved_paths[stmt.module_name] = resolved
                         self._edge_stmts[(file_path, resolved)] = stmt
+                        added = True
+                if not added:
+                    # BACK-547 honest-decline: an extracted import that produced
+                    # no edge is only a false-negative risk if it points
+                    # intra-project. External (stdlib/dep) imports correctly have
+                    # no in-tree edge; None means the extractor can't tell, and
+                    # we conservatively don't count it (never cry wolf).
+                    verdict = extractor.is_intra_project_import(
+                        stmt, base_path, search_paths=extra_paths,
+                        project_namespaces=project_namespaces)
+                    if verdict is True:
+                        self._unresolved_intra += 1
+                        if len(self._unresolved_examples) < 5:
+                            self._unresolved_examples.append((file_path, stmt))
 
     def _build_meta(self) -> Dict[str, Any]:
         known_limits = [
@@ -602,9 +643,15 @@ class DependsAdapter(ResourceAdapter):
             known_limits.append(
                 "no project marker found above the target before the scan-root ceiling — "
                 "BACK-525, scope inferred from the target's own directory")
+        if self._unresolved_intra > 0:
+            known_limits.append(
+                f'{self._unresolved_intra} intra-project import(s) did not resolve to a file — '
+                'BACK-547, dependents may be undercounted (a negative is a lower bound)')
         return {
             'analysis_kind': 'import-graph',
-            'confidence': 'high',
+            # BACK-547: a graph with unresolved intra-project imports is not a
+            # high-confidence source for a blast-radius negative.
+            'confidence': 'reduced' if self._unresolved_intra > 0 else 'high',
             'known_limits': known_limits,
         }
 
@@ -635,11 +682,38 @@ class DependsAdapter(ResourceAdapter):
             f"{root}. Pass an explicit root or cd into the project for full coverage."
         )
 
-    def _warnings(self) -> str:
-        """Join every active disclosure (scan cap, inferred root) into one
-        warning string, in priority order."""
-        parts = [w for w in (self._scan_cap_warning(), self._root_inferred_warning()) if w]
-        return '\n'.join(parts)
+    def _honest_decline_warning(self) -> str:
+        """BACK-547 honest-decline: one-line disclosure when the scan contained
+        intra-project imports that did not resolve to a file edge, so a
+        blast-radius negative here is a lower bound, not a proof of "nothing
+        imports this". Only intra-project misses count — external (stdlib/dep)
+        imports are correctly edge-less and never trigger this."""
+        n = self._unresolved_intra
+        if n <= 0:
+            return ''
+        eg = ''
+        if self._unresolved_examples:
+            _importer, stmt = self._unresolved_examples[0]
+            eg = f" (e.g. '{stmt.module_name}')"
+        return (
+            f"⚠ {n} intra-project import{'s' if n != 1 else ''} in this scan did not "
+            f"resolve to a file{eg} — dependents may be undercounted, or those targets "
+            "lie outside the scanned scope. Treat blast-radius negatives here as a lower bound."
+        )
+
+    def _warnings(self, include_honest_decline: bool = False) -> str:
+        """Join active disclosures (scan cap, inferred root, and — only when the
+        result is empty — honest-decline) into one warning string, in priority
+        order. The honest-decline ⚠ is gated to the empty/negative case (the
+        DD-killer BACK-542 signature): on a *positive* result the same
+        intra-project-miss count is disclosed via _meta.known_limits instead, so
+        a corpus with a few unresolved imports doesn't append a caveat to every
+        confident, non-empty answer (that would be the cry-wolf failure honest-
+        decline is meant to prevent)."""
+        parts = [self._scan_cap_warning(), self._root_inferred_warning()]
+        if include_honest_decline:
+            parts.append(self._honest_decline_warning())
+        return '\n'.join(w for w in parts if w)
 
     # ── Formatters ─────────────────────────────────────────────────────────
 
@@ -679,8 +753,14 @@ class DependsAdapter(ResourceAdapter):
             'metadata': self.get_metadata(),
             '_meta': self._build_meta(),
         }
-        if self._scan_capped or self._root_inferred:
-            result['warning'] = self._warnings()
+        # BACK-547: undercount_possible flags that an empty result may be a lower
+        # bound (intra-project imports that didn't resolve), so the renderer
+        # softens the confident "nothing imports this" assertion and the ⚠ shows.
+        empty = not dependents
+        result['undercount_possible'] = empty and self._unresolved_intra > 0
+        warnings = self._warnings(include_honest_decline=empty)
+        if warnings:
+            result['warning'] = warnings
         return result
 
     def _format_directory_summary(self, directory: Path, top_n: Optional[int], fmt: str) -> Dict[str, Any]:
@@ -714,8 +794,11 @@ class DependsAdapter(ResourceAdapter):
             'metadata': self.get_metadata(),
             '_meta': self._build_meta(),
         }
-        if self._scan_capped or self._root_inferred:
-            result['warning'] = self._warnings()
+        empty = not modules
+        result['undercount_possible'] = empty and self._unresolved_intra > 0
+        warnings = self._warnings(include_honest_decline=empty)
+        if warnings:
+            result['warning'] = warnings
         return result
 
     @staticmethod

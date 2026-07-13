@@ -147,12 +147,22 @@ class TestCSharp:
         extractor = get_extractor(f)
         assert set(extractor.extract_namespaces(f)) == {'Foo', 'Bar'}
 
-    def test_extract_namespaces_non_csharp_is_noop(self, tmp_path):
-        """Other languages have no such node kind; gated by spec.resolve_namespaces."""
+    def test_extract_namespaces_swift_is_noop(self, tmp_path):
+        """Swift has no package/namespace declaration node to scan (modules
+        are a build-system concept, not a source construct) — gated by
+        spec.package_node_types being empty, unlike Java/Kotlin/PHP/C#
+        (BACK-547 scale-out) which now have real inventories."""
+        f = tmp_path / 'a.swift'
+        f.write_text('import Foundation\nclass A {}\n')
+        extractor = get_extractor(f)
+        assert extractor.extract_namespaces(f) == []
+
+    def test_extract_namespaces_java_package_declaration(self, tmp_path):
+        """BACK-547: Java now has its own package inventory via `package` decl."""
         f = tmp_path / 'a.java'
         f.write_text('package foo.bar;\nclass A {}\n')
         extractor = get_extractor(f)
-        assert extractor.extract_namespaces(f) == []
+        assert extractor.extract_namespaces(f) == ['foo.bar']
 
 
 class TestPhp:
@@ -374,7 +384,65 @@ class TestModuleResolution:
         (tmp_path / 'p/A.java').write_text('package p;\nimport p.other.*;\nimport static p.M.X;\n')
         res = self._resolve(tmp_path, 'p/A.java', 'p')
         assert res['p.other.*'] is None      # wildcard package import
-        assert res['p.M.X'] is None          # static member, no p/M/X.java
+        assert res['p.M.X'] is None          # static member, no p/M.java either
+
+    def test_java_nested_type_import_resolves_to_enclosing_class(self, tmp_path):
+        """BACK-551: `import a.b.Outer.Inner` names a nested type — must resolve
+        to Outer.java (the file), not silently drop because there's no
+        Inner.java. Java measurement loop found this class of miss."""
+        (tmp_path / 'src/a/b').mkdir(parents=True)
+        (tmp_path / 'src/a/b/Outer.java').write_text(
+            'package a.b;\npublic class Outer { public static class Inner {} }\n')
+        (tmp_path / 'src/a/b/User.java').write_text(
+            'package a.b;\nimport a.b.Outer.Inner;\npublic class User {}\n')
+        res = self._resolve(tmp_path, 'src/a/b/User.java', 'src/a/b')
+        assert res['a.b.Outer.Inner'] == (tmp_path / 'src/a/b/Outer.java').resolve()
+
+    def test_java_static_member_import_resolves_to_class(self, tmp_path):
+        """BACK-551: `import static a.b.Outer.CONST` must resolve to Outer.java."""
+        (tmp_path / 'src/a/b').mkdir(parents=True)
+        (tmp_path / 'src/a/b/Outer.java').write_text(
+            'package a.b;\npublic class Outer { public static final int CONST = 1; }\n')
+        (tmp_path / 'src/a/b/User.java').write_text(
+            'package a.b;\nimport static a.b.Outer.CONST;\npublic class User {}\n')
+        res = self._resolve(tmp_path, 'src/a/b/User.java', 'src/a/b')
+        assert res['a.b.Outer.CONST'] == (tmp_path / 'src/a/b/Outer.java').resolve()
+
+    def test_java_nested_fallback_does_not_peel_into_package(self, tmp_path):
+        """BACK-551 FP-safety: an unresolved `import a.b.Missing` (no Missing.java
+        in-tree, `b` is a lowercase package component) must stay None — the
+        member-peel must NOT strip down to the package and match a stray file
+        named after a package component (never fabricate an edge)."""
+        (tmp_path / 'src/a/b').mkdir(parents=True)
+        # A decoy file whose stem equals a package component; the peel must not
+        # reach it.
+        (tmp_path / 'src/a/b.java').write_text('package a;\nclass b {}\n')
+        (tmp_path / 'src/a/b/User.java').write_text(
+            'package a.b;\nimport a.b.Missing;\npublic class User {}\n')
+        res = self._resolve(tmp_path, 'src/a/b/User.java', 'src/a/b')
+        assert res['a.b.Missing'] is None
+
+    def test_kotlin_member_import_resolves_to_enclosing_class(self, tmp_path):
+        """BACK-551: Kotlin `import a.b.Outer.member` peels to Outer.kt."""
+        (tmp_path / 'src/a/b').mkdir(parents=True)
+        (tmp_path / 'src/a/b/Outer.kt').write_text(
+            'package a.b\nclass Outer { companion object { const val C = 1 } }\n')
+        (tmp_path / 'src/a/b/User.kt').write_text(
+            'package a.b\nimport a.b.Outer.C\nclass User\n')
+        res = self._resolve(tmp_path, 'src/a/b/User.kt', 'src/a/b')
+        assert res['a.b.Outer.C'] == (tmp_path / 'src/a/b/Outer.kt').resolve()
+
+    def test_php_nested_fallback_disabled(self, tmp_path):
+        """BACK-551: PHP does NOT get the member-peel (its `\\` namespace
+        components are StudlyCaps, so the Uppercase gate can't tell package from
+        type) — `use App\\Models\\User\\Missing` with no Missing.php stays None,
+        never peeling to a stray Models/User file."""
+        (tmp_path / 'src/App/Models').mkdir(parents=True)
+        (tmp_path / 'src/App/Models/User.php').write_text('<?php\nnamespace App\\Models;\nclass User {}\n')
+        (tmp_path / 'src/App/Web.php').write_text(
+            '<?php\nnamespace App\\Web;\nuse App\\Models\\User\\Missing;\nclass Web {}\n')
+        res = self._resolve(tmp_path, 'src/App/Web.php', 'src/App')
+        assert res['App\\Models\\User\\Missing'] is None
 
     def test_csharp_namespace_fans_out_to_every_declaring_file(self, tmp_path):
         """BACK-544: `using Foo.Bar` names a namespace, not one type — a

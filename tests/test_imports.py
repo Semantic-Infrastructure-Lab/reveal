@@ -7,6 +7,70 @@ from reveal.analyzers.imports.python import extract_python_imports, extract_pyth
 from reveal.adapters.imports import ImportsAdapter
 
 
+class TestIsIntraProjectImport:
+    """BACK-547 honest-decline: per-language intra-project vs external classification.
+    True = intra-project (real miss if unresolved), False = external (correctly
+    edge-less), None = can't tell (conservatively not counted)."""
+
+    def _stmt(self, module_name, is_relative=False, level=0):
+        return ImportStatement(
+            file_path=Path('/p/a'), line_number=1, module_name=module_name,
+            imported_names=[], is_relative=is_relative, import_type='import', level=level)
+
+    def test_base_default_is_none(self):
+        from reveal.analyzers.imports.base import LanguageExtractor
+        # Rust/Zig extractors that don't override inherit None (conservative).
+        from reveal.analyzers.imports.rust import RustExtractor
+        assert RustExtractor().is_intra_project_import(self._stmt('crate::x'), Path('/p')) is None
+
+    def test_python_relative_is_intra_project(self):
+        from reveal.analyzers.imports.python import PythonExtractor
+        e = PythonExtractor()
+        assert e.is_intra_project_import(self._stmt('.utils', is_relative=True, level=1), Path('/p')) is True
+
+    def test_python_absolute_is_unknown(self):
+        from reveal.analyzers.imports.python import PythonExtractor
+        e = PythonExtractor()
+        # `import os` / `from django.db import models` — can't cheaply tell.
+        assert e.is_intra_project_import(self._stmt('os'), Path('/p')) is None
+
+    def test_go_uses_module_prefix(self, tmp_path):
+        from reveal.analyzers.imports.go import GoExtractor
+        (tmp_path / 'go.mod').write_text('module example.com/demo\n\ngo 1.21\n')
+        e = GoExtractor()
+        assert e.is_intra_project_import(
+            self._stmt('example.com/demo/util'), tmp_path) is True
+        assert e.is_intra_project_import(
+            self._stmt('github.com/other/dep'), tmp_path) is False
+
+    def test_go_without_gomod_is_unknown(self, tmp_path):
+        from reveal.analyzers.imports.go import GoExtractor
+        assert GoExtractor().is_intra_project_import(
+            self._stmt('example.com/demo/util'), tmp_path) is None
+
+    def test_csharp_uses_declared_namespaces(self):
+        from reveal.analyzers.imports.base import get_extractor
+        e = get_extractor(Path('Foo.cs'))
+        declared = {'MyApp.Services', 'MyApp.Core'}
+        # Declared, nested-under-declared, and ancestor-of-declared → intra-project.
+        assert e.is_intra_project_import(self._stmt('MyApp.Services'), Path('/p'),
+                                         project_namespaces=declared) is True
+        assert e.is_intra_project_import(self._stmt('MyApp.Services.Deep'), Path('/p'),
+                                         project_namespaces=declared) is True
+        assert e.is_intra_project_import(self._stmt('MyApp'), Path('/p'),
+                                         project_namespaces=declared) is True
+        # BCL / NuGet namespaces not declared in-tree → external.
+        assert e.is_intra_project_import(self._stmt('System.Text'), Path('/p'),
+                                         project_namespaces=declared) is False
+        assert e.is_intra_project_import(self._stmt('Newtonsoft.Json'), Path('/p'),
+                                         project_namespaces=declared) is False
+
+    def test_csharp_without_inventory_is_unknown(self):
+        from reveal.analyzers.imports.base import get_extractor
+        e = get_extractor(Path('Foo.cs'))
+        assert e.is_intra_project_import(self._stmt('MyApp.Services'), Path('/p')) is None
+
+
 class TestImportStatement:
     """Test ImportStatement dataclass."""
 

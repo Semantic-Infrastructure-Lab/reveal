@@ -478,6 +478,23 @@ class PythonExtractor(LanguageExtractor):
                 targets.append(sub)
         return targets
 
+    def is_intra_project_import(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
+        project_namespaces: Optional[Set[str]] = None,
+    ) -> Optional[bool]:
+        """A *relative* Python import (`from . import x`, `from ..pkg import y`)
+        is unambiguously intra-project — if it didn't resolve, that's a real
+        miss. An *absolute* import (`import os`, `from django.db import models`)
+        could be stdlib, a third-party dependency, or an in-tree package; we
+        can't cheaply tell without a package inventory, so return None rather
+        than risk crying wolf."""
+        if stmt.is_relative or stmt.level > 0:
+            return True
+        return None
+
 
 # Backward compatibility: Keep old function-based API
 def extract_python_imports(file_path: Path) -> List[ImportStatement]:

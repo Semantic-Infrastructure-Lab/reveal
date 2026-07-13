@@ -216,3 +216,39 @@ class LanguageExtractor(ABC):
         """
         primary = self.resolve_import(stmt, base_path, search_paths=search_paths)
         return [primary] if primary is not None else []
+
+    def is_intra_project_import(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
+        project_namespaces: Optional[Set[str]] = None,
+    ) -> Optional[bool]:
+        """Classify an import as intra-project vs external, for honest-decline.
+
+        Powers ``depends://``'s honest-decline invariant (BACK-547): when an
+        import statement was extracted but produced **no** graph edge, this
+        distinguishes the two very different reasons —
+
+          * ``True``  — the import points **inside this project** but did not
+            resolve to a file (a real resolution-level miss, or a target outside
+            the scanned scope). These are the false-negative risk a blast-radius
+            negative must disclose.
+          * ``False`` — the import is **external** (stdlib / third-party
+            dependency) and *correctly* has no in-tree edge. Not a concern.
+          * ``None``  — the extractor cannot cheaply tell. Callers must treat
+            ``None`` conservatively (do **not** count it as a miss), so the
+            default is deliberately ``None`` rather than a guess: a wrong
+            "intra-project" would cry wolf, the exact failure honest-decline
+            exists to avoid.
+
+        ``project_namespaces`` (optional): the set of namespaces/packages the
+        scanned tree *declares* — supplied by the caller for namespace-resolved
+        languages (C#) so a qualified import can be classed intra-project iff
+        the project declares a matching namespace. Extractors that don't need it
+        ignore it.
+
+        Only consulted for statements that did not resolve; a resolved import is
+        by definition intra-project and never reaches here.
+        """
+        return None

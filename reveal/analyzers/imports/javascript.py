@@ -83,6 +83,19 @@ class JavaScriptExtractor(LanguageExtractor):
         for node in import_nodes:
             imports.extend(self._parse_import_statement(node, file_path, analyzer))
 
+        # Extract ES module re-exports: `export ... from '...'` (BACK-548).
+        # Tree-sitter models these as export_statement, not import_statement, so
+        # they were previously invisible to the import graph — a re-export barrel
+        # (`export * from './x'`) never counted as importing './x', and depends://
+        # systematically undercut the re-exported module's blast radius. A
+        # re-export IS a dependency edge (the barrel pulls the module in to
+        # re-expose it), so surface it as one.
+        export_nodes = analyzer._find_nodes_by_type('export_statement')
+        for node in export_nodes:
+            result = self._parse_reexport_statement(node, file_path, analyzer)
+            if result:
+                imports.append(result)
+
         # Extract CommonJS require() calls
         call_nodes = analyzer._find_nodes_by_type('call_expression')
         for node in call_nodes:
@@ -257,6 +270,50 @@ class JavaScriptExtractor(LanguageExtractor):
             alias=alias,
             source_line=_line_text(analyzer, line_number),
         )]
+
+    def _parse_reexport_statement(self, node, file_path: Path, analyzer) -> Optional[ImportStatement]:
+        """Parse an ES module re-export `export ... from '...'` into an import edge (BACK-548).
+
+        Only export_statements with a string source are re-exports; a local
+        `export const x = 1` / `export function f(){}` has no source module and is
+        skipped (returns None). Handled forms:
+            export * from './x'              # star re-export (barrel)
+            export * as ns from './x'        # namespace re-export
+            export { a, b } from './x'       # named re-export
+            export { a as c } from './x'     # aliased named re-export
+
+        Marked skip_unused: a re-export is itself the usage (the barrel's public
+        API — same rationale as the __init__.py re-export pattern), so it must not
+        be flagged as an unused import.
+        """
+        module_path = self._extract_module_path_from_import(node, analyzer)
+        if not module_path:
+            return None  # local export (`export const ...`), not a re-export edge
+
+        imported_names: List[str] = []
+        for child in _children(node):
+            kind = child.kind()
+            if kind in ('*', 'namespace_export'):
+                imported_names = ['*']
+            elif kind == 'export_clause':
+                for spec in _children(child):
+                    if spec.kind() == 'export_specifier':
+                        spec_children = _children(spec)
+                        if spec_children:
+                            imported_names.append(analyzer._get_node_text(spec_children[0]))
+
+        line_number = node.start_position().row + 1
+        return ImportStatement(
+            file_path=file_path,
+            line_number=line_number,
+            module_name=module_path,
+            imported_names=imported_names,
+            is_relative=module_path.startswith('.'),
+            import_type='re_export',
+            alias=None,
+            source_line=_line_text(analyzer, line_number),
+            skip_unused=True,
+        )
 
     def _determine_call_type(self, node, analyzer) -> Optional[str]:
         """Determine if node is require() or dynamic import().
@@ -483,6 +540,22 @@ class JavaScriptExtractor(LanguageExtractor):
         # Resolve relative imports
         return self._resolve_relative_js(module_path, base_path)
 
+    def is_intra_project_import(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
+        project_namespaces: Optional[Set[str]] = None,
+    ) -> Optional[bool]:
+        """A relative specifier (`./x`, `../x`) is intra-project; a bare
+        specifier (`react`, `@angular/core`) is an npm dependency (external).
+        This mirrors resolve_import's own relative-vs-bare split, so an
+        unresolved relative import is a real intra-project miss (or a target
+        outside the scanned scope)."""
+        if stmt.module_name.startswith('.'):
+            return True
+        return False
+
     # TS ESM idiom: source imports use the compiled-output extension
     # (e.g. `./foo.js`) while the source file on disk is `.ts`/`.tsx`/`.mts`.
     _TS_ESM_EXTENSION_FALLBACKS = {
@@ -505,8 +578,12 @@ class JavaScriptExtractor(LanguageExtractor):
         8. As directory with index.js
         9. As directory with index.ts
         """
-        # Clean up the path (remove leading ./)
-        clean_path = module_path.lstrip('./')
+        # Strip a leading './' only — str.lstrip('./') strips *characters*,
+        # not the prefix, so it was mangling '../foo' and '../../foo' into
+        # bare 'foo' (every leading '.'/'/' character stripped), silently
+        # resolving multi-level parent imports against the wrong directory.
+        # '../' must be preserved so base_path / clean_path navigates up.
+        clean_path = module_path[2:] if module_path.startswith('./') else module_path
 
         # Build target path
         target = base_path / clean_path
@@ -519,9 +596,14 @@ class JavaScriptExtractor(LanguageExtractor):
             # TS ESM idiom: `import './foo.js'` resolving to `foo.ts` on disk
             suffix = target.suffix
             if suffix in self._TS_ESM_EXTENSION_FALLBACKS:
-                stem_path = target.with_suffix('')
+                # String slicing, not Path.with_suffix(): with_suffix() strips
+                # only the last dot-segment of the *whole* name, so a
+                # multi-dot filename like 'foo.contribution.js' would lose
+                # '.contribution' too (target.with_suffix('') -> 'foo', not
+                # 'foo.contribution') — a real VS Code naming convention.
+                stem_str = str(target)[: -len(suffix)]
                 for fallback_ext in self._TS_ESM_EXTENSION_FALLBACKS[suffix]:
-                    fallback_path = stem_path.with_suffix(fallback_ext)
+                    fallback_path = Path(stem_str + fallback_ext)
                     if fallback_path.exists() and fallback_path.is_file():
                         return fallback_path.resolve()
 
