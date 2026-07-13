@@ -211,8 +211,8 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal architecture [path]` | Architectural brief: entry points, core abstractions, risks | `reveal architecture --help` |
 | `reveal deps [path]` | Dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
 | `reveal hotspots [path]` | High-complexity files and functions that need attention | `reveal hotspots --help` |
-| `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(7 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin)* | `reveal contracts --help` |
-| `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes *(7 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin)* | `reveal surface --help` |
+| `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(8 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby)* | `reveal contracts --help` |
+| `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes *(8 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby)* | `reveal surface --help` |
 | `reveal testability [path]` | Test patch pressure joined with production boundary fan-out *(patch half Python only — BACK-374)* | `reveal testability --help` |
 | `reveal trace --from FUNC` | Walk call graph from a named entry point; depth-indented narrative with side-effect classification | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
@@ -841,6 +841,13 @@ reveal app.py myfunc --sideeffects
 ```
 Shows what external systems a range touches. Useful for assessing blast radius, spotting unexpected I/O, or understanding retry safety. Works on PHP and Python.
 
+**`--transitive` → follow calls into project-local helpers (BACK-545/546)**
+```bash
+reveal app.py handle_request --sideeffects --transitive
+reveal app.py handle_request --boundary --transitive --depth 3
+```
+Modifier for `--sideeffects` or `--boundary`: instead of only the entry function's own body, walks calls into project-local helper functions and reports their effects too — a real interprocedural blast-radius/agentic-exposure read, not just what's written inline. `--depth` controls how many call hops to follow (default 2, max 5). Stdlib/third-party calls are not followed (no source to walk); only project-local functions resolvable in the same codebase.
+
 **`--loopmap` → loop skeleton (FOR/WHILE/LOOP/DO) with nesting depth**
 ```bash
 reveal file.py process_batch --loopmap
@@ -1467,9 +1474,17 @@ reveal architecture src/           # Entry points, core abstractions, risks, nex
 reveal architecture src/auth/      # Target a specific subdirectory
 reveal architecture . --format json  # Machine-readable: {facts, risks[], next_commands[]}
 reveal architecture src/ --no-imports  # Skip import analysis (faster, no graph)
+reveal architecture src/ --against main  # Diff against a git ref (BACK-441)
 ```
 
 **Output sections:** entry points (fan-in=0, by fan-out) · core abstractions (most imported) · component cohesion bars · risks (circular groups, high-complexity entry points, load-bearing files) · next commands (dynamically generated from findings).
+
+**`--against REF` → architectural diff against a git ref (BACK-441)**
+```bash
+reveal architecture src/ --against main
+reveal architecture src/ --against v1.2.0 --format json
+```
+Base = `REF` (materialized read-only via git, working tree untouched), head = the current working tree. Reports fan-in/fan-out deltas, circular-dependency groups introduced or resolved, component-coupling changes, complexity-centroid shift, and entry-point changes — "what did this branch actually change architecturally" instead of diffing file-by-file. Deltas are only meaningful for graph-backed languages (Python/JS/TS/Go/Rust/C/C++ today — see BACK-487/488).
 
 **Use case:** Pre-edit orientation for a specific module. More targeted than `reveal overview` — works on subdirectories and produces a risks + next_commands structure agents can act on directly. `next_commands` tells the agent exactly what to look at next without further reasoning.
 
@@ -1528,7 +1543,7 @@ reveal surface . --source-only          # Production surface only — excludes t
 reveal surface src/ --source-only --type sdk  # SDK egress, production code only (security review)
 ```
 
-**What it finds:** CLI entry points (Click/argparse), HTTP routes (Flask/FastAPI/Django decorators), environment variable reads, network egress (requests, urllib, sockets), filesystem writes (open with `'w'`/`'a'`, `Path.write_*`, `shutil.*`), subprocess calls. *(Python only — TypeScript support tracked in BACK-373; returns an explicit note on non-Python paths rather than a silent zero.)*
+**What it finds:** CLI entry points, HTTP routes, environment variable reads, network egress, filesystem writes, subprocess calls — per language: Python (Click/argparse, Flask/FastAPI/Django, requests/urllib/sockets), TypeScript (Express/NestJS routes, fetch/axios), Java (Spring routes, `System.getenv`), C# (ASP.NET routes, `Environment.GetEnvironmentVariable`), PHP (Laravel/Symfony/WordPress routes, `getenv`/`$_ENV`), Swift (Vapor routes, `@main`/CLI entry), Kotlin (Ktor/Spring routes, `fun main`), Ruby (Sinatra/Rails routes, `ENV[...]`/`ENV.fetch`, gem-taxonomy requires). *(Supported: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby. On other languages it returns an explicit "not supported" note rather than a silent zero.)*
 
 **`--source-only` (v0.101.0+):** Prunes test directories (`tests/`, `test/`, `spec/`, `__tests__/`, any dir starting with `test` or `spec`) and test files (`test_*.py`, `*_test.py`, `conftest.py`, `*.test.ts`, `*.spec.ts`, etc.) before scanning. Useful for security/architecture reviews where test scaffolding adds noise. `_meta.known_limits` in JSON output records the exclusion.
 
@@ -1596,7 +1611,7 @@ reveal contracts src/ --format=json        # Machine-readable, for diffing acros
 reveal contracts src/services/             # Scope to a subsystem
 ```
 
-**What it finds:** Abstract base classes (ABC, ABCMeta), `typing.Protocol` definitions, `TypedDict` schemas, `@dataclass` declarations, NamedTuple classes — the structural contracts a codebase exposes between modules. In TypeScript/Java/C#/PHP/Swift/Kotlin it classifies interfaces (Swift protocols, Kotlin interfaces) as the contract, `abstract`-modifier classes as abstract contracts, and implementing classes as the types satisfying each. *(Supported: Python, TypeScript, Java, C#, PHP, Swift, Kotlin. On other languages it returns an explicit "not supported" note rather than a silent zero.)*
+**What it finds:** Abstract base classes (ABC, ABCMeta), `typing.Protocol` definitions, `TypedDict` schemas, `@dataclass` declarations, NamedTuple classes — the structural contracts a codebase exposes between modules. In TypeScript/Java/C#/PHP/Swift/Kotlin it classifies interfaces (Swift protocols, Kotlin interfaces) as the contract, `abstract`-modifier classes as abstract contracts, and implementing classes as the types satisfying each; in Ruby, every `module` is a contract and any class with a direct `include`/`extend` (or a superclass) is an implementation. *(Supported: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby. On other languages it returns an explicit "not supported" note rather than a silent zero.)*
 
 **Use case:** Before refactoring or extending a module, see the *interfaces* it ships rather than the implementation. Pairs well with `reveal architecture` (entry points + abstractions) and `reveal surface` (external boundaries) to build a 3-pass mental model: **architecture** → **contracts** → **surface**.
 
