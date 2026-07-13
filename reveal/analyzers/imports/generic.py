@@ -158,8 +158,37 @@ class _ImportSpec:
             the import string (unlike ``import a.b.Outer.Inner``), so peeling
             trailing components can never find the real declaring file (e.g.
             ``Utils.kt``) — only a content-level index over ``a.b``'s files
-            can. Kotlin-only for now (Scala 3 also permits top-level defs but
-            is unmeasured; PHP/Swift/Lua have no such idiom).
+            can. Kotlin-only (confirmed absent in real Scala 2 code — Scala
+            forbids bare top-level defs outside a package object entirely,
+            see ``container_member_fallback`` below for Scala's own gap;
+            PHP/Swift/Lua have no such idiom either).
+        member_container_node_types: Node ``kind()`` value(s) for a
+            *top-level named container* whose members are reached by
+            ``import a.b.Container.member`` where ``Container`` does not
+            satisfy ``nested_member_fallback``'s Uppercase-type gate — Scala
+            ``object_definition`` when the object is named in lowerCamelCase
+            (idiomatic for a "static-helpers" object, e.g. ``object
+            helpers``). Feeds :meth:`extract_container_members`. Empty means
+            the language has no such gap (its containers are always
+            PascalCase types, already covered by ``nested_member_fallback``).
+        container_member_node_types: Node ``kind()`` value(s) for a member
+            declaration *directly inside* a ``member_container_node_types``
+            container's body — Scala ``function_definition``/
+            ``val_definition`` inside an ``object``'s ``template_body``.
+        container_member_fallback: True to synthesize
+            ``(package.Container, member) -> [file]`` entries into the same
+            content-scanned index :meth:`resolve_member_targets` looks up
+            (BACK-557 Scala measurement loop). BACK-551's Uppercase-gated
+            peel already resolves ``import a.b.Directory.getX`` (PascalCase
+            container) to ``Directory.scala``, but real GitBucket code has
+            ``object helpers`` — a lowerCamelCase container the peel
+            deliberately refuses to reach (indistinguishable, by name alone,
+            from peeling into a package segment and fabricating an edge).
+            Verifying the peeled component is a *real declared container*,
+            not just a same-named file, is exactly BACK-555's content-scan
+            idea one level deeper — a container's own member set, rather
+            than the file's top level. Scala-only; Java/Kotlin/C#/PHP/Swift
+            have no lowerCamelCase-container idiom.
     """
 
     import_node_types: FrozenSet[str]
@@ -176,6 +205,9 @@ class _ImportSpec:
     nested_member_fallback: bool = False
     member_node_types: FrozenSet[str] = field(default_factory=frozenset)
     member_symbol_fallback: bool = False
+    member_container_node_types: FrozenSet[str] = field(default_factory=frozenset)
+    container_member_node_types: FrozenSet[str] = field(default_factory=frozenset)
+    container_member_fallback: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -225,6 +257,9 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
     _PACKAGE_NAME_CHILD_KINDS: ClassVar[FrozenSet[str]] = frozenset({
         'qualified_name', 'identifier', 'scoped_identifier', 'namespace_name',
+        # Scala `package a.b.c` (package_clause) names its child
+        # `package_identifier`, not any of the above (BACK-557).
+        'package_identifier',
     })
 
     def extract_namespaces(self, file_path: Path) -> List[str]:
@@ -338,6 +373,90 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 return analyzer._get_node_text(child)
         return None
 
+    def extract_container_members(self, file_path: Path) -> List[Tuple[str, str]]:
+        """``(containerName, memberName)`` pairs for members of a top-level
+        *named container* this language allows to be imported by a member
+        path even though the container itself isn't reached by
+        :meth:`_resolve_dotted`'s ``nested_member_fallback`` peel — Scala's
+        ``object helpers`` idiom (BACK-557 GitBucket measurement loop).
+
+        BACK-551's peel already resolves ``import a.b.Directory.getX`` (a
+        PascalCase container, e.g. ``object Directory``) to ``Directory.scala``
+        by treating the trailing component as "looks like a type" and
+        matching it as a file. It deliberately refuses to peel to a
+        lowerCamelCase trailing component (``helpers``) because, by name
+        alone, that's indistinguishable from a package segment — peeling
+        there could fabricate an edge to an unrelated same-named file. The
+        only safe way to confirm ``helpers`` is a *real declared container*
+        (not a filename coincidence) is to verify it structurally: scan for
+        a top-level container node (``object_definition``) whose own name is
+        ``helpers``, and pair it with each member the import might actually
+        reach. This is the same content-scan discipline BACK-555's
+        :meth:`extract_top_level_members` uses for Kotlin's free functions,
+        one container level deeper.
+
+        No-op (``[]``) unless ``spec.member_container_node_types`` and
+        ``spec.container_member_node_types`` are both set. A container only
+        counts when its immediate parent is the tree's root node (genuinely
+        top-level, not a nested object) — detected as "parent has no parent
+        of its own", not a hardcoded root ``kind()`` string, since that
+        differs by grammar (Kotlin's tree-sitter grammar roots at
+        ``source_file``; Scala's roots at ``compilation_unit``) and
+        tree-sitter node equality (``==``) is unreliable across separately
+        obtained wrapper objects even for the same underlying node. A member
+        only counts when it is a direct child of the container's body
+        wrapper (Scala ``template_body``) — a method declared on a *class
+        nested inside* the object must not be indexed here (it has its own,
+        deeper import path this index does not model).
+        """
+        if not self.spec.member_container_node_types or not self.spec.container_member_node_types:
+            return []
+        analyzer = self._get_analyzer(file_path)
+        if analyzer is None:
+            return []
+        pairs: List[Tuple[str, str]] = []
+        for container_type in self.spec.member_container_node_types:
+            for container in analyzer._find_nodes_by_type(container_type):
+                parent = container.parent()
+                if parent is None or parent.parent() is not None:
+                    continue
+                container_name = self._direct_identifier_name(container, analyzer)
+                if not container_name:
+                    continue
+                body = self._container_body(container)
+                if body is None:
+                    continue
+                for member in _children(body):
+                    if member.kind() not in self.spec.container_member_node_types:
+                        continue
+                    member_name = self._direct_identifier_name(member, analyzer)
+                    if member_name:
+                        pairs.append((container_name, member_name))
+        return pairs
+
+    _IDENTIFIER_KINDS: ClassVar[FrozenSet[str]] = frozenset({'identifier', 'simple_identifier'})
+
+    @classmethod
+    def _direct_identifier_name(cls, node, analyzer) -> Optional[str]:
+        """First direct child whose kind is a plain identifier — the declared
+        name for a Scala ``object``/``def``/``val`` node, all of which expose
+        their name as a direct child (unlike Kotlin's nested property shape,
+        see :meth:`_top_level_member_name`)."""
+        for child in _children(node):
+            if child.kind() in cls._IDENTIFIER_KINDS:
+                return analyzer._get_node_text(child)
+        return None
+
+    @staticmethod
+    def _container_body(node):
+        """The child node holding a container's member declarations — Scala
+        wraps an ``object_definition``'s members in a ``template_body``
+        (``{ ... }``), one level below the ``extends``/name children."""
+        for child in _children(node):
+            if child.kind() == 'template_body':
+                return child
+        return None
+
     def resolve_member_targets(
         self,
         stmt: ImportStatement,
@@ -346,18 +465,23 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         """Every in-tree file declaring the top-level symbol ``stmt`` imports.
 
         Last-resort fallback for Kotlin's free-function/property import idiom
-        (BACK-547 measurement loop): splits ``stmt.module_name`` into
-        ``(package, symbol)`` on ``spec.module_separator`` and looks up the
-        content-scanned index built from :meth:`extract_top_level_members` +
-        :meth:`extract_namespaces`. Fans out to every declaring file the same
-        way :meth:`resolve_namespace_targets` does — a same-named top-level
+        (BACK-547 measurement loop) *and* Scala's lowerCamelCase-container
+        member idiom (BACK-557) — both populate the same ``(package, symbol)``
+        shaped index (Scala's ``package`` component is synthesized as
+        ``declared_package + separator + containerName`` by the caller, so
+        the lookup here is identical either way). Splits ``stmt.module_name``
+        into ``(package, symbol)`` on ``spec.module_separator`` and looks up
+        the content-scanned index built from :meth:`extract_top_level_members`
+        / :meth:`extract_container_members` + :meth:`extract_namespaces`.
+        Fans out to every declaring file the same way
+        :meth:`resolve_namespace_targets` does — a same-named top-level
         overload can legitimately be declared in more than one file (e.g. one
         ``asImageModel`` extension per receiver type in a shared package), and
         without type inference there is no principled way to pick one, so
         this reports all of them rather than guessing or skipping. Honest-skip
         contract holds: an unindexed ``(package, symbol)`` returns ``[]``.
         """
-        if not self.spec.member_symbol_fallback:
+        if not self.spec.member_symbol_fallback and not self.spec.container_member_fallback:
             return []
         sep = self.spec.module_separator
         module = stmt.module_name
@@ -1023,6 +1147,24 @@ _SCALA_SPEC = _ImportSpec(
     source_extensions=frozenset({'.scala'}),
     # BACK-551: `import a.b.Outer.Inner` names a member of Outer — peel to Outer.scala.
     nested_member_fallback=True,
+    # BACK-557 scale-out: `package_clause` -> `identifier`/`stable_identifier`
+    # (`package a.b.c`) feeds the honest-decline package inventory (as for
+    # Java/Kotlin/PHP) *and* is required to pair a file's declared package
+    # with `extract_container_members`' (containerName, memberName) pairs
+    # below.
+    package_node_types=frozenset({'package_clause'}),
+    # BACK-557 Scala measurement loop (real corpus: samples/scala, GitBucket):
+    # confirmed real Scala 2/3 code has NO bare top-level def/val outside any
+    # object (Scala forbids it outside a `package object`; unlike Kotlin,
+    # `member_symbol_fallback`/`member_node_types` stay unset here — there is
+    # nothing to index at file scope). The real, confirmed gap is one level
+    # deeper: `object helpers` (a lowerCamelCase container — GitBucket's only
+    # such container in-tree) whose members (`import
+    # gitbucket.core.view.helpers.getApiMilestone`) BACK-551's Uppercase-gated
+    # peel can never reach by design (see extract_container_members).
+    member_container_node_types=frozenset({'object_definition'}),
+    container_member_node_types=frozenset({'function_definition', 'val_definition'}),
+    container_member_fallback=True,
 )
 
 _DART_SPEC = _ImportSpec(

@@ -611,6 +611,21 @@ class DependsAdapter(ResourceAdapter):
                     for symbol in extractor.extract_top_level_members(file_path):
                         for ns in declared:
                             member_index.setdefault((ns, symbol), []).append(file_path)
+                if getattr(spec, 'container_member_fallback', False) and declared:
+                    # BACK-557 Scala measurement loop: `import a.b.container.member`
+                    # where `container` is a lowerCamelCase top-level object (e.g.
+                    # `object helpers`) that BACK-551's Uppercase-gated peel
+                    # deliberately refuses to reach. Synthesize the same
+                    # (package, symbol) shape member_symbol_fallback uses, keyed
+                    # under the container's own qualified name
+                    # (`declared_package<sep>containerName`), so
+                    # resolve_member_targets's existing split-on-last-component
+                    # lookup finds it with no further changes.
+                    sep = spec.module_separator or ''
+                    for container_name, symbol in extractor.extract_container_members(file_path):
+                        for ns in declared:
+                            key = (f'{ns}{sep}{container_name}', symbol)
+                            member_index.setdefault(key, []).append(file_path)
 
         self._graph = ImportGraph.from_imports(all_imports)
 
@@ -663,14 +678,18 @@ class DependsAdapter(ResourceAdapter):
                             self._graph.add_dependency(file_path, resolved)
                             self._edge_stmts[(file_path, resolved)] = stmt
                             added = True
-                if not added and member_index and getattr(
-                        getattr(extractor, 'spec', None), 'member_symbol_fallback', False):
+                if not added and member_index and (getattr(
+                        getattr(extractor, 'spec', None), 'member_symbol_fallback', False)
+                        or getattr(getattr(extractor, 'spec', None), 'container_member_fallback', False)):
                     # BACK-547 Kotlin measurement loop: `import a.b.foo` for a
                     # top-level fun/val/var — the direct dotted match above
                     # looked for `foo.kt` and failed, and BACK-551's
                     # enclosing-class peel can't help either (there is no
                     # enclosing type in the import path to peel down to).
-                    # Fall back to the content-scanned member index.
+                    # BACK-557 Scala measurement loop: same fallback also
+                    # covers `import a.b.container.member` where `container`
+                    # is a lowerCamelCase object BACK-551's peel refuses to
+                    # reach. Fall back to the content-scanned member index.
                     for resolved in extractor.resolve_member_targets(stmt, member_index):
                         if resolved != file_path:
                             self._graph.add_dependency(file_path, resolved)

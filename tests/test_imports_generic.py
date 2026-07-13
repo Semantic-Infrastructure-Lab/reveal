@@ -535,6 +535,82 @@ class TestModuleResolution:
         extractor = get_extractor(tmp_path / 'a/b/Widget.kt')
         assert extractor.extract_top_level_members(tmp_path / 'a/b/Widget.kt') == []
 
+    def test_scala_lowercase_object_member_import_resolves_via_container_index(self, tmp_path):
+        """BACK-557 Scala measurement loop (real corpus: samples/scala,
+        GitBucket): `import a.b.container.member` where `container` is a
+        lowerCamelCase top-level `object` (e.g. real code's `object
+        helpers`) is NOT reached by BACK-551's nested_member_fallback peel —
+        the peel's Uppercase-type gate stops at the first lowercase trailing
+        component, which is exactly `container`'s name here (indistinguishable
+        by name alone from a package segment). Real corpus measurement found
+        this class of miss on GitBucket's `helpers.scala` (2 of 9 real
+        importers silently dropped before this fix)."""
+        (tmp_path / 'a/b').mkdir(parents=True)
+        (tmp_path / 'a/b/Utils.scala').write_text(
+            'package a.b\n\nobject helpers {\n  def urlLink(x: String): String = x\n}\n')
+        (tmp_path / 'a/b/User.scala').write_text(
+            'package a.b\nimport a.b.helpers.urlLink\nclass User\n')
+
+        entry = tmp_path / 'a/b/User.scala'
+        declaring = tmp_path / 'a/b/Utils.scala'
+        extractor = get_extractor(entry)
+        member_index = {}
+        sep = extractor.spec.module_separator
+        for f in [declaring, entry]:
+            declared_ns = extractor.extract_namespaces(f)
+            for container_name, symbol in extractor.extract_container_members(f):
+                for ns in declared_ns:
+                    member_index.setdefault((f'{ns}{sep}{container_name}', symbol), []).append(f)
+        stmt = [s for s in extractor.extract_imports(entry) if s.module_name == 'a.b.helpers.urlLink'][0]
+
+        # Direct dotted match must fail (no urlLink.scala in-tree) and the
+        # nested_member_fallback peel must also fail (its Uppercase gate
+        # refuses to peel to lowercase `helpers`) — this is the bug BACK-551
+        # doesn't cover, confirming the container-member fallback is load-bearing.
+        assert extractor.resolve_import(stmt, base_path=tmp_path / 'a/b', search_paths=[tmp_path]) is None
+
+        targets = extractor.resolve_member_targets(stmt, member_index)
+        assert targets == [declaring.resolve()]
+
+    def test_scala_uppercase_object_member_still_resolves_via_peel_not_container_index(self, tmp_path):
+        """PascalCase containers (`object Directory`) already resolve via
+        BACK-551's peel — the container-member index must not be needed (and
+        this loop must not regress that existing path)."""
+        (tmp_path / 'a/b').mkdir(parents=True)
+        (tmp_path / 'a/b/Directory.scala').write_text(
+            'package a.b\n\nobject Directory {\n  def getRepositoryDir(x: String): String = x\n}\n')
+        (tmp_path / 'a/b/User.scala').write_text(
+            'package a.b\nimport a.b.Directory.getRepositoryDir\nclass User\n')
+        res = self._resolve(tmp_path, 'a/b/User.scala', 'a/b')
+        assert res['a.b.Directory.getRepositoryDir'] == (tmp_path / 'a/b/Directory.scala').resolve()
+
+    def test_scala_container_member_index_does_not_index_nested_class_members(self, tmp_path):
+        """A method declared on a class nested *inside* the object must not
+        enter the container-member index — it has its own, deeper import
+        path this index does not model, and indexing it here would risk a
+        spurious extra edge."""
+        (tmp_path / 'a/b').mkdir(parents=True)
+        (tmp_path / 'a/b/Widget.scala').write_text(
+            'package a.b\n\nobject widget {\n'
+            '  class Inner {\n    def render(): Unit = {}\n  }\n'
+            '}\n')
+        extractor = get_extractor(tmp_path / 'a/b/Widget.scala')
+        pairs = extractor.extract_container_members(tmp_path / 'a/b/Widget.scala')
+        assert ('widget', 'render') not in pairs
+
+    def test_kotlin_has_no_container_member_fallback(self, tmp_path):
+        """Kotlin's own top-level-member idiom is `member_symbol_fallback`
+        (no enclosing object at all) — `container_member_fallback` must stay
+        off so `extract_container_members`/its index entries are never
+        populated for Kotlin, a guaranteed no-op mirroring the existing
+        Java negative control below."""
+        (tmp_path / 'a/b').mkdir(parents=True)
+        (tmp_path / 'a/b/Widget.kt').write_text(
+            'package a.b\nobject helpers {\n    fun urlLink(x: String) = x\n}\n')
+        extractor = get_extractor(tmp_path / 'a/b/Widget.kt')
+        assert extractor.spec.container_member_fallback is False
+        assert extractor.extract_container_members(tmp_path / 'a/b/Widget.kt') == []
+
     def test_java_has_no_member_symbol_fallback(self, tmp_path):
         """Java has no top-level-function idiom — `member_symbol_fallback`
         must stay off so `resolve_member_targets` is always a no-op, never a
