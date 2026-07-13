@@ -263,6 +263,10 @@ class DependsRenderer:
                 print("  No dependents resolved — but see the ⚠ above: this may be incomplete.")
             else:
                 print("  No dependents found (nothing imports this module)")
+            same_module_note = result.get('same_module_note')
+            if same_module_note:
+                print()
+                print(same_module_note)
             print()
             print("ℹ Import-graph analysis — dynamic imports not followed.")
             return
@@ -779,6 +783,30 @@ class DependsAdapter(ResourceAdapter):
             "lie outside the scanned scope. Treat blast-radius negatives here as a lower bound."
         )
 
+    def _same_module_note(self, target: Path) -> str:
+        """BACK-560: unconditional informational note for languages where
+        same-module cross-file references are architecturally invisible to
+        import extraction (Swift: no `import` statement exists for a sibling
+        file in the same target). Deliberately NOT the ⚠ honest-decline
+        signal — that implies "we tried to resolve an import and partially
+        failed" (_unresolved_intra > 0), which never applies here since
+        nothing was extracted to begin with. This is a different claim: the
+        answer may still be a confident "no dependents *via import*," but the
+        language can express intra-module edges with no import at all, so a
+        negative here says less than the same negative would for, say, Java."""
+        extractor = get_extractor(target)
+        spec = getattr(extractor, 'spec', None)
+        if not getattr(spec, 'same_module_undetectable', False):
+            return ''
+        return (
+            "ℹ This is a Swift file. Swift compiles a whole module/target together, "
+            "so a sibling file in the same module can use this file's declarations "
+            "with no `import` statement at all — depends:// only sees import edges, "
+            "so same-module dependents never show up here regardless of how many "
+            "exist. This is not an undercount from a failed resolution; it's a class "
+            "of dependency this analysis cannot see."
+        )
+
     def _warnings(self, include_honest_decline: bool = False) -> str:
         """Join active disclosures (scan cap, inferred root, and — only when the
         result is empty — honest-decline) into one warning string, in priority
@@ -865,6 +893,10 @@ class DependsAdapter(ResourceAdapter):
         warnings = self._warnings(include_honest_decline=empty)
         if warnings:
             result['warning'] = warnings
+        if empty:
+            note = self._same_module_note(target)
+            if note:
+                result['same_module_note'] = note
         return result
 
     def _format_directory_summary(self, directory: Path, top_n: Optional[int], fmt: str) -> Dict[str, Any]:

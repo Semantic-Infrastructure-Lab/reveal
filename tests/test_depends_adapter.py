@@ -405,6 +405,58 @@ class TestDependsAdapterHonestDecline:
         assert r['_meta']['confidence'] == 'high'
 
 
+class TestDependsAdapterSwiftSameModuleNote:
+    """BACK-560: Swift same-module cross-file references have no import
+    statement at all, so the ⚠ honest-decline (keyed on _unresolved_intra)
+    never fires for them — an empty depends:// result on a Swift file looks
+    identical to a genuinely dependency-free one. A separate, unconditional
+    informational note must fire instead, distinguishing "this language can't
+    express that edge as an import" from "we tried and partially failed"."""
+
+    def test_swift_empty_result_carries_same_module_note(self, tmp_path):
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'Lonely.swift', "class Lonely {}\n")
+        r = DependsAdapter(str(tmp_path / 'Lonely.swift')).get_structure()
+        assert r['count'] == 0
+        note = r.get('same_module_note') or ''
+        assert 'Swift' in note
+        assert 'import' in note
+        # Must not be conflated with the honest-decline ⚠ signal — that
+        # implies a failed resolution, which never happened here.
+        assert '⚠' not in note
+
+    def test_swift_note_not_confused_with_undercount_warning(self, tmp_path):
+        """The note is additive, not a replacement for the (silent-here)
+        honest-decline machinery — undercount_possible must stay False since
+        no import was extracted-and-unresolved."""
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'Lonely.swift', "class Lonely {}\n")
+        r = DependsAdapter(str(tmp_path / 'Lonely.swift')).get_structure()
+        assert r['undercount_possible'] is False
+        assert 'same_module_note' in r
+
+    def test_swift_non_empty_result_has_no_note(self, tmp_path):
+        """The note is scoped to empty results only — a Swift file that DOES
+        have a resolved import-based dependent must not carry it (nothing to
+        caveat about that positive edge)."""
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'Widget.swift', "class Widget {}\n")
+        _write(tmp_path / 'App.swift', "import Widget\nclass App {}\n")
+        r = DependsAdapter(str(tmp_path / 'Widget.swift')).get_structure()
+        assert r['count'] == 1
+        assert 'same_module_note' not in r
+
+    def test_non_swift_empty_result_has_no_note(self, tmp_path):
+        """Languages without this architectural gap (imports always exist to
+        be extracted, even if unresolved) must never carry the Swift note."""
+        from reveal.adapters.depends import DependsAdapter
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "t"\n')
+        _write(tmp_path / 'lonely.py', "def f(): pass\n")
+        r = DependsAdapter(str(tmp_path / 'lonely.py')).get_structure()
+        assert r['count'] == 0
+        assert 'same_module_note' not in r
+
+
 class TestDependsAdapterCSharpNamespaceFanout:
     """BACK-554: depends:// must resolve a C# `using X.Y` naming a namespace
     declared across several files (or a file with NO local `using` at all —

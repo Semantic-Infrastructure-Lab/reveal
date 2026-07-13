@@ -189,6 +189,27 @@ class _ImportSpec:
             idea one level deeper — a container's own member set, rather
             than the file's top level. Scala-only; Java/Kotlin/C#/PHP/Swift
             have no lowerCamelCase-container idiom.
+        same_module_undetectable: True when this language's same-module
+            (same target/package) cross-file references are architecturally
+            invisible to import extraction — there is no import statement to
+            miss, because the whole module compiles together and files reach
+            each other's top-level declarations with no syntax naming the
+            source file at all (Swift: a sibling file in the same target
+            needs no ``import`` to use another file's public/internal
+            declarations). BACK-560: this is *not* an unresolved-import case
+            (``_unresolved_intra`` never increments — nothing was extracted
+            to fail resolving), so the existing ⚠ honest-decline signal,
+            keyed on that counter, never fires either. A ``depends://`` query
+            against such a file that has real same-module dependents still
+            confidently reports "no dependents," indistinguishable from a
+            genuinely dependency-free file. This flag lets the adapter emit
+            an unconditional informational note instead — "this language
+            can't express that edge as an import" is a different claim than
+            "we tried to resolve an import and failed," so it gets a
+            different (non-⚠) signal. False for every other language: their
+            same-module references, if any exist, still show up as ordinary
+            unresolved intra-project imports and are already covered by the
+            existing honest-decline path.
     """
 
     import_node_types: FrozenSet[str]
@@ -208,6 +229,7 @@ class _ImportSpec:
     member_container_node_types: FrozenSet[str] = field(default_factory=frozenset)
     container_member_node_types: FrozenSet[str] = field(default_factory=frozenset)
     container_member_fallback: bool = False
+    same_module_undetectable: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -1112,6 +1134,10 @@ _SWIFT_SPEC = _ImportSpec(
     # module maps 1:1 to a single in-tree file (skipped otherwise).
     module_separator='.',
     source_extensions=frozenset({'.swift'}),
+    # BACK-560: same-module (same-target) cross-file references need no
+    # `import` at all — Swift compiles a whole module together, so there is
+    # no statement for extraction to miss.
+    same_module_undetectable=True,
 )
 
 _KOTLIN_SPEC = _ImportSpec(
