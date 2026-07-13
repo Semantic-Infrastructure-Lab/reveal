@@ -65,6 +65,13 @@ from .types import ImportStatement
 
 logger = logging.getLogger(__name__)
 
+# BACK-564: sentinel distinguishing "this node's target isn't a concatenation
+# expression, fall back to the ordinary text-based `_build` path" from a
+# genuine `None` result ("this concatenation was classified and honestly
+# skipped — do not fabricate an edge, do not fall back to text parsing
+# either, since text parsing would produce a *worse*, garbage module_name").
+_NOT_CONCAT = object()
+
 
 @dataclass(frozen=True)
 class _ImportSpec:
@@ -231,6 +238,33 @@ class _ImportSpec:
             in-tree file via the path→constant convention. BACK-557 direction
             a (the recall half): gates :meth:`extract_constant_references`,
             a no-op for every language without it.
+        concat_relative_node_types: Node ``kind()`` value(s) among
+            ``import_node_types`` whose *target* may be built by string
+            concatenation rather than a bare literal — PHP's
+            ``require``/``require_once``/``include``/``include_once``
+            (BACK-564). WordPress-core measurement found 0/387 real
+            require/include edges use a bare string literal; every real
+            statement concatenates a leading operand onto a trailing path
+            fragment (``__DIR__ . '/x.php'``, ``dirname( __FILE__ ) .
+            '/x.php'``, ``ABSPATH . WPINC . '/version.php'``). The ordinary
+            text-based :meth:`_build` path strips quote/space characters off
+            the *ends* of the whole remainder string, which cannot parse a
+            concatenation expression — the leading operator/constant text
+            stays embedded in ``module_name``, so it can never match a real
+            file. When a node's kind is in this set, :meth:`_node_to_import`
+            first tries :meth:`_concat_to_import`, which walks the AST
+            structurally (mirroring :meth:`_call_to_import`'s
+            structural-not-textual approach) instead of slicing text.
+            Only the universal PHP magic-constant idiom (``__DIR__`` /
+            ``dirname( __FILE__ )``, semantically identical to Ruby's
+            ``require_relative``) is resolved; any other leading operand
+            (``ABSPATH``, ``WPINC``, or anything else reveal can't classify)
+            is an honest skip — never a fabricated edge, matching this
+            module's "resolves only to a file that exists, or not at all"
+            contract. A node with no concatenation at all (a bare string
+            literal, still legal PHP) falls through unchanged to the
+            existing :meth:`_build` text path. Empty means no language uses
+            this idiom (every language but PHP).
     """
 
     import_node_types: FrozenSet[str]
@@ -253,6 +287,7 @@ class _ImportSpec:
     same_module_undetectable: bool = False
     convention_autoloaded: bool = False
     zeitwerk_convention: bool = False
+    concat_relative_node_types: FrozenSet[str] = field(default_factory=frozenset)
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -607,8 +642,143 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
     def _node_to_import(self, node, analyzer, file_path: Path) -> Optional[ImportStatement]:
         """Turn a dedicated import-statement node into an ImportStatement."""
+        if node.kind() in self.spec.concat_relative_node_types:
+            result = self._concat_to_import(node, analyzer, file_path)
+            if result is not _NOT_CONCAT:
+                return result
         raw = analyzer._get_node_text(node)
         return self._build(raw, node, file_path)
+
+    # BACK-564: PHP require/include targets built by string concatenation
+    # (`__DIR__ . '/x.php'`) are the dominant real-world idiom (0/387 WordPress
+    # core edges use a bare literal) and the text-based `_build` path below
+    # cannot parse them — it only strips characters off the ends of the whole
+    # remainder string, leaving operator/constant text embedded in
+    # `module_name`. These three helpers walk the AST structurally instead,
+    # the same approach `_call_to_import` already uses for Ruby/Lua.
+
+    _DIR_RELATIVE_NAME: ClassVar[str] = '__DIR__'
+    _DIRNAME_CALLEE: ClassVar[str] = 'dirname'
+    _FILE_CONST_NAME: ClassVar[str] = '__FILE__'
+
+    def _concat_to_import(self, node, analyzer, file_path: Path):
+        """Structural extraction for a require/include node whose target is a
+        concatenation expression (``binary_expression`` chained on ``.``).
+
+        Returns:
+          * an :class:`ImportStatement` when the concatenation's leading
+            operand reduces to PHP's directory-relative magic-constant idiom
+            (``__DIR__`` or ``dirname( __FILE__ )``) — the trailing string
+            fragment becomes ``module_name``, ``is_relative=True``, so it
+            flows through the same ``_resolve_module``/``_resolve_path_target``
+            machinery as Ruby's ``require_relative``.
+          * ``None`` (honest skip, never a fabricated edge) when the leading
+            operand is anything else — a framework constant (``ABSPATH``,
+            ``WPINC``), a variable, or any shape this doesn't recognize.
+          * the module-level ``_NOT_CONCAT`` sentinel when the node's argument
+            isn't a concatenation at all (a bare string literal, e.g.
+            ``require 'lib/foo.php';``) — the caller falls back to the
+            existing text-based ``_build`` path unchanged, so that
+            already-working case never regresses.
+        """
+        concat = self._first_child_of_kind(node, 'binary_expression')
+        if concat is None:
+            return _NOT_CONCAT
+
+        fragment = self._trailing_string_fragment(concat, analyzer)
+        if fragment is None:
+            # Trailing operand isn't a plain string literal (e.g. a variable
+            # or a further function call) — can't safely name a file.
+            return None
+
+        leading = self._leading_operand(concat)
+        if leading is None or not self._is_dir_relative_operand(leading, analyzer):
+            # ABSPATH-family framework constants, or any other shape reveal
+            # can't classify — deliberately out of scope (BACK-564), needs a
+            # separate framework-aware opt-in. Never guess.
+            return None
+
+        module_name = fragment.lstrip('/')
+        if not module_name:
+            return None
+
+        return ImportStatement(
+            file_path=file_path,
+            line_number=node.start_position().row + 1,
+            module_name=module_name,
+            imported_names=[],
+            is_relative=True,
+            import_type='include',
+            alias=None,
+            source_line=analyzer._get_node_text(node).strip(),
+            skip_unused=True,
+        )
+
+    @staticmethod
+    def _first_child_of_kind(node, kind: str):
+        """First direct child of ``node`` whose kind is exactly ``kind``."""
+        for child in _children(node):
+            if child.kind() == kind:
+                return child
+        return None
+
+    @staticmethod
+    def _trailing_string_fragment(binary_expr, analyzer) -> Optional[str]:
+        """The rightmost operand of a (possibly chained) ``.`` concatenation,
+        if it is a plain string literal — the last-appended path fragment in
+        e.g. ``ABSPATH . WPINC . '/version.php'`` (the trailing ``string``
+        node, tree-sitter's PHP grammar being left-associative so the
+        outermost ``binary_expression``'s direct children are the *last*
+        two operands). Returns ``None`` if the rightmost operand isn't a bare
+        string (a variable, a call, ...).
+        """
+        children = _children(binary_expr)
+        if not children:
+            return None
+        last = children[-1]
+        if last.kind() != 'string':
+            return None
+        content = _GenericTreeSitterImportExtractor._first_descendant_text(
+            last, analyzer, ('string_content',)
+        )
+        return content
+
+    @staticmethod
+    def _leading_operand(binary_expr):
+        """The operand left of the final ``.`` in a concatenation chain — for
+        ``__DIR__ . '/x.php'`` that's the ``__DIR__`` name node; for
+        ``ABSPATH . WPINC . '/version.php'`` that's the nested
+        ``binary_expression`` for ``ABSPATH . WPINC`` (deliberately NOT
+        unwrapped further — a multi-segment leading chain never reduces to
+        the single-operand ``__DIR__``/``dirname(__FILE__)`` idiom, so
+        :meth:`_is_dir_relative_operand` correctly rejects it as-is).
+        """
+        children = _children(binary_expr)
+        if len(children) < 2:
+            return None
+        return children[0]
+
+    @classmethod
+    def _is_dir_relative_operand(cls, operand, analyzer) -> bool:
+        """True when ``operand`` is PHP's directory-relative magic-constant
+        idiom: the bare ``__DIR__`` constant, or a ``dirname( __FILE__ )``
+        call. Anything else (a framework constant like ``ABSPATH``, a
+        variable, a nested concatenation) returns False — the caller treats
+        that as an honest skip, not a guess.
+        """
+        kind = operand.kind()
+        if kind == 'name':
+            return analyzer._get_node_text(operand).strip() == cls._DIR_RELATIVE_NAME
+        if kind == 'function_call_expression':
+            callee = cls._first_child_of_kind(operand, 'name')
+            if callee is None or analyzer._get_node_text(callee).strip() != cls._DIRNAME_CALLEE:
+                return False
+            args = cls._first_child_of_kind(operand, 'arguments')
+            if args is None:
+                return False
+            arg_text = cls._first_descendant_text(args, analyzer, ('name',))
+            return arg_text is not None and arg_text.strip() == cls._FILE_CONST_NAME
+        return False
 
     def _call_to_import(self, node, analyzer, file_path: Path) -> Optional[ImportStatement]:
         """Turn a ``require``-style call node into an ImportStatement, if it is one.
@@ -1179,6 +1349,16 @@ _PHP_SPEC = _ImportSpec(
     # Java/Kotlin. (No nested_member_fallback: `\` namespace components are
     # StudlyCaps, so the Uppercase gate can't tell package from type.)
     package_node_types=frozenset({'namespace_definition'}),
+    # BACK-564: real PHP require/include targets are almost never a bare
+    # string literal — they're built by concatenation (`__DIR__ . '/x.php'`,
+    # `ABSPATH . WPINC . '/version.php'`). See `_concat_to_import` and the
+    # `_ImportSpec.concat_relative_node_types` docstring for the resolution
+    # rules (only the `__DIR__`/`dirname(__FILE__)` idiom resolves; framework
+    # constants like ABSPATH are an honest skip, not a fabricated edge).
+    concat_relative_node_types=frozenset({
+        'require_expression', 'require_once_expression',
+        'include_expression', 'include_once_expression',
+    }),
 )
 
 _RUBY_SPEC = _ImportSpec(

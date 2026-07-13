@@ -644,6 +644,38 @@ class TestModuleResolution:
         res = self._resolve(tmp_path, 'main.php', '.')
         assert res['inc.php'] == (tmp_path / 'inc.php').resolve()
 
+    def test_php_require_dir_concat_resolves(self, tmp_path):
+        """BACK-564: `require __DIR__ . '/foo.php';` — the dominant real-world
+        PHP require idiom (0/387 WordPress-core edges use a bare literal) —
+        must resolve structurally, not just the bare-literal case above."""
+        (tmp_path / 'foo.php').write_text('<?php\n$x = 1;\n')
+        (tmp_path / 'main.php').write_text("<?php\nrequire __DIR__ . '/foo.php';\n")
+        res = self._resolve(tmp_path, 'main.php', '.')
+        assert res['foo.php'] == (tmp_path / 'foo.php').resolve()
+
+    def test_php_require_once_dirname_file_concat_resolves(self, tmp_path):
+        """`require_once dirname( __FILE__ ) . '/bar.php';` — pre-`__DIR__`
+        (PHP < 5.3) spelling of the same directory-relative idiom."""
+        (tmp_path / 'bar.php').write_text('<?php\n$x = 1;\n')
+        (tmp_path / 'main.php').write_text(
+            "<?php\nrequire_once dirname( __FILE__ ) . '/bar.php';\n")
+        res = self._resolve(tmp_path, 'main.php', '.')
+        assert res['bar.php'] == (tmp_path / 'bar.php').resolve()
+
+    def test_php_require_framework_constant_concat_honest_skip(self, tmp_path):
+        """`require_once ABSPATH . WPINC . '/version.php';` — WordPress's
+        framework-constant concatenation. Out of scope for BACK-564 (needs a
+        separate framework-aware opt-in): must not crash and must not
+        fabricate an edge, just honestly extract nothing for this statement."""
+        (tmp_path / 'wp-includes').mkdir()
+        (tmp_path / 'wp-includes/version.php').write_text('<?php\n$wp_version = "1";\n')
+        (tmp_path / 'main.php').write_text(
+            "<?php\nrequire_once ABSPATH . WPINC . '/version.php';\n")
+        entry = tmp_path / 'main.php'
+        extractor = get_extractor(entry)
+        imports = extractor.extract_imports(entry)
+        assert imports == []
+
     def test_php_use_ambiguous_basename_skips(self, tmp_path):
         """Two User.php under different namespaces with no distinguishing parent
         in the `use` path → ambiguous → skip (never guess an edge)."""
