@@ -569,6 +569,39 @@ class TestResolveImport:
         result = e.resolve_import(stmt, nested_dir)
         assert result == target.resolve()
 
+    def test_bare_dot_resolves_own_directory_index(self, tmp_path):
+        """BACK-556: `import { x } from '.'` (bare current-directory barrel,
+        no path segment at all) must resolve to this directory's index.ts —
+        same idiom as './dir', just with an empty dir name. Real example:
+        VS Code copilot extension's codeReferencing/citationManager.ts
+        imports its own barrel via `from '.'`."""
+        pkg_dir = tmp_path / 'pkg'
+        pkg_dir.mkdir()
+        index = pkg_dir / 'index.ts'
+        index.write_text('export const x = 1;')
+        sibling = pkg_dir / 'citationManager.ts'
+        sibling.write_text('// importer')
+        e = JavaScriptExtractor()
+        stmt = self._make_stmt('.', pkg_dir)
+        result = e.resolve_import(stmt, pkg_dir)
+        assert result == index.resolve()
+
+    def test_bare_dotdot_resolves_parent_directory_index(self, tmp_path):
+        """BACK-556: `import { x } from '..'` (bare parent-directory barrel)
+        must resolve to the parent directory's index.ts. Real example: VS
+        Code notebook-renderers extension's test/notebookRenderer.test.ts
+        imports `{ activate } from '..'`."""
+        pkg_dir = tmp_path / 'pkg'
+        pkg_dir.mkdir()
+        index = pkg_dir / 'index.ts'
+        index.write_text('export const activate = () => {};')
+        test_dir = pkg_dir / 'test'
+        test_dir.mkdir()
+        e = JavaScriptExtractor()
+        stmt = self._make_stmt('..', test_dir)
+        result = e.resolve_import(stmt, test_dir)
+        assert result == index.resolve()
+
 
 # ─── _resolve_relative_js ────────────────────────────────────────────────────
 

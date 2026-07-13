@@ -588,8 +588,20 @@ class JavaScriptExtractor(LanguageExtractor):
         # Build target path
         target = base_path / clean_path
 
-        # If path has extension, try exact match
-        if '.' in clean_path.split('/')[-1]:
+        # If path has extension, try exact match.
+        # BACK-556: a bare '.' or '..' specifier (self/parent-directory
+        # barrel import, e.g. `import { x } from '..'`) has a last path
+        # segment that is ALL dots — '.' in that segment is true, but it's
+        # not an extension, it's the whole directory reference. Treating it
+        # as "has extension" made this branch return None before ever
+        # reaching the directory/index-file resolution below, silently
+        # dropping every bare '.'/'..' barrel import (confirmed on the VS
+        # Code corpus: codeReferencing/citationManager.ts imports `from
+        # '.'`, notebook-renderers/test/notebookRenderer.test.ts imports
+        # `from '..'` — both missed before this fix).
+        last_segment = clean_path.split('/')[-1]
+        has_extension = '.' in last_segment and last_segment not in ('.', '..')
+        if has_extension:
             if target.exists() and target.is_file():
                 return target.resolve()
 
