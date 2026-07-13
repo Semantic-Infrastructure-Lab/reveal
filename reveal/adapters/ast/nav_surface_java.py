@@ -9,6 +9,7 @@ entrypoint, and import-root taxonomy for network/db/sdk egress.
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from .nav_surface_common import _get_text, _get_line, _add_once
 
 from reveal.core import node_children as _children
 
@@ -56,14 +57,6 @@ def scan_file_surface_java(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
     content_bytes = source.encode('utf-8')
     return _scan_tree(tree, file_path, content_bytes)
-
-
-def _get_text(node, content_bytes: bytes) -> str:
-    return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
-
-
-def _get_line(node) -> int:
-    return node.start_position().row + 1
 
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
@@ -250,11 +243,3 @@ def _first_string_arg(call_node: Any, content_bytes: bytes) -> Optional[str]:
             if arg.kind() == 'string_literal':
                 return _string_literal_text(arg, content_bytes)
     return None
-
-
-def _add_once(lst: List[Dict[str, Any]], entry: Dict[str, Any]) -> None:
-    key = (entry.get('name', ''), entry.get('file', ''), entry.get('line', 0))
-    for existing in lst:
-        if (existing.get('name', ''), existing.get('file', ''), existing.get('line', 0)) == key:
-            return
-    lst.append(entry)

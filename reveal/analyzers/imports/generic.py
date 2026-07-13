@@ -287,6 +287,61 @@ class _ImportSpec:
             :meth:`_resolve_concat_operand` looks up when a concatenation's
             operand is an identifier it doesn't otherwise recognize. Empty
             means no language uses this idiom (every language but PHP).
+        module_dir_convention: Directory segment name(s) under which the
+            immediately-following path component names a build *module/target*
+            whose members are every source file beneath it — Swift SwiftPM's
+            ``Sources/<Target>/**`` and ``Tests/<Target>/**`` layout
+            (BACK-567). A Swift ``import Foo`` names a whole module, not a
+            file, and that module is almost never a single ``Foo.swift`` (real
+            targets are multi-file), so :meth:`_resolve_module`'s bare-basename
+            match resolves ~0% of real cross-module imports — measured 123
+            edges / 7 dependent files across a 1,961-file real corpus
+            (Kickstarter iOS, 8 SwiftPM packages) despite 1,000+ real
+            ``import <in-tree module>`` statements, with ``_unresolved_intra``
+            stuck at 0 so not even the ⚠ honest-decline signal fired (a silent
+            wrong "no dependents," the exact failure class BACK-547 exists to
+            kill). When set, the adapter builds a path-derived
+            ``module -> [files]`` index (:meth:`module_for_file`, no parsing —
+            pure directory convention, so no Swift toolchain is needed at
+            runtime, mirroring how the PHP concat fix never shells out to
+            ``php``) and :meth:`resolve_module_targets` fans ``import Foo`` out
+            to every file in module ``Foo`` — the same many-files fan-out C#'s
+            namespace index uses. The index's module names also feed
+            :meth:`is_intra_project_import`: an ``import`` of a known in-tree
+            module is intra-project; anything else (``Foundation``, ``Apollo``,
+            a SwiftPM registry/URL dependency) is external and correctly
+            edge-less. Orthogonal to ``same_module_undetectable`` — that still
+            covers *same*-target cross-file references, which genuinely have no
+            import statement; this covers *cross*-module imports, which do.
+            Module names are sanitized to Swift's rule (non-identifier chars →
+            ``_``, so directory ``Kickstarter-Framework`` matches ``import
+            Kickstarter_Framework``). Empty for every other language.
+        manifest_filename: The build-manifest filename whose declared targets
+            override ``module_dir_convention`` when a target sets an explicit
+            source ``path:`` — Swift's ``Package.swift`` (BACK-567). The pure
+            ``Sources/<Target>/`` convention is right for the common case, but
+            SwiftPM lets a target relocate its sources (``.target(name:
+            "GraphAPI", path: "./Sources")`` puts a *whole* ``Sources/`` tree —
+            subdirs and all — in one module; ``path: "./GraphAPITestMocks"``
+            puts them outside ``Sources/`` entirely). The real-corpus oracle
+            (cross-checked against ``swift package dump-package``) found the
+            convention alone mis-maps every such file, and — worse —
+            ``import GraphAPI`` (326 real importers) then classifies as external
+            and reports zero dependents with no ⚠, the silent-negative BACK-547
+            forbids. When set, the adapter parses each manifest
+            (:meth:`extract_manifest_targets`, structural tree-sitter walk of
+            the ``.target``/``.testTarget`` calls — no toolchain, mirroring the
+            PHP concat fix) for authoritative target→directory mappings and
+            resolves a file's module by longest-prefix match, falling back to
+            the directory convention only where no manifest target claims it.
+            Empty for every other language.
+        manifest_target_calls: The manifest callee name(s) that declare a build
+            target — SwiftPM's ``target``, ``testTarget``, ``executableTarget``,
+            ``macro``, ``plugin`` (BACK-567). Feeds
+            :meth:`extract_manifest_targets`. ``testTarget`` defaults its source
+            directory to ``Tests/<name>`` rather than ``Sources/<name>``; the
+            rest default to ``Sources/<name>`` (both overridable by an explicit
+            ``path:``). Empty for every other language.
     """
 
     import_node_types: FrozenSet[str]
@@ -311,6 +366,9 @@ class _ImportSpec:
     zeitwerk_convention: bool = False
     concat_relative_node_types: FrozenSet[str] = field(default_factory=frozenset)
     constant_define_call_names: FrozenSet[str] = field(default_factory=frozenset)
+    module_dir_convention: FrozenSet[str] = field(default_factory=frozenset)
+    manifest_filename: Optional[str] = None
+    manifest_target_calls: FrozenSet[str] = field(default_factory=frozenset)
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -432,6 +490,173 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         if not module or module.endswith('*'):
             return []
         return list(namespace_index.get(module, ()))
+
+    @staticmethod
+    def _sanitize_module_name(name: str) -> str:
+        """Swift's module-name rule: a target's module identifier replaces every
+        non-alphanumeric-underscore character in the target name with ``_``, so
+        a target directory ``Kickstarter-Framework`` is imported as
+        ``Kickstarter_Framework`` (BACK-567). Applied to both the directory-
+        derived key and (idempotently) the import name so they match."""
+        return ''.join(c if (c.isalnum() or c == '_') else '_' for c in name)
+
+    def module_for_file(self, file_path: Path) -> Optional[str]:
+        """The build module/target a file belongs to, by directory convention
+        (BACK-567) — no parsing, so it needs no language toolchain.
+
+        Walks the path for a segment named in ``spec.module_dir_convention``
+        (Swift: ``Sources``/``Tests``); the *next* component is the target
+        name, sanitized to the module identifier. Returns ``None`` when the
+        file isn't under such a layout (a loose script, a `Package.swift`
+        itself) so it's simply not indexed — never guessed into a module.
+        The next component must not be the file's own basename (a file sitting
+        directly in ``Sources/`` names no module).
+        """
+        segments = self.spec.module_dir_convention
+        if not segments:
+            return None
+        parts = file_path.parts
+        for i, part in enumerate(parts):
+            # parts[i+1] is the target name; something must follow it (parts[i+2:]
+            # non-empty) for the file to live *inside* the module, not be a loose
+            # file sitting directly in Sources/ that names no module.
+            if part in segments and i + 2 < len(parts):
+                return self._sanitize_module_name(parts[i + 1])
+        return None
+
+    def resolve_module_targets(
+        self,
+        stmt: ImportStatement,
+        module_index: Dict[str, List[Path]],
+    ) -> List[Path]:
+        """Every in-tree file of the module ``stmt`` imports (BACK-567, Swift).
+
+        A Swift ``import Foo`` names a whole module, not one file, so — like
+        C#'s namespace fan-out (:meth:`resolve_namespace_targets`) — this
+        returns *every* file in module ``Foo`` rather than a single guessed
+        ``Foo.swift``. An import of a module not in the index (an external
+        framework/dependency) returns ``[]``, never a fabricated path (the
+        honest-skip contract every resolver here holds to)."""
+        if not self.spec.module_dir_convention:
+            return []
+        module = stmt.module_name
+        if not module:
+            return []
+        return list(module_index.get(self._sanitize_module_name(module), ()))
+
+    def extract_manifest_targets(
+        self, file_path: Path,
+    ) -> List[Tuple[str, Optional[str], bool]]:
+        """Targets declared in a build manifest (Swift ``Package.swift``,
+        BACK-567) — the authoritative override for the directory convention
+        when a target relocates its sources with an explicit ``path:``.
+
+        Structurally walks each ``.target``/``.testTarget``/… call
+        (``spec.manifest_target_calls``) for its ``name:`` and optional
+        ``path:`` string-literal arguments — no manifest evaluation, no Swift
+        toolchain, mirroring :meth:`_call_to_import`'s AST-not-text approach.
+        Returns ``(sanitized_module_name, explicit_path_or_None, is_test)``
+        per target; the caller resolves ``explicit_path`` (or the
+        ``Sources/<name>`` / ``Tests/<name>`` default when ``None``) against
+        the manifest's own directory. A call missing a ``name:`` literal (a
+        computed name — never a guess) is skipped."""
+        calls = self.spec.manifest_target_calls
+        if not calls or self.spec.manifest_filename is None:
+            return []
+        analyzer = self._get_analyzer(file_path)
+        if analyzer is None:
+            return []
+        # Only `.target(...)` calls that are DIRECT elements of the
+        # `Package(targets: [...])` array are declarations; a `.target(name:)`
+        # nested inside a `dependencies:` array is a reference to another
+        # target, not a declaration of one, and must not be indexed (it has no
+        # sources of its own). Scoping to the targets array's direct children
+        # excludes those references structurally.
+        results: List[Tuple[str, Optional[str], bool]] = []
+        for pkg_call in analyzer._find_nodes_by_type('call_expression'):
+            if self._manifest_callee_name(pkg_call, analyzer) != 'Package':
+                continue
+            targets_arr = self._manifest_labeled_array(pkg_call, analyzer, 'targets')
+            if targets_arr is None:
+                continue
+            for node in _children(targets_arr):
+                if node.kind() != 'call_expression':
+                    continue
+                callee = self._manifest_callee_name(node, analyzer)
+                if callee not in calls:
+                    continue
+                name = self._manifest_string_arg(node, analyzer, 'name')
+                if not name:
+                    continue  # computed target name — honest skip, never guessed
+                path = self._manifest_string_arg(node, analyzer, 'path')
+                results.append((self._sanitize_module_name(name), path, callee == 'testTarget'))
+        return results
+
+    @classmethod
+    def _manifest_labeled_array(cls, call_node, analyzer, label: str):
+        """The ``array_literal`` node of the ``label:`` argument in a call
+        (``Package(targets: [...])`` → the targets array), or None."""
+        suffix = cls._first_child_of_kind(call_node, 'call_suffix')
+        args_parent = cls._first_child_of_kind(suffix, 'value_arguments') if suffix else None
+        if args_parent is None:
+            return None
+        for arg in _children(args_parent):
+            if arg.kind() != 'value_argument':
+                continue
+            arg_label = cls._first_child_of_kind(arg, 'value_argument_label')
+            if arg_label is not None and analyzer._get_node_text(arg_label) == label:
+                return cls._first_child_of_kind(arg, 'array_literal')
+        return None
+
+    @classmethod
+    def _manifest_callee_name(cls, call_node, analyzer) -> Optional[str]:
+        """The trailing identifier of a call's callee — ``target`` from a
+        ``.target(...)`` prefix expression. Scans only the callee subtree (the
+        children *before* the ``call_suffix`` argument list, so argument labels
+        like ``name:``/``path:`` are never mistaken for it) and returns its last
+        ``simple_identifier``, so both ``.target`` and a bare ``target``
+        resolve. None when no such identifier exists (a computed callee)."""
+        for child in _children(call_node):
+            if child.kind() == 'call_suffix':
+                break
+            leaf = cls._last_identifier(child, analyzer)
+            if leaf is not None:
+                return leaf
+        return None
+
+    @classmethod
+    def _last_identifier(cls, node, analyzer) -> Optional[str]:
+        """Deepest-last ``simple_identifier`` text under ``node`` (its callee
+        name for a dotted ``.a.b.target`` prefix), or None."""
+        found: Optional[str] = None
+        if node.kind() == 'simple_identifier':
+            found = analyzer._get_node_text(node)
+        for child in _children(node):
+            leaf = cls._last_identifier(child, analyzer)
+            if leaf is not None:
+                found = leaf
+        return found
+
+    @classmethod
+    def _manifest_string_arg(cls, call_node, analyzer, label: str) -> Optional[str]:
+        """The string-literal value of the ``label:`` argument in a call, or
+        None when absent or non-literal (a computed path — honest skip)."""
+        suffix = cls._first_child_of_kind(call_node, 'call_suffix')
+        args_parent = cls._first_child_of_kind(suffix, 'value_arguments') if suffix else None
+        if args_parent is None:
+            return None
+        for arg in _children(args_parent):
+            if arg.kind() != 'value_argument':
+                continue
+            arg_label = cls._first_child_of_kind(arg, 'value_argument_label')
+            if arg_label is None or analyzer._get_node_text(arg_label) != label:
+                continue
+            literal = cls._first_child_of_kind(arg, 'line_string_literal')
+            if literal is None:
+                return None
+            text = cls._first_child_of_kind(literal, 'line_str_text')
+            return analyzer._get_node_text(text) if text is not None else ''
+        return None
 
     def extract_top_level_members(self, file_path: Path) -> List[str]:
         """Names of top-level (file-scope, not class-scope) function/property
@@ -1317,6 +1542,20 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 if declared == ns or declared.startswith(ns + sep) or ns.startswith(declared + sep):
                     return True
             return False
+        if self.spec.module_dir_convention and project_namespaces is not None:
+            # BACK-567 Swift: modules aren't declared in source, but the
+            # directory-derived module index's key set (passed here as
+            # project_namespaces) is exactly the in-tree module inventory. An
+            # `import Foo` is intra-project iff Foo is one of those modules;
+            # anything else (Foundation, a SwiftPM registry/URL dependency) is
+            # external and correctly edge-less. In practice every in-tree
+            # module resolves via resolve_module_targets, so this branch's True
+            # is a defensive backstop that keeps a would-be silent miss on the
+            # honest-decline path rather than the conservative None.
+            module = stmt.module_name
+            if not module:
+                return None
+            return self._sanitize_module_name(module) in project_namespaces
         return None
 
     def _resolve_include(
@@ -1728,6 +1967,19 @@ _SWIFT_SPEC = _ImportSpec(
     # `import` at all — Swift compiles a whole module together, so there is
     # no statement for extraction to miss.
     same_module_undetectable=True,
+    # BACK-567: cross-module `import Foo` names a whole SwiftPM target, resolved
+    # to every file under Sources/<Foo>/ or Tests/<Foo>/ by directory
+    # convention (no toolchain needed). Orthogonal to same_module_undetectable
+    # above — that covers same-target refs (no import at all); this covers
+    # cross-target imports (a real statement that had been resolving ~0%).
+    module_dir_convention=frozenset({'Sources', 'Tests'}),
+    # BACK-567: Package.swift target declarations override the convention above
+    # when a target relocates its sources via an explicit `path:` (real case:
+    # GraphAPI's `path: "./Sources"` puts every subdir in one module).
+    manifest_filename='Package.swift',
+    manifest_target_calls=frozenset({
+        'target', 'testTarget', 'executableTarget', 'macro', 'plugin',
+    }),
 )
 
 _KOTLIN_SPEC = _ImportSpec(

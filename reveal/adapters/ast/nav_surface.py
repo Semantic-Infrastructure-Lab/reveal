@@ -3,6 +3,7 @@
 import ast
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from .nav_surface_common import _add_once
 
 _NET_PACKAGES: frozenset = frozenset({
     'requests', 'httpx', 'aiohttp', 'urllib', 'urllib3', 'socket',
@@ -379,11 +380,3 @@ def _unparse_expr(node: ast.expr) -> str:
         if isinstance(node, ast.Attribute):
             return f"{_unparse_expr(node.value)}.{node.attr}"
         return '?'
-
-
-def _add_once(lst: List[Dict[str, Any]], entry: Dict[str, Any]) -> None:
-    key = (entry.get('name', ''), entry.get('file', ''), entry.get('line', 0))
-    for existing in lst:
-        if (existing.get('name', ''), existing.get('file', ''), existing.get('line', 0)) == key:
-            return
-    lst.append(entry)

@@ -22,6 +22,7 @@ shape as `nav_surface_ruby.py`.
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from .nav_surface_common import _get_text, _get_line
 
 from reveal.core import node_children as _children
 
@@ -52,14 +53,6 @@ def scan_file_contracts_ruby(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
             stack.append(ch)
 
     return {'modules': modules, 'classes': classes}
-
-
-def _get_text(node, content_bytes: bytes) -> str:
-    return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
-
-
-def _get_line(node) -> int:
-    return node.start_position().row + 1
 
 
 def _tail(name: str) -> str:

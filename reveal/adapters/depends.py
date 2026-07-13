@@ -12,7 +12,7 @@ Usage:
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Set, Tuple
+from typing import Dict, Any, List, NamedTuple, Optional, Set, Tuple
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import safe_json_dumps
@@ -75,6 +75,19 @@ _VCS_ROOT_MARKERS = ['.git']
 # recognized before BACK-525's tiering split. Still used where "is there any
 # marker at all in this one directory" is the actual question (tests).
 _PROJECT_ROOT_MARKERS = _PACKAGE_ROOT_MARKERS + _VCS_ROOT_MARKERS
+
+
+class _ResolutionIndices(NamedTuple):
+    """The per-scan indices `_build_graph` builds in its first pass over
+    `files` and consumes in edge resolution. Grouped so the pass that
+    produces them and the passes that read them can be separate methods
+    without a wide positional hand-off (BACK-566)."""
+    all_imports: List[ImportStatement]  # every extracted import, → ImportGraph
+    project_namespaces: Set[str]        # declared packages/namespaces (honest-decline)
+    namespace_index: Dict[str, List[Path]]        # BACK-554: namespace → declaring files
+    member_index: Dict[Tuple[str, str], List[Path]]  # BACK-547/557: (pkg, symbol) → files
+    zeitwerk_index: Dict[str, Path]     # BACK-557: constant-path → declaring file
+    module_index: Dict[str, List[Path]]  # BACK-567: Swift module → member files
 
 
 def _has_package_marker(directory: Path) -> bool:
@@ -577,16 +590,35 @@ class DependsAdapter(ResourceAdapter):
         self._constants_indexed = 0
         self._constants_ambiguous = 0
 
-        # BACK-498: discover files the same way ImportsAdapter._build_graph does —
-        # os.walk honoring SKIP_DIRECTORIES/hidden dirs (not a raw rglob, which
-        # both scans build artifacts/vendor dirs it shouldn't and, on a repo where
-        # scan_root ends up far above the real project, times out) — and build a
-        # basename -> [full paths] index alongside it. Package/namespace-resolved
-        # languages (Java, Kotlin, C#, PHP, Swift) need that index to resolve a
-        # dotted/qualified import to a file without their own tree walk; without
-        # it `resolve_import` silently fails for every such import and depends://
-        # reports "No dependents found" even though imports://?rank=fan-in sees
-        # the same edge (BACK-491 built this index for imports:// only).
+        # Four phases, split out for readability/complexity (BACK-566), same
+        # order and behavior as before: (1) walk the tree into `files` + a
+        # basename index; (2) parse every file once into the resolution
+        # indices; (3) resolve each import to graph edges; (4) add the
+        # convention-only Zeitwerk edges.
+        files, file_index = self._discover_files(scan_root, supported_exts)
+        indices = self._build_resolution_indices(files)
+        self._graph = ImportGraph.from_imports(indices.all_imports)
+        self._resolve_edges(scan_root, file_index, indices)
+        self._build_zeitwerk_edges(files, indices.zeitwerk_index)
+
+    def _discover_files(
+        self, scan_root: Path, supported_exts: frozenset,
+    ) -> Tuple[List[Path], Dict[str, List[Path]]]:
+        """Walk `scan_root` into the parse corpus + a basename index.
+
+        BACK-498: discover files the same way ImportsAdapter._build_graph does —
+        os.walk honoring SKIP_DIRECTORIES/hidden dirs (not a raw rglob, which
+        both scans build artifacts/vendor dirs it shouldn't and, on a repo where
+        scan_root ends up far above the real project, times out) — and build a
+        basename -> [full paths] index alongside it. Package/namespace-resolved
+        languages (Java, Kotlin, C#, PHP, Swift) need that index to resolve a
+        dotted/qualified import to a file without their own tree walk; without
+        it `resolve_import` silently fails for every such import and depends://
+        reports "No dependents found" even though imports://?rank=fan-in sees
+        the same edge (BACK-491 built this index for imports:// only).
+
+        Sets ``self._scan_capped`` as a side effect (the file-count cap).
+        """
         files: List[Path] = []
         file_index: Dict[str, List[Path]] = {}
         if scan_root.is_file():
@@ -613,7 +645,17 @@ class DependsAdapter(ResourceAdapter):
                 if capped:
                     self._scan_capped = True
                     break
+        return files, file_index
 
+    def _build_resolution_indices(self, files: List[Path]) -> '_ResolutionIndices':
+        """Parse every file in `files` once into the resolution indices.
+
+        One pass over the parse corpus that produces everything edge
+        resolution needs: the flat import list (→ ImportGraph), the
+        package/namespace declaration sets, and the namespace / member /
+        Zeitwerk indices. Also updates the autoload-coverage and
+        PHP-constant counters as a side effect.
+        """
         all_imports: List[ImportStatement] = []
         # BACK-547/544/549: the set of packages/namespaces the tree declares,
         # for honest-decline classification of package-declaring languages
@@ -655,6 +697,17 @@ class DependsAdapter(ResourceAdapter):
         # zero require statements by design, so gating this on
         # self._graph.files (import-derived) would miss almost all of them.
         zeitwerk_index: Dict[str, Path] = {}
+        # BACK-567: module-name -> [member files], the Swift SwiftPM
+        # target-membership index. Built purely from each file's PATH
+        # (Sources/<Target>/** convention) — no tree-sitter parse, no Swift
+        # toolchain — so `import Foo` can fan out to every file in module Foo
+        # (mirroring C#'s namespace fan-out), instead of _resolve_module's
+        # bare-basename match that resolves ~0% of real multi-file targets. Its
+        # key set is also the in-tree module inventory is_intra_project_import
+        # needs (fed via project_namespaces below) to classify `import Foo` as
+        # intra-project vs an external framework — that dual use is why the
+        # keys join project_namespaces rather than a separate set.
+        module_index: Dict[str, List[Path]] = {}
         # BACK-565: name -> ('literal', str) | ('absolute', str), the
         # project-wide PHP framework-constant index (`define('ABSPATH',
         # __DIR__ . '/')`) that `_concat_to_import`'s `ABSPATH . WPINC .
@@ -669,6 +722,11 @@ class DependsAdapter(ResourceAdapter):
         constant_index, constant_ambiguous = self._build_constant_index(files)
         self._constants_indexed = len(constant_index)
         self._constants_ambiguous = len(constant_ambiguous)
+        # BACK-567: explicit-`path:` target dirs from every Package.swift, built
+        # once before the per-file loop so each Swift file's module lookup can
+        # prefer an authoritative manifest mapping over the directory
+        # convention (see _swift_module_for).
+        manifest_dirs = self._build_manifest_module_dirs(files)
         for file_path in files:
             extractor = get_extractor(file_path)
             if not extractor:
@@ -695,6 +753,19 @@ class DependsAdapter(ResourceAdapter):
                     # pre-existing Zeitwerk-app misconfiguration, not
                     # something to guess between).
                     zeitwerk_index.setdefault(const_path, file_path)
+            if getattr(spec, 'module_dir_convention', None):
+                # BACK-567: index this file under its SwiftPM target. An explicit
+                # manifest `path:` (manifest_dirs) wins over the directory
+                # convention (real case: GraphAPI's `path: "./Sources"`); the
+                # convention is the fallback for the common default layout.
+                # Every scanned file of the module participates, including
+                # zero-import ones, so `import Foo` fans out to the whole target.
+                # The module name also joins project_namespaces as the in-tree
+                # module inventory is_intra_project_import checks against.
+                module_name = self._swift_module_for(extractor, file_path, manifest_dirs)
+                if module_name:
+                    module_index.setdefault(module_name, []).append(file_path)
+                    project_namespaces.add(module_name)
             if getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None):
                 declared = extractor.extract_namespaces(file_path)
                 project_namespaces.update(declared)
@@ -721,9 +792,65 @@ class DependsAdapter(ResourceAdapter):
                             key = (f'{ns}{sep}{container_name}', symbol)
                             member_index.setdefault(key, []).append(file_path)
 
-        self._graph = ImportGraph.from_imports(all_imports)
+        return _ResolutionIndices(
+            all_imports=all_imports,
+            project_namespaces=project_namespaces,
+            namespace_index=namespace_index,
+            member_index=member_index,
+            zeitwerk_index=zeitwerk_index,
+            module_index=module_index,
+        )
 
-        # Resolve to build dependency (and reverse_deps) edges
+    @staticmethod
+    def _build_manifest_module_dirs(files: List[Path]) -> List[Tuple[Path, str]]:
+        """BACK-567: (resolved_source_dir, module_name) for every build-manifest
+        target that sets an EXPLICIT `path:`, across every Package.swift in the
+        scan.
+
+        Only explicit-path targets are recorded — a default-layout target
+        (`Sources/<name>/`) is already handled correctly by the directory
+        convention (:meth:`_GenericTreeSitterImportExtractor.module_for_file`),
+        so re-deriving it here would be redundant and would need the target's
+        on-disk directory name (lost to module-name sanitization) anyway. The
+        explicit path is resolved against the manifest's own directory, so
+        `./Sources`, `./GraphAPITestMocks`, `../Sibling`, and `Sources/Foo` all
+        work. Sorted longest-path-first so :meth:`_swift_module_for`'s
+        first-containing-match is a longest-prefix match (a nested target dir
+        wins over an ancestor target dir)."""
+        dirs: List[Tuple[Path, str]] = []
+        for f in files:
+            spec = getattr(get_extractor(f), 'spec', None)
+            manifest = getattr(spec, 'manifest_filename', None)
+            if not manifest or f.name != manifest:
+                continue
+            extractor = get_extractor(f)
+            pkg_dir = f.parent
+            for name, path, _is_test in extractor.extract_manifest_targets(f):
+                if not path:
+                    continue  # default layout — the directory convention handles it
+                dirs.append(((pkg_dir / path).resolve(), name))
+        dirs.sort(key=lambda d: len(d[0].parts), reverse=True)
+        return dirs
+
+    @staticmethod
+    def _swift_module_for(
+        extractor, file_path: Path, manifest_dirs: List[Tuple[Path, str]],
+    ) -> Optional[str]:
+        """The module a Swift file belongs to: an explicit-`path:` manifest
+        target that contains it (longest prefix), else the directory convention
+        (BACK-567)."""
+        resolved = file_path.resolve()
+        for abs_dir, module_name in manifest_dirs:
+            if resolved == abs_dir or abs_dir in resolved.parents:
+                return module_name
+        return extractor.module_for_file(file_path)
+
+    def _resolve_edges(
+        self, scan_root: Path, file_index: Dict[str, List[Path]],
+        indices: '_ResolutionIndices',
+    ) -> None:
+        """Resolve every extracted import into dependency (and reverse_deps)
+        edges, one file at a time."""
         for file_path, imports in self._graph.files.items():
             extractor = get_extractor(file_path)
             if not extractor:
@@ -737,109 +864,143 @@ class DependsAdapter(ResourceAdapter):
             for stmt in imports:
                 if stmt.is_type_checking:
                     continue
-                if uses_file_index:
-                    # Generic extractors' resolve_import needs the file_index
-                    # kwarg the base resolve_import_targets can't pass, and
-                    # don't have the `from pkg import submodule` idiom — single
-                    # resolution is correct for them.
-                    resolved = extractor.resolve_import(
-                        stmt, base_path, search_paths=extra_paths, file_index=file_index)
-                    targets = [resolved] if resolved else []
-                else:
-                    # BACK-542: one statement can pull in several files
-                    # (`from pkg import a, b` where a/b are submodules), so
-                    # resolve to the full target set, not just the primary.
-                    targets = extractor.resolve_import_targets(
-                        stmt, base_path, search_paths=extra_paths)
-                added = False
-                for resolved in targets:
-                    if resolved and resolved != file_path:
-                        self._graph.add_dependency(file_path, resolved)
-                        self._graph.resolved_paths[stmt.module_name] = resolved
-                        self._edge_stmts[(file_path, resolved)] = stmt
-                        added = True
-                if not added and namespace_index and getattr(
-                        getattr(extractor, 'spec', None), 'resolve_namespaces', False):
-                    # BACK-554: the single-file dotted match above only catches a
-                    # namespace that coincidentally names one matching file — the
-                    # common case (a namespace declared across several files, or
-                    # a file reachable only via a project-wide `global using`)
-                    # needs the namespace index instead, fanning out to every
-                    # declaring file (mirrors ImportsAdapter._resolve_dependencies,
-                    # BACK-544).
-                    for resolved in extractor.resolve_namespace_targets(stmt, namespace_index):
-                        if resolved != file_path:
-                            self._graph.add_dependency(file_path, resolved)
-                            self._edge_stmts[(file_path, resolved)] = stmt
-                            added = True
-                if not added and member_index and (getattr(
-                        getattr(extractor, 'spec', None), 'member_symbol_fallback', False)
-                        or getattr(getattr(extractor, 'spec', None), 'container_member_fallback', False)):
-                    # BACK-547 Kotlin measurement loop: `import a.b.foo` for a
-                    # top-level fun/val/var — the direct dotted match above
-                    # looked for `foo.kt` and failed, and BACK-551's
-                    # enclosing-class peel can't help either (there is no
-                    # enclosing type in the import path to peel down to).
-                    # BACK-557 Scala measurement loop: same fallback also
-                    # covers `import a.b.container.member` where `container`
-                    # is a lowerCamelCase object BACK-551's peel refuses to
-                    # reach. Fall back to the content-scanned member index.
-                    for resolved in extractor.resolve_member_targets(stmt, member_index):
-                        if resolved != file_path:
-                            self._graph.add_dependency(file_path, resolved)
-                            self._edge_stmts[(file_path, resolved)] = stmt
-                            added = True
-                if not added:
-                    # BACK-547 honest-decline: an extracted import that produced
-                    # no edge is only a false-negative risk if it points
-                    # intra-project. External (stdlib/dep) imports correctly have
-                    # no in-tree edge; None means the extractor can't tell, and
-                    # we conservatively don't count it (never cry wolf).
-                    verdict = extractor.is_intra_project_import(
-                        stmt, base_path, search_paths=extra_paths,
-                        project_namespaces=project_namespaces)
-                    if verdict is True:
-                        self._unresolved_intra += 1
-                        if len(self._unresolved_examples) < 5:
-                            self._unresolved_examples.append((file_path, stmt))
+                self._resolve_statement_edges(
+                    stmt, file_path, extractor, base_path, extra_paths,
+                    uses_file_index, file_index, indices)
 
-        # BACK-557 direction a: Zeitwerk convention-inferred edges. A second
-        # pass over EVERY scanned file (not self._graph.files — most
-        # Zeitwerk-resolved files have no import statement, so they never
-        # entered that import-derived dict) whose extractor opts in via
-        # spec.zeitwerk_convention. Exact-match only against zeitwerk_index
-        # (built above from the tree's own file layout): a reference that
-        # doesn't land on a real in-tree file's conventional constant name
-        # is simply not added, never guessed at — the same honest-skip
-        # contract every other resolver in this module holds to.
-        if zeitwerk_index:
-            for file_path in files:
-                extractor = get_extractor(file_path)
-                if extractor is None:
+    def _resolve_statement_edges(
+        self, stmt: 'ImportStatement', file_path: Path, extractor,
+        base_path: Path, extra_paths: List[Path], uses_file_index: bool,
+        file_index: Dict[str, List[Path]], indices: '_ResolutionIndices',
+    ) -> None:
+        """Resolve a single import statement, walking the fallback cascade:
+        direct resolution → namespace index (BACK-554) → member index
+        (BACK-547/557) → honest-decline classification (BACK-547)."""
+        if uses_file_index:
+            # Generic extractors' resolve_import needs the file_index
+            # kwarg the base resolve_import_targets can't pass, and
+            # don't have the `from pkg import submodule` idiom — single
+            # resolution is correct for them.
+            resolved = extractor.resolve_import(
+                stmt, base_path, search_paths=extra_paths, file_index=file_index)
+            targets = [resolved] if resolved else []
+        else:
+            # BACK-542: one statement can pull in several files
+            # (`from pkg import a, b` where a/b are submodules), so
+            # resolve to the full target set, not just the primary.
+            targets = extractor.resolve_import_targets(
+                stmt, base_path, search_paths=extra_paths)
+        added = False
+        for resolved in targets:
+            if resolved and resolved != file_path:
+                self._graph.add_dependency(file_path, resolved)
+                self._graph.resolved_paths[stmt.module_name] = resolved
+                self._edge_stmts[(file_path, resolved)] = stmt
+                added = True
+        spec = getattr(extractor, 'spec', None)
+        if not added and indices.namespace_index and getattr(spec, 'resolve_namespaces', False):
+            # BACK-554: the single-file dotted match above only catches a
+            # namespace that coincidentally names one matching file — the
+            # common case (a namespace declared across several files, or
+            # a file reachable only via a project-wide `global using`)
+            # needs the namespace index instead, fanning out to every
+            # declaring file (mirrors ImportsAdapter._resolve_dependencies,
+            # BACK-544).
+            for resolved in extractor.resolve_namespace_targets(stmt, indices.namespace_index):
+                if resolved != file_path:
+                    self._graph.add_dependency(file_path, resolved)
+                    self._edge_stmts[(file_path, resolved)] = stmt
+                    added = True
+        if not added and indices.member_index and (
+                getattr(spec, 'member_symbol_fallback', False)
+                or getattr(spec, 'container_member_fallback', False)):
+            # BACK-547 Kotlin measurement loop: `import a.b.foo` for a
+            # top-level fun/val/var — the direct dotted match above
+            # looked for `foo.kt` and failed, and BACK-551's
+            # enclosing-class peel can't help either (there is no
+            # enclosing type in the import path to peel down to).
+            # BACK-557 Scala measurement loop: same fallback also
+            # covers `import a.b.container.member` where `container`
+            # is a lowerCamelCase object BACK-551's peel refuses to
+            # reach. Fall back to the content-scanned member index.
+            for resolved in extractor.resolve_member_targets(stmt, indices.member_index):
+                if resolved != file_path:
+                    self._graph.add_dependency(file_path, resolved)
+                    self._edge_stmts[(file_path, resolved)] = stmt
+                    added = True
+        if indices.module_index and getattr(spec, 'module_dir_convention', None):
+            # BACK-567 Swift: `import Foo` names a whole SwiftPM target, not a
+            # file. Fan out to every file in module Foo via the path-derived
+            # module index — the same module→many-files shape C#'s namespace
+            # index uses. Deliberately NOT gated on `not added`: the direct
+            # bare-basename match above resolves `import Foo` iff a UNIQUE
+            # `Foo.swift` exists (real case: ServerDrivenUI/ServerDrivenUI.swift),
+            # which is just one of the target's files — letting that pre-empt
+            # the fan-out would under-report the module to a single file. The
+            # fan-out is a superset (it includes that Foo.swift) and reverse_deps
+            # is set-keyed, so unioning is idempotent.
+            for resolved in extractor.resolve_module_targets(stmt, indices.module_index):
+                if resolved != file_path:
+                    self._graph.add_dependency(file_path, resolved)
+                    self._edge_stmts.setdefault((file_path, resolved), stmt)
+                    added = True
+        if not added:
+            # BACK-547 honest-decline: an extracted import that produced
+            # no edge is only a false-negative risk if it points
+            # intra-project. External (stdlib/dep) imports correctly have
+            # no in-tree edge; None means the extractor can't tell, and
+            # we conservatively don't count it (never cry wolf).
+            verdict = extractor.is_intra_project_import(
+                stmt, base_path, search_paths=extra_paths,
+                project_namespaces=indices.project_namespaces)
+            if verdict is True:
+                self._unresolved_intra += 1
+                if len(self._unresolved_examples) < 5:
+                    self._unresolved_examples.append((file_path, stmt))
+
+    def _build_zeitwerk_edges(
+        self, files: List[Path], zeitwerk_index: Dict[str, Path],
+    ) -> None:
+        """Add Zeitwerk convention-inferred edges (BACK-557 direction a).
+
+        A second pass over EVERY scanned file (not self._graph.files — most
+        Zeitwerk-resolved files have no import statement, so they never
+        entered that import-derived dict) whose extractor opts in via
+        spec.zeitwerk_convention. Exact-match only against zeitwerk_index
+        (built from the tree's own file layout): a reference that
+        doesn't land on a real in-tree file's conventional constant name
+        is simply not added, never guessed at — the same honest-skip
+        contract every other resolver in this module holds to.
+        """
+        if not zeitwerk_index:
+            return
+        for file_path in files:
+            extractor = get_extractor(file_path)
+            if extractor is None:
+                continue
+            spec = getattr(extractor, 'spec', None)
+            if not getattr(spec, 'zeitwerk_convention', False):
+                continue
+            for line_no, const_path in extractor.extract_constant_references(file_path):
+                target = zeitwerk_index.get(const_path)
+                if target is None or target == file_path:
                     continue
-                spec = getattr(extractor, 'spec', None)
-                if not getattr(spec, 'zeitwerk_convention', False):
-                    continue
-                for line_no, const_path in extractor.extract_constant_references(file_path):
-                    target = zeitwerk_index.get(const_path)
-                    if target is None or target == file_path:
-                        continue
-                    self._graph.add_dependency(file_path, target)
-                    self._zeitwerk_edges += 1
-                    if (file_path, target) not in self._edge_stmts:
-                        # No real statement backs this edge — synthesize one
-                        # so file-dependents display still shows a module
-                        # name and line rather than falling through to the
-                        # generic 'unknown'-type dependent entry.
-                        self._edge_stmts[(file_path, target)] = ImportStatement(
-                            file_path=file_path,
-                            line_number=line_no,
-                            module_name=const_path,
-                            imported_names=[],
-                            is_relative=False,
-                            import_type='zeitwerk_convention',
-                            skip_unused=True,
-                        )
+                self._graph.add_dependency(file_path, target)
+                self._zeitwerk_edges += 1
+                if (file_path, target) not in self._edge_stmts:
+                    # No real statement backs this edge — synthesize one
+                    # so file-dependents display still shows a module
+                    # name and line rather than falling through to the
+                    # generic 'unknown'-type dependent entry.
+                    self._edge_stmts[(file_path, target)] = ImportStatement(
+                        file_path=file_path,
+                        line_number=line_no,
+                        module_name=const_path,
+                        imported_names=[],
+                        is_relative=False,
+                        import_type='zeitwerk_convention',
+                        skip_unused=True,
+                    )
 
     @staticmethod
     def _build_constant_index(
@@ -1000,27 +1161,34 @@ class DependsAdapter(ResourceAdapter):
         )
 
     def _same_module_note(self, target: Path) -> str:
-        """BACK-560: unconditional informational note for languages where
-        same-module cross-file references are architecturally invisible to
-        import extraction (Swift: no `import` statement exists for a sibling
-        file in the same target). Deliberately NOT the ⚠ honest-decline
-        signal — that implies "we tried to resolve an import and partially
-        failed" (_unresolved_intra > 0), which never applies here since
-        nothing was extracted to begin with. This is a different claim: the
-        answer may still be a confident "no dependents *via import*," but the
-        language can express intra-module edges with no import at all, so a
-        negative here says less than the same negative would for, say, Java."""
+        """BACK-560/567: unconditional informational note framing what a Swift
+        file's dependent list does and doesn't mean. Two distinct truths:
+
+        1. **Same-module (same-target) references are invisible** (BACK-560) —
+           Swift compiles a target together, so a sibling file uses this file's
+           declarations with no `import` statement to extract. Not an
+           undercount from failed resolution; a class of edge that has no
+           syntax at all. Deliberately NOT the ⚠ honest-decline signal (keyed
+           on _unresolved_intra, which never increments here — nothing was
+           extracted to fail).
+
+        2. **Cross-module dependents shown are module-level** (BACK-567) — an
+           `import Foo` names the whole module Foo, so every file importing
+           this file's module is listed as a dependent, whether or not it uses
+           *this specific file*. The count is an honest ceiling at Swift's
+           import granularity (the module), not file-precise like Java's."""
         extractor = get_extractor(target)
         spec = getattr(extractor, 'spec', None)
         if not getattr(spec, 'same_module_undetectable', False):
             return ''
         return (
-            "ℹ This is a Swift file. Swift compiles a whole module/target together, "
-            "so a sibling file in the same module can use this file's declarations "
-            "with no `import` statement at all — depends:// only sees import edges, "
-            "so same-module dependents never show up here regardless of how many "
-            "exist. This is not an undercount from a failed resolution; it's a class "
-            "of dependency this analysis cannot see."
+            "ℹ This is a Swift file. Swift's import granularity is the module/target, "
+            "not the file, so this list is module-level: (1) same-module siblings use "
+            "this file's declarations with NO `import` statement, so they can never "
+            "appear here (not a failed resolution — a class of edge with no syntax); "
+            "(2) any dependent shown imports this file's whole module, not necessarily "
+            "this specific file. Treat the count as an import-granularity ceiling, not "
+            "a file-precise dependent set."
         )
 
     def _convention_autoload_note(self) -> str:

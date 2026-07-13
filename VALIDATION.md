@@ -64,9 +64,11 @@ actually closes the gap without introducing false positives.
 | Rust | Meilisearch (17-crate workspace, 726 files) | Independent regex-based `use`/`Cargo.toml` parser | 30-target stratified sample, 295 edges | 59.0% → **100%** | 0 | (1) Multi-segment `crate::`/`super::` paths only ever consumed their first segment, with `super::` unconditionally failing; (2) grouped `use crate::{a,b,c}` imports matched on a keyword-typed AST node the extractor didn't recognize, silently dropping the entire statement |
 | C# | Jellyfin, Godot C# glue | Real-corpus grep (idiom itself was fixture-only — absent from both corpora) | Fixture + incidental real-corpus hit | N/A for the target idiom | — | Investigating the (absent) target idiom surfaced that namespace fan-out was never wired into the dependency graph at all for zero-import files |
 | PHP | WordPress core (`samples/php`, 1,927 files) | Buildless `require`/`require_once`/`include`/`include_once` string-expression resolver (not `use`/namespace — see [harness README](../internal-docs/planning/dogfood-findings/php-recall-oracle/README.md) for why) | 80-target stratified sample, 442 edges | 0.00% → 33.85% (BACK-564) → **100.00%** (BACK-565) | 0 | `depends://`'s PHP resolver only recognized a bare string-literal require/include target; every real WordPress require/include uses string concatenation (`__DIR__ . 'x.php'`, `ABSPATH . WPINC . 'x.php'`, etc. — confirmed 0 bare-literal requires exist anywhere in the corpus). BACK-564 resolved the universal `__DIR__`/`dirname(__FILE__)` directory-relative idiom via a structural AST-walk extractor. BACK-565 (same session) closed the remaining majority: WordPress-specific framework-bootstrap constants (`ABSPATH`/`WPINC`/`WP_CONTENT_DIR`/`WP_PLUGIN_DIR`) are genuinely derivable — WordPress defines them in-tree via `define('ABSPATH', __DIR__ . '/')` and similar — so a project-wide constant index (built to a fixed point, since real constants chain through each other) now substitutes them into the same concatenation resolver. Constants with genuinely ambiguous `define()` values (measured: 3/50) are excluded from the index, never guessed |
+| Swift | Kickstarter iOS (`samples/swift`, 1,961 files, 8 SwiftPM packages) | `swift package dump-package` (real toolchain, target list) + independent per-file import parse | Full-tree; 21 declared targets, 164-edge precision sample | ~0% effective (123 edges / 7 dependent files) → **100% of declared targets resolved** (384,278 edges / 1,511 dependent files) | 0 (164-edge sample, none unbacked) | Swift's import granularity is the *module (SwiftPM target)*, not the file, but the resolver only matched `import Foo` → a unique `Foo.swift` — resolving ~0% of real multi-file targets, AND (worse) leaving `unresolved_intra` at 0 so no honest-decline `⚠` fired: a silent wrong "no dependents". Fixed in two buildless parts: (1) `Sources/<Target>/` directory-convention fan-out (`import Foo` → every file in target Foo, C#-namespace-style); (2) a structural `Package.swift` parse for targets that relocate sources via an explicit `path:` (real GraphAPI `path: "./Sources"`, 326 importers). The independent `dump-package` oracle caught the custom-`path:` case the directory convention alone would have silently mis-mapped |
 
-**Ten measurement loops, ten real bugs found, all ten fixed** (PHP's
-BACK-564/565 were the last two, both fixed the same session after being
+**Eleven measurement loops, eleven real bugs found, all eleven fixed** (Swift's
+BACK-567 was the last, closing the premium-tier program; PHP's
+BACK-564/565 before it were both fixed the same session after being
 filed with full evidence in the original measurement pass — BACK-565 was
 filed as a residual of BACK-564 and closed before the session ended, once
 it was clear the framework constants were genuinely derivable rather than
@@ -93,9 +95,11 @@ rather than hiding a real edge.
 The following are **not** in the table above because they have not been
 run through an independent-oracle diff against a real corpus:
 
-- **Swift, C++, Dart, Lua, Zig, GDScript, C** — each shares a resolver
+- **C++, Dart, Lua, Zig, GDScript, C** — each shares a resolver
   family with at least one already-measured language, but has not been
-  independently confirmed on its own real corpus.
+  independently confirmed on its own real corpus. (Swift graduated out of
+  this list — measured with a full `swift package dump-package` oracle loop,
+  BACK-567; see the Results table.)
 - **Java's residual 3/975 misses** — root-caused to a directory-name
   collision in a global skip-list (`env`, also matching a Python-venv-style
   convention) that excludes a real, unrelated source package. Filed, not yet

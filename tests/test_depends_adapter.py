@@ -1407,5 +1407,179 @@ class TestZeitwerkConventionInference:
         assert a.get_metadata()['zeitwerk_edges_inferred'] >= 3
 
 
+class TestDependsAdapterSwiftModuleFanout:
+    """BACK-567: Swift `import Foo` names a whole SwiftPM target, not a file.
+
+    The target is almost always multi-file, so the old bare-basename match
+    (`import Foo` -> `Foo.swift`) resolved ~0% of real cross-module imports and,
+    worse, left `_unresolved_intra` at 0 so no honest-decline ⚠ fired either —
+    a silent wrong "no dependents". These lock in the module→many-files fan-out
+    (mirroring C#'s namespace fan-out) built purely from the Sources/<Target>/
+    directory convention (no Swift toolchain at runtime).
+    """
+
+    def _spm_workspace(self, tmp_path: Path) -> Path:
+        """A minimal multi-target SwiftPM layout: Library imports KsApi;
+        KsApi is a 2-file target with a same-module sibling (no import);
+        Standalone is imported by nobody."""
+        root = tmp_path
+        (root / 'Package.swift').write_text('// swift-tools-version:5.9\n')
+        # KsApi target — two files; Models has NO import (same-module sibling).
+        _write(root / 'Sources' / 'KsApi' / 'Service.swift',
+               'import Foundation\npublic struct Service {}\n')
+        _write(root / 'Sources' / 'KsApi' / 'Models.swift',
+               'public struct Model {}\n')
+        # Library target — two files, both import the KsApi module.
+        _write(root / 'Sources' / 'Library' / 'Client.swift',
+               'import Foundation\nimport KsApi\npublic struct Client {}\n')
+        _write(root / 'Sources' / 'Library' / 'Helper.swift',
+               'import KsApi\npublic struct Helper {}\n')
+        # A test target that imports Library.
+        _write(root / 'Tests' / 'LibraryTests' / 'ClientTests.swift',
+               'import XCTest\nimport Library\nfinal class ClientTests: XCTestCase {}\n')
+        # A target nobody imports.
+        _write(root / 'Sources' / 'Standalone' / 'Alone.swift',
+               'public struct Alone {}\n')
+        return root
+
+    def test_import_fans_out_to_every_file_in_module(self, tmp_path):
+        """`import KsApi` makes each importer a dependent of BOTH KsApi files —
+        Service.swift (which carries the import) and Models.swift (same-module
+        sibling that never appears in any import statement)."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._spm_workspace(tmp_path)
+        for member in ('Service.swift', 'Models.swift'):
+            r = DependsAdapter(str(root / 'Sources' / 'KsApi' / member)).get_structure()
+            names = {Path(d['file']).name for d in r['dependents']}
+            assert names == {'Client.swift', 'Helper.swift'}, member
+            assert r['count'] == 2
+
+    def test_external_import_produces_no_edge_and_no_false_decline(self, tmp_path):
+        """`import Foundation` is external — no in-tree edge, and it must NOT
+        trip the honest-decline counter (never cry wolf on a stdlib import)."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._spm_workspace(tmp_path)
+        a = DependsAdapter(str(root / 'Sources' / 'KsApi' / 'Service.swift'))
+        a.get_structure()
+        assert a._unresolved_intra == 0
+
+    def test_module_with_no_importers_reports_zero_with_note(self, tmp_path):
+        """Standalone is imported by nobody → 0 dependents, and the Swift
+        module-level note fires (same-module siblings are invisible)."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._spm_workspace(tmp_path)
+        r = DependsAdapter(str(root / 'Sources' / 'Standalone' / 'Alone.swift')).get_structure()
+        assert r['count'] == 0
+        assert 'same_module_note' in r
+        assert 'module' in r['same_module_note']
+
+    def test_test_target_import_resolves(self, tmp_path):
+        """`import Library` from a Tests/<Target>/ file resolves — Tests/ is in
+        the module_dir_convention set alongside Sources/."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._spm_workspace(tmp_path)
+        r = DependsAdapter(str(root / 'Sources' / 'Library' / 'Client.swift')).get_structure()
+        names = {Path(d['file']).name for d in r['dependents']}
+        assert 'ClientTests.swift' in names
+
+    def test_module_with_same_named_file_still_fans_out_fully(self, tmp_path):
+        """A target with a file matching its own name (real case:
+        ServerDrivenUI/ServerDrivenUI.swift) must NOT let the coincidental
+        bare-basename direct match pre-empt the fan-out — every file in the
+        module is still a dependent, not just the same-named one."""
+        from reveal.adapters.depends import DependsAdapter
+        root = tmp_path
+        (root / 'Package.swift').write_text('// swift-tools-version:5.9\n')
+        _write(root / 'Sources' / 'SDUI' / 'SDUI.swift', 'public struct SDUI {}\n')
+        _write(root / 'Sources' / 'SDUI' / 'Other.swift', 'public struct Other {}\n')
+        _write(root / 'Sources' / 'App' / 'Main.swift',
+               'import SDUI\npublic struct Main {}\n')
+        # Both SDUI files must show App/Main.swift as a dependent — including
+        # Other.swift, which the bare-basename match could never reach.
+        for member in ('SDUI.swift', 'Other.swift'):
+            r = DependsAdapter(str(root / 'Sources' / 'SDUI' / member)).get_structure()
+            names = {Path(d['file']).name for d in r['dependents']}
+            assert 'Main.swift' in names, member
+
+    def test_hyphenated_target_dir_matches_underscore_import(self, tmp_path):
+        """SwiftPM sanitizes a target name to its module identifier: directory
+        `My-Lib` is imported as `import My_Lib`. The dir-derived key is
+        sanitized the same way so they match (real Kickstarter case:
+        `Kickstarter-Framework` ↔ `import Kickstarter_Framework`)."""
+        from reveal.adapters.depends import DependsAdapter
+        root = tmp_path
+        (root / 'Package.swift').write_text('// swift-tools-version:5.9\n')
+        _write(root / 'Sources' / 'My-Lib' / 'Core.swift', 'public struct Core {}\n')
+        _write(root / 'Sources' / 'App' / 'Main.swift',
+               'import My_Lib\npublic struct Main {}\n')
+        r = DependsAdapter(str(root / 'Sources' / 'My-Lib' / 'Core.swift')).get_structure()
+        names = {Path(d['file']).name for d in r['dependents']}
+        assert 'Main.swift' in names
+
+    def _custom_path_workspace(self, tmp_path: Path) -> Path:
+        """A package whose target relocates its sources with an explicit path:
+        (real GraphAPI shape: `path: "./Sources"` collapses the WHOLE Sources/
+        tree — subdirs and all — into one module, with no Sources/<Target>/
+        level). The directory convention alone would mis-map Sources/Schema/*
+        to a bogus `Schema` module and leave `import Api` resolving to nothing;
+        the manifest path: override fixes it."""
+        root = tmp_path
+        _write(root / 'Package.swift', '''
+            // swift-tools-version:5.9
+            import PackageDescription
+            let package = Package(
+              name: "Api",
+              targets: [
+                .target(name: "Api", dependencies: [], path: "./Sources"),
+                .testTarget(name: "ApiTests", dependencies: [.target(name: "Api")]),
+              ]
+            )
+        ''')
+        # Custom layout: files live in Sources/Schema/, Sources/Ops/ — NO
+        # Sources/Api/ dir exists, so only the manifest path: can map them.
+        _write(root / 'Sources' / 'Schema' / 'User.swift', 'public struct User {}\n')
+        _write(root / 'Sources' / 'Ops' / 'Query.swift', 'public struct Query {}\n')
+        _write(root / 'Tests' / 'ApiTests' / 'UserTests.swift',
+               'import XCTest\nimport Api\nfinal class UserTests: XCTestCase {}\n')
+        return root
+
+    def test_manifest_path_override_maps_whole_subtree_to_one_module(self, tmp_path):
+        """`import Api` fans out to EVERY file under the target's `path:
+        "./Sources"` — including Sources/Schema/User.swift and
+        Sources/Ops/Query.swift, which the directory convention would have
+        mis-filed under bogus `Schema`/`Ops` modules."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._custom_path_workspace(tmp_path)
+        for member in ('Schema/User.swift', 'Ops/Query.swift'):
+            r = DependsAdapter(str(root / 'Sources' / member)).get_structure()
+            names = {Path(d['file']).name for d in r['dependents']}
+            assert 'UserTests.swift' in names, member
+
+    def test_manifest_path_override_no_false_decline(self, tmp_path):
+        """`import Api` resolves via the manifest override, so it must NOT be
+        misclassified as an external module and trip honest-decline — the
+        silent-negative this whole path exists to prevent."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._custom_path_workspace(tmp_path)
+        a = DependsAdapter(str(root / 'Sources' / 'Schema' / 'User.swift'))
+        a.get_structure()
+        assert a._unresolved_intra == 0
+
+    def test_manifest_dependency_reference_not_a_declaration(self, tmp_path):
+        """A `.target(name: "Api")` nested in a testTarget's dependencies: is a
+        reference, not a declaration — it must not create a second, wrongly-
+        located `Api` module. Only the real target dir maps."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._custom_path_workspace(tmp_path)
+        a = DependsAdapter(str(root))
+        files, _ = a._discover_files(root, frozenset({'.swift'}))
+        idx = a._build_resolution_indices(files)
+        # Every Api-module file must be a real file under Sources/ (the path:
+        # override), never a phantom from the dependency reference.
+        for p in idx.module_index['Api']:
+            assert p.exists()
+            assert 'Sources' in p.parts
+
+
 if __name__ == '__main__':
     unittest.main()

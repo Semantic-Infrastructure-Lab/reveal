@@ -165,6 +165,146 @@ class TestCSharp:
         assert extractor.extract_namespaces(f) == ['foo.bar']
 
 
+class TestSwiftModuleConvention:
+    """BACK-567: Swift `import Foo` names a whole SwiftPM target. These cover the
+    directory-convention primitives (no toolchain) the depends:// fan-out is
+    built on: module_for_file, name sanitization, and honest-decline."""
+
+    def _ext(self, tmp_path):
+        f = tmp_path / 'x.swift'
+        f.write_text('import Foundation\n')
+        return get_extractor(f)
+
+    @staticmethod
+    def _stmt(module_name, file_path='/r/x.swift'):
+        from reveal.analyzers.imports.types import ImportStatement
+        return ImportStatement(
+            file_path=Path(file_path), line_number=1, module_name=module_name,
+            imported_names=[], is_relative=False, import_type='import')
+
+    def test_module_for_file_from_sources_layout(self, tmp_path):
+        ext = self._ext(tmp_path)
+        p = Path('/repo/Sources/KsApi/Models/Project.swift')
+        assert ext.module_for_file(p) == 'KsApi'
+
+    def test_module_for_file_from_tests_layout(self, tmp_path):
+        ext = self._ext(tmp_path)
+        p = Path('/repo/Tests/LibraryTests/ClientTests.swift')
+        assert ext.module_for_file(p) == 'LibraryTests'
+
+    def test_module_for_file_nested_module_name_repeats(self, tmp_path):
+        """The first component after Sources/ is the target even when a
+        same-named subdirectory repeats deeper (real Library layout)."""
+        ext = self._ext(tmp_path)
+        p = Path('/repo/Sources/Library/Library/Tracking/Segment.swift')
+        assert ext.module_for_file(p) == 'Library'
+
+    def test_module_for_file_loose_file_in_sources_is_none(self, tmp_path):
+        """A file sitting directly in Sources/ names no module (nothing follows
+        the target component) — not guessed into one."""
+        ext = self._ext(tmp_path)
+        assert ext.module_for_file(Path('/repo/Sources/loose.swift')) is None
+
+    def test_module_for_file_no_convention_dir_is_none(self, tmp_path):
+        ext = self._ext(tmp_path)
+        assert ext.module_for_file(Path('/repo/misc/a.swift')) is None
+
+    def test_hyphen_sanitized_to_underscore(self, tmp_path):
+        ext = self._ext(tmp_path)
+        p = Path('/repo/Sources/Kickstarter-Framework/App.swift')
+        assert ext.module_for_file(p) == 'Kickstarter_Framework'
+
+    def test_resolve_module_targets_fans_out(self, tmp_path):
+        ext = self._ext(tmp_path)
+        a, b = Path('/r/Sources/KsApi/A.swift'), Path('/r/Sources/KsApi/B.swift')
+        index = {'KsApi': [a, b]}
+        assert set(ext.resolve_module_targets(self._stmt('KsApi'), index)) == {a, b}
+
+    def test_resolve_module_targets_unknown_module_empty(self, tmp_path):
+        ext = self._ext(tmp_path)
+        assert ext.resolve_module_targets(
+            self._stmt('Foundation'), {'KsApi': [Path('/r/a.swift')]}) == []
+
+    def test_resolve_module_targets_sanitizes_import_name(self, tmp_path):
+        """`import Kickstarter_Framework` resolves against the sanitized dir key
+        `Kickstarter_Framework` (dir was `Kickstarter-Framework`)."""
+        ext = self._ext(tmp_path)
+        a = Path('/r/Sources/Kickstarter-Framework/App.swift')
+        assert ext.resolve_module_targets(
+            self._stmt('Kickstarter_Framework'), {'Kickstarter_Framework': [a]}) == [a]
+
+    def test_is_intra_project_true_for_known_module(self, tmp_path):
+        ext = self._ext(tmp_path)
+        assert ext.is_intra_project_import(
+            self._stmt('KsApi'), Path('/r'),
+            project_namespaces={'KsApi', 'Library'}) is True
+
+    def test_is_intra_project_false_for_external_module(self, tmp_path):
+        ext = self._ext(tmp_path)
+        assert ext.is_intra_project_import(
+            self._stmt('Foundation'), Path('/r'),
+            project_namespaces={'KsApi', 'Library'}) is False
+
+    def test_is_intra_project_none_without_inventory(self, tmp_path):
+        """No module inventory supplied (project_namespaces=None) → conservative
+        None, never a guess."""
+        ext = self._ext(tmp_path)
+        assert ext.is_intra_project_import(self._stmt('KsApi'), Path('/r')) is None
+
+    def _manifest(self, tmp_path, body):
+        p = tmp_path / 'Package.swift'
+        p.write_text(body)
+        return get_extractor(p), p
+
+    def test_extract_manifest_targets_name_and_path(self, tmp_path):
+        ext, p = self._manifest(tmp_path, '''
+            // swift-tools-version:5.9
+            import PackageDescription
+            let package = Package(
+              name: "Api",
+              targets: [
+                .target(name: "Api", dependencies: [], path: "./Sources"),
+                .testTarget(name: "ApiTests"),
+                .target(name: "Plain"),
+              ]
+            )
+        ''')
+        got = set(ext.extract_manifest_targets(p))
+        assert got == {('Api', './Sources', False),
+                       ('ApiTests', None, True),
+                       ('Plain', None, False)}
+
+    def test_extract_manifest_targets_excludes_dependency_reference(self, tmp_path):
+        """A `.target(name:)` inside a dependencies: array is a reference, not a
+        declaration — only elements of the Package(targets:) array count."""
+        ext, p = self._manifest(tmp_path, '''
+            let package = Package(
+              name: "P",
+              targets: [
+                .target(name: "A", dependencies: [.target(name: "B"), .product(name: "X", package: "y")]),
+              ]
+            )
+        ''')
+        names = [n for n, _, _ in ext.extract_manifest_targets(p)]
+        assert names == ['A']  # B is a dependency reference, not declared
+
+    def test_extract_manifest_targets_sanitizes_name(self, tmp_path):
+        ext, p = self._manifest(tmp_path, '''
+            let package = Package(
+              name: "P",
+              targets: [.target(name: "Kickstarter-Framework")]
+            )
+        ''')
+        assert ext.extract_manifest_targets(p) == [('Kickstarter_Framework', None, False)]
+
+    def test_extract_manifest_targets_empty_without_package_call(self, tmp_path):
+        """A .swift file that isn't a manifest (no Package(...) call) yields
+        nothing — the extractor doesn't scan arbitrary .target-looking calls."""
+        ext = self._ext(tmp_path)
+        f = tmp_path / 'x.swift'  # created by _ext with `import Foundation`
+        assert ext.extract_manifest_targets(f) == []
+
+
 class TestPhp:
     def test_use_require_include(self):
         code = (
