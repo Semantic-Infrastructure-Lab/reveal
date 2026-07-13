@@ -345,6 +345,35 @@ class TestHTMLAnalyzer(unittest.TestCase):
         self.assertNotIn('broken', exists_link)
         self.assertTrue(missing_link.get('broken', False))
 
+    def test_broken_link_detection_multilevel_relative(self):
+        """BACK-550: href.lstrip('./') strips *characters*, not the prefix,
+        so a multi-level '../../style.css' has every leading '.'/'/'
+        character stripped down to 'style.css' and gets resolved against the
+        wrong (too-shallow) directory — a real file two levels up is
+        misreported as broken."""
+        nested_dir = os.path.join(self.temp_dir, "a", "b")
+        os.makedirs(nested_dir, exist_ok=True)
+
+        html = """
+<html><body>
+    <a href="../../style.css">Up two levels</a>
+</body></html>"""
+        path = os.path.join(nested_dir, "page.html")
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(html)
+
+        # The real target: temp_dir/style.css (two levels up from a/b/page.html)
+        with open(os.path.join(self.temp_dir, "style.css"), 'w') as f:
+            f.write("body {}")
+
+        analyzer = HTMLAnalyzer(path)
+        result = analyzer.get_structure(links=True, broken=True)
+        link = result['links'][0]
+
+        self.assertFalse(link.get('broken', False),
+                          "../../style.css exists two levels up but was "
+                          "reported broken — lstrip('./') char-strip bug")
+
     # ========================================
     # Metadata Extraction Tests
     # ========================================

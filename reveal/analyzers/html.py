@@ -488,8 +488,14 @@ class HTMLAnalyzer(FileAnalyzer):
                 # Absolute path from root (can't check without knowing web root)
                 return False
             else:
-                # Relative path
-                target = self.path.parent / href.lstrip('./')
+                # Relative path. Strip a leading './' only — str.lstrip('./')
+                # strips *characters*, not the prefix, so it mangles
+                # multi-level '../../foo' into bare 'foo' (every leading
+                # '.'/'/' character stripped), silently resolving against the
+                # wrong directory (BACK-550, same bug as BACK-549 in
+                # javascript.py's _resolve_relative_js).
+                clean_href = href[2:] if href.startswith('./') else href
+                target = self.path.parent / clean_href
                 return not target.exists()
         return False
 
