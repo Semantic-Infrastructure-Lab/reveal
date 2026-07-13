@@ -267,6 +267,12 @@ class DependsRenderer:
         if warning:
             print(f"{warning}\n")
 
+        # BACK-557: convention-autoload coverage caveat prints for both empty
+        # and positive results (a positive count is still a lower bound here).
+        autoload_note = result.get('autoload_note')
+        if autoload_note:
+            print(f"{autoload_note}\n")
+
         if not dependents:
             if result.get('undercount_possible'):
                 # BACK-547: the caveat (⚠) already printed above; do not assert
@@ -393,6 +399,19 @@ class DependsAdapter(ResourceAdapter):
     # (what's actually expensive to parse), not every file os.walk visits.
     _SCAN_FILE_CAP = 5000
 
+    # BACK-557: convention-autoloading coverage caveat. When a
+    # `convention_autoloaded` language (Ruby/Rails-Zeitwerk) dominates the scan
+    # and the fraction of its files carrying ANY import/require statement falls
+    # below this threshold, statement-based analysis structurally undercounts
+    # (most intra-app edges are bare constant references with no statement).
+    # Threshold grounded in the real Discourse corpus: convention-loaded trees
+    # cluster ≤10% require-density (app/ 4.7%, db/ 1.8%, plugins/ 8.9%,
+    # spec/ 10.2%) while explicit-require Ruby sits far higher (config/ 32%,
+    # script/ 87%); 15% lands in the empirical gap. Min file count avoids
+    # firing on tiny toy trees where the ratio is noise.
+    _AUTOLOAD_DENSITY_THRESHOLD = 0.15
+    _AUTOLOAD_MIN_FILES = 20
+
     def __init__(self, path: str = '.', query: Optional[str] = None):
         """Initialize depends adapter.
 
@@ -418,6 +437,11 @@ class DependsAdapter(ResourceAdapter):
         # negative must disclose rather than assert a confident "nothing here".
         self._unresolved_intra = 0
         self._unresolved_examples: List[tuple] = []
+        # BACK-557: per-scan require-statement coverage for the dominant
+        # convention-autoloaded language (Ruby). total = files of that language
+        # scanned; with_imports = those declaring ≥1 import/require.
+        self._autoload_total = 0
+        self._autoload_with_imports = 0
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Build import graph and return reverse-dependency view.
@@ -613,8 +637,17 @@ class DependsAdapter(ResourceAdapter):
             extractor = get_extractor(file_path)
             if not extractor:
                 continue
-            all_imports.extend(extractor.extract_imports(file_path))
+            file_imports = extractor.extract_imports(file_path)
+            all_imports.extend(file_imports)
             spec = getattr(extractor, 'spec', None)
+            # BACK-557: require-statement coverage for the convention-autoloaded
+            # language (Ruby). Counted over EVERY scanned file of that language,
+            # including zero-import ones (which never enter self._graph.files),
+            # so the density denominator is the true file count.
+            if getattr(spec, 'convention_autoloaded', False):
+                self._autoload_total += 1
+                if file_imports:
+                    self._autoload_with_imports += 1
             if getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None):
                 declared = extractor.extract_namespaces(file_path)
                 project_namespaces.update(declared)
@@ -740,6 +773,11 @@ class DependsAdapter(ResourceAdapter):
             known_limits.append(
                 f'{self._unresolved_intra} intra-project import(s) did not resolve to a file — '
                 'BACK-547, dependents may be undercounted (a negative is a lower bound)')
+        if self._convention_autoload_note():
+            known_limits.append(
+                f'{self._autoload_with_imports}/{self._autoload_total} Ruby files declare any '
+                'require — BACK-557, convention-based autoloading (Zeitwerk) suspected, '
+                'require-based dependents may significantly undercount (positive results too)')
         return {
             'analysis_kind': 'import-graph',
             # BACK-547: a graph with unresolved intra-project imports is not a
@@ -816,6 +854,29 @@ class DependsAdapter(ResourceAdapter):
             "so same-module dependents never show up here regardless of how many "
             "exist. This is not an undercount from a failed resolution; it's a class "
             "of dependency this analysis cannot see."
+        )
+
+    def _convention_autoload_note(self) -> str:
+        """BACK-557: project-level coverage caveat for a convention-autoloaded
+        language (Ruby/Rails-Zeitwerk). Fires when that language dominates the
+        scan and require-statement density is below threshold — most intra-app
+        edges are bare constant references with no statement to extract, so
+        depends:// structurally undercounts. Unlike the ⚠ honest-decline (which
+        is keyed on failed *resolution* of an extracted import and only fires on
+        empty results), this fires on positive results too: a non-empty answer
+        is still a lower bound when 90%+ of edges were never expressible as a
+        require in the first place. Returns '' when the signal doesn't apply."""
+        if self._autoload_total < self._AUTOLOAD_MIN_FILES:
+            return ''
+        density = self._autoload_with_imports / self._autoload_total
+        if density >= self._AUTOLOAD_DENSITY_THRESHOLD:
+            return ''
+        return (
+            f"ℹ Only {density:.0%} of the {self._autoload_total} Ruby files scanned declare any "
+            "require/require_relative — convention-based autoloading (Rails/Zeitwerk maps file "
+            "paths to constant names, resolving bare references like `Topic` with no statement) "
+            "is likely. depends:// only sees require-based edges, so intra-project dependents "
+            "here may be significantly undercounted regardless of the count shown."
         )
 
     def _warnings(self, include_honest_decline: bool = False) -> str:
@@ -908,6 +969,9 @@ class DependsAdapter(ResourceAdapter):
             note = self._same_module_note(target)
             if note:
                 result['same_module_note'] = note
+        autoload_note = self._convention_autoload_note()
+        if autoload_note:
+            result['autoload_note'] = autoload_note
         return result
 
     def _format_directory_summary(self, directory: Path, top_n: Optional[int], fmt: str) -> Dict[str, Any]:
@@ -946,6 +1010,9 @@ class DependsAdapter(ResourceAdapter):
         warnings = self._warnings(include_honest_decline=empty)
         if warnings:
             result['warning'] = warnings
+        autoload_note = self._convention_autoload_note()
+        if autoload_note:
+            result['autoload_note'] = autoload_note
         return result
 
     @staticmethod

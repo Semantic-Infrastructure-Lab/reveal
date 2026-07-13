@@ -210,6 +210,20 @@ class _ImportSpec:
             same-module references, if any exist, still show up as ordinary
             unresolved intra-project imports and are already covered by the
             existing honest-decline path.
+        convention_autoloaded: True when this language commonly resolves
+            intra-project references by a file-path/name *convention* rather
+            than an explicit import statement, so a low density of
+            import/require statements across the tree signals that
+            statement-based dependency analysis structurally undercounts.
+            Ruby/Rails (Zeitwerk, the default autoloader since Rails 6) maps
+            ``app/models/foo/bar.rb`` → ``Foo::Bar`` and resolves bare constant
+            references with zero ``require``/``require_relative`` — in a real
+            Rails app only single-digit-percent of files carry any require, so
+            ``depends://`` sees almost none of the real intra-app edges.
+            BACK-557: this flag lets the adapter emit a project-level coverage
+            caveat (even on *positive* results, unlike the ⚠ honest-decline
+            which is empty-only) when require density falls below a threshold —
+            containment first, before any convention-inference recall feature.
     """
 
     import_node_types: FrozenSet[str]
@@ -230,6 +244,7 @@ class _ImportSpec:
     container_member_node_types: FrozenSet[str] = field(default_factory=frozenset)
     container_member_fallback: bool = False
     same_module_undetectable: bool = False
+    convention_autoloaded: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -1115,6 +1130,10 @@ _RUBY_SPEC = _ImportSpec(
     call_import_names=frozenset({'require', 'require_relative', 'load'}),
     # Ruby imports are always path-style literals — no qualified-name separator.
     source_extensions=frozenset({'.rb'}),
+    # BACK-557: Rails/Zeitwerk resolves most intra-app references by path→constant
+    # convention with no require statement, so low require density means
+    # depends:// undercounts — emit a coverage caveat.
+    convention_autoloaded=True,
 )
 
 # BACK-488: Swift and Kotlin were absent from the table entirely — `imports://`,

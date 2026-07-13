@@ -1223,5 +1223,73 @@ class TestPythonPackageRootAndResolution:
         assert 'reluser.py' in importers  # was landing on sub/__init__.py pre-fix
 
 
+class TestConventionAutoloadCaveat:
+    """BACK-557 — depends:// is structurally blind to Zeitwerk-autoloaded
+    (zero-require) intra-app edges. Containment step: caveat low require-density
+    Ruby trees even on positive results, before any convention-inference recall
+    feature. Fires only for the convention_autoloaded language (Ruby) below the
+    density threshold and above the min-file floor."""
+
+    def _zeitwerk_tree(self, tmp_path, n_models=30, requires=1):
+        """A Rails-shaped Ruby tree: many model files, almost none with a
+        require (bare-constant Zeitwerk references instead)."""
+        (tmp_path / 'Gemfile').write_text('gem "rails"\n')
+        for i in range(n_models):
+            body = ('require "digest/sha1"\n' if i < requires else '')
+            # bare-constant reference to a sibling class, no require:
+            body += f'class Model{i}\n  def go\n    Model{(i + 1) % n_models}.new\n  end\nend\n'
+            _write(tmp_path / 'app' / 'models' / f'model{i}.rb', body)
+        return tmp_path
+
+    def test_low_density_ruby_tree_caveats_empty_result(self, tmp_path):
+        from reveal.adapters.depends import DependsAdapter
+        root = self._zeitwerk_tree(tmp_path, n_models=30, requires=1)
+        r = DependsAdapter(str(root / 'app' / 'models' / 'model0.rb')).get_structure()
+        assert 'autoload_note' in r                       # positive OR empty, fires
+        assert 'Zeitwerk' in r['autoload_note']
+        assert any('BACK-557' in k for k in r['_meta']['known_limits'])
+
+    def test_low_density_ruby_tree_caveats_positive_result(self, tmp_path):
+        """The caveat must fire even when the count is > 0 — a positive result
+        is still a lower bound when 90%+ of edges are unstated."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._zeitwerk_tree(tmp_path, n_models=30, requires=1)
+        # add one real require edge so the target has a dependent
+        _write(root / 'app' / 'models' / 'importer.rb',
+               'require_relative "model0"\nclass Importer; end\n')
+        r = DependsAdapter(str(root / 'app' / 'models' / 'model0.rb')).get_structure()
+        assert r['count'] >= 1                            # positive result
+        assert 'autoload_note' in r                       # still caveated
+
+    def test_high_density_ruby_tree_no_caveat(self, tmp_path):
+        """A normal Ruby tree where most files require their deps must NOT be
+        caveated (script/ in Discourse is 87% — explicit-require, not Zeitwerk)."""
+        from reveal.adapters.depends import DependsAdapter
+        (tmp_path / 'Gemfile').write_text('gem "sinatra"\n')
+        for i in range(30):
+            _write(tmp_path / 'lib' / f'part{i}.rb',
+                   f'require_relative "part{(i + 1) % 30}"\nclass Part{i}; end\n')
+        r = DependsAdapter(str(tmp_path / 'lib' / 'part0.rb')).get_structure()
+        assert 'autoload_note' not in r
+
+    def test_below_min_files_no_caveat(self, tmp_path):
+        """A tiny low-density tree is noise, not a signal — must not fire."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._zeitwerk_tree(tmp_path, n_models=5, requires=0)
+        r = DependsAdapter(str(root / 'app' / 'models' / 'model0.rb')).get_structure()
+        assert 'autoload_note' not in r
+
+    def test_non_ruby_tree_no_caveat(self, tmp_path):
+        """Python (not convention_autoloaded) must never get the Ruby caveat,
+        even though a package of __init__-only files has low import density."""
+        from reveal.adapters.depends import DependsAdapter
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "p"\n')
+        _write(tmp_path / 'pkg' / '__init__.py', '')
+        for i in range(30):
+            _write(tmp_path / 'pkg' / f'm{i}.py', f'class M{i}: ...\n')
+        r = DependsAdapter(str(tmp_path / 'pkg' / 'm0.py')).get_structure()
+        assert 'autoload_note' not in r
+
+
 if __name__ == '__main__':
     unittest.main()
