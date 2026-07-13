@@ -590,6 +590,43 @@ def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
                         help='autossl://: filter output to a single named user')
 
 
+class _ScopedErrorArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser that gives unrecognized-argument errors a short, scoped
+    usage line instead of the full flat usage block.
+
+    All adapter-specific flag groups (nginx/cpanel/ssl/markdown/...) live on
+    one parser (BACK-522) since there are no real per-command subparsers, so
+    the default argparse usage dump lists every flag from every subsystem
+    regardless of what was actually invoked — misleading for a plain `.py`
+    file error. This only narrows the *unrecognized arguments* case; other
+    argparse errors (bad choice, missing value) keep the default behavior
+    since their usage context is still relevant to the flag involved.
+    """
+
+    def error(self, message: str) -> None:
+        if message.startswith('unrecognized arguments:'):
+            positional_usage = ' '.join(
+                self._format_positional_usage(action)
+                for action in self._actions
+                if not action.option_strings
+            )
+            self._print_message(
+                f'usage: {self.prog} [options] {positional_usage}\n',
+                sys.stderr,
+            )
+            self._print_message(
+                f'{self.prog}: error: {message}\n'
+                f'Full flag reference: {self.prog} --help  |  Quick examples: {self.prog} help://quick\n',
+                sys.stderr,
+            )
+            self.exit(2)
+        super().error(message)
+
+    def _format_positional_usage(self, action: argparse.Action) -> str:
+        metavar = action.metavar or action.dest
+        return f'[{metavar}]' if action.nargs == '?' else metavar
+
+
 def create_argument_parser(version: str) -> argparse.ArgumentParser:
     """Create and configure the command-line argument parser.
 
@@ -599,7 +636,7 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     Returns:
         Configured ArgumentParser instance
     """
-    parser = argparse.ArgumentParser(
+    parser = _ScopedErrorArgumentParser(
         description='Reveal: Explore code semantically - The simplest way to understand code',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=build_help_epilog(),
