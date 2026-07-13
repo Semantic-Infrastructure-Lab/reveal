@@ -63,13 +63,15 @@ actually closes the gap without introducing false positives.
 | Scala | GitBucket (247 files) | Content-scanned package + object-member oracle | Exhaustive, 1 qualifying edge | 0% → **100%** | 0 | `lowerCamelCase` top-level singleton objects defeated the existing Uppercase-gated resolver peel the same way a package segment would |
 | Rust | Meilisearch (17-crate workspace, 726 files) | Independent regex-based `use`/`Cargo.toml` parser | 30-target stratified sample, 295 edges | 59.0% → **100%** | 0 | (1) Multi-segment `crate::`/`super::` paths only ever consumed their first segment, with `super::` unconditionally failing; (2) grouped `use crate::{a,b,c}` imports matched on a keyword-typed AST node the extractor didn't recognize, silently dropping the entire statement |
 | C# | Jellyfin, Godot C# glue | Real-corpus grep (idiom itself was fixture-only — absent from both corpora) | Fixture + incidental real-corpus hit | N/A for the target idiom | — | Investigating the (absent) target idiom surfaced that namespace fan-out was never wired into the dependency graph at all for zero-import files |
+| PHP | WordPress core (`samples/php`, 1,927 files) | Buildless `require`/`require_once`/`include`/`include_once` string-expression resolver (not `use`/namespace — see [harness README](../internal-docs/planning/dogfood-findings/php-recall-oracle/README.md) for why) | 33-target stratified sample, 387 edges | **0.00%** (filed, not fixed) | 0 | `depends://`'s PHP resolver only recognizes a bare string-literal require/include target; every real WordPress require/include uses string concatenation (`__DIR__ . 'x.php'`, `ABSPATH . WPINC . 'x.php'`, etc. — confirmed 0 bare-literal requires exist anywhere in the corpus), so the resolver's `module_name` ends up as unmatchable garbage text on effectively 100% of real statements. Filed as BACK-564 (not fixed — a shared `generic.py` extractor change, out of this session's measurement scope) |
 
-**Nine measurement loops, eight real bugs found and fixed** (the ninth,
-C#'s `global using`, cleared the specific idiom as architecturally absent from
-both real corpora checked, but the investigation still surfaced and fixed an
-unrelated namespace-indexing gap). Every fix shipped with regression tests
-(fail-before/pass-after confirmed by disabling the fix in place, not by
-reverting source) and a full-suite run showing zero regressions elsewhere.
+**Ten measurement loops, eight real bugs found and fixed, one (PHP) found and
+filed but not yet fixed.** C#'s `global using` cleared the specific idiom as
+architecturally absent from both real corpora checked, but the investigation
+still surfaced and fixed an unrelated namespace-indexing gap. Every *fixed*
+bug shipped with regression tests (fail-before/pass-after confirmed by
+disabling the fix in place, not by reverting source) and a full-suite run
+showing zero regressions elsewhere.
 
 ## What the false positives mean
 
@@ -87,7 +89,7 @@ rather than hiding a real edge.
 The following are **not** in the table above because they have not been
 run through an independent-oracle diff against a real corpus:
 
-- **Swift, PHP, C++, Dart, Lua, Zig, GDScript, C** — each shares a resolver
+- **Swift, C++, Dart, Lua, Zig, GDScript, C** — each shares a resolver
   family with at least one already-measured language, but has not been
   independently confirmed on its own real corpus.
 - **Java's residual 3/975 misses** — root-caused to a directory-name
