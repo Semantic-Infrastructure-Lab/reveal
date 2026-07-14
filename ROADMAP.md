@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-07-13 (enchanted-gargoyle-0713 — v0.108.0 release: contracts/surface 8-language coverage, --transitive blast-radius, architecture --against, BACK-547 recall-oracle program complete)
+> **Last updated**: 2026-07-13 (enchanted-gargoyle-0713 — v0.108.1 release: critical dependency-pin fix, v0.108.0 broke on every fresh install)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,11 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.108.1 — critical fix: v0.108.0 broke on every fresh install (tree-sitter-language-pack 1.12.5 incompatibility)
+- ✅ Capped `tree-sitter-language-pack` to `<1.12.5` — 1.12.5 changed `Parser.parse()`'s required type and `Tree.root_node`'s calling convention, silently breaking parsing for every language on every OS on any fresh `pip install` (BACK-573).
+- ✅ Fixed a Windows-only regression in PHP `__DIR__`/constant-anchor import resolution (path vs. namespace-separator collision).
+- ✅ CI "Tests" workflow green on all 6 platform/Python combinations for the first time in ~2 days.
 
 ### v0.108.0 — contracts/surface 8-language coverage + --transitive blast-radius + architecture --against + BACK-547 recall-oracle program complete
 - ✅ `contracts`/`surface` extended from 2 to 8 languages — Java, C#, PHP, Swift, Kotlin, Ruby added, matching Python/TypeScript (BACK-403 pt 2).

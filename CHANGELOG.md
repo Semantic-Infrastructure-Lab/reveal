@@ -12,6 +12,15 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.108.1] - 2026-07-13 (session enchanted-gargoyle-0713)
+
+### Fixed
+- **Critical: fresh installs of v0.108.0 got a broken parser on every language, every OS (BACK-573)** — `pyproject.toml` pinned only a floor on `tree-sitter-language-pack` (`>=1.8.1`), no ceiling. `tree-sitter-language-pack` 1.12.5 changed `Parser.parse()` to require `bytes` instead of `str` and `Tree.root_node` from a callable method to a property; `treesitter.py`'s broad exception handler around the parse call silently swallowed the resulting `TypeError` and returned an empty tree, so `get_structure()` came back `{}` for every file. Found via the CI "Tests" workflow, which had been red on every platform for ~2 days — the local dev environment's already-installed older pin masked the regression. Capped to `<1.12.5` (1.12.2 confirmed last-known-good via version bisection); real forward-compat work (the ~19 call sites using `.root_node()` as a method) filed as follow-up, not attempted under release pressure.
+- **PHP `__DIR__`/constant-anchor import resolution silently failed on Windows (BACK-564/565 regression)** — the absolute module path built by `str(anchor / remainder)` renders native (backslash) separators on Windows, which collided with PHP's `\` namespace separator: `_resolve_module` checked for a namespace split before checking whether the string was a filesystem path, so an absolute Windows path got misparsed as bogus namespace components and resolved to `None` instead of the real file. Reordered the checks — path-shaped strings (absolute, `/`-containing, or source-extension-suffixed) now win over namespace-separator splitting on every platform.
+- **`TestTier2Pbixray` (xlsx adapter tests) hard-failed instead of skipping** when the optional `pbixray` extra wasn't installed — which is always, in CI's `.[dev]` install. Added the same `pytest.importorskip` guard this test file already uses for `openpyxl`.
+
+Verified in a venv reproducing CI's exact install (`pip install -e ".[dev]"`, no `pbixray`, dependency resolution matching `pyproject.toml`'s new ceiling): full suite green on all 6 CI platform/Python combinations (ubuntu/macos/windows × 3.10/3.12). Local suite (pinned to the older known-good `tree-sitter-language-pack==1.8.1`) unaffected throughout: 10,885 passed, 0 failed.
+
 ## [0.108.0] - 2026-07-13 (sessions glossy-luster-0711, gihudo-0711, rainy-eddy-0711, extragalactic-expedition-0711, titanic-kaiju-0711, ochre-gleam-0711, navy-tint-0711, weightless-horizon-0712, sacred-seraph-0713, merging-station-0713, drifting-neutron-0713, pearl-spark-0713, enchanted-gargoyle-0713)
 
 ### Added
