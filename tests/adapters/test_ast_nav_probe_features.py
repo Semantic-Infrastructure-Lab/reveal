@@ -1283,6 +1283,23 @@ class TestClassifyCallReceiver(unittest.TestCase):
         self.assertIsNone(classify_call('conn.Close', language='go'))
         self.assertIsNone(classify_call('conn.Subprotocol', language='go'))
 
+    def test_requests_receiver_no_longer_classifies_as_http(self):
+        # BACK-640 (sideeffects-recall-oracle/java): 'requests' (Python's
+        # requests library alias) REMOVED from the unscoped http receiver
+        # fallback — as a bare English plural noun it collided with Java's
+        # `request.requests.get(i)` field access (a list field, not HTTP),
+        # same class as BACK-594's conn/session/cache drop. Redundant with
+        # the explicit python http patterns below (still classify correctly).
+        from reveal.adapters.ast.nav_effects import classify_call
+        # language='java' scopes out python's explicit 'requests.get'
+        # segment pattern, isolating the receiver-fallback path (which runs
+        # unconditionally regardless of language) — this is what the real
+        # corpus false positive hit via `reveal ... --sideeffects` on a
+        # detected-Java file.
+        self.assertIsNone(classify_call('request.requests.get', language='java'))
+        self.assertEqual(classify_call('requests.get', language='python'), 'http')
+        self.assertEqual(classify_call('requests.post', language='python'), 'http')
+
     def test_underscore_log_warning_classifies_as_log(self):
         # Restoration after BACK-283: was matched by substring on 'log',
         # now matched cleanly via receiver segment.
@@ -1392,6 +1409,14 @@ class TestClassifyCallReceiver(unittest.TestCase):
     def test_java_system_getenv_classifies_as_env(self):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertEqual(classify_call('System.getenv'), 'env')
+
+    def test_java_system_getproperty_classifies_as_env(self):
+        # BACK-639 (sideeffects-recall-oracle/java, real-corpus measurement on
+        # Elasticsearch): System.getProperty is Java's dominant env-config-read
+        # idiom (JVM system properties) and was entirely unclassified — 12/13
+        # real env misses in the stratified sample traced to it.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('System.getProperty'), 'env')
 
     def test_java_slf4j_classifies_as_log(self):
         from reveal.adapters.ast.nav_effects import classify_call
@@ -3233,6 +3258,74 @@ class TestTsxDepsExcludesLowercaseJsxTags(unittest.TestCase):
         # Only the real `{div}` expression reference is a read — not the
         # opening/closing <div> tag-name occurrences.
         self.assertEqual(read_lines, [3])
+
+
+# ─── BACK-638: Java/C# constructor_declaration missing from FUNCTION_NODE_TYPES
+# / DEF_NODES / KEYWORD_LABEL ──────────────────────────────────────────────
+# A Java constructor's name equals its enclosing class name, and
+# `constructor_declaration` was absent from every function-node taxonomy —
+# so element/nav lookups by that name fell through _find_element_node's
+# 'function' pass entirely and matched the class_declaration node instead
+# (same string name), silently returning the WHOLE CLASS BODY as the
+# constructor's range. `--sideeffects`/`--boundary` on a constructor then
+# attributed sibling methods' effects to it. Found via the Java
+# sideeffects-recall-oracle loop (BACK-547 third language) on real
+# Elasticsearch source: `RecoveryMetricsCollector` and `ElasticsearchIndexWriter`
+# constructors both leaked a `logger.warn(...)` call from an unrelated,
+# much-later method into their own --sideeffects output.
+
+class TestBack638JavaConstructorBoundary(unittest.TestCase):
+    def test_constructor_extracted_as_its_own_function(self):
+        import pathlib
+        import tempfile
+        from reveal.analyzers.java import JavaAnalyzer
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / 'Foo.java'
+            f.write_text(
+                "class Foo {\n"
+                "    private final int x;\n"
+                "    public Foo(int x) {\n"
+                "        this.x = x;\n"
+                "    }\n"
+                "    public void unrelatedMethod() {\n"
+                "        System.out.println(\"unrelated\");\n"
+                "    }\n"
+                "}\n"
+            )
+            structure = JavaAnalyzer(str(f)).get_structure()
+            names = [fn['name'] for fn in structure.get('functions', [])]
+            self.assertIn('Foo', names)
+            self.assertIn('unrelatedMethod', names)
+
+    def test_constructor_boundary_excludes_sibling_method_body(self):
+        import pathlib
+        import tempfile
+        from reveal.analyzers.java import JavaAnalyzer
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / 'Foo.java'
+            f.write_text(
+                "class Foo {\n"
+                "    private final int x;\n"
+                "    public Foo(int x) {\n"
+                "        this.x = x;\n"
+                "    }\n"
+                "    public void unrelatedMethod() {\n"
+                "        System.out.println(\"unrelated\");\n"
+                "    }\n"
+                "}\n"
+            )
+            structure = JavaAnalyzer(str(f)).get_structure()
+            ctor = next(fn for fn in structure['functions'] if fn['name'] == 'Foo')
+            # Regression: pre-fix, this fell through to class_declaration and
+            # spanned the whole class body (through unrelatedMethod's line 8).
+            self.assertLess(ctor['line_end'], 6)
+
+    def test_constructor_declaration_in_def_nodes_taxonomy(self):
+        # node_taxonomy.py side of the same fix — used by --scope's ancestor
+        # chain and the composite-set KEYWORD_LABEL guard rail.
+        from reveal.adapters.ast.node_taxonomy import DEF_NODES, KEYWORD_LABEL
+        self.assertIn('constructor_declaration', DEF_NODES)
+        self.assertEqual(KEYWORD_LABEL['constructor_declaration'], 'DEF')
 
 
 if __name__ == '__main__':

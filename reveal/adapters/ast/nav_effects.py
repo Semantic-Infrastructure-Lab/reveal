@@ -237,7 +237,15 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         ('env', ['std::env']),
     ],
     'java': [
-        ('env', ['system.getenv']),
+        # BACK-639 (sideeffects-recall-oracle/java, real-corpus measurement on
+        # Elasticsearch server): `System.getProperty` is Java's dominant
+        # env-config-read idiom (JVM system properties, e.g. `-Des.foo=bar`)
+        # and was entirely unclassified — 12/13 real env misses in the
+        # stratified sample traced to it (`System.getProperty("es.logs.base_path")`
+        # in bootstrap/Bootstrap.java, `System.getProperty("es.index.max_number_of_shards", ...)`
+        # in IndexMetadata.java, and 10 more). Dotted `system.` prefix => zero
+        # collision risk, same shape as the existing `system.getenv` entry.
+        ('env', ['system.getenv', 'system.getproperty']),
     ],
     # BACK-477: Kotlin's kotlin.io File extension functions — none of these
     # match any existing pattern (verified: 'writeText'/'appendText'/etc are
@@ -384,7 +392,13 @@ _RECEIVER_TAXONOMY: List[Tuple[str, List[str]]] = [
     ('db', ['cursor', 'db', 'engine']),
     ('cache', ['redis', 'memcache']),
     ('log', ['logger', '_log', 'log', '_logger', 'ilogger', 'slf4j']),
-    ('http', ['httpx', 'aiohttp', 'requests', 'httpclient', '_httpclient']),
+    # BACK-640 (sideeffects-recall-oracle/java): 'requests' (Python's requests
+    # library alias) removed — as a bare English plural noun it collided with
+    # Java's `request.requests.get(i)` field access (a TermVectorsRequest
+    # list, not HTTP), same class as BACK-594's conn/session/cache drop.
+    # Redundant with explicit python http patterns (requests.get/post/put/
+    # delete already in _TAXONOMY_BY_LANG['python']), so no recall loss.
+    ('http', ['httpx', 'aiohttp', 'httpclient', '_httpclient']),
     # BACK-401: .NET BCL / JVM stdlib receivers for File/Directory/Path-style
     # I/O and env access — safe as non-final-only receiver matches (see
     # module docstring caution on why these aren't bare _TAXONOMY patterns).

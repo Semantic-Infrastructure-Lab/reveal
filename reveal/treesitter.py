@@ -87,6 +87,17 @@ FUNCTION_NODE_TYPES = (
     'function',              # Generic
     'method',                # Ruby
     'Decl',                   # Zig (wraps FnProto + body; see ZigAnalyzer._get_node_name)
+    # BACK-638: Java/C# constructors parse to a DISTINCT node kind from
+    # method_declaration, not a same-name variant of it. Without this, a
+    # constructor's name lookup (--boundary/--effects/--scope/element
+    # extraction) fell through _find_element_node's 'function' pass entirely
+    # and matched the enclosing class_declaration instead (same string name),
+    # silently returning the WHOLE CLASS BODY as the constructor's range —
+    # sibling methods' effects leaked into constructor --sideeffects results.
+    # Found via the Java sideeffects-recall-oracle loop (BACK-547 third
+    # language): reveal RecoveryMetricsCollector.java RecoveryMetricsCollector
+    # --boundary showed effects from an unrelated method ~70 lines later.
+    'constructor_declaration',  # Java, C#
     # BACK-478: 'function_definition_statement'/'local_function_definition_statement'
     # used to be listed here as Lua's global/local function kinds. Verified via
     # direct tree-sitter inspection: both `function foo() end` and

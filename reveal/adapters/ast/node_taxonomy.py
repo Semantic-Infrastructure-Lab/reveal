@@ -181,6 +181,10 @@ DEF_NODES: frozenset = frozenset({
     # FUNCTION_NODE_TYPES but were already covered here via 'function_declaration'
     # (real Lua node kind; the treesitter.py comment naming them appears stale).
     'method', 'function_signature', 'Decl',
+    # BACK-638: Java/C# constructor_declaration — same gap as treesitter.py's
+    # FUNCTION_NODE_TYPES (see comment there); without this, --scope also
+    # silently dropped a constructor as its own ancestor for a nested line.
+    'constructor_declaration',
 })
 CLASS_NODES: frozenset = frozenset({
     'class_definition', 'class_declaration', 'class',
@@ -382,6 +386,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'method_definition': 'DEF', 'method_declaration': 'DEF',
     'arrow_function': 'DEF',
     'method': 'DEF', 'function_signature': 'DEF', 'Decl': 'DEF',
+    'constructor_declaration': 'DEF',  # BACK-638: Java/C#
     'lambda': 'LAMBDA',
     'class_definition': 'CLASS', 'class_declaration': 'CLASS', 'class': 'CLASS',
     'class_specifier': 'CLASS', 'anonymous_class': 'CLASS',
