@@ -112,15 +112,17 @@ cpp:
   sideeffects:
   - {line: 21, kind: file}
   - {line: 26, kind: file}
-  # Tier 2 (BACK-422/BACK-421): macro-hidden early return, line 20
+  # BACK-421 part 3 (RESOLVED): macro-hidden early return, line 20
   # (`CHECK_OR_RETURN(result < 1000, -1)` expands to `if (!(cond)) return (val)`)
-  # is invisible to --exits/--returns/--ifmap — tree-sitter parses the raw
+  # is invisible to node-kind matching alone — tree-sitter parses the raw
   # source, not the preprocessor-expanded form, so the macro invocation is
   # just a plain call_expression, not an if_statement/return_statement node.
-  # BACK-421 part 3, confirmed on this minimal repro; fix needs macro-name
-  # heuristics, not just node-kind matching — left open, not fixed this session.
+  # Fixed via callee-name heuristics (nav_exits._is_exit_call): known C++
+  # error-macro names/prefixes (CHECK_OR_RETURN, ERR_FAIL_*) are treated as
+  # an EXIT the same way die/exit/raise/fail already were for other languages.
   exits:
   - {kind: RETURN, line: 18}
+  - {kind: EXIT, line: 20}
   - {kind: RETURN, line: 23}
   - {kind: RETURN, line: 28}
   ifmap:
@@ -131,6 +133,7 @@ cpp:
   mutations_probe: {range: "16-16", var: result, next_read_line: 17}
   returns:
   - {line: 18, gate_lines: [17]}
+  - {line: 20, gate_lines: []}
   - {line: 23, gate_lines: [22]}
   - {line: 28, gate_lines: []}
   # `Batch.run` named extraction fails for C++ (BACK-451, filed not fixed) —
@@ -268,27 +271,31 @@ rust:
   - {kind: READ, line: 19}
   sideeffects:
   - {line: 15, kind: file}
-  # BACK-428 (found this session, not fixed): --exits only sees the one
-  # explicit `return Err(e)` (line 16). It misses both of Rust's implicit
-  # exit idioms: the `?` operator on line 14 (`validate(order)?` returns
-  # early on Err without a `return` keyword) and the tail-expression return
-  # on line 19 (`Ok(result)` with no `return`, no semicolon — the function's
-  # value). Root cause: --exits/--returns only match `return_statement`/
-  # `return_expression` node kinds; both Rust idioms are structurally
-  # different node types (`try_expression` postfix `?`, and a bare tail
-  # expression). Same disease as BACK-421 (macro-hidden exits) but a
-  # different, non-mechanical fix — needs real "what counts as exiting this
-  # function" semantics per idiom, not just a node-kind-set extension like
-  # BACK-427's if_expression fix was. Left open.
+  # BACK-428 (RESOLVED): --exits now also finds Rust's two implicit exit
+  # idioms alongside the explicit `return Err(e)` (line 16): the `?`
+  # operator on line 14 (`validate(order)?` returns early on Err) and the
+  # tail-expression return on line 19 (`Ok(result)`, no `return` keyword, no
+  # semicolon — the function's value). Fixed via structural (not
+  # node-kind-set) detection in nav_exits.py: `?` parses to a
+  # `try_expression` node, but that exact kind string collides with
+  # Kotlin's try/catch/finally block, so it's disambiguated by checking for
+  # a literal '?' child rather than added to the shared taxonomy; the tail
+  # expression has no distinguishing node kind at all, so it's found
+  # positionally (last non-brace child of a `function_item`'s own `block`,
+  # when not wrapped in a statement kind like `expression_statement`).
   exits:
+  - {kind: RETURN, line: 14}
   - {kind: RETURN, line: 16}
+  - {kind: RETURN, line: 19}
   ifmap:
   - {keyword: IF, line_start: 15}
   catchmap:
     not_supported: true  # Rust has no try/catch (uses Result/? instead)
   mutations_probe: {range: "14-14", var: result, next_read_line: 15}
   returns:
+  - {line: 14, gate_lines: []}
   - {line: 16, gate_lines: [15]}
+  - {line: 19, gate_lines: []}
   batch_element: Batch.run
   loopmap:
   - {keyword: FOR, line_start: 53}

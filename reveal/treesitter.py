@@ -1249,7 +1249,24 @@ class TreeSitterAnalyzer(FileAnalyzer):
         class method returned no name and was silently dropped from the
         structure entirely — invisible to ``--outline`` and ``Class.method``
         extraction alike.
+
+        BACK-421 part 2: an out-of-line C++ method definition
+        (``int Widget::compute(int x) { ... }``) declarator-nests a
+        ``qualified_identifier`` (``namespace_identifier`` "Widget", ``::``,
+        ``identifier`` "compute"). Plain recursion would find the innermost
+        identifier-kind child and return bare "compute", silently dropping
+        the class association. Joining every identifier-shaped child of a
+        ``qualified_identifier`` with "::" preserves it as "Widget::compute".
         """
+        if node.kind() == 'qualified_identifier':
+            parts = [
+                self._get_node_text(child)
+                for child in _children(node)
+                if child.kind() in ('identifier', 'namespace_identifier', 'field_identifier', 'type_identifier')
+            ]
+            if parts:
+                return '::'.join(parts)
+
         # Check current node
         if node.kind() in ('identifier', 'name', 'simple_identifier', 'field_identifier'):
             return self._get_node_text(node)

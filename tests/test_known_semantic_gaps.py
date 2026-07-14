@@ -1,10 +1,18 @@
 """BACK-437: make accepted-hard semantic gaps VISIBLE in test output.
 
-BACK-421 (parts 2/3), BACK-428, and non-Python ``--narrow`` are real,
-open-by-design gaps: each needs per-idiom *semantic* work (macro-name
-heuristics, qualifier-preserving name extraction, per-language exit/annotation
-semantics), not a mechanical node-kind addition. See
+Non-Python ``--narrow`` is a real, open-by-design gap: it needs per-language
+annotation/guard semantics, not a mechanical node-kind addition. See
 ``internal-docs/design/MULTI_LANGUAGE_ARCHITECTURE_2026-07-03.md``.
+
+(BACK-421 parts 2/3 and BACK-428 — qualifier-preserving name extraction,
+macro-hidden early returns, and Rust's `?`/tail-expression implicit exits —
+have all been resolved. Their tests below are now plain regression tests:
+``test_cpp_out_of_line_method_keeps_class_qualifier`` stays here since it
+targets a synthetic tmp_path fixture, not the shared conformance corpus;
+``test_cpp_macro_hidden_return_is_an_exit`` and
+``test_rust_implicit_exits_are_found`` are now redundant with
+``test_conformance_matrix.py``'s data-driven `exits`/`returns` checks but
+are kept as easy-to-find named pins for these idioms.)
 
 Until this file existed, those gaps lived only in prose — BACKLOG notes and
 ``expected.yaml`` comments — so a fully-green conformance suite read as "no
@@ -40,15 +48,13 @@ def _run(*args) -> str:
     return res.stdout
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BACK-421 part 3: macro-hidden early return is invisible to --exits. "
-    "CHECK_OR_RETURN(...) expands to `if (!(cond)) return (val)` but tree-sitter "
-    "parses the raw source, seeing a plain call_expression, not a "
-    "return_statement. Needs macro-name heuristics, not node-kind matching.",
-)
 def test_cpp_macro_hidden_return_is_an_exit():
-    """process_order's line-20 CHECK_OR_RETURN is a real early exit."""
+    """process_order's line-20 CHECK_OR_RETURN is a real early exit.
+
+    Superseded by the real conformance matrix (expected.yaml's cpp `exits`/
+    `returns` entries now include line 20) — kept here as a standalone,
+    easy-to-find regression pin for this specific idiom.
+    """
     out = _run(_FIXTURES / "cpp" / "sample.cpp", "process_order", "--exits",
                "--format", "json")
     exit_lines = {f["line"] for f in json.loads(out)["findings"]}
@@ -57,13 +63,6 @@ def test_cpp_macro_hidden_return_is_an_exit():
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BACK-421 part 2: out-of-line `Widget::compute` definitions strip the "
-    "`Widget::` qualifier during name extraction, so the method is reported as a "
-    "free function `compute` with no class association. Needs qualifier-preserving "
-    "name extraction in treesitter.py.",
-)
 def test_cpp_out_of_line_method_keeps_class_qualifier(tmp_path):
     """An out-of-line C++ method definition should keep its class association."""
     src = tmp_path / "widget.cpp"
@@ -90,15 +89,13 @@ def test_cpp_out_of_line_method_keeps_class_qualifier(tmp_path):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BACK-428: Rust's implicit exits are invisible to --exits — the `?` "
-    "postfix operator (early Err return) and a bare tail expression (the "
-    "function's return value) are not `return_statement`/`return_expression` "
-    "nodes. Needs per-idiom 'what counts as exiting this function' semantics.",
-)
 def test_rust_implicit_exits_are_found():
-    """process_order has 3 exits: `?` (L14), explicit return (L16), tail (L19)."""
+    """process_order has 3 exits: `?` (L14), explicit return (L16), tail (L19).
+
+    Superseded by the real conformance matrix (expected.yaml's rust `exits`/
+    `returns` entries now include lines 14 and 19) — kept here as a
+    standalone, easy-to-find regression pin for these two idioms.
+    """
     out = _run(_FIXTURES / "rust" / "sample.rs", "process_order", "--exits",
                "--format", "json")
     exit_lines = {f["line"] for f in json.loads(out)["findings"]}

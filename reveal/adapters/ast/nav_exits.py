@@ -17,6 +17,78 @@ from ...core import node_children as _children
 # (Ruby `raise ArgumentError` was invisible to --exits/--returns/--flowto).
 _EXIT_CALL_NAMES: frozenset = frozenset({'die', 'exit', 'raise', 'fail'})
 
+# BACK-421 part 3: C++ error-handling macros expand to an early return, but
+# tree-sitter parses the raw (pre-preprocessor) source, so they appear as a
+# plain call_expression -- e.g. `CHECK_OR_RETURN(cond, val)` expands to
+# `if (!(cond)) return (val)`. Godot's ERR_FAIL_* family (ERR_FAIL_COND,
+# ERR_FAIL_COND_V_MSG, ERR_FAIL_NULL, ...) is the same idiom under a
+# different name -- matched by prefix rather than enumerating every
+# variant, since upstream adds new _MSG/_V/_EDMSG suffixes regularly.
+_CPP_MACRO_EXIT_PREFIXES: tuple = ('ERR_FAIL',)
+_CPP_MACRO_EXIT_NAMES: frozenset = frozenset({'CHECK_OR_RETURN'})
+
+
+def _is_exit_call(callee: Optional[str]) -> bool:
+    """True if a call_expression callee name is a known exit idiom (die/exit/raise/fail, C++ error macros)."""
+    if callee is None:
+        return False
+    if callee in _EXIT_CALL_NAMES or callee in _CPP_MACRO_EXIT_NAMES:
+        return True
+    return callee.startswith(_CPP_MACRO_EXIT_PREFIXES)
+
+
+# BACK-428: Rust's `?` postfix operator (`validate(order)?`) conditionally
+# propagates an early `Err` return. It parses to a `try_expression` node --
+# but that exact kind string is ALSO Kotlin's try/catch/finally block
+# (node_taxonomy.py's TRY_NODES comment documents this collision and
+# deliberately keeps `try_expression` out of the shared taxonomy for this
+# reason). Adding it to EXIT_NODES/KEYWORD_LABEL globally would misclassify
+# every Kotlin try-block as a RETURN exit. Disambiguated structurally
+# instead: Rust's try_expression always has a literal '?' child (confirmed
+# via direct tree-sitter inspection: children are `[<expr>, '?']`); Kotlin's
+# always opens with a literal 'try' keyword child. Checked per-callsite here
+# rather than folded into the taxonomy, since the taxonomy has no concept of
+# "same kind string, different language, disambiguate by shape."
+def _is_rust_try_propagation(node: Any) -> bool:
+    return node.kind() == 'try_expression' and any(c.kind() == '?' for c in _children(node))
+
+
+# Statement-shaped kinds that can appear as a direct child of a Rust `block`.
+# Anything else appearing as the LAST such child (before the closing '}') is
+# a bare tail expression -- Rust's implicit-return idiom: no distinguishing
+# node kind exists (it's the same expression kinds used everywhere else),
+# only its position (last, unwrapped by expression_statement/no semicolon).
+_RUST_BLOCK_STATEMENT_KINDS: frozenset = frozenset({
+    'expression_statement', 'let_declaration', 'empty_statement',
+    'const_item', 'static_item', 'function_item', 'struct_item',
+    'enum_item', 'impl_item', 'trait_item', 'mod_item', 'use_declaration',
+    'type_item', 'union_item', 'macro_definition', 'macro_invocation',
+    'attribute_item', 'inner_attribute_item',
+    'line_comment', 'block_comment', '{', '}',
+})
+
+
+def _find_rust_tail_expression(scope_node: Any) -> Optional[Any]:
+    """Return the function's implicit-return tail expression node, if any.
+
+    Only called when scope_node.kind() == 'function_item' -- Rust's own
+    function-node kind, so this never fires for another language's block.
+    """
+    body = None
+    for child in _children(scope_node):
+        if child.kind() == 'block':
+            body = child
+    if body is None:
+        return None
+    last = None
+    for child in _children(body):
+        if child.kind() in ('{', '}'):
+            continue
+        last = child
+    if last is not None and last.kind() not in _RUST_BLOCK_STATEMENT_KINDS:
+        return last
+    return None
+
 # Mapping from exit node type to kind label — derived from the shared
 # taxonomy (node_taxonomy.py) so it can't drift from EXIT_NODES/KEYWORD_LABEL
 # the way BACK-431 found it had (bare 'break'/'continue' were hand-added
@@ -77,15 +149,31 @@ def collect_exits(
                     text = text[:77] + '...'
                 results.append({'kind': kind, 'line': line, 'text': text})
                 continue
+            if _is_rust_try_propagation(node):
+                text = get_text(node).splitlines()[0].strip()
+                if len(text) > 80:
+                    text = text[:77] + '...'
+                results.append({'kind': 'RETURN', 'line': line, 'text': text})
+                continue
             if node.kind() in call_node_types:
                 callee = _extract_callee(node, get_text)
-                if callee in _EXIT_CALL_NAMES:
+                if _is_exit_call(callee):
                     text = get_text(node).splitlines()[0].strip()
                     if len(text) > 80:
                         text = text[:77] + '...'
                     results.append({'kind': 'EXIT', 'line': line, 'text': text})
 
         stack.extend(reversed(_children(node)))
+
+    if scope_node.kind() == 'function_item':
+        tail = _find_rust_tail_expression(scope_node)
+        if tail is not None:
+            tail_line = tail.start_position().row + 1
+            if from_line <= tail_line <= to_line:
+                text = get_text(tail).splitlines()[0].strip()
+                if len(text) > 80:
+                    text = text[:77] + '...'
+                results.append({'kind': 'RETURN', 'line': tail_line, 'text': text})
 
     results.sort(key=lambda r: r['line'])
     return results
@@ -291,9 +379,15 @@ def collect_gate_chains(
                     text = text[:77] + '...'
                 results.append({'kind': _EXIT_KIND[ntype], 'line': line, 'text': text, 'gates': gates[:]})
                 return
+            if _is_rust_try_propagation(node):
+                text = get_text(node).splitlines()[0].strip()
+                if len(text) > 80:
+                    text = text[:77] + '...'
+                results.append({'kind': 'RETURN', 'line': line, 'text': text, 'gates': gates[:]})
+                return
             if ntype in call_node_types:
                 callee = _extract_callee(node, get_text)
-                if callee in _EXIT_CALL_NAMES:
+                if _is_exit_call(callee):
                     text = get_text(node).splitlines()[0].strip()
                     if len(text) > 80:
                         text = text[:77] + '...'
@@ -309,6 +403,17 @@ def collect_gate_chains(
                 walk(child, gates)
 
     walk(scope_node, [])
+
+    if scope_node.kind() == 'function_item':
+        tail = _find_rust_tail_expression(scope_node)
+        if tail is not None:
+            tail_line = tail.start_position().row + 1
+            if from_line <= tail_line <= to_line:
+                text = get_text(tail).splitlines()[0].strip()
+                if len(text) > 80:
+                    text = text[:77] + '...'
+                results.append({'kind': 'RETURN', 'line': tail_line, 'text': text, 'gates': []})
+
     results.sort(key=lambda r: r['line'])
     return results
 
