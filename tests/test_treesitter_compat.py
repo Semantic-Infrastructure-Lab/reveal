@@ -14,13 +14,15 @@ from reveal.core import (
     node_children,
     node_prev_sibling,
     node_next_sibling,
+    tree_root,
+    ts_parse,
 )
 
 
 def _parse(code: str, lang: str = 'python'):
     parser = ts.get_parser(lang)
-    tree = parser.parse(code)
-    return tree.root_node()
+    tree = ts_parse(parser, code)
+    return tree_root(tree)
 
 
 class TestNodeChildren(unittest.TestCase):
@@ -142,6 +144,79 @@ class TestRoundTripWithCheckpoints(unittest.TestCase):
             forward = node_next_sibling(prv)
             self.assertIsNotNone(forward)
             self.assertEqual(forward.start_byte(), mid.start_byte())
+
+
+class TestTreeRoot(unittest.TestCase):
+    """tree_root() must work across the 1.12.5 root_node method→property change.
+
+    tree-sitter-language-pack <1.12.5 exposes `Tree.root_node` as a bound
+    method; 1.12.5+ exposes it as a property (BACK-573/BACK-574).
+    """
+
+    class _MethodStyleTree:
+        """Simulates <1.12.5: root_node is callable."""
+
+        def __init__(self, node):
+            self._node = node
+
+        def root_node(self):
+            return self._node
+
+    class _PropertyStyleTree:
+        """Simulates >=1.12.5: root_node is a plain attribute."""
+
+        def __init__(self, node):
+            self.root_node = node
+
+    def test_real_installed_tree(self):
+        # Whatever calling convention the currently-installed pin uses,
+        # tree_root() must resolve to the real root node either way.
+        tree = ts.get_parser('python').parse('x = 1')
+        root = tree_root(tree)
+        self.assertEqual(root.kind(), 'module')
+
+    def test_method_style_root_node(self):
+        sentinel = object()
+        tree = self._MethodStyleTree(sentinel)
+        self.assertIs(tree_root(tree), sentinel)
+
+    def test_property_style_root_node(self):
+        sentinel = object()
+        tree = self._PropertyStyleTree(sentinel)
+        self.assertIs(tree_root(tree), sentinel)
+
+
+class TestTsParse(unittest.TestCase):
+    """ts_parse() must work across the 1.12.5 str→bytes change in Parser.parse()."""
+
+    class _StrOnlyParser:
+        """Simulates <1.12.5: parse() requires str, rejects bytes."""
+
+        def parse(self, source):
+            if not isinstance(source, str):
+                raise TypeError("argument 'source': not an instance of 'str'")
+            return ('parsed-str', source)
+
+    class _BytesOnlyParser:
+        """Simulates >=1.12.5: parse() requires bytes, rejects str."""
+
+        def parse(self, source):
+            if not isinstance(source, bytes):
+                raise TypeError('source must be a bytestring or a callable, not str')
+            return ('parsed-bytes', source)
+
+    def test_real_installed_parser(self):
+        parser = ts.get_parser('python')
+        tree = ts_parse(parser, 'x = 1')
+        self.assertEqual(tree_root(tree).kind(), 'module')
+
+    def test_str_only_parser_gets_str(self):
+        result = ts_parse(self._StrOnlyParser(), 'hello')
+        self.assertEqual(result, ('parsed-str', 'hello'))
+
+    def test_bytes_only_parser_falls_back_to_bytes(self):
+        result = ts_parse(self._BytesOnlyParser(), 'hello')
+        self.assertEqual(result, ('parsed-bytes', b'hello'))
 
 
 if __name__ == '__main__':

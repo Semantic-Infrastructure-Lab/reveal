@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any, List, Tuple
 
 from ..registry import get_analyzer, get_all_analyzers
 from ..core import node_children as _children
+from ..core import tree_root
 from ..capabilities import get_capability
 
 _CAPABILITY_METHODS = [
@@ -143,7 +144,7 @@ def show_ast(path: str, max_depth: Optional[int] = None) -> str:
         lines.append(f"🌳 Tree-sitter AST: {path}")
         lines.append("")
 
-        root_node = analyzer.tree.root_node()
+        root_node = tree_root(analyzer.tree)
         src_bytes = analyzer.content.encode('utf-8')
         lines.append(_format_ast_node(root_node, depth=0, max_depth=max_depth, src_bytes=src_bytes))
 

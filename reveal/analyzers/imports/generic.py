@@ -58,6 +58,7 @@ from pathlib import Path
 from typing import ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from ...core import node_children as _children
+from ...core import tree_root
 from ...registry import get_analyzer
 from ...utils.path_utils import is_skippable_dir
 from .base import LanguageExtractor, register_extractor
@@ -885,7 +886,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             for child in _children(node):
                 walk(child)
 
-        walk(analyzer.tree.root_node())
+        walk(tree_root(analyzer.tree))
         return refs
 
     # --- internals -------------------------------------------------------

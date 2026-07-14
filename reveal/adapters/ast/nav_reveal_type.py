@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ...core import suppress_treesitter_warnings  # noqa: F401 — called at scan time
 from ...core import node_children as _children
+from ...core import tree_root
 from ...utils.path_utils import is_skippable_dir
 
 
@@ -67,7 +68,7 @@ def _scan_file(file_path: str, var_name: str, evidence: List[Dict[str, Any]]) ->
         if not hasattr(analyzer, 'tree') or not analyzer.tree:
             return
         get_text: Callable = analyzer._get_node_text
-        root = analyzer.tree.root_node()
+        root = tree_root(analyzer.tree)
         _walk(root, var_name, get_text, file_path, evidence, func_stack=[])
     except Exception:  # noqa: BLE001
         pass

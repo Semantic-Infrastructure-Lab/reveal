@@ -35,6 +35,7 @@ from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line, _add_once
 
 from reveal.core import node_children as _children
+from reveal.core import tree_root, ts_parse
 
 _NET_GEMS: frozenset = frozenset({
     'net/http', 'faraday', 'httparty', 'excon', 'typhoeus', 'rest-client',
@@ -77,7 +78,7 @@ def scan_file_surface_ruby(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
         from tree_sitter_language_pack import get_parser
         source = Path(file_path).read_text(errors='replace')
         parser = get_parser('ruby')
-        tree = parser.parse(source)
+        tree = ts_parse(parser, source)
     except Exception:
         return {k: [] for k in _EMPTY_KEYS}
 
@@ -88,7 +89,7 @@ def scan_file_surface_ruby(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
     surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _EMPTY_KEYS}
 
-    stack = [tree.root_node()]
+    stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
         kind = node.kind()

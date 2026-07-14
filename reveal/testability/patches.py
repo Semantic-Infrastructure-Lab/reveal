@@ -11,7 +11,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from ..core.treesitter_compat import suppress_treesitter_warnings
+from ..core.treesitter_compat import suppress_treesitter_warnings, tree_root, ts_parse
 from ..utils.path_utils import is_skippable_dir
 
 suppress_treesitter_warnings()
@@ -275,8 +275,8 @@ def _scan_file_ts(file_path: Path) -> List[PatchUse]:
     lang = 'tsx' if file_path.suffix in ('.tsx', '.jsx') else 'typescript'
     try:
         parser = get_parser(lang)
-        tree = parser.parse(source)
-        root = tree.root_node()
+        tree = ts_parse(parser, source)
+        root = tree_root(tree)
     except Exception as exc:
         logger.debug('tree-sitter parse failed for %s: %s', file_path, exc)
         return []

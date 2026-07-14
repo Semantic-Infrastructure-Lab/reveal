@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line, _add_once
 
 from reveal.core import node_children as _children
+from reveal.core import tree_root, ts_parse
 
 _NET_PACKAGES: frozenset = frozenset({
     'okhttp3', 'retrofit2', 'io.ktor.client', 'java.net.http', 'org.apache.http',
@@ -69,7 +70,7 @@ def scan_file_surface_kotlin(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
         from tree_sitter_language_pack import get_parser
         source = Path(file_path).read_text(errors='replace')
         parser = get_parser('kotlin')
-        tree = parser.parse(source)
+        tree = ts_parse(parser, source)
     except Exception:
         return {k: [] for k in _EMPTY_KEYS}
 
@@ -79,7 +80,7 @@ def scan_file_surface_kotlin(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
     surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _EMPTY_KEYS}
-    root = tree.root_node()
+    root = tree_root(tree)
 
     # CLI entrypoint: a top-level `fun main` (direct child of the file only, so a
     # class method named main isn't misclassified as an entrypoint).

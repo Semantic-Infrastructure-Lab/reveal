@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
+from .core import tree_root
+
 if TYPE_CHECKING:
     from argparse import Namespace
 
@@ -151,7 +153,7 @@ def _resolve_func_node(analyzer, element: str):
     if func_node is None:
         syntax = _parse_element_syntax(element) if element else None
         if syntax and syntax['type'] == 'line':
-            func_node = analyzer.tree.root_node()
+            func_node = tree_root(analyzer.tree)
             func_start = syntax['start_line']
             func_end = (
                 syntax['end_line']

@@ -53,7 +53,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ...core.treesitter_compat import node_children
+from ...core.treesitter_compat import node_children, tree_root, ts_parse
 from ...utils.path_utils import to_posix
 from .utils import find_reveal_root
 
@@ -196,11 +196,11 @@ class V027(BaseRule):
         parser: Any,
     ) -> List[Detection]:
         """Flag guide-documented params that no longer exist in the schema."""
-        tree = parser.parse(guide_text)
+        tree = ts_parse(parser, guide_text)
         known_params = set(query_params.keys())
 
         detections = []
-        for name, line in _iter_param_column_entries(tree.root_node(), guide_text):
+        for name, line in _iter_param_column_entries(tree_root(tree), guide_text):
             if name in _UNIVERSAL_RESULT_CONTROL or name in known_params:
                 continue
             detections.append(self.create_detection(

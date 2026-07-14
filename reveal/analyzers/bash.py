@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
+from ..core import tree_root
 
 _MAX_VALUE_LEN = 60
 
@@ -52,7 +53,7 @@ class BashAnalyzer(TreeSitterAnalyzer):
             return []
 
         variables = []
-        for child in _children(self.tree.root_node()):
+        for child in _children(tree_root(self.tree)):
             if child.kind() != 'variable_assignment':
                 continue
             name_node = child.child_by_field_name('name')

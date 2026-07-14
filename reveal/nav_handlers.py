@@ -14,6 +14,8 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Callable, List, Optional
 
+from .core import tree_root
+
 
 # Branch keywords for --ifmap and --catchmap filtering
 _IF_KEYWORDS: frozenset = frozenset({'IF', 'ELIF', 'ELSE', 'UNLESS', 'SWITCH', 'CASE', 'DEFAULT'})
@@ -423,7 +425,7 @@ def _nav_scope(analyzer, element: str, as_json: bool) -> None:
         )
         sys.exit(1)
     line_no = syntax['start_line']
-    chain = scope_chain(analyzer.tree.root_node(), line_no, analyzer._get_node_text)
+    chain = scope_chain(tree_root(analyzer.tree), line_no, analyzer._get_node_text)
     if as_json:
         _nav_json('scope', analyzer.path, element, line_no, line_no, chain)
     else:

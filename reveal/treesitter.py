@@ -15,6 +15,8 @@ from .core import suppress_treesitter_warnings
 from .core import node_children as _children
 from .core import node_next_sibling as _next_sibling
 from .core import iter_tree as _iter_tree
+from .core import tree_root
+from .core import ts_parse
 
 # Suppress tree-sitter deprecation warnings (centralized in core module)
 suppress_treesitter_warnings()
@@ -271,7 +273,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         try:
             parser = get_parser(self.language)  # type: ignore[arg-type]  # language is validated at runtime
-            self.tree = parser.parse(self.content)
+            self.tree = ts_parse(parser, self.content)
         except Exception as e:
             logger.debug("tree-sitter parse failed for %s: %s", self.path, e)
             self.tree = None
@@ -958,7 +960,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             # the identical node sequence in document order, so each kind's
             # bucket is byte-identical to the old `stack=[root]; pop; push
             # reversed(children)` walk (verified over 557K real nodes).
-            for node in _iter_tree(self.tree.root_node()):
+            for node in _iter_tree(tree_root(self.tree)):
                 cache.setdefault(node.kind(), []).append(node)
 
             # Write completed node_cache back to module-level cache

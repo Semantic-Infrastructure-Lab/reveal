@@ -13,6 +13,7 @@ from typing import Dict, List, Any, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
+from ..core import tree_root
 
 
 @register('.yaml', '.yml', name='YAML', icon='', category='data')
@@ -52,7 +53,7 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         if not self.tree:
             return []
         pairs: List[Any] = []
-        for node in _children(self.tree.root_node()):
+        for node in _children(tree_root(self.tree)):
             if node.kind() == 'document':
                 pairs.extend(self._get_document_mapping_pairs(node))
         return pairs
@@ -151,7 +152,7 @@ class JsonAnalyzer(TreeSitterAnalyzer):
         # Only look for pairs that are direct children of the root object
         if not self.tree:
             return pairs
-        for node in _children(self.tree.root_node()):
+        for node in _children(tree_root(self.tree)):
             if node.kind() == 'object':
                 pairs.extend(c for c in _children(node) if c.kind() == 'pair')
         return pairs

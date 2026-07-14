@@ -11,6 +11,7 @@ from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..structure_options import StructureOptions
 from ..core import node_children as _children
+from ..core import tree_root, ts_parse
 
 # Cache for markdown_inline parse results, keyed by (path, mtime_ns).
 # Avoids re-parsing the same file's inline content when multiple rules or
@@ -78,7 +79,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
 
                 inline_parser = get_parser('markdown_inline')
-                self.inline_tree = inline_parser.parse(self.content)
+                self.inline_tree = ts_parse(inline_parser, self.content)
                 if cache_key is not None:
                     _inline_parse_cache[cache_key] = self.inline_tree
             except Exception:
@@ -103,8 +104,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             for child in _children(node):
                 _traverse(child)
 
-        if tree and tree.root_node():
-            _traverse(tree.root_node())
+        if tree and tree_root(tree):
+            _traverse(tree_root(tree))
 
         return results
 

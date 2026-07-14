@@ -13,6 +13,7 @@ from typing import Dict, List, Any, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
+from ..core import tree_root
 
 
 @register('Dockerfile', name='Dockerfile', icon='')
@@ -49,7 +50,7 @@ class DockerfileAnalyzer(TreeSitterAnalyzer):
         }
 
         # Extract all instructions
-        for node in _children(self.tree.root_node()):
+        for node in _children(tree_root(self.tree)):
             if node.kind() in instruction_map:
                 key = instruction_map[node.kind()]
                 if key not in structure:

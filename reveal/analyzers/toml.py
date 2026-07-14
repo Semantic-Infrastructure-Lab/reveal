@@ -13,6 +13,7 @@ from typing import Dict, Any, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
+from ..core import tree_root
 
 
 @register('.toml', name='TOML', icon='', category='config')
@@ -53,7 +54,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         sections: list = []
         keys: list = []
 
-        for node in _children(self.tree.root_node()):
+        for node in _children(tree_root(self.tree)):
             if node.kind() == 'pair':
                 self._process_toml_pair_node(node, keys)
             elif node.kind() in ('table', 'table_array_element'):
@@ -86,7 +87,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
     def _find_section_end_line(self, node) -> int:
         """Return end line for a section node (stops at next table or EOF)."""
         end_line = node.end_position().row + 1
-        for sibling in _children(self.tree.root_node()):
+        for sibling in _children(tree_root(self.tree)):
             if sibling.start_position().row <= node.start_position().row:
                 continue
             if sibling.kind() in ['table', 'table_array_element']:
@@ -99,7 +100,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         """Extract a TOML section by name."""
         if not self.tree:
             return super().extract_element(element_type, name)
-        for node in _children(self.tree.root_node()):
+        for node in _children(tree_root(self.tree)):
             if node.kind() not in ['table', 'table_array_element']:
                 continue
             if self._extract_table_name(node) != name:
