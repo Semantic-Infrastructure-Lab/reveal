@@ -22,63 +22,20 @@ from ..utils.query import parse_query_params
 from ..utils.path_utils import (
     is_skippable_dir,
     is_unsafe_scan_root,
+    resolve_project_root,
     search_parents,
-    search_parents_within_ceiling,
+    _PACKAGE_ROOT_MARKERS,
+    _VCS_ROOT_MARKERS,
+    _has_package_marker,
+    _has_vcs_marker,
 )
 
-# BACK-498: find_project_root()'s built-in default markers (pyproject.toml,
-# setup.py/.cfg, .git, Cargo.toml, package.json, go.mod) are Python/JS/Rust/Go-
-# centric — they miss the root marker every package/namespace-resolved language
-# in this adapter's scope actually uses, so for Java/Kotlin/C#/Swift/PHP repos
-# without a discoverable .git it always fell through to the too-narrow parent-
-# dir fallback below. Passed explicitly (not merged into path_utils' shared
-# default) so this widening is scoped to depends://'s own root search and
-# doesn't change behavior for I002/D005/B005's separate, private
-# _find_project_root copies. 'settings.gradle(.kts)' and '*.sln' are true
-# root-only markers (Gradle forbids nested settings files; a solution file
-# sits above its .csproj members) so they can't cause the "found a marker
-# several modules too deep" problem 'pom.xml'/'composer.json' risk in a
-# multi-module tree — those two are still net improvements over the bare
-# parent-dir fallback even when they resolve to a submodule root rather than
-# the monorepo root.
-#
-# BACK-515: this list MUST cover the root marker of every language depends://
-# builds an import graph for — a missing marker isn't a cosmetic gap, it's a
-# hang. When no marker is found, search_parents climbs until it hits ANY
-# ancestor marker (commonly a `.git` far above the real project), and
-# _build_graph then tries to parse every file under it. BACK-514 added
-# import-graph coverage for Lua/Scala/Dart/Zig/GDScript but only Lua's marker
-# reached this list initially; Scala and Dart then reproduced the identical
-# "hang" (a full monorepo scan) — see RESOLVED_LEDGER. The five markers below
-# close that. Each is one-per-package and can nest in a multi-module tree, so
-# like 'pom.xml'/'composer.json' they may resolve to a submodule root rather
-# than the monorepo root — a bounded, correct-enough scope, and vastly better
-# than climbing to an unrelated ancestor repo.
-# BACK-525: split into two tiers — a package/build marker is *positive
-# project-unit evidence*; a VCS root (`.git`) is checked only if no package
-# marker exists anywhere in the climb. Conflating them (the old flat
-# `_PROJECT_ROOT_MARKERS`) is what let a distant ancestor `.git` get promoted
-# to a scan root when nothing closer existed — the marker was "found" but was
-# really just a climb-ceiling signal, not a project unit. See
+# BACK-612: the marker sets and per-tier predicates now live in
+# reveal.utils.path_utils (the single home shared with config/I002/D005) —
+# imported above. Kept here: the back-compat union alias
+# (`_PROJECT_ROOT_MARKERS`, "is there ANY marker in this one dir") and the
+# `_has_project_marker` helper the depends tests import. See
 # internal-docs/design/SCAN_ROOT_RESOLUTION_2026-07-09.md.
-_PACKAGE_ROOT_MARKERS = [
-    'pyproject.toml', 'setup.py', 'setup.cfg', 'Cargo.toml',
-    'package.json', 'go.mod',
-    'settings.gradle', 'settings.gradle.kts',  # Java/Kotlin (Gradle)
-    'pom.xml',  # Java (Maven)
-    'Package.swift',  # Swift (SPM)
-    'composer.json',  # PHP
-    'build.sbt', 'build.sc',  # Scala (sbt / Mill)  — BACK-515
-    'pubspec.yaml',  # Dart (pub)                    — BACK-515
-    'build.zig',  # Zig                              — BACK-515
-    'project.godot',  # GDScript (Godot)             — BACK-515
-]
-
-_VCS_ROOT_MARKERS = ['.git']
-
-# Back-compat union — every marker (package or VCS) `_has_project_marker`
-# recognized before BACK-525's tiering split. Still used where "is there any
-# marker at all in this one directory" is the actual question (tests).
 _PROJECT_ROOT_MARKERS = _PACKAGE_ROOT_MARKERS + _VCS_ROOT_MARKERS
 
 
@@ -95,96 +52,25 @@ class _ResolutionIndices(NamedTuple):
     module_index: Dict[str, List[Path]]  # BACK-567: Swift module → member files
 
 
-def _has_package_marker(directory: Path) -> bool:
-    """True if *directory* holds positive project-unit evidence (BACK-525
-    tier 1) — a package/build marker, never a bare VCS root.
-
-    Extends the literal-filename check with two repo-specific-name globs:
-    `*.sln` (C# solution files) and `*.rockspec` (Lua/LuaRocks package
-    specs) — neither can be a fixed literal in `_PACKAGE_ROOT_MARKERS`
-    because both carry a project-specific name.
-
-    A directory that is itself an importable Python package (`__init__.py`
-    present) is never a project root, even if it holds a marker: absolute
-    self-package imports (`from homeassistant.core import X`) resolve relative
-    to the package's *parent*, so promoting the package dir to scan root
-    leaves every such import unresolved — a silent fan-in collapse (measured
-    9% recall on Home Assistant `core.py`, whose `homeassistant/setup.py`
-    source module — not a setuptools script — was mis-read as a root marker).
-    The real root lives above the top of the package chain, so keep climbing.
-    """
-    if (directory / '__init__.py').exists():
-        return False
-    if any((directory / marker).exists() for marker in _PACKAGE_ROOT_MARKERS):
-        return True
-    return any(directory.glob('*.sln')) or any(directory.glob('*.rockspec'))
-
-
-def _has_reveal_root_marker(directory: Path) -> bool:
-    """True if *directory* holds a ``.reveal.yaml`` declaring ``root: true``
-    (BACK-525 tier 0 — an explicit, language-agnostic project-root
-    declaration that beats any *inferred* package/VCS marker).
-
-    This is the consistent, cross-language way to pin a scan root when the
-    marker heuristics can't: a C/C++ tree whose only build file is a
-    ``Makefile``/``CMakeLists.txt`` (not in the package-marker set), or any
-    project checked out as a subdirectory of a larger VCS repo (a monorepo
-    component, a vendored subtree, reveal's own ``samples/<lang>/``), where
-    tier-2 would otherwise promote a distant ancestor ``.git``. Reuses
-    :meth:`RevealConfig._reveal_yaml_is_root` so there is exactly one definition of
-    what ``root: true`` means across reveal (config discovery + this scan
-    root)."""
-    config_file = directory / '.reveal.yaml'
-    if not config_file.exists():
-        return False
-    from ..config import RevealConfig
-    return RevealConfig._reveal_yaml_is_root(config_file)
-
-
-def _has_vcs_marker(directory: Path) -> bool:
-    """True if *directory* is a VCS root (BACK-525 tier 2) — checked only
-    when no package marker exists anywhere in the climb."""
-    return any((directory / marker).exists() for marker in _VCS_ROOT_MARKERS)
-
-
 def _has_project_marker(directory: Path) -> bool:
-    """True if *directory* holds a depends:// project-root marker (package
-    or VCS, union of both tiers). See the BACK-515 note above for why a
-    missing marker is a hang, not a cosmetic gap; see BACK-525 for why the
-    tiers matter for *which* marker gets promoted to a scan root.
-    """
+    """True if *directory* holds a depends:// project-root marker (package or
+    VCS, union of both tiers). A missing marker is a hang, not a cosmetic gap
+    (BACK-515); the tiers decide *which* marker gets promoted (BACK-525). Both
+    predicates now live in path_utils (BACK-612); kept here for the tests."""
     return _has_package_marker(directory) or _has_vcs_marker(directory)
 
 
 def _resolve_project_root(
     target_path: Path, root_override: Optional[Path] = None
 ) -> Optional[Path]:
-    """Tiered nearest-marker resolution (BACK-525 layers 1+2): a near
-    package/build marker beats a distant VCS root, and the climb is bounded
-    by a hard ceiling it can never promote to a root. Returns ``None`` if
-    neither tier finds anything before the ceiling — the caller falls back
-    to the inferred-project scope (layer 3).
-
-    Tier -1 (an explicit ``?root=DIR`` query param, already validated by the
-    caller — exists, is a directory containing the target, not an unsafe scan
-    root) wins over everything: it is a deliberate per-invocation instruction,
-    the no-mutation counterpart to ``.reveal.yaml root:true`` that also works in
-    MCP/service mode (BACK-610). When supplied it short-circuits the climb.
-
-    Tier 0 (an explicit ``.reveal.yaml root:true``) is consulted next: it is
-    the one deterministic, language-agnostic root declaration, so it beats
-    every *inferred* marker — the fix for marker-less C/C++ trees and any
-    project nested under an ancestor ``.git`` (see :func:`_has_reveal_root_marker`).
+    """Resolve depends://'s scan root via the shared, ceiling-bounded resolver
+    (BACK-612): tier -1 ``?root=`` override → tier 0 ``.reveal.yaml root:true``
+    → tier 1 package marker → tier 2 VCS root. Returns ``None`` if nothing
+    matches before the hard ceiling — ``get_structure`` then applies depends://'s
+    own inferred-project fallback (BACK-525 layer 3), which is why the shared
+    resolver's ``python_init_chain`` tier is left off here.
     """
-    if root_override is not None:
-        return root_override
-    reveal_root = search_parents_within_ceiling(target_path, _has_reveal_root_marker)
-    if reveal_root is not None:
-        return reveal_root
-    package_root = search_parents_within_ceiling(target_path, _has_package_marker)
-    if package_root is not None:
-        return package_root
-    return search_parents_within_ceiling(target_path, _has_vcs_marker)
+    return resolve_project_root(target_path, root_override=root_override)
 
 _SCHEMA_QUERY_PARAMS = {
     'top': {
