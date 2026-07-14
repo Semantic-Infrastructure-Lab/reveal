@@ -61,8 +61,19 @@ from ...core import node_children as _children
 from ...core import tree_root
 from ...registry import get_analyzer
 from ...utils.path_utils import is_skippable_dir
-from .base import LanguageExtractor, register_extractor
+from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from .types import ImportStatement
+
+# Cross-invocation disk cache (BACK-626, extending BACK-625): same
+# independent-reparse gap PythonExtractor had -- extract_imports() does not
+# share TreeSitterAnalyzer.get_structure()'s structure cache (BACK-535). One
+# namespace shared by every language riding this generic extractor (C/C++/
+# Java/Kotlin/Scala/C#/Ruby/PHP/Swift/Dart/Lua/GDScript); the per-file
+# fingerprint already keys on the file's own path, so different languages
+# never collide. Bypassed when constant_index is supplied (PHP's define()
+# resolution, BACK-565) -- that argument makes the result depend on more than
+# the file's own contents, so it is not safe to key purely on path+mtime+size.
+_IMPORTS_CACHE = ImportsDiskCache("generic_imports")
 
 logger = logging.getLogger(__name__)
 
@@ -399,7 +410,23 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         and every non-PHP caller) behaves exactly as before this session:
         constant-involving concatenations are honestly skipped, not
         fabricated.
+
+        Cached cross-invocation on disk (BACK-626) when ``constant_index`` is
+        ``None`` -- the common case for every caller but PHP's constant-aware
+        resolution path, whose result depends on more than the file's own
+        contents and so is deliberately never cached.
         """
+        if constant_index is not None:
+            return self._extract_imports_uncached(file_path, constant_index)
+        return _IMPORTS_CACHE.get_or_compute(
+            file_path, lambda: self._extract_imports_uncached(file_path, None)
+        )
+
+    def _extract_imports_uncached(
+        self,
+        file_path: Path,
+        constant_index: Optional[Dict[str, Tuple[str, str]]],
+    ) -> List[ImportStatement]:
         analyzer = self._get_analyzer(file_path)
         if analyzer is None:
             return []

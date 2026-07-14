@@ -10,14 +10,101 @@ New languages can be added by creating a class that inherits from
 LanguageExtractor and decorating it with @register_extractor.
 """
 
+import hashlib
+import logging
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Set, ClassVar, Optional, Type, Dict
+from typing import Callable, List, Set, ClassVar, Optional, Tuple, Type, Dict
 
 from .types import ImportStatement
+from ...core import disk_cache
+
+logger = logging.getLogger(__name__)
 
 # Registry for auto-discovery of language extractors
 _EXTRACTOR_REGISTRY: Dict[str, Type['LanguageExtractor']] = {}
+
+
+class ImportsDiskCache:
+    """Per-file in-process + disk cache for one extractor's extract_imports().
+
+    Factored out of PythonExtractor's BACK-625 fix so the other bespoke
+    extractors (JS/Go/Rust/Zig) and the shared generic tree-sitter extractor
+    (C/C++/Java/Kotlin/Scala/C#/Ruby/PHP/Swift/Dart/Lua/GDScript) get the same
+    cross-invocation win without each hand-rolling the fingerprint/cache-key
+    plumbing. ``extract_imports()`` independently re-parses+walks the tree
+    per call -- it does not share ``TreeSitterAnalyzer.get_structure()``'s own
+    structure cache (BACK-535) -- and is invoked repeatedly per file across
+    I001/I002/I005, ``calls://``'s build_symbol_map, ``depends://``, and
+    ``imports://``, both within one CLI invocation and across fresh ones.
+
+    One instance per language module (module-level singleton), keyed by a
+    caller-chosen ``namespace`` so each language's entries live in their own
+    disk-cache bucket with an independent prune cap.
+    """
+
+    def __init__(self, namespace: str, env_var: str = "REVEAL_IMPORTS_CACHE_MAX_FILES",
+                 default_max_files: int = 100_000):
+        self.namespace = namespace
+        self._env_var = env_var
+        self._default_max_files = default_max_files
+        self._mem_cache: Dict[Tuple[str, int], List[ImportStatement]] = {}
+
+    def max_files(self) -> int:
+        """Read the entry cap, honoring this cache's env var override."""
+        raw = os.environ.get(self._env_var)
+        if raw is None:
+            return self._default_max_files
+        try:
+            return int(raw)
+        except ValueError:
+            logger.debug("Invalid %s=%r, using default", self._env_var, raw)
+            return self._default_max_files
+
+    def fingerprint(self, path_str: str, mtime_ns: int) -> Optional[str]:
+        """Disk-cache key for one file's extracted imports, or None to skip caching."""
+        try:
+            size = os.path.getsize(path_str)
+        except OSError:
+            return None
+        hasher = hashlib.sha256()
+        hasher.update(path_str.encode("utf-8", "replace"))
+        hasher.update(b"\x00")
+        hasher.update(str(mtime_ns).encode("ascii"))
+        hasher.update(b"\x00")
+        hasher.update(str(size).encode("ascii"))
+        return hasher.hexdigest()
+
+    def get_or_compute(
+        self, file_path: Path, compute: Callable[[], List[ImportStatement]]
+    ) -> List[ImportStatement]:
+        """Return cached imports for *file_path*, computing (and caching) on a miss."""
+        path_str = os.path.abspath(str(file_path))
+        try:
+            mtime_ns = os.stat(path_str).st_mtime_ns
+        except OSError:
+            mtime_ns = 0
+        cache_key = (path_str, mtime_ns)
+        if cache_key in self._mem_cache:
+            return self._mem_cache[cache_key]
+
+        fingerprint = self.fingerprint(path_str, mtime_ns)
+        if fingerprint is not None:
+            cached = disk_cache.get(self.namespace, fingerprint)
+            if cached is not None:
+                self._mem_cache[cache_key] = cached
+                return cached
+
+        imports = compute()
+        self._mem_cache[cache_key] = imports
+        if fingerprint is not None:
+            disk_cache.put(self.namespace, fingerprint, imports, max_entries=self.max_files())
+        return imports
+
+    def clear(self) -> None:
+        """Drop the in-process layer (tests only; disk entries are untouched)."""
+        self._mem_cache.clear()
 
 
 def register_extractor(cls: Type['LanguageExtractor']) -> Type['LanguageExtractor']:

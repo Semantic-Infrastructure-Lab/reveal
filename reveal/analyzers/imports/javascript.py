@@ -17,11 +17,16 @@ from pathlib import Path
 from typing import Any, List, Set, Optional
 
 from .types import ImportStatement
-from .base import LanguageExtractor, register_extractor
+from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from ...registry import get_analyzer
 from ...core import node_children as _children
 
 logger = logging.getLogger(__name__)
+
+# Cross-invocation disk cache (BACK-626, extending BACK-625 to JS/TS): same
+# independent-reparse gap as PythonExtractor had -- extract_imports() does not
+# share TreeSitterAnalyzer.get_structure()'s structure cache (BACK-535).
+_IMPORTS_CACHE = ImportsDiskCache("javascript_imports")
 
 
 def _line_text(analyzer, line_number: int) -> str:
@@ -57,12 +62,19 @@ class JavaScriptExtractor(LanguageExtractor):
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all import statements from JavaScript/TypeScript file using tree-sitter.
 
+        Cached cross-invocation on disk (BACK-626), same pattern as
+        PythonExtractor (BACK-625): a 2nd+ `reveal` command on an unchanged
+        file skips the parse entirely.
+
         Args:
             file_path: Path to .js, .jsx, .ts, .tsx, .mjs, or .cjs file
 
         Returns:
             List of ImportStatement objects
         """
+        return _IMPORTS_CACHE.get_or_compute(file_path, lambda: self._extract_imports_uncached(file_path))
+
+    def _extract_imports_uncached(self, file_path: Path) -> List[ImportStatement]:
         try:
             analyzer_class = get_analyzer(str(file_path))
             if not analyzer_class:

@@ -21,10 +21,15 @@ from typing import List, Optional, Set
 
 from ...core import node_children as _children
 from ...registry import get_analyzer
-from .base import LanguageExtractor, register_extractor
+from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from .types import ImportStatement
 
 logger = logging.getLogger(__name__)
+
+# Cross-invocation disk cache (BACK-626, extending BACK-625 to Zig): same
+# independent-reparse gap as PythonExtractor had -- extract_imports() does not
+# share TreeSitterAnalyzer.get_structure()'s structure cache (BACK-535).
+_IMPORTS_CACHE = ImportsDiskCache("zig_imports")
 
 
 def _line_text(analyzer, line_number: int) -> str:
@@ -47,6 +52,11 @@ class ZigImportExtractor(LanguageExtractor):
     language_name = 'Zig'
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
+        """Extract all @import(...) calls, cached cross-invocation on disk
+        (BACK-626), same pattern as PythonExtractor (BACK-625)."""
+        return _IMPORTS_CACHE.get_or_compute(file_path, lambda: self._extract_imports_uncached(file_path))
+
+    def _extract_imports_uncached(self, file_path: Path) -> List[ImportStatement]:
         try:
             analyzer_class = get_analyzer(str(file_path))
             if not analyzer_class:
