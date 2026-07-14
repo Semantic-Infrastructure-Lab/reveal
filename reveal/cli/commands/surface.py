@@ -110,9 +110,10 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
     from reveal.adapters.ast.nav_surface_ruby import scan_file_surface_ruby
     from reveal.adapters.ast.nav_surface_go import scan_file_surface_go
     from reveal.adapters.ast.nav_surface_rust import scan_file_surface_rust
+    from reveal.adapters.ast.nav_surface_cpp import scan_file_surface_cpp
     collected = _collect_source_files(path, source_only=source_only)
     (py_files, ts_files, java_files, cs_files, php_files, swift_files,
-     kt_files, rb_files, go_files, rs_files) = collected
+     kt_files, rb_files, go_files, rs_files, cpp_files) = collected
     surfaces: Dict[str, List[Dict[str, Any]]] = {
         k: [] for k in ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
     }
@@ -126,7 +127,7 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
     # whole project's surface. Assess how much of the tree is actually in a
     # language `surface` analyzes so _render_report can warn on the substitution.
     coverage = assess_language_coverage(
-        path, {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go', 'rust'})
+        path, {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go', 'rust', 'cpp'})
 
     scanners = (
         (py_files, scan_file_surface),
@@ -139,6 +140,7 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
         (rb_files, scan_file_surface_ruby),
         (go_files, scan_file_surface_go),
         (rs_files, scan_file_surface_rust),
+        (cpp_files, scan_file_surface_cpp),
     )
     for file_list, scanner in scanners:
         for file_path in file_list:
@@ -194,11 +196,13 @@ def _is_test_file(fpath: Path) -> bool:
         return stem.endswith('_test')
     if suffix == '.rs':
         return stem.endswith('_test') or stem.endswith('_tests') or name == 'tests.rs'
+    if suffix in ('.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'):
+        return stem.endswith('_test') or stem.endswith('_tests') or stem.startswith('test_')
     return False
 
 
 def _collect_source_files(path: Path, source_only: bool = False):
-    """Return (py, ts, java, cs, php, swift, kotlin, ruby, go, rust) file lists for the given path."""
+    """Return (py, ts, java, cs, php, swift, kotlin, ruby, go, rust, cpp) file lists for the given path."""
     _EXT_BUCKETS = (
         (frozenset({'.py'}), 0),
         (frozenset({'.ts', '.tsx'}), 1),
@@ -210,6 +214,7 @@ def _collect_source_files(path: Path, source_only: bool = False):
         (frozenset({'.rb'}), 7),
         (frozenset({'.go'}), 8),
         (frozenset({'.rs'}), 9),
+        (frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'}), 10),
     )
 
     def _bucket_for(suffix: str):
@@ -268,7 +273,7 @@ def _render_report(report: Dict[str, Any], top: int = None) -> None:
         if not warning:
             lang = report.get('unsupported_language', '')
             if lang:
-                print("  reveal surface currently supports Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, and Rust.")
+                print("  reveal surface currently supports Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, and C++.")
                 print(f"  No supported files found — detected {lang}.")
             else:
                 print("  No external surfaces detected.")

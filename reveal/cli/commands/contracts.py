@@ -125,6 +125,32 @@ def _collect_rust_files(path: Path) -> List[Path]:
     return files
 
 
+_CPP_EXTENSIONS: frozenset = frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'})
+
+
+def _has_cpp_files(path: Path) -> bool:
+    if path.is_file():
+        return path.suffix.lower() in _CPP_EXTENSIONS
+    for root, dirs, filenames in os.walk(str(path)):
+        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
+        for fname in filenames:
+            if Path(fname).suffix.lower() in _CPP_EXTENSIONS:
+                return True
+    return False
+
+
+def _collect_cpp_files(path: Path) -> List[Path]:
+    if path.is_file():
+        return [path] if path.suffix.lower() in _CPP_EXTENSIONS else []
+    files: List[Path] = []
+    for root, dirs, filenames in os.walk(str(path)):
+        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
+        for fname in filenames:
+            if Path(fname).suffix.lower() in _CPP_EXTENSIONS:
+                files.append(Path(os.path.join(root, fname)))
+    return files
+
+
 def create_contracts_parser() -> argparse.ArgumentParser:
     from reveal.cli.parser import _build_global_options_parser
     parser = argparse.ArgumentParser(
@@ -189,16 +215,18 @@ def _scan_contracts(
     is_ruby = not is_interface_family and _has_ruby_files(path)
     is_go = not is_interface_family and not is_ruby and _has_go_files(path)
     is_rust = not is_interface_family and not is_ruby and not is_go and _has_rust_files(path)
+    is_cpp = (not is_interface_family and not is_ruby and not is_go and not is_rust
+              and _has_cpp_files(path))
 
     if (not _has_python_files(path) and not is_interface_family and not is_ruby
-            and not is_go and not is_rust):
+            and not is_go and not is_rust and not is_cpp):
         unsupported_language = detect_non_python_language(path)
 
     # BACK-518: guard against a few stray supported-language files standing in
     # for a mostly-unsupported tree (see surface.py / assess_language_coverage).
     coverage = assess_language_coverage(
         path,
-        {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go', 'rust'},
+        {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go', 'rust', 'cpp'},
     )
     coverage_dict = {
         'total_code_files': coverage.total_code_files,
@@ -221,6 +249,11 @@ def _scan_contracts(
 
     if is_rust:
         result = _scan_contracts_rust(path, abstract_only, show_implementations)
+        result['coverage'] = coverage_dict
+        return result
+
+    if is_cpp:
+        result = _scan_contracts_cpp(path, abstract_only, show_implementations)
         result['coverage'] = coverage_dict
         return result
 
@@ -593,6 +626,63 @@ def _scan_contracts_rust(
     }
 
 
+def _scan_contracts_cpp(
+    path: Path,
+    abstract_only: bool,
+    show_implementations: bool,
+) -> Dict[str, Any]:
+    """C++-specific contract scanner — abstract classes + subclasses.
+
+    C++ has no `interface` keyword; the contract is an **abstract class** (a
+    `class`/`struct` with ≥1 pure virtual method, `virtual T f() = 0`), and
+    implementors are declared explicitly via inheritance. See
+    `nav_contracts_cpp.py` for the extraction detail.
+    """
+    from reveal.adapters.ast.nav_contracts_cpp import scan_file_contracts_cpp
+
+    classes: List[Dict[str, Any]] = []
+    for file_path in _collect_cpp_files(path):
+        scanned = scan_file_contracts_cpp(str(file_path))
+        classes.extend(scanned['classes'])
+
+    contracts: List[Dict[str, Any]] = []
+    contract_names: Set[str] = set()
+    for cls in classes:
+        cls['implementations'] = []
+        if cls['is_abstract']:
+            contracts.append(cls)
+            contract_names.add(cls['name'])
+
+    implementers: List[Dict[str, Any]] = []
+    if show_implementations:
+        contract_map = {c['name']: c for c in contracts}
+        for cls in classes:
+            impl_of = [b for b in cls['bases'] if b in contract_names and b != cls['name']]
+            if impl_of:
+                for base in impl_of:
+                    contract_map[base]['implementations'].append({
+                        'name': cls['name'], 'file': cls['file'], 'line': cls['line'],
+                    })
+                if not abstract_only:
+                    implementers.append({
+                        'name': cls['name'], 'file': cls['file'], 'line': cls['line'],
+                        'bases': sorted(impl_of),
+                    })
+
+    return {
+        'path': str(path),
+        'total_contracts': len(contracts),
+        'abcs': [],
+        'protocols': contracts,
+        'typeddicts': [],
+        'dataclasses': implementers,
+        'basemodels': [],
+        'path_heuristic': [],
+        'unsupported_language': '',
+        '_cpp_mode': True,
+    }
+
+
 def _extract_all_classes(structures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Extract class dicts from collect_structures output.
 
@@ -710,6 +800,7 @@ def _render_report(report: Dict[str, Any]) -> None:
     ruby_mode = report.get('_ruby_mode', False)
     go_mode = report.get('_go_mode', False)
     rust_mode = report.get('_rust_mode', False)
+    cpp_mode = report.get('_cpp_mode', False)
 
     print()
     print(f"Contracts: {path}")
@@ -730,7 +821,7 @@ def _render_report(report: Dict[str, Any]) -> None:
         if not warning:
             lang = report.get('unsupported_language', '')
             if lang:
-                print(f"  reveal contracts currently supports Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, and Rust.")
+                print(f"  reveal contracts currently supports Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, and C++.")
                 print(f"  No supported files found — detected {lang}.")
             else:
                 print("  No contracts or seams found.")
@@ -742,6 +833,8 @@ def _render_report(report: Dict[str, Any]) -> None:
                     print("  Try widening the path or checking for interface type declarations.")
                 elif rust_mode:
                     print("  Try widening the path or checking for trait / impl-for declarations.")
+                elif cpp_mode:
+                    print("  Try widening the path or checking for abstract classes (pure virtual methods).")
                 else:
                     print("  Try widening the path or checking imports for ABC/Protocol usage.")
             print()
@@ -761,6 +854,9 @@ def _render_report(report: Dict[str, Any]) -> None:
     elif rust_mode:
         _render_group("Traits", report['protocols'], show_methods=False, show_impls=True)
         _render_group("Implementing Types", report['dataclasses'], show_methods=False, show_impls=False)
+    elif cpp_mode:
+        _render_group("Abstract Classes (interfaces)", report['protocols'], show_methods=False, show_impls=True)
+        _render_group("Subclasses", report['dataclasses'], show_methods=False, show_impls=False)
     else:
         _render_group("Abstract Base Classes", report['abcs'], show_methods=True, show_impls=True)
         _render_group("Protocols", report['protocols'], show_methods=True, show_impls=True)

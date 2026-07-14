@@ -1436,5 +1436,67 @@ class TestNavSurfaceRust(unittest.TestCase):
         self.assertIn('/api', [e['path'] for e in result['http']])
 
 
+class TestNavSurfaceCpp(unittest.TestCase):
+    """Unit tests for the C++ surface scanner (nav_surface_cpp, BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _scan_cpp(self, filename: str, content: str):
+        from reveal.adapters.ast.nav_surface_cpp import scan_file_surface_cpp
+        path = _write(self.tmp, filename, content)
+        return scan_file_surface_cpp(path)
+
+    def test_cpp_network_include(self):
+        result = self._scan_cpp('c.cpp', '#include <curl/curl.h>\n')
+        self.assertIn('curl/curl.h', [e['name'] for e in result['network']])
+
+    def test_cpp_db_include(self):
+        result = self._scan_cpp('d.cpp', '#include <pqxx/pqxx>\n')
+        self.assertIn('pqxx/pqxx', [e['name'] for e in result['db']])
+
+    def test_cpp_sdk_include(self):
+        result = self._scan_cpp('a.cpp', '#include <aws/core/Aws.h>\n')
+        self.assertIn('aws/core/Aws.h', [e['name'] for e in result['sdk']])
+
+    def test_cpp_env_getenv(self):
+        result = self._scan_cpp('cfg.cpp', 'void f() { auto k = getenv("API_KEY"); }\n')
+        self.assertIn('API_KEY', [e['name'] for e in result['env']])
+
+    def test_cpp_env_std_getenv(self):
+        result = self._scan_cpp('cfg.cpp', 'void f() { auto k = std::getenv("PORT"); }\n')
+        self.assertIn('PORT', [e['name'] for e in result['env']])
+
+    def test_cpp_fs_ofstream(self):
+        result = self._scan_cpp('w.cpp', 'void f() { std::ofstream out("/tmp/x"); }\n')
+        self.assertIn('std::ofstream', [e['name'] for e in result['fs']])
+
+    def test_cpp_route_cpphttplib(self):
+        result = self._scan_cpp('h.cpp', 'void f() { svr.Get("/users", handler); }\n')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/users')
+        self.assertEqual(entries[0]['methods'], 'GET')
+
+    def test_cpp_route_crow_macro(self):
+        result = self._scan_cpp('h.cpp', 'void f() { CROW_ROUTE(app, "/health")([](){ return 1; }); }\n')
+        entries = [e for e in result['http'] if e['path'] == '/health']
+        self.assertEqual(len(entries), 1)  # not double-counted by the nested call
+
+    def test_cpp_cli_main(self):
+        result = self._scan_cpp('m.cpp', 'int main() { return 0; }\n')
+        self.assertEqual(len(result['cli']), 1)
+
+    def test_cpp_lowercase_getter_not_a_route(self):
+        """`cache.get("key")` uses a lowercase getter, not cpp-httplib's
+        title-case `Get`, and its arg is not a path — must not be a route."""
+        result = self._scan_cpp('x.cpp', 'void f() { auto v = cache.get("key"); }\n')
+        self.assertEqual(len(result['http']), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

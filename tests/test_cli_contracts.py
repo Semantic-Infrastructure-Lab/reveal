@@ -1389,5 +1389,81 @@ class TestScanContractsRust(unittest.TestCase):
         self.assertEqual([p['name'] for p in report['protocols']], ['Store'])
 
 
+class TestScanContractsCpp(unittest.TestCase):
+    """Tests for C++ contract detection — abstract classes + subclasses
+    (BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write_cpp(self, filename: str, content: str) -> str:
+        return _write(self.tmp, filename, content)
+
+    def test_abstract_class_classified_as_contract(self):
+        self._write_cpp('store.cpp', '''\
+            class Store {
+            public:
+                virtual int get() = 0;
+            };
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertTrue(report.get('_cpp_mode'))
+        self.assertEqual([p['name'] for p in report['protocols']], ['Store'])
+
+    def test_non_abstract_class_not_a_contract(self):
+        """A class with only concrete methods is not a contract."""
+        self._write_cpp('plain.cpp', '''\
+            class Widget {
+            public:
+                int compute() { return 1; }
+            };
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(report['total_contracts'], 0)
+
+    def test_subclass_recorded_as_implementation(self):
+        self._write_cpp('store.cpp', '''\
+            class Store {
+            public:
+                virtual int get() = 0;
+            };
+            class MemStore : public Store {
+            public:
+                int get() override { return 1; }
+            };
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        store = next(p for p in report['protocols'] if p['name'] == 'Store')
+        self.assertIn('MemStore', [i['name'] for i in store['implementations']])
+        self.assertIn('MemStore', [c['name'] for c in report['dataclasses']])
+
+    def test_multiple_inheritance_bases(self):
+        self._write_cpp('m.cpp', '''\
+            class Reader { public: virtual int read() = 0; };
+            class Writer { public: virtual void write() = 0; };
+            class File : public Reader, public Writer {
+            public:
+                int read() override { return 0; }
+                void write() override {}
+            };
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        file_impl = next(c for c in report['dataclasses'] if c['name'] == 'File')
+        self.assertEqual(file_impl['bases'], ['Reader', 'Writer'])
+
+    def test_cpp_abstract_only_omits_subclasses(self):
+        self._write_cpp('store.cpp', '''\
+            class Store { public: virtual int get() = 0; };
+            class MemStore : public Store { public: int get() override { return 1; } };
+        ''')
+        report = _scan_contracts(Path(self.tmp), abstract_only=True)
+        self.assertEqual(report['dataclasses'], [])
+        self.assertEqual([p['name'] for p in report['protocols']], ['Store'])
+
+
 if __name__ == '__main__':
     unittest.main()
