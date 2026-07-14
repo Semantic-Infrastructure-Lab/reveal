@@ -7,7 +7,11 @@ name = "reveal-cli"
 version = "0.108.1"
 description = "How AI agents understand codebases without wasting tokens — local-first, adapter-driven, progressive disclosure enforced by design"
 readme = "README.md"
-requires-python = ">=3.10"
+# Upper bound: on Python 3.14 the language-pack version reveal is pinned to (<=1.12.2, vendored
+# parser) produces unusable trees (no type/children). Capping at <3.14 makes pip refuse the install
+# with a clear message rather than installing something broken at runtime. Lift only once BACK-573's
+# core-tree-sitter API migration lands and the language-pack pin moves to >=1.12.5.
+requires-python = ">=3.10,<3.14"
 license = {text = "MIT"}
 authors = [
     {name = "Progressive Reveal Contributors", email = "scottsen@users.noreply.github.com"}
@@ -35,7 +39,7 @@ dependencies = [
     "tomli>=2.0.0;python_version<'3.11'",  # TOML support for Python <3.11
     "rich>=13.0.0",  # For beautiful terminal output
     "tree-sitter>=0.25.2",  # Semantic parsing for all languages
-    "tree-sitter-language-pack>=1.8.1,<1.12.5",  # Language grammar support (1.x: 305 languages, abi3 wheel). Upper bound: 1.12.5 breaks Parser.parse() (str->bytes) and Tree.root_node (method->property) with no reveal-side compat shim yet (BACK-573) — 1.12.2 is the last known-good release, verified via version bisection.
+    "tree-sitter-language-pack>=1.8.1,<1.12.5",  # Language grammar support (1.x: 305 languages, abi3 wheel). Upper bound resolves to 1.12.2 (1.12.3/1.12.4 never released). The real break is in CORE py-tree-sitter (zero-arg Node/TreeCursor accessors are properties, parse() takes bytes — predates 0.23); reveal is shielded only because language-pack <=1.12.2 returns a VENDORED old-API parser. 1.12.5 (via the 1.12.3 change) drops the vendored parser and hands reveal the installed core parser, exposing the new API — hence the ceiling. See BACK-573 design doc; migration must control the core tree-sitter version, not language-pack.
     "beautifulsoup4>=4.12.0",  # HTML parsing for HTML analyzer (uses stdlib html.parser)
     "mccabe>=0.7.0",  # McCabe cyclomatic complexity (aligns C901 with Ruff)
     "cryptography>=41.0.0",  # SSL certificate parsing for ssl:// adapter
