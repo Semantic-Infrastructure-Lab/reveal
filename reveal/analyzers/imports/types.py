@@ -90,7 +90,13 @@ class ImportGraph:
             rec_stack.add(node)
             current_path.append(node)
 
-            for neighbor in self.dependencies.get(node, set()):
+            # Sorted, not raw set iteration: neighbor order otherwise depends
+            # on Python's per-process hash randomization, and since `visited`
+            # is a global (once-per-node) marker, traversal order determines
+            # *which* cycles are found, not just their order — an unsorted
+            # `set` here made cycle counts nondeterministic across runs
+            # (BACK-627).
+            for neighbor in sorted(self.dependencies.get(node, set()), key=str):
                 dfs(neighbor)
 
             current_path.pop()
@@ -181,7 +187,7 @@ class ImportGraph:
         # closes the cycle back onto it.
         parent: Dict[Path, Path] = {}
         queue: deque = deque()
-        for neighbor in self.dependencies.get(start, set()):
+        for neighbor in sorted(self.dependencies.get(start, set()), key=str):
             if neighbor == start:
                 return [start, start]  # self-loop
             if neighbor in group_set and neighbor not in parent:
@@ -190,7 +196,7 @@ class ImportGraph:
 
         while queue:
             node = queue.popleft()
-            for neighbor in self.dependencies.get(node, set()):
+            for neighbor in sorted(self.dependencies.get(node, set()), key=str):
                 if neighbor == start:
                     # Reconstruct start → … → node, then close back to start.
                     path = [node]

@@ -321,6 +321,62 @@ class TestImportGraph:
         assert path[0] == path[-1]
         assert len(path) == 3  # any two nodes form a 2-cycle in a clique
 
+    def test_find_cycles_deterministic_across_hash_seeds(self):
+        """BACK-627: find_cycles()'s DFS marks nodes ``visited`` globally, so
+        traversal order determines *which* overlapping cycles are found, not
+        just their order. Iterating ``self.dependencies[node]`` — a ``set`` —
+        unsorted meant that order depended on Python's per-process hash
+        randomization: the same graph produced different cycle counts on
+        every fresh interpreter (confirmed on a real 1039-file TypeScript
+        corpus, e.g. 16537 vs 16602 total I002 issues across two identical
+        `reveal --check` runs). A node with multiple outgoing edges into
+        different, only-partially-overlapping cycles reproduces this in a
+        same-process unit test only if neighbor order is left to chance —
+        this test instead directly compares two fresh interpreters with
+        different PYTHONHASHSEED values, the actual mechanism of the bug.
+        """
+        import os
+        import subprocess
+        import sys
+
+        script = (
+            "from pathlib import Path\n"
+            "from reveal.analyzers.imports import ImportGraph\n"
+            "g = ImportGraph()\n"
+            "d, x, y = Path('d.py'), Path('x.py'), Path('y.py')\n"
+            "for f in (d, x, y):\n"
+            "    g.files[f] = []\n"
+            "# d has two ways back to itself: the short cycle d->x->d, and the\n"
+            "# longer d->y->x->d. Whichever of d's two neighbors (x or y) the\n"
+            "# (unsorted) DFS visits first fully explores and marks x `visited`;\n"
+            "# the other branch then short-circuits on that `visited` flag before\n"
+            "# it can walk back through x to close its own, different cycle. So\n"
+            "# which cycle is reported for this exact graph flips with neighbor\n"
+            "# iteration order — i.e. with the interpreter's PYTHONHASHSEED.\n"
+            "g.add_dependency(d, x)\n"
+            "g.add_dependency(x, d)\n"
+            "g.add_dependency(d, y)\n"
+            "g.add_dependency(y, x)\n"
+            "cycles = g.find_cycles()\n"
+            "print(sorted(tuple(str(p) for p in c) for c in cycles))\n"
+        )
+
+        outputs = set()
+        for seed in ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9'):
+            env = dict(os.environ, PYTHONHASHSEED=seed)
+            result = subprocess.run(
+                [sys.executable, '-c', script],
+                cwd=str(Path(__file__).resolve().parent.parent),
+                env=env, capture_output=True, text=True, timeout=30,
+            )
+            assert result.returncode == 0, result.stderr
+            outputs.add(result.stdout.strip())
+
+        assert len(outputs) == 1, (
+            f"find_cycles() found different cycles across PYTHONHASHSEED "
+            f"values (BACK-627 regression): {outputs}"
+        )
+
     def test_find_unused_imports(self):
         """Test detecting unused imports."""
         imports = [
