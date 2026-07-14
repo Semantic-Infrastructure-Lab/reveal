@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...analyzers.imports import ImportGraph
 from ...analyzers.imports.base import get_extractor, get_all_extensions
-from ...utils.path_utils import is_unsafe_scan_root
+from ...utils.path_utils import is_unsafe_scan_root, resolve_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -21,19 +21,6 @@ logger = logging.getLogger(__name__)
 # tree-sitter; caching by project root makes the scan happen once per project
 # per process (was once per subdirectory, defeating the cache on deep trees).
 _graph_cache: Dict[Path, 'ImportGraph'] = {}
-
-# Project-root marker files, one per supported language. The presence of any of
-# these at a directory level means "this directory is a project root, stop here".
-# Without the non-Python markers, a TS/Go/Rust project with no .git would fall
-# through to the __init__.py heuristic and could mis-detect a far ancestor as the
-# root (BACK-338), then scan tens of thousands of unrelated files.
-_PROJECT_MARKERS = (
-    'pyproject.toml',  # Python
-    'setup.py',        # Python
-    'package.json',    # JavaScript / TypeScript
-    'go.mod',          # Go
-    'Cargo.toml',      # Rust
-)
 
 # Safety ceiling on the import-graph scan. A correctly-detected project root
 # almost never exceeds this; blowing past it means root detection went wrong
@@ -104,51 +91,27 @@ def _max_graph_files() -> int:
 
 
 def _find_project_root(path: Path) -> Path:
-    """Walk up from path to find the project root.
+    """Nearest project root above *path*, via the shared ceiling-bounded
+    resolver (BACK-612). Resolution order, first that applies:
+      0. ``.reveal.yaml root:true`` — an explicit pin (newly honored here).
+      1. Nearest package/build marker (the widened, ``__init__``-guarded set —
+         a marker-bearing dir that is itself a Python package is skipped so the
+         real root above it is found, not the package dir).
+      2. Nearest ``.git`` root.
+      3. Top of the *contiguous* ``__init__.py`` chain rooted at the target's
+         own directory (Python packages only) — the BACK-338 guard: a stray
+         far-ancestor ``__init__.py`` can never hijack a non-package tree.
+      4. ``path.parent`` when nothing matches before the hard ceiling.
 
-    Resolution order:
-      1. The nearest ancestor holding a language project marker
-         (pyproject.toml, setup.py, package.json, go.mod, Cargo.toml).
-      2. The nearest ancestor holding a .git directory.
-      3. The top of the *contiguous* __init__.py chain rooted at the target's
-         own directory (Python packages only).
-      4. path.parent, if none of the above apply.
-
-    Step 3 is deliberately contiguous: a stray __init__.py far up the tree (a
-    common leftover in a shared src/ or home dir) must never hijack the root of
-    an unrelated, non-package directory and trigger a whole-tree scan (BACK-338).
+    Adopting the shared resolver closes the scan-root over-climb bug for I002
+    the way BACK-609/610 closed it for ``depends://``: a marker-less C/C++ tree
+    nested under an ancestor ``.git`` now scopes correctly given a
+    ``.reveal.yaml root:true`` in the component. Tiers 1 and 3 compose — when
+    the guard skips a marker-bearing package dir and there is no real higher
+    root, the contiguous-``__init__`` tier recovers the same dir.
     """
-    current = path.parent
-
-    # Pass 1: look for project-level markers (strongest signal)
-    sentinel = current
-    git_root = None
-    for _ in range(15):
-        if any((current / marker).exists() for marker in _PROJECT_MARKERS):
-            return current
-        if git_root is None and (current / '.git').exists():
-            git_root = current  # note it, keep walking for a marker above it
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
-
-    # .git is a strong project root signal even without a marker file
-    if git_root is not None and not is_unsafe_scan_root(git_root):
-        return git_root
-
-    # Pass 2: contiguous __init__.py chain from the target's own package upward.
-    # If the target directory is not itself a Python package, do NOT ascend —
-    # this is what prevents a far-ancestor __init__.py from hijacking the root.
-    if (sentinel / '__init__.py').exists():
-        current = sentinel
-        for _ in range(15):
-            parent = current.parent
-            if parent == current or not (parent / '__init__.py').exists():
-                return current
-            current = parent
-
-    return sentinel
+    root = resolve_project_root(path, python_init_chain=True)
+    return root if root is not None else path.parent
 
 
 # Initialize file patterns from all registered extractors at module load time

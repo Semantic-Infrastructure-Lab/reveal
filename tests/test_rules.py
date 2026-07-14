@@ -1465,6 +1465,68 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
             target.unlink(missing_ok=True)
 
 
+class TestI002RootLeversBACK612(unittest.TestCase):
+    """BACK-612: I002 now shares depends://'s resolver, so it newly honors the
+    two root levers (.reveal.yaml root:true, and the __init__ guard that climbs
+    past a self-package to the real root) — closing the over-climb bug for the
+    circular-import rule as BACK-609/610 closed it for depends://."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = Path(tempfile.mkdtemp(prefix='reveal_back612_'))
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_reveal_yaml_root_true_pins_root_over_ancestor_git(self):
+        """The universal lever: a marker-less component nested under an ancestor
+        .git now scopes to the component when it declares .reveal.yaml root:true
+        — I002 ignored root:true entirely before BACK-612."""
+        from reveal.rules.imports.I002 import _find_project_root
+        (self.tmp / '.git').mkdir()  # foreign ancestor repo
+        comp = self.tmp / 'vendor' / 'cproj'
+        (comp / 'src').mkdir(parents=True)
+        (comp / '.reveal.yaml').write_text('root: true\n')
+        target = comp / 'src' / 'main.c'
+        target.write_text('#include "util.h"\n')
+
+        # Pre-BACK-612 this climbed to the ancestor .git (self.tmp); now pinned.
+        self.assertEqual(_find_project_root(target.resolve()), comp.resolve())
+
+    def test_init_guard_climbs_past_self_package_to_real_root(self):
+        """The __init__ guard: a marker-bearing dir that is also a Python
+        package is skipped so the real root above it is found — I002's old flat
+        climb would have stopped at the package dir."""
+        from reveal.rules.imports.I002 import _find_project_root
+        (self.tmp / '.git').mkdir()
+        pkg = self.tmp / 'homeassistant'
+        pkg.mkdir()
+        (pkg / '__init__.py').write_text('')
+        (pkg / 'setup.py').write_text('# source module, not a root marker\n')
+        target = pkg / 'core.py'
+        target.write_text('from homeassistant.const import X\n')
+
+        # setup.py sits in a package dir → skipped by the guard; real root is
+        # the VCS root above, not the package dir itself.
+        self.assertEqual(_find_project_root(target.resolve()), self.tmp.resolve())
+
+    def test_init_guard_and_chain_recover_same_dir_without_higher_root(self):
+        """Composition: when the guard skips a marker-bearing package dir and
+        there is NO real higher root, the contiguous-__init__ tier recovers the
+        same dir — no over-climb into nowhere."""
+        from reveal.rules.imports.I002 import _find_project_root
+        # No .git, no ancestor marker before the ceiling (tmp is under /tmp).
+        pkg = self.tmp / 'proj' / 'app'
+        pkg.mkdir(parents=True)
+        (pkg / '__init__.py').write_text('')
+        (pkg / 'pyproject.toml').write_text('[project]\nname="app"\n')
+        target = pkg / 'm.py'
+        target.write_text('x = 1\n')
+
+        self.assertEqual(_find_project_root(target.resolve()), pkg.resolve())
+
+
 class TestI001EdgeCases(unittest.TestCase):
     """Additional edge case tests for I001."""
 
