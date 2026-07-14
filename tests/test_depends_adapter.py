@@ -859,6 +859,203 @@ class TestDependsAdapterScanRootResolution:
 
         assert _resolve_project_root(target) == tmp_path
 
+    def test_reveal_yaml_root_beats_ancestor_vcs(self, tmp_path):
+        """BACK-609 tier 0: an explicit `.reveal.yaml root:true` pins the scan
+        root and beats a distant ancestor `.git`. This is the consistent,
+        language-agnostic way to root a marker-less tree (C/C++ with only a
+        Makefile) or a project nested under a larger repo — without it the
+        climb promotes the ancestor VCS root and over-scans."""
+        from reveal.adapters.depends import _resolve_project_root
+
+        (tmp_path / '.git').mkdir()
+        component = tmp_path / 'vendor' / 'thing'
+        component.mkdir(parents=True)
+        (component / '.reveal.yaml').write_text('root: true\n')
+        target = component / 'src' / 'target.c'
+        _write(target, 'int x;\n')
+
+        assert _resolve_project_root(target) == component
+
+    def test_reveal_yaml_without_root_true_does_not_pin(self, tmp_path):
+        """A `.reveal.yaml` that does NOT declare `root: true` is not a tier-0
+        marker — resolution falls through to the ordinary package/VCS tiers,
+        so an ambient config file can't accidentally re-scope the scan."""
+        from reveal.adapters.depends import _resolve_project_root
+
+        (tmp_path / '.git').mkdir()
+        component = tmp_path / 'vendor' / 'thing'
+        component.mkdir(parents=True)
+        (component / '.reveal.yaml').write_text('exclude:\n  - "*.tmp"\n')
+        target = component / 'src' / 'target.c'
+        _write(target, 'int x;\n')
+
+        # No root:true anywhere → the ancestor .git (tier 2) is the boundary.
+        assert _resolve_project_root(target) == tmp_path
+
+    def test_reveal_yaml_root_beats_nearer_package_marker(self, tmp_path):
+        """Tier 0 outranks tier 1: a `.reveal.yaml root:true` higher up wins
+        over a *nearer* package marker below it, so an explicit declaration is
+        never silently overridden by an inferred sub-package boundary."""
+        from reveal.adapters.depends import _resolve_project_root
+
+        (tmp_path / '.reveal.yaml').write_text('root: true\n')
+        nested = tmp_path / 'packages' / 'foo'
+        nested.mkdir(parents=True)
+        (nested / 'package.json').write_text('{"name": "foo"}\n')
+        target = nested / 'src' / 'target.js'
+        _write(target, 'var x = 1;\n')
+
+        assert _resolve_project_root(target) == tmp_path
+
+
+class TestDependsAdapterRootOverride:
+    """BACK-610: the ``?root=DIR`` query param pins the scan root for one
+    invocation (highest precedence, tier -1), with fail-closed validation, and
+    the over-climb diagnostic now names it instead of giving impossible advice."""
+
+    def test_root_override_is_highest_precedence(self, tmp_path):
+        """Tier -1: a validated ``?root=`` beats even a ``.reveal.yaml root:true``
+        higher up — an explicit per-invocation instruction wins over every
+        inferred or declared marker."""
+        from reveal.adapters.depends import _resolve_project_root
+
+        (tmp_path / '.reveal.yaml').write_text('root: true\n')
+        (tmp_path / '.git').mkdir()
+        component = tmp_path / 'packages' / 'foo'
+        (component / 'src').mkdir(parents=True)
+        target = component / 'src' / 'target.c'
+        _write(target, 'int x;\n')
+
+        # Without an override, tier 0 pins tmp_path; the override forces component.
+        assert _resolve_project_root(target) == tmp_path
+        assert _resolve_project_root(target, root_override=component) == component
+
+    def test_root_override_pins_scan_root_over_ancestor_git(self, tmp_path):
+        """End-to-end: a marker-less C tree nested under an ancestor ``.git``
+        over-climbs to that repo by default; ``?root=`` scopes the scan to the
+        component instead — the exact over-climb case BACK-609/610 target."""
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / '.git').mkdir()  # foreign ancestor repo (the over-climb trap)
+        comp = tmp_path / 'cproj' / 'src'
+        _write(comp / 'util.h', 'int u(void);\n')
+        _write(comp / 'util.c', '#include "util.h"\nint u(void){return 1;}\n')
+
+        # Default: climbs to the ancestor .git.
+        a = DependsAdapter(str(comp / 'util.h'))
+        a.get_structure()
+        assert a._scan_root == tmp_path
+
+        # Pinned: scoped to the component, still finds the dependent.
+        b = DependsAdapter(str(comp / 'util.h'), query=f'root={comp}')
+        r = b.get_structure()
+        assert b._scan_root == comp
+        assert b._root_override_used == comp
+        assert r['count'] == 1
+        assert 'util.c' in r['dependents'][0]['file']
+
+    def test_relative_root_resolved_from_cwd(self, tmp_path, monkeypatch):
+        """A relative ``?root=`` resolves against cwd, so the same URI works in
+        CLI and MCP/service mode."""
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / '.git').mkdir()
+        comp = tmp_path / 'cproj' / 'src'
+        _write(comp / 'util.h', 'int u(void);\n')
+        _write(comp / 'util.c', '#include "util.h"\nint u(void){return 1;}\n')
+
+        monkeypatch.chdir(tmp_path)
+        a = DependsAdapter(str(comp / 'util.h'), query='root=cproj/src')
+        a.get_structure()
+        assert a._root_override_used == comp
+
+    def test_unsafe_root_rejected_falls_back_and_warns(self, tmp_path):
+        """``?root=`` cannot be used to force a catastrophic wide scan: a
+        filesystem/home/system root is refused (same ceiling the climb obeys),
+        and resolution falls back to auto-detection with a disclosure."""
+        import tempfile
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / '.git').mkdir()
+        target = tmp_path / 'src' / 'foo.h'
+        _write(target, 'int f(void);\n')
+
+        a = DependsAdapter(str(target), query=f'root={tempfile.gettempdir()}')
+        r = a.get_structure()
+
+        assert a._root_override_used is None
+        assert a._scan_root == tmp_path  # fell back to tier-2 .git
+        assert 'filesystem/home/system root' in r['warning']
+
+    def test_nonexistent_root_rejected_and_warns(self, tmp_path):
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / '.git').mkdir()
+        target = tmp_path / 'src' / 'foo.h'
+        _write(target, 'int f(void);\n')
+
+        a = DependsAdapter(str(target), query=f'root={tmp_path / "nope"}')
+        r = a.get_structure()
+
+        assert a._root_override_used is None
+        assert 'not an existing directory' in r['warning']
+
+    def test_root_not_containing_target_rejected_and_warns(self, tmp_path):
+        """A pinned root that doesn't hold the target can never surface the
+        target's dependents — reject it rather than scan an unrelated tree."""
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / '.git').mkdir()
+        target = tmp_path / 'app' / 'foo.h'
+        _write(target, 'int f(void);\n')
+        (tmp_path / 'other').mkdir()
+
+        a = DependsAdapter(str(target), query=f'root={tmp_path / "other"}')
+        r = a.get_structure()
+
+        assert a._root_override_used is None
+        assert 'does not contain the target' in r['warning']
+
+    def test_capped_file_target_diagnostic_names_root_lever(self, tmp_path, monkeypatch):
+        """The over-climb fix (BACK-610): a single-file target that hits the cap
+        must NOT be told to 'narrow the path' (impossible for one file) — it must
+        name the levers that actually fix it (``?root=`` / ``.reveal.yaml``)."""
+        from reveal.adapters.depends import DependsAdapter
+
+        monkeypatch.setattr(DependsAdapter, '_SCAN_FILE_CAP', 3)
+        (tmp_path / '.git').mkdir()
+        for i in range(5):
+            inc = f'#include "m{i - 1}.h"\n' if i > 0 else ''
+            _write(tmp_path / 'src' / f'm{i}.h', f'{inc}int f{i}(void);\n')
+
+        a = DependsAdapter(str(tmp_path / 'src' / 'm0.h'))
+        r = a.get_structure()
+
+        assert r['metadata']['scan_capped'] is True
+        warning = r['warning']
+        assert "Can't narrow a single-file target" in warning
+        assert '?root=' in warning
+        assert "root: true" in warning
+
+    def test_capped_pinned_root_diagnostic_is_honest(self, tmp_path, monkeypatch):
+        """When ``?root=`` is already in effect and the cap STILL fires, don't
+        loop back to advice they already followed — say the pinned root is
+        genuinely over the cap."""
+        from reveal.adapters.depends import DependsAdapter
+
+        monkeypatch.setattr(DependsAdapter, '_SCAN_FILE_CAP', 3)
+        comp = tmp_path / 'cproj'
+        for i in range(5):
+            inc = f'#include "m{i - 1}.h"\n' if i > 0 else ''
+            _write(comp / 'src' / f'm{i}.h', f'{inc}int f{i}(void);\n')
+
+        a = DependsAdapter(str(comp / 'src' / 'm0.h'), query=f'root={comp}')
+        r = a.get_structure()
+
+        assert r['metadata']['scan_capped'] is True
+        assert 'exceeds the scan cap even as scoped' in r['warning']
+        assert '?root=DIR' not in r['warning']
+
 
 class TestDependsAdapterLanguageScoping:
     """BACK-525 layer 4: a single-file target only parses files in its own

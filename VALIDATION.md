@@ -95,11 +95,19 @@ rather than hiding a real edge.
 The following are **not** in the table above because they have not been
 run through an independent-oracle diff against a real corpus:
 
-- **C++, Dart, Lua, Zig, GDScript, C** — each shares a resolver
+- **C++, Dart, Lua, Zig, GDScript** — each shares a resolver
   family with at least one already-measured language, but has not been
   independently confirmed on its own real corpus. (Swift graduated out of
   this list — measured with a full `swift package dump-package` oracle loop,
   BACK-567; see the Results table.)
+- **C** — `#include` recall spot-checked at set level against grep ground truth
+  on Redis (`samples/c`): 10/10 headers across fan-in 3–75 match exactly, two
+  set-verified (server.h 75/75, zmalloc.h 23/23, 0 false pos / 0 false neg).
+  Not yet a full stratified from-scratch oracle loop like the premium tier, but
+  the real DD blocker on C — `depends://` over-climbing the scan root on a
+  Makefile-based tree — was found and fixed here (BACK-609, layer-0
+  `.reveal.yaml root:true`). A full `gcc -MM`-oracle loop is the optional
+  follow-on.
 - **Java's residual 3/975 misses** — root-caused to a directory-name
   collision in a global skip-list (`env`, also matching a Python-venv-style
   convention) that excludes a real, unrelated source package. Filed, not yet

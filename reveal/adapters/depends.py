@@ -19,7 +19,12 @@ from ..utils import safe_json_dumps
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
 from ..utils.query import parse_query_params
-from ..utils.path_utils import is_skippable_dir, search_parents, search_parents_within_ceiling
+from ..utils.path_utils import (
+    is_skippable_dir,
+    is_unsafe_scan_root,
+    search_parents,
+    search_parents_within_ceiling,
+)
 
 # BACK-498: find_project_root()'s built-in default markers (pyproject.toml,
 # setup.py/.cfg, .git, Cargo.toml, package.json, go.mod) are Python/JS/Rust/Go-
@@ -115,6 +120,27 @@ def _has_package_marker(directory: Path) -> bool:
     return any(directory.glob('*.sln')) or any(directory.glob('*.rockspec'))
 
 
+def _has_reveal_root_marker(directory: Path) -> bool:
+    """True if *directory* holds a ``.reveal.yaml`` declaring ``root: true``
+    (BACK-525 tier 0 — an explicit, language-agnostic project-root
+    declaration that beats any *inferred* package/VCS marker).
+
+    This is the consistent, cross-language way to pin a scan root when the
+    marker heuristics can't: a C/C++ tree whose only build file is a
+    ``Makefile``/``CMakeLists.txt`` (not in the package-marker set), or any
+    project checked out as a subdirectory of a larger VCS repo (a monorepo
+    component, a vendored subtree, reveal's own ``samples/<lang>/``), where
+    tier-2 would otherwise promote a distant ancestor ``.git``. Reuses
+    :meth:`RevealConfig._reveal_yaml_is_root` so there is exactly one definition of
+    what ``root: true`` means across reveal (config discovery + this scan
+    root)."""
+    config_file = directory / '.reveal.yaml'
+    if not config_file.exists():
+        return False
+    from ..config import RevealConfig
+    return RevealConfig._reveal_yaml_is_root(config_file)
+
+
 def _has_vcs_marker(directory: Path) -> bool:
     """True if *directory* is a VCS root (BACK-525 tier 2) — checked only
     when no package marker exists anywhere in the climb."""
@@ -130,13 +156,31 @@ def _has_project_marker(directory: Path) -> bool:
     return _has_package_marker(directory) or _has_vcs_marker(directory)
 
 
-def _resolve_project_root(target_path: Path) -> Optional[Path]:
+def _resolve_project_root(
+    target_path: Path, root_override: Optional[Path] = None
+) -> Optional[Path]:
     """Tiered nearest-marker resolution (BACK-525 layers 1+2): a near
     package/build marker beats a distant VCS root, and the climb is bounded
     by a hard ceiling it can never promote to a root. Returns ``None`` if
     neither tier finds anything before the ceiling — the caller falls back
     to the inferred-project scope (layer 3).
+
+    Tier -1 (an explicit ``?root=DIR`` query param, already validated by the
+    caller — exists, is a directory containing the target, not an unsafe scan
+    root) wins over everything: it is a deliberate per-invocation instruction,
+    the no-mutation counterpart to ``.reveal.yaml root:true`` that also works in
+    MCP/service mode (BACK-610). When supplied it short-circuits the climb.
+
+    Tier 0 (an explicit ``.reveal.yaml root:true``) is consulted next: it is
+    the one deterministic, language-agnostic root declaration, so it beats
+    every *inferred* marker — the fix for marker-less C/C++ trees and any
+    project nested under an ancestor ``.git`` (see :func:`_has_reveal_root_marker`).
     """
+    if root_override is not None:
+        return root_override
+    reveal_root = search_parents_within_ceiling(target_path, _has_reveal_root_marker)
+    if reveal_root is not None:
+        return reveal_root
     package_root = search_parents_within_ceiling(target_path, _has_package_marker)
     if package_root is not None:
         return package_root
@@ -152,6 +196,18 @@ _SCHEMA_QUERY_PARAMS = {
         'type': 'string',
         'description': 'Output format: text (default) or dot (GraphViz)',
         'examples': ["depends://src?format=dot"],
+    },
+    'root': {
+        'type': 'string',
+        'description': (
+            'Pin the scan root to DIR for this invocation (highest precedence — '
+            'beats .reveal.yaml root:true, package, and VCS markers). Resolved '
+            'relative to cwd; must be a directory containing the target and is '
+            'refused if it is a filesystem/home/system root. Use it when the '
+            'auto-detected root climbs too high — e.g. a marker-less C/C++ tree '
+            'nested under a larger ancestor .git repo.'
+        ),
+        'examples': ["depends://src/server.c?root=src"],
     },
 }
 
@@ -233,6 +289,14 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'description': 'Full reverse dependency graph in GraphViz DOT format',
         'output_type': 'dependency_summary',
     },
+    {
+        'uri': "depends://project/src/main.c?root=project",
+        'description': (
+            'Pin the scan root when auto-detection over-climbs (e.g. a Makefile '
+            'C project nested under a larger ancestor .git)'
+        ),
+        'output_type': 'module_dependents',
+    },
 ]
 
 _SCHEMA_NOTES = [
@@ -242,6 +306,7 @@ _SCHEMA_NOTES = [
     'Results are conservative: false negatives possible, never false positives',
     'Use ?top=N on a directory to find high-coupling modules (many dependents = high impact if changed)',
     'Use depends://file.py to do impact analysis before refactoring a module',
+    'Scan root: ?root=DIR > .reveal.yaml root:true > package marker > VCS root > inferred subtree',
 ]
 
 
@@ -444,6 +509,11 @@ class DependsAdapter(ResourceAdapter):
         self._scan_root: Optional[Path] = None
         self._scan_capped = False
         self._root_inferred = False
+        # BACK-610: the validated ?root= override actually in effect (None when
+        # not passed or rejected), plus a one-line reason when a passed ?root=
+        # was rejected (surfaced via _warnings so the fallback isn't silent).
+        self._root_override_used: Optional[Path] = None
+        self._root_override_rejected: Optional[str] = None
         # BACK-547 honest-decline: import statements that were extracted and
         # point intra-project (per the extractor's is_intra_project_import) but
         # produced no graph edge — the false-negative risk a blast-radius
@@ -492,8 +562,10 @@ class DependsAdapter(ResourceAdapter):
         # exists above the file; only fall back to the bare parent dir if even
         # that isn't found.
         # BACK-525 layers 1+2: tiered nearest-marker climb, bounded by a hard
-        # ceiling it can never itself become the answer to.
-        project_root = _resolve_project_root(target_path)
+        # ceiling it can never itself become the answer to. BACK-610: an
+        # explicit ?root= override (validated) takes precedence over the climb.
+        root_override = self._validated_root_override(target_path)
+        project_root = _resolve_project_root(target_path, root_override=root_override)
         if project_root is None:
             # BACK-525 layer 3: inferred-project fallback (tsserver's model)
             # — no marker found before the ceiling, so don't scan the
@@ -530,6 +602,54 @@ class DependsAdapter(ResourceAdapter):
             return self._format_file_dependents(target_path)
         else:
             return self._format_directory_summary(target_path, top_n=top_n, fmt=fmt)
+
+    def _validated_root_override(self, target_path: Path) -> Optional[Path]:
+        """BACK-610: resolve and validate the ``?root=DIR`` query param, if any.
+
+        Returns the pinned scan root (an absolute, resolved ``Path``) when the
+        param is present and valid, else ``None`` — in which case resolution
+        falls through to the normal tier-0..3 climb. A *passed-but-invalid*
+        ``?root=`` records a one-line reason in ``self._root_override_rejected``
+        (surfaced via :meth:`_warnings`) so the fallback is never silent.
+
+        Validation (fail-closed to the auto climb, never raising):
+        * resolved relative to cwd and ``~`` expanded, so a relative DIR works
+          the same in CLI and MCP/service mode (the URI is what's passed in both);
+        * must be an existing directory;
+        * must not be an unsafe scan root (``/``, ``$HOME``, temp/system dir) —
+          the same ceiling guard the climb obeys, so ``?root=`` cannot be used
+          to force the catastrophic wide scan the ceiling exists to prevent;
+        * must contain the target (or equal it) — a root that doesn't hold the
+          target can never surface the target's dependents.
+
+        The scan-file cap in :meth:`_build_graph` still applies to whatever root
+        is pinned, so a legitimately huge pinned root is capped-and-warned, not
+        silently truncated.
+        """
+        raw = self._query_params.get('root')
+        if not raw or not isinstance(raw, str):
+            return None
+        candidate = Path(raw).expanduser()
+        if not candidate.is_absolute():
+            candidate = Path.cwd() / candidate
+        candidate = candidate.resolve()
+        if not candidate.is_dir():
+            self._root_override_rejected = (
+                f"?root={raw} is not an existing directory"
+            )
+            return None
+        if is_unsafe_scan_root(candidate):
+            self._root_override_rejected = (
+                f"?root={raw} resolves to a filesystem/home/system root"
+            )
+            return None
+        if not _path_is_under(target_path, candidate):
+            self._root_override_rejected = (
+                f"?root={raw} does not contain the target"
+            )
+            return None
+        self._root_override_used = candidate
+        return candidate
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get dependents for a specific module by name.
@@ -1119,14 +1239,45 @@ class DependsAdapter(ResourceAdapter):
 
         Mirrors imports.py's coverage_warning_line — a partial graph must say
         so, not present itself as complete (same principle as BACK-518 part 2).
+
+        BACK-610: the advice is now honest for the case that actually breaks.
+        The old wording ("Scope depends:// to a narrower path") is *impossible*
+        for a single-file target — you can't narrow a single file, and the real
+        cause is the scan root climbing above the file's project (an ancestor
+        .git). For a file target, name the levers that actually fix it: ``?root=``
+        or a ``.reveal.yaml root:true`` marker. If a ``?root=`` was already in
+        effect and the cap still fired, the pinned root is genuinely over the cap,
+        so don't loop back to advice they already followed.
         """
         if not self._scan_capped:
             return ''
         root = self._scan_root
-        return (
+        base = (
             f"⚠ Scan capped at {self._SCAN_FILE_CAP:,} files under {root} — "
-            "results may be incomplete. Scope depends:// to a narrower path "
-            "for a complete scan."
+            "results may be incomplete."
+        )
+        if self._root_override_used is not None:
+            return f"{base} This pinned ?root= exceeds the scan cap even as scoped."
+        if self._target_path is not None and self._target_path.is_file():
+            return (
+                f"{base} Can't narrow a single-file target — the scan root climbed "
+                "above this file's project. Pin it with depends://…?root=DIR or a "
+                "'.reveal.yaml' containing 'root: true' at the project root."
+            )
+        return (
+            f"{base} Scope depends:// to a narrower path, or pin the root with "
+            "?root=DIR (or a '.reveal.yaml' with 'root: true')."
+        )
+
+    def _root_override_warning(self) -> str:
+        """BACK-610: one-line disclosure when a passed ``?root=`` was rejected
+        and validation fell back to auto-detection — so the silent fallback
+        doesn't hand back a scope the user didn't ask for without saying why."""
+        if not self._root_override_rejected:
+            return ''
+        return (
+            f"⚠ {self._root_override_rejected} — ignored, using the auto-detected "
+            "scan root instead."
         )
 
     def _root_inferred_warning(self) -> str:
@@ -1223,7 +1374,11 @@ class DependsAdapter(ResourceAdapter):
         a corpus with a few unresolved imports doesn't append a caveat to every
         confident, non-empty answer (that would be the cry-wolf failure honest-
         decline is meant to prevent)."""
-        parts = [self._scan_cap_warning(), self._root_inferred_warning()]
+        parts = [
+            self._root_override_warning(),
+            self._scan_cap_warning(),
+            self._root_inferred_warning(),
+        ]
         if include_honest_decline:
             parts.append(self._honest_decline_warning())
         return '\n'.join(w for w in parts if w)
