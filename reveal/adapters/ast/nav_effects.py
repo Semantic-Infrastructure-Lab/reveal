@@ -158,6 +158,51 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         # unambiguous logging APIs, not print wrappers.
         ('log', ['nslog', 'os_log']),
     ],
+    # csharp/ruby/cpp: --sideeffects/--boundary classify_call() was never
+    # actually gated to Python/TS (the docs claiming that were stale — these
+    # three already worked via _TAXONOMY_COMMON alone); this adds their
+    # dominant per-language idioms for parity with the other 8 languages that
+    # already have a dedicated bucket (php/python/js/go/rust/java/kotlin/swift).
+    'csharp': [
+        ('db', [
+            'executereader', 'executenonquery', 'executescalar', 'savechanges',
+        ]),
+        ('http', [
+            'getasync', 'postasync', 'putasync', 'deleteasync', 'sendasync',
+        ]),
+        ('file', [
+            'writealltext', 'readalltext', 'writealllines', 'readalllines',
+            'createdirectory', 'streamwriter', 'filestream',
+        ]),
+        ('env', ['getenvironmentvariable']),
+        ('log', [
+            'loginformation', 'logerror', 'logwarning', 'logdebug', 'logcritical',
+        ]),
+        # 'task.delay' kept 2-segment (not bare 'delay') to avoid colliding
+        # with unrelated domain uses of a generic word like a UI/animation delay.
+        ('sleep', ['task.delay']),
+    ],
+    'ruby': [
+        ('file', [
+            'file.write', 'file.read', 'file.delete',
+            'fileutils.rm', 'fileutils.mkdir_p',
+        ]),
+        # ActiveRecord CRUD verbs (.save/.where/.find_by) deliberately excluded —
+        # too collision-prone with unrelated domain methods of the same name.
+        ('http', ['net::http', 'httparty', 'faraday']),
+    ],
+    'cpp': [
+        ('file', ['ofstream', 'ifstream', 'fstream', 'freopen']),
+        ('http', [
+            'curl_easy_perform', 'curl_easy_setopt', 'curl_easy_init',
+        ]),
+        # bare 'sleep'/'exit'/'abort'/'getenv' already covered by
+        # _TAXONOMY_COMMON; 'sleep_for' (std::this_thread::sleep_for) is the
+        # one idiom common doesn't reach, since it doesn't contain 'sleep' as
+        # its own segment.
+        ('sleep', ['sleep_for']),
+        ('log', ['spdlog::info', 'spdlog::warn', 'spdlog::error']),
+    ],
 }
 
 # Analyzer `language` values that share one _TAXONOMY_BY_LANG bucket.

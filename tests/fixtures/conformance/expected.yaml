@@ -459,8 +459,15 @@ ruby:
   - {kind: WRITE, line: 10}
   - {kind: READ, line: 17}
   sideeffects:
-  - {line: 13, kind: file}
-  - {line: 13, kind: file}
+  - {line: 13, kind: file}  # File.open (common taxonomy 'open('); f.write's own
+                            # 'file' hit was a false positive from ruby lacking
+                            # a dedicated taxonomy bucket — it fell back to the
+                            # *unscoped* table and accidentally matched Swift's
+                            # language-scoped bare 'write' pattern. Fixed this
+                            # session by giving ruby its own _TAXONOMY_BY_LANG
+                            # entry; f.write (unknown receiver type) is correctly
+                            # unclassified now, matching the existing conservative
+                            # philosophy (ActiveRecord CRUD verbs excluded too).
   exits:
   - {kind: RETURN, line: 17}
   - {kind: RETURN, line: 19}

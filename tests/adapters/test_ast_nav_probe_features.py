@@ -1079,6 +1079,67 @@ class TestClassifyCall(unittest.TestCase):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertIsNone(classify_call('print', 'swift'))
 
+    def test_csharp_db_executereader(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('ExecuteReader', 'csharp'), 'db')
+
+    def test_csharp_http_getasync(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('client.GetAsync', 'csharp'), 'http')
+
+    def test_csharp_file_writealltext(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('File.WriteAllText', 'csharp'), 'file')
+
+    def test_csharp_env_getenvironmentvariable(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('Environment.GetEnvironmentVariable', 'csharp'), 'env')
+
+    def test_csharp_log_loginformation(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('_logger.LogInformation', 'csharp'), 'log')
+
+    def test_csharp_sleep_task_delay(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('Task.Delay', 'csharp'), 'sleep')
+
+    def test_csharp_scoped_to_csharp(self):
+        # These are csharp-only patterns — must not leak into other languages.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('ExecuteReader', 'python'))
+
+    def test_ruby_file_write(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('File.write', 'ruby'), 'file')
+
+    def test_ruby_fileutils_rm(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('FileUtils.rm', 'ruby'), 'file')
+
+    def test_ruby_http_net_http(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('Net::HTTP.get', 'ruby'), 'http')
+
+    def test_ruby_http_httparty(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('HTTParty.get', 'ruby'), 'http')
+
+    def test_cpp_file_ofstream(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('std::ofstream', 'cpp'), 'file')
+
+    def test_cpp_http_curl_easy_perform(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('curl_easy_perform', 'cpp'), 'http')
+
+    def test_cpp_sleep_for(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('std::this_thread::sleep_for', 'cpp'), 'sleep')
+
+    def test_cpp_log_spdlog(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('spdlog::info', 'cpp'), 'log')
+
     def test_hard_stop_die(self):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertEqual(classify_call('die'), 'hard_stop')
@@ -1569,11 +1630,11 @@ class TestClassifyCallLanguageScoping(unittest.TestCase):
 
     def test_unknown_language_falls_back_to_unscoped(self):
         # 'kotlin' used to be the example here, but BACK-477 gave it a real
-        # _TAXONOMY_BY_LANG entry — use a language still genuinely absent
-        # from the table so this keeps testing the fallback, not kotlin's
-        # scoping.
+        # _TAXONOMY_BY_LANG entry (and this session added csharp/ruby/cpp) —
+        # use a language still genuinely absent from the table so this keeps
+        # testing the fallback, not some language's own scoping.
         from reveal.adapters.ast.nav_effects import classify_call
-        self.assertEqual(classify_call('session_start', language='ruby'), 'session')
+        self.assertEqual(classify_call('session_start', language='dart'), 'session')
 
 
 class TestCollectEffects(unittest.TestCase):
