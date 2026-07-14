@@ -1,12 +1,19 @@
 """Git file operations: history, blame, and content retrieval."""
 
+import hashlib
 import os
 import re
 import sys
 from datetime import datetime
 from typing import Dict, Any, List, Optional, cast, TYPE_CHECKING
 
+from ...core import disk_cache
 from ...utils.results import ResultBuilder
+
+# One entry per (repo, HEAD commit, since, no_merges) -- low cardinality like
+# I002's import-graph cache (one entry per scan root), not per-file like the
+# structure cache, so the default 64-entry prune cap is correct as-is.
+_CHURN_CACHE_NAMESPACE = "churn"
 
 _LINE_RANGE_RE = re.compile(r'^[Ll](\d+)-[Ll]?(\d+)$')
 
@@ -937,6 +944,37 @@ def commit_touches_element(
     return False
 
 
+def _churn_fingerprint(
+    repo: 'pygit2.Repository',
+    start_oid: Any,
+    since: Optional[str],
+    no_merges: bool,
+) -> Optional[str]:
+    """Disk-cache key for a full-history churn walk, or None to skip caching.
+
+    Bound to (repo workdir, resolved start commit oid, since, no_merges) —
+    deliberately NOT scope_paths, since the walk's expensive step
+    (diff_to_tree per commit) runs identically regardless of scope; only
+    which deltas get tallied differs. Caching the unscoped walk once means
+    every differently-scoped caller on the same commit reuses one entry
+    instead of fragmenting the cache per scope_paths set. A HEAD move (new
+    oid) is a cache miss, never a stale hit.
+    """
+    try:
+        workdir = repo.workdir or str(repo.path)
+    except Exception:
+        return None
+    hasher = hashlib.sha256()
+    hasher.update(str(workdir).encode("utf-8", "replace"))
+    hasher.update(b"\x00")
+    hasher.update(str(start_oid).encode("ascii"))
+    hasher.update(b"\x00")
+    hasher.update((since or "").encode("utf-8", "replace"))
+    hasher.update(b"\x00")
+    hasher.update(str(int(no_merges)).encode("ascii"))
+    return hasher.hexdigest()
+
+
 def get_churn_counts(
     repo: 'pygit2.Repository',
     ref: str,
@@ -951,11 +989,17 @@ def get_churn_counts(
     O(total historical file-touches) instead of O(files x commits). See
     internal-docs/design/BACK483_CHURN_COMPLEXITY_HOTSPOTS_2026-07-07.md.
 
+    The walk result is disk-cached (BACK-624) keyed on the resolved HEAD
+    commit, since, and no_merges — repo-history walks on a real repo (one
+    diff_to_tree per historical commit) dominate `reveal hotspots` wall time
+    by 85-94% on an unchanged tree, dwarfing everything else `stats://`
+    computes. scope_paths is applied as a post-filter on the cached full
+    result rather than during the walk, so it doesn't fragment the cache.
+
     Args:
         repo: Open pygit2 repository
         ref: Starting ref (e.g. 'HEAD')
         scope_paths: Repo-relative paths to tally, or None for all paths.
-            Bounds memory/cost on large repos to only the files being scored.
         since: Optional ISO date string — commits before this are skipped
         no_merges: If True, skip merge commits (multiple parents) entirely
 
@@ -975,6 +1019,14 @@ def get_churn_counts(
         obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
     start = cast('pygit2.Commit', obj)
 
+    fingerprint = _churn_fingerprint(repo, start.id, since, no_merges)
+    if fingerprint is not None:
+        cached = disk_cache.get(_CHURN_CACHE_NAMESPACE, fingerprint)
+        if cached is not None:
+            if scope_paths is None:
+                return cached
+            return {p: c for p, c in cached.items() if p in scope_paths}
+
     counts: Dict[str, int] = defaultdict(int)
     for commit in repo.walk(start.id, pygit2.GIT_SORT_TIME):  # type: ignore[arg-type]
         if no_merges and len(commit.parents) > 1:
@@ -989,7 +1041,12 @@ def get_churn_counts(
 
         for delta in diff.deltas:
             path = delta.new_file.path or delta.old_file.path
-            if scope_paths is None or path in scope_paths:
-                counts[path] += 1
+            counts[path] += 1
 
-    return dict(counts)
+    result = dict(counts)
+    if fingerprint is not None:
+        disk_cache.put(_CHURN_CACHE_NAMESPACE, fingerprint, result)
+
+    if scope_paths is None:
+        return result
+    return {p: c for p, c in result.items() if p in scope_paths}
