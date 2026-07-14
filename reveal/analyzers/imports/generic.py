@@ -1667,6 +1667,20 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             target = module[len(prefix):]
             return self._resolve_path_target(target, None, search_paths, exts)
 
+        # Path-shaped module strings must win over namespace-separator
+        # splitting, checked first: PHP's module_separator is '\' (`use
+        # App\Models\User`), which collides with Windows' native path
+        # separator. An absolute path built by __DIR__/constant-anchor
+        # resolution (BACK-564/565, str(anchor / remainder)) renders
+        # backslashes there, so on Windows `sep in module` matched first and
+        # split the whole path into bogus namespace components — silently
+        # resolving to None instead of the real file. No legitimate dotted/
+        # namespaced import in any currently-supported language starts with
+        # '.', contains '/', ends with a source extension, or is an absolute
+        # filesystem path, so reordering is safe on every platform.
+        if self._looks_like_path(module, exts):
+            return self._resolve_path_target(module, base_path, search_paths, exts)
+
         if sep and sep in module:
             parts = [p for p in module.split(sep) if p]
             # Scala selector `{C, D}` / wildcard `_` name multiple targets or a
@@ -1675,9 +1689,6 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             if parts and (parts[-1] == '_' or '{' in parts[-1]):
                 return None
             return self._resolve_dotted(parts, exts, search_paths, file_index)
-
-        if self._looks_like_path(module, exts):
-            return self._resolve_path_target(module, base_path, search_paths, exts)
 
         # Single-token module with no separator and no path markers: try it as a
         # bare basename (Swift `import Foo` → Foo.swift; Java default-package
