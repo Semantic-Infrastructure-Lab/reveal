@@ -102,6 +102,29 @@ def _collect_go_files(path: Path) -> List[Path]:
     return files
 
 
+def _has_rust_files(path: Path) -> bool:
+    if path.is_file():
+        return path.suffix.lower() == '.rs'
+    for root, dirs, filenames in os.walk(str(path)):
+        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
+        for fname in filenames:
+            if fname.endswith('.rs'):
+                return True
+    return False
+
+
+def _collect_rust_files(path: Path) -> List[Path]:
+    if path.is_file():
+        return [path] if path.suffix.lower() == '.rs' else []
+    files: List[Path] = []
+    for root, dirs, filenames in os.walk(str(path)):
+        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
+        for fname in filenames:
+            if fname.endswith('.rs'):
+                files.append(Path(os.path.join(root, fname)))
+    return files
+
+
 def create_contracts_parser() -> argparse.ArgumentParser:
     from reveal.cli.parser import _build_global_options_parser
     parser = argparse.ArgumentParser(
@@ -165,15 +188,17 @@ def _scan_contracts(
     is_interface_family = _has_interface_family_files(path)
     is_ruby = not is_interface_family and _has_ruby_files(path)
     is_go = not is_interface_family and not is_ruby and _has_go_files(path)
+    is_rust = not is_interface_family and not is_ruby and not is_go and _has_rust_files(path)
 
-    if not _has_python_files(path) and not is_interface_family and not is_ruby and not is_go:
+    if (not _has_python_files(path) and not is_interface_family and not is_ruby
+            and not is_go and not is_rust):
         unsupported_language = detect_non_python_language(path)
 
     # BACK-518: guard against a few stray supported-language files standing in
     # for a mostly-unsupported tree (see surface.py / assess_language_coverage).
     coverage = assess_language_coverage(
         path,
-        {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go'},
+        {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go', 'rust'},
     )
     coverage_dict = {
         'total_code_files': coverage.total_code_files,
@@ -191,6 +216,11 @@ def _scan_contracts(
 
     if is_go:
         result = _scan_contracts_go(path, abstract_only, show_implementations)
+        result['coverage'] = coverage_dict
+        return result
+
+    if is_rust:
+        result = _scan_contracts_rust(path, abstract_only, show_implementations)
         result['coverage'] = coverage_dict
         return result
 
@@ -505,6 +535,64 @@ def _scan_contracts_go(
     }
 
 
+def _scan_contracts_rust(
+    path: Path,
+    abstract_only: bool,
+    show_implementations: bool,
+) -> Dict[str, Any]:
+    """Rust-specific contract scanner — traits + explicit implementors.
+
+    Rust's contract is the `trait`; implementors are *declared* via
+    `impl Trait for Type` (no structural inference needed, unlike Go). See
+    `nav_contracts_rust.py` for the extraction detail.
+    """
+    from reveal.adapters.ast.nav_contracts_rust import scan_file_contracts_rust
+
+    traits: List[Dict[str, Any]] = []
+    impls: List[Dict[str, Any]] = []
+    for file_path in _collect_rust_files(path):
+        scanned = scan_file_contracts_rust(str(file_path))
+        traits.extend(scanned['interfaces'])
+        impls.extend(scanned['impls'])
+
+    for tr in traits:
+        tr['bases'] = []
+        tr['implementations'] = []
+
+    trait_by_name = {t['name']: t for t in traits}
+    # A type may implement several traits — collect its trait list for the
+    # "implementing types" slot; populate each trait's implementers.
+    type_traits: Dict[str, Dict[str, Any]] = {}
+    if show_implementations:
+        for impl in impls:
+            entry = {'name': impl['type'], 'file': impl['file'], 'line': impl['line']}
+            tr = trait_by_name.get(impl['trait'])
+            if tr is not None:
+                tr['implementations'].append(entry)
+            rec = type_traits.setdefault(impl['type'], {'name': impl['type'],
+                                                        'file': impl['file'],
+                                                        'line': impl['line'], 'bases': set()})
+            rec['bases'].add(impl['trait'])
+
+    implementers: List[Dict[str, Any]] = []
+    if not abstract_only:
+        for rec in type_traits.values():
+            implementers.append({**rec, 'bases': sorted(rec['bases'])})
+
+    return {
+        'path': str(path),
+        'total_contracts': len(traits),
+        'abcs': [],
+        'protocols': traits,
+        'typeddicts': [],
+        'dataclasses': implementers,
+        'basemodels': [],
+        'path_heuristic': [],
+        'unsupported_language': '',
+        '_rust_mode': True,
+    }
+
+
 def _extract_all_classes(structures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Extract class dicts from collect_structures output.
 
@@ -621,6 +709,7 @@ def _render_report(report: Dict[str, Any]) -> None:
     ts_mode = report.get('_ts_mode', False)
     ruby_mode = report.get('_ruby_mode', False)
     go_mode = report.get('_go_mode', False)
+    rust_mode = report.get('_rust_mode', False)
 
     print()
     print(f"Contracts: {path}")
@@ -641,7 +730,7 @@ def _render_report(report: Dict[str, Any]) -> None:
         if not warning:
             lang = report.get('unsupported_language', '')
             if lang:
-                print(f"  reveal contracts currently supports Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, and Go.")
+                print(f"  reveal contracts currently supports Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, and Rust.")
                 print(f"  No supported files found — detected {lang}.")
             else:
                 print("  No contracts or seams found.")
@@ -651,6 +740,8 @@ def _render_report(report: Dict[str, Any]) -> None:
                     print("  Try widening the path or checking for module/include/extend (mixin) usage.")
                 elif go_mode:
                     print("  Try widening the path or checking for interface type declarations.")
+                elif rust_mode:
+                    print("  Try widening the path or checking for trait / impl-for declarations.")
                 else:
                     print("  Try widening the path or checking imports for ABC/Protocol usage.")
             print()
@@ -667,6 +758,9 @@ def _render_report(report: Dict[str, Any]) -> None:
     elif go_mode:
         _render_group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
         _render_group("Implementing Types (structural)", report['dataclasses'], show_methods=False, show_impls=False)
+    elif rust_mode:
+        _render_group("Traits", report['protocols'], show_methods=False, show_impls=True)
+        _render_group("Implementing Types", report['dataclasses'], show_methods=False, show_impls=False)
     else:
         _render_group("Abstract Base Classes", report['abcs'], show_methods=True, show_impls=True)
         _render_group("Protocols", report['protocols'], show_methods=True, show_impls=True)

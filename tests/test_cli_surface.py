@@ -1358,5 +1358,83 @@ func f() {
         self.assertEqual(len(result['http']), 0)
 
 
+class TestNavSurfaceRust(unittest.TestCase):
+    """Unit tests for the Rust surface scanner (nav_surface_rust, BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _scan_rs(self, filename: str, content: str):
+        from reveal.adapters.ast.nav_surface_rust import scan_file_surface_rust
+        path = _write(self.tmp, filename, content)
+        return scan_file_surface_rust(path)
+
+    def test_rust_network_import(self):
+        result = self._scan_rs('c.rs', 'use reqwest::Client;\n')
+        self.assertIn('reqwest::Client', [e['name'] for e in result['network']])
+
+    def test_rust_db_import(self):
+        result = self._scan_rs('d.rs', 'use sqlx::PgPool;\n')
+        self.assertIn('sqlx::PgPool', [e['name'] for e in result['db']])
+
+    def test_rust_sdk_import_prefix(self):
+        """`aws_sdk_*` crates match by prefix."""
+        result = self._scan_rs('p.rs', 'use aws_sdk_s3::Client;\n')
+        self.assertIn('aws_sdk_s3::Client', [e['name'] for e in result['sdk']])
+
+    def test_rust_env_var(self):
+        result = self._scan_rs('cfg.rs', 'fn f() { let k = env::var("API_KEY"); }\n')
+        self.assertIn('API_KEY', [e['name'] for e in result['env']])
+
+    def test_rust_env_var_fully_qualified(self):
+        result = self._scan_rs('cfg.rs', 'fn f() { let k = std::env::var("PORT"); }\n')
+        self.assertIn('PORT', [e['name'] for e in result['env']])
+
+    def test_rust_fs_write(self):
+        result = self._scan_rs('w.rs', 'fn f() { std::fs::write("/tmp/x", b"d"); }\n')
+        self.assertIn('std::fs::write', [e['name'] for e in result['fs']])
+
+    def test_rust_route_attribute_macro(self):
+        result = self._scan_rs('h.rs', '#[get("/users/{id}")]\nasync fn get_user() {}\n')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/users/{id}')
+        self.assertEqual(entries[0]['methods'], 'GET')
+
+    def test_rust_route_axum_builder(self):
+        result = self._scan_rs('r.rs', 'fn f() { let a = Router::new().route("/health", get(health)); }\n')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/health')
+        self.assertEqual(entries[0]['methods'], 'GET')
+
+    def test_rust_cli_top_level_main(self):
+        result = self._scan_rs('main.rs', 'fn main() {}\n')
+        self.assertEqual(len(result['cli']), 1)
+
+    def test_rust_non_verb_attribute_not_a_route(self):
+        """A non-HTTP attribute macro (e.g. `#[test]`) must not be a route."""
+        result = self._scan_rs('t.rs', '#[test]\nfn it_works() {}\n')
+        self.assertEqual(len(result['http']), 0)
+
+    def test_rust_route_without_leading_slash_not_a_route(self):
+        result = self._scan_rs('r.rs', 'fn f() { let a = x.route("relative", get(h)); }\n')
+        self.assertEqual(len(result['http']), 0)
+
+    def test_rust_actix_web_resource_route(self):
+        result = self._scan_rs('r.rs', 'fn cfg() { s.service(web::resource("/tasks").route(web::get().to(list))); }\n')
+        entries = [e for e in result['http'] if e['path'] == '/tasks']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['methods'], 'ANY')
+
+    def test_rust_web_scope_route(self):
+        result = self._scan_rs('r.rs', 'fn cfg() { s.service(web::scope("/api")); }\n')
+        self.assertIn('/api', [e['path'] for e in result['http']])
+
+
 if __name__ == '__main__':
     unittest.main()

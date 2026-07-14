@@ -1297,5 +1297,97 @@ class TestScanContractsGo(unittest.TestCase):
         self.assertEqual([p['name'] for p in report['protocols']], ['Store'])
 
 
+class TestScanContractsRust(unittest.TestCase):
+    """Tests for Rust contract detection — traits + explicit impls (BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write_rs(self, filename: str, content: str) -> str:
+        return _write(self.tmp, filename, content)
+
+    def test_trait_classified_as_protocol(self):
+        self._write_rs('store.rs', '''\
+            trait Store {
+                fn get(&self) -> Vec<u8>;
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertTrue(report.get('_rust_mode'))
+        self.assertEqual([p['name'] for p in report['protocols']], ['Store'])
+
+    def test_impl_for_records_implementation(self):
+        self._write_rs('store.rs', '''\
+            trait Store {
+                fn get(&self) -> Vec<u8>;
+            }
+            struct MemStore;
+            impl Store for MemStore {
+                fn get(&self) -> Vec<u8> { vec![] }
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        store = next(p for p in report['protocols'] if p['name'] == 'Store')
+        self.assertIn('MemStore', [i['name'] for i in store['implementations']])
+        self.assertIn('MemStore', [c['name'] for c in report['dataclasses']])
+
+    def test_inherent_impl_not_an_implementation(self):
+        """`impl Type {}` (no `for`) is an inherent impl, not a trait
+        implementation — it must not appear as an implementer."""
+        self._write_rs('store.rs', '''\
+            trait Store {
+                fn get(&self);
+            }
+            struct MemStore;
+            impl MemStore {
+                fn helper(&self) {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        store = next(p for p in report['protocols'] if p['name'] == 'Store')
+        self.assertEqual(store['implementations'], [])
+        self.assertEqual(report['dataclasses'], [])
+
+    def test_type_implementing_multiple_traits(self):
+        self._write_rs('store.rs', '''\
+            trait Reader { fn read(&self); }
+            trait Writer { fn write(&self); }
+            struct File;
+            impl Reader for File { fn read(&self) {} }
+            impl Writer for File { fn write(&self) {} }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        file_impl = next(c for c in report['dataclasses'] if c['name'] == 'File')
+        self.assertEqual(file_impl['bases'], ['Reader', 'Writer'])
+
+    def test_generic_impl_target_resolves_base_type(self):
+        """`impl Trait for Type<T>` records the base type name, not the
+        generic wrapper."""
+        self._write_rs('store.rs', '''\
+            trait Store { fn get(&self); }
+            struct Cache<T> { inner: T }
+            impl<T> Store for Cache<T> {
+                fn get(&self) {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        store = next(p for p in report['protocols'] if p['name'] == 'Store')
+        self.assertIn('Cache', [i['name'] for i in store['implementations']])
+
+    def test_rust_abstract_only_omits_implementers(self):
+        self._write_rs('store.rs', '''\
+            trait Store { fn get(&self); }
+            struct MemStore;
+            impl Store for MemStore { fn get(&self) {} }
+        ''')
+        report = _scan_contracts(Path(self.tmp), abstract_only=True)
+        self.assertEqual(report['dataclasses'], [])
+        self.assertEqual([p['name'] for p in report['protocols']], ['Store'])
+
+
 if __name__ == '__main__':
     unittest.main()
