@@ -1,7 +1,27 @@
 """Workspace resource handlers for the claude:// adapter — plans, memory, agents, hooks."""
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Union
 from datetime import datetime
+
+
+def _resolve_md_resource(directory: Path, name: str) -> Union[Path, List[str], None]:
+    """Resolve a claude://<X>/<name> single-item lookup to its .md file.
+
+    Returns the resolved Path on an unambiguous match, a list of candidate
+    stems if the glob fallback matches more than one file, or None if
+    nothing matches.
+    """
+    path = directory / name
+    if not path.suffix:
+        path = directory / (name + '.md')
+    if path.exists():
+        return path
+    matches = sorted(directory.glob(f'{name}*.md')) if directory.exists() else []
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        return [p.stem for p in matches]
+    return None
 
 
 def _parse_agent_frontmatter(content: str) -> Dict[str, Any]:
@@ -37,18 +57,14 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
     parts = resource.split('/', 1)
     plan_name = parts[1].strip() if len(parts) > 1 else ''
     if plan_name:
-        plan_path = plans_dir / plan_name
-        if not plan_path.suffix:
-            plan_path = plans_dir / (plan_name + '.md')
-        if not plan_path.exists():
-            matches = sorted(plans_dir.glob(f'{plan_name}*.md')) if plans_dir.exists() else []
-            if len(matches) == 1:
-                plan_path = matches[0]
-            elif len(matches) > 1:
-                return {**base, 'type': 'claude_plans', 'ambiguous': True,
-                        'matches': [p.stem for p in matches], 'query': plan_name}
-            else:
-                return {**base, 'type': 'claude_plan', 'error': f'Plan not found: {plan_name}', 'name': plan_name}
+        resolved = _resolve_md_resource(plans_dir, plan_name)
+        if isinstance(resolved, list):
+            return {**base, 'type': 'claude_plans', 'ambiguous': True,
+                    'matches': resolved, 'query': plan_name}
+        if resolved is None:
+            return {**base, 'type': 'claude_plan',
+                    'error': f'Plan not found: {plan_name}', 'name': plan_name}
+        plan_path = resolved
         try:
             content = plan_path.read_text(encoding='utf-8', errors='replace')
         except Exception as e:
@@ -174,19 +190,14 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
     parts = resource.split('/', 1)
     agent_name = parts[1].strip() if len(parts) > 1 else ''
     if agent_name:
-        agent_path = agents_dir / agent_name
-        if not agent_path.suffix:
-            agent_path = agents_dir / (agent_name + '.md')
-        if not agent_path.exists():
-            matches = sorted(agents_dir.glob(f'{agent_name}*.md')) if agents_dir.exists() else []
-            if len(matches) == 1:
-                agent_path = matches[0]
-            elif len(matches) > 1:
-                return {**base, 'type': 'claude_agents', 'ambiguous': True,
-                        'matches': [p.stem for p in matches], 'query': agent_name}
-            else:
-                return {**base, 'type': 'claude_agent',
-                        'error': f'Agent not found: {agent_name}', 'name': agent_name}
+        resolved = _resolve_md_resource(agents_dir, agent_name)
+        if isinstance(resolved, list):
+            return {**base, 'type': 'claude_agents', 'ambiguous': True,
+                    'matches': resolved, 'query': agent_name}
+        if resolved is None:
+            return {**base, 'type': 'claude_agent',
+                    'error': f'Agent not found: {agent_name}', 'name': agent_name}
+        agent_path = resolved
         try:
             content = agent_path.read_text(encoding='utf-8', errors='replace')
         except Exception as e:

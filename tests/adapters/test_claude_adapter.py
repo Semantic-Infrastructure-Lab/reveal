@@ -1773,6 +1773,19 @@ class TestClaudePlans:
         finally:
             ClaudeAdapter.PLANS_DIR = original
 
+    def test_read_plan_ambiguous_match(self, tmp_path):
+        plans_dir = self._make_plans_dir(tmp_path)
+        (plans_dir / 'alpha-other.md').write_text('# Alpha Other\n\nUnrelated.')
+        original = ClaudeAdapter.PLANS_DIR
+        ClaudeAdapter.PLANS_DIR = tmp_path / 'plans'
+        try:
+            adapter = ClaudeAdapter('plans/alpha')
+            result = adapter._get_plans()
+            assert result.get('ambiguous') is True
+            assert sorted(result['matches']) == ['alpha-other', 'alpha-plan']
+        finally:
+            ClaudeAdapter.PLANS_DIR = original
+
     def test_missing_plans_dir(self, tmp_path):
         original = ClaudeAdapter.PLANS_DIR
         ClaudeAdapter.PLANS_DIR = tmp_path / 'plans'  # doesn't exist
@@ -2080,6 +2093,20 @@ class TestClaudeAgents:
             adapter = ClaudeAdapter('agents/nonexistent')
             result = adapter._get_agents()
             assert 'error' in result
+        finally:
+            ClaudeAdapter.AGENTS_DIR = original
+
+    def test_agents_ambiguous_match(self, tmp_path):
+        agents_dir = self._make_agents_dir(tmp_path)
+        (agents_dir / 'review-helper.md').write_text(
+            '---\nname: review-helper\ndescription: Other reviewer\ntools: Bash\nmodel: haiku\n---\nHelp.')
+        original = ClaudeAdapter.AGENTS_DIR
+        ClaudeAdapter.AGENTS_DIR = tmp_path / 'agents'
+        try:
+            adapter = ClaudeAdapter('agents/review')
+            result = adapter._get_agents()
+            assert result.get('ambiguous') is True
+            assert sorted(result['matches']) == ['review-bot', 'review-helper']
         finally:
             ClaudeAdapter.AGENTS_DIR = original
 
