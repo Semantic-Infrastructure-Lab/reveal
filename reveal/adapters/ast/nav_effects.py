@@ -36,7 +36,19 @@ _TAXONOMY_COMMON: List[Tuple[str, List[str]]] = [
     ]),
     ('db', [
         'pg_query', 'pg_fetch', 'sqlite_query',
-        '->query', '->execute', '->fetch', '->select', '->insert', '->update', '->delete',
+        # BACK-635: `->update`/`->delete` were removed from the COMMON table and
+        # moved to PHP-only (_TAXONOMY_BY_LANG['php']). The tokenizer strips the
+        # `->`/`::` sigil, so these arrow patterns collapse to the collision-prone
+        # BARE verbs `update`/`delete` — which then wrongly matched any language's
+        # ordinary `dict.update()` / `list`-ish `.update()` (corpus: 12 db FPs on
+        # Home Assistant, incl. 2/60 negative-control FPs) and stole Python's
+        # `requests.delete(url)` from http (kind-order db<http let bare `delete`
+        # win over the explicit python `requests.delete`->http). `->query`/
+        # `->execute`/`->fetch`/`->select`/`->insert` stay common: their bare
+        # forms (`query`/`execute`/`fetch`/`select`/`insert`) are load-bearing for
+        # Python SQLAlchemy recall (`session.query`, `cursor.execute`) and did not
+        # produce corpus FPs.
+        '->query', '->execute', '->fetch', '->select', '->insert',
         '::query', '::execute',
         'db_query', 'db_insert', 'db_update', 'db_delete',
     ]),
@@ -53,7 +65,14 @@ _TAXONOMY_COMMON: List[Tuple[str, List[str]]] = [
     ]),
     ('file', [
         'fopen', 'fwrite', 'fread', 'fclose', 'fputs',
-        'rename', 'unlink', 'mkdir', 'rmdir', 'copy',
+        # BACK-635: bare `copy` moved to PHP-only (PHP's `copy($src,$dst)`
+        # builtin). As a bare, undotted verb it matched every language's ordinary
+        # value-copy idiom — `dict.copy()`, `x.copy()`, `os.environ.copy()`
+        # (corpus: 4 file FPs on Home Assistant) — none of which is filesystem
+        # I/O. `rename`/`unlink`/`mkdir`/`rmdir` stay: they have negligible
+        # non-file collision risk (values don't carry `.rename()`/`.unlink()`
+        # methods) and produced no corpus FPs.
+        'rename', 'unlink', 'mkdir', 'rmdir',
         'readfile', 'tmpfile', 'open(',
     ]),
     ('env', [
@@ -72,6 +91,14 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         ('db', [
             'mysql_query', 'mysql_fetch', 'mysqli_query', 'mysqli_fetch',
             'wpdb', '$wpdb', 'pdo->', 'pdo::', 'new pdo',
+            # BACK-635: moved here from _TAXONOMY_COMMON. `$obj->update(...)` /
+            # `$obj->delete(...)` are legitimate PHP ActiveRecord/query-builder
+            # db idioms, but as bare verbs they over-fired on other languages'
+            # `.update()`/`.delete()` — so they are now PHP-scoped. (In unscoped
+            # `_COMPILED_ALL` mode every language's patterns merge, so this move
+            # is behavior-preserving there; it only tightens the per-language
+            # scoped tables.)
+            '->update', '->delete',
         ]),
         ('http', [
             'curl_exec', 'curl_setopt', 'curl_init',
@@ -91,6 +118,10 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         ]),
         ('file', [
             'file_put_contents', 'file_get_contents',
+            # BACK-635: PHP's `copy($src, $dst)` filesystem builtin — moved here
+            # from _TAXONOMY_COMMON, where the bare verb wrongly matched every
+            # language's value-copy `.copy()` (dict/list/os.environ).
+            'copy',
         ]),
         ('log', [
             'error_log', 'trigger_error', 'var_dump', 'phpinfo',
@@ -98,6 +129,25 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
     ],
     'python': [
         ('hard_stop', ['sys.exit', 'os._exit']),
+        # BACK-594: SQLAlchemy ORM operations on a `session` receiver. These
+        # replace the language-UNSCOPED `session`/`connection` -> db receiver
+        # heuristic that was dropped from _RECEIVER_TAXONOMY (it tagged aiohttp
+        # `session.get(url)` / OAuth `session.async_ensure_token_valid()` /
+        # websocket `connection.send_result(...)` as db — `session`/`connection`
+        # are extremely common non-db variable names). Each verb here is an
+        # unambiguous SQLAlchemy Session method with no aiohttp/websocket
+        # counterpart (aiohttp ClientSession has none of add/flush/commit/…),
+        # so it classifies the real db call without the cross-domain FP.
+        # `session.query`/`session.execute` are already caught by common
+        # `->query`/`->execute`; `session.get`/`session.delete` are deliberately
+        # OMITTED — they are genuinely ambiguous (SQLAlchemy 2.0 db read vs
+        # aiohttp http verb), so per the conservative philosophy we DECLINE.
+        ('db', [
+            'session.add', 'session.add_all', 'session.flush', 'session.commit',
+            'session.rollback', 'session.refresh', 'session.expunge',
+            'session.expunge_all', 'session.merge', 'session.connection',
+            'session.scalar', 'session.scalars',
+        ]),
         ('http', [
             'requests.get', 'requests.post', 'requests.put', 'requests.delete',
             'urllib.request', 'httpx.', 'aiohttp.',
@@ -318,9 +368,21 @@ _COMPILED_BY_LANG: Dict[str, List[Tuple[str, List[List[str]]]]] = {
 # and bare `cursor` (single segment) does not match. Project-specific
 # receivers (tsx, evlog, services.trade_db, ...) belong in BACK-238's
 # `.reveal.yaml` extension, not here.
+# BACK-594: `conn`/`connection`/`session` (db) and bare `cache` (cache) were
+# REMOVED — this fallback is language-unscoped and these are extremely common
+# non-db/non-cache variable/package names, so they produced corpus-confirmed
+# cross-language false positives: Go `conn.Close()`/`conn.Subprotocol()` -> db,
+# Go `cache.NewListWatchFromClient(...)` -> cache (the k8s package literally
+# named `cache`), Python aiohttp `session.get(url)` -> db, websocket
+# `connection.send_result(...)` -> db. Real SQLAlchemy db calls that used to
+# rely on the `session`/`connection` receiver are now caught precisely by the
+# explicit `session.<orm-verb>` patterns in _TAXONOMY_BY_LANG['python'] and by
+# the common `->execute`/`->query` verbs (`connection.execute`, `cursor.execute`).
+# `cursor` (db) and `redis`/`memcache` (cache) are kept: they are specific
+# enough to not collide with ordinary variable names.
 _RECEIVER_TAXONOMY: List[Tuple[str, List[str]]] = [
-    ('db', ['cursor', 'conn', 'connection', 'session', 'db', 'engine']),
-    ('cache', ['cache', 'redis', 'memcache']),
+    ('db', ['cursor', 'db', 'engine']),
+    ('cache', ['redis', 'memcache']),
     ('log', ['logger', '_log', 'log', '_logger', 'ilogger', 'slf4j']),
     ('http', ['httpx', 'aiohttp', 'requests', 'httpclient', '_httpclient']),
     # BACK-401: .NET BCL / JVM stdlib receivers for File/Directory/Path-style

@@ -1265,13 +1265,23 @@ class TestClassifyCallReceiver(unittest.TestCase):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertEqual(classify_call('cursor.execute'), 'db')
 
-    def test_conn_commit_classifies_as_db(self):
+    def test_conn_connection_receiver_no_longer_classifies_as_db(self):
+        # BACK-594 (sideeffects-recall-oracle, real-corpus): `conn`/`connection`
+        # were REMOVED from the language-unscoped db receiver fallback. They are
+        # extremely common non-db variable names and produced corpus-confirmed
+        # cross-language false positives — Go websocket `conn.Close()`/
+        # `conn.Subprotocol()` -> db (client-go), Python websocket
+        # `connection.send_result(...)` -> db (Home Assistant). Per the
+        # conservative philosophy an ambiguous receiver is DECLINED, not guessed.
+        # Real db calls formerly relying on these are now caught precisely by the
+        # explicit `session.<orm-verb>` python patterns and the common
+        # `->execute`/`->commit`-shaped verbs (e.g. `connection.execute`).
         from reveal.adapters.ast.nav_effects import classify_call
-        self.assertEqual(classify_call('conn.commit'), 'db')
-
-    def test_connection_close_classifies_as_db(self):
-        from reveal.adapters.ast.nav_effects import classify_call
-        self.assertEqual(classify_call('connection.close'), 'db')
+        self.assertIsNone(classify_call('conn.commit'))
+        self.assertIsNone(classify_call('connection.close'))
+        # Go corpus false positives that motivated the removal:
+        self.assertIsNone(classify_call('conn.Close', language='go'))
+        self.assertIsNone(classify_call('conn.Subprotocol', language='go'))
 
     def test_underscore_log_warning_classifies_as_log(self):
         # Restoration after BACK-283: was matched by substring on 'log',
@@ -1722,6 +1732,88 @@ class TestClassifyCallLanguageScoping(unittest.TestCase):
         self.assertIsNone(
             classify_call('aiohttp_client.async_get_clientsession', language='python'))
         self.assertEqual(classify_call('requests.get', language='python'), 'http')
+
+    # ── BACK-635: bare-verb subsequence over-fire (fail-before / pass-after) ──
+
+    def test_python_dict_update_not_db(self):
+        # `->update` was moved to PHP-only. The tokenizer strips the arrow, so
+        # it used to collapse to bare `update` and tag every Python `.update()`
+        # as db (corpus: 12 FPs on Home Assistant incl. 2/60 negative-control
+        # FPs `added_doors.update(...)` / `self.data.update()`).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('domains.update', language='python'))
+        self.assertIsNone(classify_call('added_doors.update', language='python'))
+        self.assertIsNone(classify_call('self.data.update', language='python'))
+        self.assertIsNone(classify_call('device.update', language='python'))
+
+    def test_python_value_copy_not_file(self):
+        # bare `copy` was moved to PHP-only (PHP's `copy()` builtin). It used to
+        # tag every value-copy idiom as file (corpus: 4 FPs — `entry.data.copy()`,
+        # `os.environ.copy()`, `env.copy()`).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('x.copy', language='python'))
+        self.assertIsNone(classify_call('entry.data.copy', language='python'))
+        # `os.environ.copy()` is now correctly ENV (via the os.environ pattern),
+        # no longer mislabeled file by the bare `copy` verb.
+        self.assertEqual(classify_call('os.environ.copy', language='python'), 'env')
+
+    def test_python_requests_delete_is_http_not_db(self):
+        # `->delete` was moved to PHP-only. It used to collapse to bare `delete`
+        # and — because kind-order puts db before http — STEAL Python's explicit
+        # `requests.delete` -> http, mislabeling it db (corpus: itunes/_request).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('requests.delete', language='python'), 'http')
+
+    def test_php_arrow_db_and_copy_still_classify(self):
+        # Proof the BACK-635 fix SCOPED rather than deleted these patterns: the
+        # PHP idioms they legitimately serve must still classify.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('$model->update', language='php'), 'db')
+        self.assertEqual(classify_call('$repo->delete', language='php'), 'db')
+        self.assertEqual(classify_call('copy', language='php'), 'file')
+        # Unscoped (no language) also still classifies — every language's
+        # patterns merge, so back-compat callers see the PHP idiom too.
+        self.assertEqual(classify_call('$model->update'), 'db')
+        self.assertEqual(classify_call('copy'), 'file')
+
+    # ── BACK-594: receiver fallback crossing language boundaries ──
+
+    def test_python_session_receiver_not_db_for_http_verbs(self):
+        # `session`/`connection` were dropped from the receiver fallback. aiohttp
+        # `session.get(url)`, OAuth `session.async_ensure_token_valid()`, and
+        # websocket `connection.send_result(...)` used to be tagged db purely by
+        # the receiver name (corpus: 9 occurrences on Home Assistant).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('session.async_ensure_token_valid', language='python'))
+        self.assertIsNone(classify_call('session.async_on_cleanup', language='python'))
+        self.assertIsNone(classify_call('connection.send_result', language='python'))
+        self.assertIsNone(classify_call('connection.send_error', language='python'))
+        # `session.get` is genuinely ambiguous (aiohttp http vs SQLAlchemy 2.0
+        # db read) -> DECLINED, not guessed.
+        self.assertIsNone(classify_call('session.get', language='python'))
+
+    def test_python_sqlalchemy_session_orm_verbs_still_db(self):
+        # Recall guard: the real SQLAlchemy db calls that used to rely on the
+        # dropped `session` receiver are now caught by explicit python patterns,
+        # so db recall does not regress (verified 25/25 on the oracle).
+        from reveal.adapters.ast.nav_effects import classify_call
+        for verb in ('add', 'flush', 'commit', 'rollback', 'refresh',
+                     'expunge', 'expunge_all', 'merge', 'connection', 'scalars'):
+            self.assertEqual(
+                classify_call(f'session.{verb}', language='python'), 'db',
+                msg=f'session.{verb} should classify as db')
+        # cursor / bare-verb paths still work too.
+        self.assertEqual(classify_call('cursor.execute', language='python'), 'db')
+        self.assertEqual(classify_call('session.query', language='python'), 'db')
+        self.assertEqual(classify_call('connection.execute', language='python'), 'db')
+
+    def test_go_cache_receiver_not_cache(self):
+        # BACK-594: bare `cache` receiver dropped — `k8s.io/client-go/tools/cache`
+        # is a package literally named `cache`, so `cache.NewListWatchFromClient`
+        # was mislabeled a cache side effect. redis/memcache receivers are kept.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('cache.NewListWatchFromClient', language='go'))
+        self.assertIsNone(classify_call('cache.NewIndexer', language='go'))
 
 
 class TestCollectEffects(unittest.TestCase):
