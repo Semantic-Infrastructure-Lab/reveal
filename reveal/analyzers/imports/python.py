@@ -12,11 +12,12 @@ Extracts import statements and symbol usage from Python source files.
 Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
+import hashlib
 import logging
 import os
 from pathlib import Path
 from typing import List, Set, Optional, Dict, Tuple
-from ...core import node_children as _children, node_prev_sibling as _prev_sibling
+from ...core import disk_cache, node_children as _children, node_prev_sibling as _prev_sibling
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,45 @@ from ...registry import get_analyzer
 # I001 also calls extract_imports for each checked file independently.
 # Caching avoids redundant parses + file reads across both rules and repeated builds.
 _extract_imports_cache: Dict[Tuple[str, int], List[ImportStatement]] = {}
+
+# Cross-invocation disk cache (BACK-625): extract_imports parses+walks the
+# tree independently of TreeSitterAnalyzer.get_structure()'s own structure
+# cache (BACK-535) -- a warm structure cache does NOT make this free, so
+# `calls://`'s build_symbol_map (used by overview/hotspots' complex-functions
+# pass) re-pays a full parse per file on every fresh CLI invocation. Found
+# profiling BACK-618 on a real 9,474-file Python corpus: 32.6s of a 401s
+# `overview` run was extract_imports's independent parse, unrelated to
+# StatsAdapter's already-cached path. Per-file entry, same shape as BACK-535's
+# structure cache, so it needs the same large prune-cap override.
+_IMPORTS_CACHE_NAMESPACE = "python_imports"
+_DEFAULT_IMPORTS_CACHE_MAX_FILES = 100_000
+
+
+def _imports_cache_max_files() -> int:
+    """Read the imports-cache entry cap, honoring REVEAL_IMPORTS_CACHE_MAX_FILES."""
+    raw = os.environ.get('REVEAL_IMPORTS_CACHE_MAX_FILES')
+    if raw is None:
+        return _DEFAULT_IMPORTS_CACHE_MAX_FILES
+    try:
+        return int(raw)
+    except ValueError:
+        logger.debug("Invalid REVEAL_IMPORTS_CACHE_MAX_FILES=%r, using default", raw)
+        return _DEFAULT_IMPORTS_CACHE_MAX_FILES
+
+
+def _imports_fingerprint(path_str: str, mtime_ns: int) -> Optional[str]:
+    """Disk-cache key for one file's extracted imports, or None to skip caching."""
+    try:
+        size = os.path.getsize(path_str)
+    except OSError:
+        return None
+    hasher = hashlib.sha256()
+    hasher.update(path_str.encode("utf-8", "replace"))
+    hasher.update(b"\x00")
+    hasher.update(str(mtime_ns).encode("ascii"))
+    hasher.update(b"\x00")
+    hasher.update(str(size).encode("ascii"))
+    return hasher.hexdigest()
 
 
 @register_extractor
@@ -51,8 +91,12 @@ class PythonExtractor(LanguageExtractor):
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all import statements from Python file using tree-sitter.
 
-        Results are cached by (file_path, mtime_ns) so I002's graph builder and
-        I001's per-file check share results without re-parsing.
+        Results are cached in-process by (file_path, mtime_ns) so I002's graph
+        builder and I001's per-file check share results without re-parsing
+        within one CLI invocation, and cross-invocation on disk (BACK-625) so
+        a 2nd+ `reveal` command on an unchanged file skips the parse entirely
+        -- this independently re-parses every file (does not share
+        TreeSitterAnalyzer's own structure cache, BACK-535).
 
         Args:
             file_path: Path to Python source file
@@ -68,6 +112,13 @@ class PythonExtractor(LanguageExtractor):
         cache_key = (path_str, mtime_ns)
         if cache_key in _extract_imports_cache:
             return _extract_imports_cache[cache_key]
+
+        fingerprint = _imports_fingerprint(path_str, mtime_ns)
+        if fingerprint is not None:
+            cached = disk_cache.get(_IMPORTS_CACHE_NAMESPACE, fingerprint)
+            if cached is not None:
+                _extract_imports_cache[cache_key] = cached
+                return cached
 
         analyzer = self._get_tree_analyzer(path_str)
         if not analyzer:
@@ -88,6 +139,9 @@ class PythonExtractor(LanguageExtractor):
             imports.extend(self._parse_from_import(node, file_path, analyzer, source_lines))
 
         _extract_imports_cache[cache_key] = imports
+        if fingerprint is not None:
+            disk_cache.put(_IMPORTS_CACHE_NAMESPACE, fingerprint, imports,
+                            max_entries=_imports_cache_max_files())
         return imports
 
     def _get_tree_analyzer(self, path_str: str):
