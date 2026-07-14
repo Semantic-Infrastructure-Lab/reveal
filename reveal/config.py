@@ -25,6 +25,8 @@ from dataclasses import dataclass
 import fnmatch
 import functools
 
+from .utils.path_utils import resolve_project_root, reveal_yaml_is_root
+
 try:
     import yaml
 except ImportError:
@@ -401,29 +403,35 @@ class RevealConfig:
 
     @classmethod
     def _reveal_yaml_is_root(cls, config_file: Path) -> bool:
-        """Return True if the .reveal.yaml file at path declares root:true."""
-        if not yaml:
-            return False
-        try:
-            with open(config_file, encoding='utf-8') as f:
-                config = yaml.safe_load(f) or {}
-            return bool(config.get('root'))
-        except (OSError, yaml.YAMLError):
-            return False
+        """Return True if the .reveal.yaml file at path declares root:true.
+
+        Delegates to the single, standalone definition in path_utils (BACK-612)
+        so ``root: true`` means exactly one thing across reveal (config
+        discovery, depends://, and the I002/D005 rules)."""
+        return reveal_yaml_is_root(config_file)
 
     @classmethod
     def _find_project_root_uncached(cls, start_path: Path) -> Path:
-        """Filesystem traversal for _find_project_root (no caching)."""
-        _system_roots = frozenset({Path('/'), Path('/tmp'), Path('/var'), Path('/var/tmp')})
-        current = start_path
-        while current != current.parent:
-            config_file = current / '.reveal.yaml'
-            if config_file.exists() and cls._reveal_yaml_is_root(config_file):
-                return current.resolve()
-            if (current / '.git').exists() and current.resolve() not in _system_roots:
-                return current.resolve()
-            current = current.parent
-        return start_path.resolve()
+        """Filesystem traversal for _find_project_root (no caching).
+
+        BACK-612: uses the shared, ceiling-bounded resolver — tier 0
+        ``.reveal.yaml root:true`` then tier 2 VCS root — the same two tiers
+        config has always used, but with the *correct* unsafe-root ceiling
+        (``is_unsafe_scan_root`` + mount boundary) instead of the stale hand-
+        copied ``{/, /tmp, /var, /var/tmp}`` frozenset it carried (missing
+        ``$HOME``/``/usr``/macOS-symlink cases). The package-marker tier is
+        deliberately left off: a config-hierarchy boundary is a distinct
+        question from "nearest import package" — a bare ``pyproject.toml`` is
+        not a config root. Falls back to ``start_path`` when nothing matches,
+        preserving config's never-None contract.
+        """
+        root = resolve_project_root(
+            start_path,
+            honor_reveal_root=True,
+            use_package_markers=False,
+            use_vcs=True,
+        )
+        return root if root is not None else start_path.resolve()
 
     @classmethod
     def _load_and_merge(cls,
