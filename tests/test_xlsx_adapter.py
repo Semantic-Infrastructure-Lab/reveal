@@ -1752,6 +1752,9 @@ class TestWorkbookOverviewExtras:
 class TestTier2Pbixray:
     """Tier 2 pbixray extraction on modern Power BI xlsx (no XMLA)."""
 
+    def setup_method(self):
+        pytest.importorskip("pbixray", reason="pbixray not installed (pip install reveal-cli[powerpivot])")
+
     def test_pbixray_available_flag(self):
         adapter = XlsxAdapter(f"xlsx://{FIXTURE_MODERN}?powerpivot=schema")
         result = adapter.get_structure()
