@@ -99,8 +99,16 @@ def get(namespace: str, key: str) -> Optional[Any]:
         return None
 
 
-def put(namespace: str, key: str, value: Any) -> None:
-    """Persist value under (namespace, key). Best-effort, never raises."""
+def put(namespace: str, key: str, value: Any, max_entries: Optional[int] = None) -> None:
+    """Persist value under (namespace, key). Best-effort, never raises.
+
+    ``max_entries`` overrides the namespace's prune cap (default
+    ``_MAX_ENTRIES_PER_NAMESPACE``). Whole-project artifacts (one entry per
+    scan-root, e.g. I002's import graph) fit comfortably under the default;
+    per-file artifacts (e.g. the structure cache, one entry per source file)
+    need a cap sized to a real repo's file count, or the namespace thrashes
+    and every entry is evicted before it can ever be reused.
+    """
     if not is_enabled():
         return
     try:
@@ -120,21 +128,21 @@ def put(namespace: str, key: str, value: Any) -> None:
             except OSError:
                 pass
             raise
-        _prune(ns_dir)
+        _prune(ns_dir, max_entries if max_entries is not None else _MAX_ENTRIES_PER_NAMESPACE)
     except Exception:
         # Read-only home, disk full, race — degrade silently to no caching.
         return
 
 
-def _prune(ns_dir: Path) -> None:
-    """Best-effort LRU-ish cap: keep the newest _MAX_ENTRIES_PER_NAMESPACE."""
+def _prune(ns_dir: Path, max_entries: int) -> None:
+    """Best-effort LRU-ish cap: keep the newest ``max_entries``."""
     try:
         entries = sorted(
             (p for p in ns_dir.glob("*.pkl")),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
-        for stale in entries[_MAX_ENTRIES_PER_NAMESPACE:]:
+        for stale in entries[max_entries:]:
             try:
                 stale.unlink()
             except OSError:

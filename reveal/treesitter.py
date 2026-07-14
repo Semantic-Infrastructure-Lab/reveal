@@ -1,5 +1,6 @@
 """Tree-sitter based analyzer for multi-language support."""
 
+import hashlib
 import logging
 import os
 from collections import OrderedDict
@@ -11,6 +12,7 @@ from .complexity import (
     _NESTING_TYPES,
     _KEYWORD_PAIRS,
 )
+from .core import disk_cache
 from .core import suppress_treesitter_warnings
 from .core import node_children as _children
 from .core import node_next_sibling as _next_sibling
@@ -36,6 +38,32 @@ logger = logging.getLogger(__name__)
 # realistic single-file multi-adapter patterns without unbounded growth.
 _MAX_PARSE_CACHE = 128
 _parse_cache: OrderedDict[Tuple[str, int], Dict[str, Any]] = OrderedDict()
+
+# Cross-invocation disk cache (BACK-535) for the built structure dict
+# (imports/functions/classes/structs, pre-slicing). `_parse_cache` above only
+# saves the tree-sitter parse within one process; the structure walk itself
+# (extraction + complexity + callers-index) is redone from cold every CLI
+# invocation. Keyed per-file on (path, mtime_ns, size, language) so one edited
+# file invalidates one entry, unlike I002's whole-tree import-graph cache.
+_STRUCTURE_CACHE_NAMESPACE = "structure"
+
+# One entry per source file (unlike I002's one-entry-per-project-root), so
+# disk_cache's default 64-entry-per-namespace prune cap would thrash on any
+# real repo — every file evicted before it's ever reused. Override with
+# REVEAL_STRUCTURE_CACHE_MAX_FILES for monorepos past this ceiling.
+_DEFAULT_STRUCTURE_CACHE_MAX_FILES = 100_000
+
+
+def _structure_cache_max_files() -> int:
+    """Read the structure-cache entry cap, honoring REVEAL_STRUCTURE_CACHE_MAX_FILES."""
+    raw = os.environ.get('REVEAL_STRUCTURE_CACHE_MAX_FILES')
+    if raw is None:
+        return _DEFAULT_STRUCTURE_CACHE_MAX_FILES
+    try:
+        return int(raw)
+    except ValueError:
+        logger.debug("Invalid REVEAL_STRUCTURE_CACHE_MAX_FILES=%r, using default", raw)
+        return _DEFAULT_STRUCTURE_CACHE_MAX_FILES
 
 
 # =============================================================================
@@ -237,12 +265,41 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
     def __init__(self, path: str):
         super().__init__(path)
-        self.tree: Optional[Any] = None
+        self._tree: Optional[Any] = None
+        self._tree_parsed: bool = False  # tree is parsed lazily, see `tree` property
         self._node_cache: Optional[Dict[str, List[Any]]] = None  # None = unbuilt; {} = built but empty
         self._content_bytes: Optional[bytes] = None
 
-        if self.language:
-            self._parse_tree()
+        # Cache key is cheap (one stat) and computed eagerly — some subclasses
+        # (e.g. MarkdownAnalyzer's inline-tree cache) read it right after
+        # construction. The expensive part, the actual parse, stays lazy.
+        path_str = os.path.abspath(str(self.path))
+        try:
+            mtime_ns = os.stat(path_str).st_mtime_ns
+        except OSError:
+            mtime_ns = 0
+        self._cache_key: Tuple[str, int] = (path_str, mtime_ns)
+
+    @property
+    def tree(self) -> Optional[Any]:
+        """Tree-sitter parse tree, parsed on first access.
+
+        Deferred so that a `get_structure()` disk-cache hit (BACK-535) never
+        pays the tree-sitter parse cost — the whole point of that cache.
+        Anything needing the raw tree directly (import extractors, nav
+        adapters, `extract_element`, etc.) still triggers a real parse
+        transparently on first touch.
+        """
+        if not self._tree_parsed:
+            self._tree_parsed = True
+            if self.language:
+                self._parse_tree()
+        return self._tree
+
+    @tree.setter
+    def tree(self, value: Optional[Any]) -> None:
+        self._tree = value
+        self._tree_parsed = True
 
     def _parse_tree(self) -> None:
         """Parse file with tree-sitter.
@@ -255,13 +312,6 @@ class TreeSitterAnalyzer(FileAnalyzer):
         Note: Tree-sitter warnings are suppressed at module level via
         suppress_treesitter_warnings() call at top of file.
         """
-        path_str = os.path.abspath(str(self.path))
-        try:
-            mtime_ns = os.stat(path_str).st_mtime_ns
-        except OSError:
-            mtime_ns = 0
-        self._cache_key: Tuple[str, int] = (path_str, mtime_ns)
-
         cached = _parse_cache.get(self._cache_key)
         if cached is not None:
             # Move to end (most-recently-used) on hit
@@ -299,12 +349,63 @@ class TreeSitterAnalyzer(FileAnalyzer):
         Note: Slicing applies to each category independently
         (e.g., --head 5 shows first 5 functions AND first 5 classes)
         """
-        if not self.tree:
+        structure = self._get_or_build_structure()
+        if not structure:
+            return {}
+
+        # Apply semantic slicing to each category. `_apply_semantic_slice`
+        # returns new lists (never mutates in place), so slicing a
+        # disk-cache hit is safe even though it's shared with future hits.
+        if head or tail or range:
+            structure = {
+                category: self._apply_semantic_slice(items, head, tail, range)
+                for category, items in structure.items()
+            }
+
+        # Remove empty categories
+        return {k: v for k, v in structure.items() if v}
+
+    def _structure_fingerprint(self) -> Optional[str]:
+        """Disk-cache key for this file's built structure, or None to skip caching.
+
+        Bound to (path, mtime_ns, size, language) — any edit changes mtime_ns
+        (and usually size), and language guards against reusing an entry if a
+        path were ever analyzed under a different grammar. Returns None (skip
+        cache) on any stat error, so a vanished/unreadable file falls through
+        to the uncached (correct) path rather than caching a wrong key.
+        """
+        try:
+            path_str = os.path.abspath(str(self.path))
+            st = os.stat(path_str)
+        except OSError:
+            return None
+        hasher = hashlib.sha256()
+        hasher.update(path_str.encode("utf-8", "replace"))
+        hasher.update(b"\x00")
+        hasher.update(str(st.st_mtime_ns).encode("ascii"))
+        hasher.update(b"\x00")
+        hasher.update(str(st.st_size).encode("ascii"))
+        hasher.update(b"\x00")
+        hasher.update(str(self.language).encode("utf-8", "replace"))
+        return hasher.hexdigest()
+
+    def _get_or_build_structure(self) -> Dict[str, Any]:
+        """Return the unsliced structure dict, from disk cache when possible.
+
+        The fingerprint/cache lookup happens before `self.tree` is touched
+        anywhere below — `tree` parses lazily on first access, so a cache hit
+        here means the file is never even parsed, not just not re-extracted.
+        """
+        fingerprint = self._structure_fingerprint()
+        if fingerprint is not None:
+            cached = disk_cache.get(_STRUCTURE_CACHE_NAMESPACE, fingerprint)
+            if cached is not None:
+                return cached
+
+        if not self.tree:  # first access here triggers the actual parse
             return {}
 
         structure = {}
-
-        # Extract common elements
         structure['imports'] = self._extract_imports()
         functions = self._extract_functions()
         callers_index = build_callers_index(functions)
@@ -314,15 +415,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
         structure['classes'] = self._extract_classes()
         structure['structs'] = self._extract_structs()
 
-        # Apply semantic slicing to each category
-        if head or tail or range:
-            for category in structure:
-                structure[category] = self._apply_semantic_slice(
-                    structure[category], head, tail, range
-                )
-
-        # Remove empty categories
-        return {k: v for k, v in structure.items() if v}
+        if fingerprint is not None:
+            disk_cache.put(_STRUCTURE_CACHE_NAMESPACE, fingerprint, structure,
+                           max_entries=_structure_cache_max_files())
+        return structure
 
     def _extract_relationships(self, structure: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
         """Extract intra-file call graph edges from structure.

@@ -63,6 +63,29 @@ def test_corrupt_entry_is_a_miss_not_a_crash():
     assert disk_cache.get("ns", "k") is None       # fails open
 
 
+def test_default_prune_cap_evicts_past_64_entries():
+    """Regression guard for BACK-535: a per-file cache needs a bigger cap.
+
+    The default (no max_entries override) must stay at the historical 64 —
+    I002's whole-tree cache relies on this. A per-file cache (BACK-535,
+    treesitter.py) passes its own much larger max_entries to avoid thrashing.
+    """
+    for i in range(70):
+        disk_cache.put("prune_default_ns", f"k{i}", i)
+    ns_dir = disk_cache._namespace_dir("prune_default_ns")
+    assert len(list(ns_dir.glob("*.pkl"))) == 64
+
+
+def test_max_entries_override_avoids_thrashing():
+    for i in range(70):
+        disk_cache.put("prune_override_ns", f"k{i}", i, max_entries=1000)
+    ns_dir = disk_cache._namespace_dir("prune_override_ns")
+    assert len(list(ns_dir.glob("*.pkl"))) == 70
+    # every entry should still be a hit — nothing evicted
+    for i in range(70):
+        assert disk_cache.get("prune_override_ns", f"k{i}") == i
+
+
 def test_version_keyed_path_isolates_reveal_versions(monkeypatch):
     disk_cache.put("ns", "k", "old")
     monkeypatch.setattr(disk_cache, "__version__", "999.999.999")
