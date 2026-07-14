@@ -4,17 +4,25 @@ Detects circular import dependencies between modules.
 Supports Python, JavaScript, Go, and Rust.
 """
 
+import hashlib
 import logging
 import os
+import stat as stat_module
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...analyzers.imports import ImportGraph
 from ...analyzers.imports.base import get_extractor, get_all_extensions
+from ...core import disk_cache
 from ...utils.path_utils import is_unsafe_scan_root, resolve_project_root
 
 logger = logging.getLogger(__name__)
+
+# Disk-cache namespace for the resolved import graph. Value keyed on a
+# fingerprint of the whole source-file set (path + mtime_ns + size), so any
+# edit/add/delete/rename under the root produces a different key and misses.
+_IMPORT_GRAPH_NAMESPACE = "import_graph"
 
 # Module-level cache: project_root → ImportGraph.
 # _build_import_graph scans every source file under the project root via
@@ -88,6 +96,57 @@ def _max_graph_files() -> int:
         except ValueError:
             logger.debug("Invalid REVEAL_I002_MAX_FILES=%r, using default", raw)
     return _DEFAULT_MAX_GRAPH_FILES
+
+
+def _tree_fingerprint(directory: Path) -> Optional[str]:
+    """Hash the source-file set under ``directory`` for the disk-cache key.
+
+    Mirrors ``_collect_raw_imports`` Pass A's file selection exactly (supported
+    extension + is_file), then digests each file's ``(relpath, mtime_ns, size)``.
+    A content edit bumps mtime_ns (and usually size); an add/delete/rename
+    changes the file set — every realistic change yields a different digest, so
+    a stale graph is never served. Stat-only (no parse), so it is cheap relative
+    to the ~O(files) tree-sitter build it may let us skip.
+
+    Returns ``None`` (→ caller skips the cache and builds directly) when:
+    * the file count exceeds the ceiling — same guard as Pass A; a mis-detected
+      giant root should not pay a full stat walk, and its graph is not cached;
+    * any stat/walk error occurs — fail open to the uncached path.
+
+    The digest deliberately includes ``get_all_extensions()`` and the reveal
+    version (via the disk-cache path) so that a change in *which* files are
+    considered source, or in extraction logic, cannot reuse an old graph.
+    """
+    try:
+        supported = get_all_extensions()
+        max_files = _max_graph_files()
+        hasher = hashlib.sha256()
+        # Bind the digest to the exact extension set that selected the files —
+        # if support changes, the same tree fingerprints differently.
+        hasher.update(("\x00".join(sorted(supported))).encode("utf-8", "replace"))
+        hasher.update(b"\x01")
+        entries = []
+        for file_path in directory.rglob("*"):
+            if file_path.suffix not in supported:
+                continue
+            try:
+                st = file_path.stat()
+            except OSError:
+                # Vanished mid-walk / unreadable — abort fingerprinting rather
+                # than key on a partial view.
+                return None
+            if not stat_module.S_ISREG(st.st_mode):
+                continue
+            entries.append((str(file_path), st.st_mtime_ns, st.st_size))
+            if len(entries) > max_files:
+                return None
+        entries.sort()
+        for path_str, mtime_ns, size in entries:
+            hasher.update(path_str.encode("utf-8", "replace"))
+            hasher.update(f"\x02{mtime_ns}\x03{size}\x04".encode("ascii"))
+        return hasher.hexdigest()
+    except Exception:
+        return None
 
 
 def _find_project_root(path: Path) -> Path:
@@ -216,11 +275,25 @@ class I002(BaseRule):
         if directory in _graph_cache:
             return _graph_cache[directory]
 
+        # Cross-invocation disk cache (BACK-536 opt 2 / BACK-535). The resolved
+        # graph is deterministic for an unchanged tree, so a 2nd+ reveal command
+        # on the same checkout skips the ~O(files) tree-sitter parse. The
+        # fingerprint walk is cheap (stat only, no parse); on a miss we fall
+        # through to the full build below.
+        fingerprint = _tree_fingerprint(directory)
+        if fingerprint is not None:
+            cached = disk_cache.get(_IMPORT_GRAPH_NAMESPACE, fingerprint)
+            if cached is not None:
+                _graph_cache[directory] = cached
+                return cached
+
         all_imports = self._collect_raw_imports(directory)
         graph = ImportGraph.from_imports(all_imports)
         self._resolve_graph_dependencies(graph)
 
         _graph_cache[directory] = graph
+        if fingerprint is not None:
+            disk_cache.put(_IMPORT_GRAPH_NAMESPACE, fingerprint, graph)
         return graph
 
     def _collect_raw_imports(self, directory: Path) -> list:
