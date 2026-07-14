@@ -1179,5 +1179,123 @@ class TestScanContractsRuby(unittest.TestCase):
         self.assertNotIn('User', impl_names)
 
 
+class TestScanContractsGo(unittest.TestCase):
+    """Tests for Go contract detection — interfaces + structural implementers
+    (BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write_go(self, filename: str, content: str) -> str:
+        return _write(self.tmp, filename, content)
+
+    def test_interface_classified_as_protocol(self):
+        self._write_go('store.go', '''\
+            package storage
+            type Store interface {
+            \tGet(key string) ([]byte, error)
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertTrue(report.get('_go_mode'))
+        self.assertEqual([p['name'] for p in report['protocols']], ['Store'])
+
+    def test_struct_with_all_methods_implements_interface(self):
+        self._write_go('store.go', '''\
+            package storage
+            type Store interface {
+            \tGet(key string) ([]byte, error)
+            \tPut(key string, val []byte) error
+            }
+            type MemStore struct{}
+            func (m *MemStore) Get(key string) ([]byte, error) { return nil, nil }
+            func (m *MemStore) Put(key string, val []byte) error { return nil }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        store = next(p for p in report['protocols'] if p['name'] == 'Store')
+        self.assertIn('MemStore', [i['name'] for i in store['implementations']])
+        self.assertIn('MemStore', [c['name'] for c in report['dataclasses']])
+
+    def test_struct_missing_a_method_does_not_implement(self):
+        """Superset match: a struct missing any interface method is not an
+        implementer (the trust-preserving direction — no false 'implements')."""
+        self._write_go('store.go', '''\
+            package storage
+            type Store interface {
+            \tGet(key string) ([]byte, error)
+            \tPut(key string, val []byte) error
+            }
+            type WriteOnly struct{}
+            func (w *WriteOnly) Put(key string, val []byte) error { return nil }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        store = next(p for p in report['protocols'] if p['name'] == 'Store')
+        self.assertEqual(store['implementations'], [])
+
+    def test_embedded_interface_methods_resolved_transitively(self):
+        self._write_go('store.go', '''\
+            package storage
+            type Reader interface {
+            \tRead() ([]byte, error)
+            }
+            type ReadStore interface {
+            \tReader
+            \tWrite() error
+            }
+            type File struct{}
+            func (f *File) Read() ([]byte, error) { return nil, nil }
+            func (f *File) Write() error { return nil }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        rs = next(p for p in report['protocols'] if p['name'] == 'ReadStore')
+        self.assertIn('File', [i['name'] for i in rs['implementations']])
+
+    def test_empty_marker_interface_has_no_implementers(self):
+        """`interface{}` (0 methods) is surfaced as a contract but must not
+        match every type — an empty required-set would trivially include all."""
+        self._write_go('marker.go', '''\
+            package storage
+            type Marker interface{}
+            type Thing struct{}
+            func (t *Thing) Do() {}
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        marker = next(p for p in report['protocols'] if p['name'] == 'Marker')
+        self.assertEqual(marker['implementations'], [])
+        self.assertEqual(report['dataclasses'], [])
+
+    def test_value_receiver_methods_count(self):
+        """A value receiver (`func (m T)`) contributes to the method set the
+        same as a pointer receiver."""
+        self._write_go('store.go', '''\
+            package storage
+            type Doer interface {
+            \tDo() error
+            }
+            type Worker struct{}
+            func (w Worker) Do() error { return nil }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        doer = next(p for p in report['protocols'] if p['name'] == 'Doer')
+        self.assertIn('Worker', [i['name'] for i in doer['implementations']])
+
+    def test_go_abstract_only_omits_implementers(self):
+        self._write_go('store.go', '''\
+            package storage
+            type Store interface {
+            \tGet() error
+            }
+            type MemStore struct{}
+            func (m *MemStore) Get() error { return nil }
+        ''')
+        report = _scan_contracts(Path(self.tmp), abstract_only=True)
+        self.assertEqual(report['dataclasses'], [])
+        self.assertEqual([p['name'] for p in report['protocols']], ['Store'])
+
+
 if __name__ == '__main__':
     unittest.main()

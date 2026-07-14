@@ -1231,5 +1231,132 @@ class TestNavSurfaceRuby(unittest.TestCase):
         self.assertEqual(len(result['http']), 0)
 
 
+class TestNavSurfaceGo(unittest.TestCase):
+    """Unit tests for the Go surface scanner (nav_surface_go, BACK-403 pt 2)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _scan_go(self, filename: str, content: str):
+        from reveal.adapters.ast.nav_surface_go import scan_file_surface_go
+        path = _write(self.tmp, filename, content)
+        return scan_file_surface_go(path)
+
+    def test_go_network_import(self):
+        result = self._scan_go('c.go', 'package p\nimport "net/http"\n')
+        self.assertIn('net/http', [e['name'] for e in result['network']])
+
+    def test_go_db_import(self):
+        result = self._scan_go('d.go', 'package p\nimport "database/sql"\n')
+        self.assertIn('database/sql', [e['name'] for e in result['db']])
+
+    def test_go_sdk_import_versioned_prefix(self):
+        """A versioned module path (`.../stripe-go/v72`) matches the SDK prefix."""
+        result = self._scan_go('pay.go', 'package p\nimport "github.com/stripe/stripe-go/v72"\n')
+        self.assertIn('github.com/stripe/stripe-go/v72', [e['name'] for e in result['sdk']])
+
+    def test_go_env_getenv(self):
+        result = self._scan_go('cfg.go', '''\
+package main
+func load() {
+	k := os.Getenv("API_KEY")
+	_ = k
+}
+''')
+        self.assertIn('API_KEY', [e['name'] for e in result['env']])
+
+    def test_go_env_lookupenv(self):
+        result = self._scan_go('cfg.go', '''\
+package main
+func load() {
+	v, ok := os.LookupEnv("DATABASE_URL")
+	_, _ = v, ok
+}
+''')
+        self.assertIn('DATABASE_URL', [e['name'] for e in result['env']])
+
+    def test_go_fs_write(self):
+        result = self._scan_go('w.go', '''\
+package main
+func save() {
+	os.WriteFile("/tmp/x", nil, 0644)
+}
+''')
+        self.assertIn('os.WriteFile', [e['name'] for e in result['fs']])
+
+    def test_go_route_gin_upper_verb(self):
+        result = self._scan_go('r.go', '''\
+package main
+func routes() {
+	r.GET("/users/:id", getUser)
+}
+''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/users/:id')
+        self.assertEqual(entries[0]['methods'], 'GET')
+
+    def test_go_route_chi_title_verb(self):
+        result = self._scan_go('r.go', '''\
+package main
+func routes() {
+	r.Post("/users", createUser)
+}
+''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/users')
+        self.assertEqual(entries[0]['methods'], 'POST')
+
+    def test_go_route_handlefunc_any(self):
+        result = self._scan_go('r.go', '''\
+package main
+func routes() {
+	http.HandleFunc("/health", healthCheck)
+}
+''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['path'], '/health')
+        self.assertEqual(entries[0]['methods'], 'ANY')
+
+    def test_go_cli_main_in_package_main(self):
+        result = self._scan_go('app.go', 'package main\nfunc main() {}\n')
+        self.assertEqual(len(result['cli']), 1)
+        self.assertEqual(result['cli'][0]['name'], 'main')
+
+    def test_go_main_outside_package_main_not_cli(self):
+        """`func main` is only the program entrypoint in `package main`; a
+        same-named function in any other package is an ordinary function."""
+        result = self._scan_go('lib.go', 'package worker\nfunc main() {}\n')
+        self.assertEqual(len(result['cli']), 0)
+
+    def test_go_receiver_method_main_not_cli(self):
+        """A receiver method named `main` is a method_declaration, not the
+        top-level entrypoint — must not be surfaced as CLI."""
+        result = self._scan_go('s.go', '''\
+package main
+type Server struct{}
+func (s *Server) main() {}
+''')
+        self.assertEqual(len(result['cli']), 0)
+
+    def test_go_title_verb_without_leading_slash_not_a_route(self):
+        """`cache.Get("key")` shares Chi's title-case `Get` verb but its arg is
+        not a path — the leading-`/` guard is load-bearing here."""
+        result = self._scan_go('x.go', '''\
+package main
+func f() {
+	v := cache.Get("some_key")
+	_ = v
+}
+''')
+        self.assertEqual(len(result['http']), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

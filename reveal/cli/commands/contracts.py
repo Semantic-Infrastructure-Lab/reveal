@@ -79,6 +79,29 @@ def _collect_ruby_files(path: Path) -> List[Path]:
     return files
 
 
+def _has_go_files(path: Path) -> bool:
+    if path.is_file():
+        return path.suffix.lower() == '.go'
+    for root, dirs, filenames in os.walk(str(path)):
+        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
+        for fname in filenames:
+            if fname.endswith('.go'):
+                return True
+    return False
+
+
+def _collect_go_files(path: Path) -> List[Path]:
+    if path.is_file():
+        return [path] if path.suffix.lower() == '.go' else []
+    files: List[Path] = []
+    for root, dirs, filenames in os.walk(str(path)):
+        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
+        for fname in filenames:
+            if fname.endswith('.go'):
+                files.append(Path(os.path.join(root, fname)))
+    return files
+
+
 def create_contracts_parser() -> argparse.ArgumentParser:
     from reveal.cli.parser import _build_global_options_parser
     parser = argparse.ArgumentParser(
@@ -141,15 +164,16 @@ def _scan_contracts(
     unsupported_language = ''
     is_interface_family = _has_interface_family_files(path)
     is_ruby = not is_interface_family and _has_ruby_files(path)
+    is_go = not is_interface_family and not is_ruby and _has_go_files(path)
 
-    if not _has_python_files(path) and not is_interface_family and not is_ruby:
+    if not _has_python_files(path) and not is_interface_family and not is_ruby and not is_go:
         unsupported_language = detect_non_python_language(path)
 
     # BACK-518: guard against a few stray supported-language files standing in
     # for a mostly-unsupported tree (see surface.py / assess_language_coverage).
     coverage = assess_language_coverage(
         path,
-        {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby'},
+        {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go'},
     )
     coverage_dict = {
         'total_code_files': coverage.total_code_files,
@@ -162,6 +186,11 @@ def _scan_contracts(
 
     if is_ruby:
         result = _scan_contracts_ruby(path, abstract_only, show_implementations)
+        result['coverage'] = coverage_dict
+        return result
+
+    if is_go:
+        result = _scan_contracts_go(path, abstract_only, show_implementations)
         result['coverage'] = coverage_dict
         return result
 
@@ -391,6 +420,91 @@ def _scan_contracts_ruby(
     }
 
 
+def _scan_contracts_go(
+    path: Path,
+    abstract_only: bool,
+    show_implementations: bool,
+) -> Dict[str, Any]:
+    """Go-specific contract scanner — interfaces + structural implementers.
+
+    Go's contract is the `interface`; its implementers are not declared
+    (no `implements` keyword) but *computed* — a struct implements an interface
+    when its method-name set is a superset of the interface's (embedded
+    interfaces resolved transitively). Marker/empty interfaces (0 methods, e.g.
+    `interface{}`) are surfaced as contracts but excluded from implementer
+    matching, since every type would trivially satisfy them. See
+    `nav_contracts_go.py` for the extraction detail.
+    """
+    from reveal.adapters.ast.nav_contracts_go import scan_file_contracts_go
+
+    interfaces: List[Dict[str, Any]] = []
+    structs: List[Dict[str, Any]] = []
+    struct_methods: Dict[str, Set[str]] = {}
+    for file_path in _collect_go_files(path):
+        scanned = scan_file_contracts_go(str(file_path))
+        interfaces.extend(scanned['interfaces'])
+        structs.extend(scanned['structs'])
+        for m in scanned['methods']:
+            struct_methods.setdefault(m['recv'], set()).add(m['name'])
+
+    iface_by_name = {i['name']: i for i in interfaces}
+
+    def _full_methods(iface: Dict[str, Any], seen: Set[str]) -> Set[str]:
+        """Interface's own methods plus those of every embedded interface,
+        resolved transitively (cycle-guarded)."""
+        if iface['name'] in seen:
+            return set()
+        seen.add(iface['name'])
+        methods: Set[str] = set(iface['methods'])
+        for embed in iface['embeds']:
+            embedded = iface_by_name.get(embed.split('.')[-1])
+            if embedded is not None:
+                methods |= _full_methods(embedded, seen)
+        return methods
+
+    # Normalise each interface into the shared contract shape (bases empty —
+    # Go interfaces have no supertype list of the kind other languages carry).
+    for iface in interfaces:
+        iface['bases'] = []
+        iface['implementations'] = []
+
+    struct_implements: Dict[str, List[str]] = {}
+    if show_implementations:
+        for iface in interfaces:
+            required = _full_methods(iface, set())
+            if not required:  # marker/empty interface — everything satisfies it
+                continue
+            for struct in structs:
+                have = struct_methods.get(struct['name'], set())
+                if required <= have:
+                    iface['implementations'].append({
+                        'name': struct['name'], 'file': struct['file'], 'line': struct['line'],
+                    })
+                    struct_implements.setdefault(struct['name'], []).append(iface['name'])
+
+    # Implementing structs (the "who satisfies a contract" slot). Each carries
+    # the interfaces it satisfies as its `bases`, mirroring the other scanners.
+    implementers: List[Dict[str, Any]] = []
+    if not abstract_only:
+        for struct in structs:
+            ifaces = struct_implements.get(struct['name'])
+            if ifaces:
+                implementers.append({**struct, 'bases': sorted(ifaces)})
+
+    return {
+        'path': str(path),
+        'total_contracts': len(interfaces),
+        'abcs': [],
+        'protocols': interfaces,
+        'typeddicts': [],
+        'dataclasses': implementers,
+        'basemodels': [],
+        'path_heuristic': [],
+        'unsupported_language': '',
+        '_go_mode': True,
+    }
+
+
 def _extract_all_classes(structures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Extract class dicts from collect_structures output.
 
@@ -506,6 +620,7 @@ def _render_report(report: Dict[str, Any]) -> None:
     total = report['total_contracts']
     ts_mode = report.get('_ts_mode', False)
     ruby_mode = report.get('_ruby_mode', False)
+    go_mode = report.get('_go_mode', False)
 
     print()
     print(f"Contracts: {path}")
@@ -526,7 +641,7 @@ def _render_report(report: Dict[str, Any]) -> None:
         if not warning:
             lang = report.get('unsupported_language', '')
             if lang:
-                print(f"  reveal contracts currently supports Python, TypeScript, Java, C#, PHP, Swift, Kotlin, and Ruby.")
+                print(f"  reveal contracts currently supports Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, and Go.")
                 print(f"  No supported files found — detected {lang}.")
             else:
                 print("  No contracts or seams found.")
@@ -534,6 +649,8 @@ def _render_report(report: Dict[str, Any]) -> None:
                     print("  Try widening the path or checking for interface/abstract class usage.")
                 elif ruby_mode:
                     print("  Try widening the path or checking for module/include/extend (mixin) usage.")
+                elif go_mode:
+                    print("  Try widening the path or checking for interface type declarations.")
                 else:
                     print("  Try widening the path or checking imports for ABC/Protocol usage.")
             print()
@@ -547,6 +664,9 @@ def _render_report(report: Dict[str, Any]) -> None:
     elif ruby_mode:
         _render_group("Mixins (Modules)", report['protocols'], show_methods=False, show_impls=True)
         _render_group("Including Classes", report['dataclasses'], show_methods=False, show_impls=False)
+    elif go_mode:
+        _render_group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
+        _render_group("Implementing Types (structural)", report['dataclasses'], show_methods=False, show_impls=False)
     else:
         _render_group("Abstract Base Classes", report['abcs'], show_methods=True, show_impls=True)
         _render_group("Protocols", report['protocols'], show_methods=True, show_impls=True)
