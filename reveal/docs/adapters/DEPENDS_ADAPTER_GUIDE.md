@@ -70,6 +70,7 @@ depends://<directory/>[?top=N][?format=dot]
 | `path` | File (returns importers of that file) or directory (returns summary) |
 | `top` | Limit directory summary to N most-imported modules |
 | `format` | Output format: `text` (default), `json`, or `dot` (Graphviz) |
+| `root` | Pin the scan root to `DIR` for this invocation (see below) |
 
 ### File vs Directory
 
@@ -112,6 +113,21 @@ Output format for directory mode:
 ```bash
 reveal 'depends://src?format=dot'    # GraphViz DOT (pipe to dot/graphviz)
 reveal 'depends://src?format=text'   # Default text table
+```
+
+### `root`
+
+Pin the scan root to `DIR` for this one invocation — the highest-precedence
+lever (it beats a `.reveal.yaml root:true` marker, package markers, and the VCS
+root). Use it when auto-detection over-climbs: e.g. a marker-less C/C++ tree
+nested under a larger ancestor `.git`, where the scan would otherwise resolve to
+the wrong repo. Resolved relative to the current directory; it must be an
+existing directory that contains the target, and is refused (with a warning,
+falling back to auto-detection) if it resolves to a filesystem/home/system root.
+Because it rides the URI, the same pin works in CLI and MCP/service mode.
+
+```bash
+reveal 'depends://project/src/server.c?root=project'   # scan only project/, not the ancestor repo
 ```
 
 ---
