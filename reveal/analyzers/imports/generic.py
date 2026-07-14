@@ -1689,11 +1689,23 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
     @staticmethod
     def _looks_like_path(module: str, exts: FrozenSet[str]) -> bool:
-        """True when a module string is a filesystem path, not a qualified name."""
+        """True when a module string is a filesystem path, not a qualified name.
+
+        ``'/' in module`` alone misses the module strings produced by
+        __DIR__/constant-anchor resolution (BACK-564/565): those are built via
+        ``str(anchor / remainder)``, which renders native (backslash)
+        separators on Windows, so the ``/`` check silently failed there —
+        the whole statement quietly resolved to ``None`` instead of the real
+        file. ``Path(module).is_absolute()`` catches that case OS-agnostically
+        (pathlib parses native separators correctly per-platform) without
+        touching the existing forward-slash convention relative literals
+        (Ruby ``require_relative './x'``, PHP ``require 'lib/foo.php'``) rely on.
+        """
         return (
             module.startswith('.')
             or '/' in module
             or any(module.endswith(e) for e in exts)
+            or Path(module).is_absolute()
         )
 
     def _resolve_dotted(
