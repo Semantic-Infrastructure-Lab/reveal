@@ -36,6 +36,20 @@ _graph_cache: Dict[Path, 'ImportGraph'] = {}
 # a silent multi-minute hang. Override with REVEAL_I002_MAX_FILES for monorepos.
 _DEFAULT_MAX_GRAPH_FILES = 20000
 
+# BACK-615 (BACK-536 opt 3): a *legitimate*, correctly-detected root can still
+# be big enough that whole-project cycle detection dominates `check`'s wall
+# time with zero progress feedback — measured 2m30s on a real 3,661-file repo
+# and 4m55s on 7,755 files (this machine, 12-way parallel Pass-B, i.e. the
+# already-optimized BACK-536 opt-1 path). That's well under the 20,000-file
+# mis-detection ceiling above, so nothing warns the user before they sit
+# through it. This is a separate, lower threshold with separate semantics:
+# _DEFAULT_MAX_GRAPH_FILES means "this root is probably wrong, abort";
+# this one means "this root is right but big, skip by default and say so"
+# (the same honest-decline convention used elsewhere in reveal rather than a
+# flag nobody would find in time — see BACK-547/capabilities.py precedent).
+# Override with REVEAL_I002_CYCLE_LIMIT to force the scan on a big tree.
+_DEFAULT_CYCLE_DETECTION_MAX_FILES = 2000
+
 # BACK-536: the Pass-B parse loop in _collect_raw_imports is the dominant cost of
 # `check` on large trees (measured ~97% of `check samples/go` — one tree-sitter
 # parse per source file under the project root). Per-file extraction is
@@ -98,6 +112,21 @@ def _max_graph_files() -> int:
     return _DEFAULT_MAX_GRAPH_FILES
 
 
+def _cycle_detection_max_files() -> int:
+    """Read the cycle-detection auto-skip threshold (BACK-615), honoring
+    REVEAL_I002_CYCLE_LIMIT. Set to 0 (or a value >= REVEAL_I002_MAX_FILES)
+    to disable the auto-skip entirely and always run full cycle detection."""
+    raw = os.environ.get('REVEAL_I002_CYCLE_LIMIT')
+    if raw:
+        try:
+            value = int(raw)
+            if value >= 0:
+                return value
+        except ValueError:
+            logger.debug("Invalid REVEAL_I002_CYCLE_LIMIT=%r, using default", raw)
+    return _DEFAULT_CYCLE_DETECTION_MAX_FILES
+
+
 def _tree_fingerprint(directory: Path) -> Optional[str]:
     """Hash the source-file set under ``directory`` for the disk-cache key.
 
@@ -111,6 +140,12 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
     Returns ``None`` (→ caller skips the cache and builds directly) when:
     * the file count exceeds the ceiling — same guard as Pass A; a mis-detected
       giant root should not pay a full stat walk, and its graph is not cached;
+    * the file count exceeds the cycle-detection auto-skip threshold (BACK-615)
+      — ``_collect_raw_imports`` will short-circuit to an empty graph for the
+      same reason, and that skip result must never be cached: caching it would
+      make a later ``REVEAL_I002_CYCLE_LIMIT`` override (raised or disabled) on
+      an unchanged tree keep silently serving the stale empty graph instead of
+      actually running the scan the override asked for;
     * any stat/walk error occurs — fail open to the uncached path.
 
     The digest deliberately includes ``get_all_extensions()`` and the reveal
@@ -120,6 +155,7 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
     try:
         supported = get_all_extensions()
         max_files = _max_graph_files()
+        cycle_limit = _cycle_detection_max_files()
         hasher = hashlib.sha256()
         # Bind the digest to the exact extension set that selected the files —
         # if support changes, the same tree fingerprints differently.
@@ -140,6 +176,8 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
             entries.append((str(file_path), st.st_mtime_ns, st.st_size))
             if len(entries) > max_files:
                 return None
+        if cycle_limit and len(entries) > cycle_limit:
+            return None
         entries.sort()
         for path_str, mtime_ns, size in entries:
             hasher.update(path_str.encode("utf-8", "replace"))
@@ -310,6 +348,14 @@ class I002(BaseRule):
         multi-minute hang on big non-Python trees where the tell (BACK-418) was a
         5-file subdir under a marker root taking >100s to check. Pass B does the
         actual parsing only once the tree is known to be a sane size.
+
+        A second, lower threshold (BACK-615) auto-skips cycle detection on a
+        *correctly*-detected but merely large root, honest-decline style,
+        rather than silently parsing for minutes with zero progress feedback
+        (measured: 2m30s/3,661 files, 4m55s/7,755 files on 12-way parallel
+        hardware). This check runs after Pass A's full stat-only walk (cheap
+        — no parsing) so it never falsely trips on the mis-detection ceiling's
+        early-abort path.
         """
         supported_extensions = get_all_extensions()
         max_files = _max_graph_files()
@@ -330,6 +376,17 @@ class I002(BaseRule):
                     directory, max_files,
                 )
                 return []
+
+        cycle_limit = _cycle_detection_max_files()
+        if cycle_limit and len(source_files) > cycle_limit:
+            logger.warning(
+                "I002: import-graph scan of %s found %d source files (over the "
+                "%d-file cycle-detection threshold); skipping circular-dependency "
+                "analysis to avoid a multi-minute whole-project parse — set "
+                "REVEAL_I002_CYCLE_LIMIT to raise the limit or 0 to disable it",
+                directory, len(source_files), cycle_limit,
+            )
+            return []
 
         # Pass B: parse the (now bounded) set of files. Independent per file, so
         # fan out across processes on large trees (BACK-536). map() preserves

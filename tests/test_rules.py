@@ -1445,6 +1445,72 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
         # The cached scan root must be the local project, never the stray ancestor
         self.assertNotIn(stray.resolve(), _graph_cache)
 
+    def test_cycle_detection_threshold_skips_large_legit_tree(self):
+        """BACK-615: a correctly-detected but large root auto-skips cycle
+        detection (distinct from the BACK-338 mis-detection ceiling — this
+        tree is legitimate, just bigger than the default 2000-file threshold)."""
+        import os
+        from unittest import mock
+        from reveal.rules.imports.I002 import I002, _graph_cache
+        for i in range(6):
+            (self.tmp / f'm{i}.py').write_text('import os\n')
+        _graph_cache.clear()
+        with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '3'}):
+            imports = I002()._collect_raw_imports(self.tmp)
+        self.assertEqual(imports, [],
+                         "scan should skip to empty list past the cycle-detection threshold")
+
+    def test_cycle_detection_threshold_override_forces_full_scan(self):
+        """REVEAL_I002_CYCLE_LIMIT=0 disables the auto-skip entirely."""
+        import os
+        from unittest import mock
+        from reveal.rules.imports.I002 import I002, _graph_cache
+        for i in range(6):
+            (self.tmp / f'm{i}.py').write_text('import os\n')
+        _graph_cache.clear()
+        with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '0'}):
+            imports = I002()._collect_raw_imports(self.tmp)
+        self.assertEqual(len(imports), 6,
+                         "REVEAL_I002_CYCLE_LIMIT=0 must disable the auto-skip")
+
+    def test_cycle_detection_threshold_does_not_affect_small_tree(self):
+        """A tree under the threshold is scanned normally — no behavior change
+        for the vast majority of projects."""
+        import os
+        from unittest import mock
+        from reveal.rules.imports.I002 import I002, _graph_cache
+        for i in range(3):
+            (self.tmp / f'm{i}.py').write_text('import os\n')
+        _graph_cache.clear()
+        with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '10'}):
+            imports = I002()._collect_raw_imports(self.tmp)
+        self.assertEqual(len(imports), 3)
+
+    def test_cycle_detection_skip_is_not_cached(self):
+        """BACK-615: a skipped (empty) graph must never reach the disk cache —
+        otherwise raising/disabling REVEAL_I002_CYCLE_LIMIT on an unchanged
+        tree would keep silently serving the stale skip result instead of
+        actually running the scan the override asked for."""
+        import os
+        from unittest import mock
+        from reveal.rules.imports.I002 import _tree_fingerprint
+        for i in range(6):
+            (self.tmp / f'm{i}.py').write_text('import os\n')
+        with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '3'}):
+            self.assertIsNone(_tree_fingerprint(self.tmp),
+                             "fingerprint must be None (uncacheable) when the "
+                             "cycle-detection threshold is exceeded")
+
+    def test_cycle_detection_threshold_env_override_invalid_falls_back_to_default(self):
+        """A non-integer REVEAL_I002_CYCLE_LIMIT falls back to the default threshold."""
+        import os
+        from unittest import mock
+        from reveal.rules.imports.I002 import (
+            _cycle_detection_max_files, _DEFAULT_CYCLE_DETECTION_MAX_FILES,
+        )
+        with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': 'not-a-number'}):
+            self.assertEqual(_cycle_detection_max_files(), _DEFAULT_CYCLE_DETECTION_MAX_FILES)
+
     def test_standalone_tmp_file_does_not_scan_system_tmp_root(self):
         """A direct /tmp file must not make I002 scan every source file under /tmp."""
         import tempfile
