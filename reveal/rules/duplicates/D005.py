@@ -30,7 +30,7 @@ from typing import Dict, List, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
-from ...utils.path_utils import is_skippable_dir
+from ...utils.path_utils import is_skippable_dir, resolve_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +46,6 @@ _STABLE_NAME_PATTERNS = {
     '__all__', 'output_format', 'format', 'test_', 'mock_', 'fixture',
     'example', 'sample',
 }
-
-_PROJECT_MARKERS = (
-    'pyproject.toml', 'setup.py', 'package.json', 'go.mod', 'Cargo.toml',
-)
 
 # Safety ceiling: cross-file detection scans every .py under the project root
 # on first check, so a huge tree is skipped (with a logged warning) rather than
@@ -74,11 +70,14 @@ def _max_project_files() -> int:
 # ── Helpers (module-level, no self) ──────────────────────────────────────────
 
 def _find_project_root(path: Path) -> Path:
-    """Walk up from path to find the nearest project root directory."""
-    for ancestor in [path.parent, *path.parents]:
-        if any((ancestor / m).exists() for m in _PROJECT_MARKERS):
-            return ancestor
-    return path.parent
+    """Nearest project root above *path* via the shared, ceiling-bounded
+    resolver (BACK-612): ``.reveal.yaml root:true`` → package marker → VCS root.
+    Falls back to the file's own directory when nothing matches before the
+    hard ceiling. Now honors ``root:true`` and ``.git`` (which the old flat
+    5-marker climb ignored) and the ``__init__.py`` guard — so D005's
+    duplicate scan is scoped to the same project boundary depends:// uses."""
+    root = resolve_project_root(path)
+    return root if root is not None else path.parent
 
 
 def _canonical_key(values: frozenset) -> str:
