@@ -104,12 +104,35 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         ]),
         ('file', [
             'os.rename', 'os.unlink', 'os.mkdir', 'shutil.',
+            # BACK-634 (sideeffects-recall-oracle/python, real-corpus
+            # measurement on Home Assistant): os.remove / os.makedirs are the
+            # exact stdlib twins of the already-present os.unlink / os.mkdir
+            # (os.remove == unlink for files, os.makedirs == recursive mkdir)
+            # and were silently unclassified — os.remove is the single most
+            # common file-deletion idiom in the corpus. Real misses:
+            # `os.remove(filename)` (nest/media_source.py:async_remove_media,
+            # verisure/camera.py:delete_image), `os.makedirs(...)`
+            # (helpers/storage.py:_write_prepared_data, knx/telegrams.py).
+            # Dotted `os.` prefix => zero collision risk.
+            'os.remove', 'os.makedirs',
             # 'pathlib' (module) stays; the bare 'Path(' constructor pattern
             # was removed (BACK-416) — it tokenizes to just ['path'] and so
             # matched any segment named `path` (e.g. a local var in
             # `path.resolveIndex()`), and constructing a Path is not itself a
             # filesystem side effect anyway.
             'pathlib',
+            # BACK-634: pathlib's file-I/O methods are invoked on Path *values*
+            # (`self._path.write_text(...)`, `file_path.read_bytes()`), so the
+            # 'pathlib' module pattern never sees them — the receiver is a local
+            # var, not the `pathlib` module. These four method names are
+            # pathlib-specific I/O verbs with negligible non-file collision risk
+            # — the exact same shape BACK-477 added for Kotlin's kotlin.io
+            # (writeText/readText/writeBytes/readBytes). Real misses:
+            # `self._path.write_text(ics_content)` (local_calendar/store.py),
+            # `file_path.read_bytes()` (llama_cpp/entity.py). mkdir/unlink are
+            # already bare in _TAXONOMY_COMMON, so Path.mkdir()/Path.unlink()
+            # were already caught.
+            'write_text', 'read_text', 'write_bytes', 'read_bytes',
         ]),
         ('env', ['os.environ', 'os.getenv']),
         ('log', ['logging.']),

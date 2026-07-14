@@ -1684,6 +1684,45 @@ class TestClassifyCallLanguageScoping(unittest.TestCase):
         self.assertEqual(classify_call('os.Environ', language='go'), 'env')
         self.assertIsNone(classify_call('os.LookupEnv', language='python'))
 
+    def test_python_os_remove_makedirs_classified_as_file(self):
+        # BACK-634 (sideeffects-recall-oracle/python, real-corpus measurement
+        # on Home Assistant): os.remove / os.makedirs — the exact stdlib twins
+        # of the already-present os.unlink / os.mkdir — were silently
+        # unclassified. Real corpus misses: `os.remove(filename)`
+        # (nest/media_source.py:async_remove_media, verisure/camera.py) and
+        # `os.makedirs(...)` (helpers/storage.py, knx/telegrams.py).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('os.remove', language='python'), 'file')
+        self.assertEqual(classify_call('os.makedirs', language='python'), 'file')
+
+    def test_python_pathlib_read_write_methods_classified_as_file(self):
+        # BACK-634: pathlib's file-I/O methods are invoked on Path *values*
+        # (`self._path.write_text(...)`, `file_path.read_bytes()`), so the
+        # 'pathlib' module pattern never matched them. Same shape BACK-477
+        # added for Kotlin's kotlin.io writeText/readText/writeBytes/readBytes.
+        # Real misses: `self._path.write_text(ics_content)`
+        # (local_calendar/store.py), `file_path.read_bytes()` (llama_cpp).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('self._path.write_text', language='python'), 'file')
+        self.assertEqual(classify_call('file_path.read_bytes', language='python'), 'file')
+        self.assertEqual(classify_call('p.read_text', language='python'), 'file')
+        self.assertEqual(classify_call('out.write_bytes', language='python'), 'file')
+
+    def test_python_async_get_clientsession_stays_unclassified_project_idiom(self):
+        # BACK-634 deliberate non-fix: `async_get_clientsession(hass)` is Home
+        # Assistant's dominant HTTP-client factory and the single largest http
+        # recall gap in the corpus — but it is a PROJECT-specific helper name,
+        # not a Python/stdlib idiom. Per the module docstring, project-specific
+        # names belong in a `.reveal.yaml` extension (BACK-238), not the global
+        # taxonomy (the same reasoning that keeps Go's `client.Do` unclassified).
+        # Genuinely global http idioms in the corpus (requests.get/delete,
+        # aiohttp.ClientSession) are already classified.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('async_get_clientsession', language='python'))
+        self.assertIsNone(
+            classify_call('aiohttp_client.async_get_clientsession', language='python'))
+        self.assertEqual(classify_call('requests.get', language='python'), 'http')
+
 
 class TestCollectEffects(unittest.TestCase):
 
