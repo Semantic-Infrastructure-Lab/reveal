@@ -8,6 +8,8 @@ from reveal.utils.path_utils import (
     search_parents,
     search_parents_within_ceiling,
     find_project_root,
+    resolve_project_root,
+    reveal_yaml_is_root,
     get_relative_to_root,
     detect_non_python_language,
     to_posix,
@@ -336,6 +338,139 @@ class TestSearchParentsWithinCeiling:
         )
 
         assert result is None
+
+
+class TestResolveProjectRoot:
+    """BACK-612: the unified tiered resolver shared by depends://, config,
+    and the I002/D005 rules. Tiers, first wins: -1 root_override → 0
+    .reveal.yaml root:true → 1 package marker → 2 VCS → 3 __init__ chain."""
+
+    def test_root_override_beats_everything(self, tmp_path):
+        (tmp_path / '.reveal.yaml').write_text('root: true\n')
+        (tmp_path / '.git').mkdir()
+        comp = tmp_path / 'a' / 'b'
+        comp.mkdir(parents=True)
+        target = comp / 'x.c'
+        target.write_text('int x;\n')
+
+        assert resolve_project_root(target, root_override=comp) == comp
+
+    def test_reveal_root_beats_ancestor_vcs(self, tmp_path):
+        (tmp_path / '.git').mkdir()
+        comp = tmp_path / 'vendor' / 'thing'
+        (comp / 'src').mkdir(parents=True)
+        (comp / '.reveal.yaml').write_text('root: true\n')
+        target = comp / 'src' / 'x.c'
+        target.write_text('int x;\n')
+
+        assert resolve_project_root(target) == comp
+
+    def test_package_marker_beats_ancestor_vcs(self, tmp_path):
+        (tmp_path / '.git').mkdir()
+        pkg = tmp_path / 'component'
+        (pkg / 'src').mkdir(parents=True)
+        (pkg / 'pyproject.toml').write_text('[project]\nname="c"\n')
+        target = pkg / 'src' / 'm.py'
+        target.write_text('x = 1\n')
+
+        assert resolve_project_root(target) == pkg
+
+    def test_package_marker_disabled_falls_through_to_vcs(self, tmp_path):
+        (tmp_path / '.git').mkdir()
+        pkg = tmp_path / 'component'
+        (pkg / 'src').mkdir(parents=True)
+        (pkg / 'pyproject.toml').write_text('[project]\nname="c"\n')
+        target = pkg / 'src' / 'm.py'
+        target.write_text('x = 1\n')
+
+        # config-style call (no package tier) climbs past the marker to the VCS root.
+        assert resolve_project_root(
+            target, use_package_markers=False
+        ) == tmp_path
+
+    def test_vcs_root_when_no_package_marker(self, tmp_path):
+        (tmp_path / '.git').mkdir()
+        target = tmp_path / 'src' / 'm.py'
+        (tmp_path / 'src').mkdir()
+        target.write_text('x = 1\n')
+
+        assert resolve_project_root(target) == tmp_path
+
+    def test_init_package_dir_is_not_promoted_to_root(self, tmp_path):
+        """The __init__.py guard: a marker-bearing dir that is also a Python
+        package is skipped so the climb finds the real root above it."""
+        (tmp_path / '.git').mkdir()
+        pkg = tmp_path / 'homeassistant'
+        pkg.mkdir()
+        (pkg / '__init__.py').write_text('')
+        (pkg / 'setup.py').write_text('# source module, not a root marker\n')
+        target = pkg / 'core.py'
+        target.write_text('x = 1\n')
+
+        # setup.py sits in a package dir → skipped; real root is the VCS root.
+        assert resolve_project_root(target) == tmp_path
+
+    def test_init_guard_and_chain_compose_when_no_higher_root(self, tmp_path):
+        """Guard (tier 1) + contiguous __init__ chain (tier 3) compose: when a
+        marker-bearing package dir has NO real root above it, the guard skips
+        it but the chain recovers the same dir — no over-climb into nowhere."""
+        # No .git, no ancestor marker anywhere before the ceiling.
+        pkg = tmp_path / 'proj' / 'app'
+        pkg.mkdir(parents=True)
+        (pkg / '__init__.py').write_text('')
+        (pkg / 'pyproject.toml').write_text('[project]\nname="app"\n')
+        target = pkg / 'm.py'
+        target.write_text('x = 1\n')
+
+        assert resolve_project_root(target, python_init_chain=True) == pkg
+
+    def test_chain_climbs_to_contiguous_top(self, tmp_path):
+        pkg = tmp_path / 'pkg'
+        (pkg / 'sub').mkdir(parents=True)
+        (pkg / '__init__.py').write_text('')
+        (pkg / 'sub' / '__init__.py').write_text('')
+        target = pkg / 'sub' / 'm.py'
+        target.write_text('x = 1\n')
+
+        assert resolve_project_root(
+            target,
+            honor_reveal_root=False,
+            use_package_markers=False,
+            use_vcs=False,
+            python_init_chain=True,
+        ) == pkg
+
+    def test_returns_none_when_nothing_matches(self, tmp_path):
+        target = tmp_path / 'loose' / 'm.py'
+        (tmp_path / 'loose').mkdir()
+        target.write_text('x = 1\n')
+
+        assert resolve_project_root(
+            target, honor_reveal_root=False, use_package_markers=False, use_vcs=False
+        ) is None
+
+    def test_reveal_yaml_without_root_true_does_not_pin(self, tmp_path):
+        (tmp_path / '.git').mkdir()
+        comp = tmp_path / 'vendor' / 'thing'
+        (comp / 'src').mkdir(parents=True)
+        (comp / '.reveal.yaml').write_text('exclude:\n  - "*.tmp"\n')
+        target = comp / 'src' / 'x.c'
+        target.write_text('int x;\n')
+
+        assert resolve_project_root(target) == tmp_path
+
+    def test_reveal_yaml_is_root_helper(self, tmp_path):
+        yes = tmp_path / 'a.yaml'
+        yes.write_text('root: true\n')
+        no = tmp_path / 'b.yaml'
+        no.write_text('root: false\n')
+        other = tmp_path / 'c.yaml'
+        other.write_text('exclude: ["x"]\n')
+
+        assert reveal_yaml_is_root(yes) is True
+        assert reveal_yaml_is_root(no) is False
+        assert reveal_yaml_is_root(other) is False
+        assert reveal_yaml_is_root(tmp_path / 'missing.yaml') is False
 
 
 class TestFindProjectRoot:

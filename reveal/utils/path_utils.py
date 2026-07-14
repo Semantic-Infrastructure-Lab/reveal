@@ -421,6 +421,158 @@ def find_project_root(
     return None if is_unsafe_scan_root(result) else result
 
 
+# ---------------------------------------------------------------------------
+# Unified project-root resolution (BACK-612)
+#
+# One ceiling-bounded, tiered resolver, shared by depends://, config
+# discovery, and the I002/D005 rules — replacing five hand-rolled climbers
+# that had diverged on their marker sets, on the unsafe-root guard (config
+# even kept a stale hand-copy of it), and on whether an explicit
+# `.reveal.yaml root:true` was honored at all. Design of record:
+# internal-docs/design/SCAN_ROOT_RESOLUTION_2026-07-09.md.
+# ---------------------------------------------------------------------------
+
+# BACK-525: a package/build marker is *positive project-unit evidence*; a bare
+# VCS root (`.git`) is only a climb ceiling. Keeping them in separate tiers is
+# what stops a distant ancestor `.git` from being promoted to a scan root when
+# nothing closer exists. Extended for the BACK-515 languages (Scala/Dart/Zig/
+# GDScript) whose missing marker reproduced as a full-monorepo-scan "hang".
+_PACKAGE_ROOT_MARKERS = [
+    'pyproject.toml', 'setup.py', 'setup.cfg', 'Cargo.toml',
+    'package.json', 'go.mod',
+    'settings.gradle', 'settings.gradle.kts',  # Java/Kotlin (Gradle)
+    'pom.xml',  # Java (Maven)
+    'Package.swift',  # Swift (SPM)
+    'composer.json',  # PHP
+    'build.sbt', 'build.sc',  # Scala (sbt / Mill)  — BACK-515
+    'pubspec.yaml',  # Dart (pub)                    — BACK-515
+    'build.zig',  # Zig                              — BACK-515
+    'project.godot',  # GDScript (Godot)             — BACK-515
+]
+
+_VCS_ROOT_MARKERS = ['.git']
+
+
+def reveal_yaml_is_root(config_file: Path) -> bool:
+    """True if the ``.reveal.yaml`` at *config_file* declares ``root: true``.
+
+    Standalone (no ``RevealConfig`` dependency) so ``path_utils`` stays free of
+    a ``config`` import and ``config.py`` can delegate to it without creating a
+    ``path_utils → config → path_utils`` cycle (BACK-612). This is the single
+    definition of what ``root: true`` means across reveal.
+    """
+    try:
+        import yaml
+    except ImportError:
+        return False
+    try:
+        with open(config_file, encoding='utf-8') as f:
+            data = yaml.safe_load(f) or {}
+        return bool(data.get('root'))
+    except (OSError, getattr(yaml, 'YAMLError', Exception)):
+        return False
+
+
+def _has_reveal_root_marker(directory: Path) -> bool:
+    """Tier 0: *directory* holds a ``.reveal.yaml`` declaring ``root: true`` —
+    an explicit, language-agnostic root declaration that beats every *inferred*
+    package/VCS marker. The consistent way to pin a root the heuristics can't
+    reach: a C/C++ tree whose only build file is a ``Makefile``/``CMakeLists``
+    (no package marker), or any project checked out under a larger repo, where
+    the VCS tier would otherwise promote a distant ancestor ``.git``.
+    """
+    config_file = directory / '.reveal.yaml'
+    return config_file.exists() and reveal_yaml_is_root(config_file)
+
+
+def _has_package_marker(directory: Path) -> bool:
+    """Tier 1: *directory* holds positive project-unit evidence — a package/
+    build marker, never a bare VCS root. Extends the literal-filename check
+    with two repo-specific-name globs (``*.sln`` C# solutions, ``*.rockspec``
+    Lua/LuaRocks) that can't be fixed literals.
+
+    A directory that is itself an importable Python package (``__init__.py``
+    present) is never a project root even if it holds a marker: absolute
+    self-package imports (``from homeassistant.core import X``) resolve to the
+    package's *parent*, so promoting the package dir to the scan root leaves
+    every such import unresolved — a silent fan-in collapse (measured 9% recall
+    on Home Assistant, whose ``homeassistant/setup.py`` was mis-read as a root
+    marker). The real root is above the top of the package chain — keep climbing.
+    """
+    if (directory / '__init__.py').exists():
+        return False
+    if any((directory / marker).exists() for marker in _PACKAGE_ROOT_MARKERS):
+        return True
+    return any(directory.glob('*.sln')) or any(directory.glob('*.rockspec'))
+
+
+def _has_vcs_marker(directory: Path) -> bool:
+    """Tier 2: *directory* is a VCS root — consulted only when no package
+    marker exists anywhere in the climb."""
+    return any((directory / marker).exists() for marker in _VCS_ROOT_MARKERS)
+
+
+def _python_package_top(target_path: Path) -> Optional[Path]:
+    """Tier 3 (opt-in): the top of the *contiguous* ``__init__.py`` chain
+    rooted at the target's own directory — the Python-package fallback the
+    I002 circular-import rule needs (BACK-338). Returns ``None`` when the
+    target directory is not itself a package, so a stray far-ancestor
+    ``__init__.py`` can never hijack the root of an unrelated tree.
+    """
+    start = target_path if target_path.is_dir() else target_path.parent
+    if not (start / '__init__.py').exists():
+        return None
+    current = start
+    for _ in range(20):
+        parent = current.parent
+        if parent == current or not (parent / '__init__.py').exists():
+            return current
+        current = parent
+    return current
+
+
+def resolve_project_root(
+    target_path: Path,
+    *,
+    root_override: Optional[Path] = None,
+    honor_reveal_root: bool = True,
+    use_package_markers: bool = True,
+    use_vcs: bool = True,
+    python_init_chain: bool = False,
+) -> Optional[Path]:
+    """Resolve *target_path*'s project root, first applicable tier wins:
+
+    * **-1** ``root_override`` — a validated, per-invocation pin (depends://'s
+      ``?root=``); callers with no such lever pass ``None``.
+    * **0** ``.reveal.yaml root:true`` (``honor_reveal_root``).
+    * **1** nearest package/build marker (``use_package_markers``).
+    * **2** nearest VCS root (``use_vcs``).
+    * **3** contiguous ``__init__.py`` chain top (``python_init_chain``).
+
+    Tiers 0–2 climb via :func:`search_parents_within_ceiling`, so the walk stops
+    at a filesystem/``$HOME``/system boundary it can never promote to a root.
+    Returns ``None`` if nothing matches before the ceiling — the caller decides
+    its own fallback (an inferred subtree, ``start_path``, etc.).
+    """
+    if root_override is not None:
+        return root_override
+    if honor_reveal_root:
+        reveal_root = search_parents_within_ceiling(target_path, _has_reveal_root_marker)
+        if reveal_root is not None:
+            return reveal_root
+    if use_package_markers:
+        package_root = search_parents_within_ceiling(target_path, _has_package_marker)
+        if package_root is not None:
+            return package_root
+    if use_vcs:
+        vcs_root = search_parents_within_ceiling(target_path, _has_vcs_marker)
+        if vcs_root is not None:
+            return vcs_root
+    if python_init_chain:
+        return _python_package_top(target_path)
+    return None
+
+
 def get_relative_to_root(
     path: Path,
     root_markers: Optional[List[str]] = None
