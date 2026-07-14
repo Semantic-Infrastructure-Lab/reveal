@@ -1605,7 +1605,10 @@ class TestClassifyCallLanguageScoping(unittest.TestCase):
         # _RECEIVER_TAXONOMY fallback — 'os.environ' isn't a receiver name,
         # so it isolates the python-only taxonomy table instead.
         self.assertEqual(classify_call('os.environ', language='python'), 'env')
-        self.assertIsNone(classify_call('os.environ', language='go'))
+        # BACK-629 (sideeffects-recall-oracle): Go's own 'os.environ' pattern
+        # was added separately (real corpus idiom, os.Environ()) — this is no
+        # longer isolating in the Go direction, so use rust (still absent)
+        # to keep testing table isolation rather than Go's own coverage.
         self.assertIsNone(classify_call('os.environ', language='rust'))
 
     def test_js_group_aliases_share_one_bucket(self):
@@ -1635,6 +1638,51 @@ class TestClassifyCallLanguageScoping(unittest.TestCase):
         # testing the fallback, not some language's own scoping.
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertEqual(classify_call('session_start', language='dart'), 'session')
+
+    def test_go_klog_glog_logrus_classified_as_log(self):
+        # BACK-629 (sideeffects-recall-oracle, real-corpus measurement on
+        # k8s.io/client-go): klog.Fatalf(...) in the azure auth plugin's
+        # init() was silently unclassified — 'klog' tokenizes to its own
+        # segment, distinct from the common bare 'log' pattern.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('klog.Fatalf', language='go'), 'log')
+        self.assertEqual(classify_call('klog.Infof', language='go'), 'log')
+        self.assertEqual(classify_call('glog.Warningf', language='go'), 'log')
+        self.assertEqual(classify_call('logrus.Error', language='go'), 'log')
+        self.assertIsNone(classify_call('klog.Fatalf', language='python'))
+
+    def test_go_http_stdlib_and_roundtrip_classified_as_http(self):
+        # BACK-629: Go had no http bucket at all — real corpus misses on
+        # client-go included `rt.RoundTrip(req)` (transport.go) and
+        # `http.NewRequestWithContext(...)` (remotecommand/websocket.go).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('http.Get', language='go'), 'http')
+        self.assertEqual(classify_call('http.NewRequestWithContext', language='go'), 'http')
+        self.assertEqual(classify_call('rt.RoundTrip', language='go'), 'http')
+        self.assertEqual(classify_call('transport.RoundTrip', language='go'), 'http')
+        self.assertIsNone(classify_call('http.Get', language='python'))
+
+    def test_go_do_call_stays_unclassified_ambiguous_verb(self):
+        # `client.Do(req)` (net/http's dominant call-site idiom, e.g.
+        # rest/request.go:Watch and rest/fake/fake.go:do in client-go) is
+        # deliberately left unclassified: classify_call only sees the callee
+        # text, not the argument, so a bare 'do' pattern would be exactly the
+        # collision-prone-verb case the module docstring warns about (same
+        # shape as '.save'/'.where' staying unclassified elsewhere) —
+        # confirmed via the sideeffects-recall-oracle measurement loop.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('client.Do', language='go'))
+
+    def test_go_os_lookupenv_setenv_unsetenv_environ_classified_as_env(self):
+        # BACK-629: os.LookupEnv(...) in client-go's feature-gate reader
+        # (features/envvar.go) was silently unclassified — only bare
+        # 'getenv'/'putenv' existed in _TAXONOMY_COMMON.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('os.LookupEnv', language='go'), 'env')
+        self.assertEqual(classify_call('os.Setenv', language='go'), 'env')
+        self.assertEqual(classify_call('os.Unsetenv', language='go'), 'env')
+        self.assertEqual(classify_call('os.Environ', language='go'), 'env')
+        self.assertIsNone(classify_call('os.LookupEnv', language='python'))
 
 
 class TestCollectEffects(unittest.TestCase):

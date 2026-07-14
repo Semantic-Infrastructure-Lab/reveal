@@ -125,6 +125,38 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             'os.open', 'os.openfile', 'os.create', 'os.remove', 'os.mkdirall',
             'ioutil.readfile', 'ioutil.writefile',
         ]),
+        # BACK-629 (sideeffects-recall-oracle, real-corpus measurement on
+        # k8s.io/client-go): Go had NO http bucket at all — every idiomatic
+        # net/http call (`http.Get`, `.RoundTrip(req)` on an http.RoundTripper,
+        # the dominant transport-layer idiom in client-go) was silently
+        # unclassified. `http_get`/`http_post` in _TAXONOMY_COMMON are
+        # snake_case literals (tokenize to one segment, `['http_get']`) and so
+        # never matched Go's dotted `http.Get(` (`['http', 'get']`) — a
+        # segment-count mismatch, not a missing verb. 'roundtrip' is bare
+        # (matches any receiver, e.g. `rt.RoundTrip(req)`, `transport.RoundTrip`)
+        # since RoundTripper is the canonical Go net/http transport interface
+        # method name and not collision-prone with unrelated domain verbs.
+        ('http', [
+            'http.get', 'http.post', 'http.head', 'http.postform',
+            'http.newrequest', 'http.newrequestwithcontext',
+            'roundtrip',
+        ]),
+        # BACK-629: klog (k8s.io/klog, the dominant structured logger across
+        # the entire Kubernetes ecosystem) and glog/logrus were silently
+        # unclassified — the common bare 'log' pattern only matches a segment
+        # that is EXACTLY 'log' (e.g. Go stdlib `log.Println`), and 'klog' is
+        # a distinct token, not a substring match, under segment-boundary
+        # tokenization. Real miss: `klog.Fatalf(...)` in client-go's azure
+        # auth plugin `init()` was unclassified before this fix.
+        ('log', ['klog', 'glog', 'logrus']),
+        # BACK-629: `os.LookupEnv` (the idiomatic Go form for an optional env
+        # read, used throughout client-go's feature-gate machinery) had no
+        # pattern at all — only bare 'getenv'/'putenv' exist in
+        # _TAXONOMY_COMMON, and 'lookupenv' is a distinct token. Real miss:
+        # `os.LookupEnv(...)` in client-go's `envvar.go` feature-gate reader
+        # was unclassified before this fix. `os.Setenv`/`os.Unsetenv`/
+        # `os.Environ` added for the same reason (all in `os`, none matched).
+        ('env', ['os.lookupenv', 'os.setenv', 'os.unsetenv', 'os.environ']),
     ],
     'rust': [
         ('hard_stop', ['std::process::exit']),
