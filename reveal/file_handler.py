@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from .core import node_children, tree_root
+from .core.treesitter_compat import _zero_arg
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -267,7 +268,7 @@ def _pick_best_candidate(candidates):
     if len(candidates) == 1:
         return candidates[0]
     for node in candidates:
-        if any(child.kind() == 'block' for child in node_children(node)):
+        if any(_zero_arg(child, 'kind') == 'block' for child in node_children(node)):
             return node
     return candidates[0]
 

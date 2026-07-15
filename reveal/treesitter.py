@@ -17,6 +17,7 @@ from .core import suppress_treesitter_warnings
 from .core import node_children as _children
 from .core import node_next_sibling as _next_sibling
 from .core import iter_tree as _iter_tree
+from .core.treesitter_compat import _zero_arg
 from .core import tree_root
 from .core import ts_parse
 
@@ -909,7 +910,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 bases.extend(self._extract_ts_extends_names(heritage_child))
             elif heritage_child.kind() == 'implements_clause':
                 bases.extend(self._extract_ts_implements_names(heritage_child))
-            elif heritage_child.kind() in ('identifier', 'type_identifier'):
+            elif _zero_arg(heritage_child, 'kind') in ('identifier', 'type_identifier'):
                 text = self._get_node_text(heritage_child).strip()
                 if text:
                     bases.append(text)
@@ -1225,7 +1226,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         kids = _children(node)
         for i, child in enumerate(kids):
-            if child.kind() == 'operator' and i + 1 < len(kids):
+            if _zero_arg(child, 'kind') == 'operator' and i + 1 < len(kids):
                 return f'operator {self._get_node_text(kids[i + 1])}'
         return None
 
@@ -1305,7 +1306,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         if node.kind() == 'struct_type':
             return self._struct_type_name(node)
-        if node.kind() == 'operator_declaration':
+        if _zero_arg(node, 'kind') == 'operator_declaration':
             return self._operator_declaration_name(node)
 
         kids = _children(node)
@@ -1356,14 +1357,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
         loop (BACK-547 fourth language) while sanity-checking constructor/
         destructor coverage before trusting any recall numbers.
         """
-        if node.kind() in ('operator_name', 'destructor_name'):
+        if _zero_arg(node, 'kind') in ('operator_name', 'destructor_name'):
             return self._get_node_text(node)
 
-        if node.kind() == 'qualified_identifier':
+        if _zero_arg(node, 'kind') == 'qualified_identifier':
             parts = [
                 self._get_node_text(child)
                 for child in _children(node)
-                if child.kind() in (
+                if _zero_arg(child, 'kind') in (
                     'identifier', 'namespace_identifier', 'field_identifier',
                     'type_identifier', 'operator_name', 'destructor_name',
                 )

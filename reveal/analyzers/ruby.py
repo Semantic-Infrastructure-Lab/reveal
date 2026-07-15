@@ -3,6 +3,7 @@
 from typing import List
 
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -26,12 +27,12 @@ class RubyAnalyzer(TreeSitterAnalyzer):
     # already renders its full 'A::B::C' text as one node).
 
     def _extract_class_bases(self, node) -> List[str]:
-        if node.kind() != 'class':
+        if _zero_arg(node, 'kind') != 'class':
             return super()._extract_class_bases(node)
         for child in _children(node):
-            if child.kind() == 'superclass':
+            if _zero_arg(child, 'kind') == 'superclass':
                 for item in _children(child):
-                    if item.kind() in ('constant', 'scope_resolution'):
+                    if _zero_arg(item, 'kind') in ('constant', 'scope_resolution'):
                         text = self._get_node_text(item).strip()
                         return [text] if text else []
         return []

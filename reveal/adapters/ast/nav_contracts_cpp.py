@@ -28,6 +28,7 @@ from .nav_surface_common import _get_text, _get_line
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 
 def scan_file_contracts_cpp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -47,7 +48,7 @@ def scan_file_contracts_cpp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        if node.kind() in ('class_specifier', 'struct_specifier'):
+        if _zero_arg(node, 'kind') in ('class_specifier', 'struct_specifier'):
             _process_class(node, file_path, content_bytes, result)
         for ch in reversed(_children(node)):
             stack.append(ch)
@@ -57,7 +58,7 @@ def scan_file_contracts_cpp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _class_name(node: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(node):
-        if ch.kind() == 'type_identifier':
+        if _zero_arg(ch, 'kind') == 'type_identifier':
             return _get_text(ch, content_bytes)
     return None
 
@@ -65,7 +66,7 @@ def _class_name(node: Any, content_bytes: bytes) -> Optional[str]:
 def _base_names(node: Any, content_bytes: bytes) -> List[str]:
     """Base-class names from a `base_class_clause` (`: public A, private B`),
     unwrapping qualified/template forms to the rightmost type name."""
-    clause = next((c for c in _children(node) if c.kind() == 'base_class_clause'), None)
+    clause = next((c for c in _children(node) if _zero_arg(c, 'kind') == 'base_class_clause'), None)
     if clause is None:
         return []
     names: List[str] = []
@@ -79,9 +80,9 @@ def _base_names(node: Any, content_bytes: bytes) -> List[str]:
 def _type_tail(node: Any, content_bytes: bytes) -> Optional[str]:
     """Rightmost type name of a base entry: `type_identifier`, or the tail of a
     `qualified_identifier`/`template_type` (`ns::Base`→`Base`, `Base<T>`→`Base`)."""
-    if node.kind() == 'type_identifier':
+    if _zero_arg(node, 'kind') == 'type_identifier':
         return _get_text(node, content_bytes)
-    if node.kind() in ('qualified_identifier', 'template_type'):
+    if _zero_arg(node, 'kind') in ('qualified_identifier', 'template_type'):
         found = None
         for ch in _children(node):
             tail = _type_tail(ch, content_bytes)
@@ -94,18 +95,18 @@ def _type_tail(node: Any, content_bytes: bytes) -> Optional[str]:
 def _is_pure_virtual_field(field: Any) -> bool:
     """A `field_declaration` is a pure virtual method if it carries a `virtual`
     specifier and a `= 0` pure-specifier (a `number_literal` 0 sibling)."""
-    has_virtual = any(c.kind() == 'virtual' for c in _children(field))
+    has_virtual = any(_zero_arg(c, 'kind') == 'virtual' for c in _children(field))
     if not has_virtual:
         return False
-    return any(c.kind() == 'number_literal' for c in _children(field))
+    return any(_zero_arg(c, 'kind') == 'number_literal' for c in _children(field))
 
 
 def _class_is_abstract(node: Any) -> bool:
-    body = next((c for c in _children(node) if c.kind() == 'field_declaration_list'), None)
+    body = next((c for c in _children(node) if _zero_arg(c, 'kind') == 'field_declaration_list'), None)
     if body is None:
         return False
     for item in _children(body):
-        if item.kind() == 'field_declaration' and _is_pure_virtual_field(item):
+        if _zero_arg(item, 'kind') == 'field_declaration' and _is_pure_virtual_field(item):
             return True
     return False
 
@@ -116,7 +117,7 @@ def _process_class(node: Any, file_path: str, content_bytes: bytes,
     if name is None:
         return
     # A forward declaration / opaque reference has no body — skip (no field list).
-    if not any(c.kind() == 'field_declaration_list' for c in _children(node)):
+    if not any(_zero_arg(c, 'kind') == 'field_declaration_list' for c in _children(node)):
         return
     result['classes'].append({
         'name': name,

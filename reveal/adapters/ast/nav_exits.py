@@ -8,6 +8,7 @@ from .nav_calls import _extract_callee
 from .nav_varflow import all_var_flow
 from .node_taxonomy import EXIT_NODES, GATE_NODES, KEYWORD_LABEL
 from ...core import node_children as _children
+from ...core.treesitter_compat import _zero_arg
 
 
 # Language-construct names treated as hard exits even when represented as calls.
@@ -50,7 +51,7 @@ def _is_exit_call(callee: Optional[str]) -> bool:
 # rather than folded into the taxonomy, since the taxonomy has no concept of
 # "same kind string, different language, disambiguate by shape."
 def _is_rust_try_propagation(node: Any) -> bool:
-    return node.kind() == 'try_expression' and any(c.kind() == '?' for c in _children(node))
+    return _zero_arg(node, 'kind') == 'try_expression' and any(_zero_arg(c, 'kind') == '?' for c in _children(node))
 
 
 # Statement-shaped kinds that can appear as a direct child of a Rust `block`.
@@ -71,21 +72,21 @@ _RUST_BLOCK_STATEMENT_KINDS: frozenset = frozenset({
 def _find_rust_tail_expression(scope_node: Any) -> Optional[Any]:
     """Return the function's implicit-return tail expression node, if any.
 
-    Only called when scope_node.kind() == 'function_item' -- Rust's own
+    Only called when scope_node's kind is 'function_item' -- Rust's own
     function-node kind, so this never fires for another language's block.
     """
     body = None
     for child in _children(scope_node):
-        if child.kind() == 'block':
+        if _zero_arg(child, 'kind') == 'block':
             body = child
     if body is None:
         return None
     last = None
     for child in _children(body):
-        if child.kind() in ('{', '}'):
+        if _zero_arg(child, 'kind') in ('{', '}'):
             continue
         last = child
-    if last is not None and last.kind() not in _RUST_BLOCK_STATEMENT_KINDS:
+    if last is not None and _zero_arg(last, 'kind') not in _RUST_BLOCK_STATEMENT_KINDS:
         return last
     return None
 
@@ -165,7 +166,7 @@ def collect_exits(
 
         stack.extend(reversed(_children(node)))
 
-    if scope_node.kind() == 'function_item':
+    if _zero_arg(scope_node, 'kind') == 'function_item':
         tail = _find_rust_tail_expression(scope_node)
         if tail is not None:
             tail_line = tail.start_position().row + 1
@@ -404,7 +405,7 @@ def collect_gate_chains(
 
     walk(scope_node, [])
 
-    if scope_node.kind() == 'function_item':
+    if _zero_arg(scope_node, 'kind') == 'function_item':
         tail = _find_rust_tail_expression(scope_node)
         if tail is not None:
             tail_line = tail.start_position().row + 1

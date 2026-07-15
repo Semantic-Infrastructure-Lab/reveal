@@ -32,6 +32,7 @@ from .nav_surface_common import _get_text, _get_line
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 
 def scan_file_contracts_go(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -56,7 +57,7 @@ def scan_file_contracts_go(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
         if kind == 'type_spec':
             _process_type_spec(node, file_path, content_bytes, result)
         elif kind == 'method_declaration':
@@ -69,7 +70,7 @@ def scan_file_contracts_go(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _type_spec_name(node: Any, content_bytes: bytes):
     for ch in _children(node):
-        if ch.kind() == 'type_identifier':
+        if _zero_arg(ch, 'kind') == 'type_identifier':
             return _get_text(ch, content_bytes)
     return None
 
@@ -79,11 +80,11 @@ def _process_type_spec(node: Any, file_path: str, content_bytes: bytes,
     name = _type_spec_name(node, content_bytes)
     if name is None:
         return
-    body = next((c for c in _children(node) if c.kind() in ('interface_type', 'struct_type')), None)
+    body = next((c for c in _children(node) if _zero_arg(c, 'kind') in ('interface_type', 'struct_type')), None)
     if body is None:
         return
     line = _get_line(node)
-    if body.kind() == 'struct_type':
+    if _zero_arg(body, 'kind') == 'struct_type':
         result['structs'].append({'name': name, 'file': file_path, 'line': line})
         return
     # interface_type: method_elem children are methods; bare type_identifier
@@ -91,11 +92,11 @@ def _process_type_spec(node: Any, file_path: str, content_bytes: bytes,
     methods: List[str] = []
     embeds: List[str] = []
     for ch in _children(body):
-        if ch.kind() == 'method_elem':
+        if _zero_arg(ch, 'kind') == 'method_elem':
             mname = _method_elem_name(ch, content_bytes)
             if mname:
                 methods.append(mname)
-        elif ch.kind() == 'type_identifier':
+        elif _zero_arg(ch, 'kind') == 'type_identifier':
             embeds.append(_get_text(ch, content_bytes))
     result['interfaces'].append({
         'name': name, 'file': file_path, 'line': line,
@@ -105,7 +106,7 @@ def _process_type_spec(node: Any, file_path: str, content_bytes: bytes,
 
 def _method_elem_name(node: Any, content_bytes: bytes):
     for ch in _children(node):
-        if ch.kind() == 'field_identifier':
+        if _zero_arg(ch, 'kind') == 'field_identifier':
             return _get_text(ch, content_bytes)
     return None
 
@@ -114,14 +115,14 @@ def _receiver_type(param_list: Any, content_bytes: bytes):
     """Extract the receiver type name from a method's receiver parameter_list,
     unwrapping a pointer receiver (`*T` → `T`)."""
     for pdecl in _children(param_list):
-        if pdecl.kind() != 'parameter_declaration':
+        if _zero_arg(pdecl, 'kind') != 'parameter_declaration':
             continue
         for ch in _children(pdecl):
-            if ch.kind() == 'type_identifier':
+            if _zero_arg(ch, 'kind') == 'type_identifier':
                 return _get_text(ch, content_bytes)
-            if ch.kind() == 'pointer_type':
+            if _zero_arg(ch, 'kind') == 'pointer_type':
                 for pc in _children(ch):
-                    if pc.kind() == 'type_identifier':
+                    if _zero_arg(pc, 'kind') == 'type_identifier':
                         return _get_text(pc, content_bytes)
     return None
 
@@ -130,8 +131,8 @@ def _process_method(node: Any, content_bytes: bytes,
                     result: Dict[str, List[Dict[str, Any]]]) -> None:
     kids = _children(node)
     # method_declaration: 'func' parameter_list(receiver) field_identifier(name) ...
-    recv_list = next((c for c in kids if c.kind() == 'parameter_list'), None)
-    name_node = next((c for c in kids if c.kind() == 'field_identifier'), None)
+    recv_list = next((c for c in kids if _zero_arg(c, 'kind') == 'parameter_list'), None)
+    name_node = next((c for c in kids if _zero_arg(c, 'kind') == 'field_identifier'), None)
     if recv_list is None or name_node is None:
         return
     recv = _receiver_type(recv_list, content_bytes)

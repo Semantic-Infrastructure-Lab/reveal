@@ -30,6 +30,7 @@ from .nav_surface_common import _get_text, _get_line, _add_once
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 # #include header-path roots (matched as a prefix on the header path).
 _NET_HEADERS: tuple = ('curl/', 'cpr/', 'boost/asio', 'boost/beast', 'restclient',
@@ -78,7 +79,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
         if kind == 'preproc_include':
             _process_include(node, file_path, content_bytes, surfaces)
         elif kind == 'call_expression':
@@ -94,20 +95,20 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
 
 
 def _string_content(node: Any, content_bytes: bytes) -> Optional[str]:
-    if node.kind() != 'string_literal':
+    if _zero_arg(node, 'kind') != 'string_literal':
         return None
     for ch in _children(node):
-        if ch.kind() == 'string_content':
+        if _zero_arg(ch, 'kind') == 'string_content':
             return _get_text(ch, content_bytes)
     return _get_text(node, content_bytes).strip('"')
 
 
 def _first_string_arg(call_node: Any, content_bytes: bytes) -> Optional[str]:
-    args = next((c for c in _children(call_node) if c.kind() == 'argument_list'), None)
+    args = next((c for c in _children(call_node) if _zero_arg(c, 'kind') == 'argument_list'), None)
     if args is None:
         return None
     for arg in _children(args):
-        if arg.kind() == 'string_literal':
+        if _zero_arg(arg, 'kind') == 'string_literal':
             return _string_content(arg, content_bytes)
     return None
 
@@ -116,9 +117,9 @@ def _process_include(node: Any, file_path: str, content_bytes: bytes,
                      surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     header = None
     for ch in _children(node):
-        if ch.kind() == 'system_lib_string':
+        if _zero_arg(ch, 'kind') == 'system_lib_string':
             header = _get_text(ch, content_bytes).strip('<>')
-        elif ch.kind() == 'string_literal':
+        elif _zero_arg(ch, 'kind') == 'string_literal':
             header = _string_content(ch, content_bytes)
     if not header:
         return
@@ -133,11 +134,11 @@ def _process_include(node: Any, file_path: str, content_bytes: bytes,
 
 def _process_function(node: Any, file_path: str, content_bytes: bytes,
                       surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    declarator = next((c for c in _children(node) if c.kind() == 'function_declarator'), None)
+    declarator = next((c for c in _children(node) if _zero_arg(c, 'kind') == 'function_declarator'), None)
     if declarator is None:
         return
     name = next((_get_text(c, content_bytes) for c in _children(declarator)
-                 if c.kind() == 'identifier'), None)
+                 if _zero_arg(c, 'kind') == 'identifier'), None)
     if name == 'main':
         surfaces['cli'].append({
             'type': 'main', 'name': 'main', 'file': file_path, 'line': _get_line(node),
@@ -149,7 +150,7 @@ def _process_declaration(node: Any, file_path: str, content_bytes: bytes,
     """`std::ofstream out("/path");` — an ofstream/fstream declaration is a
     file-write surface."""
     type_node = next((c for c in _children(node)
-                      if c.kind() in ('qualified_identifier', 'type_identifier')), None)
+                      if _zero_arg(c, 'kind') in ('qualified_identifier', 'type_identifier')), None)
     if type_node is None:
         return
     type_text = _get_text(type_node, content_bytes)
@@ -166,13 +167,13 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
     # only the direct-callee shapes are handled here (no manual recursion — that
     # would double-count the inner CROW_ROUTE call).
     fn = next((c for c in _children(node)
-               if c.kind() in ('identifier', 'qualified_identifier', 'field_expression')), None)
+               if _zero_arg(c, 'kind') in ('identifier', 'qualified_identifier', 'field_expression')), None)
     if fn is None:
         return
     line = _get_line(node)
 
     # env: getenv / std::getenv
-    if fn.kind() in ('identifier', 'qualified_identifier'):
+    if _zero_arg(fn, 'kind') in ('identifier', 'qualified_identifier'):
         fn_text = _get_text(fn, content_bytes)
         if fn_text in _ENV_FUNCS:
             key = _first_string_arg(node, content_bytes)
@@ -198,8 +199,8 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
             return
 
     # cpp-httplib: svr.Get("/path", handler)
-    if fn.kind() == 'field_expression':
-        field = next((c for c in _children(fn) if c.kind() == 'field_identifier'), None)
+    if _zero_arg(fn, 'kind') == 'field_expression':
+        field = next((c for c in _children(fn) if _zero_arg(c, 'kind') == 'field_identifier'), None)
         if field is not None:
             verb = _get_text(field, content_bytes)
             if verb in _HTTP_VERBS:

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ...core import node_children as _children
+from ...core.treesitter_compat import _zero_arg
 from .nav_calls import range_calls
 from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_NODES
 
@@ -804,7 +805,7 @@ def _collect_property_effects(
         line = node.start_position().row + 1
         if node.end_position().row + 1 < from_line or line > to_line:
             continue
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
         if kind in CALL_NODE_TYPES:
             # A call's own callee belongs to the call channel: `os.environ.get`
             # is an `attribute` whose base text is exactly `os.environ`, so
@@ -827,8 +828,8 @@ def _collect_property_effects(
             if callee is None and node.child_by_field_name('receiver') is None:
                 callee = node.child(0)
             if callee is not None:
-                callee_spans.add((callee.start_byte(), callee.end_byte()))
-        elif kind in _PROPERTY_NODES and (node.start_byte(), node.end_byte()) not in callee_spans:
+                callee_spans.add((_zero_arg(callee, 'start_byte'), _zero_arg(callee, 'end_byte')))
+        elif kind in _PROPERTY_NODES and (_zero_arg(node, 'start_byte'), _zero_arg(node, 'end_byte')) not in callee_spans:
             # child(0) is the base in every shape this matches: the receiver of
             # a member access (`process.env` in `process.env.FOO`) and the
             # subject of a subscript (`os.environ` in `os.environ['FOO']`).

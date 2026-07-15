@@ -22,6 +22,7 @@ from .nav_surface_common import _get_text, _get_line
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 
 def scan_file_contracts_rust(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -41,7 +42,7 @@ def scan_file_contracts_rust(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
         if kind == 'trait_item':
             _process_trait(node, file_path, content_bytes, result)
         elif kind == 'impl_item':
@@ -55,9 +56,9 @@ def scan_file_contracts_rust(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 def _type_name(node: Any, content_bytes: bytes) -> Optional[str]:
     """Base type name, unwrapping generic (`Vec<u8>`→`Vec`) and scoped
     (`a::B`→`B`) forms to the rightmost type_identifier."""
-    if node.kind() == 'type_identifier':
+    if _zero_arg(node, 'kind') == 'type_identifier':
         return _get_text(node, content_bytes)
-    if node.kind() in ('generic_type', 'scoped_type_identifier', 'reference_type'):
+    if _zero_arg(node, 'kind') in ('generic_type', 'scoped_type_identifier', 'reference_type'):
         found = None
         for ch in _children(node):
             name = _type_name(ch, content_bytes)
@@ -70,16 +71,16 @@ def _type_name(node: Any, content_bytes: bytes) -> Optional[str]:
 def _process_trait(node: Any, file_path: str, content_bytes: bytes,
                    result: Dict[str, List[Dict[str, Any]]]) -> None:
     name = next((_get_text(c, content_bytes) for c in _children(node)
-                 if c.kind() == 'type_identifier'), None)
+                 if _zero_arg(c, 'kind') == 'type_identifier'), None)
     if name is None:
         return
     methods: List[str] = []
-    body = next((c for c in _children(node) if c.kind() == 'declaration_list'), None)
+    body = next((c for c in _children(node) if _zero_arg(c, 'kind') == 'declaration_list'), None)
     if body is not None:
         for item in _children(body):
-            if item.kind() in ('function_signature_item', 'function_item'):
+            if _zero_arg(item, 'kind') in ('function_signature_item', 'function_item'):
                 mname = next((_get_text(c, content_bytes) for c in _children(item)
-                              if c.kind() == 'identifier'), None)
+                              if _zero_arg(c, 'kind') == 'identifier'), None)
                 if mname:
                     methods.append(mname)
     result['interfaces'].append({
@@ -92,7 +93,7 @@ def _process_impl(node: Any, file_path: str, content_bytes: bytes,
     """`impl Trait for Type` — the type names straddle a `for` token. An
     inherent `impl Type { }` has no `for` and is not a contract implementation."""
     kids = _children(node)
-    for_idx = next((i for i, c in enumerate(kids) if c.kind() == 'for'), None)
+    for_idx = next((i for i, c in enumerate(kids) if _zero_arg(c, 'kind') == 'for'), None)
     if for_idx is None:
         return
     trait_name = None

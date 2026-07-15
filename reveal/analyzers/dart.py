@@ -3,6 +3,7 @@
 from typing import List
 
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -31,13 +32,13 @@ class DartAnalyzer(TreeSitterAnalyzer):
     # filter naturally excludes the type parameter.
 
     def _extract_class_bases(self, node) -> List[str]:
-        if node.kind() != 'class_definition':
+        if _zero_arg(node, 'kind') != 'class_definition':
             return super()._extract_class_bases(node)
         bases = []
         for child in _children(node):
-            if child.kind() in ('superclass', 'interfaces'):
+            if _zero_arg(child, 'kind') in ('superclass', 'interfaces'):
                 for item in _children(child):
-                    if item.kind() == 'type_identifier':
+                    if _zero_arg(item, 'kind') == 'type_identifier':
                         text = self._get_node_text(item).strip()
                         if text:
                             bases.append(text)

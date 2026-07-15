@@ -3,6 +3,7 @@
 from typing import List
 
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -34,13 +35,13 @@ class CppAnalyzer(TreeSitterAnalyzer):
     # regardless of access level, matching every other language's behavior.
 
     def _extract_class_bases(self, node) -> List[str]:
-        if node.kind() != 'class_specifier':
+        if _zero_arg(node, 'kind') != 'class_specifier':
             return super()._extract_class_bases(node)
         for child in _children(node):
-            if child.kind() == 'base_class_clause':
+            if _zero_arg(child, 'kind') == 'base_class_clause':
                 bases = []
                 for item in _children(child):
-                    if item.kind() in ('type_identifier', 'qualified_identifier'):
+                    if _zero_arg(item, 'kind') in ('type_identifier', 'qualified_identifier'):
                         text = self._get_node_text(item).strip()
                         if text:
                             bases.append(text)

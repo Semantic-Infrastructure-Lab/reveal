@@ -45,6 +45,7 @@ from .nav_surface_common import _get_text, _get_line, _add_once
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 _NET_MODULES: frozenset = frozenset({
     'net/http', 'net/rpc', 'google.golang.org/grpc',
@@ -119,7 +120,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
 
         if kind == 'import_spec':
             _process_import(node, file_path, content_bytes, surfaces)
@@ -136,9 +137,9 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
 
 def _package_name(tree: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(tree_root(tree)):
-        if ch.kind() == 'package_clause':
+        if _zero_arg(ch, 'kind') == 'package_clause':
             for c in _children(ch):
-                if c.kind() == 'package_identifier':
+                if _zero_arg(c, 'kind') == 'package_identifier':
                     return _get_text(c, content_bytes)
     return None
 
@@ -146,7 +147,7 @@ def _package_name(tree: Any, content_bytes: bytes) -> Optional[str]:
 def _string_literal_text(node: Any, content_bytes: bytes) -> str:
     """Text of an interpreted_string_literal, stripping the surrounding quotes."""
     for ch in _children(node):
-        if ch.kind() == 'interpreted_string_literal_content':
+        if _zero_arg(ch, 'kind') == 'interpreted_string_literal_content':
             return _get_text(ch, content_bytes)
     return _get_text(node, content_bytes).strip('"`')
 
@@ -154,7 +155,7 @@ def _string_literal_text(node: Any, content_bytes: bytes) -> str:
 def _process_import(node: Any, file_path: str, content_bytes: bytes,
                     surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     for ch in _children(node):
-        if ch.kind() == 'interpreted_string_literal':
+        if _zero_arg(ch, 'kind') == 'interpreted_string_literal':
             module = _string_literal_text(ch, content_bytes)
             _categorize_module(module, file_path, _get_line(node), surfaces)
             return
@@ -173,7 +174,7 @@ def _categorize_module(module: str, file_path: str, line: int,
 def _function_name(node: Any, content_bytes: bytes) -> Optional[str]:
     """Name of a function_declaration (its direct ``identifier`` child)."""
     for ch in _children(node):
-        if ch.kind() == 'identifier':
+        if _zero_arg(ch, 'kind') == 'identifier':
             return _get_text(ch, content_bytes)
     return None
 
@@ -193,14 +194,14 @@ def _selector_parts(node: Any, content_bytes: bytes):
     ``os.Getenv``/``r.GET`` case; a nested expression for a chained call, whose
     text is returned as-is). The field is the trailing ``field_identifier``.
     """
-    if node.kind() != 'selector_expression':
+    if _zero_arg(node, 'kind') != 'selector_expression':
         return None, None
     kids = _children(node)
     if not kids:
         return None, None
     field = None
     for ch in kids:
-        if ch.kind() == 'field_identifier':
+        if _zero_arg(ch, 'kind') == 'field_identifier':
             field = _get_text(ch, content_bytes)
     receiver = _get_text(kids[0], content_bytes)
     return receiver, field
@@ -208,17 +209,17 @@ def _selector_parts(node: Any, content_bytes: bytes):
 
 def _first_string_arg(call_node: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(call_node):
-        if ch.kind() != 'argument_list':
+        if _zero_arg(ch, 'kind') != 'argument_list':
             continue
         for arg in _children(ch):
-            if arg.kind() == 'interpreted_string_literal':
+            if _zero_arg(arg, 'kind') == 'interpreted_string_literal':
                 return _string_literal_text(arg, content_bytes)
     return None
 
 
 def _process_call(node: Any, file_path: str, content_bytes: bytes,
                   surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    selector = next((c for c in _children(node) if c.kind() == 'selector_expression'), None)
+    selector = next((c for c in _children(node) if _zero_arg(c, 'kind') == 'selector_expression'), None)
     if selector is None:
         return
     receiver, field = _selector_parts(selector, content_bytes)

@@ -40,6 +40,7 @@ from .nav_surface_common import _get_text, _get_line, _add_once
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 _NET_CRATES: frozenset = frozenset({
     'reqwest', 'hyper', 'isahc', 'ureq', 'tonic', 'tungstenite',
@@ -92,7 +93,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
 
     # CLI: only a top-level `fn main` is the crate entrypoint.
     for child in _children(root):
-        if child.kind() == 'function_item' and _function_item_name(child, content_bytes) == 'main':
+        if _zero_arg(child, 'kind') == 'function_item' and _function_item_name(child, content_bytes) == 'main':
             surfaces['cli'].append({
                 'type': 'main', 'name': 'main', 'file': file_path, 'line': _get_line(child),
             })
@@ -100,7 +101,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     stack = [root]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
         if kind == 'use_declaration':
             _process_use(node, file_path, content_bytes, surfaces)
         elif kind == 'attribute_item':
@@ -115,32 +116,32 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
 
 def _function_item_name(node: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(node):
-        if ch.kind() == 'identifier':
+        if _zero_arg(ch, 'kind') == 'identifier':
             return _get_text(ch, content_bytes)
     return None
 
 
 def _string_content(node: Any, content_bytes: bytes) -> Optional[str]:
     """Text inside a string_literal (its string_content child), quotes stripped."""
-    if node.kind() != 'string_literal':
+    if _zero_arg(node, 'kind') != 'string_literal':
         return None
     for ch in _children(node):
-        if ch.kind() == 'string_content':
+        if _zero_arg(ch, 'kind') == 'string_content':
             return _get_text(ch, content_bytes)
     return _get_text(node, content_bytes).strip('"')
 
 
 def _crate_root(node: Any, content_bytes: bytes) -> Optional[str]:
     """First `::` segment of a use path (the crate root)."""
-    if node.kind() == 'use_as_clause':
-        node = next((c for c in _children(node) if c.kind() in ('scoped_identifier', 'identifier')), node)
-    if node.kind() == 'scoped_identifier':
+    if _zero_arg(node, 'kind') == 'use_as_clause':
+        node = next((c for c in _children(node) if _zero_arg(c, 'kind') in ('scoped_identifier', 'identifier')), node)
+    if _zero_arg(node, 'kind') == 'scoped_identifier':
         for ch in _children(node):
-            if ch.kind() == 'identifier':
+            if _zero_arg(ch, 'kind') == 'identifier':
                 return _get_text(ch, content_bytes)
-            if ch.kind() == 'scoped_identifier':
+            if _zero_arg(ch, 'kind') == 'scoped_identifier':
                 return _crate_root(ch, content_bytes)
-    if node.kind() == 'identifier':
+    if _zero_arg(node, 'kind') == 'identifier':
         return _get_text(node, content_bytes)
     return None
 
@@ -148,7 +149,7 @@ def _crate_root(node: Any, content_bytes: bytes) -> Optional[str]:
 def _process_use(node: Any, file_path: str, content_bytes: bytes,
                  surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     target = next((c for c in _children(node)
-                   if c.kind() in ('scoped_identifier', 'use_as_clause', 'identifier',
+                   if _zero_arg(c, 'kind') in ('scoped_identifier', 'use_as_clause', 'identifier',
                                    'scoped_use_list', 'use_list')), None)
     if target is None:
         return
@@ -174,20 +175,20 @@ def _categorize_crate(crate: str, full: str, file_path: str, line: int,
 
 def _attribute_verb_and_path(attr_item: Any, content_bytes: bytes):
     """(verb, path) for an `#[get("/x")]`-style route attribute, or (None, None)."""
-    attribute = next((c for c in _children(attr_item) if c.kind() == 'attribute'), None)
+    attribute = next((c for c in _children(attr_item) if _zero_arg(c, 'kind') == 'attribute'), None)
     if attribute is None:
         return None, None
     verb = None
     token_tree = None
     for ch in _children(attribute):
-        if ch.kind() == 'identifier':
+        if _zero_arg(ch, 'kind') == 'identifier':
             verb = _get_text(ch, content_bytes)
-        elif ch.kind() == 'token_tree':
+        elif _zero_arg(ch, 'kind') == 'token_tree':
             token_tree = ch
     if verb is None or verb.lower() not in _HTTP_VERBS or token_tree is None:
         return None, None
     for ch in _children(token_tree):
-        if ch.kind() == 'string_literal':
+        if _zero_arg(ch, 'kind') == 'string_literal':
             path = _string_content(ch, content_bytes)
             if path and path.startswith('/'):
                 return verb.upper(), path
@@ -206,15 +207,15 @@ def _process_attribute(node: Any, file_path: str, content_bytes: bytes,
 
 
 def _call_function_child(node: Any):
-    return next((c for c in _children(node) if c.kind() in ('scoped_identifier', 'field_expression', 'identifier')), None)
+    return next((c for c in _children(node) if _zero_arg(c, 'kind') in ('scoped_identifier', 'field_expression', 'identifier')), None)
 
 
 def _first_string_arg(call_node: Any, content_bytes: bytes) -> Optional[str]:
-    args = next((c for c in _children(call_node) if c.kind() == 'arguments'), None)
+    args = next((c for c in _children(call_node) if _zero_arg(c, 'kind') == 'arguments'), None)
     if args is None:
         return None
     for arg in _children(args):
-        if arg.kind() == 'string_literal':
+        if _zero_arg(arg, 'kind') == 'string_literal':
             return _string_content(arg, content_bytes)
     return None
 
@@ -222,13 +223,13 @@ def _first_string_arg(call_node: Any, content_bytes: bytes) -> Optional[str]:
 def _route_call_verb(call_node: Any, content_bytes: bytes) -> str:
     """Verb from an Axum `.route(path, get(handler))` — the 2nd arg's call
     identifier if it names an HTTP verb, else ANY."""
-    args = next((c for c in _children(call_node) if c.kind() == 'arguments'), None)
+    args = next((c for c in _children(call_node) if _zero_arg(c, 'kind') == 'arguments'), None)
     if args is None:
         return 'ANY'
-    call_args = [a for a in _children(args) if a.kind() == 'call_expression']
+    call_args = [a for a in _children(args) if _zero_arg(a, 'kind') == 'call_expression']
     for ca in call_args:
         fn = _call_function_child(ca)
-        if fn is not None and fn.kind() == 'identifier':
+        if fn is not None and _zero_arg(fn, 'kind') == 'identifier':
             verb = _get_text(fn, content_bytes)
             if verb.lower() in _HTTP_VERBS:
                 return verb.upper()
@@ -242,7 +243,7 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
         return
     line = _get_line(node)
 
-    if fn.kind() == 'scoped_identifier':
+    if _zero_arg(fn, 'kind') == 'scoped_identifier':
         path_text = _get_text(fn, content_bytes)
         if path_text.endswith('env::var') or path_text.endswith('env::var_os'):
             key = _first_string_arg(node, content_bytes)
@@ -269,8 +270,8 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
                 })
             return
 
-    if fn.kind() == 'field_expression':
-        field = next((c for c in _children(fn) if c.kind() == 'field_identifier'), None)
+    if _zero_arg(fn, 'kind') == 'field_expression':
+        field = next((c for c in _children(fn) if _zero_arg(c, 'kind') == 'field_identifier'), None)
         if field is not None and _get_text(field, content_bytes) == 'route':
             path = _first_string_arg(node, content_bytes)
             if path and path.startswith('/'):

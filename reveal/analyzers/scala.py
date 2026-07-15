@@ -3,6 +3,7 @@
 from typing import List
 
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -30,17 +31,17 @@ class ScalaAnalyzer(TreeSitterAnalyzer):
     # implements-list handling.
 
     def _extract_class_bases(self, node) -> List[str]:
-        if node.kind() != 'class_definition':
+        if _zero_arg(node, 'kind') != 'class_definition':
             return super()._extract_class_bases(node)
         for child in _children(node):
-            if child.kind() == 'extends_clause':
+            if _zero_arg(child, 'kind') == 'extends_clause':
                 bases = []
                 for item in _children(child):
-                    if item.kind() == 'type_identifier':
+                    if _zero_arg(item, 'kind') == 'type_identifier':
                         text = self._get_node_text(item).strip()
                         if text:
                             bases.append(text)
-                    elif item.kind() == 'generic_type':
+                    elif _zero_arg(item, 'kind') == 'generic_type':
                         base = self._extract_generic_type_base(item)
                         if base:
                             bases.append(base)
