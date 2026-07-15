@@ -266,6 +266,7 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
         findings = [
             {'kind': e['kind'], 'line': e['line'], 'callee': e['callee'],
              'first_arg': e.get('first_arg'), 'has_more_args': e.get('has_more_args', False),
+             'via': e.get('via', 'call'),
              **({'hop': e['hop'], 'chain': e['chain']} if transitive else {})}
             for e in effects if e['kind'] is not None
         ]

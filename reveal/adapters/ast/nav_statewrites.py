@@ -182,7 +182,13 @@ def collect_statewrites(
     results: List[Dict[str, Any]] = []
     _walk_assignments(func_node, from_line, to_line, get_text, results)
     for e in collect_effects(func_node, from_line, to_line, get_text, language):
-        if e['kind'] in _CALL_KINDS:
+        # Call sites only. collect_effects() grew a second, property-access
+        # channel in BACK-644 (`os.environ['X']`, `process.env.FOO`), but an
+        # env *assignment target* like `os.environ['X'] = '1'` is already
+        # reported by _walk_assignments above — merging the property channel
+        # too would double-count it. _walk_assignments owns every
+        # assignment-shaped write; this merge owns the call-shaped ones.
+        if e['kind'] in _CALL_KINDS and e.get('via') == 'call':
             results.append({
                 'kind': e['kind'], 'line': e['line'], 'target': e['callee'], 'via': 'call',
             })

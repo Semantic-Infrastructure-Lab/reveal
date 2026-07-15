@@ -838,8 +838,13 @@ reveal app.py myfunc --sideeffects
 # L9       http       curl_exec($ch)
 # L11      sleep      sleep(1)
 # L12      file       file_put_contents("/tmp/...")
+# L14      env        process.env.API_KEY          <- property read, no ()
 ```
 Shows what external systems a range touches. Useful for assessing blast radius, spotting unexpected I/O, or understanding retry safety. Works on PHP and Python.
+
+Two channels feed this. Most effects are **calls**, classified by callee name. But a language's env-read idiom is often a bare **property/subscript access** with no call node anywhere in it — `process.env.FOO` / `process.env['FOO']` (JS/TS), `ENV['FOO']` (Ruby), `os.environ['FOO']` (Python) — which no callee-name taxonomy can ever see. Those are detected by a separate property channel (v0.109.0+, BACK-644) and render without a `()` suffix, since they are not calls; `--format=json` tags each finding `"via": "call"` or `"via": "property"`.
+
+The property channel is deliberately narrow: it matches an explicit allowlist of env bases, case-sensitively, rather than treating member access as an effect by shape. So Ruby's `ENV['X']` (process environment) is reported while `env['X']` (Rack's request hash) is not, and `config.process.env.X` is not mistaken for Node's `process.env`. A bare `process.env` passed as an argument is not itself a key read and is not reported. Call-form env reads (`os.environ.get('X')`, `getenv('X')`, `System.getenv()`) are the call channel's job and are reported once, not twice.
 
 **`--transitive` → follow calls into project-local helpers (BACK-545/546)**
 ```bash
@@ -881,7 +886,7 @@ reveal file.php :1-800 --statewrites
 # L193     field    self.ref
 # L196     field    self.subpath
 ```
-`--mutations` is local-variable/refactor oriented (read-after-write hazards) and `--sideeffects` is call oriented — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--statewrites` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--sideeffects`'s call taxonomy, merged in by kind. `db` inherits `--sideeffects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. True global-vs-local scope distinction and DB column/table extraction are out of scope for this flag. Works on PHP, Python, and JS/TS.
+`--mutations` is local-variable/refactor oriented (read-after-write hazards) and `--sideeffects` is call oriented (plus an env property channel, BACK-644) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--statewrites` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--sideeffects`'s call taxonomy, merged in by kind. `db` inherits `--sideeffects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. True global-vs-local scope distinction and DB column/table extraction are out of scope for this flag. Works on PHP, Python, and JS/TS.
 
 **`--keys VAR` → dynamic key/property access surface (BACK-439d)**
 ```bash

@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional
 
 from .nav_outline import element_outline, render_branchmap
-from .nav_effects import collect_effects
+from .nav_effects import collect_effects, format_effect_target
 
 LOOP_KEYWORDS: frozenset = frozenset({'FOR', 'WHILE', 'LOOP', 'DO'})
 
@@ -80,9 +80,6 @@ def render_fanout(loops: List[Dict[str, Any]], from_line: int, to_line: int) -> 
             lines.append(f'{indent}  (no classified side effects)')
             continue
         for e in loop['effects']:
-            callee = e['callee'] or '(unknown)'
-            first_arg = e.get('first_arg')
-            has_more = e.get('has_more_args', False)
-            arg_str = f'({first_arg}{"..." if has_more else ""})' if first_arg else '()'
-            lines.append(f'{indent}  L{e["line"]:<6}  {e["kind"]:<8}  {callee}{arg_str}')
+            target = format_effect_target(e)
+            lines.append(f'{indent}  L{e["line"]:<6}  {e["kind"]:<8}  {target}')
     return '\n'.join(lines)

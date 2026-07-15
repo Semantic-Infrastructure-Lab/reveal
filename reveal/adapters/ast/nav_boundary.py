@@ -1,7 +1,12 @@
 from typing import Any, Callable, Dict, List, Optional
 
 from .nav_exits import collect_deps
-from .nav_effects import collect_effects, collect_effects_transitive, render_effects_transitive
+from .nav_effects import (
+    collect_effects,
+    collect_effects_transitive,
+    format_effect_target,
+    render_effects_transitive,
+)
 
 
 _PHP_SUPERGLOBALS = frozenset({
@@ -82,14 +87,8 @@ def render_boundary(
         kind_width = max(len(e['kind']) for e in effects)
         lines = ['EFFECTS:']
         for e in effects:
-            callee = e['callee'] or '(unknown)'
-            first_arg = e.get('first_arg')
-            has_more = e.get('has_more_args', False)
-            if first_arg:
-                arg_str = f'({first_arg}{"..." if has_more else ""})'
-            else:
-                arg_str = '()'
-            lines.append(f'  {e["kind"]:<{kind_width}}  L{e["line"]:<6}  {callee}{arg_str}')
+            target = format_effect_target(e)
+            lines.append(f'  {e["kind"]:<{kind_width}}  L{e["line"]:<6}  {target}')
         sections.append('\n'.join(lines))
     else:
         sections.append(f'EFFECTS:\n  none in L{from_line}–L{to_line}')

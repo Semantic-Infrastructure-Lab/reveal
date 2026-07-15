@@ -7,7 +7,9 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from ...core import node_children as _children
 from .nav_calls import range_calls
+from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_NODES
 
 # Each entry: (kind_label, list_of_patterns).
 #
@@ -227,15 +229,15 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         ]),
         ('log', ['console.log', 'console.error', 'console.warn']),
         ('sleep', ['setTimeout', 'setInterval']),
-        # NO env bucket (BACK-644): Node's dominant env-read idiom is
-        # `process.env.FOO` / `process.env['FOO']` — a plain property/index
-        # READ, not a call. classify_call() only ever sees callee text from
-        # range_calls()'s call_expression extraction (nav_calls.py), so no
-        # taxonomy pattern can classify this shape; a `('env', ['process.env'])`
-        # entry would be permanently dead code (verified: 0/26 real corpus
-        # hits even with the pattern present). See BACK-644 for the
-        # architectural gap this represents (collect_effects has no
-        # property-access side-effect channel at all, for any language).
+        # NO env bucket, deliberately (BACK-644, fixed): Node's dominant
+        # env-read idiom is `process.env.FOO` / `process.env['FOO']` — a plain
+        # property/index READ, not a call. classify_call() only ever sees callee
+        # text from range_calls()'s call_expression extraction (nav_calls.py),
+        # so no *call*-taxonomy pattern can classify this shape; an
+        # ('env', ['process.env']) entry here would be dead code (verified:
+        # 0/26 real corpus hits with the pattern present). JS/TS env reads ARE
+        # classified now — by collect_effects()'s separate property channel
+        # (_ENV_BASES_BY_LANG below), not from this table.
     ],
     'go': [
         ('file', [
@@ -536,6 +538,134 @@ def classify_call(callee: str, language: Optional[str] = None) -> Optional[str]:
     return _classify_by_receiver(callee_segs)
 
 
+# ---------------------------------------------------------------------------
+# Property-access channel (BACK-644)
+# ---------------------------------------------------------------------------
+# classify_call() can only ever see callee text, because its sole input is
+# range_calls() (nav_calls.py), which walks call nodes exclusively. An env read
+# that is a bare property/subscript access — Node's `process.env.FOO`, Ruby's
+# `ENV['FOO']`, Python's `os.environ['FOO']` — contains no call node anywhere,
+# so it never becomes a callee string and no taxonomy entry can match it: an
+# ('env', ['process.env']) entry was verified permanently dead (0/26 corpus
+# hits) before being reverted. This second channel walks member-access and
+# subscript nodes instead.
+#
+# It is deliberately far narrower than the call taxonomy. A call *name* is
+# strong evidence of an effect; a property read is not (`config.env`, `a.b.c`
+# are ordinary reads), so this matches an explicit allowlist of env bases only
+# and never classifies by shape — per the conservative-classification law, a
+# wrong classification is worse than an unclassified read.
+#
+# Corpus scale, all invisible before this: 760 `process.env` reads in VS Code,
+# 534 `ENV[` reads in Discourse, 8 `os.environ[` reads in Home Assistant.
+_PROPERTY_SUBSCRIPT_NODES: frozenset = frozenset({
+    'subscript',             # Python: os.environ['FOO']
+    'subscript_expression',  # JS/TS:  process.env['FOO']
+    'element_reference',     # Ruby:   ENV['FOO']
+})
+
+_PROPERTY_NODES: frozenset = _MEMBER_ACCESS_NODES | _PROPERTY_SUBSCRIPT_NODES
+
+# Env bases, matched CASE-SENSITIVELY against the base's exact source text —
+# NOT tokenized through _tokenize() like the call taxonomy.
+#
+# Case is load-bearing: Ruby's `ENV['X']` is the process environment, but
+# `env['X']` is Rack's request hash — an unrelated thing, and Discourse has 199
+# of them against 534 real `ENV[` reads. _tokenize() lowercases, so the call
+# taxonomy structurally cannot tell those apart; that is also why Ruby's
+# `ENV.fetch(...)` call form is left unclassified rather than given an
+# ('env', ['env.fetch']) entry that would equally match Rack's `env.fetch(...)`
+# (8 occurrences in Discourse — a miss, but a miss is cheaper than 199 FPs).
+#
+# PHP ($_ENV) is deliberately absent: WordPress has 1 occurrence across 5,291
+# files, so there is no corpus evidence to justify a pattern. PHP's real idiom
+# is `getenv()`, already classified by the call channel.
+_ENV_BASES_BY_LANG: Dict[str, Tuple[str, ...]] = {
+    'js': ('process.env',),
+    'python': ('os.environ',),
+    'ruby': ('ENV',),
+}
+
+
+def _env_property_bases(language: Optional[str]) -> Tuple[str, ...]:
+    """Env bases for *language*, or every known base when unscoped.
+
+    Mirrors classify_call()'s unscoped fallback (_COMPILED_ALL): omitting the
+    language checks every language's bases.
+    """
+    if language:
+        lang = _LANG_GROUP.get(language, language)
+        return _ENV_BASES_BY_LANG.get(lang, ())
+    return tuple(base for bases in _ENV_BASES_BY_LANG.values() for base in bases)
+
+
+def _collect_property_effects(
+    func_node: Any,
+    from_line: int,
+    to_line: int,
+    get_text: Callable,
+    language: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Return env property/subscript accesses in a line range (BACK-644).
+
+    Reads dominate, but an env assignment *target* (`os.environ['X'] = '1'`) is
+    an env effect too and is reported here — note --statewrites merges only the
+    call channel, since its own assignment walk already owns that write.
+    """
+    bases = _env_property_bases(language)
+    if not bases:
+        return []
+    from ...treesitter import CALL_NODE_TYPES  # noqa: PLC0415
+
+    results: List[Dict[str, Any]] = []
+    callee_spans = set()
+    stack = [func_node]
+    while stack:
+        node = stack.pop()
+        line = node.start_position().row + 1
+        if node.end_position().row + 1 < from_line or line > to_line:
+            continue
+        kind = node.kind()
+        if kind in CALL_NODE_TYPES:
+            # A call's own callee belongs to the call channel: `os.environ.get`
+            # is an `attribute` whose base text is exactly `os.environ`, so
+            # without this it would be reported a second time here, on the very
+            # line classify_call() already tagged 'env'. Only the callee node
+            # itself is suppressed, never its subtree — in
+            # `process.env.FOO.trim()` the receiver `process.env.FOO` is a real
+            # env read that must still be found.
+            #
+            # 'function' is the callee field wherever the callee is a single
+            # node (Python `call`, JS `call_expression`). Ruby's `call` instead
+            # exposes 'receiver'/'method' separately, with no node spanning
+            # `receiver.method` at all (see _extract_callee) — there child(0) is
+            # the RECEIVER, so the generic fallback would suppress the very
+            # reads we want: `ENV["X"]` in `ENV["X"].blank?`. That cost 80 real
+            # Discourse reads (85.5% -> 99.6% recall) in BACK-644 corpus
+            # validation. A receiver-less Ruby call (`puts(x)`) has no receiver
+            # field and correctly falls through to child(0).
+            callee = node.child_by_field_name('function')
+            if callee is None and node.child_by_field_name('receiver') is None:
+                callee = node.child(0)
+            if callee is not None:
+                callee_spans.add((callee.start_byte(), callee.end_byte()))
+        elif kind in _PROPERTY_NODES and (node.start_byte(), node.end_byte()) not in callee_spans:
+            # child(0) is the base in every shape this matches: the receiver of
+            # a member access (`process.env` in `process.env.FOO`) and the
+            # subject of a subscript (`os.environ` in `os.environ['FOO']`).
+            # Requiring the base to be the *whole* match keeps a bare
+            # `process.env` (no key read) unclassified — passing env around is
+            # not itself an env read.
+            base = node.child(0)
+            if base is not None and from_line <= line <= to_line and get_text(base) in bases:
+                results.append({
+                    'line': line, 'callee': get_text(node), 'first_arg': None,
+                    'has_more_args': False, 'kind': 'env', 'via': 'property',
+                })
+        stack.extend(reversed(_children(node)))
+    return results
+
+
 def collect_effects(
     func_node: Any,
     from_line: int,
@@ -543,20 +673,45 @@ def collect_effects(
     get_text: Callable,
     language: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """Return classified side-effect call sites in a line range.
+    """Return classified side-effect sites in a line range, in line order.
+
+    Two independent channels feed this (BACK-644):
+        call     -- range_calls() call sites, classified by classify_call()
+        property -- bare env property/subscript reads, which contain no call
+                    node and so can never be classified from callee text
 
     Each item is a dict:
-        line      -- 1-indexed line of the call
-        callee    -- callee name string
-        first_arg -- first argument text (or None)
+        line      -- 1-indexed line of the site
+        callee    -- callee name, or full expression text for a property read
+        first_arg -- first argument text (always None for a property read)
         kind      -- taxonomy label, or None if unclassified
+        via       -- 'call' or 'property'
     """
-    calls = range_calls(func_node, from_line, to_line, get_text)
     results = []
-    for call in calls:
+    for call in range_calls(func_node, from_line, to_line, get_text):
         kind = classify_call(call.get('callee') or '', language)
-        results.append({**call, 'kind': kind})
+        results.append({**call, 'kind': kind, 'via': 'call'})
+    results.extend(
+        _collect_property_effects(func_node, from_line, to_line, get_text, language)
+    )
+    results.sort(key=lambda r: r['line'])
     return results
+
+
+def format_effect_target(effect: Dict[str, Any]) -> str:
+    """Render an effect's target the way it appears in source.
+
+    A call renders with its first argument (`os.getenv(HOME)`); a property read
+    (BACK-644) is not a call and must not get the `()` suffix that would imply
+    one — it renders bare (`process.env.FOO`).
+    """
+    target = effect['callee'] or '(unknown)'
+    if effect.get('via') == 'property':
+        return target
+    first_arg = effect.get('first_arg')
+    if not first_arg:
+        return f'{target}()'
+    return f'{target}({first_arg}{"..." if effect.get("has_more_args") else ""})'
 
 
 def _resolve_definition_node(file_path: str, name: str, analyzer_cache: Dict[str, Any]):
@@ -691,15 +846,7 @@ def render_effects(
     lines = []
     for e in visible:
         kind = e['kind'] or '?'
-        callee = e['callee'] or '(unknown)'
-        lineno = e['line']
-        first_arg = e.get('first_arg')
-        has_more = e.get('has_more_args', False)
-        if first_arg:
-            arg_str = f'({first_arg}{"..." if has_more else ""})'
-        else:
-            arg_str = '()'
-        lines.append(f'L{lineno:<6}  {kind:<{kind_width}}  {callee}{arg_str}')
+        lines.append(f'L{e["line"]:<6}  {kind:<{kind_width}}  {format_effect_target(e)}')
     return '\n'.join(lines)
 
 
@@ -733,11 +880,6 @@ def render_effects_transitive(
         lines = [header]
         for e in group_effects:
             kind = e['kind'] or '?'
-            callee = e['callee'] or '(unknown)'
-            lineno = e['line']
-            first_arg = e.get('first_arg')
-            has_more = e.get('has_more_args', False)
-            arg_str = f'({first_arg}{"..." if has_more else ""})' if first_arg else '()'
-            lines.append(f'  L{lineno:<6}  {kind:<{kind_width}}  {callee}{arg_str}')
+            lines.append(f'  L{e["line"]:<6}  {kind:<{kind_width}}  {format_effect_target(e)}')
         blocks.append('\n'.join(lines))
     return '\n'.join(blocks)

@@ -1273,6 +1273,11 @@ class TestStateWrites(unittest.TestCase):
         writes = collect_statewrites(func, 1, 10, get_text)
         self.assertEqual(len(writes), 1)
         self.assertEqual(writes[0]['kind'], 'env')
+        # BACK-644: collect_effects() grew a property-access channel that also
+        # sees `os.environ['X']`. _walk_assignments already owns every
+        # assignment-shaped write, so the merge in collect_statewrites must
+        # take call-shaped effects only or this write is reported twice.
+        self.assertEqual(writes[0]['via'], 'assignment')
 
     def test_no_false_positive_on_read_only_function(self):
         code = """

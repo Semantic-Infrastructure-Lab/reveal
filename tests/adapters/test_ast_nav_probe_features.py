@@ -1944,30 +1944,30 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertIsNone(classify_call('requestService.request', language='typescript'))
 
-    def test_js_process_env_stays_unclassified_no_dead_pattern(self):
-        # BACK-644: process.env.FOO / process.env['FOO'] is a property/
-        # subscript READ, never a call_expression, so range_calls() never
-        # extracts it as a callee in the first place — a taxonomy pattern
-        # for it would be permanently dead code (verified: 0/26 real corpus
-        # hits with the pattern present). Deliberately NOT added — locks in
-        # that classify_call('process.env', ...) has no js env entry to
-        # false-confidence future readers into thinking env classification
-        # works for JS/TS.
+    def test_js_process_env_stays_unclassified_by_the_call_channel(self):
+        # BACK-644: process.env.FOO is a property/subscript access, never a
+        # call_expression, so range_calls() never extracts it as a callee and
+        # classify_call() can never see it — a call-taxonomy entry for it would
+        # be dead code (verified: 0/26 real corpus hits with the pattern
+        # present). Still deliberately NOT added: env classification for JS/TS
+        # is now real, but it lives in collect_effects()'s property channel
+        # (test_process_env_read_is_classified_env below), not here.
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertIsNone(classify_call('process.env', language='typescript'))
 
-    def test_process_env_read_produces_no_call_site_at_all(self):
-        # BACK-644, end-to-end: confirms the gap is in range_calls()'s
-        # call_expression-only extraction, not just classify_call — a real
-        # parsed function whose ONLY effect is a process.env property read
-        # yields ZERO call sites, so collect_effects has nothing to classify
-        # even in principle.
-        from reveal.adapters.ast.nav_effects import collect_effects
+    def test_process_env_read_is_classified_env(self):
+        # BACK-644 (fixed), end-to-end: a function whose ONLY effect is a
+        # process.env property read produces zero *call* sites, so this is
+        # exactly the shape that was invisible before the property channel
+        # existed. Both the dotted and subscript forms must be classified, and
+        # rendered WITHOUT a `()` suffix — they are not calls.
+        from reveal.adapters.ast.nav_effects import collect_effects, render_effects
         parser = ts.get_parser('typescript')
         src = textwrap.dedent("""
         function readToken() {
             const token = process.env.MY_TOKEN;
-            return token;
+            const other = process.env['SECRET'];
+            return token + other;
         }
         """).lstrip('\n')
         content_bytes = src.encode('utf-8')
@@ -1978,7 +1978,121 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
             return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
 
         effects = collect_effects(root, 1, 999, get_text, language='typescript')
-        self.assertEqual(effects, [])
+        self.assertEqual(
+            [(e['line'], e['kind'], e['callee'], e['via']) for e in effects],
+            [(2, 'env', 'process.env.MY_TOKEN', 'property'),
+             (3, 'env', "process.env['SECRET']", 'property')],
+        )
+        rendered = render_effects(effects, 1, 999)
+        self.assertIn('process.env.MY_TOKEN', rendered)
+        self.assertNotIn('process.env.MY_TOKEN()', rendered)
+
+    def test_process_env_method_call_is_not_double_reported(self):
+        # BACK-644: `os.environ.get('X')` is classified 'env' by the CALL
+        # channel, and its callee `os.environ.get` is an attribute whose base
+        # text is exactly `os.environ` — so without callee suppression the
+        # property channel would report the same env access a second time on
+        # the same line. Exactly one effect per line is the contract.
+        from reveal.adapters.ast.nav_effects import collect_effects
+        parser = ts.get_parser('python')
+        src = textwrap.dedent("""
+        def f():
+            a = os.environ.get('CALL_FORM')
+            b = os.environ['SUBSCRIPT_FORM']
+        """).lstrip('\n')
+        content_bytes = src.encode('utf-8')
+        tree = parser.parse(src)
+        root = tree.root_node()
+
+        def get_text(node):
+            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+        effects = collect_effects(root, 1, 999, get_text, language='python')
+        self.assertEqual(
+            [(e['line'], e['kind'], e['via']) for e in effects],
+            [(2, 'env', 'call'), (3, 'env', 'property')],
+        )
+
+    def test_ruby_env_constant_matches_but_rack_env_local_does_not(self):
+        # BACK-644, the precision trap this channel exists to avoid: Ruby's
+        # `ENV['X']` is the process environment, but `env['X']` is Rack's
+        # request hash — 199 of them in Discourse against 534 real ENV[ reads.
+        # classify_call()'s _tokenize() lowercases and so cannot tell them
+        # apart; the property channel matches base text CASE-SENSITIVELY.
+        # Also covers `ENV['X'].blank?`, where Ruby's `call` exposes the
+        # element_reference as its RECEIVER (child(0)) rather than a callee —
+        # suppressing child(0) generically would lose the read entirely.
+        from reveal.adapters.ast.nav_effects import collect_effects
+        parser = ts.get_parser('ruby')
+        src = textwrap.dedent("""
+        def handle(env)
+          real = ENV['SECRET_KEY']
+          guarded = ENV['HOME'].blank?
+          rack = env['HTTP_HOST']
+          more = env.fetch('REQUEST_METHOD')
+        end
+        """).lstrip('\n')
+        content_bytes = src.encode('utf-8')
+        tree = parser.parse(src)
+        root = tree.root_node()
+
+        def get_text(node):
+            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+        effects = collect_effects(root, 1, 999, get_text, language='ruby')
+        self.assertEqual(
+            [(e['line'], e['kind'], e['callee']) for e in effects if e['kind'] == 'env'],
+            [(2, 'env', "ENV['SECRET_KEY']"), (3, 'env', "ENV['HOME']")],
+        )
+
+    def test_property_channel_ignores_lookalike_bases(self):
+        # BACK-644: the channel matches an explicit base allowlist, never a
+        # "member access = effect" shape — a wrong classification is worse than
+        # an unclassified read. `config.process.env.X` (a local object, real:
+        # VS Code's terminalSandboxEngine.test.ts) and a bare `process.env`
+        # passed around without reading a key are both correctly not env.
+        from reveal.adapters.ast.nav_effects import collect_effects
+        parser = ts.get_parser('typescript')
+        src = textwrap.dedent("""
+        function f(config) {
+            const a = config.process.env.FOO;
+            const b = other.env.BAR;
+            spawn(cmd, process.env);
+        }
+        """).lstrip('\n')
+        content_bytes = src.encode('utf-8')
+        tree = parser.parse(src)
+        root = tree.root_node()
+
+        def get_text(node):
+            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+        effects = collect_effects(root, 1, 999, get_text, language='typescript')
+        self.assertEqual([e for e in effects if e['kind'] == 'env'], [])
+
+    def test_property_channel_keeps_receiver_of_a_method_call(self):
+        # BACK-644: only the callee node itself is suppressed, never its
+        # subtree — in `process.env.FOO.trim()` the receiver `process.env.FOO`
+        # is a real env read and must survive.
+        from reveal.adapters.ast.nav_effects import collect_effects
+        parser = ts.get_parser('typescript')
+        src = textwrap.dedent("""
+        function f() {
+            return process.env.FOO.trim();
+        }
+        """).lstrip('\n')
+        content_bytes = src.encode('utf-8')
+        tree = parser.parse(src)
+        root = tree.root_node()
+
+        def get_text(node):
+            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+        effects = collect_effects(root, 1, 999, get_text, language='typescript')
+        self.assertEqual(
+            [(e['kind'], e['callee']) for e in effects if e['kind'] == 'env'],
+            [('env', 'process.env.FOO')],
+        )
 
 
 class TestCollectEffects(unittest.TestCase):
