@@ -784,6 +784,44 @@ class TestRenderElement:
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         mock_renderer.render_element.assert_called_once()
 
+    # BACK-654 — help:// not-found hint toward --section
+
+    def test_not_found_hints_section_flag_for_help_scheme(self, capsys):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = None
+        del mock_adapter.list_elements  # not all adapters implement this
+        mock_renderer = MagicMock()
+        args = _args()
+        with pytest.raises(SystemExit):
+            _render_element(mock_adapter, mock_renderer, 'Elements Reference', None, args, scheme='help')
+        err = capsys.readouterr().err
+        assert "--section 'Elements Reference'" in err
+
+    def test_not_found_no_hint_for_other_schemes(self, capsys):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = None
+        del mock_adapter.list_elements
+        mock_renderer = MagicMock()
+        args = _args()
+        with pytest.raises(SystemExit):
+            _render_element(mock_adapter, mock_renderer, 'missing_fn', None, args, scheme='ast')
+        err = capsys.readouterr().err
+        assert '--section' not in err
+
+    def test_not_found_no_hint_when_section_already_passed(self, capsys):
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = None
+        del mock_adapter.list_elements
+        mock_renderer = MagicMock()
+        args = _args(section='Elements Reference')
+        with pytest.raises(SystemExit):
+            _render_element(mock_adapter, mock_renderer, 'Elements Reference', None, args, scheme='help')
+        err = capsys.readouterr().err
+        assert '--section' not in err
+
 
 # ─── _parse_text_headings ─────────────────────────────────────────────────────
 

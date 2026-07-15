@@ -313,7 +313,7 @@ def _handle_rendering(adapter, renderer_class: type[Any], scheme: str,
     resource_is_element = getattr(adapter.__class__, 'ELEMENT_NAMESPACE_ADAPTER', False)
 
     if supports_elements and (element or (resource and resource_is_element)):
-        _render_element(adapter, renderer_class, element, resource, args)
+        _render_element(adapter, renderer_class, element, resource, args, scheme=scheme)
     else:
         _render_structure(adapter, renderer_class, args, scheme=scheme, resource=resource)
 
@@ -377,7 +377,7 @@ _ELEMENT_RENDER_MODES = [
 
 
 def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
-                    resource: str, args: 'Namespace') -> None:
+                    resource: str, args: 'Namespace', scheme: Optional[str] = None) -> None:
     """Render a specific element from adapter.
 
     Args:
@@ -386,6 +386,7 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
         element: Element name (or None to use resource)
         resource: Fallback element name if element is None
         args: CLI arguments
+        scheme: URI scheme (used to tailor the not-found hint, e.g. help://)
     """
     element_name = element if element else resource
     element_kwargs = {}
@@ -400,6 +401,15 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
         if hasattr(adapter, 'list_elements'):
             elements = adapter.list_elements()
             print(f"Available elements: {', '.join(elements)}", file=sys.stderr)
+        # BACK-654: help:// requires --section for heading extraction (unlike
+        # file/markdown adapters, which accept a bare positional section name)
+        # — the plain "not found" reads like the section doesn't exist at all.
+        if scheme == 'help' and not section:
+            print(
+                f"Hint: help:// needs an explicit flag for section extraction — try "
+                f"--section {element_name!r}",
+                file=sys.stderr,
+            )
         sys.exit(1)
 
     # Apply --head/--tail to text-body content (BACK-355).
