@@ -305,7 +305,22 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         ('http', ['net::http', 'httparty', 'faraday']),
     ],
     'cpp': [
-        ('file', ['ofstream', 'ifstream', 'fstream', 'freopen']),
+        # BACK-547 fourth language (C++ sideeffects-recall-oracle loop,
+        # Godot engine `core/` corpus): 'ofstream'/'ifstream'/etc. above are
+        # generic-stdlib C++ file I/O, but a codebase built on a
+        # cross-platform engine abstraction almost never calls them
+        # directly — `FileAccess::open`/`->store_*`/`->get_*` is the idiom
+        # actually used (verified: every real `get_buffer`/`store_buffer`
+        # call site across core/servers/drivers is on a FileAccess-derived
+        # receiver, no collision found). 'fileaccess' catches the static
+        # factory (`FileAccess::open(...)`); the verbs catch instance calls.
+        ('file', [
+            'ofstream', 'ifstream', 'fstream', 'freopen',
+            'fileaccess', 'diraccess',
+            'store_line', 'store_string', 'store_buffer',
+            'store_8', 'store_16', 'store_32', 'store_64',
+            'get_as_text', 'get_buffer',
+        ]),
         ('http', [
             'curl_easy_perform', 'curl_easy_setopt', 'curl_easy_init',
         ]),
@@ -313,8 +328,27 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         # _TAXONOMY_COMMON; 'sleep_for' (std::this_thread::sleep_for) is the
         # one idiom common doesn't reach, since it doesn't contain 'sleep' as
         # its own segment.
-        ('sleep', ['sleep_for']),
-        ('log', ['spdlog::info', 'spdlog::warn', 'spdlog::error']),
+        # 'delay_usec'/'delay_msec' are the same OS-singleton-wrapper idiom
+        # as the 'env' additions below (`OS::get_singleton()->delay_usec(...)`)
+        # — verified real, unambiguous call sites (core_bind.cpp:OS::delay_usec/
+        # delay_msec).
+        ('sleep', ['sleep_for', 'delay_usec', 'delay_msec']),
+        # Same recall-oracle loop: bare 'getenv'/'putenv' (_TAXONOMY_COMMON)
+        # never matches the cross-platform-engine OS-singleton wrapper idiom
+        # (`OS::get_singleton()->get_environment(...)`) — verified real,
+        # unambiguous call sites (core_bind.cpp:OS::get_environment/
+        # set_environment/has_environment/unset_environment).
+        ('env', ['get_environment', 'set_environment', 'has_environment', 'unset_environment']),
+        # 'print_line'/'print_error'/'print_verbose' and the WARN_PRINT/
+        # ERR_PRINT macros (case-insensitive segment match) are the
+        # dominant logging idiom in engine code built this way — distinct
+        # enough spellings that they don't collide with unrelated C++
+        # (same shape as Go's klog/glog/logrus addition, BACK-629).
+        ('log', [
+            'spdlog::info', 'spdlog::warn', 'spdlog::error',
+            'print_line', 'print_error', 'print_verbose',
+            'warn_print', 'err_print',
+        ]),
     ],
 }
 

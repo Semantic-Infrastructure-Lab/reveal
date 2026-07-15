@@ -1801,6 +1801,48 @@ class TestClassifyCallLanguageScoping(unittest.TestCase):
         self.assertEqual(classify_call('$model->update'), 'db')
         self.assertEqual(classify_call('copy'), 'file')
 
+    def test_cpp_fileaccess_idiom_classified_as_file(self):
+        # BACK-547 fourth language (sideeffects-recall-oracle, real-corpus
+        # measurement on Godot's core/): a cross-platform-engine codebase
+        # almost never calls stdlib ofstream/fopen directly — real corpus
+        # misses were FileAccess::open(...) (static factory) and instance
+        # calls like f->store_line(...)/f->get_buffer(...), none of which
+        # matched the generic-stdlib-only 'file' patterns already present.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('FileAccess::open', language='cpp'), 'file')
+        self.assertEqual(classify_call('f->store_line', language='cpp'), 'file')
+        self.assertEqual(classify_call('f->store_buffer', language='cpp'), 'file')
+        self.assertEqual(classify_call('f->get_buffer', language='cpp'), 'file')
+        self.assertIsNone(classify_call('f->store_line', language='python'))
+
+    def test_cpp_os_singleton_env_and_sleep_wrapper_classified(self):
+        # BACK-547 fourth language: bare 'getenv'/'putenv' (_TAXONOMY_COMMON)
+        # never matches the cross-platform-engine OS-singleton wrapper idiom
+        # (`OS::get_singleton()->get_environment(...)`/`->delay_usec(...)`) —
+        # real corpus misses: core_bind.cpp:OS::get_environment/
+        # set_environment/has_environment/unset_environment/delay_usec/
+        # delay_msec.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('OS::get_singleton()->get_environment', language='cpp'), 'env')
+        self.assertEqual(classify_call('OS::get_singleton()->has_environment', language='cpp'), 'env')
+        self.assertEqual(classify_call('OS::get_singleton()->set_environment', language='cpp'), 'env')
+        self.assertEqual(classify_call('OS::get_singleton()->delay_usec', language='cpp'), 'sleep')
+        self.assertEqual(classify_call('OS::get_singleton()->delay_msec', language='cpp'), 'sleep')
+
+    def test_cpp_print_line_and_warn_err_print_classified_as_log(self):
+        # BACK-547 fourth language: print_line/print_error/print_verbose and
+        # the WARN_PRINT/ERR_PRINT macros are the dominant logging idiom in
+        # engine code built this way (same shape as Go's klog/glog/logrus
+        # addition, BACK-629) — real corpus misses across config/engine.cpp,
+        # object/message_queue.cpp, and elsewhere.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('print_line', language='cpp'), 'log')
+        self.assertEqual(classify_call('print_error', language='cpp'), 'log')
+        self.assertEqual(classify_call('print_verbose', language='cpp'), 'log')
+        self.assertEqual(classify_call('WARN_PRINT', language='cpp'), 'log')
+        self.assertEqual(classify_call('ERR_PRINT', language='cpp'), 'log')
+        self.assertIsNone(classify_call('print_line', language='python'))
+
     # ── BACK-594: receiver fallback crossing language boundaries ──
 
     def test_python_session_receiver_not_db_for_http_verbs(self):
