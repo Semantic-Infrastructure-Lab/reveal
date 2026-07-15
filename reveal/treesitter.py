@@ -1268,12 +1268,31 @@ class TreeSitterAnalyzer(FileAnalyzer):
         identifier-kind child and return bare "compute", silently dropping
         the class association. Joining every identifier-shaped child of a
         ``qualified_identifier`` with "::" preserves it as "Widget::compute".
+
+        BACK-641: C++ operator overloads and destructors name-node as
+        ``operator_name`` (whole-node text e.g. "operator==") and
+        ``destructor_name`` (whole-node text e.g. "~Ref") respectively —
+        neither is an ``identifier``/``field_identifier``. Without them
+        here, an out-of-line ``Vector2::operator==`` collapsed to bare
+        "Vector2" (the qualifier only), colliding with the constructor and
+        every other operator on the type; an inline ``~Ref() { ... }``
+        recursed past ``destructor_name`` into its inner ``identifier``
+        child and returned bare "Ref" (dropping the "~"), again colliding
+        with the constructor. Found via the C++ sideeffects-recall-oracle
+        loop (BACK-547 fourth language) while sanity-checking constructor/
+        destructor coverage before trusting any recall numbers.
         """
+        if node.kind() in ('operator_name', 'destructor_name'):
+            return self._get_node_text(node)
+
         if node.kind() == 'qualified_identifier':
             parts = [
                 self._get_node_text(child)
                 for child in _children(node)
-                if child.kind() in ('identifier', 'namespace_identifier', 'field_identifier', 'type_identifier')
+                if child.kind() in (
+                    'identifier', 'namespace_identifier', 'field_identifier',
+                    'type_identifier', 'operator_name', 'destructor_name',
+                )
             ]
             if parts:
                 return '::'.join(parts)

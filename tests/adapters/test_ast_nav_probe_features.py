@@ -3328,5 +3328,67 @@ class TestBack638JavaConstructorBoundary(unittest.TestCase):
         self.assertEqual(KEYWORD_LABEL['constructor_declaration'], 'DEF')
 
 
+# ─── BACK-641: C++ operator_name/destructor_name missing from
+# _find_identifier_in_tree's name-kind lists ────────────────────────────────
+# An out-of-line operator overload (`Vector2::operator==(...) { ... }`)
+# declarator-nests a qualified_identifier whose `name` child is an
+# `operator_name` node — not `identifier`/`field_identifier` — so the
+# qualified_identifier join dropped it and returned bare "Vector2" (the
+# scope qualifier only), colliding with the constructor and every other
+# operator on the type. An inline destructor (`~Ref() { ... }`) name-nodes
+# as `destructor_name` wrapping an inner `identifier`; plain recursion
+# skipped past destructor_name and returned the inner identifier's bare
+# text "Ref" (dropping the "~"), again colliding with the constructor.
+# Found via the C++ sideeffects-recall-oracle loop (BACK-547 fourth
+# language) while sanity-checking constructor/destructor coverage before
+# trusting any recall numbers — same failure family as BACK-638, different
+# mechanism (name-extraction join list, not a missing FUNCTION_NODE_TYPES
+# entry).
+
+class TestBack641CppOperatorAndDestructorNaming(unittest.TestCase):
+    def test_out_of_line_operator_overload_named_correctly(self):
+        import pathlib
+        import tempfile
+        from reveal.analyzers.cpp import CppAnalyzer
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / 'vec.cpp'
+            f.write_text(
+                "struct Vec {\n"
+                "    int x;\n"
+                "    bool operator==(const Vec &o) const;\n"
+                "};\n"
+                "bool Vec::operator==(const Vec &o) const {\n"
+                "    return x == o.x;\n"
+                "}\n"
+            )
+            structure = CppAnalyzer(str(f)).get_structure()
+            names = [fn['name'] for fn in structure.get('functions', [])]
+            self.assertIn('Vec::operator==', names)
+            # Regression: pre-fix this collapsed to bare "Vec" (the scope
+            # qualifier only), colliding with any constructor.
+            self.assertNotIn('Vec', names)
+
+    def test_inline_destructor_named_with_tilde(self):
+        import pathlib
+        import tempfile
+        from reveal.analyzers.cpp import CppAnalyzer
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / 'widget.cpp'
+            f.write_text(
+                "class Widget {\n"
+                "public:\n"
+                "    Widget() {}\n"
+                "    ~Widget() {}\n"
+                "};\n"
+            )
+            structure = CppAnalyzer(str(f)).get_structure()
+            names = [fn['name'] for fn in structure.get('functions', [])]
+            self.assertIn('Widget', names)      # constructor
+            self.assertIn('~Widget', names)      # destructor, distinct name
+            # Regression: pre-fix both collapsed to the same bare "Widget",
+            # making them indistinguishable to name-based lookup.
+            self.assertEqual(names.count('Widget'), 1)
+
+
 if __name__ == '__main__':
     unittest.main()
