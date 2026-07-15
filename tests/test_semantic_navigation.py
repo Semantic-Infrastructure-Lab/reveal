@@ -364,7 +364,7 @@ class TestRangeWithNavFlags(unittest.TestCase):
 
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
-        args = self._make_args(deps=True, range=(106, 133))
+        args = self._make_args(deps=True, range=(211, 239))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
@@ -377,8 +377,8 @@ class TestRangeWithNavFlags(unittest.TestCase):
 
     def test_mutations_with_tuple_range(self):
         """--mutations with a pre-parsed tuple range should not crash.
-        Uses collect_mutations (L936) with a sub-range that leaves the return
-        statement outside, so at least one mutation qualifies."""
+        Uses collect_mutations's own body with a sub-range that leaves the
+        sort/return read outside, so at least one mutation qualifies."""
         import io, sys
         from reveal.file_handler import _dispatch_nav
         from reveal.analyzers.python import PythonAnalyzer
@@ -386,7 +386,7 @@ class TestRangeWithNavFlags(unittest.TestCase):
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
         # Sub-range: covers writes to `mutations` but stops before the sort/return read
-        args = self._make_args(mutations=True, range=(150, 172))
+        args = self._make_args(mutations=True, range=(241, 264))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
@@ -407,7 +407,7 @@ class TestRangeWithNavFlags(unittest.TestCase):
 
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
-        args = self._make_args(exits=True, range=(30, 95))
+        args = self._make_args(exits=True, range=(114, 180))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
