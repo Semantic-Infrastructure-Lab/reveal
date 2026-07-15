@@ -1,4 +1,4 @@
-"""Tree-sitter surface extraction for TypeScript/TSX — env vars, FS writes, HTTP routes, CLI, imports."""
+"""Tree-sitter surface extraction for TypeScript/TSX/JavaScript/JSX — env vars, FS writes, HTTP routes, CLI, imports."""
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -41,12 +41,18 @@ _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 
 def scan_file_surface_ts(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
-    """Parse one TypeScript/TSX file and return categorised surface entries."""
+    """Parse one TypeScript/TSX/JavaScript/JSX file and return categorised surface entries.
+
+    BACK-631: plain JS/JSX share this scanner — the extraction below is generic
+    tree-walking (env vars, HTTP routes, FS writes, ...) with no type-annotation
+    dependency, so TS's grammar (a JS superset) parses plain .js fine; .jsx
+    needs the JSX-aware 'tsx' grammar just like .tsx does.
+    """
     try:
         from tree_sitter_language_pack import get_parser
         path = Path(file_path)
         source = path.read_text(errors='replace')
-        lang = 'tsx' if path.suffix == '.tsx' else 'typescript'
+        lang = 'tsx' if path.suffix in ('.tsx', '.jsx') else 'typescript'
         parser = get_parser(lang)
         tree = ts_parse(parser, source)
     except Exception:

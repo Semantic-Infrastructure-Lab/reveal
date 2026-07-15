@@ -8,6 +8,7 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
+from ...registry import _is_cpp_header_content
 from ...utils.path_utils import (
     assess_language_coverage,
     detect_non_python_language,
@@ -29,8 +30,12 @@ _TS_EXTENSIONS: frozenset = frozenset({'.ts', '.tsx'})
 # (analyzers/java.py, csharp.py, php.py, swift.py, kotlin.py) now emits the same
 # shape TS does (interfaces/protocols → 'interfaces'; abstract classes flagged
 # is_abstract; concrete classes carry their bases).
+# BACK-631: plain JS/JSX added — JavaScriptAnalyzer is TreeSitterAnalyzer with
+# no overrides, emitting the same 'classes' category (no interfaces/types,
+# since JS has no interface/type-alias/abstract-class grammar — correctly
+# absent rather than a gap) so it shares the classifier with zero code changes.
 _INTERFACE_FAMILY_EXTENSIONS: frozenset = frozenset({
-    '.ts', '.tsx', '.java', '.cs', '.php', '.swift', '.kt', '.kts',
+    '.ts', '.tsx', '.js', '.jsx', '.java', '.cs', '.php', '.swift', '.kt', '.kts',
 })
 
 
@@ -127,27 +132,42 @@ def _collect_rust_files(path: Path) -> List[Path]:
 
 _CPP_EXTENSIONS: frozenset = frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'})
 
+# BACK-630: `.h` is ambiguous between C and C++ (registry.py routes it to C by
+# default). A header-only C++ class (Godot-style abstract base with no .cpp)
+# is only included here if content-sniffed as C++ — see _is_cpp_header_content,
+# same marker set the registry uses for single-file analyzer selection.
+
+
+def _is_cpp_file(fpath: Path) -> bool:
+    suffix = fpath.suffix.lower()
+    if suffix in _CPP_EXTENSIONS:
+        return True
+    if suffix == '.h':
+        return _is_cpp_header_content(str(fpath))
+    return False
+
 
 def _has_cpp_files(path: Path) -> bool:
     if path.is_file():
-        return path.suffix.lower() in _CPP_EXTENSIONS
+        return _is_cpp_file(path)
     for root, dirs, filenames in os.walk(str(path)):
         dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
         for fname in filenames:
-            if Path(fname).suffix.lower() in _CPP_EXTENSIONS:
+            if _is_cpp_file(Path(os.path.join(root, fname))):
                 return True
     return False
 
 
 def _collect_cpp_files(path: Path) -> List[Path]:
     if path.is_file():
-        return [path] if path.suffix.lower() in _CPP_EXTENSIONS else []
+        return [path] if _is_cpp_file(path) else []
     files: List[Path] = []
     for root, dirs, filenames in os.walk(str(path)):
         dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
         for fname in filenames:
-            if Path(fname).suffix.lower() in _CPP_EXTENSIONS:
-                files.append(Path(os.path.join(root, fname)))
+            fpath = Path(os.path.join(root, fname))
+            if _is_cpp_file(fpath):
+                files.append(fpath)
     return files
 
 
@@ -226,7 +246,7 @@ def _scan_contracts(
     # for a mostly-unsupported tree (see surface.py / assess_language_coverage).
     coverage = assess_language_coverage(
         path,
-        {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go', 'rust', 'cpp'},
+        {'python', 'typescript', 'tsx', 'javascript', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go', 'rust', 'cpp'},
     )
     coverage_dict = {
         'total_code_files': coverage.total_code_files,
@@ -821,7 +841,7 @@ def _render_report(report: Dict[str, Any]) -> None:
         if not warning:
             lang = report.get('unsupported_language', '')
             if lang:
-                print(f"  reveal contracts currently supports Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, and C++.")
+                print(f"  reveal contracts currently supports Python, TypeScript, JavaScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, and C++.")
                 print(f"  No supported files found — detected {lang}.")
             else:
                 print("  No contracts or seams found.")

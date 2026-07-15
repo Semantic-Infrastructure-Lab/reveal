@@ -897,12 +897,22 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return []
 
     def _extract_ts_heritage_bases(self, heritage) -> List[str]:
+        # BACK-631: the plain-JavaScript grammar has no extends_clause/
+        # implements_clause wrapper — `class_heritage` holds the `extends`
+        # keyword and the base identifier as flat siblings (TS wraps them in
+        # extends_clause). Collect both shapes: nested clause children (TS)
+        # and bare identifier/type_identifier children directly under
+        # `heritage` (JS) — JS has no `implements`, so only extends applies.
         bases = []
         for heritage_child in _children(heritage):
             if heritage_child.kind() == 'extends_clause':
                 bases.extend(self._extract_ts_extends_names(heritage_child))
             elif heritage_child.kind() == 'implements_clause':
                 bases.extend(self._extract_ts_implements_names(heritage_child))
+            elif heritage_child.kind() in ('identifier', 'type_identifier'):
+                text = self._get_node_text(heritage_child).strip()
+                if text:
+                    bases.append(text)
         return bases
 
     def _extract_ts_extends_names(self, extends_clause) -> List[str]:

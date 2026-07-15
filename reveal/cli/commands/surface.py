@@ -8,6 +8,7 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any, Dict, List
 
+from ...registry import _is_cpp_header_content
 from ...utils.path_utils import (
     assess_language_coverage,
     detect_non_python_language,
@@ -127,7 +128,7 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
     # whole project's surface. Assess how much of the tree is actually in a
     # language `surface` analyzes so _render_report can warn on the substitution.
     coverage = assess_language_coverage(
-        path, {'python', 'typescript', 'tsx', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go', 'rust', 'cpp'})
+        path, {'python', 'typescript', 'tsx', 'javascript', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go', 'rust', 'cpp'})
 
     scanners = (
         (py_files, scan_file_surface),
@@ -196,16 +197,19 @@ def _is_test_file(fpath: Path) -> bool:
         return stem.endswith('_test')
     if suffix == '.rs':
         return stem.endswith('_test') or stem.endswith('_tests') or name == 'tests.rs'
-    if suffix in ('.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'):
+    if suffix in ('.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh', '.h'):
         return stem.endswith('_test') or stem.endswith('_tests') or stem.startswith('test_')
     return False
+
+
+_CPP_BUCKET_IDX = 10
 
 
 def _collect_source_files(path: Path, source_only: bool = False):
     """Return (py, ts, java, cs, php, swift, kotlin, ruby, go, rust, cpp) file lists for the given path."""
     _EXT_BUCKETS = (
         (frozenset({'.py'}), 0),
-        (frozenset({'.ts', '.tsx'}), 1),
+        (frozenset({'.ts', '.tsx', '.js', '.jsx'}), 1),
         (frozenset({'.java'}), 2),
         (frozenset({'.cs'}), 3),
         (frozenset({'.php'}), 4),
@@ -214,19 +218,25 @@ def _collect_source_files(path: Path, source_only: bool = False):
         (frozenset({'.rb'}), 7),
         (frozenset({'.go'}), 8),
         (frozenset({'.rs'}), 9),
-        (frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'}), 10),
+        (frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'}), _CPP_BUCKET_IDX),
     )
 
-    def _bucket_for(suffix: str):
+    def _bucket_for(fpath: Path):
+        suffix = fpath.suffix
         for exts, idx in _EXT_BUCKETS:
             if suffix in exts:
                 return idx
+        # BACK-630: `.h` defaults to C in the registry — only route it into the
+        # cpp bucket when content-sniffed as C++ (header-only classes/templates),
+        # same marker set the registry uses for single-file analyzer selection.
+        if suffix == '.h' and _is_cpp_header_content(str(fpath)):
+            return _CPP_BUCKET_IDX
         return None
 
     buckets: List[List[Path]] = [[] for _ in _EXT_BUCKETS]
 
     if path.is_file():
-        idx = _bucket_for(path.suffix)
+        idx = _bucket_for(path)
         if idx is not None:
             buckets[idx].append(path)
         return tuple(buckets)
@@ -241,7 +251,7 @@ def _collect_source_files(path: Path, source_only: bool = False):
             fpath = Path(os.path.join(root, fname))
             if source_only and _is_test_file(fpath):
                 continue
-            idx = _bucket_for(fpath.suffix)
+            idx = _bucket_for(fpath)
             if idx is not None:
                 buckets[idx].append(fpath)
     return tuple(buckets)
@@ -273,7 +283,7 @@ def _render_report(report: Dict[str, Any], top: int = None) -> None:
         if not warning:
             lang = report.get('unsupported_language', '')
             if lang:
-                print("  reveal surface currently supports Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, and C++.")
+                print("  reveal surface currently supports Python, TypeScript, JavaScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, and C++.")
                 print(f"  No supported files found — detected {lang}.")
             else:
                 print("  No external surfaces detected.")

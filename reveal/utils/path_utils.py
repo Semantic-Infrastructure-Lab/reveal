@@ -10,7 +10,16 @@ from pathlib import Path, PurePath
 from typing import Callable, Dict, Optional, List, Set, Union
 
 from ..defaults import SKIP_DIRECTORIES, AMBIGUOUS_SKIP_DIRECTORIES
-from ..registry import language_for_extension, LANGUAGE_DISPLAY_NAMES
+from ..registry import _is_cpp_header_content, language_for_extension, LANGUAGE_DISPLAY_NAMES
+
+
+def _language_for_path(fpath: Path) -> Optional[str]:
+    """Like registry.language_for_extension, but content-sniffs `.h` for C++
+    (BACK-421/630) instead of always resolving it to C."""
+    ext = fpath.suffix.lower()
+    if ext == '.h' and _is_cpp_header_content(str(fpath)):
+        return 'cpp'
+    return language_for_extension(ext)
 
 _SKIP_DIRS: frozenset = SKIP_DIRECTORIES
 _AMBIGUOUS_SKIP_DIRS: frozenset = AMBIGUOUS_SKIP_DIRECTORIES
@@ -126,15 +135,17 @@ def is_unsafe_scan_root(path: Union[str, PurePath, None]) -> bool:
     return real in _unsafe_scan_roots()
 
 
-def _non_python_display_name(ext: str) -> str:
-    """Human-readable language label for *ext*, or '' if Python/unknown.
+def _non_python_display_name(fpath: Path) -> str:
+    """Human-readable language label for *fpath*, or '' if Python/unknown.
 
     Derived from the registry's single-sourced language_for_extension()
     instead of a hand-maintained extension table (BACK-431 Issue B) — the
     prior _NON_PYTHON_LANG_EXTS dict was itself created to fix BACK-403,
     which was caused by exactly this kind of table falling out of sync.
+    Content-sniffs `.h` for C++ rather than always resolving it to C
+    (BACK-421/630).
     """
-    lang = language_for_extension(ext)
+    lang = _language_for_path(fpath)
     if not lang or lang == 'python':
         return ''
     return LANGUAGE_DISPLAY_NAMES.get(lang, lang.capitalize())
@@ -148,12 +159,12 @@ def detect_non_python_language(path: Path) -> str:
     notes instead of silent empty results.
     """
     if path.is_file():
-        return _non_python_display_name(path.suffix.lower())
+        return _non_python_display_name(path)
     counts: Dict[str, int] = {}
     for root, dirs, filenames in os.walk(str(path)):
         dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
         for fname in filenames:
-            lang = _non_python_display_name(Path(fname).suffix.lower())
+            lang = _non_python_display_name(Path(os.path.join(root, fname)))
             if lang:
                 counts[lang] = counts.get(lang, 0) + 1
     return max(counts, key=counts.__getitem__) if counts else ''
@@ -232,21 +243,21 @@ def assess_language_coverage(path: Path, supported_languages: Set[str]) -> Langu
     code_exts = get_code_extensions()
     counts: Dict[str, int] = {}  # registry language key -> file count
 
-    def _tally(ext: str) -> None:
-        ext = ext.lower()
+    def _tally(fpath: Path) -> None:
+        ext = fpath.suffix.lower()
         if ext not in code_exts:
             return
-        lang = language_for_extension(ext)
+        lang = _language_for_path(fpath)
         if lang:
             counts[lang] = counts.get(lang, 0) + 1
 
     if path.is_file():
-        _tally(path.suffix)
+        _tally(path)
     else:
         for root, dirs, filenames in os.walk(str(path)):
             dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
             for fname in filenames:
-                _tally(Path(fname).suffix)
+                _tally(Path(os.path.join(root, fname)))
 
     total = sum(counts.values())
     analyzed = sum(c for lang, c in counts.items() if lang in supported_languages)

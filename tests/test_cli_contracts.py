@@ -553,6 +553,41 @@ class TestScanContractsTypeScript(unittest.TestCase):
         self.assertNotIn('Protocols', out)
 
 
+class TestScanContractsJavaScript(unittest.TestCase):
+    """Tests for plain JS/JSX contract detection (BACK-631).
+
+    JS has no interface/type-alias/abstract-class grammar, so only the
+    concrete-class-with-bases path (implementing classes) applies — the
+    interface/abstract-class/type-alias cases are TS-only and covered above.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write_js(self, filename: str, content: str) -> str:
+        return _write(self.tmp, filename, content)
+
+    def test_plain_js_reaches_interface_family_scanner(self):
+        self._write_js('service.js', '''\
+            class Base {
+              run() {}
+            }
+            class Concrete extends Base {
+              run() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertTrue(report.get('_ts_mode'))
+        impl_names = [c['name'] for c in report['dataclasses']]
+        self.assertIn('Concrete', impl_names)
+        bases = next(c for c in report['dataclasses'] if c['name'] == 'Concrete')['bases']
+        self.assertIn('Base', bases)
+
+
 class TestScanContractsJava(unittest.TestCase):
     """Tests for Java contract detection (BACK-403 pt 2)."""
 
@@ -1463,6 +1498,29 @@ class TestScanContractsCpp(unittest.TestCase):
         report = _scan_contracts(Path(self.tmp), abstract_only=True)
         self.assertEqual(report['dataclasses'], [])
         self.assertEqual([p['name'] for p in report['protocols']], ['Store'])
+
+    def test_header_only_abstract_class_classified_as_contract(self):
+        """BACK-630: a .h with no sibling .cpp (Godot-style) must not be invisible."""
+        self._write_cpp('store.h', '''\
+            class Store {
+            public:
+                virtual int get() = 0;
+            };
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertTrue(report.get('_cpp_mode'))
+        self.assertEqual([p['name'] for p in report['protocols']], ['Store'])
+
+    def test_plain_c_header_not_treated_as_cpp(self):
+        """A genuine C header (no C++-only markers) must not enter cpp mode."""
+        self._write_cpp('widget.h', '''\
+            struct Widget {
+                int value;
+            };
+            int widget_compute(struct Widget *w);
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertFalse(report.get('_cpp_mode'))
 
 
 if __name__ == '__main__':

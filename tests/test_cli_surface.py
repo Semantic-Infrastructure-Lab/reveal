@@ -310,6 +310,26 @@ class TestScanSurface(unittest.TestCase):
         self.assertNotIn('VENV_KEY', env_names)
         self.assertNotIn('SITE_PACKAGES_KEY', env_names)
 
+    def test_header_only_cpp_class_reaches_surface_scan(self):
+        """BACK-630: a .h with no sibling .cpp (Godot-style) must not be invisible."""
+        _write(self.tmp, 'cfg.h', '''\
+            class Config {
+            public:
+                void load() { auto k = std::getenv("PORT"); }
+            };
+        ''')
+        report = _scan_surface(Path(self.tmp))
+        self.assertIn('PORT', [e['name'] for e in report['surfaces']['env']])
+
+    def test_plain_c_header_excluded_from_cpp_surface_scan(self):
+        """A genuine C header (no C++-only markers) must not enter cpp mode."""
+        _write(self.tmp, 'widget.h', '''\
+            struct Widget { int value; };
+            int widget_compute(struct Widget *w);
+        ''')
+        report = _scan_surface(Path(self.tmp))
+        self.assertEqual(report['total'], 0)
+
 
 class TestCliCommandProvenance(unittest.TestCase):
     """BACK-534: @command is a CLI surface only with click/typer provenance."""
@@ -636,6 +656,18 @@ class TestNavSurfaceTS(unittest.TestCase):
         names = [e['name'] for e in result['db']]
         self.assertIn('ioredis', names)
 
+    def test_js_file_scanned(self):
+        """BACK-631: plain .js parses fine under the TS grammar (a JS superset)."""
+        result = self._scan_ts('client.js', 'import axios from "axios";\n')
+        names = [e['name'] for e in result['network']]
+        self.assertIn('axios', names)
+
+    def test_jsx_file_scanned(self):
+        """BACK-631: .jsx needs the JSX-aware 'tsx' grammar, not 'typescript'."""
+        result = self._scan_ts('App.jsx', 'import axios from "axios";\nfunction App() { return <div />; }\n')
+        names = [e['name'] for e in result['network']]
+        self.assertIn('axios', names)
+
 
 class TestScanSurfaceTS(unittest.TestCase):
     """Integration tests: _scan_surface picks up .ts/.tsx files."""
@@ -655,6 +687,13 @@ class TestScanSurfaceTS(unittest.TestCase):
 
     def test_tsx_files_included_in_scan(self):
         _write(self.tmp, 'App.tsx', 'import axios from "axios";\n')
+        report = _scan_surface(Path(self.tmp))
+        names = [e['name'] for e in report['surfaces']['network']]
+        self.assertIn('axios', names)
+
+    def test_js_files_included_in_scan(self):
+        """BACK-631: plain .js files must not be invisible to `reveal surface`."""
+        _write(self.tmp, 'client.js', 'import axios from "axios";\n')
         report = _scan_surface(Path(self.tmp))
         names = [e['name'] for e in report['surfaces']['network']]
         self.assertIn('axios', names)
