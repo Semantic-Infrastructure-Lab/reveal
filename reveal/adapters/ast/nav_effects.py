@@ -381,6 +381,29 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
     # not collide with other 'write' meanings the way an unscoped common
     # pattern would.
     'swift': [
+        # BACK-547 Swift sideeffects-recall-oracle (eleventh/final language):
+        # Apollo GraphQL's `client.fetch(query:)` / `client.perform(mutation:)`
+        # (plus the completion-handler/async overloads `fetchWithResult` /
+        # `performWithResult`) are the dominant network idiom in Kickstarter's
+        # KsApi service layer — 100+ call sites across Service.swift and its
+        # ApolloClient extensions, all unclassified before this fix. The
+        # tokenizer doesn't split camelCase (same shape as C#'s
+        # `SaveChangesAsync`), so `fetchwithresult`/`performwithresult` need
+        # their own entries alongside the bare `fetch`/`perform` forms.
+        # Receiver names vary too much (apiService/client/asyncClient/
+        # sharedClient/self) for a receiver-suffix mechanism, so this is a
+        # bare-verb bucket entry instead — scoped to `swift` only, so it can
+        # never fire for Ruby's unrelated `reviewable.perform(...)` (Discourse
+        # action dispatch, 230 corpus hits) or similar per-language verbs.
+        # Corpus-wide collision check (samples/swift, all 5,327 files): the
+        # only non-network `.perform(` is a local, project-specific
+        # `UIView.perform(animated:closure:)` static helper (2 call sites in
+        # one file) — accepted, same conservative trade-off as Kotlin's
+        # declined `Store` receiver but inverted: here the network reading
+        # overwhelmingly dominates (65+ sites) rather than the reverse.
+        # `dataTask` (URLSession's raw completion-handler API, NSURLSession.swift)
+        # is rarer (3 corpus hits) but unambiguous.
+        ('http', ['fetch', 'perform', 'fetchwithresult', 'performwithresult', 'datatask']),
         ('file', ['write']),
         # BACK-498 quick win: NSLog/os_log are Swift/Cocoa's logging calls —
         # bare `print` deliberately stays unclassified (matches tier1 Java/C#/

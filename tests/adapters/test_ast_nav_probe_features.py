@@ -4176,5 +4176,39 @@ class TestBack547KotlinSqlDelightTaxonomy(unittest.TestCase):
         self.assertEqual(classify_call('cursor->execute', language='kotlin'), 'db')
 
 
+class TestBack547SwiftApolloHttpTaxonomy(unittest.TestCase):
+    """Apollo GraphQL's `client.fetch(query:)` / `client.perform(mutation:)`
+    (plus the completion-handler/async `fetchWithResult`/`performWithResult`
+    overloads) is the dominant network idiom in Kickstarter's KsApi service
+    layer (sideeffects-recall-oracle/swift, eleventh and final language): 100+
+    call sites across Service.swift and its ApolloClient extensions, all
+    unclassified before this fix. Scoped to `language='swift'` so it can never
+    fire for Ruby's unrelated `reviewable.perform(...)` (Discourse action
+    dispatch, 230 corpus hits in samples/ruby) or any other language's own
+    'fetch'/'perform' verbs."""
+
+    def test_bare_fetch_and_perform_classified_http(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('apollo.fetch', language='swift'), 'http')
+        self.assertEqual(classify_call('client.perform', language='swift'), 'http')
+
+    def test_with_result_variants_classified_http(self):
+        # Tokenizer doesn't split camelCase (same gap as C#'s SaveChangesAsync
+        # / Kotlin's executeAsOne), so the WithResult compound needs its own entry.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('client.fetchWithResult', language='swift'), 'http')
+        self.assertEqual(classify_call('client.performWithResult', language='swift'), 'http')
+
+    def test_data_task_classified_http(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('self.dataTask', language='swift'), 'http')
+
+    def test_ruby_perform_not_classified_http(self):
+        # Cross-language non-collision: Ruby's Reviewable#perform is an
+        # unrelated business-logic action dispatcher (Discourse), not network.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('reviewable.perform', language='ruby'))
+
+
 if __name__ == '__main__':
     unittest.main()
