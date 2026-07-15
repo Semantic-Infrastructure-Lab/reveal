@@ -118,6 +118,13 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             'file_get_contents',
             'wp_remote_get', 'wp_remote_post', 'wp_remote_request',
             'setcookie', 'setrawcookie', 'mail',
+            # BACK-649 (sideeffects-recall-oracle/php, seventh language):
+            # raw-socket HTTP idiom used by hand-rolled protocol clients
+            # (POP3, FTP, WP_Http's streams transport) predating cURL/
+            # wp_remote_*. Real miss: class-pop3.php:connect ->
+            # `fsockopen("$server", $port, ...)`. Bare stdlib builtin, no
+            # corpus redefinitions, negligible collision risk.
+            'fsockopen',
         ]),
         ('cache', [
             'memcache_get', 'memcache_set', 'memcache_delete', 'memcache_add',
@@ -138,6 +145,14 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         ]),
         ('log', [
             'error_log', 'trigger_error', 'var_dump', 'phpinfo',
+            # BACK-649 (sideeffects-recall-oracle/php, seventh language):
+            # error_reporting() reads/sets PHP's runtime error-diagnostic
+            # level -- real corpus misses: load.php:wp_debug_mode,
+            # class-wpdb.php:check_connection,
+            # class-wp-http-streams.php:request,
+            # class-wp-customize-selective-refresh.php:handle_render_partials_request.
+            # Bare stdlib builtin, no corpus redefinitions.
+            'error_reporting',
         ]),
     ],
     'python': [

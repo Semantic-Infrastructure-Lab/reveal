@@ -3784,5 +3784,35 @@ class TestBack547RubyDbAndFileTaxonomy(unittest.TestCase):
         self.assertIn('http', kinds)
 
 
+class TestBack649PhpTaxonomy(unittest.TestCase):
+    """BACK-649 (sideeffects-recall-oracle/php, seventh language): real
+    corpus misses found on WordPress, both bare stdlib builtins previously
+    absent from _TAXONOMY_BY_LANG['php']."""
+
+    def _sideeffect_kinds(self, src):
+        from reveal.adapters.ast.nav_effects import collect_effects
+        _, root, get_text, _ = _parse_php(src)
+        effects = collect_effects(root, 1, 999, get_text, language='php')
+        return {e['kind'] for e in effects}
+
+    def test_error_reporting_classified_as_log(self):
+        kinds = self._sideeffect_kinds(
+            "<?php\n"
+            "function wp_debug_mode() {\n"
+            "    error_reporting( E_ALL );\n"
+            "}\n"
+        )
+        self.assertIn('log', kinds)
+
+    def test_fsockopen_classified_as_http(self):
+        kinds = self._sideeffect_kinds(
+            "<?php\n"
+            "function connect($server, $port) {\n"
+            "    $fp = fsockopen($server, $port, $errno, $errstr);\n"
+            "}\n"
+        )
+        self.assertIn('http', kinds)
+
+
 if __name__ == '__main__':
     unittest.main()
