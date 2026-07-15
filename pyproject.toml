@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reveal-cli"
-version = "0.108.1"
+version = "0.109.0"
 description = "How AI agents understand codebases without wasting tokens — local-first, adapter-driven, progressive disclosure enforced by design"
 readme = "README.md"
 # Upper bound: on Python 3.14 the language-pack version reveal is pinned to (<=1.12.2, vendored

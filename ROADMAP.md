@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-07-13 (enchanted-gargoyle-0713 — v0.108.1 release: critical dependency-pin fix, v0.108.0 broke on every fresh install)
+> **Last updated**: 2026-07-15 (glossy-spectrum-0715 — v0.109.0 release: 11-language contracts/surface, disk-cache program, depends:// scan-root rewrite, CI-red recovery)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,13 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.109.0 — contracts/surface 11-language coverage complete + persistent disk-cache program + depends:// scan-root rewrite + master CI red recovery
+- ✅ `contracts`/`surface` reach all 11 languages — Go, Rust, C++ added, plus C++ `.h`-only classes and plain JS/JSX residuals closed (BACK-403 pt 2 / BACK-588).
+- ✅ Persistent disk caching for structure, import graph, churn, and imports extraction — up to ~100x on repeat invocations; I002 auto-skips above 2,000 files instead of hanging (BACK-535/536/608/614/615/624/625/626/627).
+- ✅ `depends://` scan-root resolution rewrite — explicit `.reveal.yaml root: true`, `?root=` override, all 5 divergent project-root resolvers consolidated onto one (BACK-609/610/612).
+- ✅ BACK-547 `--sideeffects`/`--boundary` recall-oracle program continued across Go/Python/Java/Ruby/PHP/C#, closing real structural bugs (Ruby `singleton_method` invisible to `--outline`, Java/C# constructor effects leaking the whole class body) alongside taxonomy gaps.
+- ✅ `master` CI red 11h+ across 2 pushes restored to green — treesitter-accessor ratchet migration, stale test line ranges, a taxonomy-mirroring gap, and a dead-code CI-only failure all root-caused and fixed.
 
 ### v0.108.1 — critical fix: v0.108.0 broke on every fresh install (tree-sitter-language-pack 1.12.5 incompatibility)
 - ✅ Capped `tree-sitter-language-pack` to `<1.12.5` — 1.12.5 changed `Parser.parse()`'s required type and `Tree.root_node`'s calling convention, silently breaking parsing for every language on every OS on any fresh `pip install` (BACK-573).
