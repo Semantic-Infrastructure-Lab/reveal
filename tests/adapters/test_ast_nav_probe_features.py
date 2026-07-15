@@ -3896,5 +3896,124 @@ class TestBack651CSharpOperatorDeclaration(unittest.TestCase):
         self.assertEqual(KEYWORD_LABEL['operator_declaration'], 'DEF')
 
 
+# ─── BACK-650: _find_element_node returned the first tree-order match for a
+# bare name, with no disambiguation when multiple functions share a name —
+# overloading and abstract+concrete-override pairs both hit this. Found via
+# the C# sideeffects-recall-oracle loop (BACK-547 eighth loop) on real
+# Jellyfin source: an abstract method and its real override shared a name
+# (bare lookup returned the bodyless abstract one, hiding a LogError call),
+# and an expression-bodied overload wrapper shared a name with the real
+# block-bodied overload (bare lookup returned the wrapper, hiding a
+# Thread.Sleep call). Fixed by preferring a candidate with a 'block'-kind
+# direct child (a real body) over one without, falling back to first-match
+# only when every same-named candidate is equally block-bodied or equally
+# bodyless (true overloads with no signal to disambiguate).
+
+class TestBack650OverloadDisambiguation(unittest.TestCase):
+    def test_abstract_and_override_same_name_resolves_to_override(self):
+        import pathlib
+        import tempfile
+        from reveal.analyzers.csharp import CSharpAnalyzer
+        from reveal.file_handler import _find_element_node
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / 'BaseTunerHost.cs'
+            f.write_text(
+                "abstract class BaseTunerHost\n"
+                "{\n"
+                "    protected abstract Task<List<MediaSourceInfo>> GetChannelStreamMediaSources(\n"
+                "        string channelId, CancellationToken cancellationToken);\n"
+                "}\n"
+                "\n"
+                "class LiveTvTunerHost : BaseTunerHost\n"
+                "{\n"
+                "    public async Task<List<MediaSourceInfo>> GetChannelStreamMediaSources(\n"
+                "        string channelId, CancellationToken cancellationToken)\n"
+                "    {\n"
+                "        try\n"
+                "        {\n"
+                "            return await GetSources(channelId);\n"
+                "        }\n"
+                "        catch (Exception ex)\n"
+                "        {\n"
+                "            Logger.LogError(ex, \"failed\");\n"
+                "            throw;\n"
+                "        }\n"
+                "    }\n"
+                "}\n"
+            )
+            analyzer = CSharpAnalyzer(str(f))
+            node = _find_element_node(analyzer, 'GetChannelStreamMediaSources')
+            self.assertIsNotNone(node)
+            # Regression: pre-fix, this returned the abstract (bodyless)
+            # declaration at line 3, a 1-line no-op range that hides the
+            # override's entire body including the LogError call.
+            self.assertGreater(node.end_position().row, 4)
+
+    def test_expression_bodied_and_block_bodied_overload_resolves_to_block(self):
+        import pathlib
+        import tempfile
+        from reveal.analyzers.csharp import CSharpAnalyzer
+        from reveal.file_handler import _find_element_node
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / 'ProgressiveFileStream.cs'
+            f.write_text(
+                "class ProgressiveFileStream : Stream\n"
+                "{\n"
+                "    public override int Read(byte[] buffer, int offset, int count)\n"
+                "        => Read(buffer.AsSpan(offset, count));\n"
+                "\n"
+                "    public int Read(Span<byte> buffer)\n"
+                "    {\n"
+                "        var sw = Stopwatch.StartNew();\n"
+                "        while (_stream.Length <= _position)\n"
+                "        {\n"
+                "            Thread.Sleep(50);\n"
+                "        }\n"
+                "        return 0;\n"
+                "    }\n"
+                "}\n"
+            )
+            analyzer = CSharpAnalyzer(str(f))
+            node = _find_element_node(analyzer, 'Read')
+            self.assertIsNotNone(node)
+            # Regression: pre-fix, this returned the expression-bodied
+            # wrapper at line 3-4, silently hiding the Thread.Sleep effect
+            # in the real block-bodied overload below it.
+            self.assertGreater(node.end_position().row, 5)
+
+    def test_true_overload_with_no_disambiguating_signal_falls_back_to_first(self):
+        # Both candidates are equally block-bodied (real overloads, no
+        # abstract/expression-bodied sibling) -- no signal to disambiguate,
+        # so first tree-order match is returned, same as pre-fix behavior.
+        import pathlib
+        import tempfile
+        from reveal.analyzers.csharp import CSharpAnalyzer
+        from reveal.file_handler import _find_element_node
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / 'Overloads.cs'
+            f.write_text(
+                "class Overloads\n"
+                "{\n"
+                "    public void Write(string s)\n"
+                "    {\n"
+                "        Console.WriteLine(s);\n"
+                "    }\n"
+                "\n"
+                "    public void Write(int i)\n"
+                "    {\n"
+                "        Console.WriteLine(i.ToString());\n"
+                "    }\n"
+                "}\n"
+            )
+            analyzer = CSharpAnalyzer(str(f))
+            node = _find_element_node(analyzer, 'Write')
+            self.assertIsNotNone(node)
+            self.assertEqual(node.start_position().row, 2)  # first Write(string s), line 3
+
+    def test_pick_best_candidate_single_candidate_returned_directly(self):
+        from reveal.file_handler import _pick_best_candidate
+        self.assertEqual(_pick_best_candidate(['only']), 'only')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
-from .core import tree_root
+from .core import node_children, tree_root
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -255,6 +255,23 @@ def _find_hierarchical_element_node(analyzer, element: str):
     return None
 
 
+def _pick_best_candidate(candidates):
+    """Disambiguate multiple same-named nodes (overloads, abstract+override
+    pairs) by preferring one with a real 'block'-kind body over a bodyless
+    signature (abstract/interface) or an expression-bodied one (BACK-650).
+
+    Falls back to the first tree-order candidate when every candidate is
+    equally block-bodied (true overloads with no signal to disambiguate) or
+    equally bodyless — same shape as the pre-fix behavior for that case.
+    """
+    if len(candidates) == 1:
+        return candidates[0]
+    for node in candidates:
+        if any(child.kind() == 'block' for child in node_children(node)):
+            return node
+    return candidates[0]
+
+
 def _find_element_node(analyzer, element: str):
     """Find and return the tree-sitter node for a named function/method.
 
@@ -268,9 +285,12 @@ def _find_element_node(analyzer, element: str):
 
     for category in ('function', 'class'):
         for node_type in ELEMENT_TYPE_MAP.get(category, []):
-            for node in analyzer._find_nodes_by_type(node_type):
-                if analyzer._get_node_name(node) == element:
-                    return node
+            candidates = [
+                node for node in analyzer._find_nodes_by_type(node_type)
+                if analyzer._get_node_name(node) == element
+            ]
+            if candidates:
+                return _pick_best_candidate(candidates)
 
     # JS-family `const f = (...) => {}` — not a FUNCTION_NODE_TYPES member at
     # all (it's a filtered variable_declarator, not a flat kind match), so it
