@@ -104,6 +104,23 @@ FUNCTION_NODE_TYPES = (
     # `local function foo() end` parse to the same 'function_declaration' kind
     # (already covered above) — these two names never matched any real Lua
     # grammar node. Dead entries, removed rather than fixed.
+    # Ruby sideeffects-recall-oracle loop (BACK-547 sixth language): `def
+    # self.foo` / `def Class.foo` parses to a DISTINCT node kind,
+    # 'singleton_method', not a same-name variant of 'method' (`def foo`).
+    # BACK-451/477 already added 'singleton_method' to CHILD_NODE_TYPES (so
+    # dotted hierarchical lookup like `Class.method_name` worked), but never
+    # to FUNCTION_NODE_TYPES/ALL_ELEMENT_NODE_TYPES — the exact same
+    # cross-taxonomy fragmentation BACK-638 (Java/C# constructors) and
+    # BACK-519 (JS class-field arrows) hit. Without this, every `def self.x`
+    # method — the dominant Ruby/Rails idiom for module-level utility, job,
+    # and service-object entry points — was entirely invisible to
+    # `--outline`/`get_structure()`, and a bare (non-dotted) name lookup for
+    # one failed outright ("could not find function or method"), even when
+    # the name was unique in the file. Verified live: Discourse's
+    # `lib/discourse.rb` (107 `def self.` methods) showed only 6 functions in
+    # `--outline`; `reveal discourse.rb allow_dev_populate?` (unique name)
+    # errored not-found despite the method existing at line 1321.
+    'singleton_method',       # Ruby class method (`def self.foo`/`def Class.foo`)
 )
 
 # Node types for class extraction

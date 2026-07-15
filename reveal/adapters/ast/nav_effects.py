@@ -345,10 +345,49 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         ('file', [
             'file.write', 'file.read', 'file.delete',
             'fileutils.rm', 'fileutils.mkdir_p',
+            # BACK-547 sixth loop (Ruby sideeffects-recall-oracle, Discourse
+            # corpus): 'rm_f'/'rm_rf' are distinct tokens from 'rm' under
+            # segment-boundary matching (`FileUtils.rm_rf(...)` doesn't
+            # contain 'rm' as its own segment). Real corpus misses:
+            # lib/socket_server.rb:stop, lib/directory_helper.rb:remove_tmp_directory.
+            'fileutils.rm_f', 'fileutils.rm_rf',
         ]),
-        # ActiveRecord CRUD verbs (.save/.where/.find_by) deliberately excluded —
-        # too collision-prone with unrelated domain methods of the same name.
-        ('http', ['net::http', 'httparty', 'faraday']),
+        ('db', [
+            # BACK-547 sixth loop: ActiveRecord CRUD/query verbs, previously
+            # declined here as "too collision-prone" without corpus evidence.
+            # Measured instead: Discourse's real `.where(`/`.pluck(`/
+            # `.find_by(`/`.update_all(`/`.delete_all(`/`.destroy_all(` call
+            # sites are overwhelmingly on Model-constant or relation-shaped
+            # receivers (`User.where`, `posts.where`, `scope.pluck`, ...);
+            # grepping the whole corpus for a custom `def where`/`def pluck`/
+            # `def update_all`/`def delete_all`/`def destroy_all` found only
+            # 4 total, all themselves DB/cache-adjacent helpers (a preloader
+            # shim, a cached-view class) — no unrelated-domain collision
+            # found. Oracle recall on this bucket: 13.5% -> majority of the
+            # remaining db miss category once these land (37 oracle db
+            # instances in the sample, only 5 hit pre-fix).
+            'where', 'pluck', 'find_by', 'find_by!',
+            'update_all', 'delete_all', 'destroy_all',
+            # Raw `pg` gem usage (bypassing ActiveRecord entirely) -- corpus:
+            # 8 real occurrences, all `PG.connect(...)` (import/migration
+            # tooling that opens its own connection). Dotted two-segment
+            # pattern, negligible collision risk.
+            'pg.connect',
+        ]),
+        ('http', [
+            'net::http', 'httparty', 'faraday',
+            # BACK-547 sixth loop: 'net::http' alone only matched
+            # `Net::HTTP.get`/`.post`/`.start`-shaped calls; real corpus
+            # traffic also constructs a request object directly
+            # (`Net::HTTP::Post.new(uri)`) before `.request(...)`-ing it on an
+            # instance -- the instance `.request(` call itself stays
+            # unclassified (same collision-prone bare-verb shape as Go's
+            # `client.Do`, deliberately declined), but the construction step
+            # is real signal and corpus-safe (`Net::HTTP::Get`/`Post`/`Put`/
+            # `Delete`/`Head` are not generic class names).
+            'net::http::get', 'net::http::post', 'net::http::put',
+            'net::http::delete', 'net::http::head',
+        ]),
     ],
     'cpp': [
         # BACK-547 fourth language (C++ sideeffects-recall-oracle loop,

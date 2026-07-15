@@ -3644,5 +3644,145 @@ class TestBack641CppOperatorAndDestructorNaming(unittest.TestCase):
             self.assertEqual(names.count('Widget'), 1)
 
 
+# ─── BACK-547 sixth loop (Ruby): `singleton_method` missing from
+# FUNCTION_NODE_TYPES ───────────────────────────────────────────────────────
+# `def self.foo` / `def Class.foo` parses to a DISTINCT tree-sitter-ruby node
+# kind, `singleton_method`, not a same-name variant of `method` (`def foo`).
+# BACK-451/477 had already added `singleton_method` to CHILD_NODE_TYPES (so
+# dotted hierarchical lookup like `Class.method_name` worked), but never to
+# FUNCTION_NODE_TYPES — the same cross-taxonomy fragmentation as BACK-638
+# (Java/C# constructors) and BACK-519 (JS class-field arrows). Every
+# `def self.x` method — the dominant Ruby/Rails idiom for module-level
+# utility/service-object entry points — was entirely invisible to
+# `--outline`/`get_structure()`, and a bare (non-dotted) name lookup for one
+# failed outright even when the name was unique in the file. Found via the
+# Ruby sideeffects-recall-oracle loop on real Discourse source: `lib/
+# discourse.rb` (107 `def self.` methods) showed only 6 functions in
+# `--outline` pre-fix.
+
+class TestBack547RubySingletonMethodExtraction(unittest.TestCase):
+    def _analyzer(self, src):
+        import pathlib
+        import tempfile
+        from reveal.analyzers.ruby import RubyAnalyzer
+        d = tempfile.TemporaryDirectory()
+        f = pathlib.Path(d.name) / 'foo.rb'
+        f.write_text(src)
+        return RubyAnalyzer(str(f)), d  # keep tempdir alive via returned handle
+
+    def test_module_level_def_self_extracted(self):
+        analyzer, _tmp = self._analyzer(
+            "module Discourse\n"
+            "  class Utils\n"
+            "    def self.execute_command(*command)\n"
+            "      1\n"
+            "    end\n"
+            "  end\n"
+            "end\n"
+        )
+        structure = analyzer.get_structure()
+        names = [fn['name'] for fn in structure.get('functions', [])]
+        # Regression: pre-fix, `singleton_method` wasn't in FUNCTION_NODE_TYPES
+        # at all, so this method never appeared in the flat functions list.
+        self.assertIn('execute_command', names)
+
+    def test_def_self_and_class_shovel_self_both_extracted(self):
+        # `def self.foo` (singleton_method) and `class << self; def foo; end;
+        # end` (method, nested in singleton_class) are two different Ruby
+        # idioms for the same thing -- both must be visible.
+        analyzer, _tmp = self._analyzer(
+            "class Foo\n"
+            "  def self.bar\n"
+            "    1\n"
+            "  end\n"
+            "\n"
+            "  class << self\n"
+            "    def baz\n"
+            "      2\n"
+            "    end\n"
+            "  end\n"
+            "end\n"
+        )
+        structure = analyzer.get_structure()
+        names = [fn['name'] for fn in structure.get('functions', [])]
+        self.assertIn('bar', names)
+        self.assertIn('baz', names)
+
+    def test_unique_name_lookup_no_longer_errors(self):
+        # The user-facing symptom: `reveal file.rb method_name` erroring
+        # "could not find function or method" for a `def self.x` method whose
+        # name was unique in the file (confirmed live on Discourse's
+        # lib/discourse.rb:allow_dev_populate?, plugins/discourse-ai/.../
+        # discourse_meta_search.rb:categories, lib/stylesheet/compiler.rb:
+        # compile_asset).
+        analyzer, _tmp = self._analyzer(
+            "class Discourse\n"
+            "  def self.allow_dev_populate?\n"
+            "    ENV[\"ALLOW_DEV_POPULATE\"] == \"1\"\n"
+            "  end\n"
+            "end\n"
+        )
+        structure = analyzer.get_structure()
+        names = [fn['name'] for fn in structure.get('functions', [])]
+        self.assertIn('allow_dev_populate?', names)
+
+
+# ─── BACK-547 sixth loop (Ruby): ActiveRecord CRUD verbs + FileUtils verb gaps
+# in _TAXONOMY_BY_LANG['ruby'] ───────────────────────────────────────────────
+# `.where`/`.pluck`/`.find_by`/`.update_all`/`.delete_all`/`.destroy_all` were
+# previously declined as "too collision-prone" without corpus evidence;
+# measured instead on real Discourse source (receiver-shape sampling found
+# near-exclusively Model-constant/relation-shaped receivers, no unrelated-
+# domain collision). `FileUtils.rm_f`/`.rm_rf` are distinct tokens from the
+# existing `fileutils.rm` pattern under segment-boundary matching.
+
+class TestBack547RubyDbAndFileTaxonomy(unittest.TestCase):
+    def _sideeffect_kinds(self, src):
+        from reveal.adapters.ast.nav_effects import collect_effects
+        parser = ts.get_parser('ruby')
+        content_bytes = src.encode('utf-8')
+        tree = parser.parse(src)
+        root = tree.root_node()
+
+        def get_text(node):
+            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+        effects = collect_effects(root, 1, 999, get_text, language='ruby')
+        return {e['kind'] for e in effects}
+
+    def test_activerecord_where_classified_as_db(self):
+        kinds = self._sideeffect_kinds(
+            "def find_active\n"
+            "  User.where(active: true)\n"
+            "end\n"
+        )
+        self.assertIn('db', kinds)
+
+    def test_activerecord_pluck_and_delete_all_classified_as_db(self):
+        kinds = self._sideeffect_kinds(
+            "def purge\n"
+            "  ids = posts.pluck(:id)\n"
+            "  Notification.where(post_id: ids).delete_all\n"
+            "end\n"
+        )
+        self.assertIn('db', kinds)
+
+    def test_fileutils_rm_f_and_rm_rf_classified_as_file(self):
+        kinds = self._sideeffect_kinds(
+            "def stop\n"
+            "  FileUtils.rm_f(@socket_path)\n"
+            "end\n"
+        )
+        self.assertIn('file', kinds)
+
+    def test_net_http_request_class_construction_classified_as_http(self):
+        kinds = self._sideeffect_kinds(
+            "def send_webhook(uri)\n"
+            "  req = Net::HTTP::Post.new(uri)\n"
+            "end\n"
+        )
+        self.assertIn('http', kinds)
+
+
 if __name__ == '__main__':
     unittest.main()
