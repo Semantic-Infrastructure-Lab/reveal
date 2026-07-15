@@ -373,7 +373,7 @@ reveal help://anti-patterns      # What NOT to do
 2. **Progressive disclosure** - Directory → File → Element
 3. **Token efficiency** - 10-150x fewer tokens than cat/grep
 4. **Line numbers** - All output is `file:line` format (vim compatible)
-5. **Zero config** - Works out of the box on 85 languages via tree-sitter
+5. **Zero config** - Works out of the box on 87 languages via tree-sitter
 
 ---
 
