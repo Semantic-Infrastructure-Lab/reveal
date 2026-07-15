@@ -189,6 +189,10 @@ DEF_NODES: frozenset = frozenset({
     # see treesitter.py FUNCTION_NODE_TYPES comment. Without this, --scope
     # silently dropped a C# operator overload as its own ancestor.
     'operator_declaration',
+    # BACK-647: Ruby singleton_method (`def self.foo`/`def Class.foo`) — same
+    # gap, see treesitter.py FUNCTION_NODE_TYPES comment. Without this,
+    # --scope silently dropped a Ruby class method as its own ancestor.
+    'singleton_method',
 })
 CLASS_NODES: frozenset = frozenset({
     'class_definition', 'class_declaration', 'class',
@@ -392,6 +396,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'method': 'DEF', 'function_signature': 'DEF', 'Decl': 'DEF',
     'constructor_declaration': 'DEF',  # BACK-638: Java/C#
     'operator_declaration': 'DEF',  # BACK-547 C# recall-oracle pre-flight
+    'singleton_method': 'DEF',  # BACK-647: Ruby `def self.foo`/`def Class.foo`
     'lambda': 'LAMBDA',
     'class_definition': 'CLASS', 'class_declaration': 'CLASS', 'class': 'CLASS',
     'class_specifier': 'CLASS', 'anonymous_class': 'CLASS',
