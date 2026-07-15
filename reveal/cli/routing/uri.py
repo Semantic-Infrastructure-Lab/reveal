@@ -582,7 +582,16 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
     result = _apply_budget_constraints(result, args, adapter)
     post_process = getattr(type(adapter), 'post_process', None)
     if post_process is not None:
-        result = adapter.post_process(result, args)
+        try:
+            result = adapter.post_process(result, args)
+        except Exception as e:
+            error_msg = str(e)
+            if '\n' in error_msg:
+                print(f"Error: {error_msg}", file=sys.stderr)
+            else:
+                scheme_hint = f" ({scheme}://)" if scheme else ""
+                print(f"Error{scheme_hint}: {error_msg}", file=sys.stderr)
+            sys.exit(1)
 
     # Add available elements if adapter supports discovery
     if hasattr(adapter, 'get_available_elements'):

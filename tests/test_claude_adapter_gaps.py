@@ -1209,6 +1209,26 @@ class TestPostProcessSearchResults:
         # No 'matches' key — should not raise
         assert result['type'] == 'claude_cross_session_search'
 
+    def test_range_on_session_overview_rejected(self, tmp_path):
+        """BACK-652: --range was silently accepted (and echoed into _display) on the
+        bare session-overview resource, which has no per-turn dimension to slice —
+        the overview looked filtered but wasn't. Now rejects with a hint toward the
+        resource that actually supports ranges."""
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('')
+        result = {'type': 'claude_session_overview', 'session': 'sess'}
+        args = self._args(range='1-3')
+        with pytest.raises(ValueError, match='message.*range'):
+            adapter.post_process(result, args)
+
+    def test_range_on_session_overview_none_is_fine(self, tmp_path):
+        """No --range passed should not trip the BACK-652 guard."""
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('')
+        result = {'type': 'claude_session_overview', 'session': 'sess'}
+        result = adapter.post_process(result, self._args())
+        assert result['type'] == 'claude_session_overview'
+
 
 # ─── BACK-074: schema includes cross-session search ────────────────────────────
 

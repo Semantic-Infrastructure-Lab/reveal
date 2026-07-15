@@ -71,6 +71,11 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'Composed readable view: overview + human prompts + assistant narrative in one call (path alias: /digest)',
         'examples': ['?digest']
     },
+    'full': {
+        'type': 'flag',
+        'description': 'Disable per-message 600-char truncation (assistant/message/exchanges views)',
+        'examples': ['?full']
+    },
 }
 
 _SCHEMA_CLI_FLAGS = {

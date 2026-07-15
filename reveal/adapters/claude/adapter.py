@@ -933,6 +933,13 @@ class ClaudeAdapter(ResourceAdapter):
             'range': getattr(args, 'range', None),
         }
 
+        if result_type == 'claude_session_overview' and getattr(args, 'range', None):
+            raise ValueError(
+                "--range is not supported on the session overview resource — it has no "
+                "per-turn dimension to slice.\n"
+                "Did you mean /message?range=N-M (a specific message-number range)?"
+            )
+
         if result_type == 'claude_workflow':
             _post_process_workflow(result, args)
         elif result_type == 'claude_session_list':

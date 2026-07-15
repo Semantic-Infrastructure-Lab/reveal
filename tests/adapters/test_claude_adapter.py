@@ -1275,6 +1275,13 @@ class TestClaudeAdapterSchema:
         assert 'user' in role_param['values']
         assert 'assistant' in role_param['values']
 
+    def test_schema_documents_full_param(self):
+        """BACK-653: ?full disables per-message truncation but was missing from the
+        schema's query_params, so the validator flagged it 'Unknown query param' even
+        though the feature itself worked and CLAUDE_ADAPTER_GUIDE.md documents it."""
+        schema = ClaudeAdapter.get_schema()
+        assert 'full' in schema['query_params']
+
     def test_schema_elements(self):
         """Schema should document available elements."""
         schema = ClaudeAdapter.get_schema()
