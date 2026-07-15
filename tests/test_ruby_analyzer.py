@@ -648,6 +648,38 @@ end
         finally:
             os.unlink(temp_path)
 
+    def test_class_bases_populated(self):
+        """BACK-645: `class Dog < Animal` and a scoped superclass must
+        populate bases — previously always returned [] for every Ruby class."""
+        code = '''class Animal
+end
+
+class Dog < Animal
+end
+
+class Formatter < ActiveSupport::Logger::SimpleFormatter
+end
+
+class Plain
+end
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.rb', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = RubyAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            classes = {c['name']: c for c in structure['classes']}
+
+            self.assertEqual(classes['Animal']['bases'], [])
+            self.assertEqual(classes['Dog']['bases'], ['Animal'])
+            self.assertEqual(classes['Formatter']['bases'], ['ActiveSupport::Logger::SimpleFormatter'])
+            self.assertEqual(classes['Plain']['bases'], [])
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()

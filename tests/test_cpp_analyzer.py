@@ -771,6 +771,32 @@ int main() {
         finally:
             os.unlink(temp_path)
 
+    def test_class_bases_populated(self):
+        """BACK-645: `class Foo final : public Bar, private ns::Baz` must
+        populate bases — previously always returned [] for every C++ class."""
+        code = '''class Bar {};
+
+class Foo final : public Bar, private ns::Baz {
+public:
+    Foo() {}
+};
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CppAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            classes = {c['name']: c for c in structure['classes']}
+
+            self.assertEqual(classes['Bar']['bases'], [])
+            self.assertIn('Bar', classes['Foo']['bases'])
+            self.assertIn('ns::Baz', classes['Foo']['bases'])
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()

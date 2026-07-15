@@ -403,6 +403,36 @@ void main() {
         finally:
             os.unlink(temp_path)
 
+    def test_class_bases_populated(self):
+        """BACK-645: `extends`/`implements` must populate bases — previously
+        always returned [] for every Dart class (its 'class_definition' node
+        kind collides with Python's/Scala's, so it silently fell through to
+        Python's argument_list-shaped extraction)."""
+        code = '''class Bar {}
+class Baz {}
+
+class Foo extends Bar implements Baz {
+}
+
+class Plain {
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.dart', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = DartAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            classes = {c['name']: c for c in structure['classes']}
+
+            self.assertEqual(classes['Bar']['bases'], [])
+            self.assertEqual(classes['Foo']['bases'], ['Bar', 'Baz'])
+            self.assertEqual(classes['Plain']['bases'], [])
+        finally:
+            os.unlink(temp_path)
+
 
 class TestDartFunctionBodyBoundary(unittest.TestCase):
     """BACK-431 Issue G tier B dogfood finding (mysterious-probe-0703, against
