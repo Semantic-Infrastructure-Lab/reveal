@@ -4115,5 +4115,66 @@ class TestBack547RustDbEnvTaxonomy(unittest.TestCase):
         self.assertEqual(classify_call('std::env::var', language='rust'), 'env')
 
 
+class TestBack547KotlinDaoReceiverSuffix(unittest.TestCase):
+    """Kotlin/Java's `xxxDao`/`XxxDao` naming convention (Data Access Object)
+    is the dominant db-access receiver in Room/SQLDelight-backed repository
+    layers, but the method vocabulary is open-ended (generated per-query
+    names like `getShowWithIdOrThrow`, `entriesForShowIdWithSendPendingActions`)
+    -- no fixed pattern list can enumerate it. Corpus (Tivi's data/ module,
+    sideeffects-recall-oracle/kotlin, tenth language): 27 files, 100+ call
+    sites, all unclassified before this fix. Fixed via a new suffix-match
+    receiver mechanism (`_classify_by_receiver_suffix`), since the receiver is
+    a whole identifier like `showdao`/`seasonsdao`, never the bare word `dao`
+    alone (unlike the existing exact-match `_RECEIVER_TAXONOMY`)."""
+
+    def test_dao_suffixed_receiver_classified_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('showDao.getShowWithIdOrThrow'), 'db')
+        self.assertEqual(
+            classify_call('episodeWatchEntryDao.entriesForShowIdWithSendPendingActions'),
+            'db',
+        )
+
+    def test_bare_dao_receiver_also_classified(self):
+        # A variable literally named `dao` (common: `private val dao: ShowDao`)
+        # is itself a valid db receiver -- suffix match correctly includes the
+        # zero-prefix case, same as the exact-match _RECEIVER_TAXONOMY would.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('dao.foo'), 'db')
+
+    def test_non_dao_suffix_not_classified(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('showQueries.getShowWithId'))
+        self.assertIsNone(classify_call('showDaoFactory.build'))
+
+
+class TestBack547KotlinSqlDelightTaxonomy(unittest.TestCase):
+    """SQLDelight's query-execution/transaction idiom
+    (`countQuery.executeAsOne()`, `.executeAsList()`, `.executeAsOneOrNull()`,
+    `transacter.transactionWithResult(...)`) is a single camelCase token --
+    same tokenizer gap as C#'s `SaveChangesAsync` (BACK-547 eighth loop).
+    Corpus: 68 executeAs*() calls + 4 transactionWithResult() calls across 17
+    files in Tivi's data/ module, 0 classified before this fix."""
+
+    def test_execute_as_variants_classified_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        for variant in ('executeAsOne', 'executeAsList', 'executeAsOneOrNull'):
+            self.assertEqual(
+                classify_call(f'countQuery.{variant}', language='kotlin'), 'db',
+                msg=f'{variant} should classify as db',
+            )
+
+    def test_transaction_with_result_classified_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(
+            classify_call('transacter.transactionWithResult', language='kotlin'), 'db',
+        )
+
+    def test_bare_execute_still_common_scoped(self):
+        # Sanity: the pre-existing common '->execute' pattern is untouched.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('cursor->execute', language='kotlin'), 'db')
+
+
 if __name__ == '__main__':
     unittest.main()

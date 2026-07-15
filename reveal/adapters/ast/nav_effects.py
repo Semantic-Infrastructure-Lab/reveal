@@ -363,6 +363,16 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             'writebytes', 'appendbytes', 'readbytes',
             'copyto', 'deleterecursively', 'mkdirs', 'createnewfile',
         ]),
+        # BACK-547 (sideeffects-recall-oracle/kotlin, tenth language): SQLDelight's
+        # query-execution/transaction idiom is a single camelCase token
+        # ('executeAsOne' etc.) — same tokenizer gap as C#'s 'savechangesasync'
+        # (BACK-547 8th loop, eighth language). Corpus (Tivi's data/ module, 252
+        # files): 68 executeAs*() calls + 4 transactionWithResult() calls across
+        # 17 files, 0 unclassified before this fix.
+        ('db', [
+            'executeasone', 'executeaslist', 'executeasoneornull',
+            'transactionwithresult',
+        ]),
     ],
     # BACK-477: Swift's dominant file-write idiom is `"...".write(toFile:...)`
     # / `data.write(to: url)` — the argument label carrying the file-specific
@@ -633,6 +643,36 @@ def _classify_by_receiver(callee_segs: List[str]) -> Optional[str]:
     return None
 
 
+# BACK-547 (sideeffects-recall-oracle/kotlin, tenth language): Java/Kotlin's
+# `xxxDao`/`XxxDao` naming convention (Data Access Object — Android's Room,
+# Spring's DAO layer, Tivi's SQLDelight-backed daos) is the dominant db-access
+# receiver, but the generated/hand-written method names carry no consistent
+# verb (`showDao.getShowWithIdOrThrow(...)`, `seasonsDao.seasonWithId(...)`,
+# `episodeWatchEntryDao.entriesForShowIdWithSendPendingActions(...)`) — an
+# open-ended vocabulary no fixed pattern list can enumerate. Corpus (Tivi
+# data/, 252 files): 27 files, 100+ call sites, all unclassified before this
+# fix. Suffix match (not exact-segment, unlike `_RECEIVER_TAXONOMY`) because
+# the receiver is a whole identifier like `showdao`/`seasonsdao`, never the
+# bare word `dao` alone. Checked for collisions across every language's
+# sample corpus (samples/): zero non-db `*dao` identifiers used as a call
+# receiver.
+_RECEIVER_SUFFIX_TAXONOMY: List[Tuple[str, List[str]]] = [
+    ('db', ['dao']),
+]
+
+
+def _classify_by_receiver_suffix(callee_segs: List[str]) -> Optional[str]:
+    """Classify by a non-final segment ENDING WITH a known receiver suffix."""
+    if len(callee_segs) < 2:
+        return None
+    non_final = callee_segs[:-1]
+    for kind, suffixes in _RECEIVER_SUFFIX_TAXONOMY:
+        for suffix in suffixes:
+            if any(seg.endswith(suffix) for seg in non_final):
+                return kind
+    return None
+
+
 def classify_call(callee: str, language: Optional[str] = None) -> Optional[str]:
     """Return the taxonomy kind for a callee string, or None if unclassified.
 
@@ -651,7 +691,7 @@ def classify_call(callee: str, language: Optional[str] = None) -> Optional[str]:
         for pattern_segs in pattern_list:
             if _segments_contain(callee_segs, pattern_segs):
                 return kind
-    return _classify_by_receiver(callee_segs)
+    return _classify_by_receiver(callee_segs) or _classify_by_receiver_suffix(callee_segs)
 
 
 # ---------------------------------------------------------------------------
