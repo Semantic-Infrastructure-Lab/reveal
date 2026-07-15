@@ -340,6 +340,16 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
     'csharp': [
         ('db', [
             'executereader', 'executenonquery', 'executescalar', 'savechanges',
+            # BACK-547 C# sideeffects-recall-oracle (eighth language): the
+            # tokenizer doesn't split camelCase, so 'savechanges' never
+            # matched EF Core's async overload as its own segment. Dominant
+            # real corpus miss: 10/15 pre-fix recall misses, all
+            # `await dbContext.SaveChangesAsync(...)` -- the standard EF
+            # Core save idiom used throughout Jellyfin's repository layer
+            # (DeviceManager, UserManager, KeyframeRepository,
+            # ChapterRepository, and 3 migration routines). 37 corpus
+            # occurrences across 16 files, 0 non-EF collisions found.
+            'savechangesasync',
         ]),
         ('http', [
             'getasync', 'postasync', 'putasync', 'deleteasync', 'sendasync',
@@ -347,6 +357,12 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         ('file', [
             'writealltext', 'readalltext', 'writealllines', 'readalllines',
             'createdirectory', 'streamwriter', 'filestream',
+            # BACK-547 C# recall-oracle: StreamReader is StreamWriter's
+            # equally-common read-side counterpart (already listed above)
+            # but was entirely absent. Real corpus misses:
+            # EncodedRecorder.StartStreamingLog, M3uParser.Parse (both
+            # `new StreamReader(...)`).
+            'streamreader',
         ]),
         ('env', ['getenvironmentvariable']),
         ('log', [

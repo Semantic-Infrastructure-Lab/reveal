@@ -3814,5 +3814,87 @@ class TestBack649PhpTaxonomy(unittest.TestCase):
         self.assertIn('http', kinds)
 
 
+class TestBack547CSharpTaxonomy(unittest.TestCase):
+    """BACK-547 (sideeffects-recall-oracle/csharp, eighth language, Jellyfin
+    corpus): two real corpus misses, both bare stdlib idioms previously
+    absent from _TAXONOMY_BY_LANG['csharp']. The tokenizer doesn't split
+    camelCase, so an async/read-side sibling of an already-listed pattern
+    needs its own explicit entry."""
+
+    def test_savechangesasync_classifies_as_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('dbContext.SaveChangesAsync'), 'db')
+
+    def test_streamreader_classifies_as_file(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('new StreamReader'), 'file')
+
+
+class TestBack651CSharpOperatorDeclaration(unittest.TestCase):
+    """BACK-651 (found via BACK-547 C# recall-oracle pre-flight check):
+    C# operator overloads (`public static bool operator ==(...)`) parse to
+    their own distinct node kind, `operator_declaration`, not a variant of
+    `method_declaration` -- and unlike BACK-638's constructor gap, the node
+    has no identifier-shaped name child at all (the "name" is the raw
+    operator-symbol token). Both the node-type gap and the missing
+    name-extraction strategy needed fixing."""
+
+    def test_operator_overload_extracted_with_name(self):
+        import pathlib
+        import tempfile
+        from reveal.analyzers.csharp import CSharpAnalyzer
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / 'SearchResult.cs'
+            f.write_text(
+                "public readonly struct SearchResult\n"
+                "{\n"
+                "    public static bool operator ==(SearchResult left, SearchResult right)\n"
+                "    {\n"
+                "        return left.Equals(right);\n"
+                "    }\n"
+                "\n"
+                "    public static bool operator !=(SearchResult left, SearchResult right)\n"
+                "    {\n"
+                "        return !left.Equals(right);\n"
+                "    }\n"
+                "}\n"
+            )
+            structure = CSharpAnalyzer(str(f)).get_structure()
+            names = [fn['name'] for fn in structure.get('functions', [])]
+            self.assertIn('operator ==', names)
+            self.assertIn('operator !=', names)
+
+    def test_operator_boundary_excludes_sibling_operator_body(self):
+        import pathlib
+        import tempfile
+        from reveal.analyzers.csharp import CSharpAnalyzer
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / 'SearchResult.cs'
+            f.write_text(
+                "public readonly struct SearchResult\n"
+                "{\n"
+                "    public static bool operator ==(SearchResult left, SearchResult right)\n"
+                "    {\n"
+                "        return left.Equals(right);\n"
+                "    }\n"
+                "\n"
+                "    public static bool operator !=(SearchResult left, SearchResult right)\n"
+                "    {\n"
+                "        return !left.Equals(right);\n"
+                "    }\n"
+                "}\n"
+            )
+            structure = CSharpAnalyzer(str(f)).get_structure()
+            op_eq = next(fn for fn in structure['functions'] if fn['name'] == 'operator ==')
+            # Regression: pre-fix, operator_declaration was entirely absent
+            # from FUNCTION_NODE_TYPES, so this element didn't exist at all.
+            self.assertLess(op_eq['line_end'], 8)
+
+    def test_operator_declaration_in_def_nodes_taxonomy(self):
+        from reveal.adapters.ast.node_taxonomy import DEF_NODES, KEYWORD_LABEL
+        self.assertIn('operator_declaration', DEF_NODES)
+        self.assertEqual(KEYWORD_LABEL['operator_declaration'], 'DEF')
+
+
 if __name__ == '__main__':
     unittest.main()

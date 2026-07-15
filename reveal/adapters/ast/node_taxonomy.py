@@ -185,6 +185,10 @@ DEF_NODES: frozenset = frozenset({
     # FUNCTION_NODE_TYPES (see comment there); without this, --scope also
     # silently dropped a constructor as its own ancestor for a nested line.
     'constructor_declaration',
+    # BACK-547 C# recall-oracle pre-flight: operator_declaration — same gap,
+    # see treesitter.py FUNCTION_NODE_TYPES comment. Without this, --scope
+    # silently dropped a C# operator overload as its own ancestor.
+    'operator_declaration',
 })
 CLASS_NODES: frozenset = frozenset({
     'class_definition', 'class_declaration', 'class',
@@ -387,6 +391,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'arrow_function': 'DEF',
     'method': 'DEF', 'function_signature': 'DEF', 'Decl': 'DEF',
     'constructor_declaration': 'DEF',  # BACK-638: Java/C#
+    'operator_declaration': 'DEF',  # BACK-547 C# recall-oracle pre-flight
     'lambda': 'LAMBDA',
     'class_definition': 'CLASS', 'class_declaration': 'CLASS', 'class': 'CLASS',
     'class_specifier': 'CLASS', 'anonymous_class': 'CLASS',

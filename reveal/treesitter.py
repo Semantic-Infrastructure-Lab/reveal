@@ -121,6 +121,18 @@ FUNCTION_NODE_TYPES = (
     # `--outline`; `reveal discourse.rb allow_dev_populate?` (unique name)
     # errored not-found despite the method existing at line 1321.
     'singleton_method',       # Ruby class method (`def self.foo`/`def Class.foo`)
+    # BACK-547 C# sideeffects-recall-oracle pre-flight check (JAVA.md's "notes
+    # for the next language" flagged operator overloads specifically as a
+    # name-collision-prone node kind worth checking): C# operator overloads
+    # (`public static bool operator ==(...)`) parse to their own distinct node
+    # kind, `operator_declaration`, not a variant of `method_declaration`.
+    # Without this, they were entirely absent from --outline/--boundary/
+    # --sideeffects and any name lookup failed outright ("could not find
+    # function or method"), unlike BACK-638's constructor gap (which at least
+    # fell through to the enclosing class). See _operator_declaration_name for
+    # the paired name-extraction fix — the node has no identifier child at
+    # all, so the node-type fix alone isn't sufficient.
+    'operator_declaration',   # C#
 )
 
 # Node types for class extraction
@@ -1174,6 +1186,28 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     return self._get_node_text(sibling)
         return None
 
+    def _operator_declaration_name(self, node) -> Optional[str]:
+        """C# `public static bool operator ==(...)` parses to `operator_declaration`,
+        whose "name" is the operator symbol itself (`==`, `!=`, `+`, ...) — a
+        token whose *node kind literally is* the symbol, not an identifier/name
+        kind any `_name_via_*` strategy recognizes. Without this, operator
+        overloads carried no name at all: absent from FUNCTION_NODE_TYPES meant
+        they were entirely invisible to --outline, and even after adding the
+        node kind there, every generic name strategy returned None, silently
+        dropping the element (same invisibility class as BACK-638's
+        constructor gap, one node deeper). Verified live: samples/csharp
+        MediaBrowser.Controller/Library/SearchResult.cs — `operator ==`/
+        `operator !=` were entirely absent from --outline before this fix.
+
+        The symbol token is the sibling immediately after the literal
+        `operator` keyword child.
+        """
+        kids = _children(node)
+        for i, child in enumerate(kids):
+            if child.kind() == 'operator' and i + 1 < len(kids):
+                return f'operator {self._get_node_text(kids[i + 1])}'
+        return None
+
     def _name_via_declarator(self, kids) -> Optional[str]:
         # PRIORITY 1: For C/C++ functions, look inside declarators FIRST —
         # these contain the actual function/variable name, not the type.
@@ -1250,6 +1284,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         if node.kind() == 'struct_type':
             return self._struct_type_name(node)
+        if node.kind() == 'operator_declaration':
+            return self._operator_declaration_name(node)
 
         kids = _children(node)
         for strategy in (
