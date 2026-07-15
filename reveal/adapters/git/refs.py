@@ -35,16 +35,15 @@ def get_ref_structure(
             limit = int(query.get('limit', 20))
             commits = get_commit_history_func(repo, commit_obj, limit=limit)
 
-            return {
-                'contract_version': '1.0',
-                'type': 'git_ref',
-                'source': f"{repo.workdir or repo.path}@{ref}",
-                'source_type': 'directory',
-                'ref': ref,
-                'commit': format_commit_func(commit_obj, detailed=True),
-                'history': commits,
-                'filter_applied': bool(query_filters),
-            }
+            return ResultBuilder.create(
+                result_type='git_ref',
+                source=f"{repo.workdir or repo.path}@{ref}",
+                source_type='directory',
+                ref=ref,
+                commit=format_commit_func(commit_obj, detailed=True),
+                history=commits,
+                filter_applied=bool(query_filters),
+            )
         else:
             raise ValueError(f"Cannot resolve ref to commit: {ref}")
 

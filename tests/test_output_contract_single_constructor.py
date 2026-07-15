@@ -35,7 +35,7 @@ _CANONICAL = {
 
 # Frozen baseline — occurrences of a hand-built ``'contract_version':`` dict
 # key outside the canonical files. Ratchet: may shrink, must never grow.
-BASELINE = 154
+BASELINE = 145
 
 _LITERAL = re.compile(r"""['"]contract_version['"]\s*:""")
 

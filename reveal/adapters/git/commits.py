@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 
 from ...utils.query import apply_result_control
+from ...utils.results import ResultBuilder
 
 if TYPE_CHECKING:
     import pygit2
@@ -22,30 +23,29 @@ def get_repository_overview(
     tags = list_tags_func(repo)
     recent_commits = get_recent_commits_func(repo, limit=10)
 
-    return {
-        'contract_version': '1.0',
-        'type': 'git_repository',
-        'source': repo.workdir or repo.path,
-        'source_type': 'directory',
-        'path': repo.workdir or repo.path,
-        'head': head_info,
-        'branches': {
+    return ResultBuilder.create(
+        result_type='git_repository',
+        source=repo.workdir or repo.path,
+        source_type='directory',
+        path=repo.workdir or repo.path,
+        head=head_info,
+        branches={
             'count': len(list(repo.branches.local)),
             'recent': branches[:10],
         },
-        'tags': {
+        tags={
             'count': len([ref for ref in repo.references if ref.startswith('refs/tags/')]),
             'recent': tags[:10],
         },
-        'commits': {
+        commits={
             'recent': recent_commits,
         },
-        'stats': {
+        stats={
             'is_bare': repo.is_bare,
             'is_empty': repo.is_empty,
             'head_detached': repo.head_is_detached if not repo.is_empty else False,
         }
-    }
+    )
 
 
 def get_recent_commits(

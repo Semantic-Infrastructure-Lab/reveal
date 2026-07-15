@@ -64,34 +64,32 @@ def get_file_at_ref(
             }
 
             if raw:
-                return {
-                    'contract_version': '1.0',
-                    'type': 'git_file',
-                    'source': f"{subpath}@{ref}",
-                    'source_type': 'file',
-                    'path': subpath,
-                    'ref': ref,
-                    'commit': short_hash,
-                    'commit_info': commit_info,
-                    'size': blob.size,
-                    'content': content,
-                    'lines': line_count,
-                }
+                return ResultBuilder.create(
+                    result_type='git_file',
+                    source=f"{subpath}@{ref}",
+                    source_type='file',
+                    path=subpath,
+                    ref=ref,
+                    commit=short_hash,
+                    commit_info=commit_info,
+                    size=blob.size,
+                    content=content,
+                    lines=line_count,
+                )
 
             structure = _analyze_blob_content(content, subpath)
-            return {
-                'contract_version': '1.0',
-                'type': 'git_file_structure',
-                'source': f"{subpath}@{ref}",
-                'source_type': 'file',
-                'path': subpath,
-                'ref': ref,
-                'commit': short_hash,
-                'commit_info': commit_info,
-                'size': blob.size,
-                'lines': line_count,
-                'structure': structure,
-            }
+            return ResultBuilder.create(
+                result_type='git_file_structure',
+                source=f"{subpath}@{ref}",
+                source_type='file',
+                path=subpath,
+                ref=ref,
+                commit=short_hash,
+                commit_info=commit_info,
+                size=blob.size,
+                lines=line_count,
+                structure=structure,
+            )
         else:
             raise ValueError(
                 f"Path is not a file: {subpath}\n"
@@ -180,18 +178,17 @@ def get_file_diff(
         'message': commit.message.split('\n')[0].strip(),
     }
 
-    return {
-        'contract_version': '1.0',
-        'type': 'git_file_diff',
-        'source': f"{subpath}@{ref}",
-        'source_type': 'file',
-        'path': subpath,
-        'ref': ref,
-        'commit': short_hash,
-        'commit_info': commit_info,
-        'diff_text': diff_text,
-        'element_filter': element,
-    }
+    return ResultBuilder.create(
+        result_type='git_file_diff',
+        source=f"{subpath}@{ref}",
+        source_type='file',
+        path=subpath,
+        ref=ref,
+        commit=short_hash,
+        commit_info=commit_info,
+        diff_text=diff_text,
+        element_filter=element,
+    )
 
 
 def _filter_diff_to_element(diff_text: str, element: str) -> str:
@@ -273,17 +270,16 @@ def get_file_history(
         total_matches = len(commits)
         controlled_commits = apply_result_control(commits, result_control)
 
-        return {
-            'contract_version': '1.0',
-            'type': 'git_file_history',
-            'source': f"{subpath}@{ref}",
-            'source_type': 'file',
-            'path': subpath,
-            'ref': ref,
-            'commits': controlled_commits,
-            'count': len(controlled_commits),
-            'total_matches': total_matches if total_matches != len(controlled_commits) else None,
-        }
+        return ResultBuilder.create(
+            result_type='git_file_history',
+            source=f"{subpath}@{ref}",
+            source_type='file',
+            path=subpath,
+            ref=ref,
+            commits=controlled_commits,
+            count=len(controlled_commits),
+            total_matches=total_matches if total_matches != len(controlled_commits) else None,
+        )
 
     except (KeyError, pygit2.GitError) as e:
         raise ValueError(f"Failed to get file history: {subpath}") from e
@@ -615,19 +611,18 @@ def get_file_blame(
 
         detail_mode = query.get('detail') == 'full'
 
-        result = {
-            'contract_version': '1.0',
-            'type': 'git_file_blame',
-            'source': f"{subpath}@{ref}",
-            'source_type': 'file',
-            'path': subpath,
-            'ref': ref,
-            'commit': str(commit.id)[:7],
-            'lines': len(lines),
-            'hunks': hunks,
-            'file_content': lines,
-            'detail': detail_mode,
-        }
+        result = ResultBuilder.create(
+            result_type='git_file_blame',
+            source=f"{subpath}@{ref}",
+            source_type='file',
+            path=subpath,
+            ref=ref,
+            commit=str(commit.id)[:7],
+            lines=len(lines),
+            hunks=hunks,
+            file_content=lines,
+            detail=detail_mode,
+        )
 
         if getattr(repo, 'is_shallow', False):
             result['shallow_clone'] = True
@@ -736,19 +731,18 @@ def get_ownership(
         repo, commit, git_subpath, include_merges, limit
     )
 
-    result: Dict[str, Any] = {
-        'contract_version': '1.0',
-        'type': 'git_ownership',
-        'source': f"{git_subpath or '.'}@{ref}",
-        'source_type': source_type,
-        'path': git_subpath or '.',
-        'ref': ref,
-        'total_commits': total,
-        'contributor_count': len(author_list),
-        'primary_author': author_list[0] if author_list else None,
-        'last_touch': max((a['last_touch'] for a in author_list), default=None),
-        'authors': author_list,
-        '_meta': {
+    result: Dict[str, Any] = ResultBuilder.create(
+        result_type='git_ownership',
+        source=f"{git_subpath or '.'}@{ref}",
+        source_type=source_type,
+        path=git_subpath or '.',
+        ref=ref,
+        total_commits=total,
+        contributor_count=len(author_list),
+        primary_author=author_list[0] if author_list else None,
+        last_touch=max((a['last_touch'] for a in author_list), default=None),
+        authors=author_list,
+        _meta={
             'analysis_kind': 'commit-ownership',
             'confidence': 'high',
             'known_limits': [
@@ -757,7 +751,7 @@ def get_ownership(
                 'author identity is name+email — aliases / multiple emails count as distinct contributors',
             ],
         },
-    }
+    )
 
     if getattr(repo, 'is_shallow', False):
         result['shallow_clone'] = True
