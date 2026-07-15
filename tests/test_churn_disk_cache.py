@@ -93,7 +93,6 @@ class TestChurnDiskCache:
         before = get_churn_counts(repo, 'HEAD', None)
         assert before == {'a.py': 2, 'b.py': 1}
 
-        author = repo.default_signature if repo.default_signature else None
         import pygit2
         author = pygit2.Signature("Test", "test@example.com")
         (repo_dir / "b.py").write_text("def b(): return 1\n")
