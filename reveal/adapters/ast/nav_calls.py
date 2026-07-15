@@ -459,7 +459,10 @@ def _subtree_contains_call(node: Any, call_node_types: frozenset) -> bool:
 def _extract_first_arg(call_node: Any, get_text: Callable) -> tuple:
     """Extract the first argument and whether more args follow."""
     for child in _children(call_node):
-        if child.kind() in ('argument_list', 'arguments', 'call_arguments'):
+        # 'token_tree': Rust macro_invocation's argument container (e.g.
+        # `tracing::debug!("msg", x)`'s `("msg", x)`) -- not an
+        # argument_list, but shaped the same way for this purpose.
+        if child.kind() in ('argument_list', 'arguments', 'call_arguments', 'token_tree'):
             real_args = [
                 c for c in _children(child)
                 if c.kind() not in ('(', ')', ',', 'comment') and c.is_named()

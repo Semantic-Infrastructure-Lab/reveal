@@ -295,7 +295,53 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
     'rust': [
         ('hard_stop', ['std::process::exit']),
         ('file', ['std::fs']),
-        ('env', ['std::env']),
+        ('env', [
+            'std::env',
+            # BACK-547 ninth loop: `use std::env;` then bare `env::var(...)`/
+            # `env::var_os(...)` is the idiomatic form once imported (milli
+            # corpus: env_var_or in vector/store.rs) -- the fully-qualified
+            # `std::env` entry above never matches this since the `std`
+            # segment is absent. 'env::' scoped to rust is unambiguous (not
+            # a generic English word like 'debug'/'error' below).
+            'env::var', 'env::var_os', 'env::set_var', 'env::remove_var',
+        ]),
+        # BACK-547 ninth loop: heed (LMDB binding, this corpus's dominant
+        # db layer) transactions are acquired via `.read_txn()`/
+        # `.write_txn()` -- often the ONLY db-shaped call in a function
+        # whose real database access happens through an opaque already-open
+        # `&rtxn` parameter with no further textual signal. Not in
+        # _TAXONOMY_COMMON at all (no prior language needed them).
+        # Deliberately does NOT include a bare `.commit` entry: since
+        # per-language tables are merged into BOTH the scoped `rust` table
+        # AND the fully-unscoped `_COMPILED_ALL` table (there is no
+        # "visible only when scoped" tier), a bare `.commit` pattern
+        # regressed the existing BACK-594 `conn`/`connection` precedent
+        # live in this loop's own test run --
+        # `classify_call('conn.commit')` (unscoped) started returning 'db'
+        # again, the same cross-language receiver-name collision BACK-594
+        # already declined. `RwTxn`/`RoTxn` are TYPE annotations, never
+        # callee text, so a bare-name pattern for them could never actually
+        # match anyway. `read_txn`/`write_txn` are safe: compound,
+        # heed-specific method names with no found collision.
+        ('db', ['read_txn', 'write_txn']),
+        # BACK-547 ninth loop (sideeffects-recall-oracle/rust, real-corpus
+        # measurement on Meilisearch's milli engine): Rust logging is done
+        # almost exclusively via the `tracing`/`log` crates' macros
+        # (`tracing::debug!(...)`, or bare `debug!(...)` after a `use
+        # tracing::debug` import) -- these were the dominant 'log' miss
+        # category once BACK-547's companion fix (macro_invocation added to
+        # CALL_NODE_TYPES) made the calls visible at all. Scoped to 'rust'
+        # (not common) because bare 'info'/'warn'/'error'/'debug'/'trace'
+        # are generic English words with real non-log collision risk in
+        # other languages (e.g. Python's `logging.info` already covered by
+        # the common `log.` prefix pattern; a bare unscoped 'error' would
+        # falsely tag ordinary error-handling calls named `.error()`
+        # unrelated to logging).
+        ('log', [
+            'tracing::info', 'tracing::warn', 'tracing::error',
+            'tracing::debug', 'tracing::trace',
+            'log::info', 'log::warn', 'log::error', 'log::debug', 'log::trace',
+        ]),
     ],
     'java': [
         # BACK-639 (sideeffects-recall-oracle/java, real-corpus measurement on

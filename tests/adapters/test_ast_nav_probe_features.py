@@ -1277,7 +1277,7 @@ class TestClassifyCallReceiver(unittest.TestCase):
         # explicit `session.<orm-verb>` python patterns and the common
         # `->execute`/`->commit`-shaped verbs (e.g. `connection.execute`).
         from reveal.adapters.ast.nav_effects import classify_call
-        self.assertIsNone(classify_call('conn.commit'))
+        self.assertIsNone(classify_call('conn::commit'))
         self.assertIsNone(classify_call('connection.close'))
         # Go corpus false positives that motivated the removal:
         self.assertIsNone(classify_call('conn.Close', language='go'))
@@ -4013,6 +4013,106 @@ class TestBack650OverloadDisambiguation(unittest.TestCase):
     def test_pick_best_candidate_single_candidate_returned_directly(self):
         from reveal.file_handler import _pick_best_candidate
         self.assertEqual(_pick_best_candidate(['only']), 'only')
+
+
+# ─── BACK-547 ninth loop (Rust sideeffects-recall-oracle, real-corpus
+# measurement on Meilisearch's milli engine): `macro_invocation` (Rust's
+# grammar node for `tracing::debug!(...)`, `println!(...)`, etc.) was
+# entirely absent from CALL_NODE_TYPES -- every macro call was invisible to
+# --calls/--sideeffects/--boundary, not just a taxonomy gap. Since Rust
+# logging is done almost exclusively via macros (the `tracing`/`log`
+# crates), this was the single dominant recall gap (31.58%->68.42% recall
+# jump from this fix alone, before any taxonomy change). Fixed by adding
+# 'macro_invocation' to CALL_NODE_TYPES and 'token_tree' (its argument
+# container, not 'arguments') to _extract_first_arg's recognized kinds --
+# the existing generic callee-extraction fallback already produced the
+# right callee string with no further special-casing needed.
+
+class TestBack547RustMacroInvocation(unittest.TestCase):
+    def _parse(self, src):
+        parser = ts.get_parser('rust')
+        content_bytes = src.encode('utf-8')
+        tree = parser.parse(src)
+        root = tree.root_node()
+
+        def get_text(node):
+            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return root, get_text
+
+    def test_scoped_macro_call_visible_to_range_calls(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        root, get_text = self._parse(textwrap.dedent("""
+        fn foo() {
+            tracing::debug!("processing {} docs", 5);
+        }
+        """).lstrip('\n'))
+        calls = range_calls(root, 1, 999, get_text)
+        callees = [c['callee'] for c in calls]
+        # Regression: pre-fix, macro_invocation wasn't in CALL_NODE_TYPES at
+        # all, so this list was empty -- the macro call was invisible.
+        self.assertIn('tracing::debug', callees)
+
+    def test_bare_macro_call_visible_to_range_calls(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        root, get_text = self._parse(textwrap.dedent("""
+        fn foo() {
+            println!("world");
+        }
+        """).lstrip('\n'))
+        calls = range_calls(root, 1, 999, get_text)
+        callees = [c['callee'] for c in calls]
+        self.assertIn('println', callees)
+
+    def test_tracing_macro_classified_as_log_effect(self):
+        from reveal.adapters.ast.nav_effects import collect_effects
+        root, get_text = self._parse(textwrap.dedent("""
+        fn foo() {
+            tracing::warn!("Attempt #{}, retrying after {}ms.", 1, 50);
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        """).lstrip('\n'))
+        effects = collect_effects(root, 1, 999, get_text, language='rust')
+        kinds = [(e['line'], e['kind']) for e in effects]
+        self.assertIn((2, 'log'), kinds)
+        self.assertIn((3, 'sleep'), kinds)
+
+    def test_macro_invocation_in_call_node_types(self):
+        from reveal.treesitter import CALL_NODE_TYPES
+        self.assertIn('macro_invocation', CALL_NODE_TYPES)
+
+
+class TestBack547RustDbEnvTaxonomy(unittest.TestCase):
+    """heed (LMDB binding) transaction acquisition (`.read_txn()`/
+    `.write_txn()`) and bare `env::var` (after `use std::env;`) were both
+    unclassified -- neither carries the `std::`/type-name prefix the prior
+    rust taxonomy entries required. Deliberately no bare `.commit` entry:
+    since per-language taxonomy tables are also merged into the fully
+    unscoped `_COMPILED_ALL` table, a bare `.commit` pattern regressed the
+    existing BACK-594 `conn`/`connection` precedent live in this loop's own
+    test run (`classify_call('conn::commit')`, unscoped, started returning
+    'db' again) -- `read_txn`/`write_txn` alone were sufficient for full
+    corpus recall on this category."""
+
+    def test_read_txn_write_txn_classified_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('index::read_txn', language='rust'), 'db')
+        self.assertEqual(classify_call('index::write_txn', language='rust'), 'db')
+
+    def test_bare_commit_not_added_unscoped(self):
+        # Regression guard for the BACK-594 conn/connection precedent this
+        # loop nearly broke -- 'commit' must stay OUT of the rust taxonomy
+        # as a bare unscoped-visible pattern.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('conn::commit'))
+
+    def test_bare_env_var_classified_env(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('env::var', language='rust'), 'env')
+        self.assertEqual(classify_call('env::var_os', language='rust'), 'env')
+
+    def test_fully_qualified_std_env_still_classified(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('std::env::var', language='rust'), 'env')
 
 
 if __name__ == '__main__':

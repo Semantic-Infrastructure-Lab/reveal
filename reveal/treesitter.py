@@ -201,6 +201,17 @@ CALL_NODE_TYPES = {
     'invocation_expression',   # C#
     'function_call',           # Lua, Bash
     'method_invocation',       # Java
+    # Rust macro invocations (`tracing::debug!(...)`, `println!(...)`,
+    # `vec![...]`) are a distinct grammar node, NOT call_expression --
+    # entirely invisible to --calls/--sideeffects/--boundary without this
+    # (BACK-547 ninth loop, Rust sideeffects-recall-oracle: this was the
+    # single dominant recall gap, since Rust logging is done almost
+    # exclusively via macros, not calls). child(0) is the macro name
+    # (identifier or scoped_identifier, e.g. "tracing::debug") followed by
+    # a literal `!` token and a `token_tree` holding the args -- the
+    # existing generic callee-extraction fallback (child(0) text) already
+    # produces the right callee string with no further special-casing.
+    'macro_invocation',         # Rust
 }
 
 # Callee node types for attribute/member access (self.foo, obj.method, pkg.Func)
