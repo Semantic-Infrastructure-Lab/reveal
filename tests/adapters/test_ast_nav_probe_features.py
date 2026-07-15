@@ -1883,6 +1883,104 @@ class TestClassifyCallLanguageScoping(unittest.TestCase):
         self.assertIsNone(classify_call('cache.NewIndexer', language='go'))
 
 
+class TestTypeScriptEffectsBack547(unittest.TestCase):
+    """BACK-547 fifth language (sideeffects-recall-oracle, TypeScript/VS Code
+    corpus, 65,008 functions). Pre-flight check (following the C++ loop's own
+    carried-forward note) found a real collision before any oracle code was
+    written: bare 'fetch' matched via _TAXONOMY_COMMON's `->fetch` (a bare
+    verb kept common for PHP's `$stmt->fetch()`/Python DB-API recall) beat
+    js's own explicit http 'fetch(' entry, because db precedes http in
+    _KIND_ORDER — every JS/TS global `fetch()` HTTP call silently classified
+    as db instead."""
+
+    def test_js_bare_fetch_classifies_as_http_not_db(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('fetch', language='typescript'), 'http')
+        self.assertEqual(classify_call('fetch', language='javascript'), 'http')
+
+    def test_php_arrow_fetch_still_classifies_as_db(self):
+        # ->fetch moved from _TAXONOMY_COMMON to _TAXONOMY_BY_LANG['php'] —
+        # PHP's $stmt->fetch() (PDOStatement/mysqli_result row fetch) must
+        # keep working, scoped or unscoped.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('$stmt->fetch', language='php'), 'db')
+        self.assertEqual(classify_call('$stmt->fetch'), 'db')  # unscoped
+
+    def test_bare_fetch_no_longer_db_for_other_languages(self):
+        # Corpus-confirmed (samples/python): bare `.fetch(` has zero real
+        # occurrences in Python — only PHP genuinely needs it.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('fetch', language='python'))
+        self.assertIsNone(classify_call('fetch', language='go'))
+
+    def test_js_indexeddb_classified_as_db(self):
+        # Real corpus miss: indexedDB.deleteDatabase(database.name) in
+        # src/vs/base/browser/indexedDB.ts:deleteDatabase — js had no db
+        # bucket at all before this loop.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('indexedDB.deleteDatabase', language='typescript'), 'db')
+        self.assertEqual(classify_call('indexedDB.open', language='typescript'), 'db')
+        self.assertEqual(classify_call('db.createObjectStore', language='typescript'), 'db')
+        self.assertIsNone(classify_call('indexedDB.deleteDatabase', language='python'))
+
+    def test_js_node_http_stdlib_classified_as_http(self):
+        # Real corpus miss: https.get(requestOptions, ...) in
+        # extensions/vscode-test-resolver/src/download.ts:
+        # downloadVSCodeServerArchive.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('https.get', language='typescript'), 'http')
+        self.assertEqual(classify_call('http.get', language='typescript'), 'http')
+        self.assertEqual(classify_call('https.request', language='typescript'), 'http')
+        self.assertEqual(classify_call('http.request', language='typescript'), 'http')
+
+    def test_js_request_service_wrapper_declined_project_specific(self):
+        # VS Code's own `requestService.request(...)` internal abstraction
+        # (3 real corpus misses: abstractUpdateService.ts:isLatestVersion,
+        # updateService.linux.ts:doCheckForUpdates,
+        # userDataProfileInit.ts:doGetProfileTemplate) is deliberately NOT
+        # added — a single-repo internal wrapper name, same declined shape
+        # as Python's async_get_clientsession (BACK-634) and Go's client.Do
+        # (BACK-633).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('requestService.request', language='typescript'))
+
+    def test_js_process_env_stays_unclassified_no_dead_pattern(self):
+        # BACK-644: process.env.FOO / process.env['FOO'] is a property/
+        # subscript READ, never a call_expression, so range_calls() never
+        # extracts it as a callee in the first place — a taxonomy pattern
+        # for it would be permanently dead code (verified: 0/26 real corpus
+        # hits with the pattern present). Deliberately NOT added — locks in
+        # that classify_call('process.env', ...) has no js env entry to
+        # false-confidence future readers into thinking env classification
+        # works for JS/TS.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('process.env', language='typescript'))
+
+    def test_process_env_read_produces_no_call_site_at_all(self):
+        # BACK-644, end-to-end: confirms the gap is in range_calls()'s
+        # call_expression-only extraction, not just classify_call — a real
+        # parsed function whose ONLY effect is a process.env property read
+        # yields ZERO call sites, so collect_effects has nothing to classify
+        # even in principle.
+        from reveal.adapters.ast.nav_effects import collect_effects
+        parser = ts.get_parser('typescript')
+        src = textwrap.dedent("""
+        function readToken() {
+            const token = process.env.MY_TOKEN;
+            return token;
+        }
+        """).lstrip('\n')
+        content_bytes = src.encode('utf-8')
+        tree = parser.parse(src)
+        root = tree.root_node()
+
+        def get_text(node):
+            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+        effects = collect_effects(root, 1, 999, get_text, language='typescript')
+        self.assertEqual(effects, [])
+
+
 class TestCollectEffects(unittest.TestCase):
 
     def setUp(self):

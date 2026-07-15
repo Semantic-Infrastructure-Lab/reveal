@@ -44,11 +44,17 @@ _TAXONOMY_COMMON: List[Tuple[str, List[str]]] = [
         # Home Assistant, incl. 2/60 negative-control FPs) and stole Python's
         # `requests.delete(url)` from http (kind-order db<http let bare `delete`
         # win over the explicit python `requests.delete`->http). `->query`/
-        # `->execute`/`->fetch`/`->select`/`->insert` stay common: their bare
-        # forms (`query`/`execute`/`fetch`/`select`/`insert`) are load-bearing for
-        # Python SQLAlchemy recall (`session.query`, `cursor.execute`) and did not
-        # produce corpus FPs.
-        '->query', '->execute', '->fetch', '->select', '->insert',
+        # `->execute`/`->select`/`->insert` stay common: their bare forms
+        # (`query`/`execute`/`select`/`insert`) are load-bearing for Python
+        # SQLAlchemy recall (`session.query`, `cursor.execute`) and did not
+        # produce corpus FPs. `->fetch` was REMOVED (TS sideeffects-recall-oracle
+        # pre-flight check, BACK-547 fifth loop): its bare form ('fetch') collided
+        # with JS/TS's global `fetch()` — the dominant modern HTTP call idiom —
+        # stealing it from the js-language http bucket's own explicit 'fetch('
+        # entry, since db precedes http in _KIND_ORDER. Confirmed via corpus grep
+        # (samples/python) that bare `.fetch(` has zero real occurrences in Python
+        # — only PHP's `$stmt->fetch()` needs it (see _TAXONOMY_BY_LANG['php']).
+        '->query', '->execute', '->select', '->insert',
         '::query', '::execute',
         'db_query', 'db_insert', 'db_update', 'db_delete',
     ]),
@@ -99,6 +105,11 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             # is behavior-preserving there; it only tightens the per-language
             # scoped tables.)
             '->update', '->delete',
+            # Moved from _TAXONOMY_COMMON (TS sideeffects-recall-oracle,
+            # BACK-547 fifth loop): bare 'fetch' collided with JS/TS's global
+            # `fetch()` HTTP call. PHP's `$stmt->fetch()` (PDOStatement/
+            # mysqli_result row fetch) is the only real, corpus-confirmed user.
+            '->fetch',
         ]),
         ('http', [
             'curl_exec', 'curl_setopt', 'curl_init',
@@ -189,9 +200,42 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         ('sleep', ['time.sleep', 'asyncio.sleep', 'gevent.sleep']),
     ],
     'js': [
-        ('http', ['fetch(']),
+        # BACK-547 (sideeffects-recall-oracle, fifth loop, real-corpus
+        # measurement on VS Code's src/vs + extensions, 65,008 functions):
+        # this bucket previously had ZERO db/file/env entries — only http/
+        # log/sleep — despite js/ts being the language most-tested by the
+        # program's own dogfooding (never actually corpus-validated before).
+        ('db', [
+            # Browser IndexedDB API — the dominant client-side db idiom with
+            # no server/db process. Real miss: `indexedDB.deleteDatabase(...)`
+            # (src/vs/base/browser/indexedDB.ts:deleteDatabase). Dotted /
+            # specific-verb forms => negligible collision risk.
+            'indexeddb.open', 'indexeddb.deletedatabase', 'createobjectstore',
+        ]),
+        ('http', [
+            'fetch(',
+            # Node stdlib http/https modules — real miss: `https.get(...)`
+            # (extensions/vscode-test-resolver/src/download.ts:
+            # downloadVSCodeServerArchive). Dotted => zero collision risk.
+            # NOT added: VS Code's own `requestService.request(...)`
+            # wrapper (3 real misses) — a single-repo internal abstraction
+            # name, same declined shape as the Python loop's
+            # `async_get_clientsession` (BACK-634) and Go's `client.Do`
+            # (BACK-633): not a public stdlib/ecosystem idiom, belongs in
+            # `.reveal.yaml` project-scoping (BACK-238) if ever addressed.
+            'http.get', 'http.request', 'https.get', 'https.request',
+        ]),
         ('log', ['console.log', 'console.error', 'console.warn']),
         ('sleep', ['setTimeout', 'setInterval']),
+        # NO env bucket (BACK-644): Node's dominant env-read idiom is
+        # `process.env.FOO` / `process.env['FOO']` — a plain property/index
+        # READ, not a call. classify_call() only ever sees callee text from
+        # range_calls()'s call_expression extraction (nav_calls.py), so no
+        # taxonomy pattern can classify this shape; a `('env', ['process.env'])`
+        # entry would be permanently dead code (verified: 0/26 real corpus
+        # hits even with the pattern present). See BACK-644 for the
+        # architectural gap this represents (collect_effects has no
+        # property-access side-effect channel at all, for any language).
     ],
     'go': [
         ('file', [
