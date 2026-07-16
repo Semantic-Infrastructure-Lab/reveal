@@ -164,6 +164,46 @@ class TestAnalyzerRegistryIntegrity(unittest.TestCase):
             f"production CLI use): {sorted(missing)}"
         )
 
+    def test_extension_collisions_are_documented_as_ambiguous(self):
+        """Every extension registered by more than one analyzer must be listed
+        in registry.AMBIGUOUS_EXTENSIONS (BACK-583).
+
+        The registry is a single dict slot per extension — a second @register
+        for the same extension silently overwrites the first, so introspection
+        callers (get_all_analyzers(), `reveal --languages`) report only the
+        last-registered class as if it were the only answer. That's fine when
+        real dispatch resolves the ambiguity via content/path sniffing (see
+        _try_conf_detection for '.conf'), but it must be a *documented*
+        exception, not a silent one — otherwise a new double-registration
+        (e.g. a future analyzer accidentally reusing an existing extension)
+        would introduce the same misleading-introspection bug with nothing
+        to catch it.
+        """
+        from reveal.registry import AMBIGUOUS_EXTENSIONS
+
+        analyzers_dir = Path(__file__).parent.parent / 'reveal' / 'analyzers'
+        registrations: Dict[str, Set[str]] = {}
+        for f in analyzers_dir.glob('*.py'):
+            if f.stem == '__init__':
+                continue
+            source = f.read_text(encoding='utf-8')
+            for match in re.finditer(r"@register\(([^)]*)\)", source):
+                for ext_match in re.finditer(r"'(\.[\w.]+)'|\"(\.[\w.]+)\"", match.group(1)):
+                    ext = (ext_match.group(1) or ext_match.group(2)).lower()
+                    registrations.setdefault(ext, set()).add(f.stem)
+
+        colliding = {ext: mods for ext, mods in registrations.items() if len(mods) > 1}
+        undocumented = set(colliding) - set(AMBIGUOUS_EXTENSIONS)
+        self.assertFalse(
+            undocumented,
+            f"Extension(s) registered by multiple analyzers but missing from "
+            f"registry.AMBIGUOUS_EXTENSIONS: "
+            f"{ {ext: sorted(colliding[ext]) for ext in undocumented} }. "
+            f"Either this is a real bug (accidental extension reuse), or it's "
+            f"intentional content-dependent dispatch — if the latter, add an "
+            f"entry to AMBIGUOUS_EXTENSIONS explaining how it resolves."
+        )
+
     def test_analyzer_count_is_consistent(self):
         """Analyzer count should be consistent with language claims.
 

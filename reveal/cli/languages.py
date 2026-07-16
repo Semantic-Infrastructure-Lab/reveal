@@ -15,7 +15,7 @@ def list_supported_languages() -> str:
     Returns:
         Formatted string showing explicit and fallback language support
     """
-    from ..registry import get_analyzer_mapping
+    from ..registry import get_analyzer_mapping, AMBIGUOUS_EXTENSIONS
 
     # Get explicit analyzers
     analyzer_mapping = get_analyzer_mapping()
@@ -63,7 +63,11 @@ def list_supported_languages() -> str:
         icon = info['icon']
         cap = get_capability(info['class'])
         tag = f" [{cap.conformance_level}]" if cap else ""
-        lines.append(f"  {icon} {name:20} ({ext}){tag}")
+        # BACK-583: this line's class is only the registry's last-registered
+        # winner for extensions registered by more than one analyzer — real
+        # dispatch resolves those by content/path sniffing instead.
+        marker = " *" if ext in AMBIGUOUS_EXTENSIONS else ""
+        lines.append(f"  {icon} {name:20} ({ext}){tag}{marker}")
 
     # Fallback section
     lines.append(f"\n🔄 Tree-sitter Fallback ({len(fallback_languages)})")
@@ -85,6 +89,13 @@ def list_supported_languages() -> str:
         "tier1-verified > smoke-tested > structure-only > untested. "
         "See: reveal --language-info <name>"
     )
+    ambiguous_in_output = {ext: note for ext, note in AMBIGUOUS_EXTENSIONS.items() if ext in explicit_extensions}
+    if ambiguous_in_output:
+        lines.append(
+            "\n* Content-dependent — actual analyzer chosen per-file, not by extension alone:"
+        )
+        for ext, note in sorted(ambiguous_in_output.items()):
+            lines.append(f"  {ext}: {note}")
 
     # Usage hints
     lines.append("\n💡 Usage:")

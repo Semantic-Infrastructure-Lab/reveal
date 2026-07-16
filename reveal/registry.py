@@ -60,6 +60,26 @@ TREESITTER_EXTENSION_MAP: Dict[str, str] = {
 # Registry for file type analyzers
 _ANALYZER_REGISTRY: Dict[str, type] = {}
 
+# BACK-583: extensions registered by more than one analyzer, where real
+# dispatch (get_analyzer()) resolves correctly via content/path sniffing
+# (e.g. _try_conf_detection for nginx-vs-ini '.conf' files) but the registry
+# itself is a single dict slot per extension — whichever analyzer's @register
+# decorator runs last at import time silently wins that slot. Introspection
+# callers that read the registry directly (get_all_analyzers(),
+# get_analyzer_mapping(), `reveal --languages`) would otherwise report that
+# one winner as *the* answer with no signal it's content-dependent. Extend
+# this when a new extension is double-registered — the KeyError-shaped ratchet
+# in tests/test_registry_integrity.py catches a double-registration that
+# isn't listed here.
+AMBIGUOUS_EXTENSIONS: Dict[str, str] = {
+    '.conf': (
+        "Content-dependent: nginx-shaped files route to NginxAnalyzer, "
+        "everything else to IniAnalyzer (see _try_conf_detection). This "
+        "entry reflects only the registry's last-registered class, not "
+        "necessarily what a given file resolves to."
+    ),
+}
+
 # Plugin discovery state — reset via _reset_plugin_discovery() in tests
 _plugins_loaded: bool = False
 
@@ -446,6 +466,11 @@ def get_all_analyzers() -> Dict[str, Dict[str, Any]]:
             'is_fallback': getattr(cls, 'is_fallback', False),
             'fallback_quality': getattr(cls, 'fallback_quality', None),
             'fallback_language': getattr(cls, 'fallback_language', None),
+            # BACK-583: non-None means this extension is registered by more
+            # than one analyzer and real dispatch resolves it by content/path
+            # sniffing — 'class' above is only the registry's last-registered
+            # winner, not necessarily what a given file actually uses.
+            'content_ambiguous': AMBIGUOUS_EXTENSIONS.get(ext),
         }
     return result
 

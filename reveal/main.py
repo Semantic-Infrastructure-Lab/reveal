@@ -536,8 +536,17 @@ def list_supported_types() -> None:
     sorted_analyzers = sorted(analyzers.items(), key=lambda x: x[1]['name'])
     print("Built-in Analyzers:")
     for ext, info in sorted_analyzers:
-        print(f"  {info['name']:20s} {ext}")
+        marker = " *" if info.get('content_ambiguous') else ""
+        print(f"  {info['name']:20s} {ext}{marker}")
     print(f"\nTotal: {len(analyzers)} file types with full support")
+
+    # BACK-583: flag extensions whose actual analyzer is content-dependent —
+    # the line above only shows the registry's last-registered winner.
+    ambiguous = [(ext, info) for ext, info in sorted_analyzers if info.get('content_ambiguous')]
+    if ambiguous:
+        print("\n* Content-dependent — actual analyzer chosen per-file, not by extension alone:")
+        for ext, info in ambiguous:
+            print(f"  {ext}: {info['content_ambiguous']}")
 
     # Check for tree-sitter fallback support
     fallbacks = _get_tree_sitter_fallbacks(analyzers)
