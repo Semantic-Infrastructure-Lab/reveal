@@ -313,7 +313,11 @@ def find_callees(
     for file_struct in structures:
         file_path = file_struct.get('file', '')
         for elem in file_struct.get('elements', []):
-            if elem.get('category') not in ('functions', 'methods'):
+            # 'tests' included for the same reason as build_callers_index
+            # (BACK-663): a Zig test is a valid call *source* now that it
+            # carries a populated `calls` list (BACK-660) — "what does this
+            # test call" should work the same way "what calls X" already does.
+            if elem.get('category') not in ('functions', 'methods', 'tests'):
                 continue
             if elem.get('name', '') != target:
                 continue
@@ -347,7 +351,9 @@ def _build_forward_index(
     for file_struct in structures:
         file_path = file_struct.get('file', '')
         for elem in file_struct.get('elements', []):
-            if elem.get('category') not in ('functions', 'methods'):
+            # 'tests' included so a recursive walk (find_callees_recursive) can
+            # start from or pass through a Zig test root (BACK-663).
+            if elem.get('category') not in ('functions', 'methods', 'tests'):
                 continue
             name = elem.get('name', '')
             if not name:
@@ -655,6 +661,8 @@ def find_uncalled(
     - Test-runner entry points (pytest/unittest, xUnit ``[Fact]``/``[Theory]``,
       JUnit ``@Test``, …) — invoked by reflection, not a call (BACK-446).
       Set ``include_test_framework=True`` to keep them in the result.
+    - Zig ``test`` blocks (category='tests') — always entry points invoked by
+      the test runner, never by name (BACK-663). Same opt-out flag applies.
 
     Args:
         path: Root directory (or file) to analyse.
@@ -692,15 +700,24 @@ def find_uncalled(
         if file_filter and str(Path(file_path).resolve()) != file_filter:
             continue
         for elem in file_struct.get('elements', []):
-            if elem.get('category') not in ('functions', 'methods'):
+            category = elem.get('category')
+            if category not in ('functions', 'methods', 'tests'):
                 continue
             name = elem.get('name', '')
             if not name:
                 continue
 
+            total_defined += 1
+
+            # Zig test blocks are unambiguously entry points (BACK-663) — no
+            # per-language name/decorator heuristic needed the way pytest's
+            # test_-prefix convention requires one, category says it all.
+            if category == 'tests' and not include_test_framework:
+                test_entrypoints_excluded += 1
+                continue
+
             decorator_names = _get_decorator_names(elem)
             is_method = _is_method_elem(elem, decorator_names)
-            total_defined += 1
 
             line_no = elem.get('line', 0)
             if _is_implicit_element(name, is_method, decorator_names, only_functions):
@@ -847,7 +864,9 @@ def build_module_dependency_graph(
         symbol_map = sym_cache[from_file]
 
         for elem in file_struct.get('elements', []):
-            if elem.get('category') not in ('functions', 'methods'):
+            # 'tests' included so a Zig test file's calls into other modules
+            # register as real module-dependency edges (BACK-663).
+            if elem.get('category') not in ('functions', 'methods', 'tests'):
                 continue
             raw_calls = elem.get('calls', [])
             if not raw_calls:
