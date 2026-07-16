@@ -39,6 +39,11 @@ class V004(BaseRule):
         'javascript': 'test_new_analyzers.py',
         'typescript': 'test_new_analyzers.py',
         'python': 'test_treesitter_utf8.py',  # Also in test_shebang_detection.py
+        # BACK-662: not a registered analyzer itself, a mixin shared by
+        # JavaScriptAnalyzer/TypeScriptAnalyzer's describe/it/test extraction —
+        # exercised by TestBack334TestCallbacks there (plus JS-side coverage in
+        # test_new_analyzers.py and the BACK-530 conformance-fixture audit).
+        '_js_test_callbacks': 'test_typescript_react.py',
     }
 
     def check(self,
