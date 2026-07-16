@@ -34,6 +34,7 @@ from reveal.rules.validation.V022 import V022
 from reveal.rules.validation.V023 import V023
 from reveal.rules.validation.V027 import V027
 from reveal.rules.validation.V028 import V028
+from reveal.rules.validation.V029 import V029
 from reveal.rules.validation.utils import find_reveal_root
 
 
@@ -2694,6 +2695,102 @@ class TestV028HelpDataNoQueryParams(unittest.TestCase):
         self.assertTrue(
             yamls, "V028 finds no help_data yaml files -> check() is a no-op"
         )
+
+
+class TestV029RuleCount(unittest.TestCase):
+    """Test V029: Quality rule count accuracy in documentation."""
+
+    def setUp(self):
+        self.rule = V029()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V029")
+        self.assertEqual(self.rule.severity.name, "MEDIUM")
+        self.assertIn("rule count", self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        """Test that non-reveal URIs are ignored."""
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        """Test that reveal:// URIs are processed."""
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        # Should return detections list
+        self.assertIsInstance(detections, list)
+
+    def test_count_enabled_rules(self):
+        """Test that _count_enabled_rules returns valid count, internal included."""
+        count = self.rule._count_enabled_rules()
+        if count is not None:
+            self.assertIsInstance(count, int)
+            self.assertGreater(count, 0)
+
+    def test_extract_rule_count_patterns(self):
+        """Test that quality-rule count patterns are detected."""
+        from reveal.rules.validation.utils import scan_doc_for_counts
+        doc_content = """
+# Reveal
+
+5. **80 quality rules via `reveal check`** — 14 categories.
+
+Also ships 81+ quality rules in the next release.
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write(doc_content)
+            doc_path = Path(f.name)
+
+        try:
+            claims = scan_doc_for_counts(doc_path, self.rule._RULE_COUNT_PATTERNS)
+            counts = [count for _, count in claims]
+            self.assertIn(80, counts)
+            self.assertIn(81, counts)
+        finally:
+            doc_path.unlink()
+
+    def test_mismatch_flagged(self):
+        """A doc claiming a wrong rule count is flagged (strict equality, not floor)."""
+        actual = self.rule._count_enabled_rules()
+        self.assertIsNotNone(actual)
+        wrong = actual + 1
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'reveal' / 'docs').mkdir(parents=True)
+            (root / 'reveal' / 'docs' / 'WHY_REVEAL.md').write_text(
+                f"5. **{wrong} quality rules via `reveal check`** — 14 categories.\n"
+            )
+            with patch('reveal.rules.validation.V029.find_reveal_root',
+                       return_value=root / 'reveal'):
+                detections = self.rule.check('reveal://', None, '')
+        self.assertTrue(
+            any(str(wrong) in d.message for d in detections),
+            f"V029 did not flag an incorrect rule count claim of {wrong}: "
+            f"{[d.message for d in detections]}",
+        )
+
+    def test_correct_count_not_flagged(self):
+        """A doc with the exact current rule count produces no detection."""
+        actual = self.rule._count_enabled_rules()
+        self.assertIsNotNone(actual)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'reveal' / 'docs').mkdir(parents=True)
+            (root / 'reveal' / 'docs' / 'WHY_REVEAL.md').write_text(
+                f"5. **{actual} quality rules via `reveal check`** — 14 categories.\n"
+            )
+            with patch('reveal.rules.validation.V029.find_reveal_root',
+                       return_value=root / 'reveal'):
+                detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(detections, [])
 
 
 if __name__ == '__main__':
