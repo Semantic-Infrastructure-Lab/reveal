@@ -153,6 +153,31 @@ success "Pre-flight checks passed"
 echo
 
 # ============================================================================
+# CI STATUS CHECK (BACK-578)
+# ============================================================================
+# A red GitHub Actions "Tests" run on master previously did not block a
+# release (v0.105.0 shipped while master was red for ~1 day). The test suite
+# below runs pytest locally, which can pass even when CI failed on a
+# platform/environment this machine doesn't cover — so that alone isn't
+# sufficient. Require the actual GitHub Actions run for this exact commit to
+# be green before releasing it.
+
+info "Checking GitHub Actions Tests status for HEAD..."
+
+HEAD_SHA=$(git rev-parse HEAD)
+CI_CONCLUSION=$(gh run list --workflow test.yml --json headSha,conclusion,status -L 100 \
+    --jq ".[] | select(.headSha == \"$HEAD_SHA\") | .conclusion" | head -1)
+
+if [ -z "$CI_CONCLUSION" ]; then
+    error "No GitHub Actions Tests run found for HEAD ($HEAD_SHA).\nWait for CI to finish (or push to trigger it), then retry.\nCheck: https://github.com/Semantic-Infrastructure-Lab/reveal/actions"
+elif [ "$CI_CONCLUSION" != "success" ]; then
+    error "GitHub Actions Tests run for HEAD ($HEAD_SHA) is not green (conclusion: $CI_CONCLUSION).\nFix CI before releasing: https://github.com/Semantic-Infrastructure-Lab/reveal/actions"
+fi
+
+success "GitHub Actions Tests passed for HEAD ($HEAD_SHA)"
+echo
+
+# ============================================================================
 # CURRENT VERSION CHECK
 # ============================================================================
 

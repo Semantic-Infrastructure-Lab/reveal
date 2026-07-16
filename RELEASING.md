@@ -19,6 +19,7 @@ date: 2026-03-28
 
 The script handles:
 - Pre-flight checks (clean repo, on master, etc.)
+- GitHub Actions Tests status check for HEAD (BACK-578 — aborts if red or missing)
 - Version bump in `pyproject.toml`
 - CHANGELOG validation
 - Reveal self-check (V007/V011/V012/V013)
@@ -322,6 +323,7 @@ Bumping mid-session causes the doc validation test (`test_agent_help_is_current_
 - [ ] **Version check**: `git tag | grep vX.Y.Z` returns nothing (or use `--resume` if it exists)
 - [ ] All features merged to master
 - [ ] Tests passing: `pytest`
+- [ ] **GitHub Actions Tests workflow is green for HEAD** (BACK-578 — script checks this automatically via `gh run list` and aborts if red or missing; a red CI run must not ship)
 - [ ] Clean git status
 - [ ] On master branch, pulled latest
 
