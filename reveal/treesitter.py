@@ -99,6 +99,18 @@ FUNCTION_NODE_TYPES = (
     # language): reveal RecoveryMetricsCollector.java RecoveryMetricsCollector
     # --boundary showed effects from an unrelated method ~70 lines later.
     'constructor_declaration',  # Java, C#
+    # BACK-643: `async function* name() {}` parses to a DISTINCT node kind,
+    # 'generator_function_declaration', not a same-name variant of
+    # 'function_declaration' — same shape of gap as constructor_declaration
+    # above. Verified via direct tree-sitter-typescript parse: a generator
+    # declared inside another function's body was entirely absent from
+    # get_structure()['functions'] / --outline, and bare-name lookup
+    # ('reveal file.ts genName') errored "could not find function or
+    # method" even though the enclosing function's --sideeffects correctly
+    # included its effects. The whole-tree walk in _find_nodes_by_type
+    # already covers any nesting depth once the kind is listed here, so
+    # this one addition fixes both outline and name-lookup for the shape.
+    'generator_function_declaration',  # JS/TS/TSX generator function statement
     # BACK-478: 'function_definition_statement'/'local_function_definition_statement'
     # used to be listed here as Lua's global/local function kinds. Verified via
     # direct tree-sitter inspection: both `function foo() end` and
@@ -590,33 +602,36 @@ class TreeSitterAnalyzer(FileAnalyzer):
     # every other language) gets both get_structure() coverage and nav-flag
     # resolution from one shared implementation.
 
-    def _is_module_scope_decl(self, lexical_decl_node) -> bool:
-        parent = lexical_decl_node.parent()
-        if parent is None:
-            return False
-        if parent.kind() == 'program':
-            return True
-        if parent.kind() == 'export_statement':
-            gp = parent.parent()
-            return gp is not None and gp.kind() == 'program'
-        return False
-
     def _arrow_or_fn_value(self, variable_declarator_node) -> Tuple[Optional[Any], Optional[Any]]:
         """Return (name_node, value_node) for a variable_declarator, or (None, None)."""
         name_node = value_node = None
         for ch in _children(variable_declarator_node):
             if ch.kind() == 'identifier' and name_node is None:
                 name_node = ch
-            elif ch.kind() in ('arrow_function', 'function_expression'):
+            elif ch.kind() in ('arrow_function', 'function_expression', 'generator_function'):
                 value_node = ch
         return name_node, value_node
 
     def _extract_arrow_functions(self) -> List[Dict[str, Any]]:
-        """Extract module-scope arrow/function-expression declarations (const X = () => {})."""
+        """Extract named arrow/function-expression declarations (const X = () => {}),
+        at module scope or nested inside another function's body.
+
+        BACK-643: this used to gate on `_is_module_scope_decl`, so a local
+        `const name = (...) => {}` declared inside another function's body
+        was invisible to both get_structure()/--outline and bare-name
+        lookup (`_find_named_arrow_function` below) — even though a plain
+        `function name() {}` in the exact same nested position was already
+        found at any depth via `_extract_undecorated_functions`'s unscoped
+        tree walk. `_arrow_or_fn_value` only matches a variable_declarator
+        whose value is an actual function literal, so dropping the scope
+        gate only brings named function-valued consts to parity with
+        function declarations — it does not start flagging arbitrary local
+        variables. As with declaration lookup, an ambiguous name reused at
+        multiple nesting depths resolves to the first tree-walk match; a
+        qualifier syntax to disambiguate is a separate, larger change.
+        """
         funcs = []
         for decl_node in self._find_nodes_by_type('lexical_declaration'):
-            if not self._is_module_scope_decl(decl_node):
-                continue
             for child in _children(decl_node):
                 if child.kind() != 'variable_declarator':
                     continue
@@ -635,16 +650,17 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         Covers two JS-family shapes that carry their name on a parent node
         rather than the (anonymous) arrow node itself:
-          1. module-scope `const name = (...) => {}` (lexical_declaration), and
+          1. `const name = (...) => {}` (lexical_declaration) at module
+             scope or nested inside another function's body — BACK-643:
+             previously module-scope-only, so a local named arrow-const was
+             listed nowhere and this lookup always missed it, and
           2. class-field methods `name = (...) => {}` (public_field_definition
              / field_definition) — BACK-527: previously only get_structure()
              saw these (via _extract_class_field_functions), so they listed in
              --outline but `reveal file.tsx name` returned "not found".
         """
-        # 1. module-scope `const name = (...) => {}`
+        # 1. `const name = (...) => {}`, module scope or nested
         for decl_node in self._find_nodes_by_type('lexical_declaration'):
-            if not self._is_module_scope_decl(decl_node):
-                continue
             for child in _children(decl_node):
                 if child.kind() != 'variable_declarator':
                     continue

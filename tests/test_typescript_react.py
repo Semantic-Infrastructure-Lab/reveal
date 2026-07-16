@@ -243,15 +243,6 @@ class TestBack333ArrowFunctions:
         names = [fn['name'] for fn in structure.get('functions', [])]
         assert 'buildGame' in names
 
-    def test_non_module_scope_arrow_not_extracted_as_top_level(self, tmp_path):
-        src = "function outer() { const inner = () => 1; }\n"
-        f = tmp_path / 'a.ts'
-        f.write_text(src)
-        structure = TypeScriptAnalyzer(str(f)).get_structure()
-        names = [fn['name'] for fn in structure.get('functions', [])]
-        assert 'inner' not in names
-        assert 'outer' in names
-
     def test_arrow_function_has_line_number(self, tmp_path):
         src = "export const myHook = () => { return 1; };\n"
         f = tmp_path / 'hook.ts'
@@ -471,6 +462,51 @@ class TestBack527ClassFieldArrowByName:
         )
         node = TSXAnalyzer(str(f))._find_named_arrow_function('nonexistent')
         assert node is None
+
+
+# ─── BACK-643: block-scoped nested named functions invisible to outline/lookup
+
+class TestBack643NestedNamedFunctions:
+    def test_nested_arrow_const_in_outline(self, tmp_path):
+        f = tmp_path / 'a.ts'
+        f.write_text("function outer() { const inner = () => 1; }\n")
+        structure = TypeScriptAnalyzer(str(f)).get_structure()
+        names = [fn['name'] for fn in structure.get('functions', [])]
+        assert 'inner' in names
+        assert 'outer' in names
+
+    def test_nested_arrow_const_resolves_by_name(self, tmp_path):
+        f = tmp_path / 'a.ts'
+        f.write_text("function outer() { const inner = async () => 1; }\n")
+        node = TypeScriptAnalyzer(str(f))._find_named_arrow_function('inner')
+        assert node is not None
+
+    def test_nested_generator_declaration_in_outline(self, tmp_path):
+        f = tmp_path / 'a.ts'
+        f.write_text(
+            "function outer() {\n"
+            "  async function* traverse(path: string) {\n"
+            "    yield path;\n"
+            "  }\n"
+            "}\n"
+        )
+        structure = TypeScriptAnalyzer(str(f)).get_structure()
+        names = [fn['name'] for fn in structure.get('functions', [])]
+        assert 'traverse' in names
+        assert 'outer' in names
+
+    def test_nested_generator_declaration_resolves_by_name(self, tmp_path):
+        f = tmp_path / 'a.ts'
+        f.write_text(
+            "function outer() {\n"
+            "  async function* traverse(path: string) {\n"
+            "    yield path;\n"
+            "  }\n"
+            "}\n"
+        )
+        from reveal.file_handler import _find_element_node
+        node = _find_element_node(TypeScriptAnalyzer(str(f)), 'traverse')
+        assert node is not None
 
 
 # ─── BACK-335: Type-annotation-only imports not flagged as unused ─────────────

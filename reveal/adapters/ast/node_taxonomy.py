@@ -193,6 +193,10 @@ DEF_NODES: frozenset = frozenset({
     # gap, see treesitter.py FUNCTION_NODE_TYPES comment. Without this,
     # --scope silently dropped a Ruby class method as its own ancestor.
     'singleton_method',
+    # BACK-643: JS/TS/TSX `async function* name() {}` — same gap, see
+    # treesitter.py FUNCTION_NODE_TYPES comment. Without this, --scope
+    # silently dropped a generator function declaration as its own ancestor.
+    'generator_function_declaration',
 })
 CLASS_NODES: frozenset = frozenset({
     'class_definition', 'class_declaration', 'class',
@@ -397,6 +401,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'constructor_declaration': 'DEF',  # BACK-638: Java/C#
     'operator_declaration': 'DEF',  # BACK-547 C# recall-oracle pre-flight
     'singleton_method': 'DEF',  # BACK-647: Ruby `def self.foo`/`def Class.foo`
+    'generator_function_declaration': 'DEF',  # BACK-643: JS/TS `async function* name() {}`
     'lambda': 'LAMBDA',
     'class_definition': 'CLASS', 'class_declaration': 'CLASS', 'class': 'CLASS',
     'class_specifier': 'CLASS', 'anonymous_class': 'CLASS',
