@@ -1,0 +1,2701 @@
+{
+  "literal:common:cache:redis": {
+    "hits": {
+      "c": 348,
+      "go": 6,
+      "lua": 536,
+      "php": 10,
+      "ruby": 1730,
+      "typescript": 2
+    },
+    "home": "common",
+    "key": "literal:common:cache:redis",
+    "kind": "cache",
+    "source": "literal",
+    "token": "redis"
+  },
+  "literal:common:db:db_delete": {
+    "hits": {},
+    "home": "common",
+    "key": "literal:common:db:db_delete",
+    "kind": "db",
+    "source": "literal",
+    "token": "db_delete"
+  },
+  "literal:common:db:db_insert": {
+    "hits": {
+      "lua": 34
+    },
+    "home": "common",
+    "key": "literal:common:db:db_insert",
+    "kind": "db",
+    "source": "literal",
+    "token": "db_insert"
+  },
+  "literal:common:db:db_query": {
+    "hits": {
+      "lua": 2,
+      "ruby": 2
+    },
+    "home": "common",
+    "key": "literal:common:db:db_query",
+    "kind": "db",
+    "source": "literal",
+    "token": "db_query"
+  },
+  "literal:common:db:db_update": {
+    "hits": {},
+    "home": "common",
+    "key": "literal:common:db:db_update",
+    "kind": "db",
+    "source": "literal",
+    "token": "db_update"
+  },
+  "literal:common:db:pg_fetch": {
+    "hits": {},
+    "home": "common",
+    "key": "literal:common:db:pg_fetch",
+    "kind": "db",
+    "source": "literal",
+    "token": "pg_fetch"
+  },
+  "literal:common:db:pg_query": {
+    "hits": {},
+    "home": "common",
+    "key": "literal:common:db:pg_query",
+    "kind": "db",
+    "source": "literal",
+    "token": "pg_query"
+  },
+  "literal:common:db:sqlite_query": {
+    "hits": {},
+    "home": "common",
+    "key": "literal:common:db:sqlite_query",
+    "kind": "db",
+    "source": "literal",
+    "token": "sqlite_query"
+  },
+  "literal:common:env:getenv": {
+    "hits": {
+      "c": 21,
+      "cpp": 59,
+      "go": 301,
+      "java": 109,
+      "kotlin": 4,
+      "lua": 116,
+      "php": 11,
+      "scala": 1,
+      "typescript": 27,
+      "zig": 32
+    },
+    "home": "common",
+    "key": "literal:common:env:getenv",
+    "kind": "env",
+    "source": "literal",
+    "token": "getenv"
+  },
+  "literal:common:env:putenv": {
+    "hits": {},
+    "home": "common",
+    "key": "literal:common:env:putenv",
+    "kind": "env",
+    "source": "literal",
+    "token": "putenv"
+  },
+  "literal:common:file:fclose": {
+    "hits": {
+      "c": 68,
+      "cpp": 51,
+      "php": 131
+    },
+    "home": "common",
+    "key": "literal:common:file:fclose",
+    "kind": "file",
+    "source": "literal",
+    "token": "fclose"
+  },
+  "literal:common:file:fopen": {
+    "hits": {
+      "c": 48,
+      "cpp": 19,
+      "php": 97
+    },
+    "home": "common",
+    "key": "literal:common:file:fopen",
+    "kind": "file",
+    "source": "literal",
+    "token": "fopen"
+  },
+  "literal:common:file:fputs": {
+    "hits": {
+      "c": 11,
+      "cpp": 5,
+      "php": 11
+    },
+    "home": "common",
+    "key": "literal:common:file:fputs",
+    "kind": "file",
+    "source": "literal",
+    "token": "fputs"
+  },
+  "literal:common:file:fread": {
+    "hits": {
+      "c": 21,
+      "cpp": 16,
+      "javascript": 1,
+      "php": 181
+    },
+    "home": "common",
+    "key": "literal:common:file:fread",
+    "kind": "file",
+    "source": "literal",
+    "token": "fread"
+  },
+  "literal:common:file:fwrite": {
+    "hits": {
+      "c": 25,
+      "cpp": 8,
+      "php": 126
+    },
+    "home": "common",
+    "key": "literal:common:file:fwrite",
+    "kind": "file",
+    "source": "literal",
+    "token": "fwrite"
+  },
+  "literal:common:file:mkdir": {
+    "hits": {
+      "c": 1,
+      "cpp": 1,
+      "go": 98,
+      "java": 15,
+      "javascript": 2,
+      "lua": 14,
+      "php": 28,
+      "ruby": 27,
+      "typescript": 263
+    },
+    "home": "common",
+    "key": "literal:common:file:mkdir",
+    "kind": "file",
+    "source": "literal",
+    "token": "mkdir"
+  },
+  "literal:common:file:open": {
+    "hits": {
+      "c": 45,
+      "cpp": 551,
+      "csharp": 21,
+      "dart": 35,
+      "gdscript": 15,
+      "go": 961,
+      "java": 1275,
+      "javascript": 33,
+      "kotlin": 3,
+      "lua": 73,
+      "php": 21,
+      "ruby": 219,
+      "rust": 159,
+      "scala": 120,
+      "swift": 16,
+      "tsx": 14,
+      "typescript": 1115,
+      "zig": 40
+    },
+    "home": "common",
+    "key": "literal:common:file:open",
+    "kind": "file",
+    "source": "literal",
+    "token": "open"
+  },
+  "literal:common:file:readfile": {
+    "hits": {
+      "cpp": 5,
+      "dart": 5,
+      "go": 519,
+      "java": 103,
+      "javascript": 14,
+      "lua": 17,
+      "php": 2,
+      "tsx": 1,
+      "typescript": 986,
+      "zig": 4
+    },
+    "home": "common",
+    "key": "literal:common:file:readfile",
+    "kind": "file",
+    "source": "literal",
+    "token": "readfile"
+  },
+  "literal:common:file:rename": {
+    "hits": {
+      "c": 14,
+      "cpp": 50,
+      "dart": 18,
+      "go": 115,
+      "java": 108,
+      "javascript": 4,
+      "lua": 32,
+      "php": 16,
+      "ruby": 10,
+      "rust": 3,
+      "scala": 1,
+      "typescript": 268
+    },
+    "home": "common",
+    "key": "literal:common:file:rename",
+    "kind": "file",
+    "source": "literal",
+    "token": "rename"
+  },
+  "literal:common:file:rmdir": {
+    "hits": {
+      "c": 1,
+      "cpp": 1,
+      "go": 47,
+      "lua": 2,
+      "php": 11,
+      "ruby": 1,
+      "typescript": 10
+    },
+    "home": "common",
+    "key": "literal:common:file:rmdir",
+    "kind": "file",
+    "source": "literal",
+    "token": "rmdir"
+  },
+  "literal:common:file:tmpfile": {
+    "hits": {
+      "c": 1,
+      "cpp": 1,
+      "go": 69,
+      "java": 4,
+      "lua": 1,
+      "ruby": 10
+    },
+    "home": "common",
+    "key": "literal:common:file:tmpfile",
+    "kind": "file",
+    "source": "literal",
+    "token": "tmpfile"
+  },
+  "literal:common:file:unlink": {
+    "hits": {
+      "c": 24,
+      "cpp": 8,
+      "go": 54,
+      "java": 8,
+      "php": 67,
+      "ruby": 1,
+      "typescript": 66,
+      "zig": 1
+    },
+    "home": "common",
+    "key": "literal:common:file:unlink",
+    "kind": "file",
+    "source": "literal",
+    "token": "unlink"
+  },
+  "literal:common:hard_stop:abort": {
+    "hits": {
+      "c": 87,
+      "cpp": 59,
+      "csharp": 1,
+      "go": 63,
+      "java": 124,
+      "javascript": 33,
+      "php": 7,
+      "ruby": 4,
+      "rust": 16,
+      "tsx": 2,
+      "typescript": 124,
+      "zig": 1
+    },
+    "home": "common",
+    "key": "literal:common:hard_stop:abort",
+    "kind": "hard_stop",
+    "source": "literal",
+    "token": "abort"
+  },
+  "literal:common:hard_stop:die": {
+    "hits": {
+      "c": 8,
+      "gdscript": 2,
+      "go": 7,
+      "java": 2,
+      "php": 128,
+      "rust": 1
+    },
+    "home": "common",
+    "key": "literal:common:hard_stop:die",
+    "kind": "hard_stop",
+    "source": "literal",
+    "token": "die"
+  },
+  "literal:common:hard_stop:exit": {
+    "hits": {
+      "c": 366,
+      "cpp": 62,
+      "csharp": 2,
+      "dart": 8,
+      "gdscript": 3,
+      "go": 556,
+      "java": 87,
+      "javascript": 15,
+      "lua": 362,
+      "php": 17,
+      "ruby": 13,
+      "rust": 3,
+      "typescript": 327,
+      "zig": 53
+    },
+    "home": "common",
+    "key": "literal:common:hard_stop:exit",
+    "kind": "hard_stop",
+    "source": "literal",
+    "token": "exit"
+  },
+  "literal:common:hard_stop:halt": {
+    "hits": {
+      "go": 1,
+      "java": 14,
+      "javascript": 2,
+      "scala": 5,
+      "typescript": 1,
+      "zig": 1
+    },
+    "home": "common",
+    "key": "literal:common:hard_stop:halt",
+    "kind": "hard_stop",
+    "source": "literal",
+    "token": "halt"
+  },
+  "literal:common:http:header": {
+    "hits": {
+      "c": 74,
+      "cpp": 441,
+      "csharp": 7,
+      "dart": 2,
+      "go": 1811,
+      "java": 650,
+      "javascript": 167,
+      "kotlin": 11,
+      "lua": 256,
+      "php": 612,
+      "ruby": 143,
+      "rust": 94,
+      "scala": 2,
+      "swift": 50,
+      "typescript": 380,
+      "zig": 40
+    },
+    "home": "common",
+    "key": "literal:common:http:header",
+    "kind": "http",
+    "source": "literal",
+    "token": "header"
+  },
+  "literal:common:http:http_get": {
+    "hits": {
+      "lua": 6
+    },
+    "home": "common",
+    "key": "literal:common:http:http_get",
+    "kind": "http",
+    "source": "literal",
+    "token": "http_get"
+  },
+  "literal:common:http:http_post": {
+    "hits": {},
+    "home": "common",
+    "key": "literal:common:http:http_post",
+    "kind": "http",
+    "source": "literal",
+    "token": "http_post"
+  },
+  "literal:common:log:log": {
+    "hits": {
+      "c": 146,
+      "cpp": 315,
+      "csharp": 20,
+      "dart": 1091,
+      "gdscript": 111,
+      "go": 2162,
+      "java": 1110,
+      "javascript": 275,
+      "kotlin": 14,
+      "lua": 1401,
+      "php": 26,
+      "ruby": 701,
+      "rust": 6,
+      "scala": 13,
+      "swift": 1,
+      "tsx": 1,
+      "typescript": 4416,
+      "zig": 1578
+    },
+    "home": "common",
+    "key": "literal:common:log:log",
+    "kind": "log",
+    "source": "literal",
+    "token": "log"
+  },
+  "literal:common:log:logger": {
+    "hits": {
+      "cpp": 73,
+      "csharp": 371,
+      "dart": 4,
+      "go": 5461,
+      "java": 16242,
+      "javascript": 1,
+      "kotlin": 104,
+      "lua": 29,
+      "ruby": 805,
+      "rust": 28,
+      "scala": 121,
+      "swift": 1,
+      "typescript": 1380,
+      "zig": 4
+    },
+    "home": "common",
+    "key": "literal:common:log:logger",
+    "kind": "log",
+    "source": "literal",
+    "token": "logger"
+  },
+  "literal:common:log:syslog": {
+    "hits": {
+      "c": 2,
+      "cpp": 2,
+      "go": 4,
+      "java": 7,
+      "lua": 2,
+      "typescript": 1
+    },
+    "home": "common",
+    "key": "literal:common:log:syslog",
+    "kind": "log",
+    "source": "literal",
+    "token": "syslog"
+  },
+  "literal:common:log:write_log": {
+    "hits": {},
+    "home": "common",
+    "key": "literal:common:log:write_log",
+    "kind": "log",
+    "source": "literal",
+    "token": "write_log"
+  },
+  "literal:common:sleep:sleep": {
+    "hits": {
+      "c": 26,
+      "cpp": 7,
+      "csharp": 3,
+      "go": 798,
+      "java": 305,
+      "kotlin": 7,
+      "lua": 254,
+      "php": 5,
+      "ruby": 24,
+      "rust": 26,
+      "scala": 5,
+      "swift": 15,
+      "tsx": 4,
+      "typescript": 39,
+      "zig": 8
+    },
+    "home": "common",
+    "key": "literal:common:sleep:sleep",
+    "kind": "sleep",
+    "source": "literal",
+    "token": "sleep"
+  },
+  "literal:common:sleep:usleep": {
+    "hits": {
+      "c": 24,
+      "cpp": 4,
+      "php": 1
+    },
+    "home": "common",
+    "key": "literal:common:sleep:usleep",
+    "kind": "sleep",
+    "source": "literal",
+    "token": "usleep"
+  },
+  "literal:cpp:env:get_environment": {
+    "hits": {
+      "cpp": 83,
+      "gdscript": 6
+    },
+    "home": "cpp",
+    "key": "literal:cpp:env:get_environment",
+    "kind": "env",
+    "source": "literal",
+    "token": "get_environment"
+  },
+  "literal:cpp:env:has_environment": {
+    "hits": {
+      "cpp": 26,
+      "gdscript": 2
+    },
+    "home": "cpp",
+    "key": "literal:cpp:env:has_environment",
+    "kind": "env",
+    "source": "literal",
+    "token": "has_environment"
+  },
+  "literal:cpp:env:set_environment": {
+    "hits": {
+      "cpp": 30
+    },
+    "home": "cpp",
+    "key": "literal:cpp:env:set_environment",
+    "kind": "env",
+    "source": "literal",
+    "token": "set_environment"
+  },
+  "literal:cpp:env:unset_environment": {
+    "hits": {
+      "cpp": 8
+    },
+    "home": "cpp",
+    "key": "literal:cpp:env:unset_environment",
+    "kind": "env",
+    "source": "literal",
+    "token": "unset_environment"
+  },
+  "literal:cpp:file:diraccess": {
+    "hits": {
+      "cpp": 612,
+      "gdscript": 2
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:diraccess",
+    "kind": "file",
+    "source": "literal",
+    "token": "diraccess"
+  },
+  "literal:cpp:file:fileaccess": {
+    "hits": {
+      "cpp": 1437,
+      "csharp": 36,
+      "gdscript": 27,
+      "java": 3,
+      "typescript": 205
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:fileaccess",
+    "kind": "file",
+    "source": "literal",
+    "token": "fileaccess"
+  },
+  "literal:cpp:file:freopen": {
+    "hits": {
+      "c": 1
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:freopen",
+    "kind": "file",
+    "source": "literal",
+    "token": "freopen"
+  },
+  "literal:cpp:file:fstream": {
+    "hits": {
+      "cpp": 1
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:fstream",
+    "kind": "file",
+    "source": "literal",
+    "token": "fstream"
+  },
+  "literal:cpp:file:get_as_text": {
+    "hits": {
+      "cpp": 50,
+      "gdscript": 2
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:get_as_text",
+    "kind": "file",
+    "source": "literal",
+    "token": "get_as_text"
+  },
+  "literal:cpp:file:get_buffer": {
+    "hits": {
+      "cpp": 201
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:get_buffer",
+    "kind": "file",
+    "source": "literal",
+    "token": "get_buffer"
+  },
+  "literal:cpp:file:ifstream": {
+    "hits": {
+      "cpp": 2
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:ifstream",
+    "kind": "file",
+    "source": "literal",
+    "token": "ifstream"
+  },
+  "literal:cpp:file:ofstream": {
+    "hits": {
+      "cpp": 8
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:ofstream",
+    "kind": "file",
+    "source": "literal",
+    "token": "ofstream"
+  },
+  "literal:cpp:file:store_16": {
+    "hits": {
+      "cpp": 40
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:store_16",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_16"
+  },
+  "literal:cpp:file:store_32": {
+    "hits": {
+      "cpp": 333
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:store_32",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_32"
+  },
+  "literal:cpp:file:store_64": {
+    "hits": {
+      "cpp": 39
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:store_64",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_64"
+  },
+  "literal:cpp:file:store_8": {
+    "hits": {
+      "cpp": 38
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:store_8",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_8"
+  },
+  "literal:cpp:file:store_buffer": {
+    "hits": {
+      "cpp": 184
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:store_buffer",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_buffer"
+  },
+  "literal:cpp:file:store_line": {
+    "hits": {
+      "cpp": 271,
+      "gdscript": 2
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:store_line",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_line"
+  },
+  "literal:cpp:file:store_string": {
+    "hits": {
+      "cpp": 84,
+      "gdscript": 3
+    },
+    "home": "cpp",
+    "key": "literal:cpp:file:store_string",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_string"
+  },
+  "literal:cpp:http:curl_easy_init": {
+    "hits": {},
+    "home": "cpp",
+    "key": "literal:cpp:http:curl_easy_init",
+    "kind": "http",
+    "source": "literal",
+    "token": "curl_easy_init"
+  },
+  "literal:cpp:http:curl_easy_perform": {
+    "hits": {},
+    "home": "cpp",
+    "key": "literal:cpp:http:curl_easy_perform",
+    "kind": "http",
+    "source": "literal",
+    "token": "curl_easy_perform"
+  },
+  "literal:cpp:http:curl_easy_setopt": {
+    "hits": {},
+    "home": "cpp",
+    "key": "literal:cpp:http:curl_easy_setopt",
+    "kind": "http",
+    "source": "literal",
+    "token": "curl_easy_setopt"
+  },
+  "literal:cpp:log:err_print": {
+    "hits": {
+      "cpp": 748
+    },
+    "home": "cpp",
+    "key": "literal:cpp:log:err_print",
+    "kind": "log",
+    "source": "literal",
+    "token": "err_print"
+  },
+  "literal:cpp:log:print_error": {
+    "hits": {
+      "cpp": 117,
+      "gdscript": 10,
+      "javascript": 4,
+      "php": 3
+    },
+    "home": "cpp",
+    "key": "literal:cpp:log:print_error",
+    "kind": "log",
+    "source": "literal",
+    "token": "print_error"
+  },
+  "literal:cpp:log:print_line": {
+    "hits": {
+      "cpp": 670
+    },
+    "home": "cpp",
+    "key": "literal:cpp:log:print_line",
+    "kind": "log",
+    "source": "literal",
+    "token": "print_line"
+  },
+  "literal:cpp:log:print_verbose": {
+    "hits": {
+      "cpp": 713
+    },
+    "home": "cpp",
+    "key": "literal:cpp:log:print_verbose",
+    "kind": "log",
+    "source": "literal",
+    "token": "print_verbose"
+  },
+  "literal:cpp:log:warn_print": {
+    "hits": {
+      "cpp": 733
+    },
+    "home": "cpp",
+    "key": "literal:cpp:log:warn_print",
+    "kind": "log",
+    "source": "literal",
+    "token": "warn_print"
+  },
+  "literal:cpp:sleep:delay_msec": {
+    "hits": {
+      "cpp": 1
+    },
+    "home": "cpp",
+    "key": "literal:cpp:sleep:delay_msec",
+    "kind": "sleep",
+    "source": "literal",
+    "token": "delay_msec"
+  },
+  "literal:cpp:sleep:delay_usec": {
+    "hits": {
+      "cpp": 62
+    },
+    "home": "cpp",
+    "key": "literal:cpp:sleep:delay_usec",
+    "kind": "sleep",
+    "source": "literal",
+    "token": "delay_usec"
+  },
+  "literal:cpp:sleep:sleep_for": {
+    "hits": {
+      "cpp": 5
+    },
+    "home": "cpp",
+    "key": "literal:cpp:sleep:sleep_for",
+    "kind": "sleep",
+    "source": "literal",
+    "token": "sleep_for"
+  },
+  "literal:csharp:db:executenonquery": {
+    "hits": {
+      "csharp": 4
+    },
+    "home": "csharp",
+    "key": "literal:csharp:db:executenonquery",
+    "kind": "db",
+    "source": "literal",
+    "token": "executenonquery"
+  },
+  "literal:csharp:db:executereader": {
+    "hits": {
+      "csharp": 4
+    },
+    "home": "csharp",
+    "key": "literal:csharp:db:executereader",
+    "kind": "db",
+    "source": "literal",
+    "token": "executereader"
+  },
+  "literal:csharp:db:executescalar": {
+    "hits": {
+      "csharp": 4
+    },
+    "home": "csharp",
+    "key": "literal:csharp:db:executescalar",
+    "kind": "db",
+    "source": "literal",
+    "token": "executescalar"
+  },
+  "literal:csharp:db:savechanges": {
+    "hits": {
+      "csharp": 43,
+      "java": 1
+    },
+    "home": "csharp",
+    "key": "literal:csharp:db:savechanges",
+    "kind": "db",
+    "source": "literal",
+    "token": "savechanges"
+  },
+  "literal:csharp:db:savechangesasync": {
+    "hits": {
+      "csharp": 38
+    },
+    "home": "csharp",
+    "key": "literal:csharp:db:savechangesasync",
+    "kind": "db",
+    "source": "literal",
+    "token": "savechangesasync"
+  },
+  "literal:csharp:env:getenvironmentvariable": {
+    "hits": {
+      "csharp": 9,
+      "go": 4,
+      "scala": 1
+    },
+    "home": "csharp",
+    "key": "literal:csharp:env:getenvironmentvariable",
+    "kind": "env",
+    "source": "literal",
+    "token": "getenvironmentvariable"
+  },
+  "literal:csharp:file:createdirectory": {
+    "hits": {
+      "csharp": 108,
+      "dart": 3,
+      "go": 6,
+      "java": 91,
+      "typescript": 69
+    },
+    "home": "csharp",
+    "key": "literal:csharp:file:createdirectory",
+    "kind": "file",
+    "source": "literal",
+    "token": "createdirectory"
+  },
+  "literal:csharp:file:filestream": {
+    "hits": {
+      "cpp": 1,
+      "csharp": 53,
+      "java": 3,
+      "typescript": 10
+    },
+    "home": "csharp",
+    "key": "literal:csharp:file:filestream",
+    "kind": "file",
+    "source": "literal",
+    "token": "filestream"
+  },
+  "literal:csharp:file:readalllines": {
+    "hits": {
+      "csharp": 8,
+      "java": 123
+    },
+    "home": "csharp",
+    "key": "literal:csharp:file:readalllines",
+    "kind": "file",
+    "source": "literal",
+    "token": "readalllines"
+  },
+  "literal:csharp:file:readalltext": {
+    "hits": {
+      "csharp": 13
+    },
+    "home": "csharp",
+    "key": "literal:csharp:file:readalltext",
+    "kind": "file",
+    "source": "literal",
+    "token": "readalltext"
+  },
+  "literal:csharp:file:streamreader": {
+    "hits": {
+      "csharp": 18,
+      "go": 2,
+      "typescript": 1
+    },
+    "home": "csharp",
+    "key": "literal:csharp:file:streamreader",
+    "kind": "file",
+    "source": "literal",
+    "token": "streamreader"
+  },
+  "literal:csharp:file:streamwriter": {
+    "hits": {
+      "cpp": 6,
+      "csharp": 2,
+      "go": 3
+    },
+    "home": "csharp",
+    "key": "literal:csharp:file:streamwriter",
+    "kind": "file",
+    "source": "literal",
+    "token": "streamwriter"
+  },
+  "literal:csharp:file:writealllines": {
+    "hits": {},
+    "home": "csharp",
+    "key": "literal:csharp:file:writealllines",
+    "kind": "file",
+    "source": "literal",
+    "token": "writealllines"
+  },
+  "literal:csharp:file:writealltext": {
+    "hits": {
+      "csharp": 28
+    },
+    "home": "csharp",
+    "key": "literal:csharp:file:writealltext",
+    "kind": "file",
+    "source": "literal",
+    "token": "writealltext"
+  },
+  "literal:csharp:http:deleteasync": {
+    "hits": {
+      "csharp": 10,
+      "typescript": 4
+    },
+    "home": "csharp",
+    "key": "literal:csharp:http:deleteasync",
+    "kind": "http",
+    "source": "literal",
+    "token": "deleteasync"
+  },
+  "literal:csharp:http:getasync": {
+    "hits": {
+      "csharp": 67,
+      "java": 15
+    },
+    "home": "csharp",
+    "key": "literal:csharp:http:getasync",
+    "kind": "http",
+    "source": "literal",
+    "token": "getasync"
+  },
+  "literal:csharp:http:postasync": {
+    "hits": {
+      "csharp": 8
+    },
+    "home": "csharp",
+    "key": "literal:csharp:http:postasync",
+    "kind": "http",
+    "source": "literal",
+    "token": "postasync"
+  },
+  "literal:csharp:http:putasync": {
+    "hits": {
+      "java": 24
+    },
+    "home": "csharp",
+    "key": "literal:csharp:http:putasync",
+    "kind": "http",
+    "source": "literal",
+    "token": "putasync"
+  },
+  "literal:csharp:http:sendasync": {
+    "hits": {
+      "csharp": 15,
+      "java": 6
+    },
+    "home": "csharp",
+    "key": "literal:csharp:http:sendasync",
+    "kind": "http",
+    "source": "literal",
+    "token": "sendasync"
+  },
+  "literal:csharp:log:logcritical": {
+    "hits": {
+      "csharp": 13
+    },
+    "home": "csharp",
+    "key": "literal:csharp:log:logcritical",
+    "kind": "log",
+    "source": "literal",
+    "token": "logcritical"
+  },
+  "literal:csharp:log:logdebug": {
+    "hits": {
+      "csharp": 314
+    },
+    "home": "csharp",
+    "key": "literal:csharp:log:logdebug",
+    "kind": "log",
+    "source": "literal",
+    "token": "logdebug"
+  },
+  "literal:csharp:log:logerror": {
+    "hits": {
+      "csharp": 398,
+      "go": 5,
+      "java": 9,
+      "typescript": 39
+    },
+    "home": "csharp",
+    "key": "literal:csharp:log:logerror",
+    "kind": "log",
+    "source": "literal",
+    "token": "logerror"
+  },
+  "literal:csharp:log:loginformation": {
+    "hits": {
+      "csharp": 423,
+      "typescript": 2
+    },
+    "home": "csharp",
+    "key": "literal:csharp:log:loginformation",
+    "kind": "log",
+    "source": "literal",
+    "token": "loginformation"
+  },
+  "literal:csharp:log:logwarning": {
+    "hits": {
+      "csharp": 164,
+      "go": 2,
+      "typescript": 1
+    },
+    "home": "csharp",
+    "key": "literal:csharp:log:logwarning",
+    "kind": "log",
+    "source": "literal",
+    "token": "logwarning"
+  },
+  "literal:go:http:roundtrip": {
+    "hits": {
+      "cpp": 1,
+      "csharp": 1,
+      "go": 423,
+      "java": 59,
+      "rust": 3,
+      "typescript": 19,
+      "zig": 2
+    },
+    "home": "go",
+    "key": "literal:go:http:roundtrip",
+    "kind": "http",
+    "source": "literal",
+    "token": "roundtrip"
+  },
+  "literal:go:log:glog": {
+    "hits": {},
+    "home": "go",
+    "key": "literal:go:log:glog",
+    "kind": "log",
+    "source": "literal",
+    "token": "glog"
+  },
+  "literal:go:log:klog": {
+    "hits": {
+      "go": 9495
+    },
+    "home": "go",
+    "key": "literal:go:log:klog",
+    "kind": "log",
+    "source": "literal",
+    "token": "klog"
+  },
+  "literal:go:log:logrus": {
+    "hits": {
+      "go": 117
+    },
+    "home": "go",
+    "key": "literal:go:log:logrus",
+    "kind": "log",
+    "source": "literal",
+    "token": "logrus"
+  },
+  "literal:js:db:createobjectstore": {
+    "hits": {
+      "javascript": 1,
+      "typescript": 1
+    },
+    "home": "js",
+    "key": "literal:js:db:createobjectstore",
+    "kind": "db",
+    "source": "literal",
+    "token": "createobjectstore"
+  },
+  "literal:js:http:fetch": {
+    "hits": {
+      "cpp": 38,
+      "csharp": 78,
+      "dart": 4,
+      "go": 17,
+      "java": 759,
+      "javascript": 26,
+      "kotlin": 18,
+      "lua": 28,
+      "php": 28,
+      "ruby": 442,
+      "rust": 10,
+      "swift": 56,
+      "tsx": 4,
+      "typescript": 485
+    },
+    "home": "js",
+    "key": "literal:js:http:fetch",
+    "kind": "http",
+    "source": "literal",
+    "token": "fetch"
+  },
+  "literal:js:sleep:setinterval": {
+    "hits": {
+      "java": 20,
+      "javascript": 9,
+      "tsx": 2,
+      "typescript": 71
+    },
+    "home": "js",
+    "key": "literal:js:sleep:setinterval",
+    "kind": "sleep",
+    "source": "literal",
+    "token": "setinterval"
+  },
+  "literal:js:sleep:settimeout": {
+    "hits": {
+      "cpp": 3,
+      "go": 8,
+      "java": 287,
+      "javascript": 86,
+      "lua": 15,
+      "php": 19,
+      "ruby": 4,
+      "tsx": 38,
+      "typescript": 1244,
+      "zig": 1
+    },
+    "home": "js",
+    "key": "literal:js:sleep:settimeout",
+    "kind": "sleep",
+    "source": "literal",
+    "token": "settimeout"
+  },
+  "literal:kotlin:db:executeaslist": {
+    "hits": {
+      "kotlin": 18
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:db:executeaslist",
+    "kind": "db",
+    "source": "literal",
+    "token": "executeaslist"
+  },
+  "literal:kotlin:db:executeasone": {
+    "hits": {
+      "kotlin": 24
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:db:executeasone",
+    "kind": "db",
+    "source": "literal",
+    "token": "executeasone"
+  },
+  "literal:kotlin:db:executeasoneornull": {
+    "hits": {
+      "kotlin": 26
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:db:executeasoneornull",
+    "kind": "db",
+    "source": "literal",
+    "token": "executeasoneornull"
+  },
+  "literal:kotlin:db:transactionwithresult": {
+    "hits": {
+      "kotlin": 4
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:db:transactionwithresult",
+    "kind": "db",
+    "source": "literal",
+    "token": "transactionwithresult"
+  },
+  "literal:kotlin:file:appendbytes": {
+    "hits": {
+      "go": 22
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:file:appendbytes",
+    "kind": "file",
+    "source": "literal",
+    "token": "appendbytes"
+  },
+  "literal:kotlin:file:appendtext": {
+    "hits": {
+      "java": 227,
+      "typescript": 263
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:file:appendtext",
+    "kind": "file",
+    "source": "literal",
+    "token": "appendtext"
+  },
+  "literal:kotlin:file:copyto": {
+    "hits": {
+      "cpp": 13,
+      "csharp": 10,
+      "go": 6,
+      "java": 122,
+      "javascript": 1,
+      "kotlin": 1,
+      "scala": 3
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:file:copyto",
+    "kind": "file",
+    "source": "literal",
+    "token": "copyto"
+  },
+  "literal:kotlin:file:createnewfile": {
+    "hits": {
+      "java": 9
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:file:createnewfile",
+    "kind": "file",
+    "source": "literal",
+    "token": "createnewfile"
+  },
+  "literal:kotlin:file:deleterecursively": {
+    "hits": {
+      "java": 6,
+      "kotlin": 1,
+      "scala": 5
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:file:deleterecursively",
+    "kind": "file",
+    "source": "literal",
+    "token": "deleterecursively"
+  },
+  "literal:kotlin:file:mkdirs": {
+    "hits": {
+      "java": 39,
+      "kotlin": 1,
+      "scala": 6
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:file:mkdirs",
+    "kind": "file",
+    "source": "literal",
+    "token": "mkdirs"
+  },
+  "literal:kotlin:file:readbytes": {
+    "hits": {
+      "c": 4,
+      "cpp": 6,
+      "go": 6,
+      "java": 382,
+      "javascript": 17,
+      "typescript": 2
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:file:readbytes",
+    "kind": "file",
+    "source": "literal",
+    "token": "readbytes"
+  },
+  "literal:kotlin:file:readtext": {
+    "hits": {
+      "java": 80,
+      "javascript": 1,
+      "ruby": 1,
+      "typescript": 45
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:file:readtext",
+    "kind": "file",
+    "source": "literal",
+    "token": "readtext"
+  },
+  "literal:kotlin:file:writebytes": {
+    "hits": {
+      "cpp": 6,
+      "go": 17,
+      "java": 454
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:file:writebytes",
+    "kind": "file",
+    "source": "literal",
+    "token": "writebytes"
+  },
+  "literal:kotlin:file:writetext": {
+    "hits": {
+      "go": 5,
+      "java": 7,
+      "javascript": 4,
+      "ruby": 3,
+      "typescript": 143
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:file:writetext",
+    "kind": "file",
+    "source": "literal",
+    "token": "writetext"
+  },
+  "literal:php:cache:apc_delete": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:cache:apc_delete",
+    "kind": "cache",
+    "source": "literal",
+    "token": "apc_delete"
+  },
+  "literal:php:cache:apc_fetch": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:cache:apc_fetch",
+    "kind": "cache",
+    "source": "literal",
+    "token": "apc_fetch"
+  },
+  "literal:php:cache:apc_store": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:cache:apc_store",
+    "kind": "cache",
+    "source": "literal",
+    "token": "apc_store"
+  },
+  "literal:php:cache:apcu_delete": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:cache:apcu_delete",
+    "kind": "cache",
+    "source": "literal",
+    "token": "apcu_delete"
+  },
+  "literal:php:cache:apcu_fetch": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:cache:apcu_fetch",
+    "kind": "cache",
+    "source": "literal",
+    "token": "apcu_fetch"
+  },
+  "literal:php:cache:apcu_store": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:cache:apcu_store",
+    "kind": "cache",
+    "source": "literal",
+    "token": "apcu_store"
+  },
+  "literal:php:cache:memcache_add": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:cache:memcache_add",
+    "kind": "cache",
+    "source": "literal",
+    "token": "memcache_add"
+  },
+  "literal:php:cache:memcache_delete": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:cache:memcache_delete",
+    "kind": "cache",
+    "source": "literal",
+    "token": "memcache_delete"
+  },
+  "literal:php:cache:memcache_get": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:cache:memcache_get",
+    "kind": "cache",
+    "source": "literal",
+    "token": "memcache_get"
+  },
+  "literal:php:cache:memcache_set": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:cache:memcache_set",
+    "kind": "cache",
+    "source": "literal",
+    "token": "memcache_set"
+  },
+  "literal:php:cache:wp_cache_delete": {
+    "hits": {
+      "php": 69
+    },
+    "home": "php",
+    "key": "literal:php:cache:wp_cache_delete",
+    "kind": "cache",
+    "source": "literal",
+    "token": "wp_cache_delete"
+  },
+  "literal:php:cache:wp_cache_get": {
+    "hits": {
+      "php": 73
+    },
+    "home": "php",
+    "key": "literal:php:cache:wp_cache_get",
+    "kind": "cache",
+    "source": "literal",
+    "token": "wp_cache_get"
+  },
+  "literal:php:cache:wp_cache_set": {
+    "hits": {
+      "php": 65
+    },
+    "home": "php",
+    "key": "literal:php:cache:wp_cache_set",
+    "kind": "cache",
+    "source": "literal",
+    "token": "wp_cache_set"
+  },
+  "literal:php:db:delete": {
+    "hits": {
+      "c": 11,
+      "cpp": 76,
+      "csharp": 89,
+      "dart": 78,
+      "go": 3219,
+      "java": 1176,
+      "javascript": 267,
+      "kotlin": 18,
+      "lua": 193,
+      "php": 172,
+      "ruby": 652,
+      "rust": 165,
+      "scala": 24,
+      "swift": 4,
+      "tsx": 13,
+      "typescript": 3620,
+      "zig": 41
+    },
+    "home": "php",
+    "key": "literal:php:db:delete",
+    "kind": "db",
+    "source": "literal",
+    "token": "delete"
+  },
+  "literal:php:db:execute": {
+    "hits": {
+      "c": 36,
+      "cpp": 320,
+      "csharp": 30,
+      "dart": 76,
+      "go": 750,
+      "java": 20430,
+      "javascript": 408,
+      "kotlin": 14,
+      "lua": 318,
+      "php": 54,
+      "ruby": 4968,
+      "rust": 654,
+      "scala": 26,
+      "typescript": 522,
+      "zig": 72
+    },
+    "home": "php",
+    "key": "literal:php:db:execute",
+    "kind": "db",
+    "source": "literal",
+    "token": "execute"
+  },
+  "literal:php:db:fetch": {
+    "hits": {
+      "cpp": 38,
+      "csharp": 78,
+      "dart": 4,
+      "go": 17,
+      "java": 759,
+      "javascript": 26,
+      "kotlin": 18,
+      "lua": 28,
+      "php": 28,
+      "ruby": 442,
+      "rust": 10,
+      "swift": 56,
+      "tsx": 4,
+      "typescript": 485
+    },
+    "home": "php",
+    "key": "literal:php:db:fetch",
+    "kind": "db",
+    "source": "literal",
+    "token": "fetch"
+  },
+  "literal:php:db:insert": {
+    "hits": {
+      "c": 15,
+      "cpp": 2528,
+      "csharp": 37,
+      "dart": 152,
+      "go": 1264,
+      "java": 148,
+      "javascript": 7,
+      "kotlin": 94,
+      "lua": 1677,
+      "php": 60,
+      "ruby": 134,
+      "rust": 825,
+      "scala": 22,
+      "swift": 34,
+      "typescript": 793,
+      "zig": 17
+    },
+    "home": "php",
+    "key": "literal:php:db:insert",
+    "kind": "db",
+    "source": "literal",
+    "token": "insert"
+  },
+  "literal:php:db:mysql_fetch": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:db:mysql_fetch",
+    "kind": "db",
+    "source": "literal",
+    "token": "mysql_fetch"
+  },
+  "literal:php:db:mysql_query": {
+    "hits": {
+      "ruby": 308,
+      "typescript": 4
+    },
+    "home": "php",
+    "key": "literal:php:db:mysql_query",
+    "kind": "db",
+    "source": "literal",
+    "token": "mysql_query"
+  },
+  "literal:php:db:mysqli_fetch": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:db:mysqli_fetch",
+    "kind": "db",
+    "source": "literal",
+    "token": "mysqli_fetch"
+  },
+  "literal:php:db:mysqli_query": {
+    "hits": {
+      "php": 6
+    },
+    "home": "php",
+    "key": "literal:php:db:mysqli_query",
+    "kind": "db",
+    "source": "literal",
+    "token": "mysqli_query"
+  },
+  "literal:php:db:pdo": {
+    "hits": {
+      "php": 6
+    },
+    "home": "php",
+    "key": "literal:php:db:pdo",
+    "kind": "db",
+    "source": "literal",
+    "token": "pdo"
+  },
+  "literal:php:db:query": {
+    "hits": {
+      "c": 20,
+      "cpp": 88,
+      "csharp": 1872,
+      "dart": 44,
+      "gdscript": 4,
+      "go": 604,
+      "java": 20550,
+      "javascript": 348,
+      "kotlin": 12,
+      "lua": 312,
+      "php": 1472,
+      "ruby": 2672,
+      "rust": 842,
+      "scala": 28,
+      "swift": 124,
+      "typescript": 2086,
+      "zig": 74
+    },
+    "home": "php",
+    "key": "literal:php:db:query",
+    "kind": "db",
+    "source": "literal",
+    "token": "query"
+  },
+  "literal:php:db:select": {
+    "hits": {
+      "c": 10,
+      "cpp": 750,
+      "csharp": 835,
+      "dart": 13,
+      "gdscript": 5,
+      "go": 97,
+      "java": 100,
+      "javascript": 345,
+      "lua": 467,
+      "php": 23,
+      "ruby": 382,
+      "rust": 2,
+      "scala": 3,
+      "swift": 13,
+      "tsx": 55,
+      "typescript": 249,
+      "zig": 59
+    },
+    "home": "php",
+    "key": "literal:php:db:select",
+    "kind": "db",
+    "source": "literal",
+    "token": "select"
+  },
+  "literal:php:db:update": {
+    "hits": {
+      "c": 40,
+      "cpp": 400,
+      "csharp": 54,
+      "dart": 68,
+      "gdscript": 9,
+      "go": 2684,
+      "java": 1300,
+      "javascript": 804,
+      "kotlin": 33,
+      "lua": 147,
+      "php": 563,
+      "ruby": 908,
+      "rust": 477,
+      "scala": 103,
+      "swift": 246,
+      "tsx": 3,
+      "typescript": 2326,
+      "zig": 196
+    },
+    "home": "php",
+    "key": "literal:php:db:update",
+    "kind": "db",
+    "source": "literal",
+    "token": "update"
+  },
+  "literal:php:db:wpdb": {
+    "hits": {
+      "php": 4138
+    },
+    "home": "php",
+    "key": "literal:php:db:wpdb",
+    "kind": "db",
+    "source": "literal",
+    "token": "wpdb"
+  },
+  "literal:php:file:copy": {
+    "hits": {
+      "c": 23,
+      "cpp": 433,
+      "csharp": 36,
+      "dart": 8,
+      "go": 4002,
+      "java": 1711,
+      "javascript": 2325,
+      "kotlin": 77,
+      "lua": 10,
+      "php": 40,
+      "ruby": 16,
+      "rust": 11,
+      "scala": 82,
+      "swift": 2,
+      "tsx": 14,
+      "typescript": 274,
+      "zig": 91
+    },
+    "home": "php",
+    "key": "literal:php:file:copy",
+    "kind": "file",
+    "source": "literal",
+    "token": "copy"
+  },
+  "literal:php:file:file_get_contents": {
+    "hits": {
+      "php": 56
+    },
+    "home": "php",
+    "key": "literal:php:file:file_get_contents",
+    "kind": "file",
+    "source": "literal",
+    "token": "file_get_contents"
+  },
+  "literal:php:file:file_put_contents": {
+    "hits": {
+      "php": 8
+    },
+    "home": "php",
+    "key": "literal:php:file:file_put_contents",
+    "kind": "file",
+    "source": "literal",
+    "token": "file_put_contents"
+  },
+  "literal:php:http:curl_exec": {
+    "hits": {
+      "php": 6
+    },
+    "home": "php",
+    "key": "literal:php:http:curl_exec",
+    "kind": "http",
+    "source": "literal",
+    "token": "curl_exec"
+  },
+  "literal:php:http:curl_init": {
+    "hits": {
+      "php": 4
+    },
+    "home": "php",
+    "key": "literal:php:http:curl_init",
+    "kind": "http",
+    "source": "literal",
+    "token": "curl_init"
+  },
+  "literal:php:http:curl_setopt": {
+    "hits": {
+      "php": 77
+    },
+    "home": "php",
+    "key": "literal:php:http:curl_setopt",
+    "kind": "http",
+    "source": "literal",
+    "token": "curl_setopt"
+  },
+  "literal:php:http:file_get_contents": {
+    "hits": {
+      "php": 56
+    },
+    "home": "php",
+    "key": "literal:php:http:file_get_contents",
+    "kind": "http",
+    "source": "literal",
+    "token": "file_get_contents"
+  },
+  "literal:php:http:fsockopen": {
+    "hits": {
+      "php": 34
+    },
+    "home": "php",
+    "key": "literal:php:http:fsockopen",
+    "kind": "http",
+    "source": "literal",
+    "token": "fsockopen"
+  },
+  "literal:php:http:mail": {
+    "hits": {
+      "go": 11,
+      "java": 89,
+      "php": 81,
+      "ruby": 258,
+      "scala": 2,
+      "swift": 9,
+      "typescript": 22
+    },
+    "home": "php",
+    "key": "literal:php:http:mail",
+    "kind": "http",
+    "source": "literal",
+    "token": "mail"
+  },
+  "literal:php:http:setcookie": {
+    "hits": {
+      "php": 47,
+      "swift": 6
+    },
+    "home": "php",
+    "key": "literal:php:http:setcookie",
+    "kind": "http",
+    "source": "literal",
+    "token": "setcookie"
+  },
+  "literal:php:http:setrawcookie": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:http:setrawcookie",
+    "kind": "http",
+    "source": "literal",
+    "token": "setrawcookie"
+  },
+  "literal:php:http:wp_remote_get": {
+    "hits": {
+      "php": 31
+    },
+    "home": "php",
+    "key": "literal:php:http:wp_remote_get",
+    "kind": "http",
+    "source": "literal",
+    "token": "wp_remote_get"
+  },
+  "literal:php:http:wp_remote_post": {
+    "hits": {
+      "php": 16
+    },
+    "home": "php",
+    "key": "literal:php:http:wp_remote_post",
+    "kind": "http",
+    "source": "literal",
+    "token": "wp_remote_post"
+  },
+  "literal:php:http:wp_remote_request": {
+    "hits": {
+      "php": 13
+    },
+    "home": "php",
+    "key": "literal:php:http:wp_remote_request",
+    "kind": "http",
+    "source": "literal",
+    "token": "wp_remote_request"
+  },
+  "literal:php:log:error_log": {
+    "hits": {
+      "php": 47
+    },
+    "home": "php",
+    "key": "literal:php:log:error_log",
+    "kind": "log",
+    "source": "literal",
+    "token": "error_log"
+  },
+  "literal:php:log:error_reporting": {
+    "hits": {
+      "php": 25
+    },
+    "home": "php",
+    "key": "literal:php:log:error_reporting",
+    "kind": "log",
+    "source": "literal",
+    "token": "error_reporting"
+  },
+  "literal:php:log:phpinfo": {
+    "hits": {
+      "php": 2,
+      "ruby": 1
+    },
+    "home": "php",
+    "key": "literal:php:log:phpinfo",
+    "kind": "log",
+    "source": "literal",
+    "token": "phpinfo"
+  },
+  "literal:php:log:trigger_error": {
+    "hits": {
+      "php": 110
+    },
+    "home": "php",
+    "key": "literal:php:log:trigger_error",
+    "kind": "log",
+    "source": "literal",
+    "token": "trigger_error"
+  },
+  "literal:php:log:var_dump": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:log:var_dump",
+    "kind": "log",
+    "source": "literal",
+    "token": "var_dump"
+  },
+  "literal:php:session:session_destroy": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:session:session_destroy",
+    "kind": "session",
+    "source": "literal",
+    "token": "session_destroy"
+  },
+  "literal:php:session:session_id": {
+    "hits": {
+      "php": 1,
+      "ruby": 10
+    },
+    "home": "php",
+    "key": "literal:php:session:session_id",
+    "kind": "session",
+    "source": "literal",
+    "token": "session_id"
+  },
+  "literal:php:session:session_regenerate_id": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:session:session_regenerate_id",
+    "kind": "session",
+    "source": "literal",
+    "token": "session_regenerate_id"
+  },
+  "literal:php:session:session_start": {
+    "hits": {
+      "php": 4,
+      "typescript": 1
+    },
+    "home": "php",
+    "key": "literal:php:session:session_start",
+    "kind": "session",
+    "source": "literal",
+    "token": "session_start"
+  },
+  "literal:php:session:session_unset": {
+    "hits": {},
+    "home": "php",
+    "key": "literal:php:session:session_unset",
+    "kind": "session",
+    "source": "literal",
+    "token": "session_unset"
+  },
+  "literal:php:session:session_write_close": {
+    "hits": {
+      "php": 5
+    },
+    "home": "php",
+    "key": "literal:php:session:session_write_close",
+    "kind": "session",
+    "source": "literal",
+    "token": "session_write_close"
+  },
+  "literal:python:db:execute": {
+    "hits": {
+      "c": 18,
+      "cpp": 160,
+      "csharp": 15,
+      "dart": 38,
+      "go": 375,
+      "java": 10215,
+      "javascript": 204,
+      "kotlin": 7,
+      "lua": 159,
+      "php": 27,
+      "ruby": 2484,
+      "rust": 327,
+      "scala": 13,
+      "typescript": 261,
+      "zig": 36
+    },
+    "home": "python",
+    "key": "literal:python:db:execute",
+    "kind": "db",
+    "source": "literal",
+    "token": "execute"
+  },
+  "literal:python:db:insert": {
+    "hits": {
+      "c": 15,
+      "cpp": 2528,
+      "csharp": 37,
+      "dart": 152,
+      "go": 1264,
+      "java": 148,
+      "javascript": 7,
+      "kotlin": 94,
+      "lua": 1677,
+      "php": 60,
+      "ruby": 134,
+      "rust": 825,
+      "scala": 22,
+      "swift": 34,
+      "typescript": 793,
+      "zig": 17
+    },
+    "home": "python",
+    "key": "literal:python:db:insert",
+    "kind": "db",
+    "source": "literal",
+    "token": "insert"
+  },
+  "literal:python:db:query": {
+    "hits": {
+      "c": 10,
+      "cpp": 44,
+      "csharp": 936,
+      "dart": 22,
+      "gdscript": 2,
+      "go": 302,
+      "java": 10275,
+      "javascript": 174,
+      "kotlin": 6,
+      "lua": 156,
+      "php": 736,
+      "ruby": 1336,
+      "rust": 421,
+      "scala": 14,
+      "swift": 62,
+      "typescript": 1043,
+      "zig": 37
+    },
+    "home": "python",
+    "key": "literal:python:db:query",
+    "kind": "db",
+    "source": "literal",
+    "token": "query"
+  },
+  "literal:python:db:select": {
+    "hits": {
+      "c": 10,
+      "cpp": 750,
+      "csharp": 835,
+      "dart": 13,
+      "gdscript": 5,
+      "go": 97,
+      "java": 100,
+      "javascript": 345,
+      "lua": 467,
+      "php": 23,
+      "ruby": 382,
+      "rust": 2,
+      "scala": 3,
+      "swift": 13,
+      "tsx": 55,
+      "typescript": 249,
+      "zig": 59
+    },
+    "home": "python",
+    "key": "literal:python:db:select",
+    "kind": "db",
+    "source": "literal",
+    "token": "select"
+  },
+  "literal:python:file:pathlib": {
+    "hits": {
+      "typescript": 15
+    },
+    "home": "python",
+    "key": "literal:python:file:pathlib",
+    "kind": "file",
+    "source": "literal",
+    "token": "pathlib"
+  },
+  "literal:python:file:read_bytes": {
+    "hits": {},
+    "home": "python",
+    "key": "literal:python:file:read_bytes",
+    "kind": "file",
+    "source": "literal",
+    "token": "read_bytes"
+  },
+  "literal:python:file:read_text": {
+    "hits": {
+      "cpp": 2,
+      "typescript": 1
+    },
+    "home": "python",
+    "key": "literal:python:file:read_text",
+    "kind": "file",
+    "source": "literal",
+    "token": "read_text"
+  },
+  "literal:python:file:shutil": {
+    "hits": {
+      "typescript": 2
+    },
+    "home": "python",
+    "key": "literal:python:file:shutil",
+    "kind": "file",
+    "source": "literal",
+    "token": "shutil"
+  },
+  "literal:python:file:write_bytes": {
+    "hits": {},
+    "home": "python",
+    "key": "literal:python:file:write_bytes",
+    "kind": "file",
+    "source": "literal",
+    "token": "write_bytes"
+  },
+  "literal:python:file:write_text": {
+    "hits": {
+      "typescript": 1
+    },
+    "home": "python",
+    "key": "literal:python:file:write_text",
+    "kind": "file",
+    "source": "literal",
+    "token": "write_text"
+  },
+  "literal:python:http:aiohttp": {
+    "hits": {
+      "typescript": 1
+    },
+    "home": "python",
+    "key": "literal:python:http:aiohttp",
+    "kind": "http",
+    "source": "literal",
+    "token": "aiohttp"
+  },
+  "literal:python:http:httpx": {
+    "hits": {
+      "typescript": 1
+    },
+    "home": "python",
+    "key": "literal:python:http:httpx",
+    "kind": "http",
+    "source": "literal",
+    "token": "httpx"
+  },
+  "literal:python:log:logging": {
+    "hits": {
+      "c": 8,
+      "cpp": 3,
+      "csharp": 64,
+      "go": 453,
+      "java": 5798,
+      "kotlin": 6,
+      "lua": 21,
+      "php": 1,
+      "ruby": 8,
+      "scala": 3,
+      "typescript": 120,
+      "zig": 10
+    },
+    "home": "python",
+    "key": "literal:python:log:logging",
+    "kind": "log",
+    "source": "literal",
+    "token": "logging"
+  },
+  "literal:ruby:db:delete_all": {
+    "hits": {
+      "java": 1,
+      "php": 3,
+      "rust": 1
+    },
+    "home": "ruby",
+    "key": "literal:ruby:db:delete_all",
+    "kind": "db",
+    "source": "literal",
+    "token": "delete_all"
+  },
+  "literal:ruby:db:destroy_all": {
+    "hits": {
+      "php": 3,
+      "ruby": 3
+    },
+    "home": "ruby",
+    "key": "literal:ruby:db:destroy_all",
+    "kind": "db",
+    "source": "literal",
+    "token": "destroy_all"
+  },
+  "literal:ruby:db:find_by": {
+    "hits": {
+      "ruby": 2410
+    },
+    "home": "ruby",
+    "key": "literal:ruby:db:find_by",
+    "kind": "db",
+    "source": "literal",
+    "token": "find_by"
+  },
+  "literal:ruby:db:find_by!": {
+    "hits": {},
+    "home": "ruby",
+    "key": "literal:ruby:db:find_by!",
+    "kind": "db",
+    "source": "literal",
+    "token": "find_by!"
+  },
+  "literal:ruby:db:pluck": {
+    "hits": {
+      "go": 1,
+      "php": 3,
+      "ruby": 1860
+    },
+    "home": "ruby",
+    "key": "literal:ruby:db:pluck",
+    "kind": "db",
+    "source": "literal",
+    "token": "pluck"
+  },
+  "literal:ruby:db:update_all": {
+    "hits": {
+      "cpp": 9,
+      "ruby": 306,
+      "rust": 1
+    },
+    "home": "ruby",
+    "key": "literal:ruby:db:update_all",
+    "kind": "db",
+    "source": "literal",
+    "token": "update_all"
+  },
+  "literal:ruby:db:where": {
+    "hits": {
+      "c": 2,
+      "cpp": 2,
+      "csharp": 1082,
+      "dart": 182,
+      "go": 5,
+      "java": 100,
+      "javascript": 8,
+      "lua": 1,
+      "php": 98,
+      "ruby": 6568,
+      "swift": 1,
+      "typescript": 19
+    },
+    "home": "ruby",
+    "key": "literal:ruby:db:where",
+    "kind": "db",
+    "source": "literal",
+    "token": "where"
+  },
+  "literal:ruby:http:faraday": {
+    "hits": {
+      "ruby": 41
+    },
+    "home": "ruby",
+    "key": "literal:ruby:http:faraday",
+    "kind": "http",
+    "source": "literal",
+    "token": "faraday"
+  },
+  "literal:ruby:http:httparty": {
+    "hits": {},
+    "home": "ruby",
+    "key": "literal:ruby:http:httparty",
+    "kind": "http",
+    "source": "literal",
+    "token": "httparty"
+  },
+  "literal:rust:db:read_txn": {
+    "hits": {
+      "rust": 421
+    },
+    "home": "rust",
+    "key": "literal:rust:db:read_txn",
+    "kind": "db",
+    "source": "literal",
+    "token": "read_txn"
+  },
+  "literal:rust:db:write_txn": {
+    "hits": {
+      "rust": 184
+    },
+    "home": "rust",
+    "key": "literal:rust:db:write_txn",
+    "kind": "db",
+    "source": "literal",
+    "token": "write_txn"
+  },
+  "literal:swift:file:write": {
+    "hits": {
+      "c": 114,
+      "cpp": 601,
+      "csharp": 25,
+      "dart": 6,
+      "gdscript": 1,
+      "go": 2954,
+      "java": 2110,
+      "javascript": 35,
+      "kotlin": 2,
+      "lua": 114,
+      "php": 17,
+      "ruby": 300,
+      "rust": 80,
+      "scala": 52,
+      "swift": 5,
+      "typescript": 821,
+      "zig": 36
+    },
+    "home": "swift",
+    "key": "literal:swift:file:write",
+    "kind": "file",
+    "source": "literal",
+    "token": "write"
+  },
+  "literal:swift:http:datatask": {
+    "hits": {
+      "swift": 4
+    },
+    "home": "swift",
+    "key": "literal:swift:http:datatask",
+    "kind": "http",
+    "source": "literal",
+    "token": "datatask"
+  },
+  "literal:swift:http:fetch": {
+    "hits": {
+      "cpp": 38,
+      "csharp": 78,
+      "dart": 4,
+      "go": 17,
+      "java": 759,
+      "javascript": 26,
+      "kotlin": 18,
+      "lua": 28,
+      "php": 28,
+      "ruby": 442,
+      "rust": 10,
+      "swift": 56,
+      "tsx": 4,
+      "typescript": 485
+    },
+    "home": "swift",
+    "key": "literal:swift:http:fetch",
+    "kind": "http",
+    "source": "literal",
+    "token": "fetch"
+  },
+  "literal:swift:http:fetchwithresult": {
+    "hits": {
+      "swift": 21
+    },
+    "home": "swift",
+    "key": "literal:swift:http:fetchwithresult",
+    "kind": "http",
+    "source": "literal",
+    "token": "fetchwithresult"
+  },
+  "literal:swift:http:perform": {
+    "hits": {
+      "c": 3,
+      "cpp": 7,
+      "csharp": 32,
+      "go": 28,
+      "java": 27,
+      "lua": 1,
+      "php": 17,
+      "ruby": 261,
+      "rust": 2,
+      "swift": 41,
+      "tsx": 17,
+      "typescript": 18,
+      "zig": 1
+    },
+    "home": "swift",
+    "key": "literal:swift:http:perform",
+    "kind": "http",
+    "source": "literal",
+    "token": "perform"
+  },
+  "literal:swift:http:performwithresult": {
+    "hits": {
+      "swift": 26
+    },
+    "home": "swift",
+    "key": "literal:swift:http:performwithresult",
+    "kind": "http",
+    "source": "literal",
+    "token": "performwithresult"
+  },
+  "literal:swift:log:nslog": {
+    "hits": {},
+    "home": "swift",
+    "key": "literal:swift:log:nslog",
+    "kind": "log",
+    "source": "literal",
+    "token": "nslog"
+  },
+  "literal:swift:log:os_log": {
+    "hits": {},
+    "home": "swift",
+    "key": "literal:swift:log:os_log",
+    "kind": "log",
+    "source": "literal",
+    "token": "os_log"
+  },
+  "receiver:common:cache:memcache": {
+    "hits": {},
+    "home": "common",
+    "key": "receiver:common:cache:memcache",
+    "kind": "cache",
+    "source": "receiver",
+    "token": "memcache"
+  },
+  "receiver:common:cache:redis": {
+    "hits": {
+      "c": 35,
+      "lua": 8,
+      "ruby": 645
+    },
+    "home": "common",
+    "key": "receiver:common:cache:redis",
+    "kind": "cache",
+    "source": "receiver",
+    "token": "redis"
+  },
+  "receiver:common:db:cursor": {
+    "hits": {
+      "cpp": 20,
+      "java": 218,
+      "javascript": 2,
+      "rust": 42,
+      "typescript": 69,
+      "zig": 21
+    },
+    "home": "common",
+    "key": "receiver:common:db:cursor",
+    "kind": "db",
+    "source": "receiver",
+    "token": "cursor"
+  },
+  "receiver:common:db:db": {
+    "hits": {
+      "cpp": 3,
+      "csharp": 6,
+      "go": 128,
+      "java": 70,
+      "javascript": 4,
+      "kotlin": 5,
+      "lua": 54,
+      "ruby": 1485,
+      "rust": 79,
+      "scala": 4,
+      "typescript": 364
+    },
+    "home": "common",
+    "key": "receiver:common:db:db",
+    "kind": "db",
+    "source": "receiver",
+    "token": "db"
+  },
+  "receiver:common:db:engine": {
+    "hits": {
+      "cpp": 5,
+      "gdscript": 52,
+      "java": 1670,
+      "ruby": 19,
+      "rust": 11,
+      "typescript": 152
+    },
+    "home": "common",
+    "key": "receiver:common:db:engine",
+    "kind": "db",
+    "source": "receiver",
+    "token": "engine"
+  },
+  "receiver:common:env:environment": {
+    "hits": {
+      "cpp": 40,
+      "csharp": 21,
+      "dart": 2,
+      "gdscript": 10,
+      "go": 84,
+      "java": 284,
+      "javascript": 4,
+      "swift": 1,
+      "typescript": 16
+    },
+    "home": "common",
+    "key": "receiver:common:env:environment",
+    "kind": "env",
+    "source": "receiver",
+    "token": "environment"
+  },
+  "receiver:common:file:directory": {
+    "hits": {
+      "csharp": 216,
+      "dart": 19,
+      "java": 1
+    },
+    "home": "common",
+    "key": "receiver:common:file:directory",
+    "kind": "file",
+    "source": "receiver",
+    "token": "directory"
+  },
+  "receiver:common:file:file": {
+    "hits": {
+      "cpp": 2,
+      "csharp": 242,
+      "dart": 7,
+      "go": 24,
+      "java": 13,
+      "lua": 56,
+      "ruby": 415,
+      "rust": 4,
+      "scala": 2,
+      "typescript": 9
+    },
+    "home": "common",
+    "key": "receiver:common:file:file",
+    "kind": "file",
+    "source": "receiver",
+    "token": "file"
+  },
+  "receiver:common:file:files": {
+    "hits": {
+      "cpp": 1,
+      "csharp": 2,
+      "java": 2936,
+      "scala": 4,
+      "typescript": 30
+    },
+    "home": "common",
+    "key": "receiver:common:file:files",
+    "kind": "file",
+    "source": "receiver",
+    "token": "files"
+  },
+  "receiver:common:file:fs": {
+    "hits": {
+      "csharp": 2,
+      "go": 54,
+      "java": 17,
+      "javascript": 49,
+      "kotlin": 1,
+      "typescript": 1380
+    },
+    "home": "common",
+    "key": "receiver:common:file:fs",
+    "kind": "file",
+    "source": "receiver",
+    "token": "fs"
+  },
+  "receiver:common:file:paths": {
+    "hits": {
+      "typescript": 2
+    },
+    "home": "common",
+    "key": "receiver:common:file:paths",
+    "kind": "file",
+    "source": "receiver",
+    "token": "paths"
+  },
+  "receiver:common:http:_httpclient": {
+    "hits": {},
+    "home": "common",
+    "key": "receiver:common:http:_httpclient",
+    "kind": "http",
+    "source": "receiver",
+    "token": "_httpclient"
+  },
+  "receiver:common:http:aiohttp": {
+    "hits": {
+      "typescript": 1
+    },
+    "home": "common",
+    "key": "receiver:common:http:aiohttp",
+    "kind": "http",
+    "source": "receiver",
+    "token": "aiohttp"
+  },
+  "receiver:common:http:httpclient": {
+    "hits": {
+      "csharp": 8,
+      "go": 3,
+      "java": 206,
+      "ruby": 1,
+      "scala": 2
+    },
+    "home": "common",
+    "key": "receiver:common:http:httpclient",
+    "kind": "http",
+    "source": "receiver",
+    "token": "httpclient"
+  },
+  "receiver:common:http:httpx": {
+    "hits": {
+      "typescript": 1
+    },
+    "home": "common",
+    "key": "receiver:common:http:httpx",
+    "kind": "http",
+    "source": "receiver",
+    "token": "httpx"
+  },
+  "receiver:common:log:_log": {
+    "hits": {
+      "gdscript": 3,
+      "lua": 1,
+      "typescript": 17
+    },
+    "home": "common",
+    "key": "receiver:common:log:_log",
+    "kind": "log",
+    "source": "receiver",
+    "token": "_log"
+  },
+  "receiver:common:log:_logger": {
+    "hits": {
+      "csharp": 1111,
+      "dart": 1,
+      "typescript": 424
+    },
+    "home": "common",
+    "key": "receiver:common:log:_logger",
+    "kind": "log",
+    "source": "receiver",
+    "token": "_logger"
+  },
+  "receiver:common:log:ilogger": {
+    "hits": {},
+    "home": "common",
+    "key": "receiver:common:log:ilogger",
+    "kind": "log",
+    "source": "receiver",
+    "token": "ilogger"
+  },
+  "receiver:common:log:log": {
+    "hits": {
+      "cpp": 2,
+      "dart": 783,
+      "gdscript": 88,
+      "go": 645,
+      "java": 389,
+      "javascript": 6,
+      "kotlin": 5,
+      "lua": 641,
+      "ruby": 40,
+      "scala": 7,
+      "typescript": 371,
+      "zig": 1551
+    },
+    "home": "common",
+    "key": "receiver:common:log:log",
+    "kind": "log",
+    "source": "receiver",
+    "token": "log"
+  },
+  "receiver:common:log:logger": {
+    "hits": {
+      "cpp": 5,
+      "csharp": 216,
+      "go": 4988,
+      "java": 15791,
+      "javascript": 1,
+      "kotlin": 55,
+      "lua": 11,
+      "ruby": 629,
+      "rust": 15,
+      "scala": 121,
+      "typescript": 1229,
+      "zig": 2
+    },
+    "home": "common",
+    "key": "receiver:common:log:logger",
+    "kind": "log",
+    "source": "receiver",
+    "token": "logger"
+  },
+  "receiver:common:log:slf4j": {
+    "hits": {},
+    "home": "common",
+    "key": "receiver:common:log:slf4j",
+    "kind": "log",
+    "source": "receiver",
+    "token": "slf4j"
+  }
+}
