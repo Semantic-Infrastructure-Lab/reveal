@@ -124,8 +124,9 @@ def create_element_dict(
     if item.get('is_abstract'):
         element['is_abstract'] = True
 
-    # Add complexity for functions/methods
-    if category in ('functions', 'methods'):
+    # Add complexity for functions/methods (and 'tests' — currently only Zig's
+    # TestDecl blocks, which now carry 'calls' too; see zig.py/BACK-660 follow-on).
+    if category in ('functions', 'methods', 'tests'):
         # Use complexity from item if available (tree-sitter calculated)
         # Otherwise calculate with heuristic
         element['complexity'] = item.get('complexity') or calculate_complexity(element, analyzer)

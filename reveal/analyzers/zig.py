@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children, node_next_sibling as _next_sibling, node_prev_sibling as _prev_sibling
+from ..adapters.ast.nav_calls import range_calls
 
 
 @register('.zig', name='Zig', icon='⚡')
@@ -108,15 +109,39 @@ class ZigAnalyzer(TreeSitterAnalyzer):
 
     def _build_function_info(self, decl_node, fn_name: str, signature: str, has_pub: bool) -> Dict[str, Any]:
         """Build function information dictionary."""
+        line_start = decl_node.start_position().row + 1
+        line_end = decl_node.end_position().row + 1
         func_info = {
-            'line': decl_node.start_position().row + 1,
-            'line_end': decl_node.end_position().row + 1,
+            'line': line_start,
+            'line_end': line_end,
             'name': fn_name,
             'signature': signature,
+            'calls': self._extract_calls(decl_node, line_start, line_end),
         }
         if has_pub:
             func_info['visibility'] = 'pub'
         return func_info
+
+    def _extract_calls(self, node, line_start: int, line_end: int) -> List[str]:
+        """Callee names reachable from `node`, deduped in first-seen order.
+
+        Zig has no call-expression wrapper node — `foo(x)` / `a.b.c(x)` parse
+        as a single `SuffixExpr` (see `nav_calls._extract_zig_suffix_calls`),
+        so `calls://` (which walks `CALL_NODE_TYPES` — Python `call`, JS/Rust
+        `call_expression`, etc.) previously saw zero callees for every Zig
+        function, reporting live functions as having no callers (BACK-660).
+        Reusing `range_calls` here — the same decoder `--calls` already uses
+        — rather than teaching `CALL_NODE_TYPES` a shape it can't represent
+        (call-or-not depends on a child node, not the node's own kind).
+        """
+        seen: List[str] = []
+        seen_set = set()
+        for call in range_calls(node, line_start, line_end, self._get_node_text):
+            callee = call['callee']
+            if callee and callee not in seen_set:
+                seen.append(callee)
+                seen_set.add(callee)
+        return seen
 
     def _extract_functions(self) -> List[Dict[str, Any]]:
         """Extract function definitions."""
@@ -256,7 +281,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         return None
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
-        """Extract a named function from Zig source."""
+        """Extract a named function or test from Zig source."""
         if element_type == 'function' and self.tree:
             for decl_node in self._find_nodes_by_type('Decl'):
                 fn_proto = self._find_fn_proto(decl_node)
@@ -269,13 +294,57 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                             'line_end': decl_node.end_position().row + 1,
                             'source': self._get_node_text(decl_node),
                         }
+        if element_type == 'test' and self.tree:
+            test_node = self._find_named_test_callback(name)
+            if test_node is not None:
+                return {
+                    'name': name,
+                    'line_start': test_node.start_position().row + 1,
+                    'line_end': test_node.end_position().row + 1,
+                    'source': self._get_node_text(test_node),
+                }
         return super().extract_element(element_type, name)
 
     def _extract_tests(self) -> List[Dict[str, Any]]:
-        """Extract test blocks."""
+        """Extract test blocks.
+
+        `line_end` was missing here (BACK-661) even though `_build_function_info`
+        sets it for functions — the outline rendered every test as `[0 lines]`,
+        indistinguishable from an empty test, because nothing else in the dict
+        conveyed the real span.
+        """
         tests = []
         for test_node in self._find_nodes_by_type('TestDecl'):
             test_name = self._get_test_name(test_node)
             if test_name:
-                tests.append({'line': test_node.start_position().row + 1, 'name': test_name})
+                line_start = test_node.start_position().row + 1
+                line_end = test_node.end_position().row + 1
+                tests.append({
+                    'line': line_start,
+                    'line_end': line_end,
+                    'name': test_name,
+                    # A function called only from a test block previously
+                    # reported zero callers via calls:// (same failure mode
+                    # as BACK-660, one hop further in) — mirrors TS/JS test
+                    # callbacks, which get 'calls' via _build_function_dict.
+                    'calls': self._extract_calls(test_node, line_start, line_end),
+                })
         return tests
+
+    def _find_named_test_callback(self, name: str):
+        """Resolve a Zig `test "name" {}` block back to its `TestDecl` node.
+
+        Generic hook name shared with TypeScript's Jest/Vitest resolver
+        (`typescript.py:_find_named_test_callback`) — `display/element.py`'s
+        `_try_treesitter_extraction` already looks for this method on any
+        analyzer via `getattr`, so implementing it is enough to make
+        `reveal file.zig "test name"` resolve exactly what `--outline`
+        lists (BACK-661: previously the outline advertised all 62 test names
+        as addressable handles that direct extraction then rejected, because
+        'test'/'TestDecl' was never in `ELEMENT_TYPE_MAP`/`FUNCTION_NODE_TYPES`
+        and this hook didn't exist for Zig).
+        """
+        for test_node in self._find_nodes_by_type('TestDecl'):
+            if self._get_test_name(test_node) == name:
+                return test_node
+        return None

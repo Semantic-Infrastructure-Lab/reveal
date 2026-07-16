@@ -128,6 +128,7 @@ def element(
         "interfaces": "interface",
         "sections": "section",
         "variables": "variable",
+        "tests": "test",
     }
     try:
         struct = analyzer.get_structure()
@@ -142,7 +143,7 @@ def element(
 
     # Last resort: try common types in order.
     for elem_type in ("function", "class", "method", "struct", "enum",
-                      "interface", "section", "variable"):
+                      "interface", "section", "variable", "test"):
         result = analyzer.extract_element(elem_type, name)
         if result is not None:
             return result

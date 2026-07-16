@@ -258,7 +258,13 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
         # locate callers that use the alias.
         alias_map = build_alias_map(file_path)
         for elem in file_struct.get('elements', []):
-            if elem.get('category') not in ('functions', 'methods'):
+            # 'tests' (Zig's TestDecl blocks — the only 'tests'-category
+            # producer today) counts as a caller here for the same reason
+            # JS/TS's describe()/it() callbacks are folded into 'functions'
+            # (BACK-334): a function called only from a test previously
+            # reported zero callers — indistinguishable from dead code,
+            # BACK-660's exact failure mode, just one hop further in.
+            if elem.get('category') not in ('functions', 'methods', 'tests'):
                 continue
             record_base = {
                 'file': file_path,
