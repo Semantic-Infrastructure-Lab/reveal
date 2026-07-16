@@ -46,19 +46,31 @@ _TAXONOMY_COMMON: List[Tuple[str, List[str]]] = [
         # ordinary `dict.update()` / `list`-ish `.update()` (corpus: 12 db FPs on
         # Home Assistant, incl. 2/60 negative-control FPs) and stole Python's
         # `requests.delete(url)` from http (kind-order db<http let bare `delete`
-        # win over the explicit python `requests.delete`->http). `->query`/
-        # `->execute`/`->select`/`->insert` stay common: their bare forms
-        # (`query`/`execute`/`select`/`insert`) are load-bearing for Python
-        # SQLAlchemy recall (`session.query`, `cursor.execute`) and did not
-        # produce corpus FPs. `->fetch` was REMOVED (TS sideeffects-recall-oracle
-        # pre-flight check, BACK-547 fifth loop): its bare form ('fetch') collided
-        # with JS/TS's global `fetch()` — the dominant modern HTTP call idiom —
-        # stealing it from the js-language http bucket's own explicit 'fetch('
-        # entry, since db precedes http in _KIND_ORDER. Confirmed via corpus grep
-        # (samples/python) that bare `.fetch(` has zero real occurrences in Python
-        # — only PHP's `$stmt->fetch()` needs it (see _TAXONOMY_BY_LANG['php']).
-        '->query', '->execute', '->select', '->insert',
-        '::query', '::execute',
+        # win over the explicit python `requests.delete`->http). `->fetch` was
+        # REMOVED (TS sideeffects-recall-oracle pre-flight check, BACK-547 fifth
+        # loop): its bare form ('fetch') collided with JS/TS's global `fetch()`
+        # — the dominant modern HTTP call idiom — stealing it from the
+        # js-language http bucket's own explicit 'fetch(' entry, since db
+        # precedes http in _KIND_ORDER. Confirmed via corpus grep (samples/python)
+        # that bare `.fetch(` has zero real occurrences in Python — only PHP's
+        # `$stmt->fetch()` needs it (see _TAXONOMY_BY_LANG['php']).
+        #
+        # BACK-636/BACK-633: `->query`/`->execute`/`->select`/`->insert` also
+        # moved out of COMMON to python+php-only (same shape as the update/delete
+        # move above). Corpus-wide grep (samples/, full trees not just the
+        # original single-subtree findings) showed these bare verbs are NOT
+        # collision-safe: `.execute(` has 8,301 Java call sites (dominant idiom
+        # is `java.util.concurrent.Executor.execute`, not db — corpus-confirmed
+        # on Elasticsearch's `clusterCoordinationExecutor.execute(...)`), `.select`
+        # has 980 Ruby call sites (dominant idiom is `Enumerable#select`, corpus-
+        # confirmed on Discourse), `->insert(` has 70 C++ STL-container sites
+        # (`HashMap::insert`/`Vector::insert`, corpus-confirmed on Godot) and
+        # `.Insert(` has 1,210 Go sites (corpus-confirmed on client-go). Recall
+        # is preserved: python/php get these verbs back via their own
+        # per-language tables below (python's `cursor.execute`/`session.query`,
+        # php's `$stmt->execute()`/`DB::table(...)->insert(...)`), the two
+        # languages the original comment identified these bare forms as
+        # load-bearing for.
         'db_query', 'db_insert', 'db_update', 'db_delete',
     ]),
     ('http', [
@@ -113,6 +125,15 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             # `fetch()` HTTP call. PHP's `$stmt->fetch()` (PDOStatement/
             # mysqli_result row fetch) is the only real, corpus-confirmed user.
             '->fetch',
+            # BACK-636/BACK-633: moved here from _TAXONOMY_COMMON, same shape
+            # as the ->update/->delete move above. `$pdo->query()`/
+            # `$stmt->execute()` (raw PDO) and Laravel's fluent query builder
+            # (`DB::table(...)->select(...)`, `->insert(...)`) are the real PHP
+            # users; as bare verbs they over-fired elsewhere (see COMMON's db
+            # bucket comment for the corpus numbers: Java .execute, Ruby
+            # .select, C++/Go .insert).
+            '->query', '->execute', '->select', '->insert',
+            '::query', '::execute',
         ]),
         ('http', [
             'curl_exec', 'curl_setopt', 'curl_init',
@@ -167,15 +188,28 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         # unambiguous SQLAlchemy Session method with no aiohttp/websocket
         # counterpart (aiohttp ClientSession has none of add/flush/commit/…),
         # so it classifies the real db call without the cross-domain FP.
-        # `session.query`/`session.execute` are already caught by common
-        # `->query`/`->execute`; `session.get`/`session.delete` are deliberately
-        # OMITTED — they are genuinely ambiguous (SQLAlchemy 2.0 db read vs
-        # aiohttp http verb), so per the conservative philosophy we DECLINE.
+        # `session.query`/`session.execute` are caught by the bare 'query'/
+        # 'execute' patterns below; `session.get`/`session.delete` are
+        # deliberately OMITTED — they are genuinely ambiguous (SQLAlchemy 2.0
+        # db read vs aiohttp http verb), so per the conservative philosophy we
+        # DECLINE.
         ('db', [
             'session.add', 'session.add_all', 'session.flush', 'session.commit',
             'session.rollback', 'session.refresh', 'session.expunge',
             'session.expunge_all', 'session.merge', 'session.connection',
             'session.scalar', 'session.scalars',
+            # BACK-636/BACK-633: moved here from _TAXONOMY_COMMON's db bucket.
+            # Bare 'query'/'execute'/'select'/'insert' are load-bearing for
+            # Python DB-API/SQLAlchemy recall (`cursor.execute`,
+            # `session.query`, SQLAlchemy Core's `select(...)`/`insert(...)`
+            # constructs) but over-fired cross-language when common (see
+            # COMMON's db bucket comment for corpus numbers). Scoping here is
+            # behavior-preserving for Python: these bare forms already applied
+            # to Python under the old unscoped-common table, including the
+            # pre-existing `list.insert()`/`iterable.select()`-shaped FPs that
+            # existed before this move too — not a new regression, just now
+            # contained to python+php instead of every language.
+            'query', 'execute', 'select', 'insert',
         ]),
         ('http', [
             'requests.get', 'requests.post', 'requests.put', 'requests.delete',
@@ -644,6 +678,52 @@ _RECEIVER_TAXONOMY: List[Tuple[str, List[str]]] = [
 ]
 
 
+# BACK-637: per-kind verb allowlist applied on top of _RECEIVER_TAXONOMY's
+# receiver-name match. A receiver name alone is ambiguous when it's also a
+# common local-variable name — `files.iterator()`/`.size()`/`.forEach()` is a
+# `Stream<Path> files`/`List<Path> files` local var (Collection/Stream ops),
+# not the JVM `Files` static class, but `_classify_by_receiver` couldn't tell
+# them apart since matching is case-insensitive and receiver-only. Corpus-wide
+# (samples/java, 44K files): `Files.<verb>` (the real static-class idiom,
+# 3,120 call sites) and lowercase `files.<verb>` (the FP local-var idiom, 212
+# call sites) have COMPLETELY disjoint verb sets — Files.* verbs below are
+# I/O-shaped, the FP verbs are Collection/Stream-shaped (get/stream/size/
+# contains/add/put/isEmpty/filter/addAll/iterator/toArray/map/clear/forEach/
+# toList/putAll/merge). 'size' is deliberately EXCLUDED even though
+# `Files.size(path)` is real NIO API: it was the #3 FP verb in the corpus
+# (21 local-var `.size()` calls) and per the conservative-classification
+# philosophy (see BACK-644 property-channel comment), a miss is cheaper than
+# a false positive. Only the 'file' kind has a filter — db/cache/log/http/env
+# receiver matches are unaffected (no filter entry = no behavior change).
+# Verbs also include the Node `fs.*`/`.NET Directory/Path` static-method
+# idioms already relied upon by other languages' 'file' receiver matches, so
+# this filter can't regress them.
+_RECEIVER_VERB_FILTER: Dict[str, frozenset] = {
+    'file': frozenset({
+        # JVM NIO `Files`/`Directory` static class (corpus histogram)
+        'exists', 'notexists', 'createdirectories', 'createdirectory',
+        'writestring', 'copy', 'write', 'deleteifexists', 'delete',
+        'createfile', 'newinputstream', 'newoutputstream', 'readalllines',
+        'isdirectory', 'move', 'newdirectorystream', 'list', 'readallbytes',
+        'readstring', 'newbufferedwriter', 'newbufferedreader',
+        'isregularfile', 'isreadable', 'iswritable', 'isexecutable',
+        'issamefile', 'issymboliclink', 'createsymboliclink', 'createlink',
+        'readsymboliclink', 'walkfiletree', 'walk', 'lines', 'find',
+        'mismatch', 'readattributes', 'setattribute', 'getattribute',
+        'newbytechannel', 'getlastmodifiedtime', 'setlastmodifiedtime',
+        'probecontenttype',
+        # Node `fs`/.NET `Directory`/`Path` static-method idioms
+        'writefilesync', 'readfilesync', 'existssync', 'mkdirsync',
+        'unlinksync', 'renamesync', 'rmsync', 'appendfilesync',
+        'copyfilesync', 'readdirsync', 'writefile', 'readfile', 'mkdir',
+        'unlink', 'rename', 'rm', 'appendfile', 'copyfile', 'readdir',
+        'getfiles', 'enumeratefiles', 'metadata', 'read', 'openread',
+        'openwrite', 'create', 'appendalltext', 'appendalllines',
+        'appendtext',
+    }),
+}
+
+
 def _segments_contain(callee_segs: List[str], pattern_segs: List[str]) -> bool:
     """True if pattern_segs appears as a consecutive sub-sequence of callee_segs."""
     n = len(pattern_segs)
@@ -656,13 +736,23 @@ def _segments_contain(callee_segs: List[str], pattern_segs: List[str]) -> bool:
 
 
 def _classify_by_receiver(callee_segs: List[str]) -> Optional[str]:
-    """Classify by matching a non-final segment against receiver names."""
+    """Classify by matching a non-final segment against receiver names.
+
+    BACK-637: if the matched kind has a verb allowlist in
+    _RECEIVER_VERB_FILTER, the final segment (the verb) must also be in it —
+    a receiver-name match alone isn't enough for kinds where the receiver
+    name collides with common local-variable names (e.g. `files`).
+    """
     if len(callee_segs) < 2:
         return None
     non_final = callee_segs[:-1]
+    verb = callee_segs[-1]
     for kind, receivers in _RECEIVER_TAXONOMY:
         for receiver in receivers:
             if receiver in non_final:
+                allowed_verbs = _RECEIVER_VERB_FILTER.get(kind)
+                if allowed_verbs is not None and verb not in allowed_verbs:
+                    continue
                 return kind
     return None
 

@@ -199,7 +199,13 @@ java:
   - {kind: READ, line: 24}
   - {kind: READ, line: 25}
   sideeffects:
-  - {line: 20, kind: file}
+  # BACK-637: was 2 findings at line 20 (Files.write + the nested
+  # Paths.get("/tmp/orders.log") argument call). The second was a byproduct
+  # of the pre-fix unfiltered 'files'/'paths' receiver match firing on ANY
+  # verb, including 'get' — the #1 corpus-confirmed FP verb for this receiver
+  # (files.get(i) on a local List/Map, not I/O). Paths.get() constructs a
+  # Path value; it isn't itself a file effect any more than Python's bare
+  # Path(...) constructor is (BACK-416 precedent). One finding is correct.
   - {line: 20, kind: file}
   exits:
   - {kind: RETURN, line: 22}
