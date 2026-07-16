@@ -106,6 +106,55 @@ def test_rust_implicit_exits_are_found():
 
 @pytest.mark.xfail(
     strict=True,
+    reason="BACK-642: tree-sitter-cpp grammar limitation, not a reveal bug. A "
+    "preprocessor-conditional block whose branches have mismatched brace nesting "
+    "(`#if X \\n if (a) { \\n } else { \\n #else \\n { \\n #endif`, Godot's real "
+    "idiom for adding an `else` only under one build config) makes tree-sitter-cpp "
+    "unable to determine real brace boundaries -- it isn't preprocessed, so it "
+    "sees both branches' tokens at once. The whole enclosing function collapses "
+    "into one ERROR node with no salvageable function_definition child (unlike "
+    "ordinary ERROR recovery, where sibling functions still resolve) -- confirmed "
+    "via direct AST dump, not just CLI output. Documenting rather than "
+    "special-casing in reveal: `.conf` (BACK-583) taught us not to build "
+    "generality for a single real occurrence, and any fix here would need reveal "
+    "to run its own C preprocessor pass, a much larger feature with no second "
+    "use case yet. Real-world repro: Godot's ProjectSettings::_setup in "
+    "samples/cpp/core/config/project_settings.cpp:677.",
+)
+def test_cpp_mismatched_brace_preprocessor_branches_are_salvaged(tmp_path):
+    """A function containing #if/#else branches with mismatched brace nesting
+    should still be found, even though today it collapses the whole function
+    (and everything after it) into one unrecoverable ERROR node."""
+    src = tmp_path / "setup.cpp"
+    src.write_text(
+        "void ProjectSettings::_setup() {\n"
+        "\twhile (true) {\n"
+        "#if defined(OVERRIDE_PATH_ENABLED)\n"
+        "\t\tif (p_upwards) {\n"
+        "\t\t\tbreak;\n"
+        "\t\t} else {\n"
+        "#else\n"
+        "\t\t{\n"
+        "#endif\n"
+        "\t\t\tbreak;\n"
+        "\t\t}\n"
+        "\t}\n"
+        "}\n"
+        "\n"
+        "void foo() {\n"
+        "}\n"
+    )
+    out = _run(src, "--format", "json")
+    data = json.loads(out)
+    names = json.dumps(data)
+    assert "_setup" in names, (
+        "ProjectSettings::_setup should be found even with mismatched-brace "
+        f"preprocessor branches in its body:\n{out}"
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
     reason="Non-Python --narrow: the type-narrowing walker only understands "
     "Python grammar (typed_parameter, Optional/Union, isinstance). A TypeScript "
     "union param narrowed by `typeof` reports 'No annotation' even though the "
