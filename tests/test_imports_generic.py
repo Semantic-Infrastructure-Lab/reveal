@@ -921,6 +921,36 @@ class TestModuleResolution:
         assert res['a.b.helper'] == (tmp_path / 'a/b/helper.lua').resolve()
         assert res['json'] is None  # not an in-tree file — skip
 
+    def test_lua_require_directory_module_resolves_to_init(self, tmp_path):
+        """BACK-621: `require("a.b")` may name a *directory* module — Lua's
+        package.path `?/init.lua` convention — with no `a/b.lua` file at all.
+        Confirmed on the real Kong corpus via its own rockspec module map
+        (`kong.conf_loader` -> `kong/conf_loader/init.lua`); before this fix
+        the dotted resolver only ever tried appending an extension to the
+        last component, so every directory-module require silently resolved
+        to None — a confident false negative reproduced on 5 real Kong
+        targets (conf_loader, db.declarative, vaults.env, dynamic_hook,
+        plugins.rate-limiting.policies)."""
+        (tmp_path / 'a/b').mkdir(parents=True)
+        (tmp_path / 'a/b/init.lua').write_text('return {}\n')
+        (tmp_path / 'main.lua').write_text(
+            'local h = require("a.b")\n')
+        res = self._resolve(tmp_path, 'main.lua', '.')
+        assert res['a.b'] == (tmp_path / 'a/b/init.lua').resolve()
+
+    def test_lua_require_flat_file_wins_over_directory_module(self, tmp_path):
+        """When both `a/b.lua` and `a/b/init.lua` exist, the flat file wins —
+        matching require()'s real lookup order (package.path tries `?.lua`
+        before `?/init.lua`) and the resolver's own ext-loop-then-index-
+        fallback structure."""
+        (tmp_path / 'a/b').mkdir(parents=True)
+        (tmp_path / 'a/b.lua').write_text('return {}\n')
+        (tmp_path / 'a/b/init.lua').write_text('return {}\n')
+        (tmp_path / 'main.lua').write_text(
+            'local h = require("a.b")\n')
+        res = self._resolve(tmp_path, 'main.lua', '.')
+        assert res['a.b'] == (tmp_path / 'a/b.lua').resolve()
+
     def test_zig_relative_import_resolves_stdlib_skips(self, tmp_path):
         (tmp_path / 'helper.zig').write_text('pub const x = 1;\n')
         (tmp_path / 'main.zig').write_text(

@@ -44,7 +44,8 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Scala | ✅ 100% (GitBucket) | — not yet run | **Measured** (import only) |
 | C++ | — spot-check family³ | ✅ 83.3% (Godot) | **Measured** (side-effects only) |
 | C | ◑ spot-checked (Redis `#include`) | — not yet run | **Spot-checked** |
-| Dart, Lua, Zig, GDScript, TSX, plain JS | — not measured | — not measured | **Smoke-tested only**⁴ |
+| Lua | ✅ 99.5% (Kong) | — not yet run | **Measured** (import only) |
+| Dart, Zig, GDScript, TSX, plain JS | — not measured | — not measured | **Smoke-tested only**⁴ |
 
 ¹ Overall TypeScript side-effect recall was 76.8%; the gap was almost entirely
 one architecturally-distinct category — Node's `process.env.X` env reads are a
@@ -112,9 +113,15 @@ actually closes the gap without introducing false positives.
 | C# | Jellyfin, Godot C# glue | Real-corpus grep (idiom itself was fixture-only — absent from both corpora) | Fixture + incidental real-corpus hit | N/A for the target idiom | — | Investigating the (absent) target idiom surfaced that namespace fan-out was never wired into the dependency graph at all for zero-import files |
 | PHP | WordPress core (`samples/php`, 1,927 files) | Buildless `require`/`require_once`/`include`/`include_once` string-expression resolver (not `use`/namespace — see [harness README](../internal-docs/planning/dogfood-findings/php-recall-oracle/README.md) for why) | 80-target stratified sample, 442 edges | 0.00% → 33.85% (BACK-564) → **100.00%** (BACK-565) | 0 | `depends://`'s PHP resolver only recognized a bare string-literal require/include target; every real WordPress require/include uses string concatenation (`__DIR__ . 'x.php'`, `ABSPATH . WPINC . 'x.php'`, etc. — confirmed 0 bare-literal requires exist anywhere in the corpus). BACK-564 resolved the universal `__DIR__`/`dirname(__FILE__)` directory-relative idiom via a structural AST-walk extractor. BACK-565 (same session) closed the remaining majority: WordPress-specific framework-bootstrap constants (`ABSPATH`/`WPINC`/`WP_CONTENT_DIR`/`WP_PLUGIN_DIR`) are genuinely derivable — WordPress defines them in-tree via `define('ABSPATH', __DIR__ . '/')` and similar — so a project-wide constant index (built to a fixed point, since real constants chain through each other) now substitutes them into the same concatenation resolver. Constants with genuinely ambiguous `define()` values (measured: 3/50) are excluded from the index, never guessed |
 | Swift | Kickstarter iOS (`samples/swift`, 1,961 files, 8 SwiftPM packages) | `swift package dump-package` (real toolchain, target list) + independent per-file import parse | Full-tree; 21 declared targets, 164-edge precision sample | ~0% effective (123 edges / 7 dependent files) → **100% of declared targets resolved** (384,278 edges / 1,511 dependent files) | 0 (164-edge sample, none unbacked) | Swift's import granularity is the *module (SwiftPM target)*, not the file, but the resolver only matched `import Foo` → a unique `Foo.swift` — resolving ~0% of real multi-file targets, AND (worse) leaving `unresolved_intra` at 0 so no honest-decline `⚠` fired: a silent wrong "no dependents". Fixed in two buildless parts: (1) `Sources/<Target>/` directory-convention fan-out (`import Foo` → every file in target Foo, C#-namespace-style); (2) a structural `Package.swift` parse for targets that relocate sources via an explicit `path:` (real GraphAPI `path: "./Sources"`, 326 importers). The independent `dump-package` oracle caught the custom-`path:` case the directory convention alone would have silently mis-mapped |
+| Lua | Kong (`samples/lua`, 1,309 `.lua` files) | Project's own `kong-latest.rockspec` `build.modules` table (authoritative dotted-module → file map) + independent regex `require(...)` scan | 30-target stratified sample (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+), 782 edges | 85.4% → **99.5%** | 29 (BACK-670, filed not fixed — see below) | `require("a.b.c")` may name a *directory* module (`a/b/c/init.lua`, Lua's `package.path` `?/init.lua` convention) with no flat `a/b/c.lua` file at all — `_match_dotted` only ever tried appending an extension to the last dotted component, so every directory-module require silently resolved to `None`. Hit 5 real Kong targets (`kong.conf_loader`, `kong.db.declarative`, `kong.vaults.env`, `kong.dynamic_hook`, `kong.plugins.rate-limiting.policies`), each returning a confident "no dependents" despite 2-35 real importers. Fixed via a new opt-in `directory_index_filenames` spec field. 3 residual misses (spec-fixture importers of `kong.vaults.env`) and 29 false positives (a shared-resolver basename-collision class — external `resty.*` modules landing on same-named in-tree `kong.tools.*` files) filed not fixed as BACK-671/BACK-670 — see [harness README](../internal-docs/planning/dogfood-findings/lua-recall-oracle/README.md) |
 
-**Eleven measurement loops, eleven real bugs found, all eleven fixed** (Swift's
-BACK-567 was the last, closing the premium-tier program; PHP's
+**Twelve measurement loops, twelve real bugs found, all twelve fixed** (Swift's
+BACK-567 closed the premium-tier program; Lua's directory-module resolution
+gap is the most recent, closing 5 real zero-dependent targets — its two
+residual findings, a basename-collision false-positive class and 3
+unexplained misses, are filed separately as BACK-670/BACK-671 rather than
+counted against this headline, matching how TS's BACK-643 and C++'s
+BACK-642 were handled). PHP's
 BACK-564/565 before it were both fixed the same session after being
 filed with full evidence in the original measurement pass — BACK-565 was
 filed as a residual of BACK-564 and closed before the session ended, once
@@ -143,11 +150,12 @@ The following are **not** in the import-recall table above because they have
 not been run through an independent-oracle diff against a real corpus (C++ *is*
 measured for side-effect recall below — this gap is import-recall only):
 
-- **C++, Dart, Lua, Zig, GDScript** — each shares a resolver
+- **C++, Dart, Zig, GDScript** — each shares a resolver
   family with at least one already-measured language, but has not been
   independently confirmed on its own real corpus. (Swift graduated out of
   this list — measured with a full `swift package dump-package` oracle loop,
-  BACK-567; see the Results table.)
+  BACK-567; Lua graduated out via a rockspec-manifest oracle loop, BACK-621;
+  see the Results table.)
 - **C** — `#include` recall spot-checked at set level against grep ground truth
   on Redis (`samples/c`): 10/10 headers across fan-in 3–75 match exactly, two
   set-verified (server.h 75/75, zmalloc.h 23/23, 0 false pos / 0 false neg).
@@ -221,6 +229,7 @@ internal-docs/planning/dogfood-findings/scala-member-import-oracle/
 internal-docs/planning/dogfood-findings/rust-recall-oracle/
 internal-docs/planning/dogfood-findings/csharp-global-using-oracle/
 internal-docs/planning/dogfood-findings/ruby-autoload-oracle/
+internal-docs/planning/dogfood-findings/lua-recall-oracle/
 
 # Side-effect / boundary recall (per-language subdirs + program README)
 internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/

@@ -354,6 +354,27 @@ class _ImportSpec:
             directory to ``Tests/<name>`` rather than ``Sources/<name>``; the
             rest default to ``Sources/<name>`` (both overridable by an explicit
             ``path:``). Empty for every other language.
+        directory_index_filenames: Filename(s) that let a dotted qualified name
+            resolve to a *directory module* — Lua's ``require("a.b.c")`` →
+            ``a/b/c/init.lua`` when no ``a/b/c.lua`` file exists (BACK-621,
+            confirmed against the real Kong corpus's own ``rockspec`` module
+            map: ``kong.conf_loader`` → ``kong/conf_loader/init.lua``, not a
+            flat file). :meth:`_match_dotted` only ever tried appending an
+            extension to the *last* dotted component (``parts[:-1] +
+            [parts[-1] + ext]``); a directory-module require has no file
+            component to append the extension to — the whole dotted path
+            names a directory, and the real file is one level deeper with a
+            fixed name. Every project in the real corpus that groups a
+            submodule under a directory (``kong/db/declarative/``,
+            ``kong/vaults/env/``, ``kong/dynamic_hook/``,
+            ``kong/plugins/rate-limiting/policies/``) hit this — a confident
+            false negative on every statement across the whole corpus naming
+            them, with no honest-decline caveat (the miss is in the *target*
+            direction, not the importer's unresolved-import counter). When
+            set, a failed direct match additionally tries ``parts +
+            [index_filename]`` for each filename in this set via the same
+            longest-unique-suffix machinery (never fabricating an edge — still
+            skipped on ambiguity). Empty for every other language.
     """
 
     import_node_types: FrozenSet[str]
@@ -381,6 +402,7 @@ class _ImportSpec:
     module_dir_convention: FrozenSet[str] = field(default_factory=frozenset)
     manifest_filename: Optional[str] = None
     manifest_target_calls: FrozenSet[str] = field(default_factory=frozenset)
+    directory_index_filenames: FrozenSet[str] = field(default_factory=frozenset)
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -1810,6 +1832,11 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             match = self._longest_unique_suffix(target_parts, search_paths, file_index)
             if match is not None:
                 return match
+        for index_filename in self.spec.directory_index_filenames:
+            target_parts = parts + [index_filename]
+            match = self._longest_unique_suffix(target_parts, search_paths, file_index)
+            if match is not None:
+                return match
         return None
 
     def _longest_unique_suffix(
@@ -2120,6 +2147,10 @@ _LUA_SPEC = _ImportSpec(
     # a/b.lua, resolved the same way Java's dotted package names are.
     module_separator='.',
     source_extensions=frozenset({'.lua'}),
+    # `require("a.b")` may also name a directory module → a/b/init.lua
+    # (BACK-621, package.path's `?/init.lua` pattern) when no flat a/b.lua
+    # file exists — confirmed against Kong's own rockspec module map.
+    directory_index_filenames=frozenset({'init.lua'}),
 )
 
 
