@@ -631,7 +631,14 @@ class JavaScriptExtractor(LanguageExtractor):
                     if fallback_path.exists() and fallback_path.is_file():
                         return fallback_path.resolve()
 
-            return None
+            # BACK-621: don't bail here. `has_extension` is a heuristic on the
+            # last path segment containing a dot — it can't distinguish a real
+            # extension from a dotted basename with the extension omitted
+            # (e.g. './charts.constants' -> charts.constants.ts, or
+            # './WelcomeScreen.Center' -> WelcomeScreen.Center.tsx, both real
+            # Excalidraw import specifiers). Fall through to the same
+            # extension-append / directory-index resolution used below for
+            # specifiers with no dot at all, instead of returning None.
 
         # Try with common JavaScript extensions
         for ext in ['.js', '.ts', '.jsx', '.tsx', '.mjs']:

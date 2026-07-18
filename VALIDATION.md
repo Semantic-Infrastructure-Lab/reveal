@@ -48,7 +48,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Dart | ✅ 100%⁵ (AppFlowy) | — not yet run | **Measured** (import only) |
 | GDScript | ✅ 100%⁶ (godot-demo-projects) | — not yet run | **Measured** (import only) |
 | Zig | ✅ 100%⁷ (ghostty) | — not yet run | **Measured** (import only) |
-| TSX, plain JS | — not measured | — not measured | **Smoke-tested only**⁴ |
+| TSX, plain JS | ✅ 100%⁸ (Excalidraw, three.js) | — not yet run | **Measured** (import only) |
 
 ¹ Overall TypeScript side-effect recall was 76.8%; the gap was almost entirely
 one architecturally-distinct category — Node's `process.env.X` env reads are a
@@ -86,6 +86,22 @@ named build-graph module aliases, has no static file-per-name convention
 correctly skipped by `resolve_import`, not counted as a recall gap. No bug
 found — the relative-file resolver was already correct across every fan-in
 bucket sampled, up to 3 levels of `../` traversal.
+⁸ One combined pass across two corpora (three.js, plain `.js`; Excalidraw,
+`.tsx`/`.ts`) since `.js`/`.jsx`/`.ts`/`.tsx`/`.mjs` all share one resolver
+function (`_resolve_relative_js`) — not per-extension code paths, unlike
+every other language in this table. Stratified sample per corpus (30
+targets / 777 edges for `.js`, 29 targets / 745 edges for `.tsx`), bucketed
+by fan-in. `.js` sample was 100% on first measurement (no bug triggered —
+the sample's basenames happened not to contain the shape below). `.tsx`
+sample started at 98.79% (9/745 misses, 0 false positives): a dotted
+basename with the file extension omitted (`./charts.constants`,
+`./WelcomeScreen.Center`, `./subset-shared.chunk`) was misjudged by
+`has_extension`'s naive "does the last path segment contain a dot" check as
+already having a real extension, so it never reached the plain
+extension-append/directory-index fallback used for genuinely extensionless
+specifiers — fixed by falling through to that same shared resolution
+instead of bailing (BACK-672). Grand total after the fix: 100% (1,522/1,522
+edges, 0 false positives).
 
 ## Import/Dependency Recall
 
@@ -144,13 +160,17 @@ actually closes the gap without introducing false positives.
 | Dart | AppFlowy (`samples/dart/frontend/appflowy_flutter`, 1,974 `.dart` files, 14 in-tree packages) | Every in-tree `pubspec.yaml`'s declared `name:` → its own `lib/` (authoritative name→dir map) + independent regex `import '...'` scan | 30-target stratified sample (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+), 825 edges | 19.3% → **99.76%** (100% real — see below) | 0 | `package:<name>/x.dart` — the dominant real-world Dart import shape (5,989 of 6,290 in-tree imports in the sample corpus, vs. 301 relative imports) — had no resolution branch at all: it contains `/` and matched `_looks_like_path` before any separator logic ran, so it was always tried (and failed) as a literal file-relative path. Every `package:` self- and cross-package import in the corpus silently resolved to `None`. Fixed with a new opt-in `package_uri_scheme`/`package_manifest_filename`/`package_manifest_lib_dirname` spec triple: builds a project-wide package-name→`lib/` index from every in-tree `pubspec.yaml` (cached per scan on the shared `file_index`), the same authoritative-manifest role Lua's rockspec and Swift's `Package.swift` played. The 2 residual sampled misses were both oracle false positives — a code-generation script's `writeln('''...''')` embeds literal `import '...'` text inside a Dart template string, which tree-sitter correctly never parses as a real import (same class as Lua's `nginx_kong.lua` false positive) — so true recall on the sample is 100% (823/823 real edges) |
 | GDScript | godot-demo-projects (`samples/gdscript`, 456 `.gd` files, 138 independent Godot projects) | Independent regex scan for `preload`/`load("res://...")`, `extends "res://..."`, and `extends Foo` matched against a project-scoped `class_name Foo` index, each `res://` path resolved against its file's own nearest `project.godot` (never the whole tree) | Full census (small population: 19 distinct targets), 41 edges | 24.4% → **100%** | 0 | Two bugs: (1) `depends://`/`imports://`'s `extra_paths` construction skipped the scan root as a search path whenever it already equaled the importing file's own directory (`scan_root != base_path`) — harmless for file-relative resolvers (which try `base_path` first) but fatal for GDScript's project-root-relative `res://`, which never falls back to `base_path`; every root-level file's (`main.gd`/`game.gd`/`test.gd`-shaped) `res://` import silently failed. Fixed by always including the scan root regardless of that equality. (2) `extends Foo` naming a `class_name Foo` declared elsewhere in-tree — Godot's global class-registration convention, and the dominant edge shape measured (27 of 41) — had no resolution path: a bareword `extends` only ever matched a literal same-named file, and Godot filenames are conventionally snake_case, not the PascalCase class name. Fixed with a new opt-in `class_name_convention` flag: a project-wide `class_name` → declaring-file index (regex-scanned, cached per scan on `file_index`), tried as a fallback when the direct bare-basename match fails |
 | Zig | ghostty (`samples/zig/ghostty`, 715 `.zig` files) | Independent regex scan for `@import("...")` (comment-stripped, string-aware), scoped to `.zig`-suffixed relative-file targets only — named-module imports (`std`, `builtin`, build-graph aliases) are out of scope, matching `resolve_import`'s own design | 26-target stratified sample (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+), 426 edges | **100%** (no baseline gap) | 0 | No bug found — the relative-file resolver (plain `(importer.parent / target).resolve()` semantics, no manifest scheme or global-registration convention involved) was already correct across every fan-in bucket sampled, including up to 3 levels of `../` traversal (`src/quirks.zig`, 113 importers) |
+| TSX, plain JS | three.js (`samples/javascript`, 1,622 `.js` files) + Excalidraw (`samples/tsx/excalidraw`, 635 `.ts`/`.tsx` files) | Independent regex scan for static/dynamic `import`, `export ... from`, and `require(...)` (comment-stripped, string-aware), true filesystem-based extension/index resolution (not a port of `resolve_import`'s own heuristic — see Finding) | 2 stratified samples, one per corpus (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+): `.js` 30 targets/777 edges, `.tsx` 29 targets/745 edges | `.js` 100% (no gap); `.tsx` 98.79% → **100%** | 0 | `.js`/`.jsx`/`.ts`/`.tsx`/`.mjs` share one resolver function (`_resolve_relative_js`) — a dotted basename with the extension omitted (`./charts.constants` → `charts.constants.ts`, `./WelcomeScreen.Center` → `.tsx`, `./subset-shared.chunk` → `.ts`) was misjudged by the `has_extension` gate (only checks whether the last path segment contains *any* dot) as already having a real extension, so it tried only the literal path plus the narrow `.js/.jsx/.mjs` TS-ESM fallback map, then returned `None` instead of falling through to the plain extension-append/directory-index resolution used for genuinely extensionless specifiers (BACK-672) |
 
-**Fifteen measurement loops, fifteen real bugs found, all fifteen fixed**
-(Swift's BACK-567 closed the premium-tier program; Zig is the most recent —
-the first loop to find *no* bug at all, a clean 100% on first measurement
-across a 26-target stratified sample spanning fan-in from 1 to 113 — evidence
-the loop shape catches real gaps rather than manufacturing them by
-construction. GDScript before it was the first loop to surface two
+**Sixteen measurement loops, fifteen real bugs found, all fifteen fixed**
+(TSX/plain-JS is the most recent — one bug found, BACK-672, a dotted-basename
+extension-omission gap in the shared `.js`/`.jsx`/`.ts`/`.tsx`/`.mjs`
+resolver, caught on the `.tsx` sample only (0/745 misses on plain `.js`).
+Zig before it was the first loop to find *no* bug at all, a clean 100% on
+first measurement across a 26-target stratified sample spanning fan-in from
+1 to 113 — evidence the loop shape catches real gaps rather than
+manufacturing them by construction. GDScript before it was the first loop to
+surface two
 independent bugs rather than one — a plumbing gap in `depends://`/
 `imports://`'s shared `extra_paths` construction that silently broke every
 project-root-relative resolver's root-level-file case, plus a missing

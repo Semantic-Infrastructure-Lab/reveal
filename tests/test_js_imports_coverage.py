@@ -746,3 +746,36 @@ class TestResolveRelativeJs:
         e = JavaScriptExtractor()
         result = e._resolve_relative_js('./missing.js', tmp_path)
         assert result is None
+
+    def test_dotted_basename_with_extension_omitted_resolves(self, tmp_path):
+        """BACK-621: './charts.constants' -> charts.constants.ts, a real
+        Excalidraw naming convention (also 'WelcomeScreen.Center',
+        'subset-shared.chunk'). `has_extension` only checks whether the last
+        path segment contains a dot at all, so a dotted basename with the
+        real extension omitted was misjudged as already having one, tried
+        only literal 'charts.constants' + the narrow .js/.jsx/.mjs TS-ESM
+        fallback map, then bailed with None — never reaching the plain
+        extension-append/directory-index resolution used for extensionless
+        specifiers. Found via an independent oracle diff against real
+        Excalidraw imports (0 false positives, 9/9 misses this exact shape)."""
+        f = tmp_path / 'charts.constants.ts'
+        f.write_text('export const X = 1;')
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('./charts.constants', tmp_path)
+        assert result == f.resolve()
+
+    def test_dotted_basename_with_extension_omitted_resolves_tsx(self, tmp_path):
+        """Same BACK-621 shape, resolving to .tsx instead of .ts."""
+        f = tmp_path / 'WelcomeScreen.Center.tsx'
+        f.write_text('export const Center = () => {};')
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('./WelcomeScreen.Center', tmp_path)
+        assert result == f.resolve()
+
+    def test_dotted_basename_no_matching_file_returns_none(self, tmp_path):
+        """The BACK-621 fallthrough must not start over-matching: a dotted
+        basename with genuinely no backing file at any extension still
+        returns None."""
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('./no.such.module', tmp_path)
+        assert result is None
