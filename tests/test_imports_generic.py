@@ -889,6 +889,56 @@ class TestModuleResolution:
         )
         res = self._resolve(tmp_path, 'main.dart', '.')
         assert res['./helper.dart'] == (tmp_path / 'helper.dart').resolve()
+        # No pubspec.yaml anywhere in the tree — flutter is correctly
+        # unresolvable, not a fabricated edge.
+        assert res['package:flutter/material.dart'] is None
+
+    def test_dart_package_uri_resolves_via_pubspec_self_import(self, tmp_path):
+        """BACK-621: `package:<name>/x.dart` is the dominant real-world Dart
+        import shape (5,989 of 6,290 in-tree imports in the AppFlowy sample
+        corpus) and must resolve against the declaring package's own lib/,
+        found via its pubspec.yaml `name:` field — not just relative
+        literals, which covered only 301 of that corpus's imports."""
+        (tmp_path / 'pubspec.yaml').write_text('name: my_app\ndescription: x\n')
+        (tmp_path / 'lib/widgets').mkdir(parents=True)
+        (tmp_path / 'lib/widgets/button.dart').write_text('class Button {}\n')
+        (tmp_path / 'lib/main.dart').write_text(
+            "import 'package:my_app/widgets/button.dart';\n"
+        )
+        res = self._resolve(tmp_path, 'lib/main.dart', 'lib')
+        assert res['package:my_app/widgets/button.dart'] == (
+            tmp_path / 'lib/widgets/button.dart').resolve()
+
+    def test_dart_package_uri_resolves_across_sibling_package(self, tmp_path):
+        """A monorepo (AppFlowy-shaped): `package:other_pkg/x.dart` from one
+        package must resolve into a *different* package's lib/, keyed by
+        that package's own pubspec.yaml — not just the importing file's own
+        package."""
+        (tmp_path / 'app').mkdir()
+        (tmp_path / 'app/pubspec.yaml').write_text('name: app\n')
+        (tmp_path / 'app/lib').mkdir()
+        (tmp_path / 'app/lib/main.dart').write_text(
+            "import 'package:shared_ui/button.dart';\n"
+        )
+        (tmp_path / 'packages/shared_ui').mkdir(parents=True)
+        (tmp_path / 'packages/shared_ui/pubspec.yaml').write_text('name: shared_ui\n')
+        (tmp_path / 'packages/shared_ui/lib').mkdir()
+        (tmp_path / 'packages/shared_ui/lib/button.dart').write_text('class Button {}\n')
+        res = self._resolve(tmp_path, 'app/lib/main.dart', 'app/lib')
+        assert res['package:shared_ui/button.dart'] == (
+            tmp_path / 'packages/shared_ui/lib/button.dart').resolve()
+
+    def test_dart_package_uri_unknown_package_skips(self, tmp_path):
+        """A `package:` URI naming no in-tree pubspec.yaml is a real external
+        pub.dev dependency (e.g. `flutter` itself) — must stay None even
+        when other in-tree packages exist, never fabricated onto one of
+        them."""
+        (tmp_path / 'pubspec.yaml').write_text('name: my_app\n')
+        (tmp_path / 'lib').mkdir()
+        (tmp_path / 'lib/main.dart').write_text(
+            "import 'package:flutter/material.dart';\n"
+        )
+        res = self._resolve(tmp_path, 'lib/main.dart', 'lib')
         assert res['package:flutter/material.dart'] is None
 
     def test_gdscript_res_uri_resolves_against_project_root(self, tmp_path):

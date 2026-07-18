@@ -53,6 +53,7 @@ Verified node kinds against tree-sitter-language-pack 1.8.x real parses
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
@@ -354,6 +355,35 @@ class _ImportSpec:
             directory to ``Tests/<name>`` rather than ``Sources/<name>``; the
             rest default to ``Sources/<name>`` (both overridable by an explicit
             ``path:``). Empty for every other language.
+        package_uri_scheme: A URI scheme prefix — Dart's ``package:`` — whose
+            remainder is ``<package-name>/<path-under-lib>`` (BACK-621, found
+            against the real AppFlowy corpus: baseline sampled recall 19.27%
+            with 0 false positives, because ``_resolve_module`` had no branch
+            for this shape at all — ``package:appflowy/x/y.dart`` contains a
+            ``/`` and starts matching before any separator logic runs, so
+            :meth:`_looks_like_path` claimed it first and tried it as a
+            literal file-relative path, which a ``package:`` URI never is;
+            5,989 of 1,974 files' import statements in the sample corpus used
+            this shape, dwarfing the 301 relative imports the resolver
+            already handled correctly). When set, :meth:`_resolve_module`
+            checks this prefix *before* :meth:`_looks_like_path` (a
+            ``package:`` URI is never file-relative) and resolves the
+            package name against a project-wide ``name -> lib/`` index built
+            once per scan from every in-tree ``package_manifest_filename``
+            (Dart's ``pubspec.yaml`` ``name:`` field — the same
+            authoritative-manifest role Lua's rockspec and Swift's
+            ``Package.swift`` play), never fabricating a mapping for a
+            package whose manifest isn't in-tree (a real pub.dev dependency
+            stays correctly edge-less). Empty for every other language.
+        package_manifest_filename: The per-package manifest filename
+            ``package_uri_scheme`` resolution reads for a declared package
+            name — Dart's ``pubspec.yaml``. Unset when ``package_uri_scheme``
+            is unset.
+        package_manifest_lib_dirname: The directory (relative to the
+            manifest's own directory) a resolved package's URI paths are
+            rooted at — Dart's ``lib`` (``package:foo/bar.dart`` →
+            ``<dir-of-manifest-declaring-foo>/lib/bar.dart``). Unset when
+            ``package_uri_scheme`` is unset.
         directory_index_filenames: Filename(s) that let a dotted qualified name
             resolve to a *directory module* — Lua's ``require("a.b.c")`` →
             ``a/b/c/init.lua`` when no ``a/b/c.lua`` file exists (BACK-621,
@@ -402,6 +432,9 @@ class _ImportSpec:
     module_dir_convention: FrozenSet[str] = field(default_factory=frozenset)
     manifest_filename: Optional[str] = None
     manifest_target_calls: FrozenSet[str] = field(default_factory=frozenset)
+    package_uri_scheme: Optional[str] = None
+    package_manifest_filename: Optional[str] = None
+    package_manifest_lib_dirname: Optional[str] = None
     directory_index_filenames: FrozenSet[str] = field(default_factory=frozenset)
 
 
@@ -1717,6 +1750,13 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             target = module[len(prefix):]
             return self._resolve_path_target(target, None, search_paths, exts)
 
+        scheme = self.spec.package_uri_scheme
+        if scheme and module.startswith(scheme):
+            # Dart `package:name/path.dart` — must be checked before
+            # `_looks_like_path` below: the remainder contains '/' and would
+            # otherwise be tried (and fail) as a file-relative literal.
+            return self._resolve_package_uri(module[len(scheme):], search_paths, file_index, exts)
+
         # Path-shaped module strings must win over namespace-separator
         # splitting, checked first: PHP's module_separator is '\' (`use
         # App\Models\User`), which collides with Windows' native path
@@ -1892,6 +1932,68 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 if candidate.is_file():
                     return candidate
         return None
+
+    def _resolve_package_uri(
+        self,
+        rest: str,
+        search_paths: Optional[List[Path]],
+        file_index: Optional[Dict[str, List[Path]]],
+        exts: FrozenSet[str],
+    ) -> Optional[Path]:
+        """Resolve a ``package:name/path`` remainder (Dart, BACK-621) to a file.
+
+        ``name`` is looked up in a project-wide index of every in-tree
+        ``spec.package_manifest_filename`` (Dart ``pubspec.yaml``)'s declared
+        ``name:``, built once per scan and cached on ``file_index`` under a
+        sentinel key (never a real basename, so it can't collide) — the same
+        object identity is threaded through every ``resolve_import`` call in
+        one ``depends://``/``imports://`` run, so this reads each manifest at
+        most once regardless of how many ``package:`` imports reference it.
+        A name absent from the index is a real external pub.dev dependency —
+        correctly returns ``None``, never a guess.
+        """
+        manifest_name = self.spec.package_manifest_filename
+        lib_dirname = self.spec.package_manifest_lib_dirname
+        if manifest_name is None or lib_dirname is None or '/' not in rest:
+            return None
+        pkg_name, sub_path = rest.split('/', 1)
+        pkg_map = self._package_manifest_map(manifest_name, lib_dirname, search_paths, file_index)
+        lib_dir = pkg_map.get(pkg_name)
+        if lib_dir is None:
+            return None
+        return self._resolve_path_target(sub_path, None, [lib_dir], exts)
+
+    _PACKAGE_MANIFEST_CACHE_KEY = '\x00package_manifest_map'
+    _MANIFEST_NAME_RE = re.compile(r'^name:\s*(\S+)', re.MULTILINE)
+
+    def _package_manifest_map(
+        self,
+        manifest_name: str,
+        lib_dirname: str,
+        search_paths: Optional[List[Path]],
+        file_index: Optional[Dict[str, List[Path]]],
+    ) -> Dict[str, Path]:
+        cache_key = self._PACKAGE_MANIFEST_CACHE_KEY
+        if file_index is not None and cache_key in file_index:
+            return file_index[cache_key]  # type: ignore[return-value]
+
+        manifests = self._index_lookup(manifest_name, search_paths, file_index)
+        pkg_map: Dict[str, Path] = {}
+        for manifest_path in manifests:
+            try:
+                text = manifest_path.read_text(encoding='utf-8', errors='replace')
+            except OSError:
+                continue
+            m = self._MANIFEST_NAME_RE.search(text)
+            if not m:
+                continue
+            lib_dir = manifest_path.parent / lib_dirname
+            if lib_dir.is_dir():
+                pkg_map[m.group(1).strip()] = lib_dir
+
+        if file_index is not None:
+            file_index[cache_key] = pkg_map  # type: ignore[assignment]
+        return pkg_map
 
     @staticmethod
     def _index_lookup(
@@ -2119,11 +2221,16 @@ _DART_SPEC = _ImportSpec(
     # for v1 (imports only).
     import_node_types=frozenset({'import_specification'}),
     keywords=frozenset({'import'}),
-    # Dart imports are path-style literals (relative `./x.dart` or a
-    # `package:x/y.dart` reference) — no qualified-name separator. A
-    # `package:` reference resolves only if it happens to name a real in-tree
-    # path; otherwise it is honestly skipped (never fabricated).
+    # Dart imports are path-style literals (relative `./x.dart`) or a
+    # `package:name/path.dart` URI (BACK-621: the dominant real-world shape —
+    # 5,989 of 6,290 in-tree imports in the AppFlowy sample corpus — resolved
+    # via the project-wide pubspec.yaml `name -> lib/` index built by
+    # `package_uri_scheme`/`package_manifest_filename`/
+    # `package_manifest_lib_dirname` below).
     source_extensions=frozenset({'.dart'}),
+    package_uri_scheme='package:',
+    package_manifest_filename='pubspec.yaml',
+    package_manifest_lib_dirname='lib',
 )
 
 _GDSCRIPT_SPEC = _ImportSpec(
