@@ -139,16 +139,23 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   invariant shipped (reveal caveats an unresolved result instead of asserting
   a false "nothing here"), and release is now gated on CI (BACK-578).
 - **Next, in priority order:**
-  1. Graduate C++ import-recall from spot-check-family to a full oracle
-     loop (BACK-674). C itself is done — graduated to 100% recall via a
-     `gcc -H` per-directive isolated-resolution oracle (BACK-611, closed
-     airless-nebula-0718; no bug found in reveal, see
-     `internal-docs/planning/dogfood-findings/c-recall-oracle/README.md`).
+  1. ✅ C/C++ import-recall both graduated to a full oracle loop. C: 100%,
+     no bug found (BACK-611, closed airless-nebula-0718). C++: 33.11% →
+     **99.56%** after fixing a real bug, BACK-675 — `depends://`'s
+     single-file scan-scoping excluded every `.cpp` file from the parse
+     corpus whenever the query target was a `.h` header, because
+     `CppImportExtractor.extensions` omits `.h` (owned by `CImportExtractor`
+     alone) even though most real C++ headers are named `.h` (BACK-674,
+     closed lohihozi-0718). See
+     `internal-docs/planning/dogfood-findings/{c,cpp}-recall-oracle/README.md`.
   2. Extend recall measurement to the remaining DD signals — `surface`,
      `contracts`, and `patches://`/testability (still Python + TS only,
      BACK-632).
   3. Close known correctness gaps as found — e.g. C++ `.hh`/`.mm` include
-     resolution (BACK-664).
+     resolution (BACK-664), `#include` directives nested inside a class body
+     (BACK-676, found by the C++ oracle loop above), C++ import-recall
+     widened past the engine-core-only corpus (`editor/`/`modules/`/
+     `thirdparty/` currently excluded, see the harness README).
   4. Guard against single-corpus overfit: a second real corpus per language
      for the already-measured set.
 

@@ -42,7 +42,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | PHP | ✅ 100% (WordPress) | ✅ 97.5% (WordPress) | **Measured** |
 | Swift | ✅ 100% (Kickstarter iOS) | ✅ 100%² (Kickstarter iOS) | **Measured** |
 | Scala | ✅ 100% (GitBucket) | — not yet run | **Measured** (import only) |
-| C++ | — spot-check family³ | ✅ 83.3% (Godot) | **Measured** (side-effects only) |
+| C++ | ✅ 99.56%³ (Godot) | ✅ 83.3% (Godot) | **Measured** |
 | C | ✅ 100%⁹ (Redis) | — not yet run | **Measured** (import only) |
 | Lua | ✅ 99.5% (Kong) | — not yet run | **Measured** (import only) |
 | Dart | ✅ 100%⁵ (AppFlowy) | — not yet run | **Measured** (import only) |
@@ -57,8 +57,26 @@ Excluding that category recall was 91.3%; the category itself was then closed
 by a dedicated property-access channel (BACK-644), corpus-validated at 98.7% on
 VS Code. ² Measured on a category-scoped stratified sample (Kotlin: `db`;
 Swift: `http`), not the full six-category sweep the other languages got.
-³ C++ import resolution shares the C-preprocessor resolver family; measured for
-side-effects but not yet through a full import-recall oracle loop. ⁴ Bugs were
+³ Graduated from spot-check family to a full stratified oracle loop
+(BACK-674, same per-directive-isolated `g++ -H` method as C's BACK-611).
+30-target stratified sample (fan-in buckets high/mid/low), core/-rooted,
+against the engine-core corpus (`core/`+`scene/`+`servers/`+`drivers/`+
+`platform/`, ~2,830 files, 7,230 oracle edges): first measurement came back
+33.11% — not a `_resolve_include` bug but a real `depends://` adapter-layer
+gap (BACK-675) hiding under a scan-cap confound the java/python-recall-oracle
+sessions had already learned to route around. `CppImportExtractor.extensions`
+deliberately omits `.h` (owned by `CImportExtractor` alone, to avoid a
+duplicate-registration conflict) even though most real C++ headers are named
+`.h`, not `.hpp` — so BACK-525 layer 4's single-file scan-scoping optimization
+silently excluded every `.cpp`/`.cc`/`.cxx` file from the parse corpus
+whenever the query target was a header, and a `.cpp` file could never be
+found importing its own `.h`. Fixed by widening the scan to the union of the
+C and C++ extractor families whenever the target is either. Post-fix: 450
+edges, 2 missing, 0 false positives — **99.56%**. The 2 residual misses
+(`core/math/bvh_tree.h` → its own `.inc` fragment includes) are a separate,
+narrower gap — `#include` directives sitting inside a template class body
+aren't captured by the tree-sitter query — filed as BACK-676, not fixed in
+this pass. Full story: [harness README](../internal-docs/planning/dogfood-findings/cpp-recall-oracle/README.md). ⁴ Bugs were
 found and fixed by running reveal against these languages on first contact, but
 no quantified recall number exists for them yet — see the roadmap's validation
 track. ⁵ Sampled recall was 99.76% (823/825); the 2 residual misses were both
@@ -180,12 +198,17 @@ actually closes the gap without introducing false positives.
 | Zig | ghostty (`samples/zig/ghostty`, 715 `.zig` files) | Independent regex scan for `@import("...")` (comment-stripped, string-aware), scoped to `.zig`-suffixed relative-file targets only — named-module imports (`std`, `builtin`, build-graph aliases) are out of scope, matching `resolve_import`'s own design | 26-target stratified sample (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+), 426 edges | **100%** (no baseline gap) | 0 | No bug found — the relative-file resolver (plain `(importer.parent / target).resolve()` semantics, no manifest scheme or global-registration convention involved) was already correct across every fan-in bucket sampled, including up to 3 levels of `../` traversal (`src/quirks.zig`, 113 importers) |
 | TSX, plain JS | three.js (`samples/javascript`, 1,622 `.js` files) + Excalidraw (`samples/tsx/excalidraw`, 635 `.ts`/`.tsx` files) | Independent regex scan for static/dynamic `import`, `export ... from`, and `require(...)` (comment-stripped, string-aware), true filesystem-based extension/index resolution (not a port of `resolve_import`'s own heuristic — see Finding) | 2 stratified samples, one per corpus (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+): `.js` 30 targets/777 edges, `.tsx` 29 targets/745 edges | `.js` 100% (no gap); `.tsx` 98.79% → **100%** | 0 | `.js`/`.jsx`/`.ts`/`.tsx`/`.mjs` share one resolver function (`_resolve_relative_js`) — a dotted basename with the extension omitted (`./charts.constants` → `charts.constants.ts`, `./WelcomeScreen.Center` → `.tsx`, `./subset-shared.chunk` → `.ts`) was misjudged by the `has_extension` gate (only checks whether the last path segment contains *any* dot) as already having a real extension, so it tried only the literal path plus the narrow `.js/.jsx/.mjs` TS-ESM fallback map, then returned `None` instead of falling through to the plain extension-append/directory-index resolution used for genuinely extensionless specifiers (BACK-672) |
 | C | Redis (`samples/c`, `src/`+`modules/`+`tests/modules/`+`utils/`, 275 files) | Real preprocessor, per-directive: `gcc -H -fsyntax-only -iquote <including-file's-dir>` resolves each quoted `#include "..."` in isolation (real header search, not a re-derivation of reveal's own) | 30-target stratified sample (fan-in buckets high/mid/low), 310 edges | **100%** (no baseline gap) | 0 real (2 apparent — see below) | No bug found — `_resolve_include`'s sibling-then-search-path resolution was already correct across every fan-in bucket sampled. Graduated from BACK-611's earlier grep spot-check to this full oracle loop; the loop's *own* first draft (whole-file `gcc -H`, reading the transitive tree) had a self-inflicted undercount bug from gcc's include-guard optimization skipping already-satisfied headers — caught before it could report a false gap, see [harness README](../internal-docs/planning/dogfood-findings/c-recall-oracle/README.md). The 2 apparent false positives are `deps/`-tree (vendored third-party) files `depends://` correctly resolves but this oracle deliberately doesn't scan as importers |
+| C++ | Godot (`samples/cpp`, `core/`+`scene/`+`servers/`+`drivers/`+`platform/`, 2,830 files) | Same method as C, per-directive `g++ -H -fsyntax-only -std=c++17` isolation | 30-target stratified sample (fan-in buckets high/mid/low), core/-rooted, 450 edges | 33.11% → **99.56%** | 1 (BACK-675) | `CppImportExtractor.extensions` omits `.h` (owned by `CImportExtractor` alone); `depends://`'s single-file scan-scoping (BACK-525 layer 4) narrowed a `.h` target's parse corpus to `{.c, .h}`, dropping every `.cpp` importer of its own header. Fixed by widening to the C/C++ family union when the target is either language. The first raw measurement (33.11%) was mostly a corpus-size confound, not this bug — `root=samples/cpp` (~14,000 files) tripped `depends://`'s BACK-524 5,000-file scan cap; re-measuring against a bounded, rsync'd sub-corpus (same precedent java/python-recall-oracle already set) isolated the real gap. Residual: 2/450 edges (`core/math/bvh_tree.h`'s own `.inc` fragment includes, sitting inside a template class body) are a separate, narrower tree-sitter capture gap, filed BACK-676, not fixed here. See [harness README](../internal-docs/planning/dogfood-findings/cpp-recall-oracle/README.md) |
 
-**Seventeen measurement loops, fifteen real bugs found, all fifteen fixed**
-(C is the most recent — the second loop, after Zig, to find no bug at all in
-`reveal` itself; it did catch a self-inflicted undercount bug in the oracle
-harness's own first draft before that draft could report a false gap, see
-the harness README). TSX/plain-JS before it found one bug, BACK-672, a
+**Eighteen measurement loops, sixteen real bugs found, all sixteen fixed**
+(C++ is the most recent, and the first loop in this program to find a bug in
+the *adapter* layer — `depends://`'s own scan-scoping — rather than in a
+language-specific `_resolve_include`/`_resolve_module` resolver; the
+resolver itself, shared with C, was already correct). C before it was the
+second loop, after Zig, to find no bug at all in `reveal` itself; it did
+catch a self-inflicted undercount bug in the oracle harness's own first
+draft before that draft could report a false gap, see the harness README.
+TSX/plain-JS before it found one bug, BACK-672, a
 dotted-basename extension-omission gap in the shared
 `.js`/`.jsx`/`.ts`/`.tsx`/`.mjs`
 resolver, caught on the `.tsx` sample only (0/745 misses on plain `.js`).
