@@ -1200,6 +1200,25 @@ class TestDependsAdapterLanguageScoping:
         assert r['count'] == 1
         assert 'foo.cpp' in r['dependents'][0]['file']
 
+    def test_hh_and_mm_targets_resolve_as_cpp(self, tmp_path):
+        """BACK-664: CppImportExtractor.extensions previously omitted '.hh'
+        (already registered as C++ by analyzers/cpp.py's structural
+        analyzer) and '.mm' (Obj-C++ — parses with tree-sitter's 'objc'
+        grammar but emits the same preproc_include nodes as C/C++), so
+        neither extension's #include directives were ever resolved by the
+        import graph."""
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / '.git').mkdir()
+        _write(tmp_path / 'src/foo.hh', '#pragma once\nvoid foo();\n')
+        _write(tmp_path / 'src/foo.mm', '#include "foo.hh"\nvoid foo() {}\n')
+
+        a = DependsAdapter(str(tmp_path / 'src' / 'foo.hh'))
+        r = a.get_structure()
+
+        assert r['count'] == 1
+        assert 'foo.mm' in r['dependents'][0]['file']
+
     def test_directory_target_stays_unscoped_across_languages(self, tmp_path):
         """A directory target isn't tied to one extractor family — it must
         still see dependents across every supported language, unchanged

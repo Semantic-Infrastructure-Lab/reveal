@@ -77,6 +77,23 @@ class TestC:
         by_mod = {i.module_name for i in imports}
         assert by_mod == {'math.h', 'local.h', 'stdio.h'}
 
+    def test_include_nested_in_struct_body(self):
+        """BACK-676: a #include inside a struct body isn't valid
+        top-level-context grammar, so tree-sitter's C grammar degrades it
+        from 'preproc_include' to the generic 'preproc_call' fallback node
+        -- the same shape used for #pragma/#undef inside a body. Only the
+        include must be picked up, and the #pragma sibling must not leak in
+        as a bogus import."""
+        code = (
+            'struct Foo {\n'
+            '#pragma pack(push, 1)\n'
+            '#include "members.inc"\n'
+            '};\n'
+        )
+        imports, _ = _extract(code, '.c')
+        mods = {i.module_name for i in imports}
+        assert mods == {'members.inc'}
+
 
 class TestCpp:
     def test_includes(self):
@@ -84,6 +101,22 @@ class TestCpp:
         imports, _ = _extract(code, '.cpp')
         mods = {i.module_name for i in imports}
         assert mods == {'vector', 'engine.hpp'}
+
+    def test_include_nested_in_class_body(self):
+        """BACK-676: Godot's bvh_tree.h fragment-include idiom -- #include
+        directives sitting inside a class body (not just at file scope)
+        degrade to a 'preproc_call' fallback node in tree-sitter's C++
+        grammar and were previously invisible to the import extractor."""
+        code = (
+            'class BVH_Tree {\n'
+            'public:\n'
+            '#include "bvh_pair.inc"\n'
+            '#include "bvh_structs.inc"\n'
+            '};\n'
+        )
+        imports, _ = _extract(code, '.cpp')
+        mods = {i.module_name for i in imports}
+        assert mods == {'bvh_pair.inc', 'bvh_structs.inc'}
 
 
 class TestJava:

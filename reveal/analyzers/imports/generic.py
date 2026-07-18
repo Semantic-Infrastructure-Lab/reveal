@@ -1012,6 +1012,20 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         constant_index: Optional[Dict[str, Tuple[str, str]]] = None,
     ) -> Optional[ImportStatement]:
         """Turn a dedicated import-statement node into an ImportStatement."""
+        if node.kind() == 'preproc_call':
+            # BACK-676: a #include nested inside a class/struct body (e.g.
+            # Godot's bvh_tree.h .inc fragment-include idiom) isn't valid
+            # top-level-only preproc_include grammar, so tree-sitter's C/C++
+            # grammars degrade it to the generic preproc_call fallback node
+            # -- the same node shape used for #pragma/#undef/etc inside a
+            # body. Only the '#include' directive is an import.
+            directive = node.child(0)
+            if (
+                directive is None
+                or directive.kind() != 'preproc_directive'
+                or analyzer._get_node_text(directive).strip() != '#include'
+            ):
+                return None
         if node.kind() in self.spec.concat_relative_node_types:
             result = self._concat_to_import(node, analyzer, file_path, constant_index)
             if result is not _NOT_CONCAT:
@@ -2122,14 +2136,19 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 # Each subclass is three lines. Adding a language = add a spec + subclass.
 
 _C_SPEC = _ImportSpec(
-    import_node_types=frozenset({'preproc_include'}),
+    # BACK-676: 'preproc_call' is the fallback node tree-sitter emits for a
+    # #include inside a struct/class body (not just 'preproc_include', which
+    # only covers top-level-context includes) -- filtered to '#include' only
+    # in _node_to_import.
+    import_node_types=frozenset({'preproc_include', 'preproc_call'}),
     keywords=frozenset({'#include'}),
     resolve_includes=True,
 )
 
 _CPP_SPEC = _ImportSpec(
     # C++20 `import mod;` is `import_declaration`; rare but cheap to include.
-    import_node_types=frozenset({'preproc_include', 'import_declaration'}),
+    # See _C_SPEC above re: 'preproc_call' (BACK-676).
+    import_node_types=frozenset({'preproc_include', 'import_declaration', 'preproc_call'}),
     keywords=frozenset({'#include', 'import'}),
     resolve_includes=True,
 )
@@ -2372,7 +2391,11 @@ class CImportExtractor(_GenericTreeSitterImportExtractor):
 
 @register_extractor
 class CppImportExtractor(_GenericTreeSitterImportExtractor):
-    extensions = {'.cpp', '.cc', '.cxx', '.hpp', '.hxx'}
+    # BACK-664: .hh (already C++ per analyzers/cpp.py's structural
+    # registration) and .mm (Obj-C++, parses with tree-sitter's 'objc'
+    # grammar but produces the same preproc_include nodes as C/C++ — verified
+    # empirically) were previously unresolved by the import graph.
+    extensions = {'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh', '.mm'}
     language_name = 'C++'
     spec = _CPP_SPEC
 
