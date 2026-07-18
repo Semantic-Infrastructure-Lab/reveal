@@ -117,6 +117,37 @@ Earlier releases (v0.33–v0.91) and full per-item notes: [CHANGELOG.md](CHANGEL
 - Windows signed-binary distribution (see Technical Debt below)
 - TypeScript/React depth — JSX component tree (`react://`) held pending demand (BACK-337)
 
+### Validation & Trust — DD correctness (active track)
+The distinction that matters for due-diligence use: *supported* ("the command
+runs on this language") is not *validated* ("we have proven the answer is
+right"). Silent false negatives — a load-bearing module reported as having zero
+importers, a db-writing function reported as pure — are the one failure mode a
+DD reviewer cannot tolerate, because a wrong answer looks exactly like a
+checked one. The program that closes this is documented in
+[VALIDATION.md](VALIDATION.md): per language, build an **independent
+ground-truth oracle** (the real toolchain where one exists — `go list`,
+`swift package dump-package`, `ts.resolveModuleName` — else a from-spec oracle
+that shares no code with reveal), diff it against reveal's output on a **real
+open-source codebase**, root-cause every miss, fix, and re-measure.
+
+- **Done:** import/dependency recall measured on 11 languages; side-effect /
+  boundary recall measured on 11 languages (12 languages covered across the two
+  programs). Every loop found a real bug; all fixed. Honest-decline invariant
+  shipped (reveal caveats an unresolved result instead of asserting a false
+  "nothing here"), and release is now gated on CI (BACK-578).
+- **Next, in priority order:**
+  1. Extend the same oracle loops to the *not-measured* languages in
+     VALIDATION.md's status table — Dart, Lua, Zig, GDScript, TSX, plain JS
+     (currently smoke-tested only) — and graduate C from spot-check to a full
+     `gcc -MM` import-recall loop (BACK-611/621).
+  2. Extend recall measurement to the remaining DD signals — `surface`,
+     `contracts`, and `patches://`/testability (still Python + TS only,
+     BACK-632).
+  3. Close known correctness gaps as found — e.g. C++ `.hh`/`.mm` include
+     resolution (BACK-664).
+  4. Guard against single-corpus overfit: a second real corpus per language
+     for the already-measured set.
+
 ---
 
 ## Architecture Hardening Track — ✅ Complete (cukite-0512)
@@ -505,7 +536,13 @@ These violate reveal's mission ("reveal reveals, doesn't modify") or fail the [S
 **Current counts drift with every language/adapter addition — this section is qualitative only.**
 Run `reveal --languages` for the live explicit-vs-fallback breakdown and exact count (source of truth, same one README.md quotes).
 
-### Production-Ready
+**Supported ≠ recall-validated.** The list below is *coverage* — the command
+runs and extracts structure. It is a separate question from whether a
+cross-file signal's *answer* has been measured correct against a ground-truth
+oracle; for that per-language status (Measured / Spot-checked / Smoke-tested
+only), see [VALIDATION.md](VALIDATION.md).
+
+### Production-Ready (structure & nav coverage)
 Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Ruby, PHP, Kotlin, Swift, Dart, Zig, Scala, Lua, GDScript, Bash, SQL
 
 ### Config & Data

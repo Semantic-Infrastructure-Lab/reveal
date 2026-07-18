@@ -1,10 +1,10 @@
-# Correctness Validation: Import/Dependency Recall
+# Correctness Validation: Recall of Reveal's DD Signals
 
 This document is the **correctness** counterpart to reveal's language coverage
 claims. Coverage answers "does this command run on this language?" This
-answers a sharper question: **when `depends://` (or the equivalent
-`imports://` fan-in view) says "N files import this," how often is that
-number actually right — and what happens when it's wrong?**
+answers a sharper question: **when reveal reports a fact about a codebase —
+"N files import this," "this function touches the database" — how often is
+that actually right, and what happens when it's wrong?**
 
 It exists because a wrong answer is the one failure mode a due-diligence or
 architecture-audit user cannot tolerate. A dependency-graph tool that
@@ -14,7 +14,54 @@ This document is the audit trail proving how that failure mode was found,
 measured, and closed — and gives you what you need to re-run the check
 yourself against reveal's actual source, not take our word for it.
 
-## Method
+Two signals have been through this treatment so far, each as its own
+independent-oracle program on real corpora: **import/dependency recall**
+(`depends://` / `imports://` fan-in) and **side-effect / boundary
+classification recall** (`--sideeffects` / `--boundary`). Both are documented
+below, with the exact per-language status first.
+
+## Validation status at a glance
+
+Reveal *supports* far more languages than are listed here (run `reveal
+--languages` for the full coverage list). This table is narrower on purpose:
+it says only where recall has been **measured against an independent
+ground-truth oracle on a real codebase** — the difference between "the command
+runs" and "we have proven the answer is right." Anything marked *not measured*
+is a claim we have not yet checked, **not** a claim it is broken.
+
+| Language | Import recall | Side-effect recall | Status |
+|---|---|---|---|
+| Python | ✅ 100% (Home Assistant) | ✅ 83.5% (Home Assistant) | **Measured** |
+| TypeScript | ✅ 100% (VS Code) | ✅ 91.3%¹ (VS Code) | **Measured** |
+| Java | ✅ 100% (Elasticsearch) | ✅ 97.5% (Elasticsearch) | **Measured** |
+| Go | ✅ 100% (Kubernetes) | ✅ 96.3% (client-go) | **Measured** |
+| Ruby | ✅ Zeitwerk-inferred (Discourse) | ✅ 98.8% (Discourse) | **Measured** |
+| Kotlin | ✅ 99.1% (tivi) | ✅ 100%² (tivi) | **Measured** |
+| Rust | ✅ 100% (Meilisearch) | ✅ 97.4% (Meilisearch) | **Measured** |
+| C# | ✅ namespace-graph fix (Jellyfin) | ✅ 98.3% (Jellyfin) | **Measured** |
+| PHP | ✅ 100% (WordPress) | ✅ 97.5% (WordPress) | **Measured** |
+| Swift | ✅ 100% (Kickstarter iOS) | ✅ 100%² (Kickstarter iOS) | **Measured** |
+| Scala | ✅ 100% (GitBucket) | — not yet run | **Measured** (import only) |
+| C++ | — spot-check family³ | ✅ 83.3% (Godot) | **Measured** (side-effects only) |
+| C | ◑ spot-checked (Redis `#include`) | — not yet run | **Spot-checked** |
+| Dart, Lua, Zig, GDScript, TSX, plain JS | — not measured | — not measured | **Smoke-tested only**⁴ |
+
+¹ Overall TypeScript side-effect recall was 76.8%; the gap was almost entirely
+one architecturally-distinct category — Node's `process.env.X` env reads are a
+property access, not a call, so the call-only classifier never saw them.
+Excluding that category recall was 91.3%; the category itself was then closed
+by a dedicated property-access channel (BACK-644), corpus-validated at 98.7% on
+VS Code. ² Measured on a category-scoped stratified sample (Kotlin: `db`;
+Swift: `http`), not the full six-category sweep the other languages got.
+³ C++ import resolution shares the C-preprocessor resolver family; measured for
+side-effects but not yet through a full import-recall oracle loop. ⁴ Bugs were
+found and fixed by running reveal against these languages on first contact, but
+no quantified recall number exists for them yet — see the roadmap's validation
+track.
+
+## Import/Dependency Recall
+
+### Method
 
 For each language below, we built (or used) an **authoritative external
 oracle** — never reveal's own code, and never a synthetic toy fixture — and
@@ -49,7 +96,7 @@ targets so a resolver bug isn't masked by testing only easy cases), root-cause
 every miss to an exact line of code, fix it, and re-measure to confirm the fix
 actually closes the gap without introducing false positives.
 
-## Results
+### Results
 
 | Language | Real corpus | Oracle | Sample | Recall: before → after | False positives | Bug(s) found & fixed |
 |---|---|---|---|---|---|---|
@@ -79,7 +126,7 @@ namespace-indexing gap. Every *fixed* bug shipped with regression tests
 (fail-before/pass-after confirmed by disabling the fix in place, not by
 reverting source) and a full-suite run showing zero regressions elsewhere.
 
-## What the false positives mean
+### What the false positives mean
 
 The only false positives observed (Go, 8 of 822) are files gated behind
 `//go:build windows` tags. `go list`'s oracle was built with `GOOS=linux` and
@@ -90,10 +137,11 @@ source* but wouldn't compile into the target binary on Linux. Documented, not
 filed as a defect, since it errs toward showing you more of the source graph
 rather than hiding a real edge.
 
-## Known gaps — not yet measured with a full oracle loop
+### Import-recall gaps — not yet measured with a full oracle loop
 
-The following are **not** in the table above because they have not been
-run through an independent-oracle diff against a real corpus:
+The following are **not** in the import-recall table above because they have
+not been run through an independent-oracle diff against a real corpus (C++ *is*
+measured for side-effect recall below — this gap is import-recall only):
 
 - **C++, Dart, Lua, Zig, GDScript** — each shares a resolver
   family with at least one already-measured language, but has not been
@@ -120,14 +168,50 @@ A gap in this list is a claim we have not yet measured, not a claim the
 capability is broken — see `README.md` and the language coverage notes for
 what each language does support today.
 
+## Side-Effect / Boundary Classification Recall
+
+`--sideeffects`/`--boundary` answer a different DD question — "what does this
+function actually *do* to the outside world: touch a database, make a network
+call, read the filesystem or environment, log, sleep?" — and carry the same
+silent-false-negative risk: a function that quietly writes to a database but
+reads as pure is exactly the blast-radius surprise a DD reviewer must not miss.
+
+Unlike import recall, **no external tool can serve as an oracle** — there is no
+`go list` for "is this a side effect." So each loop's `build_oracle.py` writes
+its own regex patterns over raw source, using a **different pattern set and a
+different parsing strategy** (independent brace-depth scanner, not reveal's
+tree-sitter parser) than the code under test — so a disagreement is a genuine
+signal, not a tautology. Same shape otherwise: stratified positive sample plus
+a negative control to catch false positives, every miss root-caused, fixed, and
+re-measured.
+
+| Language | Real corpus | Recall: before → after | Notable bug found & fixed |
+|---|---|---|---|
+| Go | Kubernetes `client-go` (2,161 files) | 57.4% → **96.3%** | Go had no `http` bucket at all — snake_case `http_get` literals never matched dotted `http.Get(`; `RoundTrip`-shaped transport calls all missed |
+| Python | Home Assistant (12,150 files) | 80.4% → **83.5%** | `file` bucket missed `os.remove`/`os.makedirs` and `pathlib` `write_text`/`read_bytes` (76.9% → 100% for `file`) |
+| Java | Elasticsearch | 81.0% → **97.5%** | `constructor_declaration` missing from the shared taxonomy leaked a constructor's effects into its enclosing class's whole body (BACK-638) |
+| C# | Jellyfin | 91.5% → **98.3%** | `SaveChangesAsync`/`StreamReader` taxonomy gaps |
+| Ruby | Discourse | 63.4% → **98.8%** | `singleton_method` (`def self.foo`) entirely absent from `FUNCTION_NODE_TYPES` — invisible to `--outline` and name lookup outright (BACK-647, the program's single largest recall jump) |
+| PHP | WordPress | 78.7% → **97.5%** | Most of the gap was oracle-side; confirmed reveal's PHP classification was already sound once the oracle's own bugs were fixed |
+| Rust | Meilisearch | 31.6% → **97.4%** | Taxonomy and receiver-scoping gaps across all categories |
+| C++ | Godot | 24.4% → **83.3%** | Macro-hidden effects and per-category taxonomy gaps |
+| TypeScript | VS Code (65,008 functions) | 75.6% → **76.8%** (91.3% ex-`env`) | `process.env.X` env reads are a property access, not a call — invisible to the call-only classifier; closed by a dedicated property-access channel (BACK-644) |
+| Kotlin | tivi | 85.0% → **100%** (`db` sample) | `db` category taxonomy gaps |
+| Swift | Kickstarter iOS | 0% → **100%** (`http` sample) | `http` idioms unclassified |
+
+Cross-language false-positive sweeps in the same program fixed bare-verb
+subsequence over-fire (`dict.update()` misread as a db write) and unscoped
+receiver-name collisions (`conn`/`session`/`cache`/`requests`), so the recall
+gains did not come at the cost of precision.
+
 ## Re-running this yourself
 
 Every loop's harness is a plain script pair — `build_oracle.*` (produces the
-independent ground truth) and `diff_recall.py` (diffs it against a live
-`depends://` run) — checked in alongside its findings, not hidden in this
-repo's history:
+independent ground truth) and `diff_recall.py` (diffs it against a live reveal
+run) — checked in alongside its findings, not hidden in this repo's history:
 
 ```
+# Import/dependency recall
 internal-docs/planning/dogfood-findings/ts-recall-oracle/
 internal-docs/planning/dogfood-findings/java-recall-oracle/
 internal-docs/planning/dogfood-findings/go-recall-oracle/
@@ -137,6 +221,9 @@ internal-docs/planning/dogfood-findings/scala-member-import-oracle/
 internal-docs/planning/dogfood-findings/rust-recall-oracle/
 internal-docs/planning/dogfood-findings/csharp-global-using-oracle/
 internal-docs/planning/dogfood-findings/ruby-autoload-oracle/
+
+# Side-effect / boundary recall (per-language subdirs + program README)
+internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/
 ```
 
 Each harness's own README documents the exact corpus commit/snapshot used,
@@ -145,9 +232,11 @@ be reproduced or challenged line by line rather than taken on faith.
 
 ## Scope
 
-This artifact covers **import/dependency-graph recall** (`depends://` and
-`imports://` fan-in) only — the specific property whose failure
-(BACK-542: an 18-importer module reported as having zero) motivated this
-entire validation program. It does not (yet) cover recall for `surface`,
-`contracts`, or `--sideeffects` — those are tracked as open coverage work,
-separately from this correctness program. See `ROADMAP.md` for what's next.
+This artifact covers recall of two DD signals: **import/dependency-graph
+recall** (`depends://` and `imports://` fan-in — the property whose failure in
+BACK-542, an 18-importer module reported as having zero, motivated the whole
+program) and **side-effect/boundary classification recall** (`--sideeffects` /
+`--boundary`). It does not yet cover recall for `surface` or `contracts`, and
+the languages marked *not measured* / *spot-checked* in the status table above
+are not yet through a full oracle loop — both are tracked as open validation
+work. See `ROADMAP.md` for the forward plan.
