@@ -192,6 +192,46 @@ class TestExtractionRouting:
         finally:
             os.unlink(temp_path)
 
+    def test_route_bare_integer_to_analyzer_get_element(self):
+        """BACK-666: a bare integer on an analyzer with get_element() (e.g. CSV
+        row lookup) must reach get_element(), not line-number semantics."""
+        from reveal.analyzers.csv_analyzer import CsvAnalyzer
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+            f.write('id,name\n1,alice\n2,bob\n3,carol\n')
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CsvAnalyzer(temp_path)
+            syntax = _parse_element_syntax('3')
+            result = _extract_by_syntax(analyzer, '3', syntax)
+
+            assert result == {'row_number': 3, 'data': {'id': '3', 'name': 'carol'}}
+        finally:
+            os.unlink(temp_path)
+
+    def test_explicit_colon_line_still_uses_line_semantics(self):
+        """BACK-666 regression guard: ':N' must never be treated as get_element(),
+        only bare 'N' — even on an analyzer that defines get_element()."""
+        from reveal.analyzers.csv_analyzer import CsvAnalyzer
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+            f.write('id,name\n1,alice\n')
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CsvAnalyzer(temp_path)
+            syntax = _parse_element_syntax(':2')
+            result = _extract_by_syntax(analyzer, ':2', syntax)
+
+            # Line semantics: no row_number/data shape from get_element()
+            assert result is not None
+            assert 'row_number' not in result
+        finally:
+            os.unlink(temp_path)
+
     def test_route_to_single_line_fallback_context_window(self):
         """Line between elements falls back to ±10 context window."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
@@ -907,6 +947,45 @@ class TestOrdinalEdgeCases:
         result = _get_category_items(structure, 'classes')
         assert result is None
 
+    def test_determine_target_category_skips_non_dict_list(self):
+        """BACK-667: a list-of-strings category (e.g. CSV's 'columns') must not
+        be picked by the 'any category with items' fallback — it has no dict
+        shape for downstream ordinal extraction to sort/build from."""
+        structure = {
+            'columns': ['id', 'name', 'age'],  # bare strings, not dicts
+            'schema': [{'name': 'id', 'type': 'integer'}],
+        }
+
+        result = _determine_target_category(structure, None)
+        assert result == 'schema'
+
+    def test_get_category_items_skips_non_dict_entries(self):
+        """BACK-667: non-dict entries must be filtered out rather than crashing
+        the sort on .get()."""
+        structure = {'mixed': ['bare_string', {'name': 'a', 'line': 2}]}
+
+        result = _get_category_items(structure, 'mixed')
+        assert result == [{'name': 'a', 'line': 2}]
+
+    def test_ordinal_extraction_on_csv_schema(self):
+        """BACK-667 end-to-end: '@N' on a CSV file resolves via 'schema', not a
+        crash or the wrong 'columns' category."""
+        from reveal.analyzers.csv_analyzer import CsvAnalyzer
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+            f.write('id,name,age\n1,alice,30\n2,bob,25\n')
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CsvAnalyzer(temp_path)
+            result = _extract_ordinal_element(analyzer, 2, None)
+
+            assert result is not None
+            assert result['name'] == 'name'
+        finally:
+            os.unlink(temp_path)
+
     def test_build_element_non_treesitter_source(self):
         """Test _build_element_from_item with non-TreeSitter analyzer."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
@@ -973,6 +1052,22 @@ class TestOutputFormats:
         # Grep format: path:line_num:content
         assert '/tmp/test.py:10:' in captured.out # noqa: win-path — analyzer.path is str, not Path; output is unchanged
         assert '/tmp/test.py:11:' in captured.out # noqa: win-path — analyzer.path is str, not Path; output is unchanged
+
+    def test_output_get_element_style_data_dict(self, capsys):
+        """BACK-666: get_element()-style results (e.g. CSV row lookup) have no
+        'source'/'line_start' — text mode must render the data dict, not fall
+        through to the source-span renderer with empty defaults."""
+        analyzer = Mock()
+        analyzer.path = '/tmp/test.csv'
+
+        result = {'row_number': 3, 'data': {'id': '3', 'name': 'carol'}}
+
+        _output_result(analyzer, result, '3', 'text')
+
+        captured = capsys.readouterr()
+        assert 'row 3' in captured.out
+        assert 'id: 3' in captured.out
+        assert 'name: carol' in captured.out
 
 
 # ============================================================================

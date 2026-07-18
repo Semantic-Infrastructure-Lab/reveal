@@ -355,8 +355,12 @@ class TestShouldSkipCategory:
 
     def test_internal_category_returns_true(self):
         for cat in ['type', 'document', 'head', 'body', 'stats', 'template',
-                    'columns', 'column_count', 'row_count', 'delimiter', 'sample_rows']:
+                    'columns', 'column_count', 'row_count', 'delimiter']:
             assert _should_skip_category(cat, [{'x': 1}]) is True
+
+    def test_sample_rows_no_longer_skipped(self):
+        # BACK-668: sample_rows must render in text mode, not be hidden.
+        assert _should_skip_category('sample_rows', [{'x': 1}]) is False
 
     def test_normal_category_with_items_returns_false(self):
         assert _should_skip_category('functions', [{'name': 'foo'}]) is False

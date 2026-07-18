@@ -18,6 +18,7 @@ from .formatting import (
     _format_html_elements,
     _format_standard_items,
     _format_csv_schema,
+    _format_csv_sample_rows,
     _format_xml_children,
     _format_markdown_headings,
     _build_analyzer_kwargs,
@@ -465,9 +466,9 @@ def _should_skip_category(category: str, items: Any) -> bool:
 
     # Skip internal/metadata categories (not meant for default display)
     # HTML: type, document, head, body, stats, template
-    # CSV: columns (use schema instead), column_count, row_count, delimiter, sample_rows
+    # CSV: columns (use schema instead), column_count, row_count, delimiter
     if category in ['type', 'document', 'head', 'body', 'stats', 'template',
-                    'columns', 'column_count', 'row_count', 'delimiter', 'sample_rows']:
+                    'columns', 'column_count', 'row_count', 'delimiter']:
         return True
 
     return False
@@ -483,6 +484,7 @@ _CATEGORY_FORMATTERS = {
     'styles': lambda items, path, fmt: _format_html_elements(items, path, fmt, 'styles'),
     'semantic': lambda items, path, fmt: _format_html_elements(items, path, fmt, 'semantic'),
     'schema': lambda items, path, fmt: _format_csv_schema(items),
+    'sample_rows': lambda items, path, fmt: _format_csv_sample_rows(items),
     'children': lambda items, path, fmt: _format_xml_children(items),
 }
 

@@ -688,6 +688,31 @@ class TestFormatCsvSchema:
         assert "..." in captured.out  # Truncation marker
 
 
+class TestFormatCsvSampleRows:
+    """Tests for CSV sample-row formatting (BACK-668)."""
+
+    def test_format_csv_sample_rows_basic(self, capsys):
+        from reveal.display.formatting import _format_csv_sample_rows
+
+        items = [
+            {'id': '1', 'name': 'alice'},
+            {'id': '2', 'name': 'bob'},
+        ]
+        _format_csv_sample_rows(items)
+        captured = capsys.readouterr()
+        assert "1. id=1, name=alice" in captured.out
+        assert "2. id=2, name=bob" in captured.out
+
+    def test_format_csv_sample_rows_truncates_long_values(self, capsys):
+        from reveal.display.formatting import _format_csv_sample_rows
+
+        long_value = 'x' * 30
+        items = [{'notes': long_value}]
+        _format_csv_sample_rows(items)
+        captured = capsys.readouterr()
+        assert "..." in captured.out
+
+
 class TestFormatXmlChildren:
     """Tests for XML children formatting."""
 

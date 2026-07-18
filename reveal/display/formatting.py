@@ -773,6 +773,18 @@ def _format_csv_schema(items: List[Dict[str, Any]]) -> None:
         print(f"  {name:<20} ({', '.join(info_parts)}){sample_str}")
 
 
+def _format_csv_sample_rows(items: List[Dict[str, Any]]) -> None:
+    """Format CSV sample rows as one numbered line per row, values truncated."""
+    for i, row in enumerate(items, start=1):
+        parts = []
+        for key, value in row.items():
+            display = str(value)
+            if len(display) > 20:
+                display = display[:20] + '...'
+            parts.append(f"{key}={display}")
+        print(f"  {i}. {', '.join(parts)}")
+
+
 def _format_xml_children(items: List[Dict[str, Any]], indent: int = 1) -> None:
     """Format XML children with nested structure."""
     for item in items:

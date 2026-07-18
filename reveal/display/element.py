@@ -19,6 +19,7 @@ _DOMINANT_CATEGORY_PRIORITY = [
     'resources', 'variables',            # Terraform
     'keys', 'tables',                    # Config
     'cells',                             # Jupyter
+    'schema',                            # CSV columns
 ]
 
 # Map element type names to category names
@@ -132,6 +133,14 @@ def _extract_by_syntax(analyzer, element: str, syntax: dict):
         if syntax['end_line']:
             return _extract_line_range(analyzer, syntax['start_line'], syntax['end_line'])
         else:
+            # Bare integer (not an explicit ":N") on an analyzer whose own
+            # get_element() gives numeric args a different meaning (e.g. CSV
+            # row lookup) — prefer that over line-number semantics.
+            if not element.startswith(':') and hasattr(analyzer, 'get_element'):
+                result = analyzer.get_element(element)
+                if result is not None:
+                    return result
+
             result = _extract_element_at_line(analyzer, syntax['start_line'])
             if result is not None:
                 return result
@@ -693,9 +702,12 @@ def _determine_target_category(structure, element_type: Optional[str] = None):
         if cat in structure and structure[cat]:
             return cat
 
-    # Fallback: use any category with items
+    # Fallback: use any category with items, skipping ones that aren't a
+    # list of dicts (e.g. CSV's 'columns' is a bare list of strings) — those
+    # have no ordinal-extractable shape and would crash downstream.
     for cat in structure:
-        if isinstance(structure[cat], list) and structure[cat]:
+        items = structure[cat]
+        if isinstance(items, list) and items and isinstance(items[0], dict):
             return cat
 
     return None
@@ -713,6 +725,12 @@ def _get_category_items(structure, category: str):
     """
     items = structure.get(category, [])
     if not items or not isinstance(items, list):
+        return None
+
+    # Skip non-dict entries (e.g. CSV's 'columns' is a bare list of strings) —
+    # they have no 'line'/'line_start' to sort by and no ordinal-extractable shape.
+    items = [item for item in items if isinstance(item, dict)]
+    if not items:
         return None
 
     # Sort by line number to ensure consistent ordering
@@ -792,6 +810,17 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
         return
 
     path = analyzer.path
+
+    # get_element()-style results (e.g. CSV row lookup via BACK-666) are a flat
+    # data dict, not an extracted code span -- no 'source'/'line_start' to render.
+    if 'source' not in result and 'data' in result:
+        row_number = result.get('row_number')
+        label = f"row {row_number}" if row_number is not None else element
+        print(f"{path} | {label}\n")
+        for key, value in result['data'].items():
+            print(f"  {key}: {value}")
+        return
+
     line_start = result.get('line_start', 1)
     line_end = result.get('line_end', line_start)
     source = result.get('source', '')
