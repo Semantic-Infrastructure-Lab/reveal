@@ -139,9 +139,11 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   invariant shipped (reveal caveats an unresolved result instead of asserting
   a false "nothing here"), and release is now gated on CI (BACK-578).
 - **Next, in priority order:**
-  1. Graduate C from spot-check to a full `gcc -MM` import-recall loop, and
-     C++ import-recall from spot-check-family to a full oracle loop
-     (BACK-611/621 remaining scope).
+  1. Graduate C++ import-recall from spot-check-family to a full oracle
+     loop (BACK-674). C itself is done — graduated to 100% recall via a
+     `gcc -H` per-directive isolated-resolution oracle (BACK-611, closed
+     airless-nebula-0718; no bug found in reveal, see
+     `internal-docs/planning/dogfood-findings/c-recall-oracle/README.md`).
   2. Extend recall measurement to the remaining DD signals — `surface`,
      `contracts`, and `patches://`/testability (still Python + TS only,
      BACK-632).

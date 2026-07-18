@@ -43,7 +43,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Swift | ✅ 100% (Kickstarter iOS) | ✅ 100%² (Kickstarter iOS) | **Measured** |
 | Scala | ✅ 100% (GitBucket) | — not yet run | **Measured** (import only) |
 | C++ | — spot-check family³ | ✅ 83.3% (Godot) | **Measured** (side-effects only) |
-| C | ◑ spot-checked (Redis `#include`) | — not yet run | **Spot-checked** |
+| C | ✅ 100%⁹ (Redis) | — not yet run | **Measured** (import only) |
 | Lua | ✅ 99.5% (Kong) | — not yet run | **Measured** (import only) |
 | Dart | ✅ 100%⁵ (AppFlowy) | — not yet run | **Measured** (import only) |
 | GDScript | ✅ 100%⁶ (godot-demo-projects) | — not yet run | **Measured** (import only) |
@@ -102,6 +102,24 @@ extension-append/directory-index fallback used for genuinely extensionless
 specifiers — fixed by falling through to that same shared resolution
 instead of bailing (BACK-672). Grand total after the fix: 100% (1,522/1,522
 edges, 0 false positives).
+⁹ Graduated from the earlier grep spot-check (BACK-611) to a full stratified
+oracle loop. Oracle resolves each quoted `#include "..."` directive in
+isolation via `gcc -H -fsyntax-only -iquote <including-file's-dir>` — the
+real compiler's own header-search algorithm, not a re-derivation of
+reveal's. An earlier draft ran `gcc -H` once per whole file and read its
+transitive include tree, which *undercounted*: gcc's include-guard
+optimization means a header already pulled in transitively earlier in the
+same file's chain never gets a fresh depth-1 entry when the file's own
+explicit `#include` line for it is reached later, so real edges (e.g.
+`script_lua.c`'s own `#include "monotonic.h"`, already reachable via
+`server.h`) went missing from the oracle itself. Resolving each directive
+as its own isolated one-line compilation fixed that. Stratified sample of
+30 targets / 310 edges (Redis's `src/`, `modules/`, `tests/modules/`,
+`utils/`), bucketed by fan-in: 100% recall, 0 real false positives (2
+apparent ones were `deps/`-tree importers correctly found by `depends://`
+but outside this oracle's deliberately narrower importer scope — vendored
+third-party code with its own build system, confirmed by direct
+inspection, not a reveal bug).
 
 ## Import/Dependency Recall
 
@@ -161,10 +179,15 @@ actually closes the gap without introducing false positives.
 | GDScript | godot-demo-projects (`samples/gdscript`, 456 `.gd` files, 138 independent Godot projects) | Independent regex scan for `preload`/`load("res://...")`, `extends "res://..."`, and `extends Foo` matched against a project-scoped `class_name Foo` index, each `res://` path resolved against its file's own nearest `project.godot` (never the whole tree) | Full census (small population: 19 distinct targets), 41 edges | 24.4% → **100%** | 0 | Two bugs: (1) `depends://`/`imports://`'s `extra_paths` construction skipped the scan root as a search path whenever it already equaled the importing file's own directory (`scan_root != base_path`) — harmless for file-relative resolvers (which try `base_path` first) but fatal for GDScript's project-root-relative `res://`, which never falls back to `base_path`; every root-level file's (`main.gd`/`game.gd`/`test.gd`-shaped) `res://` import silently failed. Fixed by always including the scan root regardless of that equality. (2) `extends Foo` naming a `class_name Foo` declared elsewhere in-tree — Godot's global class-registration convention, and the dominant edge shape measured (27 of 41) — had no resolution path: a bareword `extends` only ever matched a literal same-named file, and Godot filenames are conventionally snake_case, not the PascalCase class name. Fixed with a new opt-in `class_name_convention` flag: a project-wide `class_name` → declaring-file index (regex-scanned, cached per scan on `file_index`), tried as a fallback when the direct bare-basename match fails |
 | Zig | ghostty (`samples/zig/ghostty`, 715 `.zig` files) | Independent regex scan for `@import("...")` (comment-stripped, string-aware), scoped to `.zig`-suffixed relative-file targets only — named-module imports (`std`, `builtin`, build-graph aliases) are out of scope, matching `resolve_import`'s own design | 26-target stratified sample (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+), 426 edges | **100%** (no baseline gap) | 0 | No bug found — the relative-file resolver (plain `(importer.parent / target).resolve()` semantics, no manifest scheme or global-registration convention involved) was already correct across every fan-in bucket sampled, including up to 3 levels of `../` traversal (`src/quirks.zig`, 113 importers) |
 | TSX, plain JS | three.js (`samples/javascript`, 1,622 `.js` files) + Excalidraw (`samples/tsx/excalidraw`, 635 `.ts`/`.tsx` files) | Independent regex scan for static/dynamic `import`, `export ... from`, and `require(...)` (comment-stripped, string-aware), true filesystem-based extension/index resolution (not a port of `resolve_import`'s own heuristic — see Finding) | 2 stratified samples, one per corpus (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+): `.js` 30 targets/777 edges, `.tsx` 29 targets/745 edges | `.js` 100% (no gap); `.tsx` 98.79% → **100%** | 0 | `.js`/`.jsx`/`.ts`/`.tsx`/`.mjs` share one resolver function (`_resolve_relative_js`) — a dotted basename with the extension omitted (`./charts.constants` → `charts.constants.ts`, `./WelcomeScreen.Center` → `.tsx`, `./subset-shared.chunk` → `.ts`) was misjudged by the `has_extension` gate (only checks whether the last path segment contains *any* dot) as already having a real extension, so it tried only the literal path plus the narrow `.js/.jsx/.mjs` TS-ESM fallback map, then returned `None` instead of falling through to the plain extension-append/directory-index resolution used for genuinely extensionless specifiers (BACK-672) |
+| C | Redis (`samples/c`, `src/`+`modules/`+`tests/modules/`+`utils/`, 275 files) | Real preprocessor, per-directive: `gcc -H -fsyntax-only -iquote <including-file's-dir>` resolves each quoted `#include "..."` in isolation (real header search, not a re-derivation of reveal's own) | 30-target stratified sample (fan-in buckets high/mid/low), 310 edges | **100%** (no baseline gap) | 0 real (2 apparent — see below) | No bug found — `_resolve_include`'s sibling-then-search-path resolution was already correct across every fan-in bucket sampled. Graduated from BACK-611's earlier grep spot-check to this full oracle loop; the loop's *own* first draft (whole-file `gcc -H`, reading the transitive tree) had a self-inflicted undercount bug from gcc's include-guard optimization skipping already-satisfied headers — caught before it could report a false gap, see [harness README](../internal-docs/planning/dogfood-findings/c-recall-oracle/README.md). The 2 apparent false positives are `deps/`-tree (vendored third-party) files `depends://` correctly resolves but this oracle deliberately doesn't scan as importers |
 
-**Sixteen measurement loops, fifteen real bugs found, all fifteen fixed**
-(TSX/plain-JS is the most recent — one bug found, BACK-672, a dotted-basename
-extension-omission gap in the shared `.js`/`.jsx`/`.ts`/`.tsx`/`.mjs`
+**Seventeen measurement loops, fifteen real bugs found, all fifteen fixed**
+(C is the most recent — the second loop, after Zig, to find no bug at all in
+`reveal` itself; it did catch a self-inflicted undercount bug in the oracle
+harness's own first draft before that draft could report a false gap, see
+the harness README). TSX/plain-JS before it found one bug, BACK-672, a
+dotted-basename extension-omission gap in the shared
+`.js`/`.jsx`/`.ts`/`.tsx`/`.mjs`
 resolver, caught on the `.tsx` sample only (0/745 misses on plain `.js`).
 Zig before it was the first loop to find *no* bug at all, a clean 100% on
 first measurement across a 26-target stratified sample spanning fan-in from
