@@ -2745,7 +2745,8 @@ class TestV029RuleCount(unittest.TestCase):
 
 Also ships 81+ quality rules in the next release.
 """
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False,
+                                          encoding='utf-8') as f:
             f.write(doc_content)
             doc_path = Path(f.name)
 
@@ -2766,7 +2767,8 @@ Also ships 81+ quality rules in the next release.
             root = Path(tmp)
             (root / 'reveal' / 'docs').mkdir(parents=True)
             (root / 'reveal' / 'docs' / 'WHY_REVEAL.md').write_text(
-                f"5. **{wrong} quality rules via `reveal check`** — 14 categories.\n"
+                f"5. **{wrong} quality rules via `reveal check`** — 14 categories.\n",
+                encoding='utf-8',
             )
             with patch('reveal.rules.validation.V029.find_reveal_root',
                        return_value=root / 'reveal'):
@@ -2785,7 +2787,8 @@ Also ships 81+ quality rules in the next release.
             root = Path(tmp)
             (root / 'reveal' / 'docs').mkdir(parents=True)
             (root / 'reveal' / 'docs' / 'WHY_REVEAL.md').write_text(
-                f"5. **{actual} quality rules via `reveal check`** — 14 categories.\n"
+                f"5. **{actual} quality rules via `reveal check`** — 14 categories.\n",
+                encoding='utf-8',
             )
             with patch('reveal.rules.validation.V029.find_reveal_root',
                        return_value=root / 'reveal'):
