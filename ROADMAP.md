@@ -141,21 +141,22 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
 - **Next, in priority order:**
   1. ✅ C/C++ import-recall both graduated to a full oracle loop. C: 100%,
      no bug found (BACK-611, closed airless-nebula-0718). C++: 33.11% →
-     **99.56%** after fixing a real bug, BACK-675 — `depends://`'s
-     single-file scan-scoping excluded every `.cpp` file from the parse
-     corpus whenever the query target was a `.h` header, because
-     `CppImportExtractor.extensions` omits `.h` (owned by `CImportExtractor`
-     alone) even though most real C++ headers are named `.h` (BACK-674,
-     closed lohihozi-0718). See
+     99.56% → **100.00%** after fixing three real bugs on the same
+     450-edge sample: `depends://`'s single-file scan-scoping excluding
+     every `.cpp` file from the parse corpus whenever the query target was
+     a `.h` header (BACK-675); `CppImportExtractor.extensions` never
+     claiming `.hh`/`.mm`, silently zeroing import resolution for either
+     extension (BACK-664); and a `#include` nested inside a class body
+     degrading to a tree-sitter fallback node the extractor never scanned
+     (BACK-676) (BACK-674, closed lohihozi-0718; BACK-664/BACK-676 closed
+     rufiloro-0718). See
      `internal-docs/planning/dogfood-findings/{c,cpp}-recall-oracle/README.md`.
   2. Extend recall measurement to the remaining DD signals — `surface`,
      `contracts`, and `patches://`/testability (still Python + TS only,
      BACK-632).
-  3. Close known correctness gaps as found — e.g. C++ `.hh`/`.mm` include
-     resolution (BACK-664), `#include` directives nested inside a class body
-     (BACK-676, found by the C++ oracle loop above), C++ import-recall
-     widened past the engine-core-only corpus (`editor/`/`modules/`/
-     `thirdparty/` currently excluded, see the harness README).
+  3. Close known correctness gaps as found — e.g. C++ import-recall widened
+     past the engine-core-only corpus (`editor/`/`modules/`/`thirdparty/`
+     currently excluded, see the harness README).
   4. Guard against single-corpus overfit: a second real corpus per language
      for the already-measured set.
 
