@@ -1180,6 +1180,26 @@ class TestDependsAdapterLanguageScoping:
         assert r['count'] == 1
         assert 'foo.c' in r['dependents'][0]['file']
 
+    def test_h_target_still_scans_cpp_importers(self, tmp_path):
+        """BACK-675: CppImportExtractor's extensions deliberately omit '.h'
+        (it's C's alone in the registry, to avoid a duplicate-registration
+        conflict) even though most real C++ headers are named '.h', not
+        '.hpp'. Narrowing a '.h' target's scan to CImportExtractor's own
+        family {.c, .h} silently drops every .cpp importer from the parse
+        corpus — found via BACK-674's C++ import-recall oracle loop against
+        Godot (33% -> 99.56% recall after this fix)."""
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / '.git').mkdir()
+        _write(tmp_path / 'src/foo.h', '#pragma once\nvoid foo();\n')
+        _write(tmp_path / 'src/foo.cpp', '#include "foo.h"\nvoid foo() {}\n')
+
+        a = DependsAdapter(str(tmp_path / 'src' / 'foo.h'))
+        r = a.get_structure()
+
+        assert r['count'] == 1
+        assert 'foo.cpp' in r['dependents'][0]['file']
+
     def test_directory_target_stays_unscoped_across_languages(self, tmp_path):
         """A directory target isn't tied to one extractor family — it must
         still see dependents across every supported language, unchanged

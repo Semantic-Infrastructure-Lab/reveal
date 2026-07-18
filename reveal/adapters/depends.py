@@ -18,6 +18,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import safe_json_dumps
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
+from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor
 from ..utils.query import parse_query_params
 from ..utils.path_utils import (
     is_skippable_dir,
@@ -37,6 +38,17 @@ from ..utils.path_utils import (
 # `_has_project_marker` helper the depends tests import. See
 # internal-docs/design/SCAN_ROOT_RESOLUTION_2026-07-09.md.
 _PROJECT_ROOT_MARKERS = _PACKAGE_ROOT_MARKERS + _VCS_ROOT_MARKERS
+
+# BACK-675: C and C++ share one #include header namespace and the same
+# preprocessor-style resolver (_resolve_include), but the extractor registry
+# gives '.h' to CImportExtractor alone (CppImportExtractor's extensions
+# deliberately omit '.h' to avoid a duplicate-registration conflict with C).
+# Most C++ headers are named '.h', not '.hpp' -- so scoping a '.h' target's
+# scan to CImportExtractor's own extensions {'.c', '.h'} (BACK-525 layer 4)
+# silently drops every .cpp/.cc/.cxx/.hpp file from the parse corpus, and
+# depends:// can never see a .cpp file as an importer of its own header.
+_C_CPP_FAMILY_EXTENSIONS = frozenset(CImportExtractor.extensions | CppImportExtractor.extensions)
+_C_CPP_LANGUAGES = frozenset({CImportExtractor.language_name, CppImportExtractor.language_name})
 
 
 class _ResolutionIndices(NamedTuple):
@@ -476,6 +488,10 @@ class DependsAdapter(ResourceAdapter):
             target_extractor = get_extractor(target_path)
             if target_extractor is not None:
                 scan_extensions = frozenset(target_extractor.extensions)
+                # BACK-675: widen to the whole C/C++ family so a '.h' target
+                # doesn't drop every .cpp importer from the scan (see note above).
+                if target_extractor.language_name in _C_CPP_LANGUAGES:
+                    scan_extensions = _C_CPP_FAMILY_EXTENSIONS
         self._build_graph(project_root, scan_extensions=scan_extensions)
 
         fmt = self._query_params.get('format', 'text')
