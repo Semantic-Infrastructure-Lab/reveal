@@ -941,6 +941,32 @@ class TestModuleResolution:
         res = self._resolve(tmp_path, 'lib/main.dart', 'lib')
         assert res['package:flutter/material.dart'] is None
 
+    def test_gdscript_extends_classname_resolves(self, tmp_path):
+        """BACK-621: `extends Foo` resolves to whichever in-tree file declares
+        `class_name Foo` — Godot's global class-registration convention. The
+        dominant real edge shape (27 of 41) in the godot-demo-projects
+        corpus, previously unresolved: a bareword `extends` only ever matched
+        a literal `Foo.gd`, and Godot filenames are conventionally
+        snake_case, not the PascalCase class name."""
+        (tmp_path / 'project.godot').write_text('')
+        (tmp_path / 'combat').mkdir()
+        (tmp_path / 'combat/combatant.gd').write_text(
+            'extends Node2D\nclass_name Combatant\n')
+        (tmp_path / 'combat/opponent.gd').write_text('extends Combatant\n')
+        res = self._resolve(tmp_path, 'combat/opponent.gd', 'combat')
+        assert res['Combatant'] == (tmp_path / 'combat/combatant.gd').resolve()
+
+    def test_gdscript_extends_builtin_class_skips(self, tmp_path):
+        """`extends Node2D` (an engine builtin, not a project `class_name`)
+        must stay None — never guessed onto an unrelated same-named file."""
+        (tmp_path / 'project.godot').write_text('')
+        (tmp_path / 'combat').mkdir()
+        (tmp_path / 'combat/combatant.gd').write_text(
+            'extends Node2D\nclass_name Combatant\n')
+        (tmp_path / 'combat/enemy.gd').write_text('extends Node2D\n')
+        res = self._resolve(tmp_path, 'combat/enemy.gd', 'combat')
+        assert res['Node2D'] is None
+
     def test_gdscript_res_uri_resolves_against_project_root(self, tmp_path):
         """`res://` is project-root-relative, not file-relative — resolving it
         against the importing file's own directory must NOT work; only the

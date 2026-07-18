@@ -863,7 +863,20 @@ class DependsAdapter(ResourceAdapter):
                 continue
 
             base_path = file_path.parent
-            extra_paths = [scan_root] if scan_root.is_dir() and scan_root != base_path else []
+            # BACK-621 GDScript: the `!= base_path` skip was a harmless dedup
+            # for every resolver that also tries base_path itself first (the
+            # `_resolve_path_target` roots list is `[base_path] + search_paths`)
+            # — until `project_relative_prefix` (GDScript `res://`), the one
+            # resolver that deliberately never falls back to base_path at all
+            # (project-root-relative, not file-relative). For an importer
+            # sitting directly in scan_root (a project's own root-level
+            # `game.gd`/`main.gd`/`test.gd`), that made extra_paths empty and
+            # every `res://` import in that file silently unresolvable — found
+            # via the godot-demo-projects oracle loop (3 of 3 sampled
+            # root-level preload/load edges missed). Always including
+            # scan_root costs nothing for the other resolvers (base_path is
+            # already tried first, so this is just a harmless duplicate root).
+            extra_paths = [scan_root] if scan_root.is_dir() else []
             # Mirrors ImportsAdapter._build_graph's gating (BACK-491): only
             # generic (spec-based) extractors accept file_index.
             uses_file_index = getattr(extractor, 'spec', None) is not None

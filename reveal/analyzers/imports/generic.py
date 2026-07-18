@@ -384,6 +384,24 @@ class _ImportSpec:
             rooted at — Dart's ``lib`` (``package:foo/bar.dart`` →
             ``<dir-of-manifest-declaring-foo>/lib/bar.dart``). Unset when
             ``package_uri_scheme`` is unset.
+        class_name_convention: When set, a single-identifier module (Swift-
+            style bare basename match already tried first) that fails to
+            resolve is retried against a project-wide index of every in-tree
+            source file's declared global-registration name — GDScript's
+            ``class_name Foo`` (BACK-621: 27 of 41 real edges in the
+            godot-demo-projects corpus, the dominant shape). Godot registers
+            ``class_name``-declared classes engine-wide, so ``extends Foo``/
+            ``preload``-free type references elsewhere never name the
+            declaring file at all — no other currently-supported language has
+            this shape (a global symbol registered from an arbitrary,
+            non-manifest source file, resolved by identifier alone). The
+            index is built once per scan, scanning every in-tree file of
+            ``source_extensions`` for a leading ``class_name NAME`` line
+            (mirrors the ``package_manifest_*`` regex-not-AST convention) and
+            cached on ``file_index`` the same way. A bareword ``extends Node``
+            naming an engine builtin (the overwhelming majority — 410 of 438
+            in the same corpus) correctly finds no entry and stays ``None``.
+            Off for every other language.
         directory_index_filenames: Filename(s) that let a dotted qualified name
             resolve to a *directory module* — Lua's ``require("a.b.c")`` →
             ``a/b/c/init.lua`` when no ``a/b/c.lua`` file exists (BACK-621,
@@ -436,6 +454,7 @@ class _ImportSpec:
     package_manifest_filename: Optional[str] = None
     package_manifest_lib_dirname: Optional[str] = None
     directory_index_filenames: FrozenSet[str] = field(default_factory=frozenset)
+    class_name_convention: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -1784,7 +1803,12 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         # bare basename (Swift `import Foo` → Foo.swift; Java default-package
         # `import Foo`). Only resolves when exactly one such file exists.
         if module.isidentifier():
-            return self._resolve_dotted([module], exts, search_paths, file_index)
+            resolved = self._resolve_dotted([module], exts, search_paths, file_index)
+            if resolved is not None:
+                return resolved
+            if self.spec.class_name_convention:
+                return self._resolve_class_name(module, search_paths, file_index)
+            return None
 
         return None
 
@@ -1994,6 +2018,80 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         if file_index is not None:
             file_index[cache_key] = pkg_map  # type: ignore[assignment]
         return pkg_map
+
+    _CLASS_NAME_CACHE_KEY = '\x00class_name_index'
+    _CLASS_NAME_RE = re.compile(r'^\s*class_name\s+(\w+)', re.MULTILINE)
+
+    def _resolve_class_name(
+        self,
+        name: str,
+        search_paths: Optional[List[Path]],
+        file_index: Optional[Dict[str, List[Path]]],
+    ) -> Optional[Path]:
+        """Resolve a bareword identifier (GDScript ``extends Foo``) against
+        the project-wide ``class_name`` index (BACK-621). ``None`` when
+        ``name`` isn't a declared ``class_name`` anywhere in-tree — an
+        engine builtin (``Node``, ``Control``, ...), correctly left
+        unresolved rather than guessed."""
+        index = self._class_name_project_index(search_paths, file_index)
+        return index.get(name)
+
+    def _class_name_project_index(
+        self,
+        search_paths: Optional[List[Path]],
+        file_index: Optional[Dict[str, List[Path]]],
+    ) -> Dict[str, Path]:
+        """``class_name`` -> declaring file, across every in-tree source file.
+
+        Built once per scan and cached on ``file_index`` under a sentinel key
+        (same convention as :meth:`_package_manifest_map`) so a scan with many
+        bareword ``extends`` statements re-reads no file twice. Unlike a
+        manifest map, there's no fixed filename to look up via
+        :meth:`_index_lookup` — every ``source_extensions`` file is a
+        candidate declarer, so this scans the full file set (``file_index``'s
+        own value union when available, else a bounded ``search_paths``
+        walk) once, the same file set already being walked for import
+        extraction — no separate tree walk when ``file_index`` is present.
+        """
+        cache_key = self._CLASS_NAME_CACHE_KEY
+        if file_index is not None and cache_key in file_index:
+            return file_index[cache_key]  # type: ignore[return-value]
+
+        exts = self.spec.source_extensions
+        candidates: Set[Path] = set()
+        if file_index is not None:
+            for paths in file_index.values():
+                if not isinstance(paths, list):
+                    continue  # a different resolver's cached sentinel value
+                for p in paths:
+                    if p.suffix in exts:
+                        candidates.add(p)
+        else:
+            for root in search_paths or []:
+                if not root.is_dir():
+                    continue
+                for dirpath, dirnames, filenames in os.walk(root):
+                    dirnames[:] = [
+                        d for d in dirnames
+                        if not is_skippable_dir(Path(dirpath), d) and not d.startswith('.')
+                    ]
+                    for fname in filenames:
+                        if Path(fname).suffix in exts:
+                            candidates.add(Path(dirpath) / fname)
+
+        index: Dict[str, Path] = {}
+        for f in candidates:
+            try:
+                text = f.read_text(encoding='utf-8', errors='replace')
+            except OSError:
+                continue
+            m = self._CLASS_NAME_RE.search(text)
+            if m:
+                index.setdefault(m.group(1), f.resolve())
+
+        if file_index is not None:
+            file_index[cache_key] = index  # type: ignore[assignment]
+        return index
 
     @staticmethod
     def _index_lookup(
@@ -2243,6 +2341,10 @@ _GDSCRIPT_SPEC = _ImportSpec(
     # `res://` is Godot's project-root-relative virtual filesystem, not
     # file-relative — resolved only against search_paths (see _resolve_module).
     project_relative_prefix='res://',
+    # BACK-621: `extends Foo` where Foo is declared `class_name Foo` in some
+    # other in-tree file — Godot's global class-registration convention, the
+    # dominant edge shape in the real godot-demo-projects corpus (27 of 41).
+    class_name_convention=True,
 )
 
 _LUA_SPEC = _ImportSpec(

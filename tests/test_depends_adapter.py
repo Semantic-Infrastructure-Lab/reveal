@@ -796,6 +796,86 @@ class TestDependsAdapterCrossModuleRoot:
         assert 'foo.lua' in r['dependents'][0]['file']
 
 
+class TestDependsAdapterGDScriptProjectRelative:
+    """BACK-621: GDScript `res://` recall gap found via the godot-demo-projects
+    oracle loop.
+
+    `_build_graph`'s `extra_paths` construction skipped adding the scan root
+    as a search path whenever it already equaled the importing file's own
+    directory (`scan_root != base_path`) — a harmless dedup for every
+    file-relative resolver (which tries `base_path` first anyway), but
+    `res://` is project-root-relative and deliberately never falls back to
+    `base_path` at all (see `_resolve_module`). An importer sitting directly
+    at the project root (a `game.gd`/`main.gd`/`test.gd`-shaped entry point —
+    exactly the common case, not an edge case) got an empty search_paths and
+    every one of its `res://` imports silently failed to resolve. 3 of 3
+    sampled root-level `preload`/`load` edges were missed in the real corpus
+    before this fix.
+    """
+
+    def test_root_level_file_preload_resolves(self, tmp_path):
+        """The regressing shape: importer and target both live directly in
+        the project root (no subdirectory between them and project.godot)."""
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / 'project.godot').write_text('')
+        _write(tmp_path / 'character.gd', 'extends Node3D\n')
+        _write(tmp_path / 'main.gd', 'const Character = preload("res://character.gd")\n')
+
+        a = DependsAdapter(str(tmp_path / 'character.gd'))
+        r = a.get_structure()
+        assert r['count'] == 1
+        assert 'main.gd' in r['dependents'][0]['file']
+
+    def test_nested_importer_still_resolves(self, tmp_path):
+        """Companion case: an importer one level below the project root must
+        keep working exactly as before (the pre-existing passing shape)."""
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / 'project.godot').write_text('')
+        _write(tmp_path / 'character.gd', 'extends Node3D\n')
+        _write(tmp_path / 'sub/main.gd', 'const Character = preload("res://character.gd")\n')
+
+        a = DependsAdapter(str(tmp_path / 'character.gd'))
+        r = a.get_structure()
+        assert r['count'] == 1
+        assert 'main.gd' in r['dependents'][0]['file']
+
+
+class TestDependsAdapterGDScriptClassNameConvention:
+    """BACK-621: `extends Foo` where `Foo` is a `class_name Foo` declared in
+    another in-tree file — Godot's global class-registration convention, and
+    the dominant edge shape in the real godot-demo-projects corpus (27 of 41
+    sampled edges, none previously resolved: a bareword `extends` only ever
+    matched a literal same-named file, and Godot filenames are conventionally
+    snake_case, not the PascalCase class name)."""
+
+    def test_extends_classname_resolves_to_declaring_file(self, tmp_path):
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / 'project.godot').write_text('')
+        _write(tmp_path / 'combat/combatant.gd', 'extends Node2D\nclass_name Combatant\n')
+        _write(tmp_path / 'combat/opponent.gd', 'extends Combatant\n')
+
+        a = DependsAdapter(str(tmp_path / 'combat/combatant.gd'))
+        r = a.get_structure()
+        assert r['count'] == 1
+        assert 'opponent.gd' in r['dependents'][0]['file']
+
+    def test_extends_builtin_engine_class_stays_unresolved(self, tmp_path):
+        """`extends Node2D` (a builtin, not a project class_name) must find
+        no dependent — never guessed onto an unrelated same-named file."""
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / 'project.godot').write_text('')
+        _write(tmp_path / 'combat/combatant.gd', 'extends Node2D\nclass_name Combatant\n')
+        _write(tmp_path / 'combat/enemy.gd', 'extends Node2D\n')
+
+        a = DependsAdapter(str(tmp_path / 'combat/combatant.gd'))
+        r = a.get_structure()
+        assert r['count'] == 0
+
+
 class TestDependsAdapterScanRootResolution:
     """BACK-525 layers 1-3: tiered nearest-marker climb, hard ceiling, and
     the inferred-project fallback that replaces the flat marker-climb."""

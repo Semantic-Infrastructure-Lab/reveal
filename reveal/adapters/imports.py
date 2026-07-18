@@ -1015,7 +1015,13 @@ class ImportsAdapter(ResourceAdapter):
             # Pass project root as an extra search path so absolute intra-project
             # imports resolve (e.g., `from db.session import X` from `api/routes.py`
             # finds `db/session.py` under the project root, not just under `api/`).
-            extra_paths = [target_path] if target_path.is_dir() and target_path != base_path else []
+            # BACK-621: always include target_path even when it equals base_path
+            # — GDScript's `project_relative_prefix` (`res://`) resolver never
+            # falls back to base_path (project-root-relative, not file-relative),
+            # so skipping target_path here left a root-level importer's `res://`
+            # imports unresolvable with no search path at all. Harmless duplicate
+            # root for every other resolver, which already tries base_path first.
+            extra_paths = [target_path] if target_path.is_dir() else []
             # BACK-491/487/488: every generic (spec-based) extractor shares the
             # `resolve_import(..., file_index=...)` signature and benefits from the
             # prebuilt basename index — C/C++ include full-suffix matching and the

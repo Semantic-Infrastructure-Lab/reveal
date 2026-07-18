@@ -46,7 +46,8 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | C | ◑ spot-checked (Redis `#include`) | — not yet run | **Spot-checked** |
 | Lua | ✅ 99.5% (Kong) | — not yet run | **Measured** (import only) |
 | Dart | ✅ 100%⁵ (AppFlowy) | — not yet run | **Measured** (import only) |
-| Zig, GDScript, TSX, plain JS | — not measured | — not measured | **Smoke-tested only**⁴ |
+| GDScript | ✅ 100%⁶ (godot-demo-projects) | — not yet run | **Measured** (import only) |
+| Zig, TSX, plain JS | — not measured | — not measured | **Smoke-tested only**⁴ |
 
 ¹ Overall TypeScript side-effect recall was 76.8%; the gap was almost entirely
 one architecturally-distinct category — Node's `process.env.X` env reads are a
@@ -64,6 +65,18 @@ oracle false positives — a code-generation script's `writeln('''...''')`
 embeds literal `import '...'` *text* inside a Dart template string, which
 tree-sitter correctly never parses as a real import (the same class of
 false positive the Lua loop's `nginx_kong.lua` case documented).
+⁶ Full census (41/41 edges, no sampling — the corpus's 19 distinct targets
+made a census cheaper than a stratified sample), 138 independent Godot
+projects. Two bugs found and fixed: (1) `depends://`/`imports://`'s
+`extra_paths` plumbing dropped the scan root as a search path whenever it
+already equaled the importing file's own directory — harmless for every
+file-relative resolver (which tries `base_path` first anyway) but fatal for
+GDScript's project-root-relative `res://`, which never falls back to
+`base_path` at all; every `res://` import in a project's own root-level file
+(`main.gd`/`game.gd`/`test.gd`) silently failed to resolve. (2) `extends Foo`
+naming a `class_name Foo` declared in another in-tree file — Godot's global
+class-registration convention, the dominant edge shape measured (27 of 41) —
+had no resolution path at all.
 
 ## Import/Dependency Recall
 
@@ -120,14 +133,21 @@ actually closes the gap without introducing false positives.
 | Swift | Kickstarter iOS (`samples/swift`, 1,961 files, 8 SwiftPM packages) | `swift package dump-package` (real toolchain, target list) + independent per-file import parse | Full-tree; 21 declared targets, 164-edge precision sample | ~0% effective (123 edges / 7 dependent files) → **100% of declared targets resolved** (384,278 edges / 1,511 dependent files) | 0 (164-edge sample, none unbacked) | Swift's import granularity is the *module (SwiftPM target)*, not the file, but the resolver only matched `import Foo` → a unique `Foo.swift` — resolving ~0% of real multi-file targets, AND (worse) leaving `unresolved_intra` at 0 so no honest-decline `⚠` fired: a silent wrong "no dependents". Fixed in two buildless parts: (1) `Sources/<Target>/` directory-convention fan-out (`import Foo` → every file in target Foo, C#-namespace-style); (2) a structural `Package.swift` parse for targets that relocate sources via an explicit `path:` (real GraphAPI `path: "./Sources"`, 326 importers). The independent `dump-package` oracle caught the custom-`path:` case the directory convention alone would have silently mis-mapped |
 | Lua | Kong (`samples/lua`, 1,309 `.lua` files) | Project's own `kong-latest.rockspec` `build.modules` table (authoritative dotted-module → file map) + independent regex `require(...)` scan | 30-target stratified sample (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+), 782 edges | 85.4% → **99.5%** | 29 (BACK-670, filed not fixed — see below) | `require("a.b.c")` may name a *directory* module (`a/b/c/init.lua`, Lua's `package.path` `?/init.lua` convention) with no flat `a/b/c.lua` file at all — `_match_dotted` only ever tried appending an extension to the last dotted component, so every directory-module require silently resolved to `None`. Hit 5 real Kong targets (`kong.conf_loader`, `kong.db.declarative`, `kong.vaults.env`, `kong.dynamic_hook`, `kong.plugins.rate-limiting.policies`), each returning a confident "no dependents" despite 2-35 real importers. Fixed via a new opt-in `directory_index_filenames` spec field. 3 residual misses (spec-fixture importers of `kong.vaults.env`) and 29 false positives (a shared-resolver basename-collision class — external `resty.*` modules landing on same-named in-tree `kong.tools.*` files) filed not fixed as BACK-671/BACK-670 — see [harness README](../internal-docs/planning/dogfood-findings/lua-recall-oracle/README.md) |
 | Dart | AppFlowy (`samples/dart/frontend/appflowy_flutter`, 1,974 `.dart` files, 14 in-tree packages) | Every in-tree `pubspec.yaml`'s declared `name:` → its own `lib/` (authoritative name→dir map) + independent regex `import '...'` scan | 30-target stratified sample (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+), 825 edges | 19.3% → **99.76%** (100% real — see below) | 0 | `package:<name>/x.dart` — the dominant real-world Dart import shape (5,989 of 6,290 in-tree imports in the sample corpus, vs. 301 relative imports) — had no resolution branch at all: it contains `/` and matched `_looks_like_path` before any separator logic ran, so it was always tried (and failed) as a literal file-relative path. Every `package:` self- and cross-package import in the corpus silently resolved to `None`. Fixed with a new opt-in `package_uri_scheme`/`package_manifest_filename`/`package_manifest_lib_dirname` spec triple: builds a project-wide package-name→`lib/` index from every in-tree `pubspec.yaml` (cached per scan on the shared `file_index`), the same authoritative-manifest role Lua's rockspec and Swift's `Package.swift` played. The 2 residual sampled misses were both oracle false positives — a code-generation script's `writeln('''...''')` embeds literal `import '...'` text inside a Dart template string, which tree-sitter correctly never parses as a real import (same class as Lua's `nginx_kong.lua` false positive) — so true recall on the sample is 100% (823/823 real edges) |
+| GDScript | godot-demo-projects (`samples/gdscript`, 456 `.gd` files, 138 independent Godot projects) | Independent regex scan for `preload`/`load("res://...")`, `extends "res://..."`, and `extends Foo` matched against a project-scoped `class_name Foo` index, each `res://` path resolved against its file's own nearest `project.godot` (never the whole tree) | Full census (small population: 19 distinct targets), 41 edges | 24.4% → **100%** | 0 | Two bugs: (1) `depends://`/`imports://`'s `extra_paths` construction skipped the scan root as a search path whenever it already equaled the importing file's own directory (`scan_root != base_path`) — harmless for file-relative resolvers (which try `base_path` first) but fatal for GDScript's project-root-relative `res://`, which never falls back to `base_path`; every root-level file's (`main.gd`/`game.gd`/`test.gd`-shaped) `res://` import silently failed. Fixed by always including the scan root regardless of that equality. (2) `extends Foo` naming a `class_name Foo` declared elsewhere in-tree — Godot's global class-registration convention, and the dominant edge shape measured (27 of 41) — had no resolution path: a bareword `extends` only ever matched a literal same-named file, and Godot filenames are conventionally snake_case, not the PascalCase class name. Fixed with a new opt-in `class_name_convention` flag: a project-wide `class_name` → declaring-file index (regex-scanned, cached per scan on `file_index`), tried as a fallback when the direct bare-basename match fails |
 
-**Thirteen measurement loops, thirteen real bugs found, all thirteen fixed**
-(Swift's BACK-567 closed the premium-tier program; Dart's `package:` URI
-resolution is the most recent, closing what was reveal's largest-blast-radius
-recall gap yet measured — a resolver branch missing entirely for the shape
-covering 95% of a real corpus's intra-project imports, found zero false
-positives, and needed no residual filed since both sampled misses were oracle
-artifacts, not reveal bugs). Lua's directory-module resolution gap before it
+**Fourteen measurement loops, fifteen real bugs found, all fifteen fixed**
+(Swift's BACK-567 closed the premium-tier program; GDScript is the most
+recent, the first loop to surface two independent bugs rather than one — a
+plumbing gap in `depends://`/`imports://`'s shared `extra_paths` construction
+that silently broke every project-root-relative resolver's root-level-file
+case, plus a missing resolution path for Godot's `class_name` global-class
+convention, the dominant edge shape in the corpus (27 of 41) — found zero
+false positives, full census at 100%. Dart's `package:` URI resolution before
+it closed what was then reveal's largest-blast-radius recall gap measured — a
+resolver branch missing entirely for the shape covering 95% of a real
+corpus's intra-project imports, found zero false positives, and needed no
+residual filed since both sampled misses were oracle artifacts, not reveal
+bugs). Lua's directory-module resolution gap before that
 closed 5 real zero-dependent targets — its two residual findings, a
 basename-collision false-positive class and 3 unexplained misses, are filed
 separately as BACK-670/BACK-671 rather than counted against this headline,
@@ -160,13 +180,14 @@ The following are **not** in the import-recall table above because they have
 not been run through an independent-oracle diff against a real corpus (C++ *is*
 measured for side-effect recall below — this gap is import-recall only):
 
-- **C++, Zig, GDScript** — each shares a resolver
+- **C++, Zig** — each shares a resolver
   family with at least one already-measured language, but has not been
   independently confirmed on its own real corpus. (Swift graduated out of
   this list — measured with a full `swift package dump-package` oracle loop,
   BACK-567; Lua graduated out via a rockspec-manifest oracle loop, BACK-621;
-  Dart graduated out via a pubspec-manifest oracle loop, BACK-621; see the
-  Results table.)
+  Dart graduated out via a pubspec-manifest oracle loop, BACK-621; GDScript
+  graduated out via a `class_name`/`res://` oracle loop on godot-demo-projects,
+  BACK-621; see the Results table.)
 - **C** — `#include` recall spot-checked at set level against grep ground truth
   on Redis (`samples/c`): 10/10 headers across fan-in 3–75 match exactly, two
   set-verified (server.h 75/75, zmalloc.h 23/23, 0 false pos / 0 false neg).
