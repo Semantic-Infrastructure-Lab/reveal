@@ -130,16 +130,18 @@ ground-truth oracle** (the real toolchain where one exists — `go list`,
 that shares no code with reveal), diff it against reveal's output on a **real
 open-source codebase**, root-cause every miss, fix, and re-measure.
 
-- **Done:** import/dependency recall measured on 11 languages; side-effect /
-  boundary recall measured on 11 languages (12 languages covered across the two
-  programs). Every loop found a real bug; all fixed. Honest-decline invariant
-  shipped (reveal caveats an unresolved result instead of asserting a false
-  "nothing here"), and release is now gated on CI (BACK-578).
+- **Done:** import/dependency recall measured on 17 languages (Python,
+  TypeScript, Java, Go, Ruby, Kotlin, Rust, C#, PHP, Swift, Scala, Lua, Dart,
+  GDScript, Zig, TSX, plain JS); side-effect / boundary recall measured on 11
+  languages. Every loop found a real bug except Zig's (clean 100% on first
+  measurement); all bugs fixed. BACK-621's original six-language breadth plan
+  (Lua/Dart/GDScript/Zig/TSX/plain-JS) is now fully closed. Honest-decline
+  invariant shipped (reveal caveats an unresolved result instead of asserting
+  a false "nothing here"), and release is now gated on CI (BACK-578).
 - **Next, in priority order:**
-  1. Extend the same oracle loops to the *not-measured* languages in
-     VALIDATION.md's status table — Dart, Lua, Zig, GDScript, TSX, plain JS
-     (currently smoke-tested only) — and graduate C from spot-check to a full
-     `gcc -MM` import-recall loop (BACK-611/621).
+  1. Graduate C from spot-check to a full `gcc -MM` import-recall loop, and
+     C++ import-recall from spot-check-family to a full oracle loop
+     (BACK-611/621 remaining scope).
   2. Extend recall measurement to the remaining DD signals — `surface`,
      `contracts`, and `patches://`/testability (still Python + TS only,
      BACK-632).
