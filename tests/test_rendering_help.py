@@ -120,6 +120,49 @@ class TestSelectIndexEntries(unittest.TestCase):
         self.assertEqual(_select_index_entries(entries), {})
 
 
+class TestAdapterStability(unittest.TestCase):
+    """Stability badge is derived from each adapter's own STABILITY attr, never
+    a hand-maintained set — a new adapter can't silently mislabel (BACK-688)."""
+
+    def setUp(self):
+        import reveal.adapters  # noqa: F401 — trigger all @register_adapter
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+        self.registry = _ADAPTER_REGISTRY
+
+    def test_badge_derived_from_registry(self):
+        from reveal.rendering.adapters.help import _get_stability_badge
+        # Stable and project adapters keep their distinct badges.
+        self.assertEqual(_get_stability_badge('ast'), '🟢')
+        self.assertEqual(_get_stability_badge('claude'), '🎓')
+        self.assertEqual(_get_stability_badge('ssl'), '🟡')
+
+    def test_codex_and_depends_are_beta_not_experimental(self):
+        # Regression: both fell through the old hand-maintained sets and rendered
+        # 🔴 Experimental despite shipping guides/schemas (BACK-688).
+        from reveal.adapters.base import Stability
+        from reveal.rendering.adapters.help import _adapter_stability, _get_stability_badge
+        for scheme in ('codex', 'depends'):
+            self.assertEqual(_adapter_stability(scheme), Stability.BETA)
+            self.assertEqual(_get_stability_badge(scheme), '🟡')
+
+    def test_no_public_adapter_is_accidentally_experimental(self):
+        # Nothing shipped in-tree should carry the 🔴 badge by omission. A truly
+        # experimental adapter must declare STABILITY = Stability.EXPERIMENTAL.
+        from reveal.adapters.base import Stability
+        from reveal.rendering.adapters.help import _adapter_stability
+        internal = {'demo', 'test'}
+        experimental = [
+            s for s in self.registry
+            if s not in internal and _adapter_stability(s) == Stability.EXPERIMENTAL
+        ]
+        self.assertEqual(experimental, [])
+
+    def test_unknown_scheme_defaults_to_beta(self):
+        from reveal.adapters.base import Stability
+        from reveal.rendering.adapters.help import _adapter_stability
+        self.assertEqual(_adapter_stability('nonexistent-scheme'), Stability.BETA)
+
+
 class TestRenderHelpListMode(unittest.TestCase):
     """Test help topic list rendering."""
 

@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 from typing import Dict, List, Any, Optional
 import json
 
-from ..base import ResourceAdapter, register_adapter, register_renderer
+from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from .renderer import ClaudeRenderer
 from ...utils.query import parse_query_params
 from .handlers.sessions import (
@@ -169,6 +169,7 @@ class ClaudeAdapter(ResourceAdapter):
     - Token usage estimates
     """
 
+    STABILITY = Stability.PROJECT
     BUDGET_LIST_FIELD = 'results'
 
     # ~/.claude/ config directory — all non-session resources (settings, plans, history, etc.)

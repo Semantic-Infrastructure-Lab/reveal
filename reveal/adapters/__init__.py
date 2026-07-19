@@ -2,6 +2,7 @@
 
 from .base import (
     ResourceAdapter,
+    Stability,
     register_adapter,
     register_renderer,
     get_adapter_class,
@@ -46,6 +47,7 @@ except ImportError:
 __all__ = [
     # Base classes and registry functions
     'ResourceAdapter',
+    'Stability',
     'register_adapter',
     'register_renderer',
     'get_adapter_class',

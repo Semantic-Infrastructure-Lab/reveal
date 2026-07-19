@@ -5,7 +5,7 @@ import platform
 import os
 from typing import Dict, Any, Optional, List
 
-from ..base import ResourceAdapter, register_adapter, register_renderer
+from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from .bytecode import check_bytecode, pyc_to_source
 from .packages import get_packages, get_packages_list, get_package_details
 from .modules import get_module_analysis, get_syspath_analysis
@@ -126,6 +126,7 @@ _SCHEMA_NOTES = [
 class PythonAdapter(ResourceAdapter):
     """Adapter for Python runtime inspection via python:// URIs."""
 
+    STABILITY = Stability.STABLE
     ELEMENT_NAMESPACE_ADAPTER = True
 
     def __init__(self):

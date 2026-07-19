@@ -14,7 +14,7 @@ from .analysis import collect_structures, PYTHON_BUILTINS
 from .filtering import apply_filters, matches_decorator
 from .help import get_help as _get_help, get_schema as _get_schema
 from .renderer import AstRenderer
-from ..base import ResourceAdapter, register_adapter, register_renderer
+from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from ...core import suppress_treesitter_warnings
 from ...utils.query import (
     parse_result_control,
@@ -44,6 +44,7 @@ class AstAdapter(ResourceAdapter):
         ast://.?complexity>10&sort=-complexity&limit=10  # Top 10 most complex (NEW: sort, limit)
     """
 
+    STABILITY = Stability.STABLE
     BUDGET_LIST_FIELD = 'results'
 
     @staticmethod

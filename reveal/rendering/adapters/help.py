@@ -4,12 +4,30 @@ import sys
 from typing import Any, Dict
 
 from reveal.utils import safe_json_dumps
+from reveal.adapters.base import Stability, _ADAPTER_REGISTRY
 
 
-# Module constants for help list mode
-STABLE_ADAPTERS = {'help', 'env', 'ast', 'python', 'reveal'}
-BETA_ADAPTERS = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git', 'ssl', 'domain', 'xlsx', 'cpanel', 'autossl', 'nginx', 'letsencrypt', 'calls', 'patches'}
-PROJECT_ADAPTERS = {'claude'}
+# Stability badge/label are derived from each adapter's own STABILITY class
+# attribute (reveal/adapters/base.py) — never a hand-maintained set here, so a
+# new adapter can't silently render with the wrong badge (BACK-688).
+_STABILITY_BADGES = {
+    Stability.STABLE: "🟢",
+    Stability.BETA: "🟡",
+    Stability.PROJECT: "🎓",
+    Stability.EXPERIMENTAL: "🔴",
+}
+_STABILITY_LABELS = {
+    Stability.STABLE: "Stable 🟢",
+    Stability.BETA: "Beta 🟡",
+    Stability.PROJECT: "Project 🎓",
+    Stability.EXPERIMENTAL: "Experimental 🔴",
+}
+
+
+def _adapter_stability(scheme: str) -> Stability:
+    """Resolve an adapter scheme to its declared stability (BETA if unknown)."""
+    cls = _ADAPTER_REGISTRY.get(scheme)
+    return getattr(cls, "STABILITY", Stability.BETA) if cls is not None else Stability.BETA
 
 # Display order for help_category sections. Categories are defined in
 # VALID_HELP_CATEGORIES (reveal/adapters/help.py); this dict pairs each with
@@ -105,15 +123,8 @@ def _render_help_breadcrumbs(scheme: str, data: Dict[str, Any]) -> None:
 
 
 def _get_stability_badge(scheme: str) -> str:
-    """Get stability badge for an adapter."""
-    if scheme in STABLE_ADAPTERS:
-        return "🟢"
-    elif scheme in BETA_ADAPTERS:
-        return "🟡"
-    elif scheme in PROJECT_ADAPTERS:
-        return "🎓"
-    else:
-        return "🔴"
+    """Get stability badge emoji for an adapter, derived from its STABILITY attr."""
+    return _STABILITY_BADGES[_adapter_stability(scheme)]
 
 
 def _render_help_header() -> None:
@@ -381,8 +392,8 @@ def _render_help_section(data: Dict[str, Any]) -> None:
 # Section renderers - each handles one aspect of help documentation
 def _render_help_detail_header(scheme: str, data: Dict[str, Any]) -> None:
     """Render help header with scheme, description, and metadata for detail mode."""
-    # Stability classification — use module-level constants as single source of truth
-    stability = "Stable 🟢" if scheme in STABLE_ADAPTERS else "Beta 🟡" if scheme in BETA_ADAPTERS else "Project 🎓" if scheme in PROJECT_ADAPTERS else "Experimental 🔴"
+    # Stability classification — derived from the adapter's own STABILITY attr.
+    stability = _STABILITY_LABELS[_adapter_stability(scheme)]
 
     # File-based analyzers have a different type label
     adapter_type = data.get('type', '')

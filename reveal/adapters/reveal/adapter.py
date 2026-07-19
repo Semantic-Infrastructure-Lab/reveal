@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
-from ..base import ResourceAdapter, register_adapter, register_renderer
+from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from ...rules.validation.utils import find_reveal_root
 
 from .renderer import RevealRenderer
@@ -26,6 +26,7 @@ class RevealAdapter(ResourceAdapter):
     """
 
     internal = True
+    STABILITY = Stability.STABLE
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:

@@ -12,6 +12,7 @@ Internal layout:
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from enum import Enum
 from typing import Dict, Any, Iterable, Optional, List, Tuple
 
 from reveal.types import RevealMeta, RevealResult, WarningEntry
@@ -42,6 +43,22 @@ from .registry import (  # noqa: F401
 )
 
 logger = logging.getLogger(__name__)
+
+
+class Stability(str, Enum):
+    """Maturity of an adapter, surfaced as a badge in ``help://``.
+
+    Owned by the adapter class (``ResourceAdapter.STABILITY``) so the help
+    renderer can *derive* the badge from the registry instead of hand-maintained
+    STABLE/BETA/PROJECT sets — a new adapter can never silently render with the
+    wrong badge (BACK-688). Values are strings so they compare and serialize
+    naturally (``Stability.BETA == "beta"``).
+    """
+
+    STABLE = "stable"          # 🟢 battle-tested, stable contract
+    BETA = "beta"              # 🟡 shipped and working, contract may still evolve
+    PROJECT = "project"        # 🎓 production-ready example for a specific project
+    EXPERIMENTAL = "experimental"  # 🔴 genuinely unfinished / use at your own risk
 
 
 @dataclass(frozen=True)
@@ -76,6 +93,13 @@ class ResourceAdapter(ABC):
     # (e.g. reveal://), never an external user's resources. Excluded from
     # default --adapters/--discover listings; shown with --all.
     internal: bool = False
+
+    # Adapter maturity, rendered as a stability badge in `help://`. Defaults to
+    # BETA — the honest baseline for a shipped-but-evolving adapter. Override to
+    # STABLE (battle-tested), PROJECT (project-specific example), or EXPERIMENTAL
+    # (genuinely unfinished). Owning this on the class (not a satellite set in the
+    # renderer) means a new or plugin adapter can never silently mislabel (BACK-688).
+    STABILITY: Stability = Stability.BETA
 
     # CLI flags this adapter owns. Generic file routing rejects these flags on
     # plain file paths (see cli/routing/file.py:_guard_adapter_flags) instead

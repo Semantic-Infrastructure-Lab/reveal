@@ -4,7 +4,7 @@ import os
 import re
 import sys
 from typing import Dict, Any, Optional
-from .base import ResourceAdapter, register_adapter, register_renderer
+from .base import ResourceAdapter, Stability, register_adapter, register_renderer
 
 _SCHEMA_OUTPUT_TYPES = [
     {
@@ -142,6 +142,7 @@ class EnvRenderer:
 class EnvAdapter(ResourceAdapter):
     """Adapter for exploring environment variables via env:// URIs."""
 
+    STABILITY = Stability.STABLE
     ELEMENT_NAMESPACE_ADAPTER = True
 
     @staticmethod
