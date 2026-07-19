@@ -566,6 +566,7 @@ class HelpAdapter(ResourceAdapter):
             return {
                 'type': 'adapter_schema',
                 'adapter': '',
+                'error': 'No adapter specified',
                 'available_adapters': adapters,
                 'usage': 'reveal help://schemas/<adapter>',
                 'examples': [

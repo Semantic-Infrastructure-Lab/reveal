@@ -716,6 +716,25 @@ class TestRenderHelp(unittest.TestCase):
         output = capture_stdout(render_help, data, 'json', False)
         self.assertIn('"available_adapters"', output)
 
+    def test_text_schema_catalog_listing_does_not_crash(self):
+        """Bare help://schemas listing must render as a catalog, not raise KeyError.
+
+        Regression: the adapter-side dict for a bare `help://schemas` lookup
+        omitted the `error` key, so `_is_catalog_listing()` (which requires
+        `'error' in data` before checking `type`/`adapter`/`available_adapters`)
+        returned False and `_render_schema_error` crashed on `data['message']`.
+        """
+        data = {
+            'type': 'adapter_schema',
+            'adapter': '',
+            'error': 'No adapter specified',
+            'available_adapters': ['ast', 'git'],
+            'usage': 'reveal help://schemas/<adapter>',
+            'examples': ['reveal help://schemas/ast'],
+        }
+        output = capture_stdout(render_help, data, 'text', False)
+        self.assertIn('Available Adapters', output)
+
     def test_help_error_exit_code_real_error(self):
         data = {'type': 'help_section', 'error': 'Unknown adapter', 'message': 'x'}
         self.assertEqual(help_error_exit_code(data), 1)
