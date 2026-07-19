@@ -11,10 +11,11 @@ When adding a new guide under reveal/docs/, either:
   a) Add it to HelpAdapter.STATIC_HELP in reveal/adapters/help.py, OR
   b) Add its relative path to _INTENTIONALLY_EXCLUDED below with a reason.
 """
+import re
 import unittest
 from pathlib import Path
 
-from reveal.adapters.help import HelpAdapter, VALID_HELP_CATEGORIES, _read_help_frontmatter
+from reveal.adapters.help import HelpAdapter, VALID_HELP_CATEGORIES, _read_help_frontmatter, _EXAMPLE_RECIPES
 
 # Docs that live under reveal/docs/ but are intentionally not in help://.
 # Key: path relative to reveal/docs/. Value: reason for exclusion.
@@ -333,6 +334,26 @@ class TestHelpErrorHandling(unittest.TestCase):
         adapter = HelpAdapter()
         result = adapter.get_element('ast/workflows')
         self.assertIsNotNone(result, 'help://ast/workflows must resolve')
+
+
+class TestExampleRecipesNoTicketRefs(unittest.TestCase):
+    """BACK-687: recipe help strings must not embed ticket numbers or
+    feature-state claims ('not yet built', 'BACK-441') — they lie the moment
+    that ticket ships, and nothing links them back to check. BACK-441 itself
+    shipped (reveal architecture --against) while its recipe still said
+    'not yet built', which is exactly this failure mode."""
+
+    _TICKET_REF = re.compile(r'\bBACK-\d+\b')
+
+    def test_no_ticket_references_in_recipe_text(self):
+        offenders = []
+        for task, task_data in _EXAMPLE_RECIPES.items():
+            for recipe in task_data.get('recipes', []):
+                for field in ('goal', 'description'):
+                    value = recipe.get(field, '')
+                    if self._TICKET_REF.search(value):
+                        offenders.append(f"{task}/{recipe.get('goal')!r} [{field}]: {value!r}")
+        self.assertFalse(offenders, 'Ticket references found in recipe text:\n' + '\n'.join(offenders))
 
 
 class TestHelpEnvelopeConsistency(unittest.TestCase):
