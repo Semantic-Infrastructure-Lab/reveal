@@ -4,7 +4,7 @@ import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from .base import ResourceAdapter, register_adapter, register_renderer, _ADAPTER_REGISTRY
+from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY
 from ..rendering import render_help
 
 # Valid help_category values for the help:// index listing.
@@ -277,6 +277,7 @@ class HelpAdapter(ResourceAdapter):
         help://examples/codebase   # Query recipes for codebase exploration
     """
 
+    STABILITY = Stability.STABLE
     ELEMENT_NAMESPACE_ADAPTER = True
 
     # Valid section names for help://adapter/section queries
@@ -549,7 +550,10 @@ class HelpAdapter(ResourceAdapter):
         # Check for schemas route: help://schemas/ssl
         # Bare 'schemas/' lists available adapters
         if topic == 'schemas' or topic == 'schemas/':
-            adapters = sorted(k for k in _ADAPTER_REGISTRY.keys() if k not in self._INTERNAL_ADAPTERS)
+            # Only list adapters that actually provide a schema — listing a
+            # meta-adapter (e.g. help://) that returns None would walk an agent
+            # straight into a "no schema available" error from its own menu (N1).
+            adapters = self._adapters_with_schema()
             return {
                 'type': 'adapter_schema',
                 'adapter': '',
@@ -745,6 +749,24 @@ class HelpAdapter(ResourceAdapter):
         topics.extend(self.help_topics.keys())
 
         return sorted(topics)
+
+    # Discovery entry points that aren't adapter schemes or static guides but are
+    # valid help:// topics — included when suggesting fixes for a mistyped topic.
+    _DISCOVERY_TOPICS = ('quick', 'relationships', 'anti-patterns', 'schemas', 'examples')
+
+    def suggest_topics(self, query: str, n: int = 3) -> List[str]:
+        """Closest known help topics to a mistyped `query`, best first.
+
+        Used by the CLI to route a lost agent back into discovery instead of
+        dead-ending on an unknown topic (BACK-692). Matches against the full
+        topic universe — adapter schemes, static guides, and discovery routes.
+        """
+        import difflib
+
+        # Compare against the base topic only (before any '/section').
+        base = query.split('/', 1)[0]
+        universe = set(self._list_topics()) | set(self._DISCOVERY_TOPICS)
+        return difflib.get_close_matches(base, sorted(universe), n=n, cutoff=0.6)
 
     def _get_adapter_description(self, adapter_class: type[Any]) -> str:
         """Get description from adapter's help method.
@@ -1269,6 +1291,25 @@ class HelpAdapter(ResourceAdapter):
         )
         return preview + footer
 
+    def _adapters_with_schema(self) -> List[str]:
+        """Public adapter schemes that actually return a machine-readable schema.
+
+        The bare `help://schemas` menu and the "did you mean" list are built from
+        this rather than the raw registry, so an agent following the menu can
+        never land on a meta-adapter (e.g. help://) that has no schema (N1).
+        """
+        schemes: List[str] = []
+        for scheme, cls in _ADAPTER_REGISTRY.items():
+            if scheme in self._INTERNAL_ADAPTERS:
+                continue
+            try:
+                if cls.get_schema():
+                    schemes.append(scheme)
+            except Exception:
+                # A schema that errors on generation isn't a usable menu entry.
+                continue
+        return sorted(schemes)
+
     def _get_adapter_schema(self, adapter_name: str) -> Optional[Dict[str, Any]]:
         """Get machine-readable schema for an adapter.
 
@@ -1280,7 +1321,9 @@ class HelpAdapter(ResourceAdapter):
         """
         adapter_class: Optional[type[Any]] = _ADAPTER_REGISTRY.get(adapter_name)
         if not adapter_class:
-            available = sorted(_ADAPTER_REGISTRY.keys())
+            # Only advertise adapters that actually have a schema, so the
+            # "did you mean" list can't point at another dead end (N1).
+            available = self._adapters_with_schema()
             return {
                 'type': 'adapter_schema',
                 'adapter': adapter_name,

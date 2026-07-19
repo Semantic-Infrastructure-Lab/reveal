@@ -376,6 +376,44 @@ _ELEMENT_RENDER_MODES = [
 ]
 
 
+def _print_help_not_found_hints(adapter, element_name: str, section: Optional[str]) -> None:
+    """Route a lost agent back into discovery on an unknown help:// topic.
+
+    Two distinct cases, distinguished so the hint is never misleading:
+
+    * **Section-extraction attempt** (`help://<known-topic>/<heading>`): the base
+      topic exists but positional `/section` syntax isn't supported — point at the
+      real `--section` flag with the intended heading (BACK-654).
+    * **Mistyped / unknown topic** (everything else): suggest the closest known
+      topics and the two discovery entry points, instead of a nonsensical
+      `--section` retry of the same bogus string (BACK-692). Dead-ending here — the
+      one moment an agent is most lost — is the worst place to offer no way back.
+    """
+    help_topics = getattr(adapter, 'help_topics', {})
+    base = element_name.split('/', 1)[0]
+
+    if '/' in element_name and base in help_topics and not section:
+        heading = element_name.split('/', 1)[1]
+        print(
+            f"Hint: help:// needs an explicit flag for section extraction — try "
+            f"reveal 'help://{base}' --section {heading!r}",
+            file=sys.stderr,
+        )
+        return
+
+    if hasattr(adapter, 'suggest_topics'):
+        matches = adapter.suggest_topics(element_name)
+        if matches:
+            print(
+                f"Hint: did you mean {' or '.join(repr(m) for m in matches)}?",
+                file=sys.stderr,
+            )
+    print(
+        "Lost? reveal 'help://quick' for orientation, or reveal 'help://' for the full index.",
+        file=sys.stderr,
+    )
+
+
 def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
                     resource: str, args: 'Namespace', scheme: Optional[str] = None) -> None:
     """Render a specific element from adapter.
@@ -401,15 +439,8 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
         if hasattr(adapter, 'list_elements'):
             elements = adapter.list_elements()
             print(f"Available elements: {', '.join(elements)}", file=sys.stderr)
-        # BACK-654: help:// requires --section for heading extraction (unlike
-        # file/markdown adapters, which accept a bare positional section name)
-        # — the plain "not found" reads like the section doesn't exist at all.
-        if scheme == 'help' and not section:
-            print(
-                f"Hint: help:// needs an explicit flag for section extraction — try "
-                f"--section {element_name!r}",
-                file=sys.stderr,
-            )
+        if scheme == 'help':
+            _print_help_not_found_hints(adapter, element_name, section)
         sys.exit(1)
 
     # Apply --head/--tail to text-body content (BACK-355).

@@ -784,19 +784,51 @@ class TestRenderElement:
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         mock_renderer.render_element.assert_called_once()
 
-    # BACK-654 — help:// not-found hint toward --section
+    # BACK-654 / BACK-692 — help:// not-found guidance. A section-extraction
+    # attempt on a KNOWN topic points at --section; a mistyped/unknown topic
+    # routes back into discovery instead of a misleading --section retry.
 
-    def test_not_found_hints_section_flag_for_help_scheme(self, capsys):
+    def test_not_found_section_attempt_hints_section_flag(self, capsys):
+        # Base topic 'query' exists; positional '/Heading' syntax isn't supported
+        # → point at the real --section flag with the intended heading (BACK-654).
         from reveal.cli.routing import _render_element
-        mock_adapter = MagicMock()
-        mock_adapter.get_element.return_value = None
-        del mock_adapter.list_elements  # not all adapters implement this
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter()
         mock_renderer = MagicMock()
         args = _args()
         with pytest.raises(SystemExit):
-            _render_element(mock_adapter, mock_renderer, 'Elements Reference', None, args, scheme='help')
+            _render_element(adapter, mock_renderer, 'query/Elements Reference', None, args, scheme='help')
         err = capsys.readouterr().err
-        assert "--section 'Elements Reference'" in err
+        assert "reveal 'help://query' --section 'Elements Reference'" in err
+
+    def test_not_found_topic_typo_routes_to_discovery(self, capsys):
+        # A mistyped topic (no slash) must NOT get a --section retry of the same
+        # bogus string — it should suggest close matches + the discovery entry
+        # points (BACK-692 / N2).
+        from reveal.cli.routing import _render_element
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter()
+        mock_renderer = MagicMock()
+        args = _args()
+        with pytest.raises(SystemExit):
+            _render_element(adapter, mock_renderer, 'quik', None, args, scheme='help')
+        err = capsys.readouterr().err
+        assert '--section' not in err
+        assert "did you mean 'quick'?" in err
+        assert "help://quick" in err and "help://" in err
+
+    def test_not_found_unknown_topic_still_routes_to_discovery(self, capsys):
+        # Even with no close match, never dead-end — always offer a way back in.
+        from reveal.cli.routing import _render_element
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter()
+        mock_renderer = MagicMock()
+        args = _args()
+        with pytest.raises(SystemExit):
+            _render_element(adapter, mock_renderer, 'zzzzzzzz', None, args, scheme='help')
+        err = capsys.readouterr().err
+        assert '--section' not in err
+        assert "help://quick" in err
 
     def test_not_found_no_hint_for_other_schemes(self, capsys):
         from reveal.cli.routing import _render_element
@@ -809,18 +841,7 @@ class TestRenderElement:
             _render_element(mock_adapter, mock_renderer, 'missing_fn', None, args, scheme='ast')
         err = capsys.readouterr().err
         assert '--section' not in err
-
-    def test_not_found_no_hint_when_section_already_passed(self, capsys):
-        from reveal.cli.routing import _render_element
-        mock_adapter = MagicMock()
-        mock_adapter.get_element.return_value = None
-        del mock_adapter.list_elements
-        mock_renderer = MagicMock()
-        args = _args(section='Elements Reference')
-        with pytest.raises(SystemExit):
-            _render_element(mock_adapter, mock_renderer, 'Elements Reference', None, args, scheme='help')
-        err = capsys.readouterr().err
-        assert '--section' not in err
+        assert 'Lost?' not in err
 
 
 # ─── _parse_text_headings ─────────────────────────────────────────────────────
