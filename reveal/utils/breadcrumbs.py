@@ -153,7 +153,7 @@ def _show_breadcrumb_hint_once() -> None:
     except OSError:
         return
     print(
-        "New here? reveal --agent-help  (~500 tokens: how to use reveal well)\n"
+        "New here? reveal --agent-help  (~2,200 tokens: how to use reveal well)\n"
         "Tip: Permanently disable navigation hints with: reveal --disable-breadcrumbs",
         file=sys.stderr,
     )

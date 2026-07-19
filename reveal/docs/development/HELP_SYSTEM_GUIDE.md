@@ -10,7 +10,6 @@ help_token_estimate: "~2,500"
 
 **Purpose:** Understand how reveal's help system works
 **Audience:** Users and contributors
-**Version:** 0.67.0
 
 ---
 
@@ -51,7 +50,7 @@ reveal --help
 
 **Usage:**
 ```bash
-reveal --agent-help           # Orientation section (~500 tokens); reveal help://agent/full for the complete guide (~40,000 tokens)
+reveal --agent-help           # Orientation section (~2,200 tokens); reveal help://agent/full for the complete guide (~40,000 tokens)
 ```
 
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -130,7 +129,7 @@ reveal help://anti-patterns      # Common mistakes
 ### For AI Agents:
 ```bash
 # Bootstrap understanding
-reveal --agent-help              # Get agent orientation (~500 tokens; help://agent/full for the complete guide)
+reveal --agent-help              # Get agent orientation (~2,200 tokens; help://agent/full for the complete guide)
 
 # Discover adapter capabilities programmatically
 reveal help://schemas            # List all adapters with schemas
@@ -249,12 +248,26 @@ class MyAdapter(ResourceAdapter):
 
 ### Adding a New Static Guide
 
-1. Create markdown file in `reveal/docs/` directory:
-```bash
-touch reveal/docs/MY_GUIDE.md
+1. Create a markdown file anywhere under `reveal/docs/`, with YAML frontmatter
+   (all `help_*` fields are read from the file itself — never from a parallel
+   Python dict):
+```markdown
+---
+title: My Guide
+help_topic: my-guide          # optional: canonical topic if the filename-derived one isn't right
+help_description: One-line description shown in the help:// index
+help_category: feature_guides # one of VALID_HELP_CATEGORIES (reveal/adapters/help.py); omit to keep it reachable but out of the index
+help_token_estimate: "~2,000" # rough token cost of the full guide
+---
 ```
 
-2. Add to `HelpAdapter.STATIC_HELP` mapping:
+2. Name it `MY_FEATURE_GUIDE.md` (or `*GUIDE.md`) and it's **auto-discovered** —
+   no code change needed. The topic name is derived from the filename
+   (`MY_FEATURE_GUIDE.md` → `my-feature`).
+
+3. Only add an entry to `HelpAdapter.STATIC_HELP` in `reveal/adapters/help.py`
+   if you need a friendlier alias, or the file doesn't end in `GUIDE.md`
+   (e.g. `QUICK_START.md`, `AGENT_HELP.md`):
 ```python
 STATIC_HELP = {
     # ... existing entries ...
@@ -262,16 +275,8 @@ STATIC_HELP = {
 }
 ```
 
-3. Update `GUIDE_CATEGORIES` in `reveal/rendering/adapters/help.py`:
-```python
-GUIDE_CATEGORIES = {
-    ...
-    'feature_guides': ['python-guide', 'markdown', 'reveal-guide', ..., 'my-guide'],
-    ...
-}
-```
-
-4. **Done!** `help://my-guide` now works
+4. **Done!** `help://my-guide` now works, and shows up in the `help://` index
+   if `help_category` is set.
 
 ---
 
@@ -381,9 +386,9 @@ A: Check:
 **Q: Static guide not showing up**
 
 A: Check:
-1. File exists in `reveal/` directory?
-2. Added to `HelpAdapter.STATIC_HELP` mapping?
-3. Topic name matches mapping key?
+1. File exists under `reveal/docs/`?
+2. Filename ends in `GUIDE.md` (auto-discovered), or added to `HelpAdapter.STATIC_HELP`?
+3. `help_category` set in the file's frontmatter to one of `VALID_HELP_CATEGORIES` (otherwise it's reachable by topic but hidden from the index)?
 
 **Q: Help rendering looks wrong**
 
@@ -391,7 +396,7 @@ A: Check `reveal/rendering/adapters/help.py` - may need to update `_render_help_
 
 **Q: Token costs seem off**
 
-A: Update estimates in `_render_help_list_mode()` token_estimate dictionaries
+A: Update the `help_token_estimate` field in the guide's own YAML frontmatter (read by `_read_help_frontmatter()` in `reveal/adapters/help.py`)
 
 ---
 
@@ -424,7 +429,3 @@ A: Update estimates in `_render_help_list_mode()` token_estimate dictionaries
 - [AGENT_HELP.md](../AGENT_HELP.md) - AI agent reference guide
 - [RECIPES.md](../guides/RECIPES.md) - Task-based workflows
 - [README.md](../README.md) - Documentation hub
-
----
-
-**Last updated:** 2026-03-28

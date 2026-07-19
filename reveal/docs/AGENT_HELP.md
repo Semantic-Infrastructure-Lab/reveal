@@ -79,7 +79,7 @@ reveal help://schemas/<adapter>  # Machine-readable adapter schema (preferred fo
 reveal help://examples/<task>    # Canonical query recipes per task category
 
 # This guide — comprehensive reference
-reveal --agent-help              # First section of this file (~500 tokens); reveal help://agent/full for all
+reveal --agent-help              # First section of this file (~2,200 tokens); reveal help://agent/full for all
 
 # Raw flag/subcommand listing (different surface — argparse-generated)
 reveal --help                    # Every flag, every subcommand, with one-liners
@@ -4239,7 +4239,7 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 ## Help System Overview
 
 **For AI agents (you):**
-- **Orientation** (`reveal --agent-help`) - First section of this file (~500 tokens)
+- **Orientation** (`reveal --agent-help`) - First section of this file (~2,200 tokens)
 - **Complete guide** (`reveal help://agent/full`) - This file in full (~40,000 tokens)
 - **Progressive help** (`reveal help://topic`) - Low-token per-topic exploration
 

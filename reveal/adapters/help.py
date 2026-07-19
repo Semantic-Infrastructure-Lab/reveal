@@ -1303,8 +1303,14 @@ class HelpAdapter(ResourceAdapter):
             preview = '\n'.join(lines[:80]).rstrip()
 
         breadcrumb = ' | '.join(section_names) if section_names else '(no sections)'
+        # Guides sometimes hand-author their own full-guide token estimate near
+        # the top (e.g. AGENT_HELP.md's "Token Cost: ~40,000 tokens" banner).
+        # Read top-to-bottom, that reads as the cost of *this* truncated output,
+        # not the full guide it describes — so state the actual shown size too.
+        shown_tokens = len(preview) // 4
         footer = (
-            f"\n\n── {len(lines)} lines total. Sections: {breadcrumb}\n"
+            f"\n\n── {len(lines)} lines total (~{shown_tokens:,} tokens shown here). "
+            f"Sections: {breadcrumb}\n"
             f"── Full guide: reveal help://{topic}/full"
         )
         return preview + footer

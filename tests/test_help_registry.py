@@ -129,8 +129,10 @@ class TestHelpRegistry(unittest.TestCase):
         content = result['content']
         self.assertIn('── Full guide: reveal help://ast/full', content,
                       'Truncated view must include /full access hint')
-        self.assertIn('lines total. Sections:', content,
-                      'Truncated view must include section breadcrumb')
+        self.assertIn('lines total', content, 'Truncated view must include line count')
+        self.assertIn('tokens shown here', content,
+                      'Truncated view must state its own actual size, not just the full-guide estimate (BACK-689)')
+        self.assertIn('Sections:', content, 'Truncated view must include section breadcrumb')
         # Should NOT contain the full guide (which ends with Version History / FAQ)
         self.assertNotIn('## Version History', content,
                          'Truncated view should not include late sections')
