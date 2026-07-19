@@ -546,6 +546,15 @@ class HelpAdapter(ResourceAdapter):
         Returns:
             Help content dict or None if not found
         """
+        result = self._get_element_impl(element_name, **kwargs)
+        # Every tier hand-rolls its own dict below; get_structure() is the only
+        # one that stamps contract_version on its own (BACK-696). Stamp it here,
+        # once, rather than touching every builder above.
+        if isinstance(result, dict):
+            result.setdefault('contract_version', '1.0')
+        return result
+
+    def _get_element_impl(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         topic = element_name  # Alias for readability
         # Check for schemas route: help://schemas/ssl
         # Bare 'schemas/' lists available adapters
@@ -646,7 +655,8 @@ class HelpAdapter(ResourceAdapter):
                 'message': (
                     f"Unknown section '{section}'. "
                     f"Valid sections: {valid_sections}"
-                )
+                ),
+                'next': [f'reveal help://{adapter_name}'],
             }
         return None
 
@@ -664,7 +674,8 @@ class HelpAdapter(ResourceAdapter):
                 'adapter': adapter_name,
                 'section': section,
                 'error': 'Unknown adapter',
-                'message': f"No adapter named '{adapter_name}'"
+                'message': f"No adapter named '{adapter_name}'",
+                'next': ['reveal help://adapters'],
             }
         return None
 
@@ -695,7 +706,8 @@ class HelpAdapter(ResourceAdapter):
                 'message': (
                     f"Adapter '{adapter_name}' does not have "
                     f"a '{section}' section"
-                )
+                ),
+                'next': [f'reveal help://{adapter_name}'],
             }
 
         return {
@@ -869,7 +881,8 @@ class HelpAdapter(ResourceAdapter):
                 'message': (
                     f'{adapter_class.__name__} does not provide '
                     f'help documentation'
-                )
+                ),
+                'next': ['reveal help://adapters'],
             }
 
         try:
@@ -881,7 +894,8 @@ class HelpAdapter(ResourceAdapter):
             return {
                 'scheme': scheme,
                 'error': 'Help generation failed',
-                'message': str(e)
+                'message': str(e),
+                'next': ['reveal help://adapters'],
             }
 
     # Rank hints for help://quick's top command block. Lower sorts first;
@@ -1204,7 +1218,8 @@ class HelpAdapter(ResourceAdapter):
                         'message': (
                             f"Section '{section}' not found in {filename}.\n"
                             f"Tip: reveal help://{topic}/full | grep -i '<keyword>' to locate headings."
-                        )
+                        ),
+                        'next': [f'reveal help://{topic}/full'],
                     }
             elif (not full and topic not in self._FULL_ONLY_TOPICS
                     and len(lines) > self._PROGRESSIVE_DISCLOSURE_THRESHOLD):
@@ -1221,14 +1236,16 @@ class HelpAdapter(ResourceAdapter):
                 'type': 'static_guide',
                 'topic': topic,
                 'error': 'File not found',
-                'message': f'Could not find {filename}'
+                'message': f'Could not find {filename}',
+                'next': ['reveal help://'],
             }
         except Exception as e:
             return {
                 'type': 'static_guide',
                 'topic': topic,
                 'error': 'Load failed',
-                'message': str(e)
+                'message': str(e),
+                'next': ['reveal help://'],
             }
 
     def _extract_markdown_section(self, lines: list[str], section: str, topic: str) -> Optional[str]:
@@ -1330,6 +1347,7 @@ class HelpAdapter(ResourceAdapter):
                 'error': 'Unknown adapter',
                 'message': f"No adapter named '{adapter_name}'. Available: {', '.join(available)}",
                 'available_adapters': available,
+                'next': ['reveal help://schemas'],
             }
 
         if not hasattr(adapter_class, 'get_schema'):
@@ -1340,7 +1358,8 @@ class HelpAdapter(ResourceAdapter):
                 'message': (
                     f'{adapter_class.__name__} does not provide '
                     f'machine-readable schema'
-                )
+                ),
+                'next': [f'reveal help://{adapter_name}'],
             }
 
         try:
@@ -1354,7 +1373,8 @@ class HelpAdapter(ResourceAdapter):
                     'message': (
                         f'{adapter_class.__name__} does not provide a machine-readable schema. '
                         f'This is expected for meta-adapters like help://'
-                    )
+                    ),
+                    'next': [f'reveal help://{adapter_name}'],
                 }
             schema_data['adapter'] = adapter_name  # Ensure adapter is included
             schema_data['type'] = 'adapter_schema'
@@ -1364,7 +1384,8 @@ class HelpAdapter(ResourceAdapter):
                 'type': 'adapter_schema',
                 'adapter': adapter_name,
                 'error': 'Schema generation failed',
-                'message': str(e)
+                'message': str(e),
+                'next': [f'reveal help://{adapter_name}'],
             }
 
     def _get_example_recipes(self, task_name: str) -> Optional[Dict[str, Any]]:
@@ -1377,6 +1398,7 @@ class HelpAdapter(ResourceAdapter):
                 'task': task_name,
                 'error': 'Unknown task' if task_name else 'No task specified',
                 'message': error_msg,
-                'available_tasks': list(_EXAMPLE_RECIPES.keys())
+                'available_tasks': list(_EXAMPLE_RECIPES.keys()),
+                'next': ['reveal help://examples'],
             }
         return _EXAMPLE_RECIPES[task_name]

@@ -335,6 +335,47 @@ class TestHelpErrorHandling(unittest.TestCase):
         self.assertIsNotNone(result, 'help://ast/workflows must resolve')
 
 
+class TestHelpEnvelopeConsistency(unittest.TestCase):
+    """BACK-696: every get_element() tier carries contract_version; error
+    dicts carry a 'next' list of follow-up commands."""
+
+    def test_every_tier_carries_contract_version(self):
+        adapter = HelpAdapter()
+        topics = ['ast', 'quick', 'relationships', 'anti-patterns', 'adapters',
+                  'ast/workflows', 'schemas/ast', 'examples/security']
+        for topic in topics:
+            result = adapter.get_element(topic)
+            self.assertIsNotNone(result, f'help://{topic} must resolve')
+            self.assertIn('contract_version', result, f'help://{topic} missing contract_version')
+
+    def test_unknown_adapter_section_error_has_next(self):
+        adapter = HelpAdapter()
+        result = adapter.get_element('nonexistent-adapter/workflows')
+        self.assertIsNone(result)
+
+    def test_invalid_section_error_has_next(self):
+        adapter = HelpAdapter()
+        result = adapter.get_element('ast/bogus-section')
+        self.assertIsNotNone(result)
+        self.assertIn('error', result)
+        self.assertIn('next', result)
+        self.assertEqual(result['next'], ['reveal help://ast'])
+
+    def test_unknown_schema_adapter_error_has_next(self):
+        adapter = HelpAdapter()
+        result = adapter.get_element('schemas/nonexistent')
+        self.assertIsNotNone(result)
+        self.assertIn('error', result)
+        self.assertEqual(result['next'], ['reveal help://schemas'])
+
+    def test_unknown_example_task_error_has_next(self):
+        adapter = HelpAdapter()
+        result = adapter.get_element('examples/nonexistent-task')
+        self.assertIsNotNone(result)
+        self.assertIn('error', result)
+        self.assertEqual(result['next'], ['reveal help://examples'])
+
+
 class TestHelpContentCurrency(unittest.TestCase):
     """Spot-check that help:// content reflects current flag names."""
 
