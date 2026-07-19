@@ -440,6 +440,88 @@ class TestResolveProjectRoot:
             python_init_chain=True,
         ) == pkg
 
+    def test_js_workspace_lerna_json_beats_nearest_package_json(self, tmp_path):
+        """BACK-698: a lerna.json ancestor is the true root for a package
+        nested inside a monorepo — not the package's own package.json."""
+        workspace = tmp_path / 'nest'
+        workspace.mkdir()
+        (workspace / 'lerna.json').write_text('{}\n')
+        pkg = workspace / 'packages' / 'common'
+        (pkg / 'src').mkdir(parents=True)
+        (pkg / 'package.json').write_text('{"name": "@nestjs/common"}\n')
+        target = pkg / 'src' / 'index.ts'
+        target.write_text('export {};\n')
+
+        assert resolve_project_root(target) == workspace
+
+    def test_js_workspace_pnpm_yaml_beats_nearest_package_json(self, tmp_path):
+        workspace = tmp_path / 'monorepo'
+        workspace.mkdir()
+        (workspace / 'pnpm-workspace.yaml').write_text("packages:\n  - 'packages/*'\n")
+        pkg = workspace / 'packages' / 'utils'
+        pkg.mkdir(parents=True)
+        (pkg / 'package.json').write_text('{"name": "utils"}\n')
+        target = pkg / 'index.ts'
+        target.write_text('export {};\n')
+
+        assert resolve_project_root(target) == workspace
+
+    def test_js_workspace_package_json_workspaces_field_beats_nearest(self, tmp_path):
+        """npm/yarn workspaces: the root package.json declares a "workspaces"
+        array rather than using a separate lerna/pnpm marker file."""
+        workspace = tmp_path / 'monorepo'
+        workspace.mkdir()
+        (workspace / 'package.json').write_text('{"name": "root", "workspaces": ["packages/*"]}\n')
+        pkg = workspace / 'packages' / 'utils'
+        pkg.mkdir(parents=True)
+        (pkg / 'package.json').write_text('{"name": "utils"}\n')
+        target = pkg / 'index.ts'
+        target.write_text('export {};\n')
+
+        assert resolve_project_root(target) == workspace
+
+    def test_single_package_js_repo_not_promoted_past_own_root(self, tmp_path):
+        """No ancestor declares workspace membership → the nearest package.json
+        stays the root, exactly as before BACK-698 (no regression for the
+        common single-package case)."""
+        (tmp_path / '.git').mkdir()
+        pkg = tmp_path / 'app'
+        (pkg / 'src').mkdir(parents=True)
+        (pkg / 'package.json').write_text('{"name": "app"}\n')
+        target = pkg / 'src' / 'index.ts'
+        target.write_text('export {};\n')
+
+        assert resolve_project_root(target) == pkg
+
+    def test_unrelated_ancestor_package_json_does_not_count_as_workspace(self, tmp_path):
+        """An ancestor package.json with no "workspaces" field is just another
+        ordinary package — must NOT be promoted to root (would silently widen
+        the scan to an unrelated sibling tree)."""
+        (tmp_path / 'package.json').write_text('{"name": "unrelated-ancestor"}\n')
+        pkg = tmp_path / 'nested' / 'app'
+        (pkg / 'src').mkdir(parents=True)
+        (pkg / 'package.json').write_text('{"name": "app"}\n')
+        target = pkg / 'src' / 'index.ts'
+        target.write_text('export {};\n')
+
+        assert resolve_project_root(target) == pkg
+
+    def test_js_workspace_marker_ignored_for_non_js_package_root(self, tmp_path):
+        """The workspace climb is gated on the matched tier-1 root itself
+        having a package.json — a Python project sitting under an ancestor
+        pnpm-workspace.yaml (e.g. a mixed-language monorepo) must not be
+        redirected to that unrelated workspace root."""
+        workspace = tmp_path / 'monorepo'
+        workspace.mkdir()
+        (workspace / 'pnpm-workspace.yaml').write_text("packages:\n  - 'packages/*'\n")
+        pkg = workspace / 'services' / 'api'
+        (pkg / 'src').mkdir(parents=True)
+        (pkg / 'pyproject.toml').write_text('[project]\nname="api"\n')
+        target = pkg / 'src' / 'm.py'
+        target.write_text('x = 1\n')
+
+        assert resolve_project_root(target) == pkg
+
     def test_returns_none_when_nothing_matches(self, tmp_path):
         target = tmp_path / 'loose' / 'm.py'
         (tmp_path / 'loose').mkdir()

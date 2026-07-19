@@ -3,6 +3,7 @@
 Consolidates common patterns for searching up directory trees.
 """
 
+import json
 import os
 import tempfile
 from dataclasses import dataclass
@@ -463,6 +464,12 @@ _PACKAGE_ROOT_MARKERS = [
 
 _VCS_ROOT_MARKERS = ['.git']
 
+# BACK-698: explicit lerna/pnpm/npm workspace declarations. Distinct from
+# _PACKAGE_ROOT_MARKERS because these are monorepo-membership signals, not
+# bare project-unit evidence — a directory holding one of these is safe to
+# promote *past* a closer individual package.json.
+_JS_WORKSPACE_ROOT_FILES = ['lerna.json', 'pnpm-workspace.yaml']
+
 
 def reveal_yaml_is_root(config_file: Path) -> bool:
     """True if the ``.reveal.yaml`` at *config_file* declares ``root: true``.
@@ -517,6 +524,30 @@ def _has_package_marker(directory: Path) -> bool:
     return any(directory.glob('*.sln')) or any(directory.glob('*.rockspec'))
 
 
+def _has_js_workspace_marker(directory: Path) -> bool:
+    """BACK-698: *directory* explicitly declares itself a JS/TS monorepo
+    workspace root — ``lerna.json``, ``pnpm-workspace.yaml``, or a
+    ``package.json`` with a ``"workspaces"`` field (npm/yarn workspaces).
+
+    Deliberately narrower than ``_has_package_marker``: a bare ``package.json``
+    is NOT enough here (that would promote any distant ancestor package to
+    root for every single-package JS/TS repo). Only an explicit workspace
+    declaration lets tier 1 climb past the nearest ``package.json`` — see
+    ``resolve_project_root``.
+    """
+    if any((directory / marker).exists() for marker in _JS_WORKSPACE_ROOT_FILES):
+        return True
+    pkg = directory / 'package.json'
+    if not pkg.exists():
+        return False
+    try:
+        with open(pkg, encoding='utf-8') as f:
+            data = json.load(f)
+        return isinstance(data, dict) and 'workspaces' in data
+    except (OSError, ValueError):
+        return False
+
+
 def _has_vcs_marker(directory: Path) -> bool:
     """Tier 2: *directory* is a VCS root — consulted only when no package
     marker exists anywhere in the climb."""
@@ -556,7 +587,10 @@ def resolve_project_root(
     * **-1** ``root_override`` — a validated, per-invocation pin (depends://'s
       ``?root=``); callers with no such lever pass ``None``.
     * **0** ``.reveal.yaml root:true`` (``honor_reveal_root``).
-    * **1** nearest package/build marker (``use_package_markers``).
+    * **1** nearest package/build marker (``use_package_markers``) — for a JS/TS
+      match specifically, climbs further to an ancestor explicitly declaring
+      lerna/pnpm/npm workspace membership if one exists (BACK-698), since that
+      ancestor is the true scan root for a monorepo package.
     * **2** nearest VCS root (``use_vcs``).
     * **3** contiguous ``__init__.py`` chain top (``python_init_chain``).
 
@@ -574,6 +608,12 @@ def resolve_project_root(
     if use_package_markers:
         package_root = search_parents_within_ceiling(target_path, _has_package_marker)
         if package_root is not None:
+            if (package_root / 'package.json').exists():
+                workspace_root = search_parents_within_ceiling(
+                    package_root.parent, _has_js_workspace_marker
+                )
+                if workspace_root is not None:
+                    return workspace_root
             return package_root
     if use_vcs:
         vcs_root = search_parents_within_ceiling(target_path, _has_vcs_marker)
