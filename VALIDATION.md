@@ -33,7 +33,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 |---|---|---|---|
 | Python | ✅ 100% (Home Assistant, celery¹¹) | ✅ 83.5% (Home Assistant) | **Measured** |
 | TypeScript | ✅ 100% (VS Code) | ✅ 91.3%¹ (VS Code) | **Measured** |
-| Java | ✅ 100% (Elasticsearch) | ✅ 97.5% (Elasticsearch) | **Measured** |
+| Java | ✅ 100% (Elasticsearch, guava¹²) | ✅ 97.5% (Elasticsearch) | **Measured** |
 | Go | ✅ 100% (Kubernetes) | ✅ 96.3% (client-go) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse) | ✅ 98.8% (Discourse) | **Measured** |
 | Kotlin | ✅ 99.1% (tivi) | ✅ 100%² (tivi) | **Measured** |
@@ -178,6 +178,19 @@ stops at the first submodule match. 99.77% → **100%** after the fix. See the
 README](../internal-docs/planning/dogfood-findings/python-recall-oracle/README.md#second-corpus-back-669-celery--overfit-guard)
 for the full write-up.
 
+¹² Overfit guard (BACK-669): re-ran the identical independent-oracle-diff
+method against a second, unrelated real corpus (guava, 611 files, 159
+targets — full population diffed, not sampled, 2,066 edges) to check whether
+the 100% Elasticsearch result generalized. Recall held at 100% immediately,
+with no fix needed — including on the exact nested-type/static-member idiom
+(`import com.google.common.base.MoreObjects.ToStringHelper;`, 353 distinct
+`import static` statements) that BACK-551 previously found broken, confirming
+that fix generalizes past the corpus that found it. Guava's style guide
+forbids wildcard imports, so that resolution path is not exercised by this
+slice. See the [harness
+README](../internal-docs/planning/dogfood-findings/java-recall-oracle/README.md#second-corpus-back-669-guava--overfit-guard)
+for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -222,6 +235,7 @@ actually closes the gap without introducing false positives.
 | TypeScript | VS Code (`src/`, 7,401 files) | `ts.resolveModuleName` (real compiler API) | 29-file stratified sample, 1,714 edges | 2.98% → **100%** | 0 | Resolver stripped *characters* not a *prefix* on multi-level `../../` relatives, destroying most deep-tree imports; chained suffix-handling mangled multi-dot filenames (`foo.contribution.js`) |
 | TypeScript (barrel follow-up) | VS Code extensions | same | 21-target sample, 158 edges | 98.10% → **100%** | 0 | Bare `.`/`..` directory-barrel specifiers misclassified as having a file extension, skipping directory/index resolution |
 | Java | Elasticsearch (`server/src/main/java`, 4,837 files) | Buildless JLS package/filename convention | Stratified sample, 975 edges | 97.54% → 99.69% → **100%** | 0 | Nested-type and static-member imports (`import a.b.Outer.Inner`) never fell back from the (non-existent) `Inner.java` to the real enclosing `Outer.java` (BACK-551). The last 3/975 misses were all importers inside `org.elasticsearch.env`, a real source package silently excluded because `env` was in the global directory skip-set — closed by BACK-552 (context-sensitive `is_skippable_dir`), verified this loop: `ClusterState`/`Sets` now resolve their `env/NodeEnvironment`/`NodeRepurposeCommand` importers. |
+| Java (overfit guard, BACK-669) | guava (single-library tree, 611 files) | Same oracle, unmodified, re-run on a second corpus | Full population (small corpus), 159 targets, 2,066 edges | **100%** (no fix needed) | 0 | None — full-population diff confirmed 100% recall immediately, including the exact BACK-551 nested-type/static-member idiom (`MoreObjects.ToStringHelper`, `Map.Entry`, 353 distinct `import static` statements) on a second, independent corpus; the BACK-551/BACK-552 fixes generalize. Wildcard imports (`import a.b.*;`) are not exercised — Guava's style guide forbids them — so that path remains covered only by the Elasticsearch measurement above. |
 | Go | Kubernetes (`pkg/`, 2,266 files) | `go list -json` (real toolchain) + independent per-file import parse | 25-target stratified sample, 822 edges | **0%** effective (every single-file query returned zero, unconditionally) → **100%** | 8 (documented, safe — see below) | Go resolves an import to its package *directory*, but the file-level query path did an exact-key lookup against the file itself — a key that could never match a directory-keyed edge. Affected every Go dependents query, always. |
 | Python | Home Assistant core (`homeassistant/`, 213 files) | `ast.parse` + independent filesystem/`sys.path` resolution | 82-target stratified sample, 790 edges | 36.74% → **100%** | 0 | Three variants of one confusion — "a package directory is not a `sys.path` root" — causing false project-root detection, self-shadowing of stdlib-named siblings, and truncation of multi-segment relative imports to their first component |
 | Python (overfit guard, BACK-669) | celery (417 files, 185 targets) | Same oracle, unmodified, re-run on a second corpus | 20-per-bucket stratified sample, 886 edges | 99.77% → **100%** | 0 | Pure `from . import a, b, c` where some names are sibling submodules and others are symbols defined only in `__init__.py` (e.g. `celery/beat.py`'s `from . import __version__, platforms, signals`) silently dropped the `__init__.py` edge whenever any name also matched a submodule |
