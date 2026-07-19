@@ -499,7 +499,7 @@ reveal check Dockerfile                # Docker best practices (S701)
 - **S** (security) - Security vulnerabilities (S001 opt-in, S701)
 - **T** (types) - Type annotation issues (T004-T006)
 - **U** (urls) - URL consistency and security (U501, U502)
-- **V** (validation) - Internal validation rules (V001-V026)
+- **V** (validation) - Internal validation rules (V001-V030)
 
 **List all rules (including opt-in):** `reveal --rules`
 **Explain specific rule:** `reveal --explain B001`
@@ -2988,7 +2988,7 @@ exit 0
 
 **reveal auto-detects and provides structure for:**
 
-### Programming Languages (85 total — run `reveal --languages` for the live explicit-vs-fallback breakdown)
+### Programming Languages (87 total — run `reveal --languages` for the live explicit-vs-fallback breakdown)
 Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, Swift, Kotlin, Dart, Elixir, Zig, GDScript, Bash, PowerShell, SQL, PHP, Ruby, Lua, and more — plus a tree-sitter fallback (basic structure only) for any other supported grammar
 
 **Structure provided:** Functions, classes, methods, imports, decorators, complexity
