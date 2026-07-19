@@ -36,7 +36,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Java | ✅ 100% (Elasticsearch, guava¹²) | ✅ 97.5% (Elasticsearch) | **Measured** |
 | Go | ✅ 100% (Kubernetes, client_golang¹⁴) | ✅ 96.3% (client-go) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse) | ✅ 98.8% (Discourse) | **Measured** |
-| Kotlin | ✅ 99.1% (tivi) | ✅ 100%² (tivi) | **Measured** |
+| Kotlin | ✅ 99.1% (tivi, 100%¹⁵ kotlinx.coroutines) | ✅ 100%² (tivi) | **Measured** |
 | Rust | ✅ 100% (Meilisearch, ripgrep¹⁰) | ✅ 97.4% (Meilisearch) | **Measured** |
 | C# | ✅ namespace-graph fix (Jellyfin) | ✅ 98.3% (Jellyfin) | **Measured** |
 | PHP | ✅ 100% (WordPress), 74.65% (osCommerce¹³) | ✅ 97.5% (WordPress) | **Measured** |
@@ -229,6 +229,20 @@ of their parent package directory-fans-out to include themselves. See the
 README](../internal-docs/planning/dogfood-findings/go-recall-oracle/README.md#second-corpus-back-669-client_golang--overfit-guard)
 for the full write-up.
 
+¹⁵ Overfit guard (BACK-669): re-ran the same content-scanned member-import
+oracle technique (BACK-555) against a second, unrelated real corpus
+(`kotlinx.coroutines`, 1,039 `.kt` files, a JetBrains library — contrasts
+with tivi's Android/KMP app shape — full population diffed, not sampled, 34
+targets, 50 edges) to check whether the 99.14% tivi result (post-BACK-555)
+generalized. Recall held at 100% immediately, no fix needed (BACK-691). 11
+false positives, all root-caused to safe wildcard-import fan-out (`import
+kotlinx.coroutines.flow.internal.*` correctly resolving to every file
+declaring that package, per `depends://`'s directory-granularity semantics)
+— a broader import than the oracle's single-symbol targets, not a bug. See
+the [harness
+README](../internal-docs/planning/dogfood-findings/kotlin-member-import-oracle/README.md#second-corpus-back-669-kotlinxcoroutines--overfit-guard)
+for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -280,6 +294,7 @@ actually closes the gap without introducing false positives.
 | Python (overfit guard, BACK-669) | celery (417 files, 185 targets) | Same oracle, unmodified, re-run on a second corpus | 20-per-bucket stratified sample, 886 edges | 99.77% → **100%** | 0 | Pure `from . import a, b, c` where some names are sibling submodules and others are symbols defined only in `__init__.py` (e.g. `celery/beat.py`'s `from . import __version__, platforms, signals`) silently dropped the `__init__.py` edge whenever any name also matched a submodule |
 | Ruby (Zeitwerk convention) | Discourse (`app/`, 1,190 files) | Direct require-statement density + constant-reference measurement | Full-tree density scan; 5,000-file capped edge scan | Confident false negative on ~95%+ of real edges → **32,078 additional edges inferred** (vs. 8,645 from explicit `require`) | 0 (additive, exact-match only — never fabricates an edge) | Modern Rails apps express nearly all intra-app dependencies as bare constant references resolved by Zeitwerk's file-path convention, with *zero* `require` statements for reveal to see. Fixed in two stages: an honest "low coverage" caveat, then a path→constant inference pass that recovers the missing edges directly. |
 | Kotlin | tivi (Android/KMP app, 629 files) | Content-scanned package + top-level-declaration oracle | Exhaustive, 233 edges | 12.0% → **99.14%** | 0 (1 residual is a grammar-library parse-recovery artifact, not a resolver bug) | Top-level function/property imports have no class/type component to resolve toward — needed a new content-scanned member index, since the existing peel logic could only ever reach type names |
+| Kotlin (overfit guard, BACK-669) | kotlinx.coroutines (JetBrains library, 1,039 `.kt` files) | Same oracle mechanism, parameterized for a second package prefix | Full population (small corpus), 34 targets, 50 edges | **100%** (no fix needed) | 11 (documented, safe — see below) | None — full-population diff confirmed 100% recall immediately; the BACK-555 content-scanned member index generalizes off tivi's app shape to a pure-library corpus. All 11 FPs traced to safe wildcard-import fan-out: `import kotlinx.coroutines.flow.internal.*` correctly resolves to every file declaring that package (directory-granularity semantics), a broader edge set than the oracle's single-symbol targets — same class as Go's BACK-685 wildcard FPs |
 | Scala | GitBucket (247 files) | Content-scanned package + object-member oracle | Exhaustive, 1 qualifying edge | 0% → **100%** | 0 | `lowerCamelCase` top-level singleton objects defeated the existing Uppercase-gated resolver peel the same way a package segment would |
 | Rust | Meilisearch (17-crate workspace, 726 files) | Independent regex-based `use`/`Cargo.toml` parser | 30-target stratified sample, 295 edges | 59.0% → **100%** | 0 | (1) Multi-segment `crate::`/`super::` paths only ever consumed their first segment, with `super::` unconditionally failing; (2) grouped `use crate::{a,b,c}` imports matched on a keyword-typed AST node the extractor didn't recognize, silently dropping the entire statement |
 | Rust (overfit guard, BACK-669) | ripgrep (single-workspace crate, 100 files) | Same oracle, unmodified, re-run on a second corpus | Full population (small corpus), 46 targets, 100 edges | 56.0% → **100%** | 0 | A `use_list` item that is itself a nested `scoped_use_list` (`use crate::{a::{x, y}, ...}`, ripgrep's dominant `lib.rs` re-export idiom) silently dropped the whole nested item — same failure shape as the grouped-import bug above, one level deeper |
