@@ -1926,17 +1926,25 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         """Return the file whose path ends with the longest unique suffix of
         ``target_parts`` (last element carries the extension), or None.
 
-        A bare-basename match (k=1) is accepted only when exactly one file in
-        the tree bears that basename; otherwise at least one parent directory
-        component must match to disambiguate. If even the most specific
-        available suffix is ambiguous, resolution is skipped.
+        A bare-basename match (k=1) is accepted only when the import had no
+        qualifying prefix to begin with (a genuinely single-token module,
+        e.g. Swift ``import Foo``) *and* exactly one file in the tree bears
+        that basename. A multi-part import (``resty.openssl.rand``) that
+        fails to match at every suffix length ``>= 2`` is never allowed to
+        fall back to a global bare-basename guess — BACK-670: that produced
+        false-positive edges onto same-basename in-tree files with zero path
+        overlap with the import's real qualifying components (e.g. Lua
+        ``resty.openssl.rand``, an external module, wrongly resolving onto
+        ``kong/tools/rand.lua`` because it was the tree's only ``rand.lua``).
+        If even the most specific available suffix is ambiguous, resolution
+        is skipped.
         """
         basename = target_parts[-1]
         candidates = self._index_lookup(basename, search_paths, file_index)
         if not candidates:
             return None
         n = len(target_parts)
-        min_k = 1 if len(candidates) == 1 else 2
+        min_k = 1 if (n == 1 and len(candidates) == 1) else 2
         for k in range(n, min_k - 1, -1):
             suffix = tuple(target_parts[-k:])
             matches = [c for c in candidates if c.parts[-k:] == suffix]

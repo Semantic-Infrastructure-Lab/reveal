@@ -1060,6 +1060,19 @@ class TestModuleResolution:
         res = self._resolve(tmp_path, 'main.lua', '.')
         assert res['a.b'] == (tmp_path / 'a/b.lua').resolve()
 
+    def test_lua_multi_part_require_never_falls_back_to_bare_basename(self, tmp_path):
+        """BACK-670: `require("resty.openssl.rand")` (an external OpenResty
+        module, not in-tree) must NOT wrongly resolve onto `kong/tools/rand.lua`
+        just because it's the only `rand.lua` in the tree — the multi-part
+        import's real qualifying components (`resty`, `openssl`) never matched
+        at any suffix, so it should skip, not guess."""
+        (tmp_path / 'kong/tools').mkdir(parents=True)
+        (tmp_path / 'kong/tools/rand.lua').write_text('return {}\n')
+        (tmp_path / 'main.lua').write_text(
+            'local r = require("resty.openssl.rand")\n')
+        res = self._resolve(tmp_path, 'main.lua', '.')
+        assert res['resty.openssl.rand'] is None
+
     def test_zig_relative_import_resolves_stdlib_skips(self, tmp_path):
         (tmp_path / 'helper.zig').write_text('pub const x = 1;\n')
         (tmp_path / 'main.zig').write_text(
