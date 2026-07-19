@@ -7,6 +7,34 @@ from reveal.utils import safe_json_dumps
 from reveal.adapters.base import Stability, _ADAPTER_REGISTRY
 
 
+def _is_catalog_listing(data: Dict[str, Any]) -> bool:
+    """True if an 'error' dict is actually a bare-topic catalog listing.
+
+    `help://examples` and `help://schemas` route through the same error-shaped
+    dict as a real lookup failure (BACK-697) — task/adapter is empty and an
+    `available_*` list is present instead. Those are navigational, not errors,
+    and must not trigger a non-zero exit.
+    """
+    if 'error' not in data:
+        return False
+    if data.get('type') == 'query_recipes':
+        return not data.get('task') and bool(data.get('available_tasks'))
+    if data.get('type') == 'adapter_schema':
+        return not data.get('adapter') and bool(data.get('available_adapters'))
+    return False
+
+
+def help_error_exit_code(data: Dict[str, Any]) -> int:
+    """Exit code `help://` output should produce for a given result dict.
+
+    Kept in sync with the per-type text renderers below so JSON and text
+    output agree on what counts as a real error (BACK-697).
+    """
+    if 'error' in data and not _is_catalog_listing(data):
+        return 1
+    return 0
+
+
 # Stability badge/label are derived from each adapter's own STABILITY class
 # attribute (reveal/adapters/base.py) — never a hand-maintained set here, so a
 # new adapter can't silently render with the wrong badge (BACK-688).
@@ -555,7 +583,7 @@ def _render_query_recipes(data: Dict[str, Any]) -> None:
     if 'error' in data:
         available = data.get('available_tasks', [])
         task = data.get('task', '')
-        if not task and available:
+        if _is_catalog_listing(data):
             # Bare help://examples — list all task categories
             print("# Query Recipes")
             print()
@@ -611,7 +639,7 @@ def _render_query_recipes(data: Dict[str, Any]) -> None:
 def _render_schema_error(data: Dict[str, Any]) -> None:
     available = data.get('available_adapters', [])
     adapter = data.get('adapter', '')
-    if not adapter and available:
+    if _is_catalog_listing(data):
         print("# Adapter Schemas")
         print()
         print("**Usage:** `reveal help://schemas/<adapter>`")
@@ -881,6 +909,9 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
     """
     if output_format == 'json':
         print(safe_json_dumps(data))
+        exit_code = help_error_exit_code(data)
+        if exit_code:
+            sys.exit(exit_code)
         return
 
     if list_mode:

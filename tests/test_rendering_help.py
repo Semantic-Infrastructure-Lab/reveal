@@ -18,6 +18,7 @@ from reveal.rendering.adapters.help import (
     _render_help_adapter_specific,
     _select_index_entries,
     render_help,
+    help_error_exit_code,
 )
 
 
@@ -679,6 +680,57 @@ class TestRenderHelp(unittest.TestCase):
         }
         output = capture_stdout(render_help, data, 'text', False)
         self.assertIn('# test:// - Test adapter', output)
+
+    def test_json_real_error_exits_nonzero(self):
+        """BACK-697: a genuine error dict must exit 1 in JSON, matching text mode."""
+        data = {
+            'type': 'adapter_schema',
+            'adapter': 'nonexistent',
+            'error': 'Unknown adapter',
+            'message': "No adapter named 'nonexistent'",
+            'available_adapters': ['ast', 'git'],
+        }
+        with self.assertRaises(SystemExit) as ctx:
+            capture_stdout(render_help, data, 'json', False)
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_json_catalog_listing_exits_zero(self):
+        """Bare help://examples is a navigational listing, not an error — exit 0."""
+        data = {
+            'type': 'query_recipes',
+            'task': '',
+            'error': 'No task specified',
+            'message': 'Specify a task. Available: security',
+            'available_tasks': ['security'],
+        }
+        output = capture_stdout(render_help, data, 'json', False)
+        self.assertIn('"task"', output)
+
+    def test_json_schema_catalog_listing_exits_zero(self):
+        """Bare help://schemas listing (no 'error' key at all) must still exit 0."""
+        data = {
+            'type': 'adapter_schema',
+            'adapter': '',
+            'available_adapters': ['ast', 'git'],
+        }
+        output = capture_stdout(render_help, data, 'json', False)
+        self.assertIn('"available_adapters"', output)
+
+    def test_help_error_exit_code_real_error(self):
+        data = {'type': 'help_section', 'error': 'Unknown adapter', 'message': 'x'}
+        self.assertEqual(help_error_exit_code(data), 1)
+
+    def test_help_error_exit_code_catalog_listing(self):
+        data = {
+            'type': 'query_recipes',
+            'task': '',
+            'error': 'No task specified',
+            'available_tasks': ['security'],
+        }
+        self.assertEqual(help_error_exit_code(data), 0)
+
+    def test_help_error_exit_code_no_error_key(self):
+        self.assertEqual(help_error_exit_code({'type': 'help_quick'}), 0)
 
 
 class TestHelpQuick(unittest.TestCase):
