@@ -34,7 +34,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Python | ✅ 100% (Home Assistant, celery¹¹) | ✅ 83.5% (Home Assistant) | **Measured** |
 | TypeScript | ✅ 100% (VS Code) | ✅ 91.3%¹ (VS Code) | **Measured** |
 | Java | ✅ 100% (Elasticsearch, guava¹²) | ✅ 97.5% (Elasticsearch) | **Measured** |
-| Go | ✅ 100% (Kubernetes) | ✅ 96.3% (client-go) | **Measured** |
+| Go | ✅ 100% (Kubernetes, client_golang¹⁴) | ✅ 96.3% (client-go) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse) | ✅ 98.8% (Discourse) | **Measured** |
 | Kotlin | ✅ 99.1% (tivi) | ✅ 100%² (tivi) | **Measured** |
 | Rust | ✅ 100% (Meilisearch, ripgrep¹⁰) | ✅ 97.4% (Meilisearch) | **Measured** |
@@ -214,6 +214,21 @@ not fixed. See the [harness
 README](../internal-docs/planning/dogfood-findings/php-recall-oracle/README.md#second-corpus-back-669-oscommerce--overfit-guard)
 for the full write-up.
 
+¹⁴ Overfit guard (BACK-669): re-ran the identical independent-oracle-diff
+method against a second, unrelated real corpus (`prometheus/client_golang`,
+162 files, single-module — no `go.work`, unlike Kubernetes' multi-module
+workspace — full population diffed, not sampled, 114 targets, 2,837 edges)
+to check whether the 100% Kubernetes result (post-BACK-553) generalized.
+Recall held at 100% immediately, no fix needed (BACK-685). 133 false
+positives, all root-caused to safe over-inclusion: two `//go:build ignore`
+code-generation scripts that `go list` excludes but reveal's build-tag-blind
+parser doesn't (the same mechanism as the original loop's 8 Windows-build-tag
+FPs), plus external test-package files (`package foo_test`) whose own import
+of their parent package directory-fans-out to include themselves. See the
+[harness
+README](../internal-docs/planning/dogfood-findings/go-recall-oracle/README.md#second-corpus-back-669-client_golang--overfit-guard)
+for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -260,6 +275,7 @@ actually closes the gap without introducing false positives.
 | Java | Elasticsearch (`server/src/main/java`, 4,837 files) | Buildless JLS package/filename convention | Stratified sample, 975 edges | 97.54% → 99.69% → **100%** | 0 | Nested-type and static-member imports (`import a.b.Outer.Inner`) never fell back from the (non-existent) `Inner.java` to the real enclosing `Outer.java` (BACK-551). The last 3/975 misses were all importers inside `org.elasticsearch.env`, a real source package silently excluded because `env` was in the global directory skip-set — closed by BACK-552 (context-sensitive `is_skippable_dir`), verified this loop: `ClusterState`/`Sets` now resolve their `env/NodeEnvironment`/`NodeRepurposeCommand` importers. |
 | Java (overfit guard, BACK-669) | guava (single-library tree, 611 files) | Same oracle, unmodified, re-run on a second corpus | Full population (small corpus), 159 targets, 2,066 edges | **100%** (no fix needed) | 0 | None — full-population diff confirmed 100% recall immediately, including the exact BACK-551 nested-type/static-member idiom (`MoreObjects.ToStringHelper`, `Map.Entry`, 353 distinct `import static` statements) on a second, independent corpus; the BACK-551/BACK-552 fixes generalize. Wildcard imports (`import a.b.*;`) are not exercised — Guava's style guide forbids them — so that path remains covered only by the Elasticsearch measurement above. |
 | Go | Kubernetes (`pkg/`, 2,266 files) | `go list -json` (real toolchain) + independent per-file import parse | 25-target stratified sample, 822 edges | **0%** effective (every single-file query returned zero, unconditionally) → **100%** | 8 (documented, safe — see below) | Go resolves an import to its package *directory*, but the file-level query path did an exact-key lookup against the file itself — a key that could never match a directory-keyed edge. Affected every Go dependents query, always. |
+| Go (overfit guard, BACK-669) | `prometheus/client_golang` (single-module, no `go.work`, 162 files) | Same oracle mechanism (whole-repo variant — no BACK-524 scan-cap isolation needed, corpus is well under the cap) | Full population (small corpus), 114 targets, 2,837 edges | **100%** (no fix needed) | 133 (documented, safe — see below) | BACK-553's directory-key fallback generalizes cleanly off Kubernetes' package/directory-granularity shape. All 133 FPs traced to two safe over-inclusion mechanisms: (1) two `//go:build ignore` code-gen scripts (`package main`) that `go list` excludes but reveal's build-tag-blind parser doesn't, fanning their real import out to every file in the target directory — same class as this row's own 8 Windows-build-tag FPs; (2) external test-package files (`package foo_test`) whose import of parent package `foo` directory-fans-out to include themselves |
 | Python | Home Assistant core (`homeassistant/`, 213 files) | `ast.parse` + independent filesystem/`sys.path` resolution | 82-target stratified sample, 790 edges | 36.74% → **100%** | 0 | Three variants of one confusion — "a package directory is not a `sys.path` root" — causing false project-root detection, self-shadowing of stdlib-named siblings, and truncation of multi-segment relative imports to their first component |
 | Python (overfit guard, BACK-669) | celery (417 files, 185 targets) | Same oracle, unmodified, re-run on a second corpus | 20-per-bucket stratified sample, 886 edges | 99.77% → **100%** | 0 | Pure `from . import a, b, c` where some names are sibling submodules and others are symbols defined only in `__init__.py` (e.g. `celery/beat.py`'s `from . import __version__, platforms, signals`) silently dropped the `__init__.py` edge whenever any name also matched a submodule |
 | Ruby (Zeitwerk convention) | Discourse (`app/`, 1,190 files) | Direct require-statement density + constant-reference measurement | Full-tree density scan; 5,000-file capped edge scan | Confident false negative on ~95%+ of real edges → **32,078 additional edges inferred** (vs. 8,645 from explicit `require`) | 0 (additive, exact-match only — never fabricates an edge) | Modern Rails apps express nearly all intra-app dependencies as bare constant references resolved by Zeitwerk's file-path convention, with *zero* `require` statements for reveal to see. Fixed in two stages: an honest "low coverage" caveat, then a path→constant inference pass that recovers the missing edges directly. |
