@@ -187,6 +187,7 @@ def resolve_python_from_import_submodules(
         return []
 
     targets: List[Path] = []
+    symbol_seen = False
     for raw_name in import_stmt.imported_names:
         name = raw_name.split()[0]  # 'intent as i' → 'intent'
         if not name or name == '*':
@@ -198,6 +199,25 @@ def resolve_python_from_import_submodules(
         sub_pkg_init = pkg_dir / name / "__init__.py"
         if sub_pkg_init.exists():
             targets.append(sub_pkg_init)
+            continue
+        symbol_seen = True  # name isn't a submodule -> lives in pkg_dir/__init__.py
+
+    # Pure `from . import a, b, c` (BACK-6xx): resolve_python_import's single
+    # "primary" result deliberately prefers a submodule match (`from . import
+    # refs` -> refs.py, not __init__.py, avoiding a false self-cycle edge on
+    # that common idiom - see its own docstring). But when the *same*
+    # statement also names a symbol that isn't a submodule (`from . import
+    # __version__, platforms, signals`, __version__ defined only in
+    # __init__.py), that import statement genuinely depends on __init__.py
+    # too - Python always executes the package's __init__.py to resolve a
+    # bare-name relative import. resolve_python_import's single-value primary
+    # can't express "two targets"; add the missing one here for
+    # resolve_import_targets (multi-target, what depends:// uses).
+    if symbol_seen and import_stmt.is_relative and not import_stmt.module_name:
+        pkg_init = pkg_dir / "__init__.py"
+        if pkg_init.exists() and pkg_init not in targets:
+            targets.append(pkg_init)
+
     return targets
 
 

@@ -31,7 +31,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 
 | Language | Import recall | Side-effect recall | Status |
 |---|---|---|---|
-| Python | ✅ 100% (Home Assistant) | ✅ 83.5% (Home Assistant) | **Measured** |
+| Python | ✅ 100% (Home Assistant, celery¹¹) | ✅ 83.5% (Home Assistant) | **Measured** |
 | TypeScript | ✅ 100% (VS Code) | ✅ 91.3%¹ (VS Code) | **Measured** |
 | Java | ✅ 100% (Elasticsearch) | ✅ 97.5% (Elasticsearch) | **Measured** |
 | Go | ✅ 100% (Kubernetes) | ✅ 96.3% (client-go) | **Measured** |
@@ -166,6 +166,18 @@ nested item, 56.0% → **100%** after the fix. See the [harness
 README](../internal-docs/planning/dogfood-findings/rust-recall-oracle/README.md#second-corpus-back-669-ripgrep--overfit-guard)
 for the full write-up.
 
+¹¹ Overfit guard (BACK-669): re-ran the identical independent-oracle-diff
+method against a second, unrelated real corpus (celery, 417 files, 185
+targets — 20-per-bucket stratified sample, 886 edges) to check whether the
+100% Home Assistant result generalized. It found one new real bug (BACK-678):
+a pure `from . import a, b, c` statement where some names are sibling
+submodules and others are symbols living only in `__init__.py` silently
+dropped the `__init__.py` edge, because the single-value "primary" resolution
+stops at the first submodule match. 99.77% → **100%** after the fix. See the
+[harness
+README](../internal-docs/planning/dogfood-findings/python-recall-oracle/README.md#second-corpus-back-669-celery--overfit-guard)
+for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -212,6 +224,7 @@ actually closes the gap without introducing false positives.
 | Java | Elasticsearch (`server/src/main/java`, 4,837 files) | Buildless JLS package/filename convention | Stratified sample, 975 edges | 97.54% → 99.69% → **100%** | 0 | Nested-type and static-member imports (`import a.b.Outer.Inner`) never fell back from the (non-existent) `Inner.java` to the real enclosing `Outer.java` (BACK-551). The last 3/975 misses were all importers inside `org.elasticsearch.env`, a real source package silently excluded because `env` was in the global directory skip-set — closed by BACK-552 (context-sensitive `is_skippable_dir`), verified this loop: `ClusterState`/`Sets` now resolve their `env/NodeEnvironment`/`NodeRepurposeCommand` importers. |
 | Go | Kubernetes (`pkg/`, 2,266 files) | `go list -json` (real toolchain) + independent per-file import parse | 25-target stratified sample, 822 edges | **0%** effective (every single-file query returned zero, unconditionally) → **100%** | 8 (documented, safe — see below) | Go resolves an import to its package *directory*, but the file-level query path did an exact-key lookup against the file itself — a key that could never match a directory-keyed edge. Affected every Go dependents query, always. |
 | Python | Home Assistant core (`homeassistant/`, 213 files) | `ast.parse` + independent filesystem/`sys.path` resolution | 82-target stratified sample, 790 edges | 36.74% → **100%** | 0 | Three variants of one confusion — "a package directory is not a `sys.path` root" — causing false project-root detection, self-shadowing of stdlib-named siblings, and truncation of multi-segment relative imports to their first component |
+| Python (overfit guard, BACK-669) | celery (417 files, 185 targets) | Same oracle, unmodified, re-run on a second corpus | 20-per-bucket stratified sample, 886 edges | 99.77% → **100%** | 0 | Pure `from . import a, b, c` where some names are sibling submodules and others are symbols defined only in `__init__.py` (e.g. `celery/beat.py`'s `from . import __version__, platforms, signals`) silently dropped the `__init__.py` edge whenever any name also matched a submodule |
 | Ruby (Zeitwerk convention) | Discourse (`app/`, 1,190 files) | Direct require-statement density + constant-reference measurement | Full-tree density scan; 5,000-file capped edge scan | Confident false negative on ~95%+ of real edges → **32,078 additional edges inferred** (vs. 8,645 from explicit `require`) | 0 (additive, exact-match only — never fabricates an edge) | Modern Rails apps express nearly all intra-app dependencies as bare constant references resolved by Zeitwerk's file-path convention, with *zero* `require` statements for reveal to see. Fixed in two stages: an honest "low coverage" caveat, then a path→constant inference pass that recovers the missing edges directly. |
 | Kotlin | tivi (Android/KMP app, 629 files) | Content-scanned package + top-level-declaration oracle | Exhaustive, 233 edges | 12.0% → **99.14%** | 0 (1 residual is a grammar-library parse-recovery artifact, not a resolver bug) | Top-level function/property imports have no class/type component to resolve toward — needed a new content-scanned member index, since the existing peel logic could only ever reach type names |
 | Scala | GitBucket (247 files) | Content-scanned package + object-member oracle | Exhaustive, 1 qualifying edge | 0% → **100%** | 0 | `lowerCamelCase` top-level singleton objects defeated the existing Uppercase-gated resolver peel the same way a package segment would |

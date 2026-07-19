@@ -1897,5 +1897,62 @@ class TestDependsAdapterSwiftModuleFanout:
             assert 'Sources' in p.parts
 
 
+class TestRelativeFromImportMixedSymbolSubmodule:
+    """BACK-678 (BACK-669 Python overfit-guard, celery second corpus): a pure
+    `from . import a, b, c` statement where SOME names are sibling submodules
+    and OTHERS are symbols defined only in __init__.py must create edges to
+    BOTH — the submodule file(s) AND __init__.py. resolve_python_import's
+    single-value "primary" result deliberately prefers a submodule match (so
+    `from . import refs` resolves to refs.py, not __init__.py, avoiding a
+    false self-cycle edge on that common idiom) — but that same preference
+    was silently dropping the __init__.py edge entirely whenever the
+    statement ALSO named a real submodule, even though Python always executes
+    __init__.py to resolve the symbol name. Reproduces the real
+    `celery/beat.py`: `from . import __version__, platforms, signals`."""
+
+    @pytest.fixture
+    def mixed_pkg(self, tmp_path):
+        _write(tmp_path / 'pkg' / '__init__.py', '__version__ = "1.0"\n')
+        _write(tmp_path / 'pkg' / 'platforms.py', 'def detect(): return 1\n')
+        _write(tmp_path / 'pkg' / 'signals.py', 'def emit(): return 2\n')
+        # Mixed: __version__ is a symbol (only in __init__.py); platforms and
+        # signals are sibling submodules.
+        _write(tmp_path / 'pkg' / 'beat.py',
+               'from . import __version__, platforms, signals\n'
+               'def go(): return __version__ + str(platforms.detect()) + str(signals.emit())\n')
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "t"\n')
+        return tmp_path
+
+    def test_symbol_creates_init_edge(self, mixed_pkg):
+        """The regression: __init__.py must appear as a dependent of beat.py
+        because __version__ is only defined there."""
+        from reveal.adapters.depends import DependsAdapter
+        r = DependsAdapter(str(mixed_pkg / 'pkg' / '__init__.py')).get_structure()
+        importers = {Path(d['file']).name for d in r['dependents']}
+        assert 'beat.py' in importers
+
+    def test_submodules_still_resolve(self, mixed_pkg):
+        """No regression: platforms.py and signals.py still get their own
+        submodule edges alongside the __init__.py fix."""
+        from reveal.adapters.depends import DependsAdapter
+        for member in ('platforms.py', 'signals.py'):
+            r = DependsAdapter(str(mixed_pkg / 'pkg' / member)).get_structure()
+            importers = {Path(d['file']).name for d in r['dependents']}
+            assert 'beat.py' in importers, member
+
+    def test_pure_submodule_import_has_no_init_edge(self, tmp_path):
+        """No regression on the idiom the submodule-preference was protecting:
+        `from . import refs` where every name IS a submodule must NOT create
+        a spurious __init__.py <-> importer self-cycle edge."""
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'pkg' / '__init__.py', '')
+        _write(tmp_path / 'pkg' / 'refs.py', 'X = 1\n')
+        _write(tmp_path / 'pkg' / 'adapter.py', 'from . import refs\nY = refs.X\n')
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "t"\n')
+        r = DependsAdapter(str(tmp_path / 'pkg' / '__init__.py')).get_structure()
+        importers = {Path(d['file']).name for d in r['dependents']}
+        assert 'adapter.py' not in importers
+
+
 if __name__ == '__main__':
     unittest.main()
