@@ -1010,6 +1010,7 @@ class HelpAdapter(ResourceAdapter):
                 'reveal help://adapters          # full adapter list',
                 'reveal help://ast               # Python/JS/Go AST queries',
                 'reveal help://ssl               # TLS cert adapter guide',
+                'reveal help://examples          # browse all task-based query recipes',
                 'reveal help://examples/security # security query recipes',
                 'reveal help://agent             # AI agent usage guide',
             ],

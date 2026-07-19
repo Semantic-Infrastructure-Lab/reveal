@@ -763,6 +763,14 @@ class TestHelpQuick(unittest.TestCase):
         self.assertIn('next_steps', result)
         self.assertTrue(result['next_steps'])
 
+    def test_next_steps_points_to_examples_index(self):
+        """BACK-690: quick teased one recipe (examples/security) but never
+        the help://examples index of all task categories — must point to both."""
+        result = self._get_quick()
+        steps = ' '.join(result['next_steps'])
+        self.assertIn('help://examples ', steps, 'missing pointer to the examples index')
+        self.assertIn('help://examples/security', steps)
+
     def test_renderer_produces_output(self):
         result = self._get_quick()
         output = capture_stdout(render_help, result, 'text', False)
