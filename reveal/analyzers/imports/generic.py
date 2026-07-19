@@ -402,6 +402,27 @@ class _ImportSpec:
             naming an engine builtin (the overwhelming majority — 410 of 438
             in the same corpus) correctly finds no entry and stays ``None``.
             Off for every other language.
+        load_path_manifest_glob: Filename glob identifying a per-package
+            manifest that registers its own directory as an *additional* bare-
+            import search root, alongside the project root — RubyGems'
+            ``*.gemspec`` (BACK-669 solidus second-corpus loop). Unlike
+            ``package_manifest_filename``/``package_uri_scheme`` (Dart), this
+            has no ``scheme:name/path`` prefix to key a lookup by declared
+            name: a bare ``require 'spree/foo'`` doesn't say which gem it
+            means, it just needs *some* in-tree gem's ``lib/`` to contain
+            ``spree/foo.rb``. So every manifest's ``load_path_lib_dirname``
+            becomes an unconditional extra search root, tried the same way
+            the single project root already is. A single-gem project (most
+            Ruby apps, e.g. Discourse) has exactly one such manifest at the
+            project root, so this is a no-op widening there — it only matters
+            for a multi-gem monorepo (Rails Engine gems, each with its own
+            ``lib/`` on Bundler's ``$LOAD_PATH``), which the original
+            single-app Discourse measurement never exercised. Unset for every
+            other language.
+        load_path_lib_dirname: The directory (relative to a
+            ``load_path_manifest_glob`` match's own directory) that manifest
+            registers as a load-path root — RubyGems' ``lib``. Unset when
+            ``load_path_manifest_glob`` is unset.
         directory_index_filenames: Filename(s) that let a dotted qualified name
             resolve to a *directory module* — Lua's ``require("a.b.c")`` →
             ``a/b/c/init.lua`` when no ``a/b/c.lua`` file exists (BACK-621,
@@ -453,6 +474,8 @@ class _ImportSpec:
     package_uri_scheme: Optional[str] = None
     package_manifest_filename: Optional[str] = None
     package_manifest_lib_dirname: Optional[str] = None
+    load_path_manifest_glob: Optional[str] = None
+    load_path_lib_dirname: Optional[str] = None
     directory_index_filenames: FrozenSet[str] = field(default_factory=frozenset)
     class_name_convention: bool = False
 
@@ -982,7 +1005,17 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                     return  # nested fragment of an already-captured outer chain
                 text = analyzer._get_node_text(node)
                 if text:
-                    refs.append((node.start_position().row + 1, text))
+                    # BACK-669 solidus second-corpus loop: a leading `::` forces
+                    # absolute (top-level) constant lookup — Ruby's disambiguator
+                    # for exactly the shape a namespaced Rails Engine needs it for
+                    # (`::Spree::Order` inside `module Spree` code that would
+                    # otherwise risk resolving a bare `Order` to some *other*
+                    # nested constant). It doesn't change *which* constant is
+                    # named, only how it's looked up, so strip it before matching
+                    # — zeitwerk_index keys are never prefixed with `::` (built
+                    # from path segments, not source text), and without this the
+                    # exact-match lookup silently misses every absolute reference.
+                    refs.append((node.start_position().row + 1, text.removeprefix('::')))
                 return  # don't descend into a captured chain's own fragments
             for child in _children(node):
                 walk(child)
@@ -2345,6 +2378,13 @@ _RUBY_SPEC = _ImportSpec(
     # BACK-557 direction a: infer those convention-resolved edges instead of
     # only caveating their absence.
     zeitwerk_convention=True,
+    # BACK-669 solidus second-corpus loop: a multi-gem monorepo (Rails Engine
+    # gems, each carrying its own gemspec + lib/) registers each gem's lib/
+    # on Bundler's $LOAD_PATH, so a bare `require 'spree/foo'` in one gem can
+    # target another gem's lib/ tree — invisible to a resolver that only
+    # tries the single project root. See load_path_manifest_glob docstring.
+    load_path_manifest_glob='*.gemspec',
+    load_path_lib_dirname='lib',
 )
 
 # BACK-488: Swift and Kotlin were absent from the table entirely — `imports://`,

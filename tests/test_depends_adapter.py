@@ -1659,6 +1659,21 @@ class TestZeitwerkConventionInference:
         files = {d['file'] for d in r['dependents']}
         assert str(root / 'app' / 'models' / 'post.rb') in files
 
+    def test_absolute_top_level_constant_reference_resolved(self, tmp_path):
+        """BACK-669 solidus second-corpus loop: `::Topic.find(1)` (a leading
+        `::` forcing absolute top-level lookup — the Rails Engine idiom that
+        disambiguates a bare constant from risking resolution to some other
+        nested constant inside a `module Spree` namespace) must resolve the
+        same as the bare `Topic.find(1)` form. The leading `::` changes only
+        how Ruby *looks up* the constant, not which one it names."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._rails_app(tmp_path)
+        _write(root / 'app' / 'models' / 'absolute_ref.rb',
+               'class AbsoluteRef\n  def go\n    ::Topic.find(1)\n  end\nend\n')
+        r = DependsAdapter(str(root / 'app' / 'models' / 'topic.rb')).get_structure()
+        files = {d['file'] for d in r['dependents']}
+        assert str(root / 'app' / 'models' / 'absolute_ref.rb') in files
+
     def test_cross_directory_reference_resolved(self, tmp_path):
         """A controller (app/controllers) referencing a model (app/models) by
         bare constant — each app/* subdir is its own Zeitwerk root."""
@@ -1889,7 +1904,7 @@ class TestDependsAdapterSwiftModuleFanout:
         root = self._custom_path_workspace(tmp_path)
         a = DependsAdapter(str(root))
         files, _ = a._discover_files(root, frozenset({'.swift'}))
-        idx = a._build_resolution_indices(files)
+        idx = a._build_resolution_indices(files, root)
         # Every Api-module file must be a real file under Sources/ (the path:
         # override), never a phantom from the dependency reference.
         for p in idx.module_index['Api']:
@@ -1952,6 +1967,63 @@ class TestRelativeFromImportMixedSymbolSubmodule:
         r = DependsAdapter(str(tmp_path / 'pkg' / '__init__.py')).get_structure()
         importers = {Path(d['file']).name for d in r['dependents']}
         assert 'adapter.py' not in importers
+
+
+class TestGemLoadPathRoots:
+    """BACK-669 solidus second-corpus (overfit guard) loop: a multi-gem
+    monorepo (Rails Engine gems, each with its own `*.gemspec` + `lib/`)
+    registers every gem's `lib/` on Bundler's $LOAD_PATH — a bare
+    `require 'other_gem/foo'` in one gem can target another gem's `lib/`
+    tree, invisible to a resolver that only tries the single project root.
+    The original Ruby measurement (Discourse) never exercised this: a
+    single-app project has exactly one gemspec at the project root, so
+    project-root-relative resolution already covered it."""
+
+    def _multi_gem_workspace(self, tmp_path):
+        """Two sibling gems under one project root, each with its own
+        gemspec + lib/ — the solidus/Rails-Engine shape."""
+        (tmp_path / '.git').mkdir()
+        _write(tmp_path / 'core' / 'core.gemspec', 'Gem::Specification.new { |s| s.name = "core" }\n')
+        _write(tmp_path / 'core' / 'lib' / 'spree' / 'testing_support' / 'helper.rb',
+               'module Spree\n  module TestingSupport\n    module Helper\n    end\n  end\nend\n')
+        _write(tmp_path / 'api' / 'api.gemspec', 'Gem::Specification.new { |s| s.name = "api" }\n')
+        _write(tmp_path / 'api' / 'spec' / 'api_spec.rb',
+               'require "spree/testing_support/helper"\n')
+        return tmp_path
+
+    def test_bare_require_resolves_via_sibling_gem_lib(self, tmp_path):
+        from reveal.adapters.depends import DependsAdapter
+        root = self._multi_gem_workspace(tmp_path)
+        r = DependsAdapter(
+            str(root / 'core' / 'lib' / 'spree' / 'testing_support' / 'helper.rb')
+        ).get_structure()
+        importers = {Path(d['file']).name for d in r['dependents']}
+        assert 'api_spec.rb' in importers
+
+    def test_single_gem_project_unaffected(self, tmp_path):
+        """A normal single-gem Ruby project (one gemspec at the project root,
+        e.g. Discourse) must resolve exactly as before — no behavior change
+        for the shape the original measurement was proven on."""
+        from reveal.adapters.depends import DependsAdapter
+        (tmp_path / '.git').mkdir()
+        _write(tmp_path / 'app.gemspec', 'Gem::Specification.new { |s| s.name = "app" }\n')
+        _write(tmp_path / 'lib' / 'helper.rb', 'class Helper; end\n')
+        _write(tmp_path / 'lib' / 'user.rb', 'require_relative "helper"\nclass User; end\n')
+        r = DependsAdapter(str(tmp_path / 'lib' / 'helper.rb')).get_structure()
+        importers = {Path(d['file']).name for d in r['dependents']}
+        assert importers == {'user.rb'}
+
+    def test_non_ruby_tree_unaffected(self, tmp_path):
+        """A Python tree has no load_path_manifest_glob set — the gemspec
+        glob must never even run, and resolution must be unchanged."""
+        from reveal.adapters.depends import DependsAdapter
+        (tmp_path / '.git').mkdir()
+        _write(tmp_path / 'pkg' / '__init__.py', '')
+        _write(tmp_path / 'pkg' / 'a.py', 'X = 1\n')
+        _write(tmp_path / 'pkg' / 'b.py', 'from . import a\n')
+        r = DependsAdapter(str(tmp_path / 'pkg' / 'a.py')).get_structure()
+        importers = {Path(d['file']).name for d in r['dependents']}
+        assert 'b.py' in importers
 
 
 if __name__ == '__main__':

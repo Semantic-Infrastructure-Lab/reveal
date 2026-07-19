@@ -19,6 +19,7 @@ from ..utils import safe_json_dumps
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
 from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor
+from ..defaults import SKIP_DIRECTORIES
 from ..utils.query import parse_query_params
 from ..utils.path_utils import (
     is_skippable_dir,
@@ -62,6 +63,7 @@ class _ResolutionIndices(NamedTuple):
     member_index: Dict[Tuple[str, str], List[Path]]  # BACK-547/557: (pkg, symbol) → files
     zeitwerk_index: Dict[str, Path]     # BACK-557: constant-path → declaring file
     module_index: Dict[str, List[Path]]  # BACK-567: Swift module → member files
+    load_path_roots: List[Path]         # BACK-669: extra gemspec-registered lib/ search roots
 
 
 def _has_project_marker(directory: Path) -> bool:
@@ -618,7 +620,7 @@ class DependsAdapter(ResourceAdapter):
         # indices; (3) resolve each import to graph edges; (4) add the
         # convention-only Zeitwerk edges.
         files, file_index = self._discover_files(scan_root, supported_exts)
-        indices = self._build_resolution_indices(files)
+        indices = self._build_resolution_indices(files, scan_root)
         self._graph = ImportGraph.from_imports(indices.all_imports)
         self._resolve_edges(scan_root, file_index, indices)
         self._build_zeitwerk_edges(files, indices.zeitwerk_index)
@@ -669,7 +671,7 @@ class DependsAdapter(ResourceAdapter):
                     break
         return files, file_index
 
-    def _build_resolution_indices(self, files: List[Path]) -> '_ResolutionIndices':
+    def _build_resolution_indices(self, files: List[Path], scan_root: Path) -> '_ResolutionIndices':
         """Parse every file in `files` once into the resolution indices.
 
         One pass over the parse corpus that produces everything edge
@@ -749,6 +751,12 @@ class DependsAdapter(ResourceAdapter):
         # prefer an authoritative manifest mapping over the directory
         # convention (see _swift_module_for).
         manifest_dirs = self._build_manifest_module_dirs(files)
+        # BACK-669: extra bare-import search roots for a multi-package monorepo
+        # (RubyGems' *.gemspec + lib/, spec.load_path_manifest_glob). Built once
+        # per scan, gated on the language actually being present (files may span
+        # languages for a directory target), so this is a no-op glob for every
+        # other tree.
+        load_path_roots = self._build_load_path_roots(files, scan_root)
         for file_path in files:
             extractor = get_extractor(file_path)
             if not extractor:
@@ -821,7 +829,50 @@ class DependsAdapter(ResourceAdapter):
             member_index=member_index,
             zeitwerk_index=zeitwerk_index,
             module_index=module_index,
+            load_path_roots=load_path_roots,
         )
+
+    @staticmethod
+    def _build_load_path_roots(files: List[Path], scan_root: Path) -> List[Path]:
+        """BACK-669 solidus second-corpus loop: every ``<dir>/lib`` sibling of a
+        ``spec.load_path_manifest_glob`` match (RubyGems ``*.gemspec``) under
+        ``scan_root`` — the real Bundler ``$LOAD_PATH`` roots a multi-gem
+        monorepo (Rails Engine gems, each with its own gemspec) registers.
+
+        Unlike Dart's ``package_manifest_filename`` (looked up by declared
+        package *name*, BACK-621), a bare Ruby ``require 'a/b'`` carries no
+        gem-name prefix to key a lookup by — every matching manifest's ``lib/``
+        is added unconditionally as one more root :meth:`_resolve_path_target`
+        tries, the same way the single project root already is. A single-gem
+        project (one gemspec at the project root, e.g. Discourse) yields
+        exactly one extra root whose ``lib/`` typically doesn't even exist —
+        a no-op widening, not a behavior change, for the shape the original
+        Ruby measurement was proven on.
+
+        Globbed once from ``scan_root`` directly (not ``files``) because a
+        ``.gemspec`` is never a ``source_extensions`` match for any language
+        extractor, so it would never appear in the parsed file corpus.
+        """
+        glob = None
+        for f in files:
+            spec = getattr(get_extractor(f), 'spec', None)
+            manifest_glob = getattr(spec, 'load_path_manifest_glob', None)
+            if manifest_glob:
+                glob = (manifest_glob, getattr(spec, 'load_path_lib_dirname', None))
+                break
+        if not glob or not glob[1]:
+            return []
+        manifest_glob, lib_dirname = glob
+        roots: List[Path] = []
+        if not scan_root.is_dir():
+            return roots
+        for manifest in scan_root.rglob(manifest_glob):
+            if any(part in SKIP_DIRECTORIES for part in manifest.parts):
+                continue
+            lib_dir = manifest.parent / lib_dirname
+            if lib_dir.is_dir():
+                roots.append(lib_dir)
+        return roots
 
     @staticmethod
     def _build_manifest_module_dirs(files: List[Path]) -> List[Tuple[Path, str]]:
@@ -893,9 +944,15 @@ class DependsAdapter(ResourceAdapter):
             # scan_root costs nothing for the other resolvers (base_path is
             # already tried first, so this is just a harmless duplicate root).
             extra_paths = [scan_root] if scan_root.is_dir() else []
+            # BACK-669: a multi-gem monorepo registers each gem's own lib/ on
+            # $LOAD_PATH too (spec.load_path_manifest_glob) — a bare `require`
+            # can target another gem's lib/ tree, not just the project root.
+            spec = getattr(extractor, 'spec', None)
+            if getattr(spec, 'load_path_manifest_glob', None) and indices.load_path_roots:
+                extra_paths = extra_paths + indices.load_path_roots
             # Mirrors ImportsAdapter._build_graph's gating (BACK-491): only
             # generic (spec-based) extractors accept file_index.
-            uses_file_index = getattr(extractor, 'spec', None) is not None
+            uses_file_index = spec is not None
             for stmt in imports:
                 if stmt.is_type_checking:
                     continue
