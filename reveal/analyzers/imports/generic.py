@@ -1064,14 +1064,87 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             shape applies — an unknown/ambiguous framework constant, a
             variable, or any shape this doesn't recognize.
           * the module-level ``_NOT_CONCAT`` sentinel when the node's target
-            isn't a concatenation at all (a bare string literal, e.g.
-            ``require 'lib/foo.php';``) — the caller falls back to the
-            existing text-based ``_build`` path unchanged, so that
-            already-working case never regresses.
+            is some other shape this method doesn't recognize at all (should
+            not occur for well-formed PHP require/include — a defensive
+            fallback to the old text-based ``_build`` path, not a designed
+            case).
+
+        BACK-680 (second-corpus overfit guard, osCommerce): a bare string
+        literal target written PHP's call-style way — ``require('includes/
+        foo.php');`` (the dominant real-world form: 534/544 of this corpus's
+        require/include statements use parens, vs. only 10/1,521 in
+        WordPress's oracle corpus) — was, before this fix, left for the
+        caller's ``_NOT_CONCAT`` fallback to ``_build()``, whose keyword-
+        stripping tokenizer splits the raw statement text on spaces
+        (``text.split(' ')``) and pops leading tokens matching
+        ``self.spec.keywords`` exactly. ``require('includes/foo.php')`` has
+        no space between the ``require`` keyword and its opening paren, so
+        the *entire* raw text is one token — it never equals the bare
+        keyword ``'require'``, the strip loop does nothing, and
+        ``module_name`` ends up as the literal garbage string
+        ``"require('includes/foo.php')"``. That string still contains a
+        ``/`` (from the real path inside it), so ``_looks_like_path``
+        (checked later in ``_resolve_module``) still says yes and a real
+        resolution is attempted — against the garbage text, which of course
+        never matches a real file. **Zero edges for every parenthesized
+        bare-literal require/include in the corpus, never a wrong edge, just
+        silently nothing** — the same "detects the node, mis-derives what's
+        inside it" failure shape BACK-564 already found for concatenation
+        targets, one syntactic form later. WordPress's own oracle corpus is
+        both near-parenthesis-free AND has zero bare-literal statements, so
+        neither the paren-unwrapping gap nor this one ever surfaced there;
+        osCommerce's parenthesized-bare-literal idiom hits both at once.
+        Fixed here by handling the bare-``string`` target explicitly and
+        structurally — the same AST-walk approach the concatenation idioms
+        above already use — instead of ever routing a require/include target
+        through ``_build()``'s text tokenizer.
+
+        Also unwraps a ``parenthesized_expression`` wrapper before dispatch
+        (tree-sitter nests a parenthesized target one level deeper than the
+        unparenthesized ``require EXPR;`` form): before this fix,
+        ``_first_child_of_kind(node, 'binary_expression')`` only ever checked
+        *direct* children of the require/include node, so a parenthesized
+        concatenation target (``require(OSCOM_BASE_DIR . 'x.php');``) also
+        silently missed the concat idiom above and fell through to the same
+        broken tokenizer path.
         """
-        concat = self._first_child_of_kind(node, 'binary_expression')
-        if concat is None:
+        target = self._require_target_node(node)
+        if target is None:
             return _NOT_CONCAT
+
+        if target.kind() == 'string':
+            # Bare string literal — PHP's `require`/`include` semantics
+            # resolve an unqualified relative path against the importing
+            # file's own directory (never a project root), same as Ruby's
+            # `require_relative` — hence `is_relative=True` unconditionally,
+            # not gated on a leading `.` the way `_build()`'s generic path
+            # requires.
+            content = self._first_descendant_text(target, analyzer, ('string_content',))
+            if not content:
+                return None
+            module_name = content.lstrip('/')
+            if not module_name:
+                return None
+            return ImportStatement(
+                file_path=file_path,
+                line_number=node.start_position().row + 1,
+                module_name=module_name,
+                imported_names=[],
+                is_relative=True,
+                import_type='include',
+                alias=None,
+                source_line=analyzer._get_node_text(node).strip(),
+                skip_unused=True,
+            )
+
+        if target.kind() != 'binary_expression':
+            # A variable (`$file`), a method/static call
+            # (`$tpl->getFile(...)`, `OSCOM::getConfig(...)`), or anything
+            # else this doesn't recognize — genuinely dynamic or unknown.
+            # Honest skip: never fabricate an edge for it.
+            return None
+
+        concat = target
 
         # BACK-564 idiom, tried first and unchanged: a single-operand
         # `__DIR__ . 'x.php'` / `dirname( __FILE__ ) . 'x.php'` concatenation
@@ -1139,6 +1212,29 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         for child in _children(node):
             if child.kind() == kind:
                 return child
+        return None
+
+    _REQUIRE_KEYWORD_KINDS: ClassVar[FrozenSet[str]] = frozenset({
+        'require', 'require_once', 'include', 'include_once',
+    })
+
+    @classmethod
+    def _require_target_node(cls, node):
+        """The actual target expression of a require/include node — the
+        first non-keyword child, unwrapping one ``parenthesized_expression``
+        wrapper (PHP's ``require(EXPR);`` call-style, tree-sitter nests the
+        real target one level deeper than the unparenthesized ``require
+        EXPR;`` form). Returns ``None`` only for a malformed/unrecognized
+        node shape (no non-keyword child, or an empty parenthesized
+        expression) — the caller treats that as "don't know", not "dynamic".
+        """
+        for child in _children(node):
+            if child.kind() in cls._REQUIRE_KEYWORD_KINDS:
+                continue
+            if child.kind() == 'parenthesized_expression':
+                inner = [c for c in _children(child) if c.kind() not in ('(', ')')]
+                return inner[0] if inner else None
+            return child
         return None
 
     @staticmethod

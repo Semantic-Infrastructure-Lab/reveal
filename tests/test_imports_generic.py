@@ -817,6 +817,53 @@ class TestModuleResolution:
         res = self._resolve(tmp_path, 'main.php', '.')
         assert res['inc.php'] == (tmp_path / 'inc.php').resolve()
 
+    def test_php_require_call_style_literal_resolves_relative(self, tmp_path):
+        """BACK-680 (second-corpus overfit guard, osCommerce): the
+        parenthesized call-style spelling of a bare-literal require —
+        `require('includes/inc.php');`, no space before the `(` — is the
+        dominant real-world form on osCommerce (534/544 statements), vs.
+        only 10/1,521 in the original WordPress oracle corpus. Before this
+        fix it silently resolved to zero edges: `_build()`'s keyword
+        stripper splits on spaces and never matches the fused
+        `require('...')` token, so `module_name` ended up as the literal
+        garbage string `"require('includes/inc.php')"` (still `_looks_like_
+        path`-true thanks to the embedded `/`, so a real resolution was
+        attempted and correctly failed against the garbage text — never a
+        wrong edge, just silently nothing)."""
+        (tmp_path / 'includes').mkdir()
+        (tmp_path / 'includes/inc.php').write_text('<?php\n$x = 1;\n')
+        (tmp_path / 'main.php').write_text("<?php\nrequire('includes/inc.php');\n")
+        res = self._resolve(tmp_path, 'main.php', '.')
+        assert res['includes/inc.php'] == (tmp_path / 'includes/inc.php').resolve()
+
+    def test_php_require_call_style_dir_concat_resolves(self, tmp_path):
+        """BACK-680: the parenthesized call-style spelling of BACK-564's
+        `__DIR__`-concatenation idiom — `require(__DIR__ . '/foo.php');` —
+        must resolve too. Before this fix, `_concat_to_import`'s
+        `_first_child_of_kind(node, 'binary_expression')` only checked
+        *direct* children of the require/include node; a parenthesized
+        target nests the `binary_expression` one level deeper (inside a
+        `parenthesized_expression`), so this silently missed the concat
+        idiom and fell through to the same broken text-tokenizer path as
+        the bare-literal case above."""
+        (tmp_path / 'foo.php').write_text('<?php\n$x = 1;\n')
+        (tmp_path / 'main.php').write_text("<?php\nrequire(__DIR__ . '/foo.php');\n")
+        res = self._resolve(tmp_path, 'main.php', '.')
+        assert res['foo.php'] == (tmp_path / 'foo.php').resolve()
+
+    def test_php_require_call_style_dynamic_honest_skip(self, tmp_path):
+        """BACK-680: a call-style require whose target is neither a bare
+        string literal nor a concatenation — `require($tpl->getFile('x'));`
+        (osCommerce's dominant dynamic idiom, 198/544 statements) — must
+        stay an honest skip (no edge), never a fabricated one, even after
+        the parenthesized-target unwrapping this session added."""
+        (tmp_path / 'main.php').write_text(
+            "<?php\nrequire($tpl->getFile('template_top.php'));\n")
+        entry = tmp_path / 'main.php'
+        extractor = get_extractor(entry)
+        imports = extractor.extract_imports(entry)
+        assert imports == []
+
     def test_php_require_dir_concat_resolves(self, tmp_path):
         """BACK-564: `require __DIR__ . '/foo.php';` — the dominant real-world
         PHP require idiom (0/387 WordPress-core edges use a bare literal) —
