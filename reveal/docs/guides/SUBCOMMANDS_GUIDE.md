@@ -711,3 +711,41 @@ reveal scaffold rule B007 "too-long"          # new quality rule stub
 - [ADAPTER_AUTHORING_GUIDE.md](../development/ADAPTER_AUTHORING_GUIDE.md) — Full adapter authoring guide
 - [RECIPES.md](RECIPES.md) — Task patterns that exercise the subcommands
 - `reveal help://scaffolding` — In-tool scaffolding reference
+
+---
+
+## reveal testability — Testability Pressure Finder
+
+Joins test patch usage with production boundary fan-out to find review targets
+where repeated mocking and runtime-boundary complexity overlap — not "mocking
+is bad," but where patching and boundary fan-out compound.
+
+### Usage
+
+```
+reveal testability [PATH] [--tests PATHS...] [--top N] [--min-patches N] [--min-categories N]
+```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--tests PATHS...` | Test paths to scan (default: `tests/`, `test/`, or `spec/` under the source root) |
+| `--top N` | Maximum patch and boundary groups to show (default: 20) |
+| `--min-patches N` | Minimum patches for a target group to be reported (default: 3) |
+| `--min-categories N` | Minimum boundary categories for unpatched functions to be reported (default: 3) |
+| `--include-unresolved` | Include low-count unresolved patch targets in text/JSON results |
+| `--format json` | Machine-readable output |
+
+### Examples
+
+```bash
+reveal testability src --tests tests
+reveal testability . --tests tests integration_tests --top 20
+reveal testability src --tests tests --format json
+```
+
+### See Also
+
+- `reveal patches://tests?group=target` — Raw patch-pressure scan (what this command joins against production boundaries)
+- `reveal help://testability` — Full testability workflow guide (interpretation, boundary taxonomy, false-positive notes)
