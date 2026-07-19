@@ -35,7 +35,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | TypeScript | ✅ 100% (VS Code), ⚠️ 68.48%→81.21% (nest¹⁷, BACK-694+BACK-698 both fixed, residual gap open) | ✅ 91.3%¹ (VS Code) | **Measured** |
 | Java | ✅ 100% (Elasticsearch, guava¹²) | ✅ 97.5% (Elasticsearch) | **Measured** |
 | Go | ✅ 100% (Kubernetes, client_golang¹⁴) | ✅ 96.3% (client-go) | **Measured** |
-| Ruby | ✅ Zeitwerk-inferred (Discourse) | ✅ 98.8% (Discourse) | **Measured** |
+| Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁸ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | **Measured** |
 | Kotlin | ✅ 99.1% (tivi, 100%¹⁵ kotlinx.coroutines) | ✅ 100%² (tivi) | **Measured** |
 | Rust | ✅ 100% (Meilisearch, ripgrep¹⁰) | ✅ 97.4% (Meilisearch) | **Measured** |
 | C# | ✅ namespace-graph fix (Jellyfin) | ✅ 98.3% (Jellyfin) | **Measured** |
@@ -297,6 +297,37 @@ See the [harness
 README](../internal-docs/planning/dogfood-findings/ts-recall-oracle/README.md#second-corpus-back-669-nest--overfit-guard)
 for the full write-up.
 
+¹⁸ Overfit guard (BACK-669): re-ran the require + Zeitwerk path→constant
+measurement loop (a from-scratch independent oracle — there was no committed
+harness from the original Discourse measurement to re-run unmodified) against
+a second, unrelated real corpus (`solidusio/solidus`, a Rails Engine/
+multi-gem monorepo — `core`/`api`/`backend`/`admin`/`promotions`/
+`legacy_promotions`, each its own gem, deliberately different shape from
+Discourse's single-app layout — full population diffed, not sampled, 576
+targets, 3,199 edges). It did not fully generalize: recall started at
+**88.06%** (2,817/3,199, 382 missed). Root cause #1 (**BACK-700**): a bare
+`require 'a/b'` only ever tried the single project root as a search path;
+Discourse's single-gemspec-at-the-root layout made that path coincide with
+its one `lib/`, but Solidus's `require 'spree/testing_support/...'` needs
+each gem's own `lib/` (Bundler's real `$LOAD_PATH`, one per `*.gemspec`) —
+395/395 real in-tree bare `require` statements in the corpus needed this,
+confirmed by direct measurement. Root cause #2 (**BACK-701**), found after
+fixing #1 alone raised recall to 98.81%: a leading `::` (`::Spree::Order`,
+Ruby's absolute-constant-lookup disambiguator — needed far more inside a
+namespaced Rails Engine than Discourse's flatter code) was kept verbatim in
+the captured constant text, so the Zeitwerk index's exact-string match
+silently missed every absolute reference. Both fixed: `_ImportSpec.
+load_path_manifest_glob`/`load_path_lib_dirname` (new fields, Ruby:
+`*.gemspec`/`lib`) add every in-tree gem's `lib/` as an extra search root;
+`extract_constant_references` strips the leading `::` before matching. The
+remaining 13 apparent misses traced to **oracle** noise (heredoc/regex-
+literal text — Rails generator templates and migration column-comment prose
+mentioning real class names without executing as code in that file) — fixed
+in the oracle, not the product, confirming a genuine **100.00%** (3,186/
+3,186) once measured honestly. See the [harness
+README](../internal-docs/planning/dogfood-findings/ruby-recall-oracle/README.md#second-corpus-solidus-solidusiosolidus)
+for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -348,6 +379,7 @@ actually closes the gap without introducing false positives.
 | Python | Home Assistant core (`homeassistant/`, 213 files) | `ast.parse` + independent filesystem/`sys.path` resolution | 82-target stratified sample, 790 edges | 36.74% → **100%** | 0 | Three variants of one confusion — "a package directory is not a `sys.path` root" — causing false project-root detection, self-shadowing of stdlib-named siblings, and truncation of multi-segment relative imports to their first component |
 | Python (overfit guard, BACK-669) | celery (417 files, 185 targets) | Same oracle, unmodified, re-run on a second corpus | 20-per-bucket stratified sample, 886 edges | 99.77% → **100%** | 0 | Pure `from . import a, b, c` where some names are sibling submodules and others are symbols defined only in `__init__.py` (e.g. `celery/beat.py`'s `from . import __version__, platforms, signals`) silently dropped the `__init__.py` edge whenever any name also matched a submodule |
 | Ruby (Zeitwerk convention) | Discourse (`app/`, 1,190 files) | Direct require-statement density + constant-reference measurement | Full-tree density scan; 5,000-file capped edge scan | Confident false negative on ~95%+ of real edges → **32,078 additional edges inferred** (vs. 8,645 from explicit `require`) | 0 (additive, exact-match only — never fabricates an edge) | Modern Rails apps express nearly all intra-app dependencies as bare constant references resolved by Zeitwerk's file-path convention, with *zero* `require` statements for reveal to see. Fixed in two stages: an honest "low coverage" caveat, then a path→constant inference pass that recovers the missing edges directly. |
+| Ruby (overfit guard, BACK-669) | solidus (Rails Engine/multi-gem monorepo, 2,067 files) | Independent require + Zeitwerk path→constant oracle, built from scratch for this corpus | Full population, 576 targets, 3,199 edges | 88.06% → **100.00%** (BACK-700 + BACK-701 both fixed) | 0 | Two shapes Discourse's single-app corpus never exercised: (1) BACK-700 — a bare `require 'a/b'` only ever tried the single project root, never each gem's own `lib/` (Bundler `$LOAD_PATH`, one per `*.gemspec` in a multi-gem monorepo) — 395/395 real bare-require statements in the corpus needed this; (2) BACK-701 — a leading `::` (`::Spree::Order`, Ruby's absolute-lookup disambiguator, common in namespaced Rails Engine code) was kept in the captured constant text, breaking the Zeitwerk index's exact-string match. 13 apparent residual misses after both fixes traced to oracle noise (heredoc/regex-literal text mistaken for code), not `depends://` — closed by fixing the oracle, confirming a genuine 100%. |
 | Kotlin | tivi (Android/KMP app, 629 files) | Content-scanned package + top-level-declaration oracle | Exhaustive, 233 edges | 12.0% → **99.14%** | 0 (1 residual is a grammar-library parse-recovery artifact, not a resolver bug) | Top-level function/property imports have no class/type component to resolve toward — needed a new content-scanned member index, since the existing peel logic could only ever reach type names |
 | Kotlin (overfit guard, BACK-669) | kotlinx.coroutines (JetBrains library, 1,039 `.kt` files) | Same oracle mechanism, parameterized for a second package prefix | Full population (small corpus), 34 targets, 50 edges | **100%** (no fix needed) | 11 (documented, safe — see below) | None — full-population diff confirmed 100% recall immediately; the BACK-555 content-scanned member index generalizes off tivi's app shape to a pure-library corpus. All 11 FPs traced to safe wildcard-import fan-out: `import kotlinx.coroutines.flow.internal.*` correctly resolves to every file declaring that package (directory-granularity semantics), a broader edge set than the oracle's single-symbol targets — same class as Go's BACK-685 wildcard FPs |
 | Scala | GitBucket (247 files) | Content-scanned package + object-member oracle | Exhaustive, 1 qualifying edge | 0% → **100%** | 0 | `lowerCamelCase` top-level singleton objects defeated the existing Uppercase-gated resolver peel the same way a package segment would |
