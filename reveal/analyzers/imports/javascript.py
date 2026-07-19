@@ -12,9 +12,11 @@ Extracts import statements and require() calls from JavaScript and TypeScript fi
 Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
+import json
 import logging
+import re
 from pathlib import Path
-from typing import Any, List, Set, Optional
+from typing import Any, Dict, List, Set, Optional, Tuple
 
 from .types import ImportStatement
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
@@ -27,6 +29,129 @@ logger = logging.getLogger(__name__)
 # independent-reparse gap as PythonExtractor had -- extract_imports() does not
 # share TreeSitterAnalyzer.get_structure()'s structure cache (BACK-535).
 _IMPORTS_CACHE = ImportsDiskCache("javascript_imports")
+
+# BACK-694: process-lifetime caches for tsconfig.json discovery/parsing.
+# Keyed by directory (find) / tsconfig path (parsed aliases) so a project
+# with thousands of files pays the walk-up + JSONC-parse cost once, not
+# once per importing file.
+_TSCONFIG_FIND_CACHE: Dict[str, Optional[Path]] = {}
+_TSCONFIG_ALIAS_CACHE: Dict[str, Tuple[Optional[Path], Dict[str, List[str]]]] = {}
+
+_JSONC_TOKEN_RE = re.compile(r'"(?:\\.|[^"\\])*"|//[^\n]*|/\*.*?\*/', re.DOTALL)
+_TRAILING_COMMA_RE = re.compile(r',(\s*[}\]])')
+
+
+def _strip_jsonc(text: str) -> str:
+    """Strip // and /* */ comments from tsconfig.json's JSONC dialect, and
+    drop trailing commas -- both are valid in tsconfig.json but not in
+    strict JSON, and tsc/most editors accept them. String literals are
+    matched and passed through verbatim so a comment marker inside a string
+    is never mistaken for a real comment."""
+    cleaned = []
+    pos = 0
+    for m in _JSONC_TOKEN_RE.finditer(text):
+        cleaned.append(text[pos:m.start()])
+        token = m.group(0)
+        if token.startswith('"'):
+            cleaned.append(token)
+        # else: comment -- drop it
+        pos = m.end()
+    cleaned.append(text[pos:])
+    return _TRAILING_COMMA_RE.sub(r'\1', ''.join(cleaned))
+
+
+def _load_tsconfig_raw(path: Path) -> dict:
+    """Parse one tsconfig.json's own compilerOptions (no `extends` chase)."""
+    try:
+        raw = path.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return {}
+    try:
+        data = json.loads(_strip_jsonc(raw))
+    except (json.JSONDecodeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _find_tsconfig(start_dir: Path, stop_at: Optional[Path]) -> Optional[Path]:
+    """Walk up from start_dir looking for tsconfig.json, never crossing
+    above stop_at (the scan root passed in as search_paths[0] -- walking
+    past it risks picking up an unrelated tsconfig.json from an enclosing
+    directory outside the scanned project)."""
+    key = f"{start_dir}|{stop_at}"
+    if key in _TSCONFIG_FIND_CACHE:
+        return _TSCONFIG_FIND_CACHE[key]
+    current = start_dir.resolve()
+    boundary = stop_at.resolve() if stop_at else None
+    result = None
+    while True:
+        candidate = current / 'tsconfig.json'
+        if candidate.is_file():
+            result = candidate
+            break
+        if boundary is not None and current == boundary:
+            break
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    _TSCONFIG_FIND_CACHE[key] = result
+    return result
+
+
+def _get_tsconfig_aliases(tsconfig_path: Path) -> Tuple[Optional[Path], Dict[str, List[str]]]:
+    """(baseUrl, paths) declared directly in this tsconfig.json. Does NOT
+    chase `extends` -- BACK-694's fix scope didn't require it for the
+    corpora exercised (nest's tsconfig.json declares paths/baseUrl
+    directly). A project whose *only* paths/baseUrl live in a base config
+    reached via `extends` will still miss those aliases; a future BACK
+    should walk the extends chain if that turns out to matter in practice."""
+    key = str(tsconfig_path)
+    if key in _TSCONFIG_ALIAS_CACHE:
+        return _TSCONFIG_ALIAS_CACHE[key]
+    data = _load_tsconfig_raw(tsconfig_path)
+    co = data.get('compilerOptions')
+    co = co if isinstance(co, dict) else {}
+    paths = co.get('paths')
+    paths = paths if isinstance(paths, dict) else {}
+    base_url_raw = co.get('baseUrl')
+    base_url: Optional[Path] = None
+    if isinstance(base_url_raw, str):
+        base_url = (tsconfig_path.parent / base_url_raw).resolve()
+    elif paths:
+        # `paths` without an explicit `baseUrl` resolves relative to the
+        # tsconfig.json's own directory (TS default).
+        base_url = tsconfig_path.parent.resolve()
+    result = (base_url, paths)
+    _TSCONFIG_ALIAS_CACHE[key] = result
+    return result
+
+
+def _match_tsconfig_path(module_path: str, base_url: Path, paths: Dict[str, List[str]]) -> List[Path]:
+    """Candidate absolute targets (extension omitted) for module_path per
+    tsconfig `paths`. Exact keys win outright; among wildcard (`@foo/*`)
+    keys, the longest matching prefix wins, matching tsc's own resolution
+    order."""
+    if module_path in paths:
+        return [base_url / target for target in paths[module_path]]
+
+    best_key = None
+    best_prefix_len = -1
+    for key in paths:
+        if '*' not in key:
+            continue
+        prefix, _, suffix = key.partition('*')
+        if (module_path.startswith(prefix) and module_path.endswith(suffix)
+                and len(module_path) >= len(prefix) + len(suffix)):
+            if len(prefix) > best_prefix_len:
+                best_prefix_len = len(prefix)
+                best_key = (key, prefix, suffix)
+
+    if not best_key:
+        return []
+    key, prefix, suffix = best_key
+    matched = module_path[len(prefix): len(module_path) - len(suffix)] if suffix else module_path[len(prefix):]
+    return [base_url / target.replace('*', matched) for target in paths[key]]
 
 
 def _line_text(analyzer, line_number: int) -> str:
@@ -542,12 +667,18 @@ class JavaScriptExtractor(LanguageExtractor):
         - Relative: './utils' -> ./utils.js, ./utils.ts, ./utils/index.js
         - Absolute: 'react', '@angular/core' -> node_modules (skip for cycles)
         - Extensions: .js, .jsx, .ts, .tsx, .mjs can be omitted
+
+        BACK-694: a non-relative specifier is tried against the nearest
+        tsconfig.json's `compilerOptions.paths`/`baseUrl` alias map before
+        being declined -- in a workspace monorepo with no `node_modules`
+        packages installed (e.g. pnpm/lerna), that alias map is the *only*
+        way `@scope/pkg`-style cross-package imports resolve; a genuine npm
+        dependency (no matching alias) still correctly returns None.
         """
         module_path = stmt.module_name
 
-        # Skip absolute imports (node_modules packages)
         if not module_path.startswith('.'):
-            return None
+            return self._resolve_via_tsconfig(module_path, base_path, search_paths)
 
         # Resolve relative imports
         return self._resolve_relative_js(module_path, base_path)
@@ -560,13 +691,55 @@ class JavaScriptExtractor(LanguageExtractor):
         project_namespaces: Optional[Set[str]] = None,
     ) -> Optional[bool]:
         """A relative specifier (`./x`, `../x`) is intra-project; a bare
-        specifier (`react`, `@angular/core`) is an npm dependency (external).
-        This mirrors resolve_import's own relative-vs-bare split, so an
-        unresolved relative import is a real intra-project miss (or a target
-        outside the scanned scope)."""
-        if stmt.module_name.startswith('.'):
+        specifier (`react`, `@angular/core`) is an npm dependency (external)
+        UNLESS it matches a tsconfig `paths` alias (BACK-694), in which case
+        it's intra-project by the project's own configuration even when
+        resolve_import ultimately can't find the target file -- that case
+        must count as a real miss (honest-decline), not a silent external
+        classification that hides the gap from confidence/known_limits."""
+        module_path = stmt.module_name
+        if module_path.startswith('.'):
+            return True
+        if self._tsconfig_alias_matches(module_path, base_path, search_paths):
             return True
         return False
+
+    def _resolve_via_tsconfig(
+        self, module_path: str, base_path: Path, search_paths: Optional[List[Path]],
+    ) -> Optional[Path]:
+        """Resolve a bare specifier via the nearest tsconfig.json's
+        `paths`/`baseUrl` alias map. Returns None if no tsconfig is found,
+        it declares no `paths`, or no alias matches -- all of which mean
+        "genuine external dependency", not a resolution failure."""
+        base_url, paths = self._tsconfig_aliases_for(base_path, search_paths)
+        if base_url is None or not paths:
+            return None
+        for candidate_base in _match_tsconfig_path(module_path, base_url, paths):
+            resolved = self._resolve_target_path(candidate_base)
+            if resolved:
+                return resolved
+        return None
+
+    def _tsconfig_alias_matches(
+        self, module_path: str, base_path: Path, search_paths: Optional[List[Path]],
+    ) -> bool:
+        """Whether module_path matches a tsconfig `paths` alias pattern,
+        independent of whether the aliased target actually resolves to a
+        file on disk."""
+        base_url, paths = self._tsconfig_aliases_for(base_path, search_paths)
+        if base_url is None or not paths:
+            return False
+        return bool(_match_tsconfig_path(module_path, base_url, paths))
+
+    @staticmethod
+    def _tsconfig_aliases_for(
+        base_path: Path, search_paths: Optional[List[Path]],
+    ) -> Tuple[Optional[Path], Dict[str, List[str]]]:
+        stop_at = search_paths[0] if search_paths else None
+        tsconfig_path = _find_tsconfig(base_path, stop_at)
+        if not tsconfig_path:
+            return None, {}
+        return _get_tsconfig_aliases(tsconfig_path)
 
     # TS ESM idiom: source imports use the compiled-output extension
     # (e.g. `./foo.js`) while the source file on disk is `.ts`/`.tsx`/`.mts`.
@@ -596,10 +769,26 @@ class JavaScriptExtractor(LanguageExtractor):
         # resolving multi-level parent imports against the wrong directory.
         # '../' must be preserved so base_path / clean_path navigates up.
         clean_path = module_path[2:] if module_path.startswith('./') else module_path
+        return self._resolve_target_path(base_path / clean_path)
 
-        # Build target path
-        target = base_path / clean_path
+    def _resolve_target_path(self, target: Path) -> Optional[Path]:
+        """Resolve a target path (extension possibly omitted, or a directory
+        implying an index file) to an actual file on disk. Shared by
+        relative-import resolution and tsconfig `paths`-alias resolution
+        (BACK-694) -- both land on "here's a path, extension/index unknown"
+        and need the identical extension/TS-ESM/index-file cascade.
 
+        Try in order:
+        1. Exact path (if includes extension)
+        2. If extension is .js/.jsx/.mjs, TS-ESM fallback (.ts/.tsx/.mts)
+        3. With .js extension
+        4. With .ts extension
+        5. With .jsx extension
+        6. With .tsx extension
+        7. With .mjs extension
+        8. As directory with index.js
+        9. As directory with index.ts
+        """
         # If path has extension, try exact match.
         # BACK-556: a bare '.' or '..' specifier (self/parent-directory
         # barrel import, e.g. `import { x } from '..'`) has a last path
@@ -611,7 +800,7 @@ class JavaScriptExtractor(LanguageExtractor):
         # Code corpus: codeReferencing/citationManager.ts imports `from
         # '.'`, notebook-renderers/test/notebookRenderer.test.ts imports
         # `from '..'` — both missed before this fix).
-        last_segment = clean_path.split('/')[-1]
+        last_segment = target.name
         has_extension = '.' in last_segment and last_segment not in ('.', '..')
         if has_extension:
             if target.exists() and target.is_file():
@@ -642,13 +831,13 @@ class JavaScriptExtractor(LanguageExtractor):
 
         # Try with common JavaScript extensions
         for ext in ['.js', '.ts', '.jsx', '.tsx', '.mjs']:
-            file_path = base_path / f"{clean_path}{ext}"
+            file_path = Path(str(target) + ext)
             if file_path.exists() and file_path.is_file():
                 return file_path.resolve()
 
         # Try as directory with index file
         for index_file in ['index.js', 'index.ts', 'index.jsx', 'index.tsx']:
-            index_path = base_path / clean_path / index_file
+            index_path = target / index_file
             if index_path.exists() and index_path.is_file():
                 return index_path.resolve()
 

@@ -5,6 +5,8 @@ Targets: 51, 55-59, 89-122, 138, 212, 262, 289, 303, 306, 350, 372-406,
 Current coverage: 62% → target: 85%+
 """
 
+import json
+
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -601,6 +603,105 @@ class TestResolveImport:
         stmt = self._make_stmt('..', test_dir)
         result = e.resolve_import(stmt, test_dir)
         assert result == index.resolve()
+
+
+# ─── tsconfig paths/baseUrl alias resolution (BACK-694) ───────────────────────
+
+class TestTsconfigPathsResolution:
+    """A bare specifier (`@utils/helper`) is a plain npm dependency UNLESS
+    it matches a tsconfig.json `compilerOptions.paths` alias, in which case
+    it's intra-project by the project's own configuration -- even when the
+    aliased target doesn't actually exist on disk (honest-decline: a real
+    miss, not a silent external classification)."""
+
+    def _stmt(self, module_name: str, base_path: Path) -> ImportStatement:
+        return ImportStatement(
+            file_path=base_path / 'main.ts', line_number=1, module_name=module_name,
+            imported_names=[], is_relative=module_name.startswith('.'),
+            import_type='es6_import')
+
+    def _write_tsconfig(self, root: Path, paths: dict, base_url: str = '.') -> None:
+        root.mkdir(parents=True, exist_ok=True)
+        (root / 'tsconfig.json').write_text(
+            '{\n  "compilerOptions": {\n'
+            f'    "baseUrl": "{base_url}",\n'
+            f'    "paths": {json.dumps(paths)}\n'
+            '  }\n}\n')
+
+    def test_alias_resolves_to_real_file(self, tmp_path):
+        """Positive: '@utils/helper' -> src/utils/helper.ts via paths alias."""
+        self._write_tsconfig(tmp_path, {'@utils/*': ['src/utils/*']})
+        target = tmp_path / 'src' / 'utils' / 'helper.ts'
+        target.parent.mkdir(parents=True)
+        target.write_text('export const helper = 1;')
+        src_dir = tmp_path / 'src'
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@utils/helper', src_dir)
+        assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) == target.resolve()
+        assert e.is_intra_project_import(stmt, src_dir, search_paths=[tmp_path]) is True
+
+    def test_alias_matches_but_target_missing_is_honest_decline(self, tmp_path):
+        """A specifier matching a paths alias whose target file doesn't
+        exist must still count as intra-project (a real miss) rather than
+        being silently classified external -- the exact safety net BACK-694
+        found broken."""
+        self._write_tsconfig(tmp_path, {'@utils/*': ['src/utils/*']})
+        src_dir = tmp_path / 'src'
+        src_dir.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@utils/gone', src_dir)
+        assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) is None
+        assert e.is_intra_project_import(stmt, src_dir, search_paths=[tmp_path]) is True
+
+    def test_genuine_npm_import_unaffected_by_tsconfig(self, tmp_path):
+        """Negative: a real npm dependency with no matching alias is still
+        correctly classified external, even with a tsconfig.json present."""
+        self._write_tsconfig(tmp_path, {'@utils/*': ['src/utils/*']})
+        src_dir = tmp_path / 'src'
+        src_dir.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('react', src_dir)
+        assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) is None
+        assert e.is_intra_project_import(stmt, src_dir, search_paths=[tmp_path]) is False
+
+    def test_longest_wildcard_prefix_wins(self, tmp_path):
+        """tsc resolution order: among overlapping wildcard keys, the
+        longest matching prefix wins ('@app/utils/*' over '@app/*')."""
+        self._write_tsconfig(tmp_path, {
+            '@app/*': ['src/generic/*'],
+            '@app/utils/*': ['src/utils/*'],
+        })
+        specific = tmp_path / 'src' / 'utils' / 'helper.ts'
+        specific.parent.mkdir(parents=True)
+        specific.write_text('export const helper = 1;')
+        generic = tmp_path / 'src' / 'generic' / 'utils' / 'helper.ts'
+        generic.parent.mkdir(parents=True)
+        generic.write_text('export const helper = 2;')
+        src_dir = tmp_path / 'src'
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@app/utils/helper', src_dir)
+        assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) == specific.resolve()
+
+    def test_tsconfig_search_bounded_by_search_paths(self, tmp_path):
+        """_find_tsconfig must not climb above search_paths[0] (the scan
+        root) -- an unrelated tsconfig.json in an enclosing directory
+        outside the scanned project must not apply."""
+        outer = tmp_path / 'outer'
+        scan_root = outer / 'project'
+        src_dir = scan_root / 'src'
+        self._write_tsconfig(outer, {'@utils/*': ['unrelated/*']})
+        src_dir.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@utils/helper', src_dir)
+        # No tsconfig.json inside scan_root itself -> alias map must not be
+        # found by climbing past scan_root into outer/.
+        assert e.resolve_import(stmt, src_dir, search_paths=[scan_root]) is None
+        assert e.is_intra_project_import(stmt, src_dir, search_paths=[scan_root]) is False
 
 
 # ─── _resolve_relative_js ────────────────────────────────────────────────────

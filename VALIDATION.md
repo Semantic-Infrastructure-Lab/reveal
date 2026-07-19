@@ -32,7 +32,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Language | Import recall | Side-effect recall | Status |
 |---|---|---|---|
 | Python | ✅ 100% (Home Assistant, celery¹¹) | ✅ 83.5% (Home Assistant) | **Measured** |
-| TypeScript | ✅ 100% (VS Code) | ✅ 91.3%¹ (VS Code) | **Measured** |
+| TypeScript | ✅ 100% (VS Code), ⚠️ 68.48%→81.21% (nest¹⁷, BACK-694 fixed, gap remains — BACK-698) | ✅ 91.3%¹ (VS Code) | **Measured** |
 | Java | ✅ 100% (Elasticsearch, guava¹²) | ✅ 97.5% (Elasticsearch) | **Measured** |
 | Go | ✅ 100% (Kubernetes, client_golang¹⁴) | ✅ 96.3% (client-go) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse) | ✅ 98.8% (Discourse) | **Measured** |
@@ -259,6 +259,36 @@ undercounting real edges as false positives. See the [harness
 README](../internal-docs/planning/dogfood-findings/scala-member-import-oracle/README.md#second-corpus-back-669-cats-effect--overfit-guard)
 for the full write-up.
 
+¹⁷ Overfit guard (BACK-669): re-ran the identical independent-oracle-diff
+method (`ts.resolveModuleName`, pinned TS 5.6.3) against a second, unrelated
+real corpus (`nestjs/nest`, a pnpm/lerna workspace monorepo with no
+`node_modules/@nestjs/*` — deliberately different shape from VS Code's
+editor-application layout — full population diffed, not sampled, 843
+targets, 2,890 edges) to check whether the 100% VS Code result generalized.
+It did not: recall collapsed to **68.48%** (1,979/2,890 edges, 911 missed).
+Root cause is not barrel re-export depth (that path works correctly) but
+that `resolve_import()` never attempted to resolve bare/non-relative import
+specifiers (`@nestjs/common`, ...) — reveal's TS/JS extractor had no
+`tsconfig.json` `paths`/`baseUrl` resolution, the only way to resolve
+cross-package imports in this corpus's monorepo layout. Compounding:
+`is_intra_project_import()` marked these `False` (definitely external)
+rather than unknown, so the misses never tripped `depends://`'s own
+undercount-disclosure (`known_limits`/`confidence`) machinery — it reported
+`confidence: high` on results 1–30% complete for the worst-hit barrel files
+(`packages/common/index.ts`: 424 oracle importers, 13 found). Filed as
+**BACK-694** (parent BACK-669) and fixed: `resolve_import`/
+`is_intra_project_import` now consult the nearest `tsconfig.json`'s
+`paths`/`baseUrl`. Re-running the full diff with the fix alone left recall
+unchanged (68.48%) — masked by a second, distinct bug: project-root
+inference stops at the nearest `package.json`, so sibling packages are never
+scanned regardless of resolution (filed as **BACK-698**, child of BACK-694).
+Isolating the two by forcing the correct workspace root confirmed the fix's
+real impact: **81.21%** (2,347/2,890, +368 edges) vs. 68.48% at the same
+root without it. Corpus number in the summary table above will not read
+100% until BACK-698 also lands. See the [harness
+README](../internal-docs/planning/dogfood-findings/ts-recall-oracle/README.md#second-corpus-back-669-nest--overfit-guard)
+for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -302,6 +332,7 @@ actually closes the gap without introducing false positives.
 |---|---|---|---|---|---|---|
 | TypeScript | VS Code (`src/`, 7,401 files) | `ts.resolveModuleName` (real compiler API) | 29-file stratified sample, 1,714 edges | 2.98% → **100%** | 0 | Resolver stripped *characters* not a *prefix* on multi-level `../../` relatives, destroying most deep-tree imports; chained suffix-handling mangled multi-dot filenames (`foo.contribution.js`) |
 | TypeScript (barrel follow-up) | VS Code extensions | same | 21-target sample, 158 edges | 98.10% → **100%** | 0 | Bare `.`/`..` directory-barrel specifiers misclassified as having a file extension, skipping directory/index resolution |
+| TypeScript (overfit guard, BACK-669) | nestjs/nest (pnpm/lerna workspace monorepo, no `node_modules/@nestjs/*`) | Same oracle mechanism (`ts.resolveModuleName`, pinned TS 5.6.3), full population | Full population, 843 targets, 2,890 edges | **68.48%→81.21%** (BACK-694 fixed; residual gap open — BACK-698) | 701 pre-fix / 1,071 post-fix (undercount, not safe over-inclusion) | Not a barrel re-export depth bug — `_parse_reexport_statement` correctly extracts `export * from`/`export { X } from` edges. Root cause: `resolve_import()` unconditionally returned `None` for any bare/non-relative specifier (`@nestjs/common`, `@nestjs/common/enums/route-paramtypes.enum`); reveal's TS/JS extractor never read `tsconfig.json` `compilerOptions.paths`/`baseUrl`, the only way to resolve cross-package imports in a workspace monorepo with no `node_modules` packages installed. Compounding: `is_intra_project_import()` classified these as `False` (definitely external) rather than unknown, so misses never incremented `_unresolved_intra` — the tool's own undercount-disclosure safety net never fired, and `depends://` reported `confidence: high` on results that were 1–30% complete for the worst-hit barrel files. Fixed in BACK-694: both functions now consult the nearest `tsconfig.json`'s `paths`/`baseUrl`. Re-running the diff with the fix alone left recall unchanged at 68.48% — masked by a second bug (BACK-698): project-root inference stops at the nearest `package.json`, so sibling packages are never scanned. Forcing the correct workspace root isolated the fix's real effect: 81.21% (+368 edges) vs. 68.48% at the same root without it. Full corpus number won't reach 100% until BACK-698 also lands. |
 | Java | Elasticsearch (`server/src/main/java`, 4,837 files) | Buildless JLS package/filename convention | Stratified sample, 975 edges | 97.54% → 99.69% → **100%** | 0 | Nested-type and static-member imports (`import a.b.Outer.Inner`) never fell back from the (non-existent) `Inner.java` to the real enclosing `Outer.java` (BACK-551). The last 3/975 misses were all importers inside `org.elasticsearch.env`, a real source package silently excluded because `env` was in the global directory skip-set — closed by BACK-552 (context-sensitive `is_skippable_dir`), verified this loop: `ClusterState`/`Sets` now resolve their `env/NodeEnvironment`/`NodeRepurposeCommand` importers. |
 | Java (overfit guard, BACK-669) | guava (single-library tree, 611 files) | Same oracle, unmodified, re-run on a second corpus | Full population (small corpus), 159 targets, 2,066 edges | **100%** (no fix needed) | 0 | None — full-population diff confirmed 100% recall immediately, including the exact BACK-551 nested-type/static-member idiom (`MoreObjects.ToStringHelper`, `Map.Entry`, 353 distinct `import static` statements) on a second, independent corpus; the BACK-551/BACK-552 fixes generalize. Wildcard imports (`import a.b.*;`) are not exercised — Guava's style guide forbids them — so that path remains covered only by the Elasticsearch measurement above. |
 | Go | Kubernetes (`pkg/`, 2,266 files) | `go list -json` (real toolchain) + independent per-file import parse | 25-target stratified sample, 822 edges | **0%** effective (every single-file query returned zero, unconditionally) → **100%** | 8 (documented, safe — see below) | Go resolves an import to its package *directory*, but the file-level query path did an exact-key lookup against the file itself — a key that could never match a directory-keyed edge. Affected every Go dependents query, always. |
