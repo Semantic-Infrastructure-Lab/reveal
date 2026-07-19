@@ -37,7 +37,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Go | ✅ 100% (Kubernetes) | ✅ 96.3% (client-go) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse) | ✅ 98.8% (Discourse) | **Measured** |
 | Kotlin | ✅ 99.1% (tivi) | ✅ 100%² (tivi) | **Measured** |
-| Rust | ✅ 100% (Meilisearch) | ✅ 97.4% (Meilisearch) | **Measured** |
+| Rust | ✅ 100% (Meilisearch, ripgrep¹⁰) | ✅ 97.4% (Meilisearch) | **Measured** |
 | C# | ✅ namespace-graph fix (Jellyfin) | ✅ 98.3% (Jellyfin) | **Measured** |
 | PHP | ✅ 100% (WordPress) | ✅ 97.5% (WordPress) | **Measured** |
 | Swift | ✅ 100% (Kickstarter iOS) | ✅ 100%² (Kickstarter iOS) | **Measured** |
@@ -155,6 +155,17 @@ but outside this oracle's deliberately narrower importer scope — vendored
 third-party code with its own build system, confirmed by direct
 inspection, not a reveal bug).
 
+¹⁰ Overfit guard (BACK-669): re-ran the identical independent-oracle-diff
+method against a second, unrelated real corpus (ripgrep, 100 files, 46
+targets/100 edges — full population diffed, not sampled) to check whether
+the 100% Meilisearch result generalized. It found one new real bug of the
+same shape as BACK-558's, one grouping level deeper — a `use_list` item
+that is itself a nested `scoped_use_list` (`use crate::{a::{x, y}, ...}`,
+ripgrep's dominant `lib.rs` re-export idiom) silently dropped the whole
+nested item, 56.0% → **100%** after the fix. See the [harness
+README](../internal-docs/planning/dogfood-findings/rust-recall-oracle/README.md#second-corpus-back-669-ripgrep--overfit-guard)
+for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -205,6 +216,7 @@ actually closes the gap without introducing false positives.
 | Kotlin | tivi (Android/KMP app, 629 files) | Content-scanned package + top-level-declaration oracle | Exhaustive, 233 edges | 12.0% → **99.14%** | 0 (1 residual is a grammar-library parse-recovery artifact, not a resolver bug) | Top-level function/property imports have no class/type component to resolve toward — needed a new content-scanned member index, since the existing peel logic could only ever reach type names |
 | Scala | GitBucket (247 files) | Content-scanned package + object-member oracle | Exhaustive, 1 qualifying edge | 0% → **100%** | 0 | `lowerCamelCase` top-level singleton objects defeated the existing Uppercase-gated resolver peel the same way a package segment would |
 | Rust | Meilisearch (17-crate workspace, 726 files) | Independent regex-based `use`/`Cargo.toml` parser | 30-target stratified sample, 295 edges | 59.0% → **100%** | 0 | (1) Multi-segment `crate::`/`super::` paths only ever consumed their first segment, with `super::` unconditionally failing; (2) grouped `use crate::{a,b,c}` imports matched on a keyword-typed AST node the extractor didn't recognize, silently dropping the entire statement |
+| Rust (overfit guard, BACK-669) | ripgrep (single-workspace crate, 100 files) | Same oracle, unmodified, re-run on a second corpus | Full population (small corpus), 46 targets, 100 edges | 56.0% → **100%** | 0 | A `use_list` item that is itself a nested `scoped_use_list` (`use crate::{a::{x, y}, ...}`, ripgrep's dominant `lib.rs` re-export idiom) silently dropped the whole nested item — same failure shape as the grouped-import bug above, one level deeper |
 | C# | Jellyfin, Godot C# glue | Real-corpus grep (idiom itself was fixture-only — absent from both corpora) | Fixture + incidental real-corpus hit | N/A for the target idiom | — | Investigating the (absent) target idiom surfaced that namespace fan-out was never wired into the dependency graph at all for zero-import files |
 | PHP | WordPress core (`samples/php`, 1,927 files) | Buildless `require`/`require_once`/`include`/`include_once` string-expression resolver (not `use`/namespace — see [harness README](../internal-docs/planning/dogfood-findings/php-recall-oracle/README.md) for why) | 80-target stratified sample, 442 edges | 0.00% → 33.85% (BACK-564) → **100.00%** (BACK-565) | 0 | `depends://`'s PHP resolver only recognized a bare string-literal require/include target; every real WordPress require/include uses string concatenation (`__DIR__ . 'x.php'`, `ABSPATH . WPINC . 'x.php'`, etc. — confirmed 0 bare-literal requires exist anywhere in the corpus). BACK-564 resolved the universal `__DIR__`/`dirname(__FILE__)` directory-relative idiom via a structural AST-walk extractor. BACK-565 (same session) closed the remaining majority: WordPress-specific framework-bootstrap constants (`ABSPATH`/`WPINC`/`WP_CONTENT_DIR`/`WP_PLUGIN_DIR`) are genuinely derivable — WordPress defines them in-tree via `define('ABSPATH', __DIR__ . '/')` and similar — so a project-wide constant index (built to a fixed point, since real constants chain through each other) now substitutes them into the same concatenation resolver. Constants with genuinely ambiguous `define()` values (measured: 3/50) are excluded from the index, never guessed |
 | Swift | Kickstarter iOS (`samples/swift`, 1,961 files, 8 SwiftPM packages) | `swift package dump-package` (real toolchain, target list) + independent per-file import parse | Full-tree; 21 declared targets, 164-edge precision sample | ~0% effective (123 edges / 7 dependent files) → **100% of declared targets resolved** (384,278 edges / 1,511 dependent files) | 0 (164-edge sample, none unbacked) | Swift's import granularity is the *module (SwiftPM target)*, not the file, but the resolver only matched `import Foo` → a unique `Foo.swift` — resolving ~0% of real multi-file targets, AND (worse) leaving `unresolved_intra` at 0 so no honest-decline `⚠` fired: a silent wrong "no dependents". Fixed in two buildless parts: (1) `Sources/<Target>/` directory-convention fan-out (`import Foo` → every file in target Foo, C#-namespace-style); (2) a structural `Package.swift` parse for targets that relocate sources via an explicit `path:` (real GraphAPI `path: "./Sources"`, 326 importers). The independent `dump-package` oracle caught the custom-`path:` case the directory convention alone would have silently mis-mapped |

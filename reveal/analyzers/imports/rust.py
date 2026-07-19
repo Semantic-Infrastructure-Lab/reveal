@@ -224,7 +224,33 @@ class RustExtractor(LanguageExtractor):
         if not base_path or not use_list_node:
             return imports
 
-        # Parse each item in the use_list
+        return self._parse_use_list_items(
+            use_list_node, base_path, file_path, line_number, analyzer, is_reexport
+        )
+
+    def _parse_use_list_items(
+        self, use_list_node, base_path: str, file_path: Path, line_number: int, analyzer,
+        is_reexport: bool = False
+    ) -> List[ImportStatement]:
+        """Parse the items of a `use_list` node given the dotted `base_path` accumulated
+        so far, recursing into any nested group.
+
+        BACK-669 (ripgrep second-corpus loop, github.com/BurntSushi/ripgrep): a
+        `use_list` item can itself be a nested `scoped_use_list` —
+        `base::{sub::{x, y}, other::z}` — which is exactly the idiomatic Rust
+        `pub use crate::{error::{Error, ErrorKind}, matcher::{...}};` re-export shape
+        (near-ubiquitous in ripgrep's crate `lib.rs` files — every one of the 16
+        importer files behind BACK-669's 44 missed edges used this shape). This loop
+        previously only matched `identifier`/`use_as_clause`/`scoped_identifier` item
+        kinds; a nested `scoped_use_list` item fell through unmatched and its entire
+        subtree's imports vanished silently — the same "whole item disappears, no
+        error" failure shape BACK-558 already fixed for the `crate`/`super`/`self`-as-
+        list-root case, one grouping level deeper. Recursing (rather than
+        special-casing exactly one extra level) closes it for arbitrarily deep
+        nesting, not just two.
+        """
+        imports: List[ImportStatement] = []
+
         for item in _children(use_list_node):
             if item.kind() == 'identifier':
                 # Simple item: fs
@@ -248,6 +274,20 @@ class RustExtractor(LanguageExtractor):
                     file_path, line_number, full_path, imported_name=imported_name, skip_unused=is_reexport,
                     source_line=_line_text(analyzer, line_number),
                 ))
+            elif item.kind() == 'scoped_use_list':
+                # Nested group: sub::{x, y} - recurse with the combined base path.
+                nested_base = None
+                nested_list = None
+                for nc in _children(item):
+                    if nc.kind() in ('identifier', 'scoped_identifier', 'crate', 'super', 'self'):
+                        nested_base = analyzer._get_node_text(nc)
+                    elif nc.kind() == 'use_list':
+                        nested_list = nc
+                if nested_base and nested_list:
+                    imports.extend(self._parse_use_list_items(
+                        nested_list, f"{base_path}::{nested_base}", file_path, line_number, analyzer,
+                        is_reexport,
+                    ))
 
         return imports
 

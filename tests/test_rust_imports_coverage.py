@@ -526,6 +526,97 @@ class TestScopedUseListCrateSuperSelfRoot:
         assert names == {'self::foo', 'self::bar'}
 
 
+class TestNestedScopedUseListGroups:
+    """BACK-669 (ripgrep second-corpus recall loop, github.com/BurntSushi/ripgrep):
+    a `use_list` item that is itself a nested `scoped_use_list` —
+    `base::{sub::{x, y}, other::z}` — was silently dropped in its ENTIRETY, the same
+    "whole item vanishes, no error" failure shape BACK-558/TestScopedUseListCrateSuperSelfRoot
+    fixed for the crate/super/self-as-root case, one grouping level deeper. This is the
+    idiomatic Rust re-export shape `pub use crate::{error::{Error, ErrorKind}, ...};` —
+    every one of ripgrep's crate `lib.rs` files uses it, and it was responsible for all
+    44 missed edges (16 importer files) in BACK-669's real-corpus diff before the fix.
+    Confirmed on real code: ripgrep's `crates/regex/src/lib.rs`'s
+    `pub use crate::{error::{Error, ErrorKind}, matcher::{RegexCaptures, RegexMatcherBuilder}};`
+    previously extracted zero imports for the whole statement.
+    """
+
+    def test_crate_nested_group_extracts_all_items(self, tmp_path):
+        code = (
+            "pub use crate::{\n"
+            "    error::{Error, ErrorKind},\n"
+            "    matcher::{RegexCaptures, RegexMatcherBuilder},\n"
+            "};\n"
+        )
+        p = _write_rs(tmp_path, 'lib.rs', code)
+        extractor = RustExtractor()
+        imports = extractor.extract_imports(p)
+        names = {i.module_name for i in imports}
+        assert names == {
+            'crate::error::Error', 'crate::error::ErrorKind',
+            'crate::matcher::RegexCaptures', 'crate::matcher::RegexMatcherBuilder',
+        }
+
+    def test_mixed_simple_and_nested_items_in_same_group(self, tmp_path):
+        """`use crate::{color::ColorSpecs, hyperlink::{self, HyperlinkConfig}, util::PrinterPath};`
+        (ripgrep `crates/printer/src/path.rs`) mixes a scoped_identifier item
+        (`color::ColorSpecs`), a nested group whose own `use_list` contains a bare
+        `self` item (`hyperlink::{self, ..}`), and another scoped_identifier
+        (`util::PrinterPath`) in one `use` — all reachable items must survive together.
+        (The bare `self` sub-item inside the nested group's use_list is a distinct,
+        narrower gap than this fix's target — it names the `hyperlink` module itself
+        rather than a further sub-path, and is not handled by any item-kind branch here
+        or before this fix; harmless for dependency-edge recall since `HyperlinkConfig`
+        in the same nested group already resolves to the same target file.)
+        """
+        code = (
+            "use crate::{\n"
+            "    color::ColorSpecs,\n"
+            "    hyperlink::{self, HyperlinkConfig},\n"
+            "    util::PrinterPath,\n"
+            "};\n"
+        )
+        p = _write_rs(tmp_path, 'path.rs', code)
+        extractor = RustExtractor()
+        imports = extractor.extract_imports(p)
+        names = {i.module_name for i in imports}
+        assert names == {
+            'crate::color::ColorSpecs',
+            'crate::hyperlink::HyperlinkConfig',
+            'crate::util::PrinterPath',
+        }
+
+    def test_doubly_nested_group_recurses_two_levels(self, tmp_path):
+        """A group nested two levels deep (`a::{b::{c::{x, y}}}`) must still resolve —
+        the fix recurses to arbitrary depth, not just one extra level."""
+        code = "use crate::{a::{b::{c::{x, y}}}};\n"
+        p = _write_rs(tmp_path, 'deep.rs', code)
+        extractor = RustExtractor()
+        imports = extractor.extract_imports(p)
+        names = {i.module_name for i in imports}
+        assert names == {'crate::a::b::c::x', 'crate::a::b::c::y'}
+
+    def test_nested_group_resolves_to_correct_file(self, tmp_path):
+        """End-to-end: resolve_import on a nested-group-extracted ImportStatement finds
+        the deepest real file, same as a flat `use crate::error::Error;` would."""
+        src_dir = tmp_path / 'src'
+        src_dir.mkdir()
+        (tmp_path / 'Cargo.toml').write_text('[package]\nname = "x"\n')
+        (src_dir / 'error.rs').write_text('pub struct Error;\npub struct ErrorKind;\n')
+        lib_rs = src_dir / 'lib.rs'
+        lib_rs.write_text(
+            "pub use crate::{\n"
+            "    error::{Error, ErrorKind},\n"
+            "};\n"
+            "mod error;\n"
+        )
+        extractor = RustExtractor()
+        imports = extractor.extract_imports(lib_rs)
+        assert len(imports) == 2
+        for stmt in imports:
+            resolved = extractor.resolve_import(stmt, lib_rs.parent)
+            assert resolved == (src_dir / 'error.rs').resolve()
+
+
 class TestCreateImport:
     """Test _create_import classification logic."""
 
