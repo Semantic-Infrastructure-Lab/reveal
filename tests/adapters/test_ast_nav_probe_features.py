@@ -4292,5 +4292,94 @@ class TestBack547SwiftApolloHttpTaxonomy(unittest.TestCase):
         self.assertIsNone(classify_call('reviewable.perform', language='ruby'))
 
 
+class TestBack725ZigTaxonomy(unittest.TestCase):
+    """BACK-718/BACK-725 (Zig, fourteenth side-effect-recall language,
+    corpus: TigerBeetle samples/zig/tigerbeetle/src). Zig had zero
+    _TAXONOMY_BY_LANG entries before this loop; scoped to language='zig' so
+    none of these can fire cross-language. All patterns corpus-grounded and
+    corpus-collision-checked (scripts/check_taxonomy_collisions.py)."""
+
+    def test_storage_sector_io_classified_file(self):
+        # TigerBeetle's own storage abstraction (storage.zig): the ONLY
+        # on-disk sector I/O call sites in the whole corpus.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(
+            classify_call('grid.superblock.storage.read_sectors', language='zig'), 'file')
+        self.assertEqual(
+            classify_call('client_replies.storage.write_sectors', language='zig'), 'file')
+
+    def test_io_wrapper_scoped_file_and_http(self):
+        # Two-segment `io.<verb>` scoping (same technique as Lua's io.write/
+        # io.read file entry) -- NOT a bare 'read'/'write'/'connect'/'send'
+        # verb, which would be the C/Lua loops' declined catastrophic-
+        # collision class.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('bus.io.connect', language='zig'), 'http')
+        self.assertEqual(classify_call('bus.io.accept', language='zig'), 'http')
+        self.assertEqual(classify_call('bus.io.listen', language='zig'), 'http')
+        self.assertEqual(classify_call('bus.io.recv', language='zig'), 'http')
+        self.assertEqual(classify_call('bus.io.send', language='zig'), 'http')
+        self.assertEqual(classify_call('storage.io.write', language='zig'), 'file')
+        self.assertEqual(classify_call('storage.io.read', language='zig'), 'file')
+
+    def test_zig_stdlib_file_camelcase_compounds(self):
+        # Tokenizer doesn't split camelCase (same gap class as C#'s
+        # SaveChangesAsync / Kotlin's executeAsOne / Swift's
+        # fetchWithResult): std.fs's own compound method names are each a
+        # single opaque token, distinct from any bare COMMON verb.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('project_root.openDir', language='zig'), 'file')
+        self.assertEqual(classify_call('std.fs.cwd().openFile', language='zig'), 'file')
+        self.assertEqual(classify_call('std.fs.cwd().makeOpenPath', language='zig'), 'file')
+        self.assertEqual(classify_call('std.fs.cwd().deleteTree', language='zig'), 'file')
+        self.assertEqual(classify_call('std.fs.selfExePath', language='zig'), 'file')
+        self.assertEqual(classify_call('std.fs.cwd().statFile', language='zig'), 'file')
+        self.assertEqual(classify_call('shell.cwd.realpathAlloc', language='zig'), 'file')
+        self.assertEqual(classify_call('testing.copyFileAbsolute', language='zig'), 'file')
+
+    def test_posix_syscalls_classified_file_and_http(self):
+        # Bare POSIX syscall names -- corpus-collision-checked (universally
+        # file-I/O-only across every corpus language, unlike a generic verb
+        # like 'read'/'write' alone).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('posix.pwrite', language='zig'), 'file')
+        self.assertEqual(classify_call('posix.fsync', language='zig'), 'file')
+        # Two-segment 'posix.<verb>' (matches both the fully-qualified
+        # std.posix.X form and a local `const posix = std.posix;` alias) --
+        # NOT the declined bare 'connect'/'socket'/'accept' alone.
+        self.assertEqual(classify_call('std.posix.connect', language='zig'), 'http')
+        self.assertEqual(classify_call('posix.connect', language='zig'), 'http')
+        self.assertEqual(classify_call('posix.socket', language='zig'), 'http')
+        # Trailing-delimiter prefix convention (same shape as Lua's
+        # ngx.socket. entry): matches any std.net.* call regardless of verb.
+        self.assertEqual(classify_call('std.net.tcpConnectToAddress', language='zig'), 'http')
+
+    def test_env_camelcase_compounds(self):
+        # std.process.getEnvVarOwned/getEnvMap -- distinct camelCase tokens
+        # from COMMON's pre-existing bare 'getenv' (which already covers the
+        # older/simpler std.posix.getenv form, unaffected by this addition).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('std.process.getEnvVarOwned', language='zig'), 'env')
+        self.assertEqual(classify_call('std.process.getEnvMap', language='zig'), 'env')
+        self.assertEqual(classify_call('std.posix.getenv', language='zig'), 'env')
+
+    def test_debug_print_classified_log_not_bare_print(self):
+        # std.debug.print -- Zig's raw stdout debug-print primitive used
+        # corpus-wide for benchmark/test-harness output. Scoped two-segment
+        # 'debug.print', NOT bare 'print' (the same catastrophic-collision
+        # class as Python's print()/JS's console.log, declined everywhere
+        # this program has touched a receiverless print idiom).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('std.debug.print', language='zig'), 'log')
+        self.assertIsNone(classify_call('print', language='zig'))
+
+    def test_zig_unmapped_before_this_loop_now_scoped(self):
+        # Sanity-lock: before this loop zig had no _TAXONOMY_BY_LANG entry
+        # at all, so it fell back to _COMPILED_COMMON_ONLY (BACK-722's fix).
+        # A Python/PHP-only builtin must still never leak into a Zig file.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('session_start', language='zig'))
+
+
 if __name__ == '__main__':
     unittest.main()

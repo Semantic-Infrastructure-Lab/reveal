@@ -771,6 +771,146 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         # request_uri (above) is unaffected -- distinctive enough that no
         # kong.request.* accessor is named exactly that.
     ],
+    # BACK-718/BACK-725 (Zig, fourteenth side-effect-recall language). Corpus:
+    # TigerBeetle (samples/zig/tigerbeetle/src, distributed financial db) --
+    # a distinctive shape for a receiverless-verb-poor language: Zig has real
+    # dot-receiver syntax (unlike C/Lua-without-`:`), but its dominant io
+    # boundary is TigerBeetle's OWN thin storage/network wrapper object
+    # (`io.read`/`io.write`/`io.connect`/etc, not a stdlib call), so the same
+    # "scope a two-segment `io.<verb>` pattern instead of a bare verb"
+    # technique the Lua loop used for `io.write`/`io.read` (file) applies
+    # again here, plus its network counterpart (`io.connect`/`io.accept`/
+    # `io.listen`/`io.recv`/`io.send`) -- corpus-confirmed the dominant,
+    # in fact ONLY, network-boundary idiom in this corpus (message_bus.zig,
+    # cdc/amqp.zig, testing/vortex/faulty_network.zig). Two-/three-segment
+    # scoped patterns carry the same "can't cross-language-collide" safety
+    # property check_taxonomy_collisions.py's own docstring describes for
+    # `_TAXONOMY_BY_LANG` entries -- checked anyway (see the module's own
+    # zig-scoped bare additions below for the ones that DO need the corpus
+    # check, since they're single-segment).
+    'zig': [
+        ('file', [
+            # TigerBeetle's storage abstraction (storage.zig/io.zig):
+            # `grid.superblock.storage.read_sectors(...)`/
+            # `client_replies.storage.write_sectors(...)` -- corpus-wide the
+            # ONLY two call sites for on-disk sector I/O in the whole
+            # codebase (io/linux.zig's own io_uring `prep_read`/`prep_write`
+            # submission-queue setup is a single internal call site each,
+            # not a corpus-wide idiom worth a pattern). Distinctive compound
+            # names, no cross-language collision risk (checked below).
+            'read_sectors', 'write_sectors',
+            # Two-segment `io.<verb>`, scoped narrower than a bare
+            # 'read'/'write' verb (which would be a catastrophic collision,
+            # same class as the C/Lua loops' declined bare send/recv) --
+            # same technique as Lua's `io.write`/`io.read` file-bucket
+            # entry (this table's 'lua' key above), unrelated module
+            # despite the identical receiver name (Lua's `io` is the
+            # stdlib file module; TigerBeetle's `io` is its own IO/event
+            # loop object) -- coincidence, not a shared mechanism.
+            'io.write', 'io.read', 'io.fsync', 'io.open_data_file',
+            # Zig stdlib file/dir idioms -- camelCase compounds, tokenizer
+            # doesn't split camelCase so each is its own distinct segment
+            # (same shape as C#'s SaveChangesAsync miss): `std.fs.cwd().
+            # openDir(...)`/`project_root.openDir(...)` (stdx/shell.zig,
+            # the dominant file-tree-walk idiom), `std.fs.cwd().
+            # openFile(...)`, `std.fs.cwd().makeOpenPath(...)`/`.deleteTree
+            # (...)` (build_multiversion.zig temp-dir lifecycle),
+            # `std.fs.selfExePath(...)`/`std.fs.cwd().statFile(...)`
+            # (multiversion.zig's self-executable-path resolution).
+            'opendir', 'openfile', 'makeopenpath', 'deletetree',
+            'selfexepath', 'statfile',
+            # Second measurement pass (post first taxonomy cut, 81.48% file
+            # recall): `std.fs.copyFileAbsolute(...)` (testing/vortex/
+            # supervisor.zig replica_install), `std.fs.cwd().
+            # realpathAlloc(...)` (multiversion.zig print_information) --
+            # both distinctive camelCase compounds, same shape as the first
+            # batch. `posix.pwrite(...)`/`posix.fsync(...)` (io/linux.zig's
+            # own io_uring completion-path fallback and directory-fsync-
+            # after-write durability call) -- bare POSIX syscall names,
+            # corpus-collision-checked below (universally file-I/O-only
+            # across every language's corpus, unlike e.g. 'read'/'write'
+            # alone -- 'fsync'/'pwrite' carry no other common meaning).
+            'copyfileabsolute', 'realpathalloc', 'pwrite', 'fsync',
+            # DECLINED: `std.fs.File{ .handle = fd }` (io/common.zig
+            # aof_blocking_close) -- a STRUCT LITERAL construction, not a
+            # call node at all; classify_call only ever sees callee text
+            # from an actual call expression, so there is no mechanism to
+            # attribute this without a new struct-literal-effects channel
+            # (same class of structural gap as TypeScript's BACK-644
+            # property-read miss, out of scope for a taxonomy-only fix).
+            # One residual 'file' miss left open for this reason.
+        ]),
+        ('http', [
+            # TigerBeetle has no HTTP client; the network-boundary
+            # equivalent is its own IO object's connection-lifecycle verbs
+            # (message_bus.zig's `bus.io.connect/.accept/.listen/.recv/
+            # .send/.send_now`, cdc/amqp.zig's own `connect`/`send`/
+            # `receive` AMQP-transport methods, testing/vortex/
+            # faulty_network.zig's fault-injection proxy). Two-segment
+            # `io.<verb>` scoping is the load-bearing safety property here:
+            # bare 'connect'/'accept'/'listen'/'send'/'recv' were the C
+            # loop's declined POSIX-socket class (catastrophic collision,
+            # 3,947 Java `accept` hits alone) and Lua's declined
+            # `httpc:connect`/bare `request` class -- scoping to the
+            # two-segment 'io.<verb>' shape avoids that exposure entirely
+            # (a bare 'io' RECEIVER is comparatively rare and, per
+            # `_RECEIVER_TAXONOMY`'s existing conservative design, still
+            # only ever a receiver-fallback signal, not a verb match).
+            'io.connect', 'io.accept', 'io.listen', 'io.recv',
+            'io.send', 'io.send_now',
+            # cdc/amqp.zig's own AMQP wire-protocol methods reuse the same
+            # 'connect'/'send'/'receive' verbs but on a DIFFERENT receiver
+            # shape (`self.connect(...)`/`amqp.send(...)`) -- not narrowed
+            # to 'io.' there, so NOT separately added as a bare pattern
+            # (would reintroduce the declined-bare-verb exposure); the
+            # cdc/amqp.zig hits in this loop's sample all happen to ALSO
+            # route through `self.io.*` internally one level down in the
+            # same function body, so `io.<verb>` still catches them at
+            # function-body granularity without a bare-verb addition.
+            #
+            # Second measurement pass: some corpus call sites go straight to
+            # POSIX/`std.net` without going through the `io` wrapper at all
+            # (`trace/statsd.zig:init_udp`'s `std.posix.connect(...)`,
+            # `stdx/unshare.zig:linux_ip_link_loopback`'s
+            # `std.posix.socket(...)`, `scripts/devhub.zig:devhub_metrics`'s
+            # `std.net.tcpConnectToAddress(...)`). Two-segment
+            # 'posix.<verb>' (matches both the fully-qualified `std.posix.X`
+            # form and the common local-alias `const posix = std.posix;`
+            # form via subsequence matching) is scoped exactly like `io.
+            # <verb>` above -- NOT the declined bare 'connect'/'socket'
+            # alone. `std.net.` (trailing-delimiter prefix convention,
+            # same shape as Lua's `ngx.socket.` entry) catches any
+            # `std.net.*` call regardless of the specific verb.
+            'posix.connect', 'posix.accept', 'posix.socket', 'std.net.',
+        ]),
+        ('env', [
+            # `std.process.getEnvVarOwned(...)` -- Zig's actual
+            # env-var-read API (distinct from the older/simpler
+            # `std.posix.getenv`, already covered by COMMON's bare
+            # 'getenv'). CamelCase compound, tokenizer doesn't split it,
+            # distinct token from COMMON's 'getenv'. `std.process.
+            # getEnvMap(...)` -- the whole-environment-map variant
+            # (stdx/shell.zig's Shell.create).
+            'getenvvarowned', 'getenvmap',
+        ]),
+        ('log', [
+            # `std.debug.print(...)` -- Zig's raw stdout/stderr debug-print
+            # primitive, used corpus-wide for benchmark/test-harness output
+            # where `std.log` would be too heavyweight (`stdx/testing/
+            # bench.zig:report`, `lsm/binary_search.zig:random_search`
+            # (gated by a LOCAL bool parameter confusingly also named
+            # `log`, unrelated to std.log), `stdx/shell.zig:close`'s timing
+            # report). Two-segment `debug.print` -- NOT bare 'print' (that
+            # would be the same catastrophic collision class as Python's
+            # print()/JS's console.log, declined everywhere this program
+            # has touched a receiverless print idiom). 'debug' as a
+            # receiver-like segment paired specifically with 'print' is a
+            # safe, narrow pair no other corpus language's own hits
+            # (checked: zero cross-language `debug.print(` hits in any
+            # `samples/<lang>` tree).
+            'debug.print',
+        ]),
+    ],
 }
 
 # Analyzer `language` values that share one _TAXONOMY_BY_LANG bucket.

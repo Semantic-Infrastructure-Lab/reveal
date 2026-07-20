@@ -47,7 +47,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | **Measured** |
 | Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | — not yet run | **Measured** (import only) |
 | GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | — not yet run | **Measured** (import only) |
-| Zig | ✅ 100%⁶ (ghostty, TigerBeetle²⁰) | — not yet run | **Measured** (import only) |
+| Zig | ✅ 100%⁶ (ghostty, TigerBeetle²⁰) | ✅ 98.4%²⁹ (TigerBeetle) | **Measured** |
 | TSX, plain JS | ✅ 100%⁷ (Excalidraw, three.js), 100%²⁵ (react-router) | — not yet run | **Measured** (import only) |
 
 **How to read this table — three caveats that the ✅ marks do not carry:**
@@ -63,7 +63,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
    Sample column in the detailed results tables below before quoting a number.**
 2. **This table covers two signals, not all of reveal's DD output.**
    Import/dependency recall is measured on all 19 languages listed. Side-effect
-   recall is measured on 12 of them — Scala, Lua, Dart, GDScript, Zig, and
+   recall is measured on 14 of them — Scala, Dart, GDScript, and
    TSX/plain-JS have **no** side-effect measurement. `surface`, `contracts`,
    and `patches://`/testability have **no ground-truth validation on any
    language** — see [Scope](#scope).
@@ -648,6 +648,44 @@ POSIX-file-truncation collision in Java/Go/C++); bare `connect`/`request`
 Kong's own `kong.request.*` incoming-request accessors as outbound HTTP) —
 see
 [sideeffects-recall-oracle/lua/LUA.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/lua/LUA.md)
+for the full write-up.
+
+²⁹ First side-effect/boundary measurement for Zig (BACK-718/BACK-725,
+fourteenth language in the program), TigerBeetle's `src/` corpus (3,884
+functions). 53.23% pre-fix → 98.39% post-fix — the pre-fix number already
+reflects the Lua loop's `_COMPILED_COMMON_ONLY` fix (confirmed still
+holding: no Python/PHP-scoped bare verb leaked into Zig identifiers) and
+confirms Lua's `_DELIM_RE` colon fix is irrelevant here (Zig has no bare
+`:` call-receiver syntax). No new reveal structural bug — instead a bug in
+this loop's OWN oracle extraction code: Zig's dominant generic-type-
+returning-function idiom nests real, independently queryable methods
+inside an outer function's body (`message_bus.zig`'s entire public API is
+declared this way); a naive brace-depth scanner that jumps past a matched
+function's whole body (safe for C, which never nests function
+definitions) silently swallowed every nested method into one giant outer-
+named record, undercounting the corpus by more than a third before being
+caught via cross-checking real `--outline` line numbers. Taxonomy
+additions: TigerBeetle's own storage/network-boundary verbs
+(`read_sectors`/`write_sectors`, two-segment `io.write`/`io.read`/
+`io.connect`/`io.accept`/`io.listen`/`io.recv`/`io.send`, direct-POSIX
+`posix.connect`/`posix.accept`/`posix.socket`/`std.net.` for call sites
+bypassing the `io` wrapper) took `file`/`http` to 92.6%/100%; Zig stdlib
+camelCase compounds (`openDir`/`openFile`/`makeOpenPath`/`deleteTree`/
+`selfExePath`/`statFile`/`copyFileAbsolute`/`realpathAlloc`,
+`getEnvVarOwned`/`getEnvMap`, `debug.print`) — the tokenizer-doesn't-split-
+camelCase gap class — took `env`/`log` to 100%. Bare POSIX `pwrite`/`fsync`
+corpus-collision-checked and kept (universally file-I/O-only meaning
+across every corpus hit, same reasoning as Lua's kept `upsert`). Two
+residual `file` misses left open, neither a taxonomy gap: a struct-literal
+construction with no call node to attribute, and a genuine ORACLE
+false-signal (this loop's own broad `std.fs.*` regex over-matching a pure
+path-string function, `isAbsoluteWindowsWTF16`) — not a reveal recall gap.
+Also corpus-confirmed, for a third time in the program, that a
+pre-existing `_TAXONOMY_COMMON` bare-verb collision (`'header'`→http,
+`'open'`→file) fires on TigerBeetle's own domain accessor/lifecycle
+methods — not fixed (common-scoped, cross-language blast radius, out of
+scope) — see
+[sideeffects-recall-oracle/zig/ZIG.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/zig/ZIG.md)
 for the full write-up.
 
 ## Import/Dependency Recall

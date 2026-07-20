@@ -2724,6 +2724,161 @@
     "source": "literal",
     "token": "os_log"
   },
+  "literal:zig:env:getenvmap": {
+    "hits": {
+      "zig": 9
+    },
+    "home": "zig",
+    "key": "literal:zig:env:getenvmap",
+    "kind": "env",
+    "source": "literal",
+    "token": "getenvmap"
+  },
+  "literal:zig:env:getenvvarowned": {
+    "hits": {
+      "zig": 20
+    },
+    "home": "zig",
+    "key": "literal:zig:env:getenvvarowned",
+    "kind": "env",
+    "source": "literal",
+    "token": "getenvvarowned"
+  },
+  "literal:zig:file:copyfileabsolute": {
+    "hits": {
+      "zig": 5
+    },
+    "home": "zig",
+    "key": "literal:zig:file:copyfileabsolute",
+    "kind": "file",
+    "source": "literal",
+    "token": "copyfileabsolute"
+  },
+  "literal:zig:file:deletetree": {
+    "hits": {
+      "zig": 16
+    },
+    "home": "zig",
+    "key": "literal:zig:file:deletetree",
+    "kind": "file",
+    "source": "literal",
+    "token": "deletetree"
+  },
+  "literal:zig:file:fsync": {
+    "hits": {
+      "c": 25,
+      "go": 60,
+      "java": 44,
+      "ruby": 1,
+      "typescript": 1,
+      "zig": 18
+    },
+    "home": "zig",
+    "key": "literal:zig:file:fsync",
+    "kind": "file",
+    "source": "literal",
+    "token": "fsync"
+  },
+  "literal:zig:file:makeopenpath": {
+    "hits": {
+      "zig": 11
+    },
+    "home": "zig",
+    "key": "literal:zig:file:makeopenpath",
+    "kind": "file",
+    "source": "literal",
+    "token": "makeopenpath"
+  },
+  "literal:zig:file:opendir": {
+    "hits": {
+      "c": 3,
+      "cpp": 4,
+      "go": 9,
+      "php": 14,
+      "zig": 27
+    },
+    "home": "zig",
+    "key": "literal:zig:file:opendir",
+    "kind": "file",
+    "source": "literal",
+    "token": "opendir"
+  },
+  "literal:zig:file:openfile": {
+    "hits": {
+      "cpp": 1,
+      "go": 118,
+      "php": 16,
+      "scala": 6,
+      "typescript": 30,
+      "zig": 24
+    },
+    "home": "zig",
+    "key": "literal:zig:file:openfile",
+    "kind": "file",
+    "source": "literal",
+    "token": "openfile"
+  },
+  "literal:zig:file:pwrite": {
+    "hits": {
+      "go": 73,
+      "zig": 5
+    },
+    "home": "zig",
+    "key": "literal:zig:file:pwrite",
+    "kind": "file",
+    "source": "literal",
+    "token": "pwrite"
+  },
+  "literal:zig:file:read_sectors": {
+    "hits": {
+      "zig": 11
+    },
+    "home": "zig",
+    "key": "literal:zig:file:read_sectors",
+    "kind": "file",
+    "source": "literal",
+    "token": "read_sectors"
+  },
+  "literal:zig:file:realpathalloc": {
+    "hits": {
+      "zig": 33
+    },
+    "home": "zig",
+    "key": "literal:zig:file:realpathalloc",
+    "kind": "file",
+    "source": "literal",
+    "token": "realpathalloc"
+  },
+  "literal:zig:file:selfexepath": {
+    "hits": {
+      "zig": 5
+    },
+    "home": "zig",
+    "key": "literal:zig:file:selfexepath",
+    "kind": "file",
+    "source": "literal",
+    "token": "selfexepath"
+  },
+  "literal:zig:file:statfile": {
+    "hits": {
+      "zig": 14
+    },
+    "home": "zig",
+    "key": "literal:zig:file:statfile",
+    "kind": "file",
+    "source": "literal",
+    "token": "statfile"
+  },
+  "literal:zig:file:write_sectors": {
+    "hits": {
+      "zig": 18
+    },
+    "home": "zig",
+    "key": "literal:zig:file:write_sectors",
+    "kind": "file",
+    "source": "literal",
+    "token": "write_sectors"
+  },
   "receiver:common:cache:memcache": {
     "hits": {},
     "home": "common",
