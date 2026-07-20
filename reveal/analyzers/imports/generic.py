@@ -1256,7 +1256,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         constant_index: Optional[Dict[str, Tuple[str, str]]] = None,
     ) -> Optional[ImportStatement]:
         """Turn a dedicated import-statement node into an ImportStatement."""
-        if node.kind() == 'preproc_call':
+        if _zero_arg(node, 'kind') == 'preproc_call':
             # BACK-676: a #include nested inside a class/struct body (e.g.
             # Godot's bvh_tree.h .inc fragment-include idiom) isn't valid
             # top-level-only preproc_include grammar, so tree-sitter's C/C++
@@ -1266,7 +1266,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             directive = node.child(0)
             if (
                 directive is None
-                or directive.kind() != 'preproc_directive'
+                or _zero_arg(directive, 'kind') != 'preproc_directive'
                 or analyzer._get_node_text(directive).strip() != '#include'
             ):
                 return None
@@ -1356,7 +1356,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         if target is None:
             return _NOT_CONCAT
 
-        if target.kind() == 'string':
+        if _zero_arg(target, 'kind') == 'string':
             # Bare string literal — PHP's `require`/`include` semantics
             # resolve an unqualified relative path against the importing
             # file's own directory (never a project root), same as Ruby's
@@ -1381,7 +1381,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 skip_unused=True,
             )
 
-        if target.kind() != 'binary_expression':
+        if _zero_arg(target, 'kind') != 'binary_expression':
             # A variable (`$file`), a method/static call
             # (`$tpl->getFile(...)`, `OSCOM::getConfig(...)`), or anything
             # else this doesn't recognize — genuinely dynamic or unknown.
@@ -1473,10 +1473,10 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         expression) — the caller treats that as "don't know", not "dynamic".
         """
         for child in _children(node):
-            if child.kind() in cls._REQUIRE_KEYWORD_KINDS:
+            if _zero_arg(child, 'kind') in cls._REQUIRE_KEYWORD_KINDS:
                 continue
-            if child.kind() == 'parenthesized_expression':
-                inner = [c for c in _children(child) if c.kind() not in ('(', ')')]
+            if _zero_arg(child, 'kind') == 'parenthesized_expression':
+                inner = [c for c in _children(child) if _zero_arg(c, 'kind') not in ('(', ')')]
                 return inner[0] if inner else None
             return child
         return None

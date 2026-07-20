@@ -13,6 +13,7 @@ import logging
 from pathlib import Path
 from typing import List, Set, Optional
 from ...core import node_children as _children, node_prev_sibling as _prev_sibling
+from ...core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
 
@@ -274,14 +275,14 @@ class RustExtractor(LanguageExtractor):
                     file_path, line_number, full_path, imported_name=imported_name, skip_unused=is_reexport,
                     source_line=_line_text(analyzer, line_number),
                 ))
-            elif item.kind() == 'scoped_use_list':
+            elif _zero_arg(item, 'kind') == 'scoped_use_list':
                 # Nested group: sub::{x, y} - recurse with the combined base path.
                 nested_base = None
                 nested_list = None
                 for nc in _children(item):
-                    if nc.kind() in ('identifier', 'scoped_identifier', 'crate', 'super', 'self'):
+                    if _zero_arg(nc, 'kind') in ('identifier', 'scoped_identifier', 'crate', 'super', 'self'):
                         nested_base = analyzer._get_node_text(nc)
-                    elif nc.kind() == 'use_list':
+                    elif _zero_arg(nc, 'kind') == 'use_list':
                         nested_list = nc
                 if nested_base and nested_list:
                     imports.extend(self._parse_use_list_items(
