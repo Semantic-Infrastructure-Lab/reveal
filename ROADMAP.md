@@ -156,9 +156,10 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
      BACK-632).
   3. Close known correctness gaps as found — e.g. C++ import-recall widened
      past the engine-core-only corpus (`editor/`/`modules/`/`thirdparty/`
-     currently excluded, see the harness README).
+     currently excluded, see the harness README) (BACK-707).
   4. Guard against single-corpus overfit: a second real corpus per language
-     for the already-measured set.
+     for the already-measured set — remaining: C++, C, Lua, Dart, GDScript,
+     Zig, TSX/plain-JS (BACK-708, children BACK-709–715).
 
 ---
 
