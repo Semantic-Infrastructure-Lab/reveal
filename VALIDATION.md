@@ -48,7 +48,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Dart | ✅ 100%⁵ (AppFlowy), 100%²⁴ (drift) | — not yet run | **Measured** (import only) |
 | GDScript | ✅ 100%⁶ (godot-demo-projects), 100%²⁵ (Pixelorama) | — not yet run | **Measured** (import only) |
 | Zig | ✅ 100%⁷ (ghostty, TigerBeetle²¹) | — not yet run | **Measured** (import only) |
-| TSX, plain JS | ✅ 100%⁸ (Excalidraw, three.js) | — not yet run | **Measured** (import only) |
+| TSX, plain JS | ✅ 100%⁸ (Excalidraw, three.js), 100%²⁶ (react-router) | — not yet run | **Measured** (import only) |
 
 ¹ Overall TypeScript side-effect recall was 76.8%; the gap was almost entirely
 one architecturally-distinct category — Node's `process.env.X` env reads are a
@@ -542,6 +542,24 @@ single-project shape confirms the `class_name_convention` resolution fix
 (from the v1 loop) generalizes correctly outside the many-independent-projects
 topology it was built against. See the [harness
 README](../internal-docs/planning/dogfood-findings/gdscript-recall-oracle/README.md#second-corpus-back-713-overfit-guard-pixelorama)
+for the full write-up.
+
+²⁶ Overfit guard (BACK-715, child of BACK-708): re-ran the same
+relative-import oracle method (`JavaScriptExtractor._resolve_relative_js`,
+the shared resolver behind every JS/TS/JSX/TSX extension) against a third,
+deliberately differently-shaped corpus (react-router v5.3.4 — a 5-package
+lerna-style monorepo, 180 `.js` files, pure JSX-in-`.js` with no `.jsx`
+extension at all, vs. three.js's single-package plain-`.js` and Excalidraw's
+single-package `.ts`/`.tsx`). Cross-package imports use bare package-name
+specifiers (e.g. `react-router-dom` importing `"react-router"`), correctly
+out of scope for this relative-import-only oracle, same as every other
+node_modules bare specifier. Full census (small population): 112 distinct
+targets, 222 edges. **100%** recall (222/222), 0 false positives, 0 misses
+— no fix needed. Confirms the shared resolver (already fixed twice: the
+TypeScript/VS Code loop, then this slice's own BACK-672 extension-omission
+fix) holds up on a monorepo topology and a pure-`.js`-JSX extension mix
+neither prior corpus exercised. See the [harness
+README](../internal-docs/planning/dogfood-findings/js-tsx-recall-oracle/README.md#second-corpus-back-715-overfit-guard-react-router)
 for the full write-up.
 
 ## Import/Dependency Recall
