@@ -286,7 +286,8 @@ class HelpAdapter(ResourceAdapter):
     # Static help files (markdown documentation in reveal/docs/)
     STATIC_HELP = {
         # Top-level docs (reveal/docs/)
-        'quick-start': 'QUICK_START.md',
+        'intro': 'QUICK_START.md',
+        'quick-start': 'QUICK_START.md',  # legacy alias for 'intro' — kept resolvable, not shown in index
         'agent': 'AGENT_HELP.md',
         'anti-patterns': 'AGENT_HELP.md',  # Merged into AGENT_HELP.md
         'benchmarks': 'BENCHMARKS.md',
@@ -1186,7 +1187,7 @@ class HelpAdapter(ResourceAdapter):
         """Load help from static markdown file.
 
         Args:
-            topic: Topic name ('agent', 'quick-start', 'tricks', etc.)
+            topic: Topic name ('agent', 'intro', 'tricks', etc.)
             full: If True, bypass progressive disclosure and return the complete file.
             section: If provided, filter content to just the named heading and its body.
 

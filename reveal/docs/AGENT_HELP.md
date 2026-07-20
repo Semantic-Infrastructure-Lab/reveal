@@ -41,7 +41,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 
 **This is a reference guide (~40,000 tokens). You do not need to read it upfront.**
 
-Start with `reveal help://quick` (~300 tokens) — it routes you to the right adapter for your task. Load sections of this guide only when you need deep reference on a specific adapter or pattern.
+Start with `reveal help://quick` (~750 tokens) — it routes you to the right adapter for your task. Load sections of this guide only when you need deep reference on a specific adapter or pattern.
 
 **Reveal covers more than source code.** Before broad discovery over any supported resource, check whether an adapter exists:
 

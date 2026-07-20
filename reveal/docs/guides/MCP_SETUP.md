@@ -194,7 +194,7 @@ reveal_query("help://schemas/git")
 
 When you're uncertain what adapter to use, start with:
 ```
-reveal_query("help://quick")   # compact intent router, ~300 tokens
+reveal_query("help://quick")   # compact intent router, ~750 tokens
 ```
 
 ## Token Efficiency

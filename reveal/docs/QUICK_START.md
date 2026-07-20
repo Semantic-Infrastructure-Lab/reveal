@@ -1,7 +1,7 @@
 ---
 title: Reveal Quick Start (5 Minutes)
 category: reference
-help_topic: quick-start
+help_topic: intro
 help_description: 5-minute introduction to reveal
 help_category: getting_started
 help_token_estimate: "~2,000"
@@ -357,7 +357,7 @@ reveal help://ssl        # Learn about ssl:// adapter
 **Built-in documentation:**
 ```bash
 reveal --help                    # CLI help
-reveal help://quick              # AI agent compact intent router (~300 tokens)
+reveal help://quick              # AI agent compact intent router (~750 tokens)
 reveal --agent-help              # AI agent orientation (~2,200 tokens; help://agent/full for the rest)
 reveal help://                   # List all help topics
 reveal help://markdown           # Markdown analysis guide

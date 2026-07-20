@@ -43,7 +43,10 @@ mcp = FastMCP(
         "   mutations   — variables the function writes and the caller will read\n"
         "   sideeffects — db/http/cache/log/file/sleep/hard_stop calls\n"
         "   returns     — exit paths with gate conditions\n"
-        "   varflow     — trace one variable's reads and writes\n\n"
+        "   varflow     — trace one variable's reads and writes\n"
+        "5. reveal_query('help://quick') — lost or need an adapter outside this "
+        "workflow (ssl, git, imports, sqlite, ...)? Start here for an orientation "
+        "map of everything else reveal://* can do.\n\n"
         "This is 3-33x more token-efficient than reading files directly. "
         "Use reveal_structure before reveal_element — always progressive disclosure."
     ),
@@ -278,6 +281,7 @@ def reveal_query(uri: str) -> str:
       ``nginx://nginx.conf``                          nginx config analysis
       ``markdown://docs/?aggregate=type``             doc taxonomy
       ``claude://sessions/``                          AI session history
+      ``help://quick``                                orientation map of all adapters/tasks
 
     Args:
         uri: Full reveal URI (scheme://resource or scheme://resource?query)

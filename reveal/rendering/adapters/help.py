@@ -73,7 +73,7 @@ _CATEGORY_LABELS = (
 # aliases). Keep small — most guide metadata lives in frontmatter, but a few
 # annotations are about CLI integration, not the doc itself.
 _TOPIC_ANNOTATIONS = {
-    'quick-start': "\n                     Recommended: Start here if you're new to reveal!",
+    'intro': "\n                     Recommended: Start here if you're new to reveal!",
     'agent': '\n                     Alias: --agent-help flag',
 }
 
@@ -232,15 +232,15 @@ def _render_special_topics_section() -> None:
     print()
     print("  quick            - Compact intent router: decision tree + key commands")
     print("                     Type: Generated")
-    print("                     Token cost: ~300 tokens (start here for AI agents)")
+    print("                     Token cost: ~750 tokens (start here for AI agents)")
     print()
     print("  adapters         - Summary of all URI adapters")
     print("                     Type: Generated")
-    print("                     Token cost: ~300 tokens")
+    print("                     Token cost: ~1,400 tokens")
     print()
     print("  relationships    - Adapter ecosystem map: clusters, power pairs, cross-adapter workflows")
     print("                     Type: Generated")
-    print("                     Token cost: ~400 tokens")
+    print("                     Token cost: ~850 tokens")
     print()
 
 
@@ -254,11 +254,12 @@ def _render_navigation_section() -> None:
     print("  reveal help://              # This index")
     print()
     print("**New users:**")
-    print("  reveal help://quick-start   # 5-minute introduction")
+    print("  reveal help://intro         # 5-minute introduction")
     print()
     print("**Bootstrap (AI agents):**")
-    print("  reveal help://quick        # Compact intent router (~300 tokens, start here)")
-    print("  reveal --agent-help        # Complete reference guide (~40,000 tokens)")
+    print("  reveal help://quick        # Compact intent router (~750 tokens, start here)")
+    print("  reveal --agent-help        # Agent orientation (~2,200 tokens)")
+    print("  reveal help://agent/full   # Complete reference guide (~40,000 tokens)")
     print()
     print("**Discover adapters:**")
     print("  reveal help://adapters       # Summary of all URI adapters")
