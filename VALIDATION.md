@@ -43,7 +43,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Swift | ✅ 100% (Kickstarter iOS), 98.42%¹⁹ (swift-collections, BACK-704 fixed) | ✅ 100%² (Kickstarter iOS) | **Measured** |
 | Scala | ✅ 100% (GitBucket, 100%¹⁶ cats-effect) | — not yet run | **Measured** (import only) |
 | C++ | ✅ 100%³ (Godot) | ✅ 83.3% (Godot) | **Measured** |
-| C | ✅ 100%⁹ (Redis) | — not yet run | **Measured** (import only) |
+| C | ✅ 100%⁹ (Redis, curl²²) | — not yet run | **Measured** (import only) |
 | Lua | ✅ 99.87% (Kong) | — not yet run | **Measured** (import only) |
 | Dart | ✅ 100%⁵ (AppFlowy) | — not yet run | **Measured** (import only) |
 | GDScript | ✅ 100%⁶ (godot-demo-projects) | — not yet run | **Measured** (import only) |
@@ -441,6 +441,25 @@ corpus's `@import(...)` calls are named-module aliases (`@import("vsr")`,
 `@import("stdx")`, ...), correctly out of scope per the same design as
 ghostty's excluded `std`/`builtin`/build-graph aliases. See the [harness
 README](../internal-docs/planning/dogfood-findings/zig-recall-oracle/README.md#second-corpus-back-714-overfit-guard-tigerbeetle)
+for the full write-up.
+
+²² Overfit guard (BACK-710, child of BACK-708): re-ran the identical
+per-directive isolated-`gcc -H` oracle method against a second, unrelated
+real corpus (`curl/curl`, a client-side networking library, 468 files —
+flatter `lib/`+`src/` layout with `lib/curlx`, `lib/vauth`, `lib/vquic`,
+`lib/vssh`, `lib/vtls` subdirs and heavy cross-directory relative includes
+such as `src/*.c` pulling `lib/curl_setup.h` and `"../include/curl/curlver.h"`
+parent-relative navigation, deliberately different shape from Redis's
+mostly-flat `src/` tree) to check whether the 100% Redis result generalized.
+It did: **100.0000%** recall, full population diffed (not sampled, 232
+targets, 2,330 edges), 0 missed. 173 apparent false positives, all confirmed
+by direct grep to be genuine `#include` lines in `tests/unit/`, `tests/tunit/`,
+`tests/libtest/`, `tests/server/`, and `projects/OS400/` files — the same
+benign scope difference already documented for the Redis oracle (importer
+scope deliberately limited to `lib/`+`src/` production code, while
+`depends://`'s search root legitimately covers the whole corpus). No fix
+needed. See the [harness
+README](../internal-docs/planning/dogfood-findings/c-recall-oracle/README.md#second-corpus-back-710-overfit-guard-curl)
 for the full write-up.
 
 ## Import/Dependency Recall
