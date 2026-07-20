@@ -1582,6 +1582,88 @@
     "source": "literal",
     "token": "writetext"
   },
+  "literal:lua:db:cassandra": {
+    "hits": {
+      "go": 57
+    },
+    "home": "lua",
+    "key": "literal:lua:db:cassandra",
+    "kind": "db",
+    "source": "literal",
+    "token": "cassandra"
+  },
+  "literal:lua:db:escape_literal": {
+    "hits": {
+      "lua": 67
+    },
+    "home": "lua",
+    "key": "literal:lua:db:escape_literal",
+    "kind": "db",
+    "source": "literal",
+    "token": "escape_literal"
+  },
+  "literal:lua:db:pgmoon": {
+    "hits": {
+      "lua": 13
+    },
+    "home": "lua",
+    "key": "literal:lua:db:pgmoon",
+    "kind": "db",
+    "source": "literal",
+    "token": "pgmoon"
+  },
+  "literal:lua:db:query": {
+    "hits": {
+      "c": 44,
+      "cpp": 44,
+      "csharp": 936,
+      "dart": 22,
+      "gdscript": 2,
+      "go": 302,
+      "java": 10275,
+      "javascript": 174,
+      "kotlin": 6,
+      "lua": 156,
+      "php": 736,
+      "ruby": 1336,
+      "rust": 421,
+      "scala": 14,
+      "swift": 62,
+      "typescript": 1043,
+      "zig": 71
+    },
+    "home": "lua",
+    "key": "literal:lua:db:query",
+    "kind": "db",
+    "source": "literal",
+    "token": "query"
+  },
+  "literal:lua:db:upsert": {
+    "hits": {
+      "java": 32,
+      "kotlin": 30,
+      "lua": 29,
+      "ruby": 16,
+      "typescript": 11,
+      "zig": 31
+    },
+    "home": "lua",
+    "key": "literal:lua:db:upsert",
+    "kind": "db",
+    "source": "literal",
+    "token": "upsert"
+  },
+  "literal:lua:http:request_uri": {
+    "hits": {
+      "lua": 24,
+      "ruby": 2
+    },
+    "home": "lua",
+    "key": "literal:lua:http:request_uri",
+    "kind": "http",
+    "source": "literal",
+    "token": "request_uri"
+  },
   "literal:php:cache:apc_delete": {
     "hits": {},
     "home": "php",

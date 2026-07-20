@@ -44,7 +44,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Scala | ✅ 100% (GitBucket — n=1 qualifying edge), 100%¹⁵ (cats-effect, 24 edges) | — not yet run | **Measured** (import only) |
 | C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | **Measured** |
 | C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | **Measured** |
-| Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | — not yet run | **Measured** (import only) |
+| Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | **Measured** |
 | Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | — not yet run | **Measured** (import only) |
 | GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | — not yet run | **Measured** (import only) |
 | Zig | ✅ 100%⁶ (ghostty, TigerBeetle²⁰) | — not yet run | **Measured** (import only) |
@@ -621,6 +621,33 @@ catastrophic cross-language collision in `classify_call`'s unscoped mode
 syntax means there is no way to scope a generic-English-verb pattern any
 narrower than "the whole call" — see
 [sideeffects-recall-oracle/c/C.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/c/C.md)
+for the full write-up.
+
+²⁸ First side-effect/boundary measurement for Lua (BACK-718/BACK-722,
+thirteenth language in the program), Kong API Gateway's `kong/` corpus
+(2,551 functions). 61.62% pre-fix → 97.98% post-fix — but the pre-fix
+number already reflects two structural fixes applied before any taxonomy
+content: `classify_call`'s `_COMPILED_BY_LANG` fallback was silently using
+the fully-unscoped table for ANY language with no entry yet (not just
+`language=None`), confirmed live misclassifying ordinary `table.insert(t,
+x)`/builtin `select('#', ...)` as `db` via Python/PHP's own scoped bare
+verbs — fixed globally (`_COMPILED_COMMON_ONLY`), benefiting every
+not-yet-measured language, not just Lua; and Lua's colon-call syntax
+(`obj:method(...)`, the dominant call idiom in this corpus) was entirely
+invisible to the tokenizer (`_DELIM_RE` never split on `:`) regardless of
+taxonomy content — fixed, corpus-verified cross-language-safe. Taxonomy
+additions: Kong's own DAO/connector verbs (`query`/`escape_literal`/
+`upsert`, `pgmoon`/`cassandra`) and OpenResty's `resty.http` idiom
+(`http.new`/`request_uri`/`ngx.location.capture`/`ngx.socket.`) took `db`
+to 100% and `http` to 90.9%. **Declined, corroborating C's `http` finding**:
+bare `insert`/`select`/`update`/`delete` (Lua stdlib `table.insert`/builtin
+`select()`/OpenSSL `digest:update`/shared-dict `:delete` all collide, the
+same BACK-633/636 class); bare `truncate` (clean in Lua alone, but real
+POSIX-file-truncation collision in Java/Go/C++); bare `connect`/`request`
+(the C loop's declined POSIX `connect` class, plus `request` would tag
+Kong's own `kong.request.*` incoming-request accessors as outbound HTTP) —
+see
+[sideeffects-recall-oracle/lua/LUA.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/lua/LUA.md)
 for the full write-up.
 
 ## Import/Dependency Recall

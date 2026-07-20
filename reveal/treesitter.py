@@ -1288,6 +1288,27 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return self._get_node_text(child).rsplit('.', 1)[-1]
         return None
 
+    def _name_via_method_index(self, kids) -> Optional[str]:
+        # PRIORITY 2d (BACK-722 Lua sideeffects-recall-oracle pre-flight):
+        # Lua `function table:name(...)` — the colon-method idiom, Lua's
+        # closest equivalent to a receiver method (implicitly takes `self`
+        # as the first parameter). Verified via real Kong source
+        # (kong/db/*.lua, kong/plugins/*/handler.lua) that this is the
+        # DOMINANT OOP method-definition idiom in this corpus — more common
+        # than the dot form `_name_via_dot_index` already handles. The name
+        # is a `method_index_expression` ("connector:query"), a distinct
+        # tree-sitter-lua node kind from `dot_index_expression` (same
+        # grammar family as Go's `selector_expression` vs Kotlin/Swift's
+        # `navigation_expression` split) — absent from every check above,
+        # so every `function X:y(...)` was entirely invisible to --outline
+        # and errored outright on a direct name lookup before this fix.
+        # Return just the final segment, matching every other bare-name
+        # function lookup in reveal (and `_name_via_dot_index`'s convention).
+        for child in kids:
+            if child.kind() == 'method_index_expression':
+                return self._get_node_text(child).rsplit(':', 1)[-1]
+        return None
+
     def _name_via_type_identifier(self, kids) -> Optional[str]:
         # PRIORITY 3: type_identifier (fallback for structs, classes) — only
         # used if no name was found in declarators.
@@ -1331,6 +1352,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             self._name_via_param_adjacent,
             self._name_via_identifier_kind,
             self._name_via_dot_index,
+            self._name_via_method_index,
             self._name_via_type_identifier,
             self._name_via_field_identifier,
         ):

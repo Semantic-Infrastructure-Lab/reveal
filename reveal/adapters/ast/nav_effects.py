@@ -655,6 +655,122 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             'warn_print', 'err_print',
         ]),
     ],
+    # BACK-722 (sideeffects-recall-oracle, thirteenth language, first
+    # BACK-718 slice after C): Kong API Gateway `kong/` (samples/lua/kong,
+    # 605 files). Lua had NO entry at all before this loop -- every .lua
+    # file fell all the way through to the fully-unscoped _COMPILED_ALL
+    # table (see _COMPILED_COMMON_ONLY's comment, the loop's single biggest
+    # finding: this silently classified ordinary `table.insert(t, x)` /
+    # bare `select('#', ...)` as 'db' via Python/PHP's scoped bare verbs
+    # leaking through). Kong's dominant idiom throughout its DAO/connector
+    # layer is Lua's own colon method-call syntax (`conn:query(sql)`,
+    # `self.connector:escape_literal(x)`, `httpc:request_uri(url)`) --
+    # `classify_call`'s tokenizer (_DELIM_RE) didn't split on `:` at all
+    # before this loop, so every colon call collapsed to ONE opaque glued
+    # segment (`"self:query"`) that could never match ANY pattern regardless
+    # of taxonomy content -- fixed at the tokenizer level (_DELIM_RE), the
+    # single biggest recall driver this loop (61.62%->86%+ alone), same
+    # shape as Rust's macro_invocation node-type gap.
+    #
+    # Bare 'insert'/'select'/'update'/'delete' (Python/PHP's own scoped db
+    # verbs, BACK-636) were corpus-checked and DECLINED for Lua, not just
+    # skipped: `table.insert`/`table.remove` (Lua stdlib, ~80/4 corpus call
+    # sites) and bare `select(...)` (Lua's builtin vararg-count idiom) use
+    # 'insert'/'select' for something completely unrelated to a database;
+    # `digest:update(chunk)` (OpenSSL streaming hash update,
+    # plugins/basic-auth/crypto.lua) and `dict:delete(...)`/`lru:delete(...)`/
+    # `kong_shm:delete(...)` (ngx.shared.DICT / mlcache in-memory cache
+    # eviction, not postgres/cassandra) corpus-confirm 'update'/'delete' the
+    # same way -- the exact BACK-633/636 collision-prone-generic-verb class,
+    # corroborated in a Lua-specific idiom pair.
+    'lua': [
+        ('db', [
+            # Kong's own postgres/cassandra DAO+connector verbs -- checked
+            # bare-colon-call receivers corpus-wide (self/connector/
+            # connection/conn/r/lconn for query; self/connector for
+            # escape_literal; DAO-shaped names for upsert), zero non-db hits
+            # found (unlike insert/select/update/delete above). 'query' was
+            # already an accepted cross-language _COMPILED_ALL exposure via
+            # python/php's own pre-existing bare 'query' entry (BACK-636) --
+            # this addition changes nothing about that exposure, only adds
+            # lua-scoped matching. 'upsert' is a genuinely new token
+            # (scripts/check_taxonomy_collisions.py: Java 32 / Zig 31 /
+            # Kotlin 30 / Ruby 16 / TS 11 hits) but kept -- "upsert" carries
+            # no OTHER common meaning in any of those languages (unlike
+            # 'truncate' below), so even an unscoped hit is overwhelmingly
+            # likely to be a real db upsert operation, not a collision.
+            'query', 'escape_literal', 'upsert',
+            # pgmoon (lua-postgres driver) / cassandra: bare module-name
+            # words, corpus-checked (16 / 2 files respectively), no
+            # collision risk -- distinctive enough not to appear as an
+            # ordinary identifier anywhere else.
+            'pgmoon', 'cassandra',
+            # DECLINED: bare 'truncate', despite 10/10 clean DAO-shaped
+            # corpus evidence in Lua itself (db/dao/init.lua's DAO:truncate,
+            # connector:truncate). check_taxonomy_collisions.py found real,
+            # ambiguous cross-language exposure via _COMPILED_ALL (unscoped
+            # mode): Java 572, Go 217, Zig 98, Ruby 179, TS 94, Rust 39,
+            # C++ 32 hits -- unlike 'upsert', 'truncate' has a completely
+            # unrelated, common, non-db meaning in most of those languages
+            # (POSIX ftruncate/Windows SetEndOfFile-shaped FILE truncation:
+            # C's ftruncate, .NET Stream.SetLength-adjacent truncate
+            # wrappers, Go's os.Truncate). Same declined-bare-verb shape as
+            # the C loop's POSIX connect/accept/send/recv and every prior
+            # loop's BACK-633/636 class -- one residual Lua 'db' miss left
+            # open (db/strategies/postgres/connector.lua:truncate) rather
+            # than risk a file-vs-db false positive elsewhere.
+        ]),
+        ('file', [
+            # io.popen: COMMON's bare 'open(' pattern already catches
+            # `io.open(...)` (tokenizes to a segment 'open', matching the
+            # common pattern directly) but NOT `io.popen(...)` -- 'popen' is
+            # a distinct segment, not a substring match (by design, see
+            # module docstring). io.write/io.read: receiver-scoped to the
+            # literal 'io' module (two-segment, not a bare 'write'/'read'
+            # verb -- those stay unscoped everywhere per the conservative
+            # philosophy, same reasoning as declining bare 'request' above).
+            # os.remove: Lua/POSIX file deletion, unambiguous, corpus-
+            # confirmed (cmd/start.lua's cleanup_dangling_unix_sockets).
+            'io.popen', 'io.write', 'io.read', 'os.remove',
+            # DECLINED: `pl_file.write(...)` (cmd/hybrid.lua:generate_cert,
+            # Penlight's file module) -- `pl_file` is a local require()
+            # alias, not a fixed stdlib name; same class as Python's
+            # declined `async_get_clientsession` (project-specific idiom
+            # tied to a variable name a taxonomy pattern can't reach
+            # generically). One residual 'file' miss left open.
+        ]),
+        ('http', [
+            # `local http = require("resty.http"); local httpc = http.new()`
+            # -- OpenResty's cosocket-based HTTP client, the dominant (only)
+            # outbound-HTTP idiom in this corpus; Kong has no raw POSIX
+            # socket idiom the way Redis/C did (C loop's declined bare
+            # connect/accept/send/recv class doesn't apply the same way
+            # here -- OpenResty wraps it all behind resty.http/ngx.socket).
+            'http.new', 'request_uri',
+            # ngx.location.capture: nginx subrequest (init.lua's buffered-
+            # proxy path) -- three-segment, unambiguous.
+            'ngx.location.capture',
+            # ngx.socket.{tcp,udp,connect,stream}: raw cosocket creation,
+            # used by the unix-domain-socket plugin-server RPC transport
+            # and a handful of DNS/stream modules. Two-segment prefix
+            # (trailing-delimiter convention, same shape as COMMON's
+            # 'redis->') matches all four verbs via one pattern.
+            'ngx.socket.',
+        ]),
+        # NOTE: bare `httpc:request(`/`httpc:connect(`/`ngx.socket.connect`'s
+        # own verb 'connect' was considered and DECLINED as its own separate
+        # bare pattern -- same finding as the C loop's declined POSIX
+        # connect/accept/send/recv (scripts/check_taxonomy_collisions.py:
+        # 'connect' is a catastrophic cross-language collision, 3,557 C++
+        # hits, 194 Go hits, from that loop's own measurement). 'request'
+        # bare was also considered and declined: it would wrongly tag every
+        # `kong.request.get_headers()`/`kong.request.get_method()`/etc PDK
+        # accessor call (Kong's OWN incoming-request API, used constantly
+        # in every plugin) as an outbound 'http' effect -- `kong.request.*`
+        # contains the segment 'request' as a contiguous subsequence match.
+        # request_uri (above) is unaffected -- distinctive enough that no
+        # kong.request.* accessor is named exactly that.
+    ],
 }
 
 # Analyzer `language` values that share one _TAXONOMY_BY_LANG bucket.
@@ -678,7 +794,7 @@ def _merge_by_kind(*taxonomies: List[Tuple[str, List[str]]]) -> List[Tuple[str, 
     return [(kind, merged[kind]) for kind in _KIND_ORDER if kind in merged]
 
 
-_DELIM_RE = re.compile(r'->|::|\.|\s+')
+_DELIM_RE = re.compile(r'->|::|\.|:|\s+')
 
 
 def _tokenize(s: str) -> List[str]:
@@ -705,6 +821,28 @@ _COMPILED_BY_LANG: Dict[str, List[Tuple[str, List[List[str]]]]] = {
     lang: _compile(_merge_by_kind(_TAXONOMY_COMMON, patterns))
     for lang, patterns in _TAXONOMY_BY_LANG.items()
 }
+# BACK-722 (Lua sideeffects-recall-oracle pre-flight): classify_call()'s
+# `_COMPILED_BY_LANG.get(lang, _COMPILED_ALL)` fallback conflated two
+# different situations that should not share a default. When `language` is
+# genuinely omitted (None), unscoped-everywhere IS the documented, correct
+# behavior. But when a REAL, known language name is passed and that language
+# simply has no _TAXONOMY_BY_LANG entry YET (every language below the
+# original eleven — at time of writing: lua, scala, dart, gdscript, zig, sql,
+# elixir, hcl, graphql, dockerfile, powershell, bash, ...), `.get()` silently
+# fell through to the SAME fully-unscoped _COMPILED_ALL table as the
+# language=None case — the exact opposite of every entry's whole purpose
+# (BACK-431 Issue D: "a Go file can no longer be tagged 'session' by a PHP
+# builtin"). Confirmed live and corpus-verified on real Kong Lua source
+# (samples/lua/kong) before this fix: `table.insert(t, x)` — ordinary Lua
+# stdlib array-append, ubiquitous, ~80 corpus call sites — classified as
+# 'db' (matching Python/PHP's scoped bare 'insert' verb through the unscoped
+# fallback), and `select('#', ...)` — Lua's builtin vararg-count idiom —
+# likewise classified as 'db' (Python/PHP's bare 'select' verb). Every
+# not-yet-measured language was silently exposed to every OTHER language's
+# collision-prone bare verbs with zero scoping protection. Fixed: an unknown-
+# but-named language now falls back to COMMON-only (this language's real,
+# intended scope until it gets its own _TAXONOMY_BY_LANG entry), not ALL.
+_COMPILED_COMMON_ONLY: List[Tuple[str, List[List[str]]]] = _compile(_TAXONOMY_COMMON)
 
 
 # BACK-285a: receiver-shape heuristics. After full-pattern matching fails,
@@ -875,7 +1013,14 @@ def classify_call(callee: str, language: Optional[str] = None) -> Optional[str]:
     if not callee_segs:
         return None
     lang = _LANG_GROUP.get(language, language) if language else None
-    taxonomy = _COMPILED_BY_LANG.get(lang, _COMPILED_ALL) if lang else _COMPILED_ALL
+    # BACK-722: a known-but-unmapped language (e.g. lua, scala, dart, zig —
+    # any language with no _TAXONOMY_BY_LANG entry yet) scopes to COMMON
+    # only, never the fully-unscoped ALL table (see _COMPILED_COMMON_ONLY's
+    # comment). Only a genuinely omitted language (None) is unscoped.
+    if lang:
+        taxonomy = _COMPILED_BY_LANG.get(lang, _COMPILED_COMMON_ONLY)
+    else:
+        taxonomy = _COMPILED_ALL
     for kind, pattern_list in taxonomy:
         for pattern_segs in pattern_list:
             if _segments_contain(callee_segs, pattern_segs):

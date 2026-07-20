@@ -1666,13 +1666,40 @@ class TestClassifyCallLanguageScoping(unittest.TestCase):
         self.assertEqual(classify_call('db_query', language='php'), 'db')
         self.assertEqual(classify_call('die', language='rust'), 'hard_stop')
 
-    def test_unknown_language_falls_back_to_unscoped(self):
-        # 'kotlin' used to be the example here, but BACK-477 gave it a real
-        # _TAXONOMY_BY_LANG entry (and this session added csharp/ruby/cpp) —
-        # use a language still genuinely absent from the table so this keeps
-        # testing the fallback, not some language's own scoping.
+    def test_unknown_language_falls_back_to_common_only(self):
+        # BACK-722 (Lua sideeffects-recall-oracle pre-flight): a known-but-
+        # unmapped language (any language absent from _TAXONOMY_BY_LANG —
+        # 'dart' still qualifies) used to silently fall back to the FULLY
+        # UNSCOPED _COMPILED_ALL table, the same table language=None uses —
+        # confirmed live on real Kong Lua source before the fix: ordinary
+        # `table.insert(t, x)` (Lua stdlib) was classified 'db' via Python/
+        # PHP's scoped bare 'insert' verb leaking through this fallback.
+        # Fixed: an unmapped-but-named language now scopes to COMMON only
+        # (its real, intended scope until it gets its own entry) — the PHP-
+        # only 'session_start' pattern (not in COMMON) no longer leaks into
+        # a Dart file, mirroring how any other cross-language leak (Go
+        # tagged 'session' by a PHP builtin) was already prevented for
+        # every language that DOES have its own entry.
         from reveal.adapters.ast.nav_effects import classify_call
-        self.assertEqual(classify_call('session_start', language='dart'), 'session')
+        self.assertIsNone(classify_call('session_start', language='dart'))
+        # True unscoped mode (language genuinely omitted) is unaffected —
+        # this is the one case where matching every language's patterns is
+        # the documented, intended behavior.
+        self.assertEqual(classify_call('session_start', language=None), 'session')
+
+    def test_lua_stdlib_calls_not_misclassified_via_unscoped_leak(self):
+        """BACK-722: the same fallback bug, concrete real-corpus evidence.
+        `table.insert`/`table.remove` (Lua's stdlib array mutators, ~80/4
+        corpus call sites in Kong) and bare `select` (Lua's builtin vararg
+        helper, `select('#', ...)`) were all silently classified 'db' via
+        Python/PHP's scoped bare 'insert'/'select' verbs leaking through
+        the old fully-unscoped fallback -- confirmed live before the fix
+        with `reveal <file> <func> --sideeffects` on a Lua file containing
+        nothing but `table.insert(t, x)` and `select('#', x)`."""
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('table.insert', language='lua'))
+        self.assertIsNone(classify_call('table.remove', language='lua'))
+        self.assertIsNone(classify_call('select', language='lua'))
 
     def test_go_klog_glog_logrus_classified_as_log(self):
         # BACK-629 (sideeffects-recall-oracle, real-corpus measurement on
@@ -3229,6 +3256,61 @@ class TestLuaDottedFunctionNameNav(unittest.TestCase):
             nodes = analyzer._find_nodes_by_type('function_declaration')
             self.assertEqual(len(nodes), 1)
             self.assertEqual(analyzer._get_node_name(nodes[0]), 'with_worker_mutex')
+        finally:
+            import os
+            os.unlink(path)
+
+
+class TestLuaColonMethodFunctionNameNav(unittest.TestCase):
+    """Lua `function table:name(...)` (BACK-722 Lua sideeffects-recall-oracle
+    pre-flight, via real Kong source e.g. kong/db/dao/init.lua's
+    `function DAO:insert(...)`/`function DAO:select(...)`) — the colon-method
+    idiom, Lua's closest equivalent to a receiver method (implicitly takes
+    `self`). The name is a `method_index_expression`, a kind that was absent
+    from every check in TreeSitterAnalyzer._get_node_name (only its sibling
+    `dot_index_expression`, the BACK-431 fix above, was handled) — so a
+    colon-defined method had no resolvable name at all: entirely missing
+    from --outline and erroring outright on a direct bare-name lookup, even
+    though it is the DOMINANT method-definition idiom in Kong's DAO/plugin-
+    handler layers, more common in this corpus than the dot form."""
+
+    def test_get_node_name_returns_final_segment(self):
+        from reveal.registry import get_analyzer
+        import tempfile
+        code = "function connector:query(sql)\n  return self:execute(sql)\nend\n"
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            path = f.name
+        try:
+            cls = get_analyzer(path)
+            analyzer = cls(path)
+            nodes = analyzer._find_nodes_by_type('function_declaration')
+            self.assertEqual(len(nodes), 1)
+            self.assertEqual(analyzer._get_node_name(nodes[0]), 'query')
+        finally:
+            import os
+            os.unlink(path)
+
+    def test_outline_includes_colon_method(self):
+        """End-to-end: --outline/get_structure() now surfaces the colon
+        method by name (previously silently absent)."""
+        from reveal.registry import get_analyzer
+        import tempfile
+        code = (
+            "local M = {}\n"
+            "function M.dotform(x)\n  return x\nend\n"
+            "function M:colonform(y)\n  return y\nend\n"
+        )
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            path = f.name
+        try:
+            cls = get_analyzer(path)
+            analyzer = cls(path)
+            structure = analyzer.get_structure()
+            names = {fn['name'] for fn in structure.get('functions', [])}
+            self.assertIn('dotform', names)
+            self.assertIn('colonform', names)
         finally:
             import os
             os.unlink(path)
