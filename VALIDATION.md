@@ -43,7 +43,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Swift | ✅ 100% of declared targets resolved (Kickstarter iOS — module-index coverage, not an edge-recall ratio), 98.42%¹⁸ (swift-collections, 14,824 edges, BACK-704 fixed) | ✅ 100%² (Kickstarter iOS) | **Measured** |
 | Scala | ✅ 100% (GitBucket — n=1 qualifying edge), 100%¹⁵ (cats-effect, 24 edges) | — not yet run | **Measured** (import only) |
 | C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | **Measured** |
-| C | ✅ 100%⁸ (Redis, curl²¹) | — not yet run | **Measured** (import only) |
+| C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | **Measured** |
 | Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | — not yet run | **Measured** (import only) |
 | Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | — not yet run | **Measured** (import only) |
 | GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | — not yet run | **Measured** (import only) |
@@ -63,7 +63,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
    Sample column in the detailed results tables below before quoting a number.**
 2. **This table covers two signals, not all of reveal's DD output.**
    Import/dependency recall is measured on all 19 languages listed. Side-effect
-   recall is measured on 11 of them — Scala, C, Lua, Dart, GDScript, Zig, and
+   recall is measured on 12 of them — Scala, Lua, Dart, GDScript, Zig, and
    TSX/plain-JS have **no** side-effect measurement. `surface`, `contracts`,
    and `patches://`/testability have **no ground-truth validation on any
    language** — see [Scope](#scope).
@@ -72,6 +72,11 @@ is a claim we have not yet checked, **not** a claim it is broken.
    the ~180-function six-category sweeps behind Python/Ruby/C#/PHP (footnote 2).
    Java's 97.5% includes `db` and `http` categories with one oracle instance
    each, both at 0% recall — the figure is carried by env/file/log/sleep.
+4. **C's `http` category is a corpus-proven, deliberate decline, not a
+   measurement gap.** C's 92.0% figure is carried entirely by `log`/`file`/
+   `env`/`sleep` (each 100%); `http` recall is 0% because the real fix (bare
+   POSIX socket verbs) was tried and reverted after corpus-checking showed it
+   breaks classification in every other language (footnote 27).
 
 ¹ Overall TypeScript side-effect recall was 76.8%; the gap was almost entirely
 one architecturally-distinct category — Node's `process.env.X` env reads are a
@@ -598,6 +603,24 @@ deliberately excluded from ground truth, the same oracle-scope-gap shape as
 the v1 corpus's `.mm` false positives, not a resolver defect. See the
 [harness
 README](../internal-docs/planning/dogfood-findings/cpp-recall-oracle/README.md#second-corpus-back-709-overfit-guard-assimp)
+for the full write-up.
+
+²⁷ First side-effect/boundary measurement for C (BACK-718/BACK-721, twelfth
+language in the program), Redis `src/` corpus (5,073 functions). 40.18% pre-fix
+→ 91.96% post-fix: `serverLog`/`serverPanic` (Redis's own logging/fatal-error
+macros, unclassified at 800+ call sites) took `log` 0%→100%; Redis's `rio`/
+`rdbWriteRaw` persistence primitives and generic `fflush`/`setenv`/`unsetenv`/
+`nanosleep` (missing from every taxonomy table, not just C's) took `file`/
+`env`/`sleep` each to 100%. **`http` stays at 0%, declined not fixed**: a bare
+POSIX-socket addition (`connect`/`accept`/`listen`/`socket`/`send`/`recv`) was
+tried and reverted after `scripts/check_taxonomy_collisions.py` found
+catastrophic cross-language collision in `classify_call`'s unscoped mode
+(`accept` alone: 3,947 Java hits) and broke two existing hard invariants
+(`engine.connect`→db, `mailer.send`→unclassified); only the three unambiguous
+`anet*` compound wrapper names were kept. Plain C's lack of receiver/dot
+syntax means there is no way to scope a generic-English-verb pattern any
+narrower than "the whole call" — see
+[sideeffects-recall-oracle/c/C.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/c/C.md)
 for the full write-up.
 
 ## Import/Dependency Recall

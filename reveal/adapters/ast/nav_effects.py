@@ -534,6 +534,81 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             'net::http::delete', 'net::http::head',
         ]),
     ],
+    'c': [
+        # BACK-718/BACK-721 (sideeffects-recall-oracle loop, Redis `src/`
+        # corpus): plain C has no dotted-receiver syntax, so classify_call()'s
+        # segment-subsequence matching can only ever equal a bare call's
+        # WHOLE fused identifier as one token -- there is no prefix/suffix
+        # matching for camelCase-fused names (same limitation noted for C#'s
+        # SaveChangesAsync/Kotlin's executeAsOne). C had zero language-scoped
+        # entries before this loop (fell back to _TAXONOMY_COMMON only), and
+        # _TAXONOMY_COMMON's generic verbs never matched any of Redis's three
+        # dominant idioms below -- pre-fix corpus recall was 41.03% (log 0%,
+        # http 0%, file 50%).
+        #
+        # log: serverLog/serverLogRaw (server.c) is the project's own
+        # structured-logging wrapper around vsnprintf+write, used at 800+
+        # call sites -- the single largest miss in the corpus (log 0%->near
+        # total). serverPanic/_serverAssert/serverAssertWithInfo are the
+        # fatal-error counterparts (also log a message before aborting).
+        ('log', [
+            'serverlog', 'serverlograw', 'serverpanic',
+            '_serverassert', 'serverassertwithinfo',
+        ]),
+        # http: Redis has no HTTP client/server (it IS a database) -- the
+        # corpus's real network boundary is the POSIX socket API, wrapped by
+        # its own `anet*` helpers (anet.c). Only the anet* compound names are
+        # added: bare 'connect'/'accept'/'listen'/'socket'/'send'/'recv' were
+        # tried first and REVERTED after scripts/check_taxonomy_collisions.py
+        # (run against every language's real corpus, not just C's) found they
+        # are catastrophically overloaded generic English verbs elsewhere --
+        # 'accept' alone hits 3,947 Java call sites, 'connect' 3,557 C++ and
+        # 194 Go, 'send' hits every language from Swift to Ruby -- and two
+        # existing hard invariants broke in _COMPILED_ALL (unscoped) mode:
+        # `engine.connect` silently stopped classifying as 'db' (the existing
+        # _RECEIVER_TAXONOMY fallback never got a chance to run once a verb
+        # match short-circuited it) and `mailer.send` started wrongly
+        # classifying as 'http'. Plain C's lack of receiver/dot syntax means
+        # there is no way to scope these six verbs narrower than "the whole
+        # call", so -- like Go's declined bare `Do` and C++'s declined bare
+        # `Do`-shaped verbs -- they are declined outright rather than fixed.
+        # The residual http miss this leaves (raw POSIX accept/connect/send/
+        # recv calls not wrapped by an anet* helper) is real and open.
+        ('http', ['anettcpconnect', 'anetunixconnect', 'anettcpgenericconnect']),
+        # file: fopen/fwrite/fread/fclose (_TAXONOMY_COMMON) already cover
+        # Redis's plain stdio use, but its RDB/AOF persistence subsystem is
+        # built on its own `rio` (redis I/O) abstraction (rio.c) -- rioWrite/
+        # rioRead and the rioWriteBulk* family are the actual byte-level
+        # primitives; rdbWriteRaw (rdb.c) is the one-hop wrapper every
+        # rdbSave*() helper bottoms out through. (rdbSave*/rdbLoad* themselves
+        # were deliberately NOT added: they're a multi-level call chain
+        # calling each other, not a flat idiom family, and reveal only
+        # classifies direct calls -- adding the whole family would just move
+        # the miss one level down, not fix it. See the oracle's
+        # build_oracle.py for the corpus evidence this was checked against.)
+        # fflush is a standard C stdio primitive missing from
+        # _TAXONOMY_COMMON's file bucket entirely (only fopen/fwrite/fread/
+        # fclose/fputs are listed) -- real corpus misses: rio.c's
+        # rioFileFlush() wraps it directly, and redis-cli.c's interactive
+        # output path calls it 5+ times. Scoped to 'c' rather than promoted
+        # to common, matching this loop's discipline of only fixing what the
+        # corpus confirmed (same choice Go's loop made for os.Setenv/
+        # os.Environ rather than generalizing to _TAXONOMY_COMMON).
+        ('file', [
+            'riowrite', 'rioread', 'rdbwriteraw', 'fflush',
+            'riowritebulkcount', 'riowritebulkstring',
+            'riowritebulklonglong', 'riowritebulkdouble',
+        ]),
+        # setenv/unsetenv: same gap as Go's os.Setenv/os.Unsetenv miss
+        # (BACK-629) -- _TAXONOMY_COMMON only has bare getenv/putenv. Real
+        # miss: setproctitle.c's spt_copyenv() calls setenv() directly while
+        # rebuilding the environment array after clearenv().
+        ('env', ['setenv', 'unsetenv']),
+        # nanosleep: _TAXONOMY_COMMON's sleep bucket only has 'sleep'/
+        # 'usleep' -- POSIX's higher-resolution nanosleep() (used by
+        # `debug sleep` in debug.c) was unclassified.
+        ('sleep', ['nanosleep']),
+    ],
     'cpp': [
         # BACK-547 fourth language (C++ sideeffects-recall-oracle loop,
         # Godot engine `core/` corpus): 'ofstream'/'ifstream'/etc. above are

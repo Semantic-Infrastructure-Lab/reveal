@@ -148,15 +148,17 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   the *other* DD signals and in a handful of tracked residuals, so the ordering
   below is by size-of-gap rather than by continuing the import-recall sweep:
 
-  1. **Side-effect / boundary recall breadth.** Seven import-measured languages
-     have no side-effect measurement at all (Scala, C, Lua, Dart, GDScript,
-     Zig, TSX/plain-JS), and Kotlin's and Swift's ✅ each rest on a single
-     category (`db` and `http` respectively, n=20) rather than the
-     six-category sweep the other nine got. This is the largest remaining gap
-     on the signal with the highest DD consequence — "this function quietly
-     writes to a database" is the blast-radius surprise a reviewer cannot
-     miss — and the methodology is already proven, so each language is roughly
-     one session (BACK-718, children BACK-720–728).
+  1. **Side-effect / boundary recall breadth.** Six import-measured languages
+     still have no side-effect measurement at all (Scala, Lua, Dart, GDScript,
+     Zig, TSX/plain-JS — C graduated out, BACK-721: 40.18%→91.96% on Redis,
+     `http` corpus-proven undoable via bare verbs and deliberately declined),
+     and Kotlin's and Swift's ✅ each rest on a single category (`db` and
+     `http` respectively, n=20) rather than the six-category sweep the other
+     nine got. This is the largest remaining gap on the signal with the
+     highest DD consequence — "this function quietly writes to a database" is
+     the blast-radius surprise a reviewer cannot miss — and the methodology is
+     already proven, so each language is roughly one session (BACK-718,
+     children BACK-720/722–728).
   2. **Close the tracked import-recall residuals, worst first:**
      TypeScript/nest 81.21% (BACK-705 — the lowest number in VALIDATION.md, on
      a flagship language, and the one with real headroom), PHP/osCommerce

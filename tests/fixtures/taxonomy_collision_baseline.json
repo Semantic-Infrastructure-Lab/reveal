@@ -1,4 +1,203 @@
 {
+  "literal:c:env:setenv": {
+    "hits": {
+      "c": 3,
+      "cpp": 11,
+      "go": 122,
+      "lua": 123,
+      "typescript": 2,
+      "zig": 25
+    },
+    "home": "c",
+    "key": "literal:c:env:setenv",
+    "kind": "env",
+    "source": "literal",
+    "token": "setenv"
+  },
+  "literal:c:env:unsetenv": {
+    "hits": {
+      "c": 1,
+      "cpp": 1,
+      "go": 18,
+      "lua": 95,
+      "zig": 14
+    },
+    "home": "c",
+    "key": "literal:c:env:unsetenv",
+    "kind": "env",
+    "source": "literal",
+    "token": "unsetenv"
+  },
+  "literal:c:file:fflush": {
+    "hits": {
+      "c": 74,
+      "cpp": 16,
+      "php": 1
+    },
+    "home": "c",
+    "key": "literal:c:file:fflush",
+    "kind": "file",
+    "source": "literal",
+    "token": "fflush"
+  },
+  "literal:c:file:rdbwriteraw": {
+    "hits": {
+      "c": 27
+    },
+    "home": "c",
+    "key": "literal:c:file:rdbwriteraw",
+    "kind": "file",
+    "source": "literal",
+    "token": "rdbwriteraw"
+  },
+  "literal:c:file:rioread": {
+    "hits": {
+      "c": 34
+    },
+    "home": "c",
+    "key": "literal:c:file:rioread",
+    "kind": "file",
+    "source": "literal",
+    "token": "rioread"
+  },
+  "literal:c:file:riowrite": {
+    "hits": {
+      "c": 20
+    },
+    "home": "c",
+    "key": "literal:c:file:riowrite",
+    "kind": "file",
+    "source": "literal",
+    "token": "riowrite"
+  },
+  "literal:c:file:riowritebulkcount": {
+    "hits": {
+      "c": 29
+    },
+    "home": "c",
+    "key": "literal:c:file:riowritebulkcount",
+    "kind": "file",
+    "source": "literal",
+    "token": "riowritebulkcount"
+  },
+  "literal:c:file:riowritebulkdouble": {
+    "hits": {
+      "c": 4
+    },
+    "home": "c",
+    "key": "literal:c:file:riowritebulkdouble",
+    "kind": "file",
+    "source": "literal",
+    "token": "riowritebulkdouble"
+  },
+  "literal:c:file:riowritebulklonglong": {
+    "hits": {
+      "c": 23
+    },
+    "home": "c",
+    "key": "literal:c:file:riowritebulklonglong",
+    "kind": "file",
+    "source": "literal",
+    "token": "riowritebulklonglong"
+  },
+  "literal:c:file:riowritebulkstring": {
+    "hits": {
+      "c": 88
+    },
+    "home": "c",
+    "key": "literal:c:file:riowritebulkstring",
+    "kind": "file",
+    "source": "literal",
+    "token": "riowritebulkstring"
+  },
+  "literal:c:http:anettcpconnect": {
+    "hits": {},
+    "home": "c",
+    "key": "literal:c:http:anettcpconnect",
+    "kind": "http",
+    "source": "literal",
+    "token": "anettcpconnect"
+  },
+  "literal:c:http:anettcpgenericconnect": {
+    "hits": {
+      "c": 4
+    },
+    "home": "c",
+    "key": "literal:c:http:anettcpgenericconnect",
+    "kind": "http",
+    "source": "literal",
+    "token": "anettcpgenericconnect"
+  },
+  "literal:c:http:anetunixconnect": {
+    "hits": {},
+    "home": "c",
+    "key": "literal:c:http:anetunixconnect",
+    "kind": "http",
+    "source": "literal",
+    "token": "anetunixconnect"
+  },
+  "literal:c:log:_serverassert": {
+    "hits": {
+      "c": 8
+    },
+    "home": "c",
+    "key": "literal:c:log:_serverassert",
+    "kind": "log",
+    "source": "literal",
+    "token": "_serverassert"
+  },
+  "literal:c:log:serverassertwithinfo": {
+    "hits": {
+      "c": 75
+    },
+    "home": "c",
+    "key": "literal:c:log:serverassertwithinfo",
+    "kind": "log",
+    "source": "literal",
+    "token": "serverassertwithinfo"
+  },
+  "literal:c:log:serverlog": {
+    "hits": {
+      "c": 830
+    },
+    "home": "c",
+    "key": "literal:c:log:serverlog",
+    "kind": "log",
+    "source": "literal",
+    "token": "serverlog"
+  },
+  "literal:c:log:serverlograw": {
+    "hits": {
+      "c": 26
+    },
+    "home": "c",
+    "key": "literal:c:log:serverlograw",
+    "kind": "log",
+    "source": "literal",
+    "token": "serverlograw"
+  },
+  "literal:c:log:serverpanic": {
+    "hits": {
+      "c": 218
+    },
+    "home": "c",
+    "key": "literal:c:log:serverpanic",
+    "kind": "log",
+    "source": "literal",
+    "token": "serverpanic"
+  },
+  "literal:c:sleep:nanosleep": {
+    "hits": {
+      "c": 5,
+      "cpp": 1,
+      "go": 42
+    },
+    "home": "c",
+    "key": "literal:c:sleep:nanosleep",
+    "kind": "sleep",
+    "source": "literal",
+    "token": "nanosleep"
+  },
   "literal:common:cache:redis": {
     "hits": {
       "c": 348,
@@ -77,7 +276,7 @@
   },
   "literal:common:env:getenv": {
     "hits": {
-      "c": 21,
+      "c": 99,
       "cpp": 59,
       "go": 301,
       "java": 109,
@@ -86,7 +285,7 @@
       "php": 11,
       "scala": 1,
       "typescript": 27,
-      "zig": 32
+      "zig": 34
     },
     "home": "common",
     "key": "literal:common:env:getenv",
@@ -104,7 +303,7 @@
   },
   "literal:common:file:fclose": {
     "hits": {
-      "c": 68,
+      "c": 110,
       "cpp": 51,
       "php": 131
     },
@@ -116,7 +315,7 @@
   },
   "literal:common:file:fopen": {
     "hits": {
-      "c": 48,
+      "c": 139,
       "cpp": 19,
       "php": 97
     },
@@ -128,7 +327,7 @@
   },
   "literal:common:file:fputs": {
     "hits": {
-      "c": 11,
+      "c": 59,
       "cpp": 5,
       "php": 11
     },
@@ -140,7 +339,7 @@
   },
   "literal:common:file:fread": {
     "hits": {
-      "c": 21,
+      "c": 45,
       "cpp": 16,
       "javascript": 1,
       "php": 181
@@ -153,7 +352,7 @@
   },
   "literal:common:file:fwrite": {
     "hits": {
-      "c": 25,
+      "c": 84,
       "cpp": 8,
       "php": 126
     },
@@ -165,7 +364,7 @@
   },
   "literal:common:file:mkdir": {
     "hits": {
-      "c": 1,
+      "c": 2,
       "cpp": 1,
       "go": 98,
       "java": 15,
@@ -183,7 +382,7 @@
   },
   "literal:common:file:open": {
     "hits": {
-      "c": 45,
+      "c": 58,
       "cpp": 551,
       "csharp": 21,
       "dart": 35,
@@ -200,7 +399,7 @@
       "swift": 16,
       "tsx": 14,
       "typescript": 1115,
-      "zig": 40
+      "zig": 177
     },
     "home": "common",
     "key": "literal:common:file:open",
@@ -210,6 +409,7 @@
   },
   "literal:common:file:readfile": {
     "hits": {
+      "c": 4,
       "cpp": 5,
       "dart": 5,
       "go": 519,
@@ -219,7 +419,7 @@
       "php": 2,
       "tsx": 1,
       "typescript": 986,
-      "zig": 4
+      "zig": 8
     },
     "home": "common",
     "key": "literal:common:file:readfile",
@@ -229,7 +429,7 @@
   },
   "literal:common:file:rename": {
     "hits": {
-      "c": 14,
+      "c": 15,
       "cpp": 50,
       "dart": 18,
       "go": 115,
@@ -240,7 +440,8 @@
       "ruby": 10,
       "rust": 3,
       "scala": 1,
-      "typescript": 268
+      "typescript": 268,
+      "zig": 1
     },
     "home": "common",
     "key": "literal:common:file:rename",
@@ -281,7 +482,7 @@
   },
   "literal:common:file:unlink": {
     "hits": {
-      "c": 24,
+      "c": 59,
       "cpp": 8,
       "go": 54,
       "java": 8,
@@ -298,7 +499,7 @@
   },
   "literal:common:hard_stop:abort": {
     "hits": {
-      "c": 87,
+      "c": 89,
       "cpp": 59,
       "csharp": 1,
       "go": 63,
@@ -309,7 +510,7 @@
       "rust": 16,
       "tsx": 2,
       "typescript": 124,
-      "zig": 1
+      "zig": 7
     },
     "home": "common",
     "key": "literal:common:hard_stop:abort",
@@ -334,7 +535,7 @@
   },
   "literal:common:hard_stop:exit": {
     "hits": {
-      "c": 366,
+      "c": 389,
       "cpp": 62,
       "csharp": 2,
       "dart": 8,
@@ -347,7 +548,7 @@
       "ruby": 13,
       "rust": 3,
       "typescript": 327,
-      "zig": 53
+      "zig": 83
     },
     "home": "common",
     "key": "literal:common:hard_stop:exit",
@@ -372,7 +573,7 @@
   },
   "literal:common:http:header": {
     "hits": {
-      "c": 74,
+      "c": 140,
       "cpp": 441,
       "csharp": 7,
       "dart": 2,
@@ -387,7 +588,7 @@
       "scala": 2,
       "swift": 50,
       "typescript": 380,
-      "zig": 40
+      "zig": 2703
     },
     "home": "common",
     "key": "literal:common:http:header",
@@ -397,7 +598,8 @@
   },
   "literal:common:http:http_get": {
     "hits": {
-      "lua": 6
+      "lua": 6,
+      "zig": 6
     },
     "home": "common",
     "key": "literal:common:http:http_get",
@@ -406,7 +608,9 @@
     "token": "http_get"
   },
   "literal:common:http:http_post": {
-    "hits": {},
+    "hits": {
+      "zig": 3
+    },
     "home": "common",
     "key": "literal:common:http:http_post",
     "kind": "http",
@@ -415,7 +619,7 @@
   },
   "literal:common:log:log": {
     "hits": {
-      "c": 146,
+      "c": 154,
       "cpp": 315,
       "csharp": 20,
       "dart": 1091,
@@ -432,7 +636,7 @@
       "swift": 1,
       "tsx": 1,
       "typescript": 4416,
-      "zig": 1578
+      "zig": 2683
     },
     "home": "common",
     "key": "literal:common:log:log",
@@ -455,7 +659,7 @@
       "scala": 121,
       "swift": 1,
       "typescript": 1380,
-      "zig": 4
+      "zig": 5
     },
     "home": "common",
     "key": "literal:common:log:logger",
@@ -488,7 +692,7 @@
   },
   "literal:common:sleep:sleep": {
     "hits": {
-      "c": 26,
+      "c": 39,
       "cpp": 7,
       "csharp": 3,
       "go": 798,
@@ -502,7 +706,7 @@
       "swift": 15,
       "tsx": 4,
       "typescript": 39,
-      "zig": 8
+      "zig": 24
     },
     "home": "common",
     "key": "literal:common:sleep:sleep",
@@ -591,7 +795,7 @@
   },
   "literal:cpp:file:freopen": {
     "hits": {
-      "c": 1
+      "c": 4
     },
     "home": "cpp",
     "key": "literal:cpp:file:freopen",
@@ -622,6 +826,7 @@
   },
   "literal:cpp:file:get_buffer": {
     "hits": {
+      "c": 3,
       "cpp": 201
     },
     "home": "cpp",
@@ -723,7 +928,9 @@
     "token": "store_string"
   },
   "literal:cpp:http:curl_easy_init": {
-    "hits": {},
+    "hits": {
+      "c": 477
+    },
     "home": "cpp",
     "key": "literal:cpp:http:curl_easy_init",
     "kind": "http",
@@ -731,7 +938,9 @@
     "token": "curl_easy_init"
   },
   "literal:cpp:http:curl_easy_perform": {
-    "hits": {},
+    "hits": {
+      "c": 504
+    },
     "home": "cpp",
     "key": "literal:cpp:http:curl_easy_perform",
     "kind": "http",
@@ -739,7 +948,9 @@
     "token": "curl_easy_perform"
   },
   "literal:cpp:http:curl_easy_setopt": {
-    "hits": {},
+    "hits": {
+      "c": 1168
+    },
     "home": "cpp",
     "key": "literal:cpp:http:curl_easy_setopt",
     "kind": "http",
@@ -761,7 +972,8 @@
       "cpp": 117,
       "gdscript": 10,
       "javascript": 4,
-      "php": 3
+      "php": 3,
+      "zig": 19
     },
     "home": "cpp",
     "key": "literal:cpp:log:print_error",
@@ -944,7 +1156,8 @@
     "hits": {
       "csharp": 18,
       "go": 2,
-      "typescript": 1
+      "typescript": 1,
+      "zig": 2
     },
     "home": "csharp",
     "key": "literal:csharp:file:streamreader",
@@ -1148,6 +1361,7 @@
   },
   "literal:js:http:fetch": {
     "hits": {
+      "c": 6,
       "cpp": 38,
       "csharp": 78,
       "dart": 4,
@@ -1161,7 +1375,8 @@
       "rust": 10,
       "swift": 56,
       "tsx": 4,
-      "typescript": 485
+      "typescript": 485,
+      "zig": 16
     },
     "home": "js",
     "key": "literal:js:http:fetch",
@@ -1270,7 +1485,8 @@
       "java": 122,
       "javascript": 1,
       "kotlin": 1,
-      "scala": 3
+      "scala": 3,
+      "zig": 1
     },
     "home": "kotlin",
     "key": "literal:kotlin:file:copyto",
@@ -1494,7 +1710,7 @@
       "swift": 4,
       "tsx": 13,
       "typescript": 3620,
-      "zig": 41
+      "zig": 43
     },
     "home": "php",
     "key": "literal:php:db:delete",
@@ -1504,7 +1720,7 @@
   },
   "literal:php:db:execute": {
     "hits": {
-      "c": 36,
+      "c": 42,
       "cpp": 320,
       "csharp": 30,
       "dart": 76,
@@ -1518,7 +1734,7 @@
       "rust": 654,
       "scala": 26,
       "typescript": 522,
-      "zig": 72
+      "zig": 88
     },
     "home": "php",
     "key": "literal:php:db:execute",
@@ -1528,6 +1744,7 @@
   },
   "literal:php:db:fetch": {
     "hits": {
+      "c": 6,
       "cpp": 38,
       "csharp": 78,
       "dart": 4,
@@ -1541,7 +1758,8 @@
       "rust": 10,
       "swift": 56,
       "tsx": 4,
-      "typescript": 485
+      "typescript": 485,
+      "zig": 16
     },
     "home": "php",
     "key": "literal:php:db:fetch",
@@ -1566,7 +1784,7 @@
       "scala": 22,
       "swift": 34,
       "typescript": 793,
-      "zig": 17
+      "zig": 63
     },
     "home": "php",
     "key": "literal:php:db:insert",
@@ -1623,7 +1841,7 @@
   },
   "literal:php:db:query": {
     "hits": {
-      "c": 20,
+      "c": 88,
       "cpp": 88,
       "csharp": 1872,
       "dart": 44,
@@ -1639,7 +1857,7 @@
       "scala": 28,
       "swift": 124,
       "typescript": 2086,
-      "zig": 74
+      "zig": 142
     },
     "home": "php",
     "key": "literal:php:db:query",
@@ -1649,7 +1867,7 @@
   },
   "literal:php:db:select": {
     "hits": {
-      "c": 10,
+      "c": 150,
       "cpp": 750,
       "csharp": 835,
       "dart": 13,
@@ -1665,7 +1883,7 @@
       "swift": 13,
       "tsx": 55,
       "typescript": 249,
-      "zig": 59
+      "zig": 60
     },
     "home": "php",
     "key": "literal:php:db:select",
@@ -1675,7 +1893,7 @@
   },
   "literal:php:db:update": {
     "hits": {
-      "c": 40,
+      "c": 42,
       "cpp": 400,
       "csharp": 54,
       "dart": 68,
@@ -1692,7 +1910,7 @@
       "swift": 246,
       "tsx": 3,
       "typescript": 2326,
-      "zig": 196
+      "zig": 326
     },
     "home": "php",
     "key": "literal:php:db:update",
@@ -1712,7 +1930,7 @@
   },
   "literal:php:file:copy": {
     "hits": {
-      "c": 23,
+      "c": 27,
       "cpp": 433,
       "csharp": 36,
       "dart": 8,
@@ -1728,7 +1946,7 @@
       "swift": 2,
       "tsx": 14,
       "typescript": 274,
-      "zig": 91
+      "zig": 138
     },
     "home": "php",
     "key": "literal:php:file:copy",
@@ -1808,6 +2026,7 @@
   },
   "literal:php:http:mail": {
     "hits": {
+      "c": 13,
       "go": 11,
       "java": 89,
       "php": 81,
@@ -1978,7 +2197,7 @@
   },
   "literal:python:db:execute": {
     "hits": {
-      "c": 18,
+      "c": 21,
       "cpp": 160,
       "csharp": 15,
       "dart": 38,
@@ -1992,7 +2211,7 @@
       "rust": 327,
       "scala": 13,
       "typescript": 261,
-      "zig": 36
+      "zig": 44
     },
     "home": "python",
     "key": "literal:python:db:execute",
@@ -2017,7 +2236,7 @@
       "scala": 22,
       "swift": 34,
       "typescript": 793,
-      "zig": 17
+      "zig": 63
     },
     "home": "python",
     "key": "literal:python:db:insert",
@@ -2027,7 +2246,7 @@
   },
   "literal:python:db:query": {
     "hits": {
-      "c": 10,
+      "c": 44,
       "cpp": 44,
       "csharp": 936,
       "dart": 22,
@@ -2043,7 +2262,7 @@
       "scala": 14,
       "swift": 62,
       "typescript": 1043,
-      "zig": 37
+      "zig": 71
     },
     "home": "python",
     "key": "literal:python:db:query",
@@ -2053,7 +2272,7 @@
   },
   "literal:python:db:select": {
     "hits": {
-      "c": 10,
+      "c": 150,
       "cpp": 750,
       "csharp": 835,
       "dart": 13,
@@ -2069,7 +2288,7 @@
       "swift": 13,
       "tsx": 55,
       "typescript": 249,
-      "zig": 59
+      "zig": 60
     },
     "home": "python",
     "key": "literal:python:db:select",
@@ -2088,7 +2307,9 @@
     "token": "pathlib"
   },
   "literal:python:file:read_bytes": {
-    "hits": {},
+    "hits": {
+      "zig": 4
+    },
     "home": "python",
     "key": "literal:python:file:read_bytes",
     "kind": "file",
@@ -2117,7 +2338,9 @@
     "token": "shutil"
   },
   "literal:python:file:write_bytes": {
-    "hits": {},
+    "hits": {
+      "zig": 3
+    },
     "home": "python",
     "key": "literal:python:file:write_bytes",
     "kind": "file",
@@ -2156,7 +2379,7 @@
   },
   "literal:python:log:logging": {
     "hits": {
-      "c": 8,
+      "c": 10,
       "cpp": 3,
       "csharp": 64,
       "go": 453,
@@ -2167,7 +2390,7 @@
       "ruby": 8,
       "scala": 3,
       "typescript": 120,
-      "zig": 10
+      "zig": 31
     },
     "home": "python",
     "key": "literal:python:log:logging",
@@ -2253,7 +2476,8 @@
       "php": 98,
       "ruby": 6568,
       "swift": 1,
-      "typescript": 19
+      "typescript": 19,
+      "zig": 1
     },
     "home": "ruby",
     "key": "literal:ruby:db:where",
@@ -2301,7 +2525,7 @@
   },
   "literal:swift:file:write": {
     "hits": {
-      "c": 114,
+      "c": 141,
       "cpp": 601,
       "csharp": 25,
       "dart": 6,
@@ -2317,7 +2541,7 @@
       "scala": 52,
       "swift": 5,
       "typescript": 821,
-      "zig": 36
+      "zig": 301
     },
     "home": "swift",
     "key": "literal:swift:file:write",
@@ -2337,6 +2561,7 @@
   },
   "literal:swift:http:fetch": {
     "hits": {
+      "c": 6,
       "cpp": 38,
       "csharp": 78,
       "dart": 4,
@@ -2350,7 +2575,8 @@
       "rust": 10,
       "swift": 56,
       "tsx": 4,
-      "typescript": 485
+      "typescript": 485,
+      "zig": 16
     },
     "home": "swift",
     "key": "literal:swift:http:fetch",
@@ -2370,7 +2596,7 @@
   },
   "literal:swift:http:perform": {
     "hits": {
-      "c": 3,
+      "c": 8,
       "cpp": 7,
       "csharp": 32,
       "go": 28,
@@ -2496,7 +2722,8 @@
       "java": 284,
       "javascript": 4,
       "swift": 1,
-      "typescript": 16
+      "typescript": 16,
+      "zig": 4
     },
     "home": "common",
     "key": "receiver:common:env:environment",
@@ -2661,7 +2888,7 @@
       "ruby": 40,
       "scala": 7,
       "typescript": 371,
-      "zig": 1551
+      "zig": 2595
     },
     "home": "common",
     "key": "receiver:common:log:log",
