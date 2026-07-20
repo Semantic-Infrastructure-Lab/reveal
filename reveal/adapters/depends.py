@@ -751,6 +751,14 @@ class DependsAdapter(ResourceAdapter):
         # prefer an authoritative manifest mapping over the directory
         # convention (see _swift_module_for).
         manifest_dirs = self._build_manifest_module_dirs(files)
+        # BACK-669 (swift-collections second corpus): a broader, position-
+        # independent set of target NAMES declared anywhere in the manifest,
+        # unioned into project_namespaces below (not module_index) so a
+        # target reachable only through a computed `targets:` array (no
+        # literal `path:` for _build_manifest_module_dirs to resolve) is
+        # still known as real and in-tree for honest-decline purposes, even
+        # when it can't be fanned out to real files.
+        project_namespaces.update(self._build_manifest_target_names(files))
         # BACK-669: extra bare-import search roots for a multi-package monorepo
         # (RubyGems' *.gemspec + lib/, spec.load_path_manifest_glob). Built once
         # per scan, gated on the language actually being present (files may span
@@ -920,6 +928,31 @@ class DependsAdapter(ResourceAdapter):
                 dirs.append(((pkg_dir / path).resolve(), name))
         dirs.sort(key=lambda d: len(d[0].parts), reverse=True)
         return dirs
+
+    @staticmethod
+    def _build_manifest_target_names(files: List[Path]) -> Set[str]:
+        """BACK-669 (swift-collections second corpus): every target NAME
+        declared anywhere across every build manifest in the scan, via
+        :meth:`~reveal.analyzers.imports.generic._GenericTreeSitterImportExtractor.extract_manifest_target_names`
+        — a broader, position-independent sibling of
+        :meth:`_build_manifest_module_dirs`. Fed into ``project_namespaces``
+        (never into ``module_index``): a target declared via a computed
+        ``targets:`` array (no literal ``Package(targets: [...])`` for
+        :meth:`_build_manifest_module_dirs` to walk) still needs to be known
+        as "a real in-tree module" so :meth:`_GenericTreeSitterImportExtractor.is_intra_project_import`
+        can flag an import of it as reduced-confidence instead of silently
+        dropping it when the directory-convention fallback can't find it
+        (e.g. a target whose sanitized name doesn't match its own source
+        directory's name)."""
+        names: Set[str] = set()
+        for f in files:
+            spec = getattr(get_extractor(f), 'spec', None)
+            manifest = getattr(spec, 'manifest_filename', None)
+            if not manifest or f.name != manifest:
+                continue
+            extractor = get_extractor(f)
+            names.update(extractor.extract_manifest_target_names(f))
+        return names
 
     @staticmethod
     def _swift_module_for(

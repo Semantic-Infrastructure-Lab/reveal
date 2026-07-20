@@ -337,6 +337,103 @@ class TestSwiftModuleConvention:
         f = tmp_path / 'x.swift'  # created by _ext with `import Foundation`
         assert ext.extract_manifest_targets(f) == []
 
+    def test_extract_manifest_targets_falls_back_when_targets_array_is_computed(self, tmp_path):
+        """BACK-669 (swift-collections second corpus): `Package(targets:)` fed
+        a computed variable (`.map { $0.toTarget() }`, not a literal array) —
+        the direct-array walk finds nothing, so this falls back to a
+        position-independent scan for any `.target`/`.testTarget` call with
+        both a literal `name:` and a literal `path:`."""
+        ext, p = self._manifest(tmp_path, '''
+            let _targets: [Target] = [
+              .target(name: "Core", path: "Sources/Core"),
+            ].map { $0 }
+            let package = Package(name: "P", targets: _targets)
+        ''')
+        assert ext.extract_manifest_targets(p) == [('Core', 'Sources/Core', False)]
+
+    def test_extract_manifest_targets_fallback_requires_literal_path(self, tmp_path):
+        """The fallback only trusts a literal native `path:` — a custom
+        builder's differently-named relocation argument (e.g. `directory:`)
+        is NOT treated as equivalent (it's commonly just a directory
+        *segment*, not a ready-to-use relative path — see
+        `extract_manifest_target_names` for how this same case is instead
+        surfaced as an honest reduced-confidence signal)."""
+        ext, p = self._manifest(tmp_path, '''
+            let _targets: [Target] = [
+              .target(name: "_RopeModule", directory: "RopeModule"),
+            ].map { $0.toTarget() }
+            let package = Package(name: "P", targets: _targets)
+        ''')
+        assert ext.extract_manifest_targets(p) == []
+
+    def test_extract_manifest_target_names_direct_array(self, tmp_path):
+        """The broader NAME-only scan agrees with the strict scan when the
+        targets array IS a literal (no fallback needed)."""
+        ext, p = self._manifest(tmp_path, '''
+            let package = Package(
+              name: "P",
+              targets: [.target(name: "Api"), .testTarget(name: "ApiTests")]
+            )
+        ''')
+        assert ext.extract_manifest_target_names(p) == {'Api', 'ApiTests'}
+
+    def test_extract_manifest_target_names_finds_computed_array_targets(self, tmp_path):
+        """BACK-669: unlike `extract_manifest_targets`, the NAME-only scan
+        finds a target declared through a computed `targets:` array —
+        `_RopeModule`'s real failure mode: neither `extract_manifest_targets`
+        (no literal path/directory relation it can trust) nor the directory
+        convention (its on-disk dir is named `RopeModule`, not
+        `_RopeModule`) can resolve it, but this at least proves the name is
+        real and in-tree so the honest-decline guard can fire instead of
+        staying silent."""
+        ext, p = self._manifest(tmp_path, '''
+            let _targets: [Target] = [
+              .target(name: "_RopeModule", directory: "RopeModule"),
+            ].map { $0.toTarget() }
+            let package = Package(name: "P", targets: _targets)
+        ''')
+        assert ext.extract_manifest_target_names(p) == {'_RopeModule'}
+
+    def test_is_intra_project_true_when_only_manifest_target_name_known(self, tmp_path):
+        """BACK-669: `is_intra_project_import`'s Swift branch checks against
+        whatever `project_namespaces` the caller built — which, since
+        `depends.py`'s BACK-669 fix, is unioned with
+        `extract_manifest_target_names`'s broader set, not just the
+        directory-convention module_index keys. A module known only through
+        that broader set must still classify as intra-project (reduced-
+        confidence honest-decline) rather than falling through to "unknown
+        external framework"."""
+        ext = self._ext(tmp_path)
+        assert ext.is_intra_project_import(
+            self._stmt('_RopeModule'), Path('/r'),
+            project_namespaces={'RopeModule', '_RopeModule'}) is True
+
+
+class TestSwiftAttributedImport:
+    """BACK-669 (swift-collections second corpus): a declaration-level
+    attribute (`@testable`, `@_spi(...)`) directly before `import` — common
+    in real Swift test files, e.g. `@_spi(Testing) @testable import Foo`.
+    Pre-fix, `_build()`'s keyword-stripping tokenizer only popped tokens
+    exactly matching `spec.keywords`; `@testable`/`@_spi(...)` never
+    matched (an attribute's argument varies, so it can't be a fixed
+    keyword), so the whole raw statement text became `module_name` —
+    silently unresolvable, and (before the honest-decline fix above) not
+    even flagged."""
+
+    def test_testable_import_strips_attribute(self):
+        imports, _ = _extract('@testable import Foo\n', '.swift')
+        assert [i.module_name for i in imports] == ['Foo']
+
+    def test_stacked_attributes_before_import_strip_all(self):
+        """`@_spi(Testing) @testable import Foo` — two stacked attributes,
+        one of them parenthesized with an argument."""
+        imports, _ = _extract('@_spi(Testing) @testable import Foo\n', '.swift')
+        assert [i.module_name for i in imports] == ['Foo']
+
+    def test_plain_import_unaffected(self):
+        imports, _ = _extract('import Foo\n', '.swift')
+        assert [i.module_name for i in imports] == ['Foo']
+
 
 class TestPhp:
     def test_use_require_include(self):

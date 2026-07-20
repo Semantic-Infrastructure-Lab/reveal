@@ -231,6 +231,28 @@ class _ImportSpec:
             same-module references, if any exist, still show up as ordinary
             unresolved intra-project imports and are already covered by the
             existing honest-decline path.
+        strip_attribute_prefix: True when this language allows a
+            declaration-level attribute (Swift: ``@testable``, ``@_spi(Foo)``,
+            ``@_implementationOnly``, ``@preconcurrency``, …) directly before
+            the import keyword itself (BACK-669 swift-collections second-
+            corpus finding). :meth:`_build`'s keyword-stripping tokenizer
+            only pops a leading token that exactly equals one of
+            ``spec.keywords``; an attribute token isn't a fixed string (its
+            argument varies, ``@_spi(Testing)`` vs ``@_spi(Http)``) so it
+            can't be listed there, and a real test file commonly stacks two
+            (``@_spi(Testing) @testable import Foo``). Without this flag the
+            un-stripped attribute text becomes part of ``module_name``
+            itself (the whole statement, verbatim) — a garbage module name
+            that can never match a real target, silently producing zero
+            resolved edges for every such import with no honest-decline
+            warning either (the statement doesn't even reach a "know we
+            couldn't resolve this" path; it just names a module that looks
+            uniquely unresolvable). When set, any leading token starting
+            with ``@`` is stripped alongside the fixed keyword set, however
+            many are stacked, before the keyword strip loop's normal exit
+            condition is checked. False for every other language: none
+            allows a bare-``@`` token immediately before their import
+            keyword.
         convention_autoloaded: True when this language commonly resolves
             intra-project references by a file-path/name *convention* rather
             than an explicit import statement, so a low density of
@@ -503,6 +525,7 @@ class _ImportSpec:
     container_member_node_types: FrozenSet[str] = field(default_factory=frozenset)
     container_member_fallback: bool = False
     same_module_undetectable: bool = False
+    strip_attribute_prefix: bool = False
     convention_autoloaded: bool = False
     zeitwerk_convention: bool = False
     concat_relative_node_types: FrozenSet[str] = field(default_factory=frozenset)
@@ -756,7 +779,90 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                     continue  # computed target name — honest skip, never guessed
                 path = self._manifest_string_arg(node, analyzer, 'path')
                 results.append((self._sanitize_module_name(name), path, callee == 'testTarget'))
+        if results:
+            return results
+        # BACK-669 (swift-collections second corpus): `Package(targets:)`
+        # wasn't a literal array to walk — some real Package.swift files
+        # build the targets list programmatically (a small helper struct
+        # plus `.map { $0.toTarget() }`) so `targets_arr` above is never
+        # found. Fall back to a position-independent scan for any call
+        # matching `manifest_target_calls` that carries both a literal
+        # `name:` and a literal native `path:` — the same declaration-vs-
+        # reference safety `_manifest_labeled_array` gets structurally
+        # above (a `.target(name:)` *reference* inside a `dependencies:`
+        # array never also carries a `path:`). Deliberately does NOT treat
+        # a custom builder's own differently-named relocation argument
+        # (e.g. swift-collections' `directory:`) as equivalent to `path:`:
+        # a custom argument name commonly holds only a directory *segment*
+        # later joined with a Sources/Tests root by more custom code (as
+        # swift-collections' own `kind.path(for: directory)` does), not a
+        # ready-to-use relative path the way PackageDescription's real
+        # `path:` always is — treating it as one would silently resolve to
+        # the wrong directory (see `extract_manifest_target_names` for how
+        # this same case is instead surfaced as an honest reduced-
+        # confidence signal rather than guessed at here).
+        for node in analyzer._find_nodes_by_type('call_expression'):
+            callee = self._manifest_callee_name(node, analyzer)
+            if callee not in calls:
+                continue
+            name = self._manifest_string_arg(node, analyzer, 'name')
+            if not name:
+                continue  # computed target name — honest skip, never guessed
+            path = self._manifest_string_arg(node, analyzer, 'path')
+            if not path:
+                continue  # no literal native path claim — honest skip
+            results.append((self._sanitize_module_name(name), path, callee == 'testTarget'))
         return results
+
+    def extract_manifest_target_names(self, file_path: Path) -> Set[str]:
+        """Every declared target NAME anywhere in a build manifest (BACK-669
+        Swift second-corpus finding, ``swift-collections``), independent of
+        whether the call is a direct child of ``Package(targets: [...])``.
+
+        :meth:`extract_manifest_targets` requires that literal-array
+        position to safely resolve a target's real source directory — an
+        explicit ``path:`` claim needs structural certainty about *where*
+        the declaration sits, since a ``.target(name:)`` reference inside a
+        ``dependencies:`` array must never be mistaken for a declaration of
+        that target's sources. This method drops that positional
+        requirement for a narrower purpose: some real Package.swift files
+        build the ``targets:`` array *programmatically* (a small helper
+        struct plus ``.map { $0.toTarget() }``, ``swift-collections``'s
+        shape) rather than as a literal array, which makes
+        ``extract_manifest_targets`` correctly return ``[]`` for
+        resolution — but that same emptiness starves
+        :meth:`is_intra_project_import`'s honest-decline check of the only
+        signal it has for "this SwiftPM target is real but reveal couldn't
+        resolve its files" versus "this import doesn't name an in-tree
+        module at all" (the pre-fix behavior: a target whose on-disk
+        directory name doesn't match its sanitized module identifier, e.g.
+        target ``_RopeModule`` declared with ``directory: "RopeModule"``,
+        silently produced neither a resolved edge NOR a reduced-confidence
+        warning). A call matching ``spec.manifest_target_calls`` with a
+        literal ``name:`` argument is safe to harvest into a NAME-ONLY
+        existence set even out of position: unlike a ``path:`` claim, there
+        is no over-counting risk from a same-shaped *reference*, because a
+        ``.target(name: "Foo")`` naming another target inside a
+        ``dependencies:`` array names a target that is, definitionally,
+        also real and in-tree. Never used for file-membership fan-out
+        (:meth:`resolve_module_targets`) — only to widen
+        ``project_namespaces`` so an unresolvable-but-real import is
+        flagged, not silently dropped."""
+        calls = self.spec.manifest_target_calls
+        if not calls or self.spec.manifest_filename is None:
+            return set()
+        analyzer = self._get_analyzer(file_path)
+        if analyzer is None:
+            return set()
+        names: Set[str] = set()
+        for node in analyzer._find_nodes_by_type('call_expression'):
+            callee = self._manifest_callee_name(node, analyzer)
+            if callee not in calls:
+                continue
+            name = self._manifest_string_arg(node, analyzer, 'name')
+            if name:
+                names.add(self._sanitize_module_name(name))
+        return names
 
     @classmethod
     def _manifest_labeled_array(cls, call_node, analyzer, label: str):
@@ -1753,8 +1859,17 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         had_angle = '<' in text and '>' in text  # C system include marker
 
         # Strip leading keyword tokens (import / using / static / #include / ...).
+        # BACK-669 (swift-collections second corpus): a language that allows
+        # a declaration-level attribute before the import keyword itself
+        # (Swift `@testable import Foo`, possibly stacked with `@_spi(...)`)
+        # also strips any leading bare-`@` token, not just the fixed keyword
+        # set — an attribute's argument varies, so it can never be listed in
+        # `spec.keywords` as an exact string.
         tokens = text.split(' ')
-        while tokens and tokens[0] in self.spec.keywords:
+        while tokens and (
+            tokens[0] in self.spec.keywords
+            or (self.spec.strip_attribute_prefix and tokens[0].startswith('@'))
+        ):
             tokens.pop(0)
         remainder = ' '.join(tokens).strip()
         if not remainder:
@@ -2522,6 +2637,13 @@ _SWIFT_SPEC = _ImportSpec(
         'import', 'struct', 'class', 'enum', 'protocol', 'typealias',
         'func', 'let', 'var',
     }),
+    # BACK-669 (swift-collections second corpus): `@testable import Foo` /
+    # `@_spi(Testing) @testable import Foo` (real, common in test files) —
+    # an attribute's variable argument can't be a fixed `keywords` entry, so
+    # this needs its own stripping rule. See `strip_attribute_prefix`'s
+    # docstring for the pre-fix failure (whole-statement garbage module
+    # name, zero edges, no honest-decline warning either).
+    strip_attribute_prefix=True,
     # Swift `import Foo` names a module; resolves to Foo.swift only when the
     # module maps 1:1 to a single in-tree file (skipped otherwise).
     module_separator='.',

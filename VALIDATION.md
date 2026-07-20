@@ -38,9 +38,9 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁸ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | **Measured** |
 | Kotlin | ✅ 99.1% (tivi, 100%¹⁵ kotlinx.coroutines) | ✅ 100%² (tivi) | **Measured** |
 | Rust | ✅ 100% (Meilisearch, ripgrep¹⁰) | ✅ 97.4% (Meilisearch) | **Measured** |
-| C# | ✅ namespace-graph fix (Jellyfin) | ✅ 98.3% (Jellyfin) | **Measured** |
+| C# | ✅ 100%²⁰ (Jellyfin), 99.36%²⁰ (Newtonsoft.Json, BACK-702 fixed) | ✅ 98.3% (Jellyfin) | **Measured** |
 | PHP | ✅ 100% (WordPress), 74.65% (osCommerce¹³) | ✅ 97.5% (WordPress) | **Measured** |
-| Swift | ✅ 100% (Kickstarter iOS) | ✅ 100%² (Kickstarter iOS) | **Measured** |
+| Swift | ✅ 100% (Kickstarter iOS), 98.42%¹⁹ (swift-collections, BACK-704 fixed) | ✅ 100%² (Kickstarter iOS) | **Measured** |
 | Scala | ✅ 100% (GitBucket, 100%¹⁶ cats-effect) | — not yet run | **Measured** (import only) |
 | C++ | ✅ 100%³ (Godot) | ✅ 83.3% (Godot) | **Measured** |
 | C | ✅ 100%⁹ (Redis) | — not yet run | **Measured** (import only) |
@@ -328,6 +328,108 @@ in the oracle, not the product, confirming a genuine **100.00%** (3,186/
 README](../internal-docs/planning/dogfood-findings/ruby-recall-oracle/README.md#second-corpus-solidus-solidusiosolidus)
 for the full write-up.
 
+¹⁹ Overfit guard (BACK-669): re-ran the module-index oracle diff
+(`oracle_diff.py`, `swift package dump-package` ground truth) plus a new
+from-scratch file-level import/target-membership oracle (`build_oracle.py`)
+against a second, unrelated real corpus (`apple/swift-collections`, a pure
+SwiftPM *library* — no app, no UI layer — with 25 targets across
+`Sources/`/`Tests/`, deliberately different shape from Kickstarter iOS's
+big multi-target app with custom `path:` relocations; full population, not
+sampled — 696 files, 14,824 oracle edges). It did not fully generalize —
+two real gaps, both **BACK-704**. Root cause #1: `_RopeModule`, one target,
+is declared through a *programmatically built* `targets:` array (`.map {
+$0.toTarget() }`, not a literal array `Package(targets: [...])` can walk)
+whose custom relocation argument (`directory: "RopeModule"`) names a
+directory segment that doesn't match the target's own sanitized identifier
+— neither the manifest parse (honestly declines: no literal native `path:`
+it can trust) nor the directory convention (indexes the files under
+`RopeModule`, the dir name, not `_RopeModule`, the real import name) can
+resolve it, and pre-fix this was *silent*: `_unresolved_intra` never
+incremented, the same silent-negative BACK-547 exists to kill. Fixed
+partially: a new `extract_manifest_target_names` broadens the
+"target exists" scan (position-independent, name-only, no path claim) and
+widens `is_intra_project_import`'s inventory, so the 3 real
+`import _RopeModule` statements (234 file-level edges) are now an honest
+reduced-confidence decline instead of a silent miss — full resolution
+stays out of scope (the directory-segment argument would need evaluating
+arbitrary Package.swift code to resolve correctly, which the buildless
+design deliberately never does). Root cause #2 (**the larger effect**):
+`@testable import Foo` / stacked `@_spi(Testing) @testable import Foo`
+(a common real Swift test-file idiom) were not recognized at all — the
+keyword-stripping tokenizer only pops tokens matching a fixed keyword set,
+and an attribute's argument varies so it can never be listed there; the
+un-stripped attribute text became the entire `module_name`, a garbage
+string that can never match a real target. Fixed with a new
+`strip_attribute_prefix` spec flag: any leading `@`-prefixed token is
+stripped alongside the fixed keyword set. Recall: **88.57%** (13,130/
+14,824) before the attribute fix → **98.42%** (14,590/14,824) after, with
+the residual 234/234 misses all `_RopeModule` (now honestly flagged, not
+silent) and 0 elsewhere. Re-running against the original Kickstarter
+corpus after both fixes: still 100% module-index coverage, `unresolved_
+intra` still 0, and total resolved import edges rose from 384,278 to
+660,716 — the attribute-prefix fix recovers real `@testable import`
+edges (1,477 real occurrences in that corpus alone) that were previously
+silently lost there too. See the [harness
+README](../internal-docs/planning/dogfood-findings/swift-recall-oracle/README.md#second-corpus-back-669-swift-collections-overfit-guard)
+for the full write-up.
+
+²⁰ C#'s import-recall history (BACK-544 namespace index, BACK-554
+`depends://` wiring) never got a from-scratch-oracle full-population
+percentage the way every other measured language did — this closes that
+gap AND runs the BACK-669 overfit guard in the same slice. Baseline
+(Jellyfin, `samples/csharp`, 2,098 files): a from-scratch independent
+namespace/type oracle (`build_oracle.py` — C# `using`/`using static`/alias
+statements resolved via an independently regex-built namespace-declaration
+index and (namespace, type) index, never calling `depends://`'s own
+resolver) found **99.9970%** recall pre-fix (1,754 targets, 99,654 edges,
+3 missing), then **100.00%** (0 missing) after **BACK-702**. Root cause:
+`using Alias = Foo.Bar.Type;` (the dominant real alias shape, 87/96 real
+alias statements) and `using static Foo.Bar.Type;` name a specific TYPE,
+one dotted component past any namespace the tree declares — the
+namespace-fan-out index never matches, and the plain directory-suffix
+match only succeeds when the physical layout mirrors the dotted namespace
+*and* the type's filename is tree-wide unique; real multi-project C# repos
+violate both (Jellyfin's top-level dirs like `MediaBrowser.Controller`
+embed a literal `.` as one path component, and `LinkedChildType` is
+declared in two different namespaces, both under an `Entities/`
+directory, making the bare-basename fallback correctly decline on
+ambiguity). Fixed via a new `namespaced_type_fallback` spec flag reusing
+the existing Kotlin/Scala `member_index`/`resolve_member_targets`
+machinery, keyed `(namespace, type_name)` instead of `(namespace,
+symbol)`. Second corpus (overfit guard): `JamesNK/Newtonsoft.Json`, a
+single-project library (945 files) — deliberately different shape from
+Jellyfin's large multi-project ASP.NET monorepo, and (unlike Jellyfin) uses
+`#if`/`#else` multi-target-framework conditional compilation extensively
+(528/945 files), stress-testing the oracle's directive handling and
+BACK-702's fix on a much higher alias density (654 alias statements vs.
+Jellyfin's 96, 322 resolved via the new fallback). Full population: 793
+targets, 48,400 oracle edges, **99.3636%** recall (308 missing, all 308 on
+one target file), 0 false positives. The one residual — filed **BACK-703**,
+not fixed — is a genuine tree-sitter-c-sharp grammar limitation, not a
+resolver gap: `Src/Newtonsoft.Json.Tests/TestFixtureBase.cs` uses `#if
+DNXCORE50 protected TestFixtureBase() #else [SetUp] protected void
+TestSetup() #endif { ... shared body ... }` — a constructor and a method
+with DIFFERENT declaration headers sharing one body across branches (legal,
+compiles under either symbol set) — which tree-sitter's preprocessor-blind
+grammar cannot parse into any valid declaration node, producing one giant
+`ERROR` node that swallows the file's entire namespace body (namespace
+declared, but invisible to `extract_namespaces`/`extract_namespaced_type_names`
+as a result). Correctly honest-decline caveated (`confidence: reduced`,
+`undercount_possible: true`), not a silent wrong zero — verified directly.
+Only 4/945 files in the corpus hit any parse ERROR at all (0/2,098 in
+Jellyfin, which has zero `#if` usage), so this is a narrow, documented,
+out-of-scope class, not a systemic gap. Along the way, an oracle-only bug
+was found and fixed (not a `depends://` bug): the oracle's original
+`#if`/`#else` handling naively kept only the `#if` branch's statements,
+which silently dropped 37 real edges whose `using` sat in the `#else`
+branch of a legacy-condition-first `#if NET20 ... #else ... #endif` (the
+real, modern-default branch) — fixed by counting every branch's body
+unconditionally (matching reveal's own preprocessor-blind, safe-over-
+inclusion parse behavior, the same policy already established for Go's
+`//go:build` tags, BACK-685). See the [harness
+README](../internal-docs/planning/dogfood-findings/csharp-recall-oracle/README.md)
+for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -387,9 +489,12 @@ actually closes the gap without introducing false positives.
 | Rust | Meilisearch (17-crate workspace, 726 files) | Independent regex-based `use`/`Cargo.toml` parser | 30-target stratified sample, 295 edges | 59.0% → **100%** | 0 | (1) Multi-segment `crate::`/`super::` paths only ever consumed their first segment, with `super::` unconditionally failing; (2) grouped `use crate::{a,b,c}` imports matched on a keyword-typed AST node the extractor didn't recognize, silently dropping the entire statement |
 | Rust (overfit guard, BACK-669) | ripgrep (single-workspace crate, 100 files) | Same oracle, unmodified, re-run on a second corpus | Full population (small corpus), 46 targets, 100 edges | 56.0% → **100%** | 0 | A `use_list` item that is itself a nested `scoped_use_list` (`use crate::{a::{x, y}, ...}`, ripgrep's dominant `lib.rs` re-export idiom) silently dropped the whole nested item — same failure shape as the grouped-import bug above, one level deeper |
 | C# | Jellyfin, Godot C# glue | Real-corpus grep (idiom itself was fixture-only — absent from both corpora) | Fixture + incidental real-corpus hit | N/A for the target idiom | — | Investigating the (absent) target idiom surfaced that namespace fan-out was never wired into the dependency graph at all for zero-import files |
+| C# (BACK-669, missing baseline) | Jellyfin (`samples/csharp`, 2,098 files, large multi-project ASP.NET media-server monorepo) | Independent namespace/type oracle (`build_oracle.py`) — C# `using`/`using static`/alias resolved via a from-scratch regex namespace-declaration index and (namespace, type) index, never calling `depends://`'s own resolver | Full population, 1,754 targets, 99,654 edges | 99.9970% → **100.00%** (BACK-702 fixed) | 0 | `using Alias = Foo.Bar.Type;` (87/96 real alias statements) and `using static Foo.Bar.Type;` name a specific TYPE one dotted component past any namespace the tree declares — the namespace fan-out index never matches, and the directory-suffix match only succeeds when the physical layout mirrors the namespace and the type's basename is tree-wide unique; Jellyfin's per-project top-level dirs (`MediaBrowser.Controller`, a literal `.` in one path component) and a same-named `LinkedChildType` type in two different namespaces broke both. Fixed via a new `namespaced_type_fallback` spec flag reusing the existing Kotlin/Scala `member_index`/`resolve_member_targets` machinery, keyed `(namespace, type_name)` |
+| C# (overfit guard, BACK-669) | Newtonsoft.Json (single-project library, 945 files, heavy `#if`/`#else` multi-target-framework conditional compilation — 528/945 files, vs. 0/2,098 in Jellyfin) | Same oracle mechanism, unmodified resolution logic | Full population, 793 targets, 48,400 edges | **99.3636%** (0 new resolver bugs — same BACK-702 fix from the baseline slice, re-confirmed) | 0 | The one residual (308/308 misses, all on one target) is a genuine tree-sitter-c-sharp grammar limitation, not a resolver gap — `TestFixtureBase.cs` shares one method BODY between a `#if DNXCORE50` constructor header and an `#else` regular-method header, which the preprocessor-blind grammar can't parse into any declaration node, producing an `ERROR` node that swallows the file's whole namespace body; correctly honest-decline caveated (`confidence: reduced`), not a silent wrong zero. Filed **BACK-703**, not fixed (4/945 files affected, narrow and documented, same class as Go's build-tag blindness, BACK-685). Also found and fixed an oracle-only bug (not `depends://`): the oracle's original #if-branch-selection heuristic (keep only the `#if` branch) silently dropped 37 real edges sitting in a legacy-condition-first `#if NET20 ... #else ...` block's `#else` (the real modern-default branch) — fixed by counting every branch unconditionally, matching reveal's own preprocessor-blind parse behavior |
 | PHP | WordPress core (`samples/php`, 1,927 files) | Buildless `require`/`require_once`/`include`/`include_once` string-expression resolver (not `use`/namespace — see [harness README](../internal-docs/planning/dogfood-findings/php-recall-oracle/README.md) for why) | 80-target stratified sample, 442 edges | 0.00% → 33.85% (BACK-564) → **100.00%** (BACK-565) | 0 | `depends://`'s PHP resolver only recognized a bare string-literal require/include target; every real WordPress require/include uses string concatenation (`__DIR__ . 'x.php'`, `ABSPATH . WPINC . 'x.php'`, etc. — confirmed 0 bare-literal requires exist anywhere in the corpus). BACK-564 resolved the universal `__DIR__`/`dirname(__FILE__)` directory-relative idiom via a structural AST-walk extractor. BACK-565 (same session) closed the remaining majority: WordPress-specific framework-bootstrap constants (`ABSPATH`/`WPINC`/`WP_CONTENT_DIR`/`WP_PLUGIN_DIR`) are genuinely derivable — WordPress defines them in-tree via `define('ABSPATH', __DIR__ . '/')` and similar — so a project-wide constant index (built to a fixed point, since real constants chain through each other) now substitutes them into the same concatenation resolver. Constants with genuinely ambiguous `define()` values (measured: 3/50) are excluded from the index, never guessed |
 | PHP (overfit guard, BACK-669) | osCommerce (`catalog/`, 436 files) | Same require/include oracle mechanism, adapted for one corpus-specific bootstrap constant (`OSCOM_BASE_DIR`) | Full population (small corpus), 74 targets, 288 edges | 0.00% → **74.65%** (BACK-680 fixed; BACK-681 residual filed, not fixed) | 0 | The dominant real-world statement shape here — parenthesized call-style (`require('includes/foo.php');`, 534/544 statements, vs. only 10/1,521 on WordPress) — broke both the concatenation AST-walk (only checked direct children, missing a target nested inside `parenthesized_expression`) and the bare-literal `_build()` fallback (space-splitting tokenizer never matches the fused `require('...')` token). Fixed by handling the parenthesized wrapper and bare string-literal targets structurally. Residual 73/288 edges trace to explicit `chdir()`/CWD-dependent bare-literal resolution in 6 legacy extension scripts — real PHP runtime behavior a generic per-file resolver correctly declines to chase (would need actual chdir-call symbolic tracking, and a naive ancestor-directory-walk risks false positives in other codebases) — filed as BACK-681 |
 | Swift | Kickstarter iOS (`samples/swift`, 1,961 files, 8 SwiftPM packages) | `swift package dump-package` (real toolchain, target list) + independent per-file import parse | Full-tree; 21 declared targets, 164-edge precision sample | ~0% effective (123 edges / 7 dependent files) → **100% of declared targets resolved** (384,278 edges / 1,511 dependent files) | 0 (164-edge sample, none unbacked) | Swift's import granularity is the *module (SwiftPM target)*, not the file, but the resolver only matched `import Foo` → a unique `Foo.swift` — resolving ~0% of real multi-file targets, AND (worse) leaving `unresolved_intra` at 0 so no honest-decline `⚠` fired: a silent wrong "no dependents". Fixed in two buildless parts: (1) `Sources/<Target>/` directory-convention fan-out (`import Foo` → every file in target Foo, C#-namespace-style); (2) a structural `Package.swift` parse for targets that relocate sources via an explicit `path:` (real GraphAPI `path: "./Sources"`, 326 importers). The independent `dump-package` oracle caught the custom-`path:` case the directory convention alone would have silently mis-mapped |
+| Swift (overfit guard, BACK-669) | swift-collections (pure SwiftPM library, 696 files, 25 targets) | `swift package dump-package` (target→path ground truth) + independent regex import scan (`build_oracle.py`), from scratch | Full population, not sampled — 14,824 edges | 88.57% → **98.42%** (BACK-704 fixed; residual 234/234 = one target, honestly declined) | 0 | Two real gaps this pure-library, no-app corpus exercised that Kickstarter's app never did: (1) `_RopeModule`'s target is declared through a *programmatically built* `targets:` array (`.map { $0.toTarget() }`), whose custom `directory:` relocation argument names a dir that doesn't match the target's own sanitized identifier — unresolvable without evaluating arbitrary manifest code, but pre-fix also *silent* (no honest-decline warning); fixed the silence, not the resolution, via a new `extract_manifest_target_names` broader name-only scan feeding `is_intra_project_import`'s inventory; (2, the bigger effect) `@testable import Foo` / stacked `@_spi(Testing) @testable import Foo` — a common test-file idiom — wasn't recognized at all: the keyword-stripping tokenizer only pops a fixed keyword set, and an attribute's argument varies so it can't be one; the un-stripped attribute text became the whole garbage `module_name`. Fixed via a new `strip_attribute_prefix` spec flag. Re-run against Kickstarter: still 100%/0 unresolved, and total resolved edges rose 384,278 → 660,716 (recovers real `@testable import` edges silently lost there too) |
 | Lua | Kong (`samples/lua`, 1,309 `.lua` files) | Project's own `kong-latest.rockspec` `build.modules` table (authoritative dotted-module → file map) + independent regex `require(...)` scan | 30-target stratified sample (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+), 782 edges | 85.4% → 99.5% → **99.87%** | 0 | `require("a.b.c")` may name a *directory* module (`a/b/c/init.lua`, Lua's `package.path` `?/init.lua` convention) with no flat `a/b/c.lua` file at all — `_match_dotted` only ever tried appending an extension to the last dotted component, so every directory-module require silently resolved to `None`. Hit 5 real Kong targets (`kong.conf_loader`, `kong.db.declarative`, `kong.vaults.env`, `kong.dynamic_hook`, `kong.plugins.rate-limiting.policies`), each returning a confident "no dependents" despite 2-35 real importers. Fixed via a new opt-in `directory_index_filenames` spec field. Two residuals found on the same sample, both fixed in a same-program follow-up (BACK-670, which incidentally also closed BACK-671): `_longest_unique_suffix`'s bare-basename (`k=1`) fallback — shared by every `module_separator` language (Java/Kotlin/Scala/C#/PHP/Swift/Lua) — wrongly matched multi-part imports whose real qualifying prefix had already failed to match (29 false positives, e.g. external `resty.*` modules landing on same-basename in-tree `kong.tools.*` files); gated to true single-token imports only, re-measured at 99.87% with 0 new false positives, and Java/PHP/Scala re-confirmed at 100%/Kotlin at its unaffected 99.14% baseline — see [harness README](../internal-docs/planning/dogfood-findings/lua-recall-oracle/README.md) |
 | Dart | AppFlowy (`samples/dart/frontend/appflowy_flutter`, 1,974 `.dart` files, 14 in-tree packages) | Every in-tree `pubspec.yaml`'s declared `name:` → its own `lib/` (authoritative name→dir map) + independent regex `import '...'` scan | 30-target stratified sample (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+), 825 edges | 19.3% → **99.76%** (100% real — see below) | 0 | `package:<name>/x.dart` — the dominant real-world Dart import shape (5,989 of 6,290 in-tree imports in the sample corpus, vs. 301 relative imports) — had no resolution branch at all: it contains `/` and matched `_looks_like_path` before any separator logic ran, so it was always tried (and failed) as a literal file-relative path. Every `package:` self- and cross-package import in the corpus silently resolved to `None`. Fixed with a new opt-in `package_uri_scheme`/`package_manifest_filename`/`package_manifest_lib_dirname` spec triple: builds a project-wide package-name→`lib/` index from every in-tree `pubspec.yaml` (cached per scan on the shared `file_index`), the same authoritative-manifest role Lua's rockspec and Swift's `Package.swift` played. The 2 residual sampled misses were both oracle false positives — a code-generation script's `writeln('''...''')` embeds literal `import '...'` text inside a Dart template string, which tree-sitter correctly never parses as a real import (same class as Lua's `nginx_kong.lua` false positive) — so true recall on the sample is 100% (823/823 real edges) |
 | GDScript | godot-demo-projects (`samples/gdscript`, 456 `.gd` files, 138 independent Godot projects) | Independent regex scan for `preload`/`load("res://...")`, `extends "res://..."`, and `extends Foo` matched against a project-scoped `class_name Foo` index, each `res://` path resolved against its file's own nearest `project.godot` (never the whole tree) | Full census (small population: 19 distinct targets), 41 edges | 24.4% → **100%** | 0 | Two bugs: (1) `depends://`/`imports://`'s `extra_paths` construction skipped the scan root as a search path whenever it already equaled the importing file's own directory (`scan_root != base_path`) — harmless for file-relative resolvers (which try `base_path` first) but fatal for GDScript's project-root-relative `res://`, which never falls back to `base_path`; every root-level file's (`main.gd`/`game.gd`/`test.gd`-shaped) `res://` import silently failed. Fixed by always including the scan root regardless of that equality. (2) `extends Foo` naming a `class_name Foo` declared elsewhere in-tree — Godot's global class-registration convention, and the dominant edge shape measured (27 of 41) — had no resolution path: a bareword `extends` only ever matched a literal same-named file, and Godot filenames are conventionally snake_case, not the PascalCase class name. Fixed with a new opt-in `class_name_convention` flag: a project-wide `class_name` → declaring-file index (regex-scanned, cached per scan on `file_index`), tried as a fallback when the direct bare-basename match fails |
