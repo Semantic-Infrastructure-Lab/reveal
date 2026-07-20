@@ -158,6 +158,7 @@ def handle_agent_help():
     two doors to the agent guide behave identically.
     """
     from ...adapters.help import HelpAdapter
+    from ...rendering.adapters.help import _render_help_static_guide
 
     result = HelpAdapter().get_element('agent')
     if not result or 'error' in result:
@@ -165,7 +166,7 @@ def handle_agent_help():
         print(f"Error: AGENT_HELP.md not found at {agent_help_path}", file=sys.stderr)
         print("This is a bug - please report it at https://github.com/Semantic-Infrastructure-Lab/reveal/issues", file=sys.stderr)
         sys.exit(1)
-    print(result['content'])
+    _render_help_static_guide(result)
     sys.exit(0)
 
 
