@@ -1118,6 +1118,44 @@ class TestModuleResolution:
         res = self._resolve(tmp_path, 'lib/main.dart', 'lib')
         assert res['package:flutter/material.dart'] is None
 
+    def test_dart_package_uri_with_show_combinator_resolves(self, tmp_path):
+        """BACK-712 (drift second-corpus overfit-guard): a `show`/`hide`
+        combinator clause trails the quoted URI (`import 'package:x/y.dart'
+        show Foo;`) — the dominant self-limiting-import idiom in the drift
+        corpus (105 pure show/hide statements, plus more combined with `as`).
+        Before the fix, the generic strip-chars-off-both-ends path in
+        `_build` left the trailing ` show Foo` text stuck to `module_name`
+        (nothing at the *end* of the remainder was in the quote-strip set),
+        producing the garbage string `"package:x/y.dart' show Foo"` — never
+        resolves, a silent false negative. 88 of 1,039 sampled oracle edges
+        in the drift corpus were missed by this, concentrated entirely on
+        drift's own barrel file (`drift/lib/drift.dart`, the most
+        show-imported target in the corpus)."""
+        (tmp_path / 'pubspec.yaml').write_text('name: my_app\n')
+        (tmp_path / 'lib').mkdir()
+        (tmp_path / 'lib/drift.dart').write_text('class OpeningDetails {}\n')
+        (tmp_path / 'lib/executor.dart').write_text(
+            "import 'package:my_app/drift.dart' show OpeningDetails;\n"
+        )
+        res = self._resolve(tmp_path, 'lib/executor.dart', 'lib')
+        assert res['package:my_app/drift.dart'] == (
+            tmp_path / 'lib/drift.dart').resolve()
+
+    def test_dart_package_uri_with_deferred_as_combinator_resolves(self, tmp_path):
+        """Same shape as the `show` combinator, for Dart's `deferred as`
+        lazy-import clause (`import 'package:x/y.dart' deferred as y;`) —
+        the quoted URI must still resolve even with a trailing
+        `deferred as alias` clause after it."""
+        (tmp_path / 'pubspec.yaml').write_text('name: my_app\n')
+        (tmp_path / 'lib').mkdir()
+        (tmp_path / 'lib/helper.dart').write_text('class Helper {}\n')
+        (tmp_path / 'lib/main.dart').write_text(
+            "import 'package:my_app/helper.dart' deferred as helper;\n"
+        )
+        res = self._resolve(tmp_path, 'lib/main.dart', 'lib')
+        assert res['package:my_app/helper.dart'] == (
+            tmp_path / 'lib/helper.dart').resolve()
+
     def test_gdscript_extends_classname_resolves(self, tmp_path):
         """BACK-621: `extends Foo` resolves to whichever in-tree file declares
         `class_name Foo` — Godot's global class-registration convention. The

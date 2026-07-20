@@ -503,8 +503,30 @@ class _ImportSpec:
             dotted match and namespace fan-out both fail — C#-only. Shares
             :meth:`resolve_member_targets`'s split-on-last-separator lookup
             with Kotlin/Scala's member-symbol fallback (harmless overlap: the
-            two flags gate mutually exclusive language sets and populate
-            disjoint index keys).
+            two flags gate mutually exclusive index keys).
+        combinator_clause: When set, ``_build`` truncates the parsed remainder
+            at the closing quote of its leading quoted literal before
+            extracting ``module_name`` — Dart's ``show``/``hide``/``deferred
+            as`` combinators (BACK-712, second-corpus overfit-guard, drift
+            monorepo: ``import 'package:drift/drift.dart' show
+            OpeningDetails;``). Without this, the generic keyword-strip +
+            ``.strip('"\\' ')`` path only trims characters belonging to the
+            strip set off each *end* of the whole remainder — a trailing
+            ``show OpeningDetails`` has no such characters at its own end, so
+            nothing is trimmed and ``module_name`` ends up as the literal
+            garbage ``"package:drift/drift.dart' show OpeningDetails"``,
+            which starts with the ``package:`` scheme but never resolves (the
+            corrupted suffix isn't a real sub-path under any in-tree
+            package's ``lib/``) — a silent false negative, invisible to the
+            honest-decline signal for the same reason every prior loop's
+            misses were. 88 of a 30-target stratified sample's 1,039 oracle
+            edges (all on ``drift/lib/drift.dart``, drift's own barrel file
+            and the single most `show`-imported target in the corpus) were
+            missed by this before the fix. Off for every other language —
+            none of C/C++/Java/C#/PHP/Ruby/Swift/Kotlin/Scala/GDScript/Lua's
+            import grammars have a combinator clause after the module target,
+            so their remainder never has anything trailing the quote/token to
+            truncate.
     """
 
     import_node_types: FrozenSet[str]
@@ -542,6 +564,7 @@ class _ImportSpec:
     class_name_convention: bool = False
     namespaced_type_node_types: FrozenSet[str] = field(default_factory=frozenset)
     namespaced_type_fallback: bool = False
+    combinator_clause: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -1848,6 +1871,27 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 return remainder[start + 1:end].strip()
         return None
 
+    @staticmethod
+    def _strip_after_quoted_literal(remainder: str) -> str:
+        """Truncate at the closing quote of a leading quoted literal.
+
+        Drops any trailing combinator clause (Dart's ``show Foo, hide Bar``/
+        ``deferred as alias``) that the generic strip-chars-off-both-ends
+        path in :meth:`_build` can't remove, since those characters sit at
+        the *end* of the whole remainder, not adjacent to the quote. A
+        remainder that doesn't start with a quote (or has no matching close)
+        is returned unchanged — callers still fall back to the ordinary
+        strip-chars path.
+        """
+        remainder = remainder.strip()
+        if not remainder or remainder[0] not in ('"', "'"):
+            return remainder
+        quote = remainder[0]
+        end = remainder.find(quote, 1)
+        if end == -1:
+            return remainder
+        return remainder[:end + 1]
+
     def _build(self, raw: str, node, file_path: Path) -> Optional[ImportStatement]:
         """Parse cleaned source text into an ImportStatement (data-driven)."""
         source_line = raw.strip()
@@ -1885,6 +1929,9 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             left, right = remainder.split('=', 1)
             alias = left.strip()
             remainder = right.strip()
+
+        if self.spec.combinator_clause:
+            remainder = self._strip_after_quoted_literal(remainder)
 
         # For a C/C++ include, extract exactly what's between the delimiters —
         # `<...>` for a system include or `"..."` for a local one — up to the
@@ -2779,6 +2826,10 @@ _DART_SPEC = _ImportSpec(
     package_uri_scheme='package:',
     package_manifest_filename='pubspec.yaml',
     package_manifest_lib_dirname='lib',
+    # BACK-712 (drift second-corpus overfit-guard): `show`/`hide`/`deferred
+    # as` combinator clauses trail the quoted URI and corrupt module_name if
+    # left in the parsed remainder — see combinator_clause's docstring.
+    combinator_clause=True,
 )
 
 _GDSCRIPT_SPEC = _ImportSpec(

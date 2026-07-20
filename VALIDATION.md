@@ -45,7 +45,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | C++ | ✅ 100%³ (Godot) | ✅ 83.3% (Godot) | **Measured** |
 | C | ✅ 100%⁹ (Redis, curl²²) | — not yet run | **Measured** (import only) |
 | Lua | ✅ 99.87% (Kong, 99.33%²³ AwesomeWM) | — not yet run | **Measured** (import only) |
-| Dart | ✅ 100%⁵ (AppFlowy) | — not yet run | **Measured** (import only) |
+| Dart | ✅ 100%⁵ (AppFlowy), 100%²⁴ (drift) | — not yet run | **Measured** (import only) |
 | GDScript | ✅ 100%⁶ (godot-demo-projects) | — not yet run | **Measured** (import only) |
 | Zig | ✅ 100%⁷ (ghostty, TigerBeetle²¹) | — not yet run | **Measured** (import only) |
 | TSX, plain JS | ✅ 100%⁸ (Excalidraw, three.js) | — not yet run | **Measured** (import only) |
@@ -493,6 +493,41 @@ real git-repo-bounded project would hit). 2 new regression tests
 targeted suite (240 tests) green, Kong re-measured unchanged at 99.87%. See
 the [harness
 README](../internal-docs/planning/dogfood-findings/lua-recall-oracle/README.md#second-corpus-back-711-overfit-guard-awesomewm)
+for the full write-up.
+
+²⁴ Overfit guard (BACK-712, child of BACK-708): re-ran the same
+independent-regex oracle method against a second, unrelated real corpus
+(drift, a SQL-code-generation package — 1,171 files, 32 in-tree pubspec.yaml
+packages under one melos workspace, vs. AppFlowy's 14 packages under a single
+Flutter app). Baseline sampled recall was 91.24% (948/1,039 edges, 30-target
+stratified sample): a real bug, concentrated almost entirely (88 of 91
+misses) on drift's own barrel file (`drift/lib/drift.dart`). Root cause: a
+`show`/`hide`/`deferred as` combinator clause trailing the quoted import URI
+(`import 'package:drift/drift.dart' show OpeningDetails;` — 105 pure
+show/hide statements in the corpus, plus more combined with `as`) was never
+stripped before quote extraction. The generic `_build` parser's
+strip-chars-off-both-ends pass only trims characters in the quote-strip set
+from each *end* of the whole remainder; the trailing clause's characters sit
+at the end instead, so nothing was trimmed and `module_name` ended up as the
+literal garbage `"package:drift/drift.dart' show OpeningDetails"` — still
+`package:`-prefixed enough to dispatch into `_resolve_package_uri`, but the
+corrupted sub-path never matched a real file, so it silently returned `None`.
+Fixed with a new opt-in `combinator_clause` spec flag: when set, `_build`
+truncates the parsed remainder at the closing quote of its leading quoted
+literal before extracting `module_name`, dropping any trailing clause
+regardless of which keyword it uses. Re-measured: **96.63%** (1,004/1,039).
+The residual 35 misses are all oracle false positives, the same class
+AppFlowy's loop already documented — `drift_dev`'s own analyzer test suite
+uses a `TestBackend.inTest({...})` virtual-file idiom that embeds literal
+`import '...'` text inside Dart string-literal fixtures (`'a|lib/db.dart':
+'''\nimport 'package:drift/drift.dart';\n...\n'''`), which tree-sitter
+correctly never parses as a real import but the oracle's naive line-regex
+does — **true recall on the sample is 100%** (real edges). 2 new regression
+tests (`test_dart_package_uri_with_show_combinator_resolves`,
+`test_dart_package_uri_with_deferred_as_combinator_resolves`), full targeted
+suite (242 tests) green, AppFlowy re-measured unchanged at 99.76%. See the
+[harness
+README](../internal-docs/planning/dogfood-findings/dart-recall-oracle/README.md#second-corpus-back-712-overfit-guard-drift)
 for the full write-up.
 
 ## Import/Dependency Recall
