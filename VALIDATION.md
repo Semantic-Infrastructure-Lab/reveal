@@ -46,7 +46,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | C | ✅ 100%⁹ (Redis, curl²²) | — not yet run | **Measured** (import only) |
 | Lua | ✅ 99.87% (Kong, 99.33%²³ AwesomeWM) | — not yet run | **Measured** (import only) |
 | Dart | ✅ 100%⁵ (AppFlowy), 100%²⁴ (drift) | — not yet run | **Measured** (import only) |
-| GDScript | ✅ 100%⁶ (godot-demo-projects) | — not yet run | **Measured** (import only) |
+| GDScript | ✅ 100%⁶ (godot-demo-projects), 100%²⁵ (Pixelorama) | — not yet run | **Measured** (import only) |
 | Zig | ✅ 100%⁷ (ghostty, TigerBeetle²¹) | — not yet run | **Measured** (import only) |
 | TSX, plain JS | ✅ 100%⁸ (Excalidraw, three.js) | — not yet run | **Measured** (import only) |
 
@@ -528,6 +528,20 @@ tests (`test_dart_package_uri_with_show_combinator_resolves`,
 suite (242 tests) green, AppFlowy re-measured unchanged at 99.76%. See the
 [harness
 README](../internal-docs/planning/dogfood-findings/dart-recall-oracle/README.md#second-corpus-back-712-overfit-guard-drift)
+for the full write-up.
+
+²⁵ Overfit guard (BACK-713, child of BACK-708): re-ran the same
+independent-regex oracle method against a second, deliberately
+differently-shaped corpus (Pixelorama, a pixel-art editor — 247 `.gd` files
+under a single `project.godot`, vs. godot-demo-projects' 138 independent
+Godot projects living side by side in one tree). Full census (small
+population): 17 distinct targets, 63 edges, of which 58 (92%) resolve via
+the `class_name`-based `extends` convention — the dominant edge shape here,
+more so than in the v1 corpus. **100%** recall (63/63), no fix needed: the
+single-project shape confirms the `class_name_convention` resolution fix
+(from the v1 loop) generalizes correctly outside the many-independent-projects
+topology it was built against. See the [harness
+README](../internal-docs/planning/dogfood-findings/gdscript-recall-oracle/README.md#second-corpus-back-713-overfit-guard-pixelorama)
 for the full write-up.
 
 ## Import/Dependency Recall
