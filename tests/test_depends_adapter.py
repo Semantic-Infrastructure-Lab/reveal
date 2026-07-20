@@ -523,6 +523,94 @@ class TestDependsAdapterCSharpNamespaceFanout:
         assert r['_meta']['confidence'] == 'reduced'
 
 
+class TestDependsAdapterCSharpNamespacedTypeFallback:
+    """BACK-669 C# recall loop (real-corpus full-population diff against
+    Jellyfin): `using static Foo.Bar.Type;` and `using Alias = Foo.Bar.Type;`
+    name a specific TYPE, one dotted component longer than any namespace the
+    tree declares — resolve_namespace_targets (BACK-544/554) never matches,
+    and the plain dotted-suffix match only succeeds when the physical
+    directory layout mirrors the namespace *and* the type's filename is
+    tree-wide unique. Real Jellyfin corpus: `LinkedChildType` is declared in
+    two different namespaces (a DB entity and a domain entity, both nested
+    under an `Entities/` directory) — the ambiguous-basename case below
+    reproduces that exact shape."""
+
+    def test_type_alias_to_ambiguous_basename_resolves_via_namespace(self, tmp_path):
+        """Two same-named types in different namespaces (ambiguous by
+        filename alone) — `using Alias = Namespace.Type;` must still resolve
+        to the ONE file whose declared namespace actually matches, not
+        silently decline just because the bare basename is ambiguous.
+
+        Physical directories (`ProjA`/`ProjB`) deliberately do NOT mirror
+        the dotted namespace (`Db`/`Domain`) — real multi-project C# repos
+        commonly don't (Jellyfin's own top-level dirs, e.g.
+        `MediaBrowser.Controller`, embed a literal `.` as ONE path
+        component, never nesting per namespace segment) — so every
+        directory-suffix match length collides at the last two components
+        (`Entities/LinkedChildType.cs`) shared by both files, forcing the
+        pre-fix ambiguous-basename decline this test guards against."""
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'ProjA' / 'Entities' / 'LinkedChildType.cs',
+               "namespace MyApp.Db.Entities\n{\n    public enum LinkedChildType { A }\n}\n")
+        _write(tmp_path / 'ProjB' / 'Entities' / 'LinkedChildType.cs',
+               "namespace MyApp.Domain.Entities\n{\n    public enum LinkedChildType { B }\n}\n")
+        _write(tmp_path / 'Consumer.cs',
+               "using DbType = MyApp.Db.Entities.LinkedChildType;\n\n"
+               "namespace MyApp\n{\n    public class Consumer { DbType t; }\n}\n")
+        (tmp_path / 'App.sln').write_text('')
+
+        r_db = DependsAdapter(str(tmp_path / 'ProjA' / 'Entities' / 'LinkedChildType.cs')).get_structure()
+        assert r_db['count'] == 1
+        assert Path(r_db['dependents'][0]['file']).name == 'Consumer.cs'
+
+        # The OTHER same-named type must NOT pick up this edge (no over-fan-out).
+        r_domain = DependsAdapter(str(tmp_path / 'ProjB' / 'Entities' / 'LinkedChildType.cs')).get_structure()
+        assert r_domain['count'] == 0
+
+    def test_using_static_resolves_to_declaring_type(self, tmp_path):
+        """`using static Foo.Bar.Helpers;` imports Helpers' static members —
+        must resolve to the file declaring `class Helpers` in namespace
+        `Foo.Bar`, not just a bare-basename guess.
+
+        Physical directory (`src`) deliberately does not mirror the
+        namespace (`MyApp.Util`) at all, so the plain directory-suffix match
+        cannot resolve this by coincidence — only the namespaced-type
+        (namespace, type) index this fix adds can."""
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'src' / 'Helpers.cs',
+               "namespace MyApp.Util\n{\n    public static class Helpers { public static void Do() {} }\n}\n")
+        _write(tmp_path / 'Program.cs',
+               "using static MyApp.Util.Helpers;\n\n"
+               "namespace MyApp\n{\n    public class Program { void M() { Do(); } }\n}\n")
+        (tmp_path / 'App.sln').write_text('')
+        r = DependsAdapter(str(tmp_path / 'src' / 'Helpers.cs')).get_structure()
+        assert r['count'] == 1
+        assert Path(r['dependents'][0]['file']).name == 'Program.cs'
+
+    def test_nested_type_not_indexed_as_top_level(self, tmp_path):
+        """A type nested inside another type's body must NOT enter the
+        (namespace, type) index — `Outer.Inner` is a distinct, unimplemented
+        member-peel idiom this fallback does not model; indexing it under
+        the enclosing namespace alone would risk a same-name collision with
+        an unrelated top-level type."""
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'Outer.cs',
+               "namespace MyApp\n{\n"
+               "    public class Outer\n    {\n"
+               "        public class Inner {}\n"
+               "    }\n"
+               "}\n")
+        _write(tmp_path / 'Consumer.cs',
+               "using static MyApp.Outer.Inner;\n\n"
+               "namespace MyApp.Other\n{\n    public class Consumer {}\n}\n")
+        (tmp_path / 'App.sln').write_text('')
+        r = DependsAdapter(str(tmp_path / 'Outer.cs')).get_structure()
+        # The nested Inner type is not indexed under ('MyApp', 'Inner'), so
+        # this correctly falls through to the honest-decline caveat rather
+        # than a fabricated/guessed edge.
+        assert r['count'] == 0
+
+
 class TestDependsAdapterDirectoryTarget:
     """Directory target: depends://pkg/ — reverse dependency summary."""
 
@@ -1910,6 +1998,83 @@ class TestDependsAdapterSwiftModuleFanout:
         for p in idx.module_index['Api']:
             assert p.exists()
             assert 'Sources' in p.parts
+
+
+class TestDependsAdapterSwiftManifestTargetNameHonestDecline:
+    """BACK-669 (swift-collections second-corpus overfit guard): a target
+    declared through a *computed* `targets:` array (`.map { $0.toTarget()
+    }`, not a literal array) whose custom relocation argument uses a
+    directory segment that differs from the target's own sanitized name
+    (real case: swift-collections' `_RopeModule` target, on-disk directory
+    `Sources/RopeModule`). Neither `extract_manifest_targets` (no literal
+    native `path:` it can trust) nor the directory convention (indexes it
+    under `RopeModule`, the dir name, not `_RopeModule`, the import name)
+    can resolve `import _RopeModule` — but pre-fix, it also failed to trip
+    `_unresolved_intra`, the exact silent-negative BACK-547 exists to kill:
+    zero dependents, reported with full confidence, for a real in-tree
+    import. Post-fix, `extract_manifest_target_names`'s broader scan widens
+    `project_namespaces` so this is at least an honest reduced-confidence
+    decline."""
+
+    def _workspace(self, tmp_path: Path) -> Path:
+        root = tmp_path
+        _write(root / 'Package.swift', '''
+            // swift-tools-version:5.9
+            struct Custom {
+              static func target(name: String, directory: String) -> Custom {
+                Custom()
+              }
+            }
+            let _targets: [Custom] = [
+              .target(name: "_RopeModule", directory: "RopeModule"),
+            ].map { $0 }
+            let package = Package(name: "P", targets: [])
+        ''')
+        # On-disk dir name ("RopeModule") differs from the target's own
+        # sanitized module identifier ("_RopeModule") — the mismatch class
+        # this whole slice is about.
+        _write(root / 'Sources' / 'RopeModule' / 'Rope.swift', 'public struct Rope {}\n')
+        _write(root / 'Sources' / 'App' / 'Main.swift',
+               'import _RopeModule\npublic struct Main {}\n')
+        return root
+
+    def test_unresolvable_manifest_import_trips_honest_decline(self, tmp_path):
+        """The `import _RopeModule` statement can't be resolved to real
+        files, but it MUST still increment `_unresolved_intra` — the
+        reduced-confidence signal — instead of silently vanishing."""
+        from reveal.adapters.depends import DependsAdapter
+        root = self._workspace(tmp_path)
+        a = DependsAdapter(str(root / 'Sources' / 'App' / 'Main.swift'))
+        a.get_structure()
+        assert a._unresolved_intra >= 1
+
+    def test_known_external_module_still_no_false_decline(self, tmp_path):
+        """Widening project_namespaces with manifest target names must not
+        make a genuinely external import (Foundation) start tripping the
+        guard — the fix only widens the in-tree inventory, never narrows
+        what counts as external. Uses a separate, clean workspace (no
+        unresolvable `_RopeModule` import anywhere in the scanned tree) so
+        the assertion isn't confounded by the OTHER test's known-honest
+        decline elsewhere in the same scan."""
+        from reveal.adapters.depends import DependsAdapter
+        root = tmp_path
+        _write(root / 'Package.swift', '''
+            // swift-tools-version:5.9
+            struct Custom {
+              static func target(name: String, directory: String) -> Custom {
+                Custom()
+              }
+            }
+            let _targets: [Custom] = [
+              .target(name: "_RopeModule", directory: "RopeModule"),
+            ].map { $0 }
+            let package = Package(name: "P", targets: [])
+        ''')
+        _write(root / 'Sources' / 'RopeModule' / 'Rope.swift', 'public struct Rope {}\n')
+        _write(root / 'Sources' / 'App' / 'Other.swift', 'import Foundation\n')
+        a = DependsAdapter(str(root / 'Sources' / 'App' / 'Other.swift'))
+        a.get_structure()
+        assert a._unresolved_intra == 0
 
 
 class TestRelativeFromImportMixedSymbolSubmodule:

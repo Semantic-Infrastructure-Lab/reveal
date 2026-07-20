@@ -60,6 +60,7 @@ from typing import ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from ...core import node_children as _children
 from ...core import tree_root
+from ...core.treesitter_compat import _zero_arg
 from ...registry import get_analyzer
 from ...utils.path_utils import is_skippable_dir
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
@@ -444,6 +445,44 @@ class _ImportSpec:
             [index_filename]`` for each filename in this set via the same
             longest-unique-suffix machinery (never fabricating an edge — still
             skipped on ambiguity). Empty for every other language.
+        namespaced_type_node_types: Node ``kind()`` value(s) for a top-level
+            *type* declaration whose ``(declared-namespace, type-name)`` pair
+            should be indexed for qualified-reference resolution beyond a
+            plain ``using Namespace;`` — C#'s ``class``/``interface``/
+            ``struct``/``record``/``enum`` declarations (BACK-669 C# recall
+            loop). C# has two real ``using`` idioms whose target names a
+            *specific type*, not a namespace: ``using static Foo.Bar.Type;``
+            (imports one type's static members) and ``using Alias =
+            Foo.Bar.Type;`` (a type alias — the dominant real shape, 87 of 96
+            alias statements in the Jellyfin corpus). Both produce a
+            ``module_name`` one component longer than any namespace the tree
+            declares, so :meth:`resolve_namespace_targets` never matches, and
+            :meth:`_resolve_dotted`'s directory-suffix match only succeeds
+            when the physical directory layout happens to mirror the dotted
+            namespace *and* the type's filename is unique tree-wide — real
+            multi-project C# repos commonly violate both (a top-level
+            directory named ``Project.SubProject`` embeds a literal ``.`` as
+            one path component, not a nested ``Project/SubProject/``; and a
+            same-named type in two different namespaces, e.g. a DTO/entity
+            pair, makes the basename ambiguous). Reuses the same
+            ``member_index``/:meth:`resolve_member_targets` machinery
+            Kotlin/Scala's member-symbol fallback already built — feeds
+            ``member_index[(declared_namespace, type_name)]`` the same way
+            :meth:`extract_top_level_members` feeds
+            ``member_index[(declared_namespace, function_name)]`` — gated by
+            ``namespaced_type_fallback`` below so it's a no-op for every
+            other language. Only a genuinely top-level type counts (parent is
+            the namespace/compilation-unit level, not another type's body) —
+            a nested type is out of scope for this fallback (its own
+            enclosing-type peel is a distinct, unimplemented idiom, same as
+            Java's ``nested_member_fallback`` which C# doesn't opt into).
+        namespaced_type_fallback: True to use the ``(namespace, type)``
+            member-index fallback above as a last resort when the direct
+            dotted match and namespace fan-out both fail — C#-only. Shares
+            :meth:`resolve_member_targets`'s split-on-last-separator lookup
+            with Kotlin/Scala's member-symbol fallback (harmless overlap: the
+            two flags gate mutually exclusive language sets and populate
+            disjoint index keys).
     """
 
     import_node_types: FrozenSet[str]
@@ -478,6 +517,8 @@ class _ImportSpec:
     load_path_lib_dirname: Optional[str] = None
     directory_index_filenames: FrozenSet[str] = field(default_factory=frozenset)
     class_name_convention: bool = False
+    namespaced_type_node_types: FrozenSet[str] = field(default_factory=frozenset)
+    namespaced_type_fallback: bool = False
 
 
 class _GenericTreeSitterImportExtractor(LanguageExtractor):
@@ -927,6 +968,63 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 return child
         return None
 
+    def extract_namespaced_type_names(self, file_path: Path) -> List[str]:
+        """Names of genuinely top-level ``class``/``interface``/``struct``/
+        ``record``/``enum`` declarations in this file — C#'s
+        ``namespaced_type_fallback`` idiom (BACK-669 C# recall loop).
+
+        Paired by the caller with :meth:`extract_namespaces` into the same
+        ``member_index[(namespace, type_name)] -> [files]`` shape Kotlin's
+        free-function fallback already populates, so ``using static
+        Foo.Bar.Type;`` / ``using Alias = Foo.Bar.Type;`` resolve via
+        :meth:`resolve_member_targets` with no new index or resolution
+        method needed.
+
+        No-op (``[]``) unless ``spec.namespaced_type_node_types`` is set. A
+        node only counts when it is genuinely top-level: its parent is the
+        ``compilation_unit`` (C# 10 file-scoped ``namespace X.Y;``) or a
+        ``declaration_list`` whose own parent is a
+        ``namespace_declaration``/``file_scoped_namespace_declaration``
+        (classic block-scoped ``namespace X.Y { ... }``) — never a type
+        nested inside another type's body, which names a *member of* the
+        enclosing type (``Outer.Inner``), a distinct and unimplemented idiom
+        this fallback does not model (same scope boundary Java's
+        ``nested_member_fallback`` draws, which C# doesn't opt into).
+        """
+        if not self.spec.namespaced_type_node_types:
+            return []
+        analyzer = self._get_analyzer(file_path)
+        if analyzer is None:
+            return []
+        names: List[str] = []
+        for node_type in self.spec.namespaced_type_node_types:
+            for node in analyzer._find_nodes_by_type(node_type):
+                if not self._is_top_level_namespaced_type(node):
+                    continue
+                name = self._direct_identifier_name(node, analyzer)
+                if name:
+                    names.append(name)
+        return names
+
+    _NAMESPACE_BODY_KINDS: ClassVar[FrozenSet[str]] = frozenset({
+        'namespace_declaration', 'file_scoped_namespace_declaration',
+    })
+
+    @classmethod
+    def _is_top_level_namespaced_type(cls, node) -> bool:
+        """True when *node* (a type declaration) sits directly under the
+        compilation unit or a namespace body — not nested inside another
+        type's own body. See :meth:`extract_namespaced_type_names`."""
+        parent = node.parent()
+        if parent is None:
+            return False
+        if _zero_arg(parent, 'kind') == 'compilation_unit':
+            return True
+        if _zero_arg(parent, 'kind') == 'declaration_list':
+            grandparent = parent.parent()
+            return grandparent is not None and _zero_arg(grandparent, 'kind') in cls._NAMESPACE_BODY_KINDS
+        return False
+
     def resolve_member_targets(
         self,
         stmt: ImportStatement,
@@ -935,23 +1033,30 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         """Every in-tree file declaring the top-level symbol ``stmt`` imports.
 
         Last-resort fallback for Kotlin's free-function/property import idiom
-        (BACK-547 measurement loop) *and* Scala's lowerCamelCase-container
-        member idiom (BACK-557) — both populate the same ``(package, symbol)``
-        shaped index (Scala's ``package`` component is synthesized as
-        ``declared_package + separator + containerName`` by the caller, so
-        the lookup here is identical either way). Splits ``stmt.module_name``
+        (BACK-547 measurement loop), Scala's lowerCamelCase-container member
+        idiom (BACK-557), *and* C#'s ``using static``/type-alias idiom
+        (BACK-669) — all three populate the same ``(package, symbol)`` shaped
+        index (Scala's ``package`` component is synthesized as
+        ``declared_package + separator + containerName`` by the caller, and
+        C#'s ``symbol`` is a type name rather than a function/property, but
+        the lookup shape is identical either way). Splits ``stmt.module_name``
         into ``(package, symbol)`` on ``spec.module_separator`` and looks up
         the content-scanned index built from :meth:`extract_top_level_members`
-        / :meth:`extract_container_members` + :meth:`extract_namespaces`.
-        Fans out to every declaring file the same way
-        :meth:`resolve_namespace_targets` does — a same-named top-level
-        overload can legitimately be declared in more than one file (e.g. one
-        ``asImageModel`` extension per receiver type in a shared package), and
-        without type inference there is no principled way to pick one, so
+        / :meth:`extract_container_members` / :meth:`extract_namespaced_type_names`
+        + :meth:`extract_namespaces`. Fans out to every declaring file the
+        same way :meth:`resolve_namespace_targets` does — a same-named
+        top-level overload/type can legitimately be declared in more than one
+        file (e.g. one ``asImageModel`` extension per receiver type in a
+        shared package, or a same-named DTO/entity pair in two namespaces),
+        and without type inference there is no principled way to pick one, so
         this reports all of them rather than guessing or skipping. Honest-skip
         contract holds: an unindexed ``(package, symbol)`` returns ``[]``.
         """
-        if not self.spec.member_symbol_fallback and not self.spec.container_member_fallback:
+        if not (
+            self.spec.member_symbol_fallback
+            or self.spec.container_member_fallback
+            or self.spec.namespaced_type_fallback
+        ):
             return []
         sep = self.spec.module_separator
         module = stmt.module_name
@@ -2324,6 +2429,23 @@ _CSHARP_SPEC = _ImportSpec(
     package_node_types=frozenset({
         'namespace_declaration', 'file_scoped_namespace_declaration',
     }),
+    # BACK-669 C# recall loop (Jellyfin, real-corpus full-population diff):
+    # `using static Foo.Bar.Type;` and `using Alias = Foo.Bar.Type;` (the
+    # latter the dominant real shape, 87/96 real alias statements) name a
+    # specific TYPE, not a namespace — resolve_namespace_targets above never
+    # matches (the target has one extra dotted component), and the plain
+    # dotted-suffix match only succeeds when the directory layout mirrors the
+    # namespace AND the type's filename is tree-wide unique. Found missing 2
+    # real edges (3 importer edges) this way: `LinkedChildType` is declared
+    # in two different namespaces/files (a DB entity and a domain entity,
+    # both under an `Entities/` directory), so the bare-basename fallback
+    # correctly declines on ambiguity — only a namespace-scoped type index
+    # can disambiguate. See namespaced_type_node_types/namespaced_type_fallback.
+    namespaced_type_node_types=frozenset({
+        'class_declaration', 'interface_declaration', 'struct_declaration',
+        'record_declaration', 'enum_declaration',
+    }),
+    namespaced_type_fallback=True,
 )
 
 _PHP_SPEC = _ImportSpec(

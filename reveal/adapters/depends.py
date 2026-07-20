@@ -821,6 +821,22 @@ class DependsAdapter(ResourceAdapter):
                         for ns in declared:
                             key = (f'{ns}{sep}{container_name}', symbol)
                             member_index.setdefault(key, []).append(file_path)
+                if getattr(spec, 'namespaced_type_fallback', False) and declared:
+                    # BACK-669 C# recall loop: `using static Foo.Bar.Type;` /
+                    # `using Alias = Foo.Bar.Type;` name a specific TYPE, one
+                    # dotted component longer than any namespace the tree
+                    # declares — resolve_namespace_targets never matches, and
+                    # the plain dotted-suffix match only succeeds when the
+                    # directory layout mirrors the namespace and the type's
+                    # filename is tree-wide unique (real Jellyfin corpus:
+                    # `LinkedChildType` is declared in two different
+                    # namespaces, both under an `Entities/` dir, so the
+                    # bare-basename match correctly declines on ambiguity).
+                    # Reuses the same (namespace, symbol) member_index shape
+                    # member_symbol_fallback populates above.
+                    for typename in extractor.extract_namespaced_type_names(file_path):
+                        for ns in declared:
+                            member_index.setdefault((ns, typename), []).append(file_path)
 
         return _ResolutionIndices(
             all_imports=all_imports,
@@ -1005,7 +1021,8 @@ class DependsAdapter(ResourceAdapter):
                     added = True
         if not added and indices.member_index and (
                 getattr(spec, 'member_symbol_fallback', False)
-                or getattr(spec, 'container_member_fallback', False)):
+                or getattr(spec, 'container_member_fallback', False)
+                or getattr(spec, 'namespaced_type_fallback', False)):
             # BACK-547 Kotlin measurement loop: `import a.b.foo` for a
             # top-level fun/val/var — the direct dotted match above
             # looked for `foo.kt` and failed, and BACK-551's
@@ -1014,7 +1031,11 @@ class DependsAdapter(ResourceAdapter):
             # BACK-557 Scala measurement loop: same fallback also
             # covers `import a.b.container.member` where `container`
             # is a lowerCamelCase object BACK-551's peel refuses to
-            # reach. Fall back to the content-scanned member index.
+            # reach. BACK-669 C# recall loop: same fallback also
+            # covers `using static Foo.Bar.Type;` / `using Alias =
+            # Foo.Bar.Type;`, whose target is a type one dotted
+            # component past any namespace the tree declares. Fall
+            # back to the content-scanned member index.
             for resolved in extractor.resolve_member_targets(stmt, indices.member_index):
                 if resolved != file_path:
                     self._graph.add_dependency(file_path, resolved)
