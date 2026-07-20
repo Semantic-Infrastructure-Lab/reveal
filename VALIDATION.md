@@ -42,7 +42,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | PHP | ✅ 100% (WordPress), 74.65% (osCommerce¹³) | ✅ 97.5% (WordPress) | **Measured** |
 | Swift | ✅ 100% (Kickstarter iOS), 98.42%¹⁹ (swift-collections, BACK-704 fixed) | ✅ 100%² (Kickstarter iOS) | **Measured** |
 | Scala | ✅ 100% (GitBucket, 100%¹⁶ cats-effect) | — not yet run | **Measured** (import only) |
-| C++ | ✅ 100%³ (Godot) | ✅ 83.3% (Godot) | **Measured** |
+| C++ | ✅ 100%³ (Godot), 100%²⁷ (assimp) | ✅ 83.3% (Godot) | **Measured** |
 | C | ✅ 100%⁹ (Redis, curl²²) | — not yet run | **Measured** (import only) |
 | Lua | ✅ 99.87% (Kong, 99.33%²³ AwesomeWM) | — not yet run | **Measured** (import only) |
 | Dart | ✅ 100%⁵ (AppFlowy), 100%²⁴ (drift) | — not yet run | **Measured** (import only) |
@@ -560,6 +560,24 @@ TypeScript/VS Code loop, then this slice's own BACK-672 extension-omission
 fix) holds up on a monorepo topology and a pure-`.js`-JSX extension mix
 neither prior corpus exercised. See the [harness
 README](../internal-docs/planning/dogfood-findings/js-tsx-recall-oracle/README.md#second-corpus-back-715-overfit-guard-react-router)
+for the full write-up.
+
+²⁷ Overfit guard (BACK-709, child of BACK-708, last of the seven BACK-708
+languages): re-ran the same per-directive-isolated `g++ -H` oracle method
+against assimp (Open Asset Import Library), deliberately different in
+topology from the v1 Godot corpus — a plugin/format-importer architecture
+(`code/AssetLib/<Format>/...`) instead of Godot's flat engine-core monolith,
+and relative parent-directory quoted includes instead of Godot's
+root-relative `-iquote` convention. Still `.h`-dominant (728 `.h` vs 23
+`.hpp`), re-exercising the BACK-675 extractor-family-scoping fix under a
+different directory shape. Full census (small population): 250 distinct
+targets, 707 edges. **100%** recall (707/707), 0 missing — no fix needed.
+50 reported false positives all spot-checked genuine: real `#include` edges
+from `test/`/`tools/`/`contrib/` files the oracle's importer scope
+deliberately excluded from ground truth, the same oracle-scope-gap shape as
+the v1 corpus's `.mm` false positives, not a resolver defect. See the
+[harness
+README](../internal-docs/planning/dogfood-findings/cpp-recall-oracle/README.md#second-corpus-back-709-overfit-guard-assimp)
 for the full write-up.
 
 ## Import/Dependency Recall
