@@ -130,36 +130,56 @@ ground-truth oracle** (the real toolchain where one exists — `go list`,
 that shares no code with reveal), diff it against reveal's output on a **real
 open-source codebase**, root-cause every miss, fix, and re-measure.
 
-- **Done:** import/dependency recall measured on 17 languages (Python,
-  TypeScript, Java, Go, Ruby, Kotlin, Rust, C#, PHP, Swift, Scala, Lua, Dart,
-  GDScript, Zig, TSX, plain JS); side-effect / boundary recall measured on 11
-  languages. Every loop found a real bug except Zig's (clean 100% on first
-  measurement); all bugs fixed. BACK-621's original six-language breadth plan
-  (Lua/Dart/GDScript/Zig/TSX/plain-JS) is now fully closed. Honest-decline
-  invariant shipped (reveal caveats an unresolved result instead of asserting
-  a false "nothing here"), and release is now gated on CI (BACK-578).
-- **Next, in priority order:**
-  1. ✅ C/C++ import-recall both graduated to a full oracle loop. C: 100%,
-     no bug found (BACK-611, closed airless-nebula-0718). C++: 33.11% →
-     99.56% → **100.00%** after fixing three real bugs on the same
-     450-edge sample: `depends://`'s single-file scan-scoping excluding
-     every `.cpp` file from the parse corpus whenever the query target was
-     a `.h` header (BACK-675); `CppImportExtractor.extensions` never
-     claiming `.hh`/`.mm`, silently zeroing import resolution for either
-     extension (BACK-664); and a `#include` nested inside a class body
-     degrading to a tree-sitter fallback node the extractor never scanned
-     (BACK-676) (BACK-674, closed lohihozi-0718; BACK-664/BACK-676 closed
-     rufiloro-0718). See
-     `internal-docs/planning/dogfood-findings/{c,cpp}-recall-oracle/README.md`.
-  2. Extend recall measurement to the remaining DD signals — `surface`,
-     `contracts`, and `patches://`/testability (still Python + TS only,
-     BACK-632).
-  3. Close known correctness gaps as found — e.g. C++ import-recall widened
-     past the engine-core-only corpus (`editor/`/`modules/`/`thirdparty/`
-     currently excluded, see the harness README) (BACK-707).
-  4. Guard against single-corpus overfit: a second real corpus per language
-     for the already-measured set — remaining: C++, C, Lua, Dart, GDScript,
-     Zig, TSX/plain-JS (BACK-708, children BACK-709–715).
+- **Done:** import/dependency recall measured on **19 languages** (Python,
+  TypeScript, Java, Go, Ruby, Kotlin, Rust, C#, PHP, Swift, Scala, C, C++, Lua,
+  Dart, GDScript, Zig, TSX, plain JS), **each against two independent corpora**;
+  side-effect / boundary recall measured on 11 of them. Every baseline loop
+  found a real bug except Zig's and C's (both clean 100% on first measurement);
+  every found bug is fixed, and four documented residuals remain tracked
+  (BACK-705, BACK-681, BACK-704 residual, BACK-703). **The single-corpus
+  overfit-guard sweep is complete** — BACK-669 for the original eleven
+  languages, and BACK-708 with children BACK-709–715 for C, C++, Lua, Dart,
+  GDScript, Zig, and TSX/plain-JS (closed merging-universe-0720). BACK-621's
+  original six-language breadth plan is fully closed. Honest-decline invariant
+  shipped (reveal caveats an unresolved result instead of asserting a false
+  "nothing here"), and release is now gated on CI (BACK-578).
+- **Next, in priority order.** Import recall is now the program's strongest
+  signal — 19 languages, two corpora each. The remaining confidence gaps are in
+  the *other* DD signals and in a handful of tracked residuals, so the ordering
+  below is by size-of-gap rather than by continuing the import-recall sweep:
+
+  1. **Side-effect / boundary recall breadth.** Seven import-measured languages
+     have no side-effect measurement at all (Scala, C, Lua, Dart, GDScript,
+     Zig, TSX/plain-JS), and Kotlin's and Swift's ✅ each rest on a single
+     category (`db` and `http` respectively, n=20) rather than the
+     six-category sweep the other nine got. This is the largest remaining gap
+     on the signal with the highest DD consequence — "this function quietly
+     writes to a database" is the blast-radius surprise a reviewer cannot
+     miss — and the methodology is already proven, so each language is roughly
+     one session (BACK-718, children BACK-720–728).
+  2. **Close the tracked import-recall residuals, worst first:**
+     TypeScript/nest 81.21% (BACK-705 — the lowest number in VALIDATION.md, on
+     a flagship language, and the one with real headroom), PHP/osCommerce
+     74.65% (BACK-681), C#/Newtonsoft.Json 99.36% (BACK-703). The latter two
+     are documented as deliberately out of scope for a generic resolver; revisit
+     only if a corpus shows the shape is commoner than measured.
+  3. **Design a ground-truth methodology for `surface` and `contracts`.**
+     These reach 11 languages of *coverage* but have **zero** recall validation
+     on any language. Unlike import recall there is no external oracle to
+     borrow (no `go list` equivalent for "what is this module's public
+     surface"), so this needs a design doc before any measurement — closer to
+     the side-effect program's from-scratch-oracle shape (BACK-719).
+  4. C++ import-recall corpus widening past the engine-core-only corpus
+     (`editor/`/`modules/`/`thirdparty/` currently excluded, see the harness
+     README) (BACK-707).
+
+  *Not on this list, deliberately:* `patches://`/testability language breadth
+  past Python + TS is filed as an idea rather than committed work — see
+  `tt show BACK-632`. Note that `surface`/`contracts` themselves already reached
+  11-language parity (BACK-588/630/631); only `patches://`/testability is still
+  Python + TS. Swift's `_RopeModule` residual is closed by design (BACK-704):
+  resolving it would require evaluating arbitrary `Package.swift` code, which
+  the buildless architecture will not do.
 
 ---
 
@@ -552,8 +572,9 @@ Run `reveal --languages` for the live explicit-vs-fallback breakdown and exact c
 **Supported ≠ recall-validated.** The list below is *coverage* — the command
 runs and extracts structure. It is a separate question from whether a
 cross-file signal's *answer* has been measured correct against a ground-truth
-oracle; for that per-language status (Measured / Spot-checked / Smoke-tested
-only), see [VALIDATION.md](VALIDATION.md).
+oracle; for that per-language status — and, just as importantly, *which signal*
+was measured, since import recall covers 19 languages while side-effect recall
+covers 11 and `surface`/`contracts` none — see [VALIDATION.md](VALIDATION.md).
 
 ### Production-Ready (structure & nav coverage)
 Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Ruby, PHP, Kotlin, Swift, Dart, Zig, Scala, Lua, GDScript, Bash, SQL
