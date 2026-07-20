@@ -2253,17 +2253,60 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         search_paths: Optional[List[Path]],
         file_index: Optional[Dict[str, List[Path]]],
     ) -> Optional[Path]:
-        """Longest-unique-suffix match of ``parts`` (last = type) across exts."""
+        """Longest-unique-suffix match of ``parts`` (last = type) across exts.
+
+        BACK-711: for a bare single-token import (``require("wibox")``, no
+        qualifying prefix), the extension-appended flat-file branch can only
+        match via ``_longest_unique_suffix``'s k=1 global-uniqueness fallback
+        — "the only file anywhere in the tree with this basename" has no
+        structural relationship to the import site. When a same-named
+        directory with an index file also exists (``wibox/init.lua``), that
+        directory match is checked first; the flat-file candidate is only
+        preferred over it when the two are *true siblings* (same parent
+        directory — e.g. ``lib/beautiful.lua`` next to ``lib/beautiful/``),
+        matching real ``require()`` search order (``?.lua`` before
+        ``?/init.lua``) for the case the flat file actually competes at the
+        same directory level. AwesomeWM has both shapes in one corpus:
+        ``lib/beautiful.lua``/``lib/beautiful/init.lua`` are true siblings
+        (flat file correctly wins), while ``require("wibox")`` (393 call
+        sites) was silently resolving onto the unrelated ``lib/awful/wibox.lua``
+        — zero directory relationship to ``lib/wibox/`` — while the real
+        target ``lib/wibox/init.lua`` showed 0 dependents.
+        """
+        if len(parts) == 1:
+            dir_match = None
+            for index_filename in self.spec.directory_index_filenames:
+                target_parts = parts + [index_filename]
+                match = self._longest_unique_suffix(target_parts, search_paths, file_index)
+                if match is not None:
+                    dir_match = match
+                    break
+            if dir_match is not None:
+                # Sibling check by direct path existence, not
+                # `_longest_unique_suffix`'s global-basename-uniqueness gate:
+                # a same-named flat file elsewhere in the tree (e.g. a test
+                # shim) must not block a real sibling from winning, and a
+                # global "only one file with this basename" guess must not
+                # win when it *isn't* the sibling either.
+                sibling_dir = dir_match.parent.parent
+                for ext in exts:
+                    basename = parts[-1] + ext
+                    for candidate in self._index_lookup(basename, search_paths, file_index):
+                        resolved = candidate.resolve()
+                        if resolved.parent == sibling_dir:
+                            return resolved
+                return dir_match
         for ext in exts:
             target_parts = parts[:-1] + [parts[-1] + ext]
             match = self._longest_unique_suffix(target_parts, search_paths, file_index)
             if match is not None:
                 return match
-        for index_filename in self.spec.directory_index_filenames:
-            target_parts = parts + [index_filename]
-            match = self._longest_unique_suffix(target_parts, search_paths, file_index)
-            if match is not None:
-                return match
+        if len(parts) != 1:
+            for index_filename in self.spec.directory_index_filenames:
+                target_parts = parts + [index_filename]
+                match = self._longest_unique_suffix(target_parts, search_paths, file_index)
+                if match is not None:
+                    return match
         return None
 
     def _longest_unique_suffix(

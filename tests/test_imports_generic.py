@@ -1204,6 +1204,40 @@ class TestModuleResolution:
         res = self._resolve(tmp_path, 'main.lua', '.')
         assert res['a.b'] == (tmp_path / 'a/b.lua').resolve()
 
+    def test_lua_bare_single_token_require_prefers_directory_module(self, tmp_path):
+        """BACK-711: a bare single-token `require("wibox")` with no dotted
+        qualifier must resolve to the same-named directory's index file
+        (`wibox/init.lua`) when one exists, not to an unrelated flat file
+        elsewhere in the tree that happens to share the basename. Confirmed
+        on the real AwesomeWM corpus: `require("wibox")` (393 call sites)
+        was silently resolving onto `lib/awful/wibox.lua` — the tree's only
+        other `wibox.lua` — via the k=1 global-uniqueness fallback, while the
+        real target `lib/wibox/init.lua` showed 0 dependents."""
+        (tmp_path / 'wibox').mkdir(parents=True)
+        (tmp_path / 'wibox/init.lua').write_text('return {}\n')
+        (tmp_path / 'awful').mkdir(parents=True)
+        (tmp_path / 'awful/wibox.lua').write_text('return {}\n')
+        (tmp_path / 'main.lua').write_text(
+            'local w = require("wibox")\n')
+        res = self._resolve(tmp_path, 'main.lua', '.')
+        assert res['wibox'] == (tmp_path / 'wibox/init.lua').resolve()
+
+    def test_lua_bare_single_token_require_prefers_true_sibling_flat_file(self, tmp_path):
+        """BACK-711 companion case: when the flat file and the directory
+        module are true siblings (same parent dir — `lib/beautiful.lua` next
+        to `lib/beautiful/init.lua`, both real files in the AwesomeWM
+        corpus), the flat file must still win, matching require()'s real
+        `?.lua` before `?/init.lua` search order — the directory-index
+        preference above only applies when the flat-file match is NOT a
+        sibling of the directory."""
+        (tmp_path / 'beautiful').mkdir(parents=True)
+        (tmp_path / 'beautiful/init.lua').write_text('return {}\n')
+        (tmp_path / 'beautiful.lua').write_text('return {}\n')
+        (tmp_path / 'main.lua').write_text(
+            'local b = require("beautiful")\n')
+        res = self._resolve(tmp_path, 'main.lua', '.')
+        assert res['beautiful'] == (tmp_path / 'beautiful.lua').resolve()
+
     def test_lua_multi_part_require_never_falls_back_to_bare_basename(self, tmp_path):
         """BACK-670: `require("resty.openssl.rand")` (an external OpenResty
         module, not in-tree) must NOT wrongly resolve onto `kong/tools/rand.lua`

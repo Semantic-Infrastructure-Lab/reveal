@@ -44,7 +44,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Scala | ✅ 100% (GitBucket, 100%¹⁶ cats-effect) | — not yet run | **Measured** (import only) |
 | C++ | ✅ 100%³ (Godot) | ✅ 83.3% (Godot) | **Measured** |
 | C | ✅ 100%⁹ (Redis, curl²²) | — not yet run | **Measured** (import only) |
-| Lua | ✅ 99.87% (Kong) | — not yet run | **Measured** (import only) |
+| Lua | ✅ 99.87% (Kong, 99.33%²³ AwesomeWM) | — not yet run | **Measured** (import only) |
 | Dart | ✅ 100%⁵ (AppFlowy) | — not yet run | **Measured** (import only) |
 | GDScript | ✅ 100%⁶ (godot-demo-projects) | — not yet run | **Measured** (import only) |
 | Zig | ✅ 100%⁷ (ghostty, TigerBeetle²¹) | — not yet run | **Measured** (import only) |
@@ -460,6 +460,39 @@ scope deliberately limited to `lib/`+`src/` production code, while
 `depends://`'s search root legitimately covers the whole corpus). No fix
 needed. See the [harness
 README](../internal-docs/planning/dogfood-findings/c-recall-oracle/README.md#second-corpus-back-710-overfit-guard-curl)
+for the full write-up.
+
+²³ Overfit guard (BACK-711, child of BACK-708): re-ran the same
+independent-regex oracle method against a second, unrelated real corpus
+(AwesomeWM, a window manager, 882 files — no rockspec/build-manifest at all,
+forcing pure directory-convention resolution vs. Kong's rockspec-backed
+lookup). Found and fixed a real bug: a bare single-token `require("wibox")`
+(393 call sites) was silently resolving onto an unrelated same-basename flat
+file (`lib/awful/wibox.lua`) instead of the real directory-module target
+(`lib/wibox/init.lua`, which showed 0 dependents) — the k=1
+global-basename-uniqueness fallback used for single-token imports had no
+structural relationship to the import site. Fixed by checking the
+directory-index candidate first for single-token imports, falling back to
+the flat file only when it's a *true sibling* of the directory (same parent
+— `lib/beautiful.lua` next to `lib/beautiful/init.lua`, a second real shape
+in the same corpus, correctly still resolves to the flat file). Full
+population diffed (170 targets, 2,552 edges): **99.33%** recall, 0 → 2,535
+matched after the fix. Residual 17 misses trace to AwesomeWM's
+`tests/examples/{text,shims}/` trees literally mirroring `lib/`'s module
+path structure (e.g. both `lib/gears/sort/topological.lua` and
+`tests/examples/text/gears/sort/topological.lua` exist) — genuine structural
+ambiguity a suffix-based resolver correctly declines rather than guesses on,
+not a reveal bug. Residual 2 extras are a test-shim bare-token resolution
+(`require("mouse")` → `lib/awful/mouse/init.lua`, same out-of-scope shim
+class as the Kong loop's rockspec-external cases) and one testbed artifact
+(search scope spanning the sibling `samples/lua` Kong corpus, an artifact of
+the two corpora sharing a `samples/` root in this harness, not something a
+real git-repo-bounded project would hit). 2 new regression tests
+(`test_lua_bare_single_token_require_prefers_directory_module`,
+`test_lua_bare_single_token_require_prefers_true_sibling_flat_file`), full
+targeted suite (240 tests) green, Kong re-measured unchanged at 99.87%. See
+the [harness
+README](../internal-docs/planning/dogfood-findings/lua-recall-oracle/README.md#second-corpus-back-711-overfit-guard-awesomewm)
 for the full write-up.
 
 ## Import/Dependency Recall
