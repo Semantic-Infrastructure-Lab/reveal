@@ -147,15 +147,18 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   "nothing here"), and release is now gated on CI (BACK-578).
 - **Next, in priority order.** Import recall is now the program's strongest
   signal — 19 languages, two corpora each. The remaining confidence gaps are in
-  the *other* DD signals and in a handful of tracked residuals, so the ordering
-  below is by size-of-gap rather than by continuing the import-recall sweep:
+  the *other* DD signals and in a handful of tracked residuals; the ordering
+  below is by cost-to-close and dependency, not strictly by gap size — item 3
+  is actually the largest remaining gap (zero validation vs. items 1/2's
+  partial-credit percentages), but items 1/2 reuse harness and infrastructure
+  that's already built and warm, so they're sequenced first:
 
   1. **Deepen Swift side-effect recall past its single-category sample.**
      BACK-718's breadth goal — every language with *some* side-effect
      measurement — is now fully closed (all 18 side-effect-measured
      languages; GDScript and TSX/plain-JS were the last two gaps). Kotlin's
-     `db`-only sample was deepened to the full six-category sweep in
-     BACK-727 (82.5% → 92.9%, see kotlin/KOTLIN.md). Swift's ✅ still rests
+     `db`-only sample has since been deepened to the full six-category
+     sweep (82.5% → 92.9%, see kotlin/KOTLIN.md). Swift's ✅ still rests
      on a single category (`http`, n=20) rather than the six-category sweep
      every other language got (BACK-728, the only work left in this item).
   2. **Close the tracked import-recall residuals, worst first:**
@@ -166,10 +169,12 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
      only if a corpus shows the shape is commoner than measured.
   3. **Design a ground-truth methodology for `surface` and `contracts`.**
      These reach 11 languages of *coverage* but have **zero** recall validation
-     on any language. Unlike import recall there is no external oracle to
-     borrow (no `go list` equivalent for "what is this module's public
-     surface"), so this needs a design doc before any measurement — closer to
-     the side-effect program's from-scratch-oracle shape (BACK-719).
+     on any language — the single largest remaining confidence gap in this
+     track, ahead of items 1/2 by size, but sequenced after them since there is
+     no existing harness to reuse. Unlike import recall there is no external
+     oracle to borrow (no `go list` equivalent for "what is this module's
+     public surface"), so this needs a design doc before any measurement —
+     closer to the side-effect program's from-scratch-oracle shape (BACK-719).
   4. C++ import-recall corpus widening past the engine-core-only corpus
      (`editor/`/`modules/`/`thirdparty/` currently excluded, see the harness
      README) (BACK-707).
