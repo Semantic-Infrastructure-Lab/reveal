@@ -1068,7 +1068,13 @@ program) and **side-effect/boundary classification recall** (`--sideeffects` /
 `--boundary`). It does not yet cover recall for `surface`, `contracts`, or
 `calls://` cross-file call-graph resolution (BACK-719, BACK-730 — the latter
 carries the same silent-wrong-answer risk as BACK-542: a whole-project graph
-query where a false negative reads as a confident, checked answer), and the
+query where a false negative reads as a confident, checked answer). A first
+pilot measurement exists — Python reverse-lookup (`?target=`) recall on Home
+Assistant core, 99.96% (2,632/2,633 sampled edges, one real gap found and
+filed as BACK-731) — but one language and one query direction is not yet
+enough evidence to promote to this table; see
+[`calls-recall-oracle/README.md`](internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+for the full methodology and open next steps. The
 languages marked *not measured* / *spot-checked* in the status table above are
 not yet through a full oracle loop — all tracked as open validation work. See
 `ROADMAP.md` for the forward plan.
