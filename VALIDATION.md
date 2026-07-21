@@ -37,7 +37,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Java | ✅ 100% (Elasticsearch, guava¹¹) | ✅ 97.5% (Elasticsearch) | ✅ 9.99%→100%³⁸ (Elasticsearch, BACK-734 fixed) | **Measured** |
 | Go | ✅ 100% (Kubernetes, client_golang¹³) | ✅ 96.3% (client-go) | ✅ 100%³⁶ (Go compiler internals) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | ✅ 22.05%→100%³⁹ (Discourse, BACK-735 fixed) | **Measured** |
-| Kotlin | ✅ 99.1% (tivi, 100%¹⁴ kotlinx.coroutines) | ✅ 82.5% → **92.9%** (tivi, six-category sweep, BACK-727) | Not measured | **Measured** |
+| Kotlin | ✅ 99.1% (tivi, 100%¹⁴ kotlinx.coroutines) | ✅ 82.5% → **92.9%** (tivi, six-category sweep, BACK-727) | ✅ 99.69%→100%⁴² (8/bucket); 99.79%⁴² (20/bucket, tivi, BACK-738 open — grammar bug, not fixable in reveal) | **Measured** |
 | Rust | ✅ 100% (Meilisearch, ripgrep⁹) | ✅ 97.4% (Meilisearch) | ✅ 95.27%→100%³⁷ (Meilisearch, BACK-733 fixed) | **Measured** |
 | C# | ✅ 100%¹⁹ (Jellyfin), 99.36%¹⁹ (Newtonsoft.Json, BACK-702 fixed) | ✅ 98.3% (Jellyfin) | ✅ 69.74%→100%⁴¹ (Jellyfin, BACK-737 fixed) | **Measured** |
 | PHP | ✅ 100% (WordPress), 74.65% (osCommerce¹²) | ✅ 97.5% (WordPress) | ✅ 98.87%→100%⁴⁰ (WordPress, BACK-736 fixed) | **Measured** |
@@ -68,8 +68,8 @@ is a claim we have not yet checked, **not** a claim it is broken.
    recall measured also has a side-effect measurement (BACK-718), and every
    one of those now has the full six-category sweep (Kotlin deepened in
    BACK-727, Swift deepened in BACK-728 — the last narrow entry). Call-graph
-   recall (`calls://`) is measured for 8 of the 19 (Python, TypeScript, Go,
-   Rust, Java, Ruby, PHP, C# — BACK-730); the other 11 are not yet measured, not known-broken.
+   recall (`calls://`) is measured for 9 of the 19 (Python, TypeScript, Go,
+   Rust, Java, Ruby, PHP, C#, Kotlin — BACK-730); the other 10 are not yet measured, not known-broken.
    `surface`, `contracts`, and `patches://`/testability have **no
    ground-truth validation on any language** — see [Scope](#scope).
 3. **Sample size still varies.** Java's 97.5% includes `db` and `http`
@@ -936,6 +936,30 @@ false positives, at both an 8-per-bucket (1,012 edges) and 20-per-bucket
 (2,828 edges) sample. See
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
 ("Eighth language: C#" section) for the full write-up.
+⁴² Kotlin `calls://` pilot (BACK-730), Tivi (629 `.kt` files), reverse-lookup
+only: a pre-flight grammar dump found no missing node kind. First
+measurement: **99.69%** recall (644/646 edges, 8/bucket) — already the
+highest first measurement in this program. Both misses traced to an
+oracle-side design inconsistency (not a `calls://` bug): the Kotlin oracle
+attributed primary-constructor parameter-default calls to the class name,
+which `calls://` never does for any language (only function/method bodies
+are caller scopes). Fixed the oracle to match precedent; re-measured at
+**100.00%** recall, 0 false positives (8/bucket, 661 edges). At 20/bucket
+(938 edges): **99.79%** recall — the 2 residual misses trace to a real
+upstream `tree-sitter-kotlin` grammar bug, not a reveal extraction bug:
+an annotation directly preceding a function type (`@Composable () ->
+Unit`, ubiquitous in Jetpack Compose code) cannot be parsed — the grammar
+consumes the type's leading `()` as the annotation's own argument list,
+producing an `ERROR` node that drops the entire enclosing function from
+structure extraction (confirmed: `showInBottomSheet` in
+`BottomSheetOverlay.kt` is invisible to `--outline` entirely, not just
+missing calls). Not fixable in reveal's Python layer — the grammar-pack
+version that might fix it is blocked by the already-tracked BACK-573/
+BACK-620 core-API migration (deferred pending a concrete driver). Filed
+**BACK-738**, open — a data point for that future call, not grounds to
+trigger it now. See
+[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+("Ninth language: Kotlin" section) for the full write-up.
 
 ## Import/Dependency Recall
 
@@ -1199,20 +1223,23 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 | Ruby | Discourse `app/`+`lib/` (1,899 files) | reverse | **22.05%** → **100.00%** | 30 (pre-fix) → 0 (post-fix) | Ruby's `'call'` node is the same tree-sitter kind Python's plain `call()` uses but a flat receiver/./method/args shape, so `child(0)` returned the receiver for every qualified/self/static call — **BACK-735**, fixed, same class as BACK-734. Two more distinct bugs found in the residual tail while at 99%: `setter`/`operator`-named methods (`def x=`/`def []`) invisible to `--outline` (same class as BACK-638/651/724), and `def Class.method` singleton methods naming themselves after the qualifying constant instead of the method (`_PARAM_LIST_KINDS` missing Ruby's `method_parameters` kind) — both fixed same session |
 | PHP | WordPress `wp-admin/`+`wp-includes/` (1,328 files) | reverse | **98.87%** → **100.00%** | 0 | `self::`/`parent::`/`static::`/`Class::method()` (PHP's static/scoped call syntax) all parse to `scoped_call_expression`, a node kind entirely absent from `CALL_NODE_TYPES` — every PHP static call was silently invisible to `calls://` — **BACK-736**, fixed. A second, distinct bug surfaced in the residual tail: `_bare_callee_name` didn't strip PHP's `"new ClassName"` constructor-call prefix or a leading `\` fully-qualified-namespace marker, so neither ever matched a bare `?target=` lookup (same bug class as BACK-733's Rust turbofish gap — a bare-name-normalization miss, not an extraction miss) — fixed same session |
 | C# | Jellyfin (2,098 files) | reverse | **69.74%** → **100.00%** | 8 (pre-fix) → 0 (post-fix) | Three distinct bugs, all fixed as **BACK-737**: (1) generic methods (`Task Enqueue<T>(...)`) had their definition name misattributed to the return type, since C#'s `type_parameter_list` sits between the method name and parameter list, breaking `_name_via_param_adjacent`'s "name immediately precedes param list" check — a caller-side gap, unlike every prior language's callee-side bugs, since it corrupts the source of every call-graph edge from an affected method; (2) explicit generic-argument suffixes (`new List<Video>()`, `Method<string>()`) survived into `_bare_callee_name`, never matching a bare `?target=` lookup — same bug class as BACK-733's Rust turbofish gap; (3) multi-line fluent call chains (Moq's `_mock.\n    Setup(...)`, a common C# test idiom) left literal newline+indentation in the bare callee name |
+| Kotlin | Tivi (629 `.kt` files) | reverse | 99.69% → **100.00%** (8/bucket); **99.79%** (20/bucket) | 0 | An oracle-side design inconsistency (not a `calls://` bug) explained the first 2 misses: the oracle attributed primary-constructor parameter-default calls to the class name, which `calls://` never does for any language (only function/method bodies are caller scopes) — fixed in the oracle to match precedent. The remaining 20/bucket residual is the first gap in this program traced to an upstream **grammar** bug rather than a reveal extraction bug: `tree-sitter-kotlin` cannot parse `@Annotation` directly preceding a function type (`@Composable () -> Unit`, ubiquitous in Jetpack Compose code) — the `()` is consumed as the annotation's own argument list, producing an `ERROR` node that drops the entire enclosing function from structure extraction. Not fixable in reveal's Python layer (vendored grammar binary); the grammar-pack version that might fix it is blocked by the already-tracked BACK-573/BACK-620 core-API migration (deferred). Filed **BACK-738**, open |
 
 Full methodology, per-corpus commit/snapshot, and the harness scripts
-(`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, `diff_*.py`) for all eight
-languages: [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
+(`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, Kotlin
+`KotlinOracle.kt`, `diff_*.py`) for all nine languages:
+[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
-Not yet measured: Kotlin, Swift, Scala, C++, C, Lua, Dart,
+Not yet measured: Swift, Scala, C++, C, Lua, Dart,
 GDScript, Zig, TSX/plain JS — a claim not yet checked, not a claim
-`calls://` is broken on those languages. If a ninth language is measured,
+`calls://` is broken on those languages. If a tenth language is measured,
 add it to this table and the status-at-a-glance table above; `_bare_callee_name`
-/`_get_callee_name`'s other dotted-name-family languages (Kotlin/Scala share
+/`_get_callee_name`'s other dotted-name-family languages (Scala shares
 the module-path/dotted-name resolver core the import-recall program already
 flagged) are a reasonable place to look next, given Java's BACK-734, Ruby's
-BACK-735, PHP's BACK-736, and C#'s BACK-737 all show even an "unflagged"
-language can hide a systemic callee- or caller-extraction bug.
+BACK-735, PHP's BACK-736, C#'s BACK-737, and Kotlin's BACK-738 all show even
+an "unflagged" language can hide a systemic callee-, caller-, or
+grammar-level bug.
 
 ## Re-running this yourself
 
