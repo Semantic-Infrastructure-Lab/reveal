@@ -4947,5 +4947,131 @@ class TestBack726TsxTaxonomy(unittest.TestCase):
         self.assertEqual(classify_call('window.open', 'tsx'), 'file')
 
 
+class TestBack728SwiftSixCategoryWidening(unittest.TestCase):
+    """BACK-728: deepened Swift past its http-only sideeffects-recall-oracle
+    sample (BACK-547 eleventh/final loop) to the full six-category sweep,
+    widening the corpus scope from samples/swift/KsApi/Sources/KsApi
+    (328 files) to the whole samples/swift tree (Kickstarter iOS, 2,051
+    files). Recall: 43.33% (26/60, pre-widening taxonomy already in place)
+    -> 100.00% (60/60), 0 negative-sample false positives, 0 functions with
+    an extra kind, at both measurements. See SWIFT.md for the full corpus
+    survey and per-finding writeup."""
+
+    def test_keychain_security_framework_classified_db(self):
+        # Kickstarter's OAuth-token storage wraps the Security framework's
+        # raw C API (Library/Sources/Library/Library/Keychain.swift) --
+        # SecItemAdd/SecItemUpdate/SecItemDelete/SecItemCopyMatching are
+        # bare, receiverless calls; callers reach the wrapper via a dotted
+        # Keychain.<verb> receiver (AppEnvironment.swift). Both forms,
+        # zero cross-language collision risk (Apple Security-framework /
+        # project-specific type names).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('SecItemAdd', language='swift'), 'db')
+        self.assertEqual(classify_call('SecItemCopyMatching', language='swift'), 'db')
+        self.assertEqual(
+            classify_call('Keychain.storePassword', language='swift'), 'db',
+        )
+        self.assertEqual(
+            classify_call('Keychain.fetchPassword', language='swift'), 'db',
+        )
+
+    def test_userdefaults_classified_db(self):
+        # UserDefaults/userDefaults local key-value persistence -- same
+        # category TSX/JS's own loop already classifies browser
+        # localStorage as (BACK-718/BACK-726). Two-segment
+        # `userdefaults.set`/`.dictionary` cover AppEnvironment.swift's
+        # saveEnvironment/fromStorage; the three-segment
+        # `UserDefaults.standard.register(defaults:...)` (Service.swift)
+        # needs its own exact entry since sliding-window matching requires
+        # CONSECUTIVE segments and `standard` sits between `userdefaults`
+        # and `register`.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(
+            classify_call('userDefaults.set', language='swift'), 'db',
+        )
+        self.assertEqual(
+            classify_call('userDefaults.dictionary', language='swift'), 'db',
+        )
+        self.assertEqual(
+            classify_call('UserDefaults.standard.register', language='swift'), 'db',
+        )
+
+    def test_filemanager_moveitem_classified_file(self):
+        # FileManager.default.moveItem(at:to:) -- RichPushNotifications/
+        # NotificationService.swift's push-notification-attachment handling,
+        # the widened corpus's one real non-`write` file idiom. Exact
+        # three-segment match (a bare `moveitem`/`filemanager` heuristic
+        # would be corpus-unsafe -- FileManager is a common enough receiver
+        # name elsewhere in this same corpus and others).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(
+            classify_call('FileManager.default.moveItem', language='swift'), 'file',
+        )
+
+    def test_downloadtask_classified_http(self):
+        # session.downloadTask(with:completionHandler:) -- URLSession's
+        # download-to-disk sibling of dataTask (already classified);
+        # RichPushNotifications/NotificationService.swift's only remaining
+        # miss after the other five fixes.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(
+            classify_call('session.downloadTask', language='swift'), 'http',
+        )
+
+    def test_bundle_main_infodictionary_classified_env(self):
+        # Bundle.main.infoDictionary -- ServiceType.userAgent's app-version/
+        # bundle-metadata read, MFMailComposeViewController.support's
+        # support-email diagnostics. Renders as an ordinary extractable
+        # callee (the optional-subscript access `Bundle.main
+        # .infoDictionary?[...]` is call-shaped in this grammar), so an
+        # ordinary three-segment _TAXONOMY_BY_LANG entry reaches it directly
+        # -- no BACK-644/BACK-727-style property-access channel needed.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(
+            classify_call('Bundle.main.infoDictionary', language='swift'), 'env',
+        )
+
+    def test_crashlytics_factory_call_classified_log(self):
+        # Crashlytics.crashlytics().log(format:...) / .record(error:...) --
+        # Kickstarter's crash-reporting/log idiom (AppEnvironment.swift,
+        # OAuth.swift, AppDelegate.swift). nav_calls' fluent-chain callee
+        # collapse means classify_call() only ever sees the bare final verb
+        # (`log`/`record`) for the CHAINED call -- bare `record` is too
+        # generic to classify safely on its own. Matching the
+        # `Crashlytics.crashlytics` FACTORY call instead (its own distinct,
+        # separately-visible call node) captures every real corpus site
+        # through one precise, zero-cross-language-collision pattern.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(
+            classify_call('Crashlytics.crashlytics', language='swift'), 'log',
+        )
+        self.assertIsNone(classify_call('record', language='swift'))
+
+    def test_dispatchqueue_asyncafter_classified_sleep(self):
+        # DispatchQueue.<queue>.asyncAfter(deadline:...) -- GCD's
+        # callback-based timer, this corpus's dominant non-test sleep idiom
+        # (5 real sites across UIRefreshControl+StartRefreshing.swift,
+        # MessageBannerView.swift, VideoFeedToastContainerView.swift,
+        # VideoFeedVideoPlayer.swift, AppDelegate.swift). Bare (not
+        # receiver-scoped) since the queue varies (.main/.global()/custom);
+        # Task.sleep already recalled via the pre-existing common bare
+        # 'sleep' pattern before this loop, unchanged here.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(
+            classify_call('DispatchQueue.main.asyncAfter', language='swift'), 'sleep',
+        )
+        self.assertEqual(classify_call('Task.sleep', language='swift'), 'sleep')
+
+    def test_prior_http_apollo_taxonomy_unregressed(self):
+        # The original loop's Apollo GraphQL fetch/perform/*WithResult/
+        # dataTask entries (BACK-547 eleventh loop, TestBack547Swift
+        # ApolloHttpTaxonomy) must stay intact through this widening --
+        # spot-checked here as a regression guard alongside that class's
+        # own full coverage.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('client.fetch', language='swift'), 'http')
+        self.assertEqual(classify_call('client.perform', language='swift'), 'http')
+
+
 if __name__ == '__main__':
     unittest.main()

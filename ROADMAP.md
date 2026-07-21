@@ -133,49 +133,47 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
 - **Done:** import/dependency recall measured on **19 languages** (Python,
   TypeScript, Java, Go, Ruby, Kotlin, Rust, C#, PHP, Swift, Scala, C, C++, Lua,
   Dart, GDScript, Zig, TSX, plain JS), **each against two independent corpora**;
-  side-effect / boundary recall now measured on **all of them** (BACK-718
-  fully closed — GDScript 20.00%→69.33% on Pixelorama, TSX/plain-JS 90.16%→98.36%
-  on Excalidraw, the last two breadth gaps). Every baseline loop
-  found a real bug except Zig's and C's (both clean 100% on first measurement);
-  every found bug is fixed, and four documented residuals remain tracked
-  (BACK-705, BACK-681, BACK-704 residual, BACK-703). **The single-corpus
-  overfit-guard sweep is complete** — BACK-669 for the original eleven
-  languages, and BACK-708 with children BACK-709–715 for C, C++, Lua, Dart,
-  GDScript, Zig, and TSX/plain-JS (closed merging-universe-0720). BACK-621's
-  original six-language breadth plan is fully closed. Honest-decline invariant
-  shipped (reveal caveats an unresolved result instead of asserting a false
-  "nothing here"), and release is now gated on CI (BACK-578).
-- **Next, in priority order.** Import recall is now the program's strongest
-  signal — 19 languages, two corpora each. The remaining confidence gaps are in
-  the *other* DD signals and in a handful of tracked residuals; the ordering
-  below is by cost-to-close and dependency, not strictly by gap size — item 3
-  is actually the largest remaining gap (zero validation vs. items 1/2's
-  partial-credit percentages), but items 1/2 reuse harness and infrastructure
-  that's already built and warm, so they're sequenced first:
+  side-effect / boundary recall now measured on **all of them, and every one
+  at the full six-category sweep** (BACK-718 fully closed — GDScript
+  20.00%→69.33% on Pixelorama, TSX/plain-JS 90.16%→98.36% on Excalidraw, the
+  last two breadth gaps; Kotlin's original `db`-only sample deepened to
+  82.5%→92.9%, Swift's original `http`-only sample deepened to
+  43.3%→100.0%, the two narrow-depth gaps, both now closed). Every baseline
+  loop found a real bug except Zig's and C's (both clean 100% on first
+  measurement); every found bug is fixed, and four documented residuals
+  remain tracked (BACK-705, BACK-681, BACK-704 residual, BACK-703). **The
+  single-corpus overfit-guard sweep is complete** — BACK-669 for the
+  original eleven languages, and BACK-708 with children BACK-709–715 for C,
+  C++, Lua, Dart, GDScript, Zig, and TSX/plain-JS (closed
+  merging-universe-0720). BACK-621's original six-language breadth plan is
+  fully closed. Honest-decline invariant shipped (reveal caveats an
+  unresolved result instead of asserting a false "nothing here"), and
+  release is now gated on CI (BACK-578).
+- **Next, in priority order.** Import recall and side-effect recall are both
+  now the program's strongest signals — 19 languages (two corpora each) and
+  18 languages (full six-category sweep each) respectively. The remaining
+  confidence gaps are in the *other* DD signals and in a handful of tracked
+  residuals; the ordering below is by cost-to-close and dependency, not
+  strictly by gap size — item 2 is actually the largest remaining gap (zero
+  validation vs. item 1's partial-credit percentages), but item 1 reuses
+  harness and infrastructure that's already built and warm, so it's
+  sequenced first:
 
-  1. **Deepen Swift side-effect recall past its single-category sample.**
-     BACK-718's breadth goal — every language with *some* side-effect
-     measurement — is now fully closed (all 18 side-effect-measured
-     languages; GDScript and TSX/plain-JS were the last two gaps). Kotlin's
-     `db`-only sample has since been deepened to the full six-category
-     sweep (82.5% → 92.9%, see kotlin/KOTLIN.md). Swift's ✅ still rests
-     on a single category (`http`, n=20) rather than the six-category sweep
-     every other language got (BACK-728, the only work left in this item).
-  2. **Close the tracked import-recall residuals, worst first:**
+  1. **Close the tracked import-recall residuals, worst first:**
      TypeScript/nest 81.21% (BACK-705 — the lowest number in VALIDATION.md, on
      a flagship language, and the one with real headroom), PHP/osCommerce
      74.65% (BACK-681), C#/Newtonsoft.Json 99.36% (BACK-703). The latter two
      are documented as deliberately out of scope for a generic resolver; revisit
      only if a corpus shows the shape is commoner than measured.
-  3. **Design a ground-truth methodology for `surface` and `contracts`.**
+  2. **Design a ground-truth methodology for `surface` and `contracts`.**
      These reach 11 languages of *coverage* but have **zero** recall validation
      on any language — the single largest remaining confidence gap in this
-     track, ahead of items 1/2 by size, but sequenced after them since there is
+     track, ahead of item 1 by size, but sequenced after it since there is
      no existing harness to reuse. Unlike import recall there is no external
      oracle to borrow (no `go list` equivalent for "what is this module's
      public surface"), so this needs a design doc before any measurement —
      closer to the side-effect program's from-scratch-oracle shape (BACK-719).
-  4. C++ import-recall corpus widening past the engine-core-only corpus
+  3. C++ import-recall corpus widening past the engine-core-only corpus
      (`editor/`/`modules/`/`thirdparty/` currently excluded, see the harness
      README) (BACK-707).
 

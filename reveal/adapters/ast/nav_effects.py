@@ -494,13 +494,119 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         # overwhelmingly dominates (65+ sites) rather than the reverse.
         # `dataTask` (URLSession's raw completion-handler API, NSURLSession.swift)
         # is rarer (3 corpus hits) but unambiguous.
-        ('http', ['fetch', 'perform', 'fetchwithresult', 'performwithresult', 'datatask']),
-        ('file', ['write']),
+        ('http', [
+            'fetch', 'perform', 'fetchwithresult', 'performwithresult', 'datatask',
+            # BACK-728: `session.downloadTask(with:completionHandler:)` --
+            # URLSession's download-to-disk sibling of `dataTask`, found
+            # widening scope past KsApi/ to RichPushNotifications' push-
+            # notification-attachment fetch (the only corpus occurrence,
+            # in `NotificationService.swift`; zero non-swift hits anywhere
+            # in samples/).
+            'downloadtask',
+        ]),
+        # BACK-728 (sideeffects-recall-oracle/swift, six-category widening):
+        # widened corpus scope (full samples/swift, not just KsApi/) surfaced
+        # a real db idiom the original http-only loop never scoped past:
+        # Kickstarter's OAuth-token storage wraps the Security framework's
+        # raw C API (`Library/Sources/Library/Library/Keychain.swift`) —
+        # `SecItemAdd`/`SecItemUpdate`/`SecItemDelete`/`SecItemCopyMatching`
+        # are bare, receiverless calls (unambiguous Apple Security-framework
+        # names, zero corpus-wide collision — verified against every
+        # language's samples/ tree, the only hits are this same Keychain.swift
+        # file). Callers reach the wrapper via a dotted `Keychain.<verb>`
+        # receiver (`AppEnvironment.swift`'s `storeOAuthTokenToKeychain`/
+        # `fetchOAuthTokenFromKeychain`/`removeOAuthTokenFromKeychain`, plus
+        # `Library-Keychain-iOSTests/KeychainTests.swift`), a project-specific
+        # type name with no cross-language collision risk.
+        ('db', [
+            'secitemadd', 'secitemupdate', 'secitemdelete', 'secitemcopymatching',
+            'keychain.storepassword', 'keychain.fetchpassword',
+            'keychain.deletepassword', 'keychain.haspassword',
+            'keychain.deleteallpasswords',
+            # `UserDefaults`/`userDefaults` (a `KeyValueStoreType`-typed
+            # variable, same lowercase-tokenized receiver either way) local
+            # key-value persistence — same "local persisted store" category
+            # TSX/JS's own loop already classifies as db for browser
+            # localStorage (BACK-718/BACK-726). Two-segment, receiver-scoped:
+            # `userdefaults.set`/`.dictionary`/`.register` cover
+            # `AppEnvironment.swift`'s `saveEnvironment`/`fromStorage` and
+            # `AppDelegate.swift`/`OnboardingView.swift`'s
+            # `userDefaults.set(true, forKey:...)`. `UserDefaults.standard
+            # .register(defaults:...)` (Service.swift) is a three-segment
+            # chain the two-segment pattern can't reach (sliding-window
+            # matching requires the pattern's segments to be CONSECUTIVE, and
+            # `standard` sits between `userdefaults` and `register`) — added
+            # as its own exact three-segment entry rather than a bare
+            # `register` (a generic, collision-prone verb on its own).
+            'userdefaults.set', 'userdefaults.dictionary',
+            'userdefaults.standard.register',
+        ]),
+        ('file', [
+            'write',
+            # BACK-728: `FileManager.default.moveItem(at:to:)` — the widened
+            # corpus's one real non-`write` file idiom
+            # (RichPushNotifications/NotificationService.swift's push-
+            # notification-attachment handling). Exact three-segment match
+            # (not a bare `moveitem` or `filemanager` receiver-shape
+            # heuristic): corpus-wide check found `FileManager` alone is a
+            # common enough type/receiver name (6 other swift files, plus
+            # unrelated hits in go/java/js/kt/ts/tsx samples for their own
+            # `FileManager`-ish types) that only the full dotted chain is a
+            # safe, precise scope.
+            'filemanager.default.moveitem',
+        ]),
+        # BACK-728: `Bundle.main.infoDictionary` (`ServiceType.userAgent`'s
+        # app-version/bundle-metadata read, `MFMailComposeViewController
+        # .support`'s support-email diagnostics) is Kickstarter's dominant
+        # build-metadata/env-config read once scope widened past KsApi/. It
+        # renders as an ordinary extractable callee (`Bundle.main
+        # .infoDictionary?[...]`'s optional-subscript access is call-shaped
+        # in this grammar), so a normal three-segment taxonomy entry — not
+        # the separate BACK-644/BACK-727-style property-access channel —
+        # already reaches it; verified live via `classify_call()` before
+        # relying on this instead of the heavier property channel.
+        ('env', ['bundle.main.infodictionary']),
         # BACK-498 quick win: NSLog/os_log are Swift/Cocoa's logging calls —
         # bare `print` deliberately stays unclassified (matches tier1 Java/C#/
         # Python treatment of stdout writes as non-log), but NSLog/os_log are
         # unambiguous logging APIs, not print wrappers.
-        ('log', ['nslog', 'os_log']),
+        #
+        # BACK-728: Firebase Crashlytics' `Crashlytics.crashlytics()` factory
+        # call (Kickstarter's crash-reporting/log idiom, `AppEnvironment
+        # .swift`/`OAuth.swift`/`AppDelegate.swift`, 6 real corpus sites) is
+        # always immediately chained into `.log(format:...)` or
+        # `.record(error:...)` — but nav_calls' fluent-chain callee collapse
+        # (BACK-415) means classify_call() only ever sees the FINAL segment
+        # of that chain (bare `log`/`record`), and bare `record` is a
+        # catastrophically generic English verb unsafe to add on its own
+        # (recording state, tape/audio recording, etc). Matching the
+        # `Crashlytics.crashlytics` FACTORY call instead — its own distinct
+        # call node, visible separately from the chained `.log`/`.record` --
+        # captures every real corpus site through one precise, zero-collision
+        # two-segment pattern (verified corpus-wide: `Crashlytics.crashlytics(`
+        # has zero non-swift hits in any language's samples/ tree) without
+        # ever touching the dangerous bare-verb form.
+        ('log', ['nslog', 'os_log', 'crashlytics.crashlytics']),
+        # BACK-728: `DispatchQueue.<queue>.asyncAfter(deadline:...)` is this
+        # corpus's dominant non-test sleep/delay idiom (GCD's callback-based
+        # timer, 5 real sites: UIRefreshControl+StartRefreshing.swift,
+        # MessageBannerView.swift, VideoFeedToastContainerView.swift,
+        # VideoFeedVideoPlayer.swift x2, AppDelegate.swift) — `Task.sleep`/
+        # `Thread.sleep` already recall via `_TAXONOMY_COMMON`'s pre-existing
+        # bare `'sleep'` pattern (a single-segment match against any segment
+        # named `sleep`, already firing on `Task.sleep(...)` before this
+        # loop). `asyncAfter` is a distinct compound word the tokenizer
+        # cannot decompose into `sleep`. Bare (not receiver-scoped): the
+        # queue variable varies (`.main`, `.global()`, custom serial queues),
+        # so a fixed receiver chain like `dispatchqueue.main.asyncafter`
+        # would miss real corpus variants. Corpus-wide collision check
+        # (samples/*, all languages): every `asyncAfter` hit outside
+        # `samples/swift` is itself a `.swift` file under
+        # `samples/zig/ghostty/macos` (Ghostty's embedded native macOS Swift
+        # UI, gated the same way as this table by the FILE's own detected
+        # language, not the sample directory name) — the same real GCD idiom,
+        # not a collision.
+        ('sleep', ['asyncafter']),
     ],
     # csharp/ruby/cpp: --sideeffects/--boundary classify_call() was never
     # actually gated to Python/TS (the docs claiming that were stale — these

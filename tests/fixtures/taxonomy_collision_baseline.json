@@ -3040,6 +3040,46 @@
     "source": "literal",
     "token": "httpclientbuilder"
   },
+  "literal:swift:db:secitemadd": {
+    "hits": {
+      "swift": 1
+    },
+    "home": "swift",
+    "key": "literal:swift:db:secitemadd",
+    "kind": "db",
+    "source": "literal",
+    "token": "secitemadd"
+  },
+  "literal:swift:db:secitemcopymatching": {
+    "hits": {
+      "swift": 1
+    },
+    "home": "swift",
+    "key": "literal:swift:db:secitemcopymatching",
+    "kind": "db",
+    "source": "literal",
+    "token": "secitemcopymatching"
+  },
+  "literal:swift:db:secitemdelete": {
+    "hits": {
+      "swift": 2
+    },
+    "home": "swift",
+    "key": "literal:swift:db:secitemdelete",
+    "kind": "db",
+    "source": "literal",
+    "token": "secitemdelete"
+  },
+  "literal:swift:db:secitemupdate": {
+    "hits": {
+      "swift": 1
+    },
+    "home": "swift",
+    "key": "literal:swift:db:secitemupdate",
+    "kind": "db",
+    "source": "literal",
+    "token": "secitemupdate"
+  },
   "literal:swift:file:write": {
     "hits": {
       "c": 141,
@@ -3075,6 +3115,17 @@
     "kind": "http",
     "source": "literal",
     "token": "datatask"
+  },
+  "literal:swift:http:downloadtask": {
+    "hits": {
+      "java": 1,
+      "swift": 1
+    },
+    "home": "swift",
+    "key": "literal:swift:http:downloadtask",
+    "kind": "http",
+    "source": "literal",
+    "token": "downloadtask"
   },
   "literal:swift:http:fetch": {
     "hits": {
@@ -3158,6 +3209,16 @@
     "kind": "log",
     "source": "literal",
     "token": "os_log"
+  },
+  "literal:swift:sleep:asyncafter": {
+    "hits": {
+      "swift": 6
+    },
+    "home": "swift",
+    "key": "literal:swift:sleep:asyncafter",
+    "kind": "sleep",
+    "source": "literal",
+    "token": "asyncafter"
   },
   "literal:zig:env:getenvmap": {
     "hits": {
