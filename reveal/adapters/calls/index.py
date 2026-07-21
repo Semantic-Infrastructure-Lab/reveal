@@ -151,6 +151,34 @@ def _bare_callee_name(callee: str) -> str:
     never matched a target lookup for the bare class name, and "\\sprintf"/
     "\\in_array"/"\\fopen" (PSR-7 vendor code, this corpus) never matched
     "sprintf"/"in_array"/"fopen".
+
+    Also strips a trailing C# explicit generic-argument suffix
+    (`List<Video>`, `Method<string>`, `Class<T>.Static<U>` -> `List`/
+    `Method`/`Static`) -- the calls-recall-oracle C# measurement (BACK-730,
+    eighth language) found `new List<T>()`/`new NullLogger<T>()`/
+    `new GenericEventArgs<T>()` (Jellyfin's dominant generic-constructor
+    idiom) and explicit generic-method invocations never matched a bare
+    `?target=List`/`?target=Method` lookup, same bug *class* as BACK-733's
+    Rust turbofish gap: the raw callee text keeps everything from the type/
+    method name's own extraction, unlike Rust where the fix already lives
+    in the extraction layer (`_callee_name_from_node`'s `generic_function`
+    case) -- C#'s `object_creation_expression`/`invocation_expression`
+    extraction has no such node-shape special case, so the suffix survives
+    to this bare-name layer instead. Cut from the first `<` to end-of-string
+    (mirrors the C# oracle's own `SimpleTypeName`-adjacent stripping) --
+    safe because no separator this function handles (`.`, `->`, `::`) is
+    ever legally followed by a bare `<` in a real callee.
+
+    Also strips leading/trailing whitespace from the final bare segment --
+    a fluent call chain split across lines for readability (e.g. Moq's
+    `_mockUserManager.\n    Setup(...)`, a common C# test idiom) makes the
+    raw callee text literally `"_mockUserManager.\n    Setup"`: separator
+    splitting on the `.` correctly isolates the method name but leaves the
+    newline+indentation between it and the separator attached to the bare
+    segment (`"\n    Setup"` != `"Setup"`), so it never matched a bare
+    `?target=Setup` lookup (calls-recall-oracle C# measurement, BACK-730,
+    eighth language). Identifiers can never legally contain whitespace, so
+    a plain `.strip()` on the final segment is always safe.
     """
     if callee.startswith('new '):
         callee = callee[4:]
@@ -158,10 +186,14 @@ def _bare_callee_name(callee: str) -> str:
         callee = callee[1:]
     idx = max(callee.rfind('->'), callee.rfind('.'), callee.rfind('::'))
     if idx == -1:
-        return callee
-    if callee[idx:idx + 2] in ('->', '::'):
-        return callee[idx + 2:]
-    return callee[idx + 1:]
+        bare = callee
+    elif callee[idx:idx + 2] in ('->', '::'):
+        bare = callee[idx + 2:]
+    else:
+        bare = callee[idx + 1:]
+    gidx = bare.find('<')
+    bare = bare[:gidx] if gidx != -1 else bare
+    return bare.strip()
 
 
 def _index_callee(

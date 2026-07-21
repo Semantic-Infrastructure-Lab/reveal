@@ -1380,9 +1380,29 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # parameter list — the node actually attached to the argument list,
         # not an unrelated identifier-shaped sibling (return type, receiver,
         # etc. — e.g. C# `Task Close()`, Go `func (s *T) Name()`).
+        #
+        # C# generic methods (`Task Enqueue<T>(...)`, `private T
+        # CreateItemByName<T>(...)`) put a `type_parameter_list` node
+        # BETWEEN the name and the parameter list, so "immediately
+        # preceding" (above) never matches — name-extraction fell through
+        # to PRIORITY 2b's first-identifier-child scan, which grabbed the
+        # RETURN TYPE instead (it's syntactically first): every generic
+        # method's own outline entry, and every call made from inside its
+        # body, was misattributed to its return-type name (e.g.
+        # `CreateItemByName<T>` -> "T", `Enqueue<T>` -> "Task") — found via
+        # the calls-recall-oracle C# measurement (BACK-730, eighth
+        # language): real corpus misses on `GetItemById`/
+        # `ShouldForceSequentialOperation` traced to callers silently
+        # renamed "T"/"Task" in Jellyfin's `LibraryManager.cs`/
+        # `LimitedConcurrencyLibraryScheduler.cs`.
         for i, child in enumerate(kids):
-            if child.kind() in _PARAM_LIST_KINDS and i > 0 and kids[i - 1].kind() in _NAME_KINDS:
-                return self._get_node_text(kids[i - 1])
+            if child.kind() in _PARAM_LIST_KINDS and i > 0:
+                prev = kids[i - 1]
+                prev_kind = _zero_arg(prev, 'kind')
+                if prev_kind in _NAME_KINDS:
+                    return self._get_node_text(prev)
+                if prev_kind == 'type_parameter_list' and i > 1 and _zero_arg(kids[i - 2], 'kind') in _NAME_KINDS:
+                    return self._get_node_text(kids[i - 2])
         return None
 
     def _name_via_identifier_kind(self, kids) -> Optional[str]:
