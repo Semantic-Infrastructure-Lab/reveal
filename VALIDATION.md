@@ -36,7 +36,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Java | ✅ 100% (Elasticsearch, guava¹¹) | ✅ 97.5% (Elasticsearch) | **Measured** |
 | Go | ✅ 100% (Kubernetes, client_golang¹³) | ✅ 96.3% (client-go) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | **Measured** |
-| Kotlin | ✅ 99.1% (tivi, 100%¹⁴ kotlinx.coroutines) | ✅ 100%² (tivi) | **Measured** |
+| Kotlin | ✅ 99.1% (tivi, 100%¹⁴ kotlinx.coroutines) | ✅ 82.5% → **92.9%** (tivi, six-category sweep, BACK-727) | **Measured** |
 | Rust | ✅ 100% (Meilisearch, ripgrep⁹) | ✅ 97.4% (Meilisearch) | **Measured** |
 | C# | ✅ 100%¹⁹ (Jellyfin), 99.36%¹⁹ (Newtonsoft.Json, BACK-702 fixed) | ✅ 98.3% (Jellyfin) | **Measured** |
 | PHP | ✅ 100% (WordPress), 74.65% (osCommerce¹²) | ✅ 97.5% (WordPress) | **Measured** |
@@ -64,14 +64,16 @@ is a claim we have not yet checked, **not** a claim it is broken.
 2. **This table covers two signals, not all of reveal's DD output.**
    Import/dependency recall is measured on all 19 languages listed, and
    side-effect recall breadth is now complete — every language with import
-   recall measured also has a side-effect measurement (BACK-718). Kotlin's
-   and Swift's each rest on a single category rather than the six-category
-   sweep the rest got (caveat 3 below). `surface`, `contracts`,
-   and `patches://`/testability have **no ground-truth validation on any
-   language** — see [Scope](#scope).
-3. **Two side-effect ✅s are single-category.** Kotlin's 100% is the `db`
-   category alone (20 samples) and Swift's is `http` alone (20 samples), versus
-   the ~180-function six-category sweeps behind Python/Ruby/C#/PHP (footnote 2).
+   recall measured also has a side-effect measurement (BACK-718). Swift
+   still rests on a single category rather than the six-category sweep the
+   rest got (caveat 3 below; Kotlin was deepened to the full sweep in
+   BACK-727). `surface`, `contracts`, and `patches://`/testability have
+   **no ground-truth validation on any language** — see [Scope](#scope).
+3. **One side-effect ✅ is single-category.** Swift's 100% is `http` alone
+   (20 samples), versus the ~180-function six-category sweeps behind
+   Python/Ruby/C#/PHP (footnote 2) — Kotlin's own db-only sample (BACK-547)
+   was deepened to the same full six-category sweep in BACK-727 (82.5% →
+   92.9%, see [KOTLIN.md](internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/kotlin/KOTLIN.md)).
    Java's 97.5% includes `db` and `http` categories with one oracle instance
    each, both at 0% recall — the figure is carried by env/file/log/sleep.
 4. **C's `http` category is a corpus-proven, deliberate decline, not a
@@ -85,8 +87,10 @@ one architecturally-distinct category — Node's `process.env.X` env reads are a
 property access, not a call, so the call-only classifier never saw them.
 Excluding that category recall was 91.3%; the category itself was then closed
 by a dedicated property-access channel (BACK-644), corpus-validated at 98.7% on
-VS Code. ² Measured on a category-scoped stratified sample (Kotlin: `db`;
-Swift: `http`), not the full six-category sweep the other languages got.
+VS Code. ² Measured on a category-scoped stratified sample (Swift: `http`),
+not the full six-category sweep the other languages got. Kotlin's original
+`db`-only sample (BACK-547) was deepened to the full six-category sweep in
+BACK-727.
 ³ Graduated from spot-check family to a full stratified oracle loop
 (BACK-674, same per-directive-isolated `g++ -H` method as C's BACK-611).
 30-target stratified sample (fan-in buckets high/mid/low), core/-rooted,
@@ -1007,7 +1011,7 @@ re-measured.
 | Rust | Meilisearch | 31.6% → **97.4%** | Taxonomy and receiver-scoping gaps across all categories |
 | C++ | Godot | 24.4% → **83.3%** | Macro-hidden effects and per-category taxonomy gaps |
 | TypeScript | VS Code (65,008 functions) | 75.6% → **76.8%** (91.3% ex-`env`) | `process.env.X` env reads are a property access, not a call — invisible to the call-only classifier; closed by a dedicated property-access channel (BACK-644) |
-| Kotlin | tivi | 85.0% → **100%** (`db` sample) | `db` category taxonomy gaps |
+| Kotlin | tivi (full tree, six-category sweep, BACK-727) | 82.5% → **92.9%** | http-client-construction (`HttpClientFactory.create`/`OkHttpClient.Builder`), `BuildConfig.X` env property reads (BACK-644-shaped), coroutine `delay()` sleep idiom, and two oracle-side bugs (unmasked `//` comments, excluded expression bodies); remaining misses are declined bare `File(`/`client.get` (catastrophic cross-language collision) |
 | Swift | Kickstarter iOS | 0% → **100%** (`http` sample) | `http` idioms unclassified |
 
 Cross-language false-positive sweeps in the same program fixed bare-verb

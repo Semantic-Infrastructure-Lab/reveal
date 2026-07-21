@@ -430,6 +430,40 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             'executeasone', 'executeaslist', 'executeasoneornull',
             'transactionwithresult',
         ]),
+        # BACK-727 (sideeffects-recall-oracle/kotlin, six-category widening):
+        # corpus (full samples/kotlin, not just data/) real http idioms once
+        # scope widened past the db-only loop's data/-only survey. Both are
+        # two-segment (receiver-scoped), not bare verbs — `create`/`Builder`
+        # alone would be catastrophically collision-prone (generic factory-
+        # method/builder-pattern names used everywhere), but the full dotted
+        # form is this corpus's actual, specific http-client-CONSTRUCTION
+        # idiom (Tivi's TiviTrakt.kt / SharedPlatformApplicationComponent.kt):
+        # `HttpClientFactory.create(...)` (Ktorfit-adjacent client factory)
+        # and `OkHttpClient.Builder()...build()` (OkHttp's fluent builder).
+        ('http', [
+            'httpclientfactory.create', 'okhttpclient.builder',
+        ]),
+        # BACK-727: Kotlin coroutines' `delay(...)` is this corpus's entire
+        # sleep idiom (2/2 real occurrences, both `ui/` Compose presenters) —
+        # `_TAXONOMY_COMMON`'s existing 'sleep'/'usleep' bare words never
+        # match it (different verb entirely). Corpus-wide grep (samples/kotlin,
+        # ALL directories including test/build) found exactly these same 2
+        # call sites and zero non-coroutine collisions within Kotlin itself.
+        # `scripts/check_taxonomy_collisions.py` flagged real cross-language
+        # exposure in the unscoped `_COMPILED_ALL` fallback (java 122,
+        # typescript 90, go 52, csharp 38, ruby 14, swift 8, ...) -- accepted
+        # anyway, same conscious trade-off already baselined for `js:http:fetch`
+        # (java 759, ruby 442, typescript 485 hits) and `swift:http:perform`
+        # (ruby 261 hits): spot-checking typescript's hits shows most are the
+        # SAME real async-sleep idiom (`await delay(300)`, a hand-rolled
+        # setTimeout-Promise wrapper) rather than a false positive; java's
+        # `listener.delay(...)` (an ActionListener combinator, Elasticsearch)
+        # is the one real non-sleep meaning found, concentrated in a single
+        # class's usage -- a residual miss risk confined to the unscoped
+        # fallback path, which real per-file analysis never takes (always
+        # passes language='kotlin' for a .kt file). Written to
+        # tests/fixtures/taxonomy_collision_baseline.json.
+        ('sleep', ['delay']),
     ],
     # BACK-477: Swift's dominant file-write idiom is `"...".write(toFile:...)`
     # / `data.write(to: url)` — the argument label carrying the file-specific
@@ -1524,6 +1558,27 @@ _ENV_BASES_BY_LANG: Dict[str, Tuple[str, ...]] = {
     'js': ('process.env',),
     'python': ('os.environ',),
     'ruby': ('ENV',),
+    # BACK-727 (sideeffects-recall-oracle/kotlin, six-category widening):
+    # Android/KMP's generated `BuildConfig.X` (build-time constants, incl.
+    # this corpus's API keys — `BuildConfig.TMDB_API_KEY`/
+    # `BuildConfig.TRAKT_CLIENT_ID`) is a bare property read with no call
+    # node anywhere, the exact same invisible-to-classify_call shape as
+    # JS's `process.env.X` (BACK-644) -- 2 real corpus misses
+    # (TmdbComponent.provideTmdbApiKey, TraktComponent.provideTraktOAuthInfo)
+    # were both otherwise-uncatchable expression-bodied property reads.
+    # Cross-corpus check before adding: the same `BuildConfig.` idiom also
+    # appears in OTHER languages' sample trees' own embedded .kt files
+    # (samples/cpp's Godot Android platform layer, Godot.kt/
+    # BenchmarkUtils.kt) -- not a collision, the SAME real idiom, since
+    # this channel is gated on the FILE's detected language, not the
+    # corpus directory name. samples/dart_drift's unrelated
+    # `BuildConfig.fromPackageDir(...)`/`.parse(...)` (a `build_config`
+    # pub package, nothing env-related) is the one real false-positive
+    # risk, but only in the fully-unscoped `language=None` fallback (every
+    # real per-file analysis passes language='kotlin' explicitly) --
+    # same residual-risk shape every other entry in this table already
+    # accepts.
+    'kotlin': ('BuildConfig',),
 }
 
 

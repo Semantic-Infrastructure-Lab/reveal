@@ -150,13 +150,14 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   the *other* DD signals and in a handful of tracked residuals, so the ordering
   below is by size-of-gap rather than by continuing the import-recall sweep:
 
-  1. **Deepen Kotlin and Swift side-effect recall past their single-category
-     samples.** BACK-718's breadth goal — every language with *some*
-     side-effect measurement — is now fully closed (all 18 side-effect-measured
-     languages; GDScript and TSX/plain-JS were the last two gaps). Kotlin's and
-     Swift's ✅ each still rest on a single category (`db` and `http`
-     respectively, n=20) rather than the six-category sweep every other
-     language got (BACK-727 Kotlin, BACK-728 Swift).
+  1. **Deepen Swift side-effect recall past its single-category sample.**
+     BACK-718's breadth goal — every language with *some* side-effect
+     measurement — is now fully closed (all 18 side-effect-measured
+     languages; GDScript and TSX/plain-JS were the last two gaps). Kotlin's
+     `db`-only sample was deepened to the full six-category sweep in
+     BACK-727 (82.5% → 92.9%, see kotlin/KOTLIN.md). Swift's ✅ still rests
+     on a single category (`http`, n=20) rather than the six-category sweep
+     every other language got (BACK-728, the only work left in this item).
   2. **Close the tracked import-recall residuals, worst first:**
      TypeScript/nest 81.21% (BACK-705 — the lowest number in VALIDATION.md, on
      a flagship language, and the one with real headroom), PHP/osCommerce

@@ -1927,6 +1927,30 @@
     "source": "literal",
     "token": "writetext"
   },
+  "literal:kotlin:sleep:delay": {
+    "hits": {
+      "c": 13,
+      "cpp": 5,
+      "csharp": 38,
+      "gdscript": 3,
+      "go": 52,
+      "java": 122,
+      "javascript": 2,
+      "kotlin": 3,
+      "lua": 3,
+      "php": 4,
+      "ruby": 14,
+      "rust": 6,
+      "swift": 8,
+      "typescript": 90,
+      "zig": 19
+    },
+    "home": "kotlin",
+    "key": "literal:kotlin:sleep:delay",
+    "kind": "sleep",
+    "source": "literal",
+    "token": "delay"
+  },
   "literal:lua:db:cassandra": {
     "hits": {
       "go": 57

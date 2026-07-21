@@ -4258,6 +4258,89 @@ class TestBack547KotlinSqlDelightTaxonomy(unittest.TestCase):
         self.assertEqual(classify_call('cursor->execute', language='kotlin'), 'db')
 
 
+class TestBack727KotlinSixCategoryWidening(unittest.TestCase):
+    """BACK-727: deepened Kotlin past its db-only sideeffects-recall-oracle
+    sample (BACK-547 tenth loop) to the full six-category sweep, widening
+    the corpus scope from samples/kotlin/data to the whole samples/kotlin
+    tree (Tivi). Recall: 82.46% -> 92.86%. New taxonomy entries below; the
+    remaining misses (bare `File(` constructor, bare `client.<verb>(`) were
+    corpus-checked and deliberately DECLINED as catastrophically collision-
+    prone (see KOTLIN.md)."""
+
+    def test_http_client_construction_classified(self):
+        # `HttpClientFactory.create(...)` (TiviTrakt.kt) and
+        # `OkHttpClient.Builder()...build()` (SharedPlatformApplicationComponent.kt)
+        # are both dotted, receiver-scoped patterns (not bare verbs) --
+        # corpus-verified as this corpus's actual http-client-CONSTRUCTION
+        # idiom, zero cross-language collision risk since both segments are
+        # required together.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(
+            classify_call('HttpClientFactory.create', language='kotlin'), 'http',
+        )
+        self.assertEqual(
+            classify_call('OkHttpClient.Builder', language='kotlin'), 'http',
+        )
+
+    def test_delay_classified_sleep(self):
+        # Kotlin coroutines' `delay(...)` is this corpus's entire sleep
+        # idiom (2/2 real occurrences) -- _TAXONOMY_COMMON's 'sleep'/
+        # 'usleep' never match it (different verb).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('delay', language='kotlin'), 'sleep')
+
+    def test_bare_file_constructor_and_client_verb_not_classified(self):
+        # Both DECLINED: corpus-wide check_taxonomy_collisions-style grep
+        # (samples/*, all 18 language corpora) found bare `File(` fires
+        # 388 times in java, 130 in cpp, 132 in gdscript_pixelorama, 101+
+        # in dart alone (same shape Dart's OWN loop already declined for
+        # `File`/`Directory` -- BACK-547 sideeffects-recall-oracle/dart);
+        # bare `client.get/post/put/delete/patch/request(` fires 336 times
+        # in go, 614 in lua_awesome, 40 in rust, 37 in ruby, 25 in java --
+        # both would be exposed cross-language in classify_call()'s unscoped
+        # _COMPILED_ALL fallback. Neither pattern was added; both stay
+        # correctly unclassified misses.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('File', language='kotlin'))
+        self.assertIsNone(classify_call('client.get', language='kotlin'))
+
+    def test_buildconfig_property_read_classified_env(self):
+        # BACK-644-shaped property/subscript channel gap: Android/KMP's
+        # generated `BuildConfig.X` (build-time constants incl. API keys)
+        # is a bare property read, invisible to classify_call() the same
+        # way JS's `process.env.X` was. End-to-end: a function whose ONLY
+        # effect is a BuildConfig read produces zero *call* sites.
+        from reveal.adapters.ast.nav_effects import collect_effects
+        parser = ts.get_parser('kotlin')
+        src = textwrap.dedent("""
+        fun provideApiKey(): String = BuildConfig.TMDB_API_KEY
+        """).lstrip('\n')
+        content_bytes = src.encode('utf-8')
+        tree = parser.parse(src)
+        root = tree.root_node()
+
+        def get_text(node):
+            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+        effects = collect_effects(root, 1, 999, get_text, language='kotlin')
+        self.assertEqual(
+            [(e['line'], e['kind'], e['callee'], e['via']) for e in effects],
+            [(1, 'env', 'BuildConfig.TMDB_API_KEY', 'property')],
+        )
+
+    def test_dao_value_hop_still_left_to_reveal_receiver_suffix(self):
+        # Not a taxonomy change -- documents that reveal's PRE-EXISTING
+        # `_classify_by_receiver_suffix` (BACK-547 tenth loop) already
+        # handles the `Lazy<XxxDao>`-wrapped `watchedShowsDao.value.getX()`
+        # DI idiom found in domain/src interactors, since it matches ANY
+        # non-final segment ending in `dao` regardless of how many hops
+        # follow. The oracle's OWN regex needed a matching `.value` hop
+        # fix (build_oracle.py) to stop reporting this as a false-positive
+        # miss -- see KOTLIN.md's oracle-bug section.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('watchedShowsDao.value.getUpNextShows'), 'db')
+
+
 class TestBack547SwiftApolloHttpTaxonomy(unittest.TestCase):
     """Apollo GraphQL's `client.fetch(query:)` / `client.perform(mutation:)`
     (plus the completion-handler/async `fetchWithResult`/`performWithResult`
