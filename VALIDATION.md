@@ -67,8 +67,9 @@ is a claim we have not yet checked, **not** a claim it is broken.
    recall measured also has a side-effect measurement (BACK-718), and every
    one of those now has the full six-category sweep (Kotlin deepened in
    BACK-727, Swift deepened in BACK-728 — the last narrow entry). `surface`,
-   `contracts`, and `patches://`/testability have **no ground-truth
-   validation on any language** — see [Scope](#scope).
+   `contracts`, `calls://` cross-file call-graph resolution, and
+   `patches://`/testability have **no ground-truth validation on any
+   language** — see [Scope](#scope).
 3. **Sample size still varies.** Java's 97.5% includes `db` and `http`
    categories with one oracle instance each, both at 0% recall — the figure
    is carried by env/file/log/sleep. Swift's own sparsest category (`env`)
@@ -1064,7 +1065,10 @@ This artifact covers recall of two DD signals: **import/dependency-graph
 recall** (`depends://` and `imports://` fan-in — the property whose failure in
 BACK-542, an 18-importer module reported as having zero, motivated the whole
 program) and **side-effect/boundary classification recall** (`--sideeffects` /
-`--boundary`). It does not yet cover recall for `surface` or `contracts`, and
-the languages marked *not measured* / *spot-checked* in the status table above
-are not yet through a full oracle loop — both are tracked as open validation
-work. See `ROADMAP.md` for the forward plan.
+`--boundary`). It does not yet cover recall for `surface`, `contracts`, or
+`calls://` cross-file call-graph resolution (BACK-719, BACK-730 — the latter
+carries the same silent-wrong-answer risk as BACK-542: a whole-project graph
+query where a false negative reads as a confident, checked answer), and the
+languages marked *not measured* / *spot-checked* in the status table above are
+not yet through a full oracle loop — all tracked as open validation work. See
+`ROADMAP.md` for the forward plan.
