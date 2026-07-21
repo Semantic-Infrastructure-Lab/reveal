@@ -336,8 +336,21 @@ def build_callers_index(functions: List[Dict[str, Any]]) -> Dict[str, List[str]]
 # list (BACK-413) — shared between _get_node_name and _get_signature so both
 # agree on which parameter_list is the actual signature vs. a receiver
 # (Go) or which identifier is the name vs. a bare return type (C#).
+#
+# 'method_parameters' (Ruby) was missing entirely until the calls-recall-
+# oracle Ruby measurement (BACK-730, sixth language): without it,
+# `_name_via_param_adjacent` never matched any Ruby method, so naming fell
+# through to `_name_via_identifier_kind`'s first-identifier-or-constant-kind
+# scan — correct by coincidence for `def foo(x)`/`def self.foo(x)` (the
+# method identifier is the only such child), but wrong for `def
+# Class.method(x)` singleton methods qualified by a class CONSTANT rather
+# than `self` (e.g. `def Report.add_report(...)`): the constant `Report`
+# came first positionally and won, so the method was named "Report", not
+# "add_report" — every call made from inside one had its caller
+# misattributed to the bare class name (real corpus example: Report.rb's
+# `add_report`/`remove_report`, both `def Report.xxx` singleton methods).
 _NAME_KINDS = ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier', 'field_identifier')
-_PARAM_LIST_KINDS = ('parameters', 'parameter_list', 'formal_parameters')
+_PARAM_LIST_KINDS = ('parameters', 'parameter_list', 'formal_parameters', 'method_parameters')
 
 
 class TreeSitterAnalyzer(FileAnalyzer):
@@ -1401,6 +1414,27 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return self._get_node_text(child).rsplit(':', 1)[-1]
         return None
 
+    def _name_via_ruby_special_name(self, kids) -> Optional[str]:
+        # Ruby `def action_key=(val)` / `def [](k)` / `def ===(other)` — the
+        # name is a distinct grammar node kind, not `identifier`: `setter`
+        # for assignment-style methods (whose own text is already the full
+        # "name=" form) and `operator` for operator-overload-style methods
+        # (`[]`, `[]=`, `===`, `<=>`, `+`, ...; whose own text is already the
+        # bare symbol). Found via the calls-recall-oracle Ruby measurement
+        # (BACK-730, sixth language): setter/operator-named methods were
+        # entirely absent from --outline/get_structure(), so every call made
+        # FROM inside one had no caller name to attribute to, showing up as
+        # residual missed edges in an otherwise ~99% recall run (real corpus
+        # examples: WatchedWord#action_key=, TagGroup#parent_tag_name=,
+        # Topic#title=, Onebox::Engine#===). Same invisibility class as
+        # BACK-651 (C# operator_declaration) and BACK-724 (GDScript
+        # constructor_definition) — a name-shaped child whose KIND, not an
+        # identifier/name-kind child of it, carries the name.
+        for child in kids:
+            if _zero_arg(child, 'kind') in ('setter', 'operator'):
+                return self._get_node_text(child)
+        return None
+
     def _name_via_type_identifier(self, kids) -> Optional[str]:
         # PRIORITY 3: type_identifier (fallback for structs, classes) — only
         # used if no name was found in declarators.
@@ -1447,6 +1481,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             self._name_via_identifier_kind,
             self._name_via_dot_index,
             self._name_via_method_index,
+            self._name_via_ruby_special_name,
             self._name_via_type_identifier,
             self._name_via_field_identifier,
         ):
@@ -1648,6 +1683,46 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return name_text
         return f"{self._get_node_text(object_node)}.{name_text}"
 
+    def _callee_name_ruby_call(self, call_node) -> Optional[str]:
+        # Ruby: obj.method() / Class.static_call() / self.foo() / foo() —
+        # tree-sitter-ruby's 'call' node is the SAME node kind Python's
+        # plain call() uses, but a structurally different shape: a flat
+        # (receiver?, '.', method, argument_list?) sibling list, not a
+        # nested func-expression child. child(0) is therefore the
+        # *receiver* whenever one is present (BACK-734-shaped bug,
+        # discovered pre-flight for the calls-recall-oracle Ruby measurement
+        # via a direct grammar dump: `obj.baz` gave calls=["obj"], dropping
+        # the actual method name entirely; `self.instance_call` gave
+        # calls=["self"]; `Qux.static_call` gave calls=["Qux"]). Use the
+        # named 'receiver'/'method' fields directly, same fix shape as
+        # Java's method_invocation (BACK-734).
+        #
+        # `rs.reason = x` (a pure attribute WRITE) parses its LHS as this
+        # SAME 'call' node shape (receiver=rs, method=reason) wrapped in an
+        # 'assignment' node — tree-sitter-ruby has no distinct ATTRASGN-like
+        # node the way Ruby's own AST does. Left un-guarded, a setter write
+        # counted as a "call" to the bare attribute name showed up as
+        # false-positive edges against the calls-recall-oracle Ruby
+        # measurement (which, matching Ruby's own AST, excludes pure writes)
+        # — real corpus examples: ColorScheme#... writing `skip_publish`,
+        # UserOption#set_defaults writing `mailing_list_mode_frequency`.
+        # `+=`/`||=` (`operator_assignment`) is NOT excluded here: it reads
+        # the attribute before writing it, so it's a genuine call, matching
+        # real Ruby semantics.
+        parent = call_node.parent()
+        if parent is not None and _zero_arg(parent, 'kind') == 'assignment':
+            left = parent.child_by_field_name('left')
+            if left is not None and _zero_arg(left, 'start_byte') == _zero_arg(call_node, 'start_byte'):
+                return None
+        method_node = call_node.child_by_field_name('method')
+        if method_node is None:
+            return None
+        method_text = self._get_node_text(method_node)
+        receiver_node = call_node.child_by_field_name('receiver')
+        if receiver_node is None:
+            return method_text
+        return f"{self._get_node_text(receiver_node)}.{method_text}"
+
     def _callee_name_generic(self, call_node) -> Optional[str]:
         return self._callee_name_from_node(call_node.child(0))
 
@@ -1702,6 +1777,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
           - Java method:    obj.method()      → "obj.method" (field-based,
                              not child(0) — method_invocation's `object`
                              field precedes `name` positionally, BACK-734)
+          - Ruby method:    obj.method()      → "obj.method" (field-based;
+                             Ruby's 'call' node is the SAME kind as Python's
+                             but a flat receiver/./method/args shape, so
+                             child(0) is the receiver, not the method,
+                             BACK-734-shaped)
         """
         if not call_node.child_count():
             return None
@@ -1711,6 +1791,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._callee_name_php_new(call_node)
         if call_node.kind() == 'method_invocation':
             return self._callee_name_java_method(call_node)
+        if _zero_arg(call_node, 'kind') == 'call' and self.language == 'ruby':
+            return self._callee_name_ruby_call(call_node)
         return self._callee_name_generic(call_node)
 
     def _extract_calls_in_function(self, func_node) -> List[str]:
