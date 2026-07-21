@@ -1627,6 +1627,27 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return f"new {self._get_node_text(child)}"
         return None
 
+    def _callee_name_java_method(self, call_node) -> Optional[str]:
+        # Java: obj.method() / Class.staticMethod() / method() —
+        # method_invocation's grammar puts an optional `object` field BEFORE
+        # the `.` token and the `name` field, so child(0) is the *object*
+        # whenever one is present (BACK-734: the generic child(0) fallback
+        # returned the qualifier — e.g. "RamUsageEstimator" — as the callee
+        # name for every qualified/static call, not the method name at all;
+        # confirmed via a calls-recall-oracle measurement that fell to 9.99%
+        # recall on Elasticsearch, then traced to this exact node-shape
+        # mismatch). Use the named fields directly rather than positional
+        # child(0), same fix shape as PHP's member_call_expression handling
+        # above.
+        name_node = call_node.child_by_field_name('name')
+        if name_node is None:
+            return None
+        name_text = self._get_node_text(name_node)
+        object_node = call_node.child_by_field_name('object')
+        if object_node is None:
+            return name_text
+        return f"{self._get_node_text(object_node)}.{name_text}"
+
     def _callee_name_generic(self, call_node) -> Optional[str]:
         return self._callee_name_from_node(call_node.child(0))
 
@@ -1678,6 +1699,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
           - Starred:        *foo(bar)         → "foo"
           - PHP method:     $obj->method()    → "$obj->method"
           - PHP new:        new ClassName()   → "new ClassName"
+          - Java method:    obj.method()      → "obj.method" (field-based,
+                             not child(0) — method_invocation's `object`
+                             field precedes `name` positionally, BACK-734)
         """
         if not call_node.child_count():
             return None
@@ -1685,6 +1709,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._callee_name_php_method(call_node)
         if call_node.kind() == 'object_creation_expression':
             return self._callee_name_php_new(call_node)
+        if call_node.kind() == 'method_invocation':
+            return self._callee_name_java_method(call_node)
         return self._callee_name_generic(call_node)
 
     def _extract_calls_in_function(self, func_node) -> List[str]:
