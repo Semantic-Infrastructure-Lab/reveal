@@ -163,7 +163,7 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
      quietly writes to a database" is
      the blast-radius surprise a reviewer cannot miss — and the methodology is
      already proven, so each language is roughly one session (BACK-718,
-     children BACK-724/726).
+     children BACK-726).
   2. **Close the tracked import-recall residuals, worst first:**
      TypeScript/nest 81.21% (BACK-705 — the lowest number in VALIDATION.md, on
      a flagship language, and the one with real headroom), PHP/osCommerce
