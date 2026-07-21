@@ -14,11 +14,12 @@ This document is the audit trail proving how that failure mode was found,
 measured, and closed — and gives you what you need to re-run the check
 yourself against reveal's actual source, not take our word for it.
 
-Two signals have been through this treatment so far, each as its own
+Three signals have been through this treatment so far, each as its own
 independent-oracle program on real corpora: **import/dependency recall**
-(`depends://` / `imports://` fan-in) and **side-effect / boundary
-classification recall** (`--sideeffects` / `--boundary`). Both are documented
-below, with the exact per-language status first.
+(`depends://` / `imports://` fan-in), **side-effect / boundary classification
+recall** (`--sideeffects` / `--boundary`), and **cross-file call-graph
+recall** (`calls://`). All three are documented below, with the exact
+per-language status first.
 
 ## Validation status at a glance
 
@@ -29,26 +30,26 @@ ground-truth oracle on a real codebase** — the difference between "the command
 runs" and "we have proven the answer is right." Anything marked *not measured*
 is a claim we have not yet checked, **not** a claim it is broken.
 
-| Language | Import recall | Side-effect recall | Status |
-|---|---|---|---|
-| Python | ✅ 100% (Home Assistant, celery¹⁰) | ✅ 83.5% (Home Assistant) | **Measured** |
-| TypeScript | ✅ 100% (VS Code), ⚠️ 68.48%→81.21% (nest¹⁶, BACK-694+BACK-698 both fixed, residual gap open) | ✅ 91.3%¹ (VS Code) | **Measured** |
-| Java | ✅ 100% (Elasticsearch, guava¹¹) | ✅ 97.5% (Elasticsearch) | **Measured** |
-| Go | ✅ 100% (Kubernetes, client_golang¹³) | ✅ 96.3% (client-go) | **Measured** |
-| Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | **Measured** |
-| Kotlin | ✅ 99.1% (tivi, 100%¹⁴ kotlinx.coroutines) | ✅ 82.5% → **92.9%** (tivi, six-category sweep, BACK-727) | **Measured** |
-| Rust | ✅ 100% (Meilisearch, ripgrep⁹) | ✅ 97.4% (Meilisearch) | **Measured** |
-| C# | ✅ 100%¹⁹ (Jellyfin), 99.36%¹⁹ (Newtonsoft.Json, BACK-702 fixed) | ✅ 98.3% (Jellyfin) | **Measured** |
-| PHP | ✅ 100% (WordPress), 74.65% (osCommerce¹²) | ✅ 97.5% (WordPress) | **Measured** |
-| Swift | ✅ 100% of declared targets resolved (Kickstarter iOS — module-index coverage, not an edge-recall ratio), 98.42%¹⁸ (swift-collections, 14,824 edges, BACK-704 fixed) | ✅ 43.3% → **100.0%** (Kickstarter iOS, six-category sweep, BACK-728) | **Measured** |
-| Scala | ✅ 100% (GitBucket — n=1 qualifying edge), 100%¹⁵ (cats-effect, 24 edges) | ✅ 66.3%³⁰ (GitBucket, `db`/Slick declined) | **Measured** |
-| C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | **Measured** |
-| C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | **Measured** |
-| Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | **Measured** |
-| Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | ✅ 84.9%³¹ (AppFlowy, bare `File`/`Directory` declined) | **Measured** |
-| GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | ✅ 69.3%³² (Pixelorama, bare `print`/`request` declined) | **Measured** |
-| Zig | ✅ 100%⁶ (ghostty, TigerBeetle²⁰) | ✅ 98.4%²⁹ (TigerBeetle) | **Measured** |
-| TSX, plain JS | ✅ 100%⁷ (Excalidraw, three.js), 100%²⁵ (react-router) | ✅ 98.4%³³ (Excalidraw) | **Measured** |
+| Language | Import recall | Side-effect recall | Call-graph recall | Status |
+|---|---|---|---|---|
+| Python | ✅ 100% (Home Assistant, celery¹⁰) | ✅ 83.5% (Home Assistant) | ✅ 99.96%→100%³⁴ (Home Assistant, 3 query directions) | **Measured** |
+| TypeScript | ✅ 100% (VS Code), ⚠️ 68.48%→81.21% (nest¹⁶, BACK-694+BACK-698 both fixed, residual gap open) | ✅ 91.3%¹ (VS Code) | ✅ 100%³⁵ (VS Code) | **Measured** |
+| Java | ✅ 100% (Elasticsearch, guava¹¹) | ✅ 97.5% (Elasticsearch) | Not measured | **Measured** |
+| Go | ✅ 100% (Kubernetes, client_golang¹³) | ✅ 96.3% (client-go) | ✅ 100%³⁶ (Go compiler internals) | **Measured** |
+| Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | Not measured | **Measured** |
+| Kotlin | ✅ 99.1% (tivi, 100%¹⁴ kotlinx.coroutines) | ✅ 82.5% → **92.9%** (tivi, six-category sweep, BACK-727) | Not measured | **Measured** |
+| Rust | ✅ 100% (Meilisearch, ripgrep⁹) | ✅ 97.4% (Meilisearch) | ✅ 95.27%→100%³⁷ (Meilisearch, BACK-733 fixed) | **Measured** |
+| C# | ✅ 100%¹⁹ (Jellyfin), 99.36%¹⁹ (Newtonsoft.Json, BACK-702 fixed) | ✅ 98.3% (Jellyfin) | Not measured | **Measured** |
+| PHP | ✅ 100% (WordPress), 74.65% (osCommerce¹²) | ✅ 97.5% (WordPress) | Not measured | **Measured** |
+| Swift | ✅ 100% of declared targets resolved (Kickstarter iOS — module-index coverage, not an edge-recall ratio), 98.42%¹⁸ (swift-collections, 14,824 edges, BACK-704 fixed) | ✅ 43.3% → **100.0%** (Kickstarter iOS, six-category sweep, BACK-728) | Not measured | **Measured** |
+| Scala | ✅ 100% (GitBucket — n=1 qualifying edge), 100%¹⁵ (cats-effect, 24 edges) | ✅ 66.3%³⁰ (GitBucket, `db`/Slick declined) | Not measured | **Measured** |
+| C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | Not measured | **Measured** |
+| C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | Not measured | **Measured** |
+| Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | Not measured | **Measured** |
+| Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | ✅ 84.9%³¹ (AppFlowy, bare `File`/`Directory` declined) | Not measured | **Measured** |
+| GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | ✅ 69.3%³² (Pixelorama, bare `print`/`request` declined) | Not measured | **Measured** |
+| Zig | ✅ 100%⁶ (ghostty, TigerBeetle²⁰) | ✅ 98.4%²⁹ (TigerBeetle) | Not measured | **Measured** |
+| TSX, plain JS | ✅ 100%⁷ (Excalidraw, three.js), 100%²⁵ (react-router) | ✅ 98.4%³³ (Excalidraw) | Not measured | **Measured** |
 
 **How to read this table — three caveats that the ✅ marks do not carry:**
 
@@ -61,15 +62,16 @@ is a claim we have not yet checked, **not** a claim it is broken.
    Sampling is stratified by fan-in precisely so a resolver bug cannot hide in
    the easy cases, but a sample is not a census. **Always read the per-language
    Sample column in the detailed results tables below before quoting a number.**
-2. **This table covers two signals, not all of reveal's DD output.**
+2. **This table covers three signals, not all of reveal's DD output.**
    Import/dependency recall is measured on all 19 languages listed, and
    side-effect recall breadth is now complete — every language with import
    recall measured also has a side-effect measurement (BACK-718), and every
    one of those now has the full six-category sweep (Kotlin deepened in
-   BACK-727, Swift deepened in BACK-728 — the last narrow entry). `surface`,
-   `contracts`, `calls://` cross-file call-graph resolution, and
-   `patches://`/testability have **no ground-truth validation on any
-   language** — see [Scope](#scope).
+   BACK-727, Swift deepened in BACK-728 — the last narrow entry). Call-graph
+   recall (`calls://`) is measured for 4 of the 19 (Python, TypeScript, Go,
+   Rust — BACK-730); the other 15 are not yet measured, not known-broken.
+   `surface`, `contracts`, and `patches://`/testability have **no
+   ground-truth validation on any language** — see [Scope](#scope).
 3. **Sample size still varies.** Java's 97.5% includes `db` and `http`
    categories with one oracle instance each, both at 0% recall — the figure
    is carried by env/file/log/sleep. Swift's own sparsest category (`env`)
@@ -790,6 +792,47 @@ app's `.ts` files already have `process.env`/`fs`/IndexedDB coverage from
 the prior TypeScript loop). See
 [sideeffects-recall-oracle/tsx/TSX.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/tsx/TSX.md).
 
+³⁴ Python `calls://` pilot (BACK-730), Home Assistant core (213 files), three
+independent query directions on the same corpus: reverse-lookup (`?target=`)
+99.96% (2,632/2,633 sampled edges, 100-target stratified sample) — one real
+miss, decorator-argument calls invisible to `calls://`, filed as BACK-731;
+forward-lookup (`?callees=`) 100.00% (201/201, 32-target stratified sample)
+after a harness bug in the oracle itself was fixed (keying decorated
+functions by the decorator line, not the `def` line, to match `calls://`'s
+own node boundary) — one false positive filed as BACK-732 (chained/
+immediately-invoked calls produce un-normalized raw text); transitive lookup
+(`?target=&depth=2`) 99.98% (9,967/9,969 edges, 20-per-bucket sample),
+ground truth derived by BFS over the depth-1 oracle rather than a fresh AST
+walk — the only miss is BACK-731 cascading one level deeper, not a new root
+cause. See [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
+³⁵ TypeScript `calls://` pilot (BACK-730), VS Code's `src/vs/base` (307
+files, reused corpus from the import-recall loop), reverse-lookup only:
+100.00% recall, 0 false positives at both an 8-per-bucket (926 edges) and a
+20-per-bucket (2,557 edges) stratified sample. Also surfaced (not a recall
+gap) a previously undocumented `calls://` behavior — a call inside a nested
+named arrow function is attributed to *every* enclosing scope up to the
+nearest declared function/method, not just its own arrow — added to
+[CALLS_ADAPTER_GUIDE.md](reveal/docs/adapters/CALLS_ADAPTER_GUIDE.md)'s
+Limitations section.
+³⁶ Go `calls://` pilot (BACK-730), the Go compiler's own internals
+(`cmd/compile/internal`, 371 files, `testdata/`/`_test.go` excluded),
+reverse-lookup only: 100.00% recall, 0 false positives, clean on the first
+run at both an 8-per-bucket (1,168 edges) and a 20-per-bucket (4,418 edges)
+stratified sample — no oracle-methodology fix needed, unlike Python/TS.
+Go structurally cannot produce the JS/TS cascading-attribution shape (no
+nested named function declarations, only closures, which never get their
+own scope), confirmed live against a real corpus case.
+³⁷ Rust `calls://` pilot (BACK-730), Meilisearch's `milli` crate (238
+files), reverse-lookup only: first measurement 96.98%/95.27% (8-/20-per-
+bucket samples) surfaced a real dominant gap — turbofish generics on a
+call/method callee defeat the bare-callee-name extractor's naive last-`::`-
+split (`size_of::<u32>()` misparsed as callee `<u32>`), plus a minor
+parenthesized-callee gap (`(f)(args)` captures `"(f)"` literally) — filed
+and fixed as **BACK-733** the same session; re-measured at **100.00%**
+recall, 0 false positives, matching Go/TS. See
+[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+("Fourth language: Rust" section) for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -1020,6 +1063,46 @@ subsequence over-fire (`dict.update()` misread as a db write) and unscoped
 receiver-name collisions (`conn`/`session`/`cache`/`requests`), so the recall
 gains did not come at the cost of precision.
 
+## Cross-File Call-Graph Recall
+
+`calls://` answers a third DD question, structurally distinct from the other
+two — not "what does this import" or "what does this function do," but "who
+calls this function, and what does it call" — a whole-project graph query
+with the same silent-wrong-answer risk as `depends://`'s BACK-542 failure: a
+false negative (no callers found) reads as a confident, checked "nothing
+calls this," not a missing measurement (BACK-730).
+
+### Method
+
+Same shape as the other two signals: an execution-free, independent oracle
+(Python's `ast`, TypeScript's own scope/AST rules read from `treesitter.py`,
+Go's `go/parser`+`go/ast`, Rust's `syn`) diffed against `calls://`'s live
+output on a real, unmodified open-source corpus, stratified by fan-in/fan-out
+so a resolver bug can't hide in the easy cases. Three query directions were
+exercised on the pilot (Python) corpus before extending to other languages:
+reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
+"what does this call"), and transitive lookup (`?target=&depth=2`).
+
+### Results
+
+| Language | Real corpus | Query direction(s) | Recall: before → after | False positives | Bug(s) found & fixed |
+|---|---|---|---|---|---|
+| Python | Home Assistant core (213 files) | reverse, forward, transitive (depth=2) | reverse 99.96% (2,632/2,633); forward 100.00% (201/201, after an oracle-harness fix); transitive 99.98% (9,967/9,969) | 1 (forward direction — un-normalized chained/IIFE call text) | Decorator-argument calls invisible to `calls://`'s node walk (**BACK-731**, not fixed — measures, doesn't remediate; recurs in both the forward and transitive samples as the same root cause, not a new gap). Chained/immediately-invoked-call raw text un-normalized (**BACK-732**, not fixed) |
+| TypeScript | VS Code `src/vs/base` (307 files) | reverse | **100.00%** (no gap) | 0 | None — also surfaced (not a recall gap) an undocumented cascading-attribution behavior: a call inside a nested named arrow is credited to every enclosing scope up to the nearest declared function/method, now documented in [CALLS_ADAPTER_GUIDE.md](reveal/docs/adapters/CALLS_ADAPTER_GUIDE.md) |
+| Go | Go compiler internals `cmd/compile/internal` (371 files) | reverse | **100.00%** (no gap, clean on first run) | 0 | None — Go structurally cannot produce the JS/TS cascading-attribution shape (no nested named function declarations, only closures, which never get their own scope) |
+| Rust | Meilisearch `milli` crate (238 files) | reverse | 96.98%/95.27% → **100.00%** | 0 (post-fix) | Turbofish generics on a call/method callee defeated the bare-callee-name extractor's naive last-`::`-split (`size_of::<u32>()` → misparsed callee `<u32>`), plus a minor parenthesized-callee gap (`(f)(args)` captured literally) — **BACK-733**, fixed |
+
+Full methodology, per-corpus commit/snapshot, and the harness scripts
+(`build_oracle*.py`/`.go`/`.js`, `main.rs`, `diff_*.py`) for all four
+languages: [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
+
+Not yet measured: Java, Ruby, Kotlin, C#, PHP, Swift, Scala, C++, C, Lua,
+Dart, GDScript, Zig, TSX/plain JS — a claim not yet checked, not a claim
+`calls://` is broken on those languages. If a fifth language is measured, add
+it to this table and the status-at-a-glance table above; `calls://`'s own
+risk ordering (JS/TS/Go/Rust were flagged first as shallower-extraction
+risks) is a reasonable guide for which to pick next.
+
 ## Re-running this yourself
 
 Every loop's harness is a plain script pair — `build_oracle.*` (produces the
@@ -1061,30 +1144,19 @@ be reproduced or challenged line by line rather than taken on faith.
 
 ## Scope
 
-This artifact covers recall of two DD signals: **import/dependency-graph
+This artifact covers recall of three DD signals: **import/dependency-graph
 recall** (`depends://` and `imports://` fan-in — the property whose failure in
 BACK-542, an 18-importer module reported as having zero, motivated the whole
-program) and **side-effect/boundary classification recall** (`--sideeffects` /
-`--boundary`). It does not yet cover recall for `surface`, `contracts`, or
-`calls://` cross-file call-graph resolution (BACK-719, BACK-730 — the latter
-carries the same silent-wrong-answer risk as BACK-542: a whole-project graph
-query where a false negative reads as a confident, checked answer). Pilot
-measurements exist for `calls://` across three query directions and four
-languages — Python on Home Assistant core: reverse-lookup (`?target=`)
-99.96% (2,632/2,633 sampled edges, one real gap filed as BACK-731), forward
-lookup (`?callees=`) 99.57%/100.00% (BACK-731 recurring plus one new finding,
-BACK-732), transitive lookup (`?target=&depth=2`) 99.98% (BACK-731 cascading
-through the graph, no new gap); TypeScript on VS Code's `src/vs/base`:
-reverse-lookup 100.00% with zero false positives at both sample sizes; Go on
-the Go compiler's own internals (`cmd/compile/internal`): reverse-lookup
-100.00% with zero false positives at both sample sizes; Rust on
-Meilisearch's `milli` crate: reverse-lookup 96.98%/95.27% (8/20 per bucket)
-with zero false positives but a real dominant gap — turbofish generics and
-parenthesized call targets defeat bare-name callee extraction, filed as
-BACK-733 — but this is still evidence for four languages, not the
-cross-language bar this table's other entries clear; see
-[`calls-recall-oracle/README.md`](internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
-for the full methodology and open next steps. The
-languages marked *not measured* / *spot-checked* in the status table above are
-not yet through a full oracle loop — all tracked as open validation work. See
-`ROADMAP.md` for the forward plan.
+program), **side-effect/boundary classification recall** (`--sideeffects` /
+`--boundary`), and **cross-file call-graph recall** (`calls://` — BACK-730,
+the same silent-wrong-answer risk as BACK-542: a whole-project graph query
+where a false negative reads as a confident, checked answer). `calls://` is
+measured for 4 of the 19 languages so far (Python across three query
+directions, TypeScript, Go, Rust — all now clean or fixed-and-reverified, see
+[Cross-File Call-Graph Recall](#cross-file-call-graph-recall)); the
+remaining 15 are open validation work, tracked the same way as any
+not-yet-measured import/side-effect language. It does not yet cover recall
+for `surface` or `contracts` (BACK-719). The languages marked *not measured*
+/ *spot-checked* in the status table above are not yet through a full oracle
+loop — all tracked as open validation work. See `ROADMAP.md` for the forward
+plan.
