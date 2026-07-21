@@ -1068,11 +1068,16 @@ program) and **side-effect/boundary classification recall** (`--sideeffects` /
 `--boundary`). It does not yet cover recall for `surface`, `contracts`, or
 `calls://` cross-file call-graph resolution (BACK-719, BACK-730 — the latter
 carries the same silent-wrong-answer risk as BACK-542: a whole-project graph
-query where a false negative reads as a confident, checked answer). A first
-pilot measurement exists — Python reverse-lookup (`?target=`) recall on Home
-Assistant core, 99.96% (2,632/2,633 sampled edges, one real gap found and
-filed as BACK-731) — but one language and one query direction is not yet
-enough evidence to promote to this table; see
+query where a false negative reads as a confident, checked answer). Pilot
+measurements exist for `calls://` across three query directions and two
+languages — Python on Home Assistant core: reverse-lookup (`?target=`)
+99.96% (2,632/2,633 sampled edges, one real gap filed as BACK-731), forward
+lookup (`?callees=`) 99.57%/100.00% (BACK-731 recurring plus one new finding,
+BACK-732), transitive lookup (`?target=&depth=2`) 99.98% (BACK-731 cascading
+through the graph, no new gap); TypeScript on VS Code's `src/vs/base`:
+reverse-lookup 100.00% with zero false positives at both sample sizes — but
+this is still evidence for two languages, not the cross-language bar this
+table's other entries clear; see
 [`calls-recall-oracle/README.md`](internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
 for the full methodology and open next steps. The
 languages marked *not measured* / *spot-checked* in the status table above are
