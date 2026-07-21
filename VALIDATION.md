@@ -39,7 +39,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | ✅ 22.05%→100%³⁹ (Discourse, BACK-735 fixed) | **Measured** |
 | Kotlin | ✅ 99.1% (tivi, 100%¹⁴ kotlinx.coroutines) | ✅ 82.5% → **92.9%** (tivi, six-category sweep, BACK-727) | Not measured | **Measured** |
 | Rust | ✅ 100% (Meilisearch, ripgrep⁹) | ✅ 97.4% (Meilisearch) | ✅ 95.27%→100%³⁷ (Meilisearch, BACK-733 fixed) | **Measured** |
-| C# | ✅ 100%¹⁹ (Jellyfin), 99.36%¹⁹ (Newtonsoft.Json, BACK-702 fixed) | ✅ 98.3% (Jellyfin) | Not measured | **Measured** |
+| C# | ✅ 100%¹⁹ (Jellyfin), 99.36%¹⁹ (Newtonsoft.Json, BACK-702 fixed) | ✅ 98.3% (Jellyfin) | ✅ 69.74%→100%⁴¹ (Jellyfin, BACK-737 fixed) | **Measured** |
 | PHP | ✅ 100% (WordPress), 74.65% (osCommerce¹²) | ✅ 97.5% (WordPress) | ✅ 98.87%→100%⁴⁰ (WordPress, BACK-736 fixed) | **Measured** |
 | Swift | ✅ 100% of declared targets resolved (Kickstarter iOS — module-index coverage, not an edge-recall ratio), 98.42%¹⁸ (swift-collections, 14,824 edges, BACK-704 fixed) | ✅ 43.3% → **100.0%** (Kickstarter iOS, six-category sweep, BACK-728) | Not measured | **Measured** |
 | Scala | ✅ 100% (GitBucket — n=1 qualifying edge), 100%¹⁵ (cats-effect, 24 edges) | ✅ 66.3%³⁰ (GitBucket, `db`/Slick declined) | Not measured | **Measured** |
@@ -68,8 +68,8 @@ is a claim we have not yet checked, **not** a claim it is broken.
    recall measured also has a side-effect measurement (BACK-718), and every
    one of those now has the full six-category sweep (Kotlin deepened in
    BACK-727, Swift deepened in BACK-728 — the last narrow entry). Call-graph
-   recall (`calls://`) is measured for 7 of the 19 (Python, TypeScript, Go,
-   Rust, Java, Ruby, PHP — BACK-730); the other 12 are not yet measured, not known-broken.
+   recall (`calls://`) is measured for 8 of the 19 (Python, TypeScript, Go,
+   Rust, Java, Ruby, PHP, C# — BACK-730); the other 11 are not yet measured, not known-broken.
    `surface`, `contracts`, and `patches://`/testability have **no
    ground-truth validation on any language** — see [Scope](#scope).
 3. **Sample size still varies.** Java's 97.5% includes `db` and `http`
@@ -903,6 +903,39 @@ positives, at both an 8-per-bucket (2,488 edges) and 20-per-bucket (5,585
 edges) sample. See
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
 ("Seventh language: PHP" section) for the full write-up.
+⁴¹ C# `calls://` pilot (BACK-730), Jellyfin (2,098 files), reverse-lookup
+only: unlike Java/Ruby/PHP, a pre-flight tree-sitter grammar dump found no
+missing node kind — the gaps here were one level deeper, in name/callee
+*text* extraction. First measurement: **69.74%** recall (1,060/1,520 oracle
+edges), 8 false positives. Tracing every miss found two distinct bugs: (1)
+generic methods (`private T CreateItemByName<T>(...)`, `Task
+Enqueue<T>(...)`) had their own definition name misattributed to the return
+type (`T`, `Task`) — C#'s `type_parameter_list` sits between the method
+name and parameter list, breaking `_name_via_param_adjacent`'s "name
+immediately precedes param list" check, so extraction fell through to a
+first-identifier scan that finds the return type first. This is a
+caller-side gap, unlike every prior language's callee-side bugs — it
+corrupts the *source* of every call-graph edge from an affected method, not
+just whether a specific target matches. (2) Explicit generic-argument
+suffixes (`new List<Video>()`, `Method<string>()`) survived into
+`_bare_callee_name`, never matching a bare `?target=` lookup — same bug
+*class* as BACK-733's Rust turbofish gap. Both fixed; re-measured at
+**99.90%** recall (1,011/1,012 edges) — tracing the one residual miss found
+a *third*, distinct bug: multi-line fluent call chains (Moq's
+`_mock.\n    Setup(...)`, a common C# test idiom) left literal
+newline+indentation in the bare callee name (`"\n    Setup"` !=
+`"Setup"`). Fixed (`.strip()` on the final bare segment — identifiers can
+never contain whitespace, unconditionally safe). All three fixed as a
+single tracker item, **BACK-737**. Also found and fixed an oracle-side bug
+(a qualified type nested inside a generic argument produced a garbage key
+that hung a `calls://` query for 120s+ on the full 2,098-file corpus — not
+an infinite loop, a real per-query wall-time characteristic of this
+corpus's size, confirmed by testing the same target scoped to a single
+file). Final measurement after all three fixes: **100.00%** recall, 0
+false positives, at both an 8-per-bucket (1,012 edges) and 20-per-bucket
+(2,828 edges) sample. See
+[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+("Eighth language: C#" section) for the full write-up.
 
 ## Import/Dependency Recall
 
@@ -1165,20 +1198,21 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 | Java | Elasticsearch `server/src/main/java` (4,837 files) | reverse | **9.99%** → **100.00%** | 167 (pre-fix) → 0 (post-fix) | `method_invocation`'s `object` field precedes `name` positionally, so the generic `child(0)`-based extractor returned the call's qualifier/object as the callee name for every qualified or static call (`obj.method()`, `Class.staticMethod()`) — nearly all real Java call sites — **BACK-734**, fixed |
 | Ruby | Discourse `app/`+`lib/` (1,899 files) | reverse | **22.05%** → **100.00%** | 30 (pre-fix) → 0 (post-fix) | Ruby's `'call'` node is the same tree-sitter kind Python's plain `call()` uses but a flat receiver/./method/args shape, so `child(0)` returned the receiver for every qualified/self/static call — **BACK-735**, fixed, same class as BACK-734. Two more distinct bugs found in the residual tail while at 99%: `setter`/`operator`-named methods (`def x=`/`def []`) invisible to `--outline` (same class as BACK-638/651/724), and `def Class.method` singleton methods naming themselves after the qualifying constant instead of the method (`_PARAM_LIST_KINDS` missing Ruby's `method_parameters` kind) — both fixed same session |
 | PHP | WordPress `wp-admin/`+`wp-includes/` (1,328 files) | reverse | **98.87%** → **100.00%** | 0 | `self::`/`parent::`/`static::`/`Class::method()` (PHP's static/scoped call syntax) all parse to `scoped_call_expression`, a node kind entirely absent from `CALL_NODE_TYPES` — every PHP static call was silently invisible to `calls://` — **BACK-736**, fixed. A second, distinct bug surfaced in the residual tail: `_bare_callee_name` didn't strip PHP's `"new ClassName"` constructor-call prefix or a leading `\` fully-qualified-namespace marker, so neither ever matched a bare `?target=` lookup (same bug class as BACK-733's Rust turbofish gap — a bare-name-normalization miss, not an extraction miss) — fixed same session |
+| C# | Jellyfin (2,098 files) | reverse | **69.74%** → **100.00%** | 8 (pre-fix) → 0 (post-fix) | Three distinct bugs, all fixed as **BACK-737**: (1) generic methods (`Task Enqueue<T>(...)`) had their definition name misattributed to the return type, since C#'s `type_parameter_list` sits between the method name and parameter list, breaking `_name_via_param_adjacent`'s "name immediately precedes param list" check — a caller-side gap, unlike every prior language's callee-side bugs, since it corrupts the source of every call-graph edge from an affected method; (2) explicit generic-argument suffixes (`new List<Video>()`, `Method<string>()`) survived into `_bare_callee_name`, never matching a bare `?target=` lookup — same bug class as BACK-733's Rust turbofish gap; (3) multi-line fluent call chains (Moq's `_mock.\n    Setup(...)`, a common C# test idiom) left literal newline+indentation in the bare callee name |
 
 Full methodology, per-corpus commit/snapshot, and the harness scripts
-(`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`, `main.rs`, `diff_*.py`) for all seven
+(`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, `diff_*.py`) for all eight
 languages: [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
-Not yet measured: Kotlin, C#, Swift, Scala, C++, C, Lua, Dart,
+Not yet measured: Kotlin, Swift, Scala, C++, C, Lua, Dart,
 GDScript, Zig, TSX/plain JS — a claim not yet checked, not a claim
-`calls://` is broken on those languages. If an eighth language is measured,
+`calls://` is broken on those languages. If a ninth language is measured,
 add it to this table and the status-at-a-glance table above; `_bare_callee_name`
-/`_get_callee_name`'s other dotted-name-family languages (Kotlin, C#,
-Scala all share the module-path/dotted-name resolver core the import-recall
-program already flagged) are a reasonable place to look next, given Java's
-BACK-734, Ruby's BACK-735, and PHP's BACK-736 all show even an "unflagged"
-language can hide a systemic callee-extraction bug.
+/`_get_callee_name`'s other dotted-name-family languages (Kotlin/Scala share
+the module-path/dotted-name resolver core the import-recall program already
+flagged) are a reasonable place to look next, given Java's BACK-734, Ruby's
+BACK-735, PHP's BACK-736, and C#'s BACK-737 all show even an "unflagged"
+language can hide a systemic callee- or caller-extraction bug.
 
 ## Re-running this yourself
 
@@ -1228,11 +1262,11 @@ program), **side-effect/boundary classification recall** (`--sideeffects` /
 `--boundary`), and **cross-file call-graph recall** (`calls://` — BACK-730,
 the same silent-wrong-answer risk as BACK-542: a whole-project graph query
 where a false negative reads as a confident, checked answer). `calls://` is
-measured for 5 of the 19 languages so far (Python across three query
-directions, TypeScript, Go, Rust, Java, Ruby, PHP — all now clean or
+measured for 8 of the 19 languages so far (Python across three query
+directions, TypeScript, Go, Rust, Java, Ruby, PHP, C# — all now clean or
 fixed-and-reverified, see
 [Cross-File Call-Graph Recall](#cross-file-call-graph-recall)); the
-remaining 12 are open validation work, tracked the same way as any
+remaining 11 are open validation work, tracked the same way as any
 not-yet-measured import/side-effect language. It does not yet cover recall
 for `surface` or `contracts` (BACK-719). The languages marked *not measured*
 / *spot-checked* in the status table above are not yet through a full oracle
