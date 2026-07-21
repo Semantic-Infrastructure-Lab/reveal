@@ -34,7 +34,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 |---|---|---|---|---|
 | Python | ✅ 100% (Home Assistant, celery¹⁰) | ✅ 83.5% (Home Assistant) | ✅ 99.96%→100%³⁴ (Home Assistant, 3 query directions) | **Measured** |
 | TypeScript | ✅ 100% (VS Code), ⚠️ 68.48%→81.21% (nest¹⁶, BACK-694+BACK-698 both fixed, residual gap open) | ✅ 91.3%¹ (VS Code) | ✅ 100%³⁵ (VS Code) | **Measured** |
-| Java | ✅ 100% (Elasticsearch, guava¹¹) | ✅ 97.5% (Elasticsearch) | Not measured | **Measured** |
+| Java | ✅ 100% (Elasticsearch, guava¹¹) | ✅ 97.5% (Elasticsearch) | ✅ 9.99%→100%³⁸ (Elasticsearch, BACK-734 fixed) | **Measured** |
 | Go | ✅ 100% (Kubernetes, client_golang¹³) | ✅ 96.3% (client-go) | ✅ 100%³⁶ (Go compiler internals) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | Not measured | **Measured** |
 | Kotlin | ✅ 99.1% (tivi, 100%¹⁴ kotlinx.coroutines) | ✅ 82.5% → **92.9%** (tivi, six-category sweep, BACK-727) | Not measured | **Measured** |
@@ -68,8 +68,8 @@ is a claim we have not yet checked, **not** a claim it is broken.
    recall measured also has a side-effect measurement (BACK-718), and every
    one of those now has the full six-category sweep (Kotlin deepened in
    BACK-727, Swift deepened in BACK-728 — the last narrow entry). Call-graph
-   recall (`calls://`) is measured for 4 of the 19 (Python, TypeScript, Go,
-   Rust — BACK-730); the other 15 are not yet measured, not known-broken.
+   recall (`calls://`) is measured for 5 of the 19 (Python, TypeScript, Go,
+   Rust, Java — BACK-730); the other 14 are not yet measured, not known-broken.
    `surface`, `contracts`, and `patches://`/testability have **no
    ground-truth validation on any language** — see [Scope](#scope).
 3. **Sample size still varies.** Java's 97.5% includes `db` and `http`
@@ -832,6 +832,26 @@ and fixed as **BACK-733** the same session; re-measured at **100.00%**
 recall, 0 false positives, matching Go/TS. See
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
 ("Fourth language: Rust" section) for the full write-up.
+³⁸ Java `calls://` pilot (BACK-730), Elasticsearch's `server/src/main/java`
+(4,837 files), reverse-lookup only: first measurement **9.99%** recall
+(198/1,982 oracle edges), 167 false positives — an order of magnitude worse
+than any prior language. Root cause: `method_invocation`'s grammar puts an
+optional `object` field *before* the `name` field, so the generic
+`child(0)`-based callee extractor (correct for Python/JS/Go's grammars)
+returned the call's object/qualifier as the "callee name" for every
+qualified or static call (`obj.method()`, `Class.staticMethod()`) — nearly
+all real Java call sites. Filed and fixed same-session as **BACK-734**
+(field-based extraction via `child_by_field_name('name')`, mirroring the
+existing PHP special-case); re-measured at **100.00%** recall, 0 false
+positives, at both an 8-per-bucket (1,982 edges) and a 20-per-bucket
+(4,009 edges) sample. Also surfaced that `javalang` (pure-Python, the
+initially-planned independent-oracle parser) silently fails to parse
+20.4% of this corpus (Java records, text blocks — both post-date
+`javalang`'s last update) — escalated to JavaParser (a modern,
+actively-maintained parser) plus a locally-installed JDK 17 rather than
+accept a biased sample. See
+[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+("Fifth language: Java" section) for the full write-up.
 
 ## Import/Dependency Recall
 
@@ -1091,17 +1111,21 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 | TypeScript | VS Code `src/vs/base` (307 files) | reverse | **100.00%** (no gap) | 0 | None — also surfaced (not a recall gap) an undocumented cascading-attribution behavior: a call inside a nested named arrow is credited to every enclosing scope up to the nearest declared function/method, now documented in [CALLS_ADAPTER_GUIDE.md](reveal/docs/adapters/CALLS_ADAPTER_GUIDE.md) |
 | Go | Go compiler internals `cmd/compile/internal` (371 files) | reverse | **100.00%** (no gap, clean on first run) | 0 | None — Go structurally cannot produce the JS/TS cascading-attribution shape (no nested named function declarations, only closures, which never get their own scope) |
 | Rust | Meilisearch `milli` crate (238 files) | reverse | 96.98%/95.27% → **100.00%** | 0 (post-fix) | Turbofish generics on a call/method callee defeated the bare-callee-name extractor's naive last-`::`-split (`size_of::<u32>()` → misparsed callee `<u32>`), plus a minor parenthesized-callee gap (`(f)(args)` captured literally) — **BACK-733**, fixed |
+| Java | Elasticsearch `server/src/main/java` (4,837 files) | reverse | **9.99%** → **100.00%** | 167 (pre-fix) → 0 (post-fix) | `method_invocation`'s `object` field precedes `name` positionally, so the generic `child(0)`-based extractor returned the call's qualifier/object as the callee name for every qualified or static call (`obj.method()`, `Class.staticMethod()`) — nearly all real Java call sites — **BACK-734**, fixed |
 
 Full methodology, per-corpus commit/snapshot, and the harness scripts
 (`build_oracle*.py`/`.go`/`.js`, `main.rs`, `diff_*.py`) for all four
 languages: [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
-Not yet measured: Java, Ruby, Kotlin, C#, PHP, Swift, Scala, C++, C, Lua,
-Dart, GDScript, Zig, TSX/plain JS — a claim not yet checked, not a claim
-`calls://` is broken on those languages. If a fifth language is measured, add
-it to this table and the status-at-a-glance table above; `calls://`'s own
-risk ordering (JS/TS/Go/Rust were flagged first as shallower-extraction
-risks) is a reasonable guide for which to pick next.
+Not yet measured: Ruby, Kotlin, C#, PHP, Swift, Scala, C++, C, Lua, Dart,
+GDScript, Zig, TSX/plain JS — a claim not yet checked, not a claim
+`calls://` is broken on those languages. If a sixth language is measured,
+add it to this table and the status-at-a-glance table above; `_bare_callee_name`
+/`_get_callee_name`'s other dotted-name-family languages (Ruby, Kotlin, C#,
+PHP, Scala all share the module-path/dotted-name resolver core the
+import-recall program already flagged) are a reasonable place to look next,
+given Java's BACK-734 shows even an "unflagged" language can hide a
+systemic callee-extraction bug.
 
 ## Re-running this yourself
 
@@ -1151,10 +1175,10 @@ program), **side-effect/boundary classification recall** (`--sideeffects` /
 `--boundary`), and **cross-file call-graph recall** (`calls://` — BACK-730,
 the same silent-wrong-answer risk as BACK-542: a whole-project graph query
 where a false negative reads as a confident, checked answer). `calls://` is
-measured for 4 of the 19 languages so far (Python across three query
-directions, TypeScript, Go, Rust — all now clean or fixed-and-reverified, see
-[Cross-File Call-Graph Recall](#cross-file-call-graph-recall)); the
-remaining 15 are open validation work, tracked the same way as any
+measured for 5 of the 19 languages so far (Python across three query
+directions, TypeScript, Go, Rust, Java — all now clean or fixed-and-reverified,
+see [Cross-File Call-Graph Recall](#cross-file-call-graph-recall)); the
+remaining 14 are open validation work, tracked the same way as any
 not-yet-measured import/side-effect language. It does not yet cover recall
 for `surface` or `contracts` (BACK-719). The languages marked *not measured*
 / *spot-checked* in the status table above are not yet through a full oracle
