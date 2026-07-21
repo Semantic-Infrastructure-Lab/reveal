@@ -911,6 +911,102 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             'debug.print',
         ]),
     ],
+    # BACK-718/BACK-720 (sideeffects-recall-oracle, fifteenth language, after
+    # C/Lua/Zig closed BACK-718's first three slices): GitBucket
+    # (samples/scala, a real production Scala/Scalatra Git-hosting web app --
+    # see scala/SCALA.md for the full corpus/methodology writeup). Two
+    # candidate bare verbs considered and DECLINED here, kept only as a
+    # documented finding (see SCALA.md): GitBucket's own Slick blocking-API
+    # persistence layer (`Priorities.filter(...).firstOption`,
+    # `query.insert(...)`, `query.update(...)`, `query.delete()`) is
+    # syntactically INDISTINGUISHABLE from Scala's own built-in
+    # collection/Option methods (`List.filter`, `Option.filter`) -- the
+    # exact same already-declined bare-verb collision class as Lua's
+    # insert/select/update/delete (BACK-636/BACK-633), just with NO
+    # distinguishing receiver-name/dotted-prefix at all (unlike Python's
+    # `session.query`, PHP's `$wpdb->query`, or Lua's `connector:query`).
+    # `check_taxonomy_collisions.py` confirmed catastrophic cross-language
+    # exposure for a scala-scoped `filter`/`insert`/`update`/`delete` (every
+    # other corpus language's own collection/map methods use the identical
+    # names) -- declined, `db` recall stays structurally low for this corpus.
+    'scala': [
+        ('db', [
+            # Slick's blocking-API TERMINAL methods -- distinctive camelCase
+            # compounds (tokenizer doesn't split camelCase, same shape as
+            # C#'s SaveChangesAsync/Zig's openFile), NOT the bare
+            # `filter`/`insert`/`update`/`delete`/`list`/`first`/`result`
+            # verbs Slick chains them onto (see this table's own header
+            # comment for why those are declined). `firstOption` alone is
+            # GitBucket's single most common Slick terminal call (31 corpus
+            # sites, e.g. `Priorities.filter(...).firstOption`) and, unlike
+            # bare `first`, has no non-Slick meaning in any corpus language.
+            'firstoption', 'withsession',
+            # Slick 2.x-style DB handle acquisition -- dotted, GitBucket's
+            # own `Database.forDataSource`/`Database.forURL` bootstrap
+            # calls (servlet/InitializeListener.scala). Zero collision risk
+            # (fully-qualified, Slick-specific).
+            'database.fordatasource', 'database.forurl',
+        ]),
+        ('file', [
+            # `new File(...)`/`new FileOutputStream(...)`/
+            # `new FileInputStream(...)`/`new FileWriter(...)` -- java.io
+            # interop, GitBucket's dominant non-JGit file-I/O idiom (100+
+            # corpus call sites). Only visible at all after this loop's
+            # `instance_expression` CALL_NODE_TYPES fix (see treesitter.py) --
+            # the "new <Name>" callee-text convention already established for
+            # PHP/C#'s `object_creation_expression` (e.g. PHP's 'new pdo').
+            'new file', 'new fileoutputstream', 'new fileinputstream',
+            'new filewriter',
+            # Apache Commons `FileUtils.*` -- a single bare, distinctive
+            # compound-noun receiver (dotted-prefix-equivalent via sliding-
+            # window subsequence matching: `FileUtils.deleteDirectory`
+            # tokenizes to ['fileutils','deletedirectory'], and the single
+            # pattern token 'fileutils' matches regardless of trailing verb)
+            # -- same "namespaced receiver, no bare verb" safety shape as
+            # Zig's `std.net.`/Lua's `ngx.socket.` prefix entries. 18
+            # deleteDirectory + 4 moveDirectory + 3 writeByteArrayToFile + 3
+            # copyFile + 2 write + 2 readFileToString + 2 forceDelete + 1
+            # each of readFileToByteArray/forceMkdirParent/forceMkdir/
+            # deleteQuietly/copyDirectory corpus call sites, zero
+            # non-file-I/O meaning.
+            'fileutils',
+            # java.io.File instance methods -- `.mkdirs()`/`.createNewFile()`
+            # are compound (not bare 'mkdir'/'create') so carry negligible
+            # collision risk versus the bare single-verb forms COMMON
+            # already declines; corpus-checked, no non-file-I/O hits in any
+            # other language's corpus.
+            'mkdirs', 'createnewfile',
+        ]),
+        ('http', [
+            # Apache HttpClient webhook-delivery idiom (WebHookService.scala
+            # callWebHook): `new HttpPost(url)`/`new HttpGet(url)` --
+            # constructor calls, only visible after the instance_expression
+            # fix above. `httpClient.execute(httpPost)` itself was ALREADY
+            # classified pre-fix via the pre-existing language-UNSCOPED
+            # `_RECEIVER_TAXONOMY` 'httpclient' receiver entry (shared with
+            # Python's httpx/aiohttp) -- no new pattern needed for that call.
+            'new httppost', 'new httpget',
+            # `HttpClientBuilder.create(...)...build()` (HttpClientUtil.scala
+            # withHttpClient) -- client CONSTRUCTION/configuration, not the
+            # request itself; added anyway since it's a distinctive compound
+            # receiver name with zero collision risk and genuinely marks a
+            # function that participates in this corpus's one real outbound-
+            # HTTP code path.
+            'httpclientbuilder',
+        ]),
+        ('env', [
+            # `System.getProperty`/`System.getenv` — Scala interops directly
+            # with java.lang.System, and language-scoping means Java's OWN
+            # existing `_TAXONOMY_BY_LANG['java']` entry for this exact verb
+            # (added BACK-639) does NOT extend to Scala files even though
+            # both compile to the same JVM class — classify_call() only
+            # merges COMMON + the file's OWN language bucket. Duplicated
+            # here rather than shared, mirroring the java entry exactly
+            # (`system.getenv` is redundant with COMMON's bare 'getenv' via
+            # subsequence match, kept for symmetry/documentation).
+            'system.getenv', 'system.getproperty',
+        ]),
+    ],
 }
 
 # Analyzer `language` values that share one _TAXONOMY_BY_LANG bucket.

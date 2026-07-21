@@ -238,6 +238,14 @@ def _extract_callee(
     if call_node.kind() == 'object_creation_expression':
         return _extract_object_creation_callee(call_node, get_text)
 
+    # Scala: new ClassName(args) / new ClassName[T](args) — a DISTINCT node
+    # kind ('instance_expression') from PHP/C#'s object_creation_expression
+    # above despite the identical source shape (BACK-718/BACK-720 Scala
+    # sideeffects-recall-oracle). Emit the same "new <name>" text so the
+    # exact same taxonomy pattern convention applies unchanged.
+    if call_node.kind() == 'instance_expression':
+        return _extract_scala_instance_callee(call_node, get_text)
+
     # Java: method_invocation is a flat node `[object? . name argument_list]` —
     # child(0) is only the *object* (`Files`, `path`), so the old logic dropped
     # the method name entirely (`Files.createDirectories()` → "Files",
@@ -383,6 +391,35 @@ def _extract_object_creation_callee(node: Any, get_text: Callable) -> Optional[s
                 class_name = get_text(base).strip()
                 if class_name:
                     return f"new {class_name}"
+    return None
+
+
+def _extract_scala_instance_callee(node: Any, get_text: Callable) -> Optional[str]:
+    """Scala `instance_expression`: `new <type_identifier|generic_type|
+    field_expression>(args)`. Emits "new <name>" — the same convention
+    `_extract_object_creation_callee` already established for PHP/C#'s
+    `object_creation_expression`, so existing 'new <name>'-shaped taxonomy
+    patterns work unchanged once a Scala entry uses them. Handles the three
+    real shapes seen in GitBucket's corpus: a bare type (`new File(...)`), a
+    parameterized type (`new ArrayList[String](...)`), and a fully-qualified
+    type (`new java.io.File(...)`, trailing segment only).
+    """
+    for child in _children(node):
+        kind = child.kind()
+        if kind == 'type_identifier':
+            name = get_text(child).strip()
+            if name:
+                return f"new {name}"
+        if kind == 'generic_type':
+            base = next((c for c in _children(child) if c.kind() == 'type_identifier'), None)
+            if base is not None:
+                name = get_text(base).strip()
+                if name:
+                    return f"new {name}"
+        if kind == 'field_expression':
+            text = get_text(child).strip()
+            if text:
+                return f"new {text.split('.')[-1]}"
     return None
 
 

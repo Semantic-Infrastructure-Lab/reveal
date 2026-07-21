@@ -2605,6 +2605,72 @@
     "source": "literal",
     "token": "write_txn"
   },
+  "literal:scala:db:firstoption": {
+    "hits": {
+      "scala": 1
+    },
+    "home": "scala",
+    "key": "literal:scala:db:firstoption",
+    "kind": "db",
+    "source": "literal",
+    "token": "firstoption"
+  },
+  "literal:scala:db:withsession": {
+    "hits": {},
+    "home": "scala",
+    "key": "literal:scala:db:withsession",
+    "kind": "db",
+    "source": "literal",
+    "token": "withsession"
+  },
+  "literal:scala:file:createnewfile": {
+    "hits": {
+      "java": 9
+    },
+    "home": "scala",
+    "key": "literal:scala:file:createnewfile",
+    "kind": "file",
+    "source": "literal",
+    "token": "createnewfile"
+  },
+  "literal:scala:file:fileutils": {
+    "hits": {
+      "go": 10,
+      "java": 122,
+      "ruby": 267,
+      "scala": 44,
+      "typescript": 2,
+      "zig": 1
+    },
+    "home": "scala",
+    "key": "literal:scala:file:fileutils",
+    "kind": "file",
+    "source": "literal",
+    "token": "fileutils"
+  },
+  "literal:scala:file:mkdirs": {
+    "hits": {
+      "java": 39,
+      "kotlin": 1,
+      "scala": 6
+    },
+    "home": "scala",
+    "key": "literal:scala:file:mkdirs",
+    "kind": "file",
+    "source": "literal",
+    "token": "mkdirs"
+  },
+  "literal:scala:http:httpclientbuilder": {
+    "hits": {
+      "java": 52,
+      "scala": 2
+    },
+    "home": "scala",
+    "key": "literal:scala:http:httpclientbuilder",
+    "kind": "http",
+    "source": "literal",
+    "token": "httpclientbuilder"
+  },
   "literal:swift:file:write": {
     "hits": {
       "c": 141,

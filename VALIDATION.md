@@ -41,7 +41,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | C# | ✅ 100%¹⁹ (Jellyfin), 99.36%¹⁹ (Newtonsoft.Json, BACK-702 fixed) | ✅ 98.3% (Jellyfin) | **Measured** |
 | PHP | ✅ 100% (WordPress), 74.65% (osCommerce¹²) | ✅ 97.5% (WordPress) | **Measured** |
 | Swift | ✅ 100% of declared targets resolved (Kickstarter iOS — module-index coverage, not an edge-recall ratio), 98.42%¹⁸ (swift-collections, 14,824 edges, BACK-704 fixed) | ✅ 100%² (Kickstarter iOS) | **Measured** |
-| Scala | ✅ 100% (GitBucket — n=1 qualifying edge), 100%¹⁵ (cats-effect, 24 edges) | — not yet run | **Measured** (import only) |
+| Scala | ✅ 100% (GitBucket — n=1 qualifying edge), 100%¹⁵ (cats-effect, 24 edges) | ✅ 66.3%³⁰ (GitBucket, `db`/Slick declined) | **Measured** |
 | C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | **Measured** |
 | C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | **Measured** |
 | Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | **Measured** |
@@ -63,7 +63,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
    Sample column in the detailed results tables below before quoting a number.**
 2. **This table covers two signals, not all of reveal's DD output.**
    Import/dependency recall is measured on all 19 languages listed. Side-effect
-   recall is measured on 14 of them — Scala, Dart, GDScript, and
+   recall is measured on 15 of them — Dart, GDScript, and
    TSX/plain-JS have **no** side-effect measurement. `surface`, `contracts`,
    and `patches://`/testability have **no ground-truth validation on any
    language** — see [Scope](#scope).
@@ -687,6 +687,45 @@ methods — not fixed (common-scoped, cross-language blast radius, out of
 scope) — see
 [sideeffects-recall-oracle/zig/ZIG.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/zig/ZIG.md)
 for the full write-up.
+
+³⁰ First side-effect/boundary measurement for Scala (BACK-718/BACK-720,
+fifteenth language in the program), GitBucket's `src/main` corpus (a real
+production Scala/Scalatra Git-hosting web app, 939 functions — NOT sbt
+itself despite the task's initial description). 33.72% pre-fix → 66.28%
+post-fix — the pre-fix number confirms the Lua loop's `_COMPILED_COMMON_ONLY`
+fix holds for a 4th language, and Lua's `_DELIM_RE` colon fix is confirmed
+irrelevant (Scala's `:` is type-annotation/named-arg syntax only). New
+reveal structural bug found and fixed: Scala's `new Foo(args)` constructor
+calls parse to `instance_expression`, a tree-sitter node kind entirely
+absent from `CALL_NODE_TYPES` (distinct from PHP/C#'s
+`object_creation_expression` despite the identical source shape) — 100+
+corpus call sites (`new File`, `new FileOutputStream`, `new HttpPost`) were
+invisible to `--calls`/`--sideeffects` before this fix, taking `file`
+0%→100% and `env` 33%→100% combined with a handful of taxonomy additions.
+**Dominant finding, and the reason `db` recall stays 0% (declined, not a
+gap)**: GitBucket's Slick ORM persistence layer (`.filter`/`.insert`/
+`.update`/`.delete`, 151 of 939 corpus functions) is deliberately designed
+to look exactly like Scala's own built-in collection/`Option` API —
+`classify_call()` only ever sees callee text, never a receiver's static
+type, so there is no way to scope these verbs any narrower than "the whole
+call" (`check_taxonomy_collisions.py` confirmed the same catastrophic
+cross-language exposure already documented for Java's `.execute`/Ruby's
+`.select`/Go's `.Insert`). Also fixed a Java-interop gap: Java's own
+`_TAXONOMY_BY_LANG['java']` entry for `System.getProperty` (footnote-worthy
+in its own right, BACK-639) does not extend to Scala files despite both
+compiling to the identical `java.lang.System` class — language-scoping has
+no cross-JVM-language sharing mechanism, so Scala needed its own duplicate
+entry. Found and fixed a bug in this loop's OWN oracle extraction code (not
+reveal): an expression-bodied `def`'s termination heuristic silently
+swallowed an entire file's remaining sibling functions into one 659-line
+bogus record before being caught via the same outlier-length sanity sweep
+every loop since Zig has run. **STATUS: BLOCKED, not closed** — code/test
+changes landed in `external-git`'s working tree and pass 630/2xfail targeted
+suite, but the measuring agent's git-worktree-isolated sandbox hard-blocked
+committing to `external-git` itself (same known limitation the Zig loop hit)
+— see
+[sideeffects-recall-oracle/scala/SCALA.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/scala/SCALA.md)
+for the full write-up and exact commit status.
 
 ## Import/Dependency Recall
 

@@ -225,6 +225,21 @@ CALL_NODE_TYPES = {
     # existing generic callee-extraction fallback (child(0) text) already
     # produces the right callee string with no further special-casing.
     'macro_invocation',         # Rust
+    # Scala `new Foo(args)`/`new Foo[T](args)` is a DISTINCT grammar node,
+    # 'instance_expression' -- NOT the same node kind as PHP/C#'s
+    # 'object_creation_expression' above despite the identical source shape
+    # (`new <Name>(...)`). Without this, every Scala constructor call was
+    # entirely invisible to --calls/--sideeffects/--boundary (BACK-718/
+    # BACK-720, Scala sideeffects-recall-oracle, fifteenth language): real
+    # misses included `new File(...)`/`new FileOutputStream(...)`/
+    # `new FileInputStream(...)` (java.io interop, GitBucket's dominant
+    # non-JGit file-I/O idiom, 100+ corpus call sites) and `new HttpPost(...)`
+    # (Apache HttpClient webhook delivery). See
+    # nav_calls.py:_extract_scala_instance_callee for the paired callee-text
+    # extraction (mirrors _extract_object_creation_callee's "new <Name>"
+    # convention already established for PHP/C#, so the same taxonomy
+    # pattern shape works unchanged).
+    'instance_expression',      # Scala
 }
 
 # Callee node types for attribute/member access (self.foo, obj.method, pkg.Func)

@@ -4381,5 +4381,133 @@ class TestBack725ZigTaxonomy(unittest.TestCase):
         self.assertIsNone(classify_call('session_start', language='zig'))
 
 
+class TestBack720ScalaTaxonomy(unittest.TestCase):
+    """BACK-718/BACK-720 (Scala, fifteenth side-effect-recall language,
+    corpus: GitBucket samples/scala/src/main -- a real production
+    Scala/Scalatra Git-hosting web app, NOT sbt itself despite the task's
+    initial description; see scala/SCALA.md). Scala had zero
+    _TAXONOMY_BY_LANG entries before this loop; scoped to language='scala'
+    so none of these can fire cross-language. All patterns corpus-grounded
+    and corpus-collision-checked (scripts/check_taxonomy_collisions.py)."""
+
+    def test_slick_terminal_methods_classified_db(self):
+        # Slick's blocking-API TERMINAL methods -- distinctive camelCase/
+        # dotted compounds, NOT the bare filter/insert/update/delete/list/
+        # first/result verbs Slick chains them onto (declined -- see
+        # test_slick_bare_verbs_deliberately_unclassified below).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('Priorities.filter(x).firstOption', language='scala'), 'db')
+        self.assertEqual(classify_call('withSession', language='scala'), 'db')
+        self.assertEqual(classify_call('Database.forDataSource', language='scala'), 'db')
+        self.assertEqual(classify_call('Database.forURL', language='scala'), 'db')
+
+    def test_slick_bare_verbs_deliberately_unclassified(self):
+        # GitBucket's Slick DAO layer is syntactically indistinguishable
+        # from Scala's own built-in collection/Option methods
+        # (List.filter/Option.filter, etc) -- classify_call only sees
+        # callee text, never a receiver's static type, so there is no way
+        # to scope 'filter'/'insert'/'update'/'delete' narrower than "the
+        # whole call" without the exact catastrophic cross-language
+        # collision this program has repeatedly declined (Lua's
+        # BACK-636/633 class). Locks in the DECISION, not a gap to fix.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('Priorities.filter', language='scala'))
+        self.assertIsNone(classify_call('query.insert', language='scala'))
+        self.assertIsNone(classify_call('query.update', language='scala'))
+        self.assertIsNone(classify_call('query.delete', language='scala'))
+
+    def test_java_io_constructor_calls_classified_file(self):
+        # `new File(...)`/`new FileOutputStream(...)`/etc -- only visible
+        # at all after this loop's `instance_expression` CALL_NODE_TYPES fix
+        # (Scala's grammar node for `new Foo(args)`, distinct from PHP/C#'s
+        # `object_creation_expression`); see
+        # TestScalaInstanceExpressionCalls below for the structural half of
+        # this fix. Emits "new <Name>" via _extract_scala_instance_callee,
+        # the same convention _extract_object_creation_callee established
+        # for PHP's 'new pdo'.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('new File', language='scala'), 'file')
+        self.assertEqual(classify_call('new FileOutputStream', language='scala'), 'file')
+        self.assertEqual(classify_call('new FileInputStream', language='scala'), 'file')
+        self.assertEqual(classify_call('new FileWriter', language='scala'), 'file')
+        self.assertEqual(classify_call('new HttpPost', language='scala'), 'http')
+        self.assertEqual(classify_call('new HttpGet', language='scala'), 'http')
+
+    def test_apache_commons_fileutils_classified_file(self):
+        # Bare 'fileutils' receiver -- distinctive compound noun, matches
+        # any FileUtils.* call regardless of trailing verb (same
+        # "namespaced receiver, no bare verb" shape as Zig's std.net./Lua's
+        # ngx.socket. prefix entries). Corpus-collision-checked: Java/Ruby
+        # hits are the SAME Apache Commons IO / Ruby stdlib FileUtils
+        # module, a corroborating idiom, not a collision.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('FileUtils.deleteDirectory', language='scala'), 'file')
+        self.assertEqual(classify_call('FileUtils.copyFile', language='scala'), 'file')
+        self.assertEqual(classify_call('f.mkdirs', language='scala'), 'file')
+        self.assertEqual(classify_call('f.createNewFile', language='scala'), 'file')
+
+    def test_httpclientbuilder_classified_http(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('HttpClientBuilder.create', language='scala'), 'http')
+
+    def test_java_interop_env_needs_own_scala_entry(self):
+        # Java-interop finding: Java's OWN _TAXONOMY_BY_LANG['java'] entry
+        # for System.getProperty (BACK-639) does NOT extend to Scala files
+        # even though both compile to the identical java.lang.System class
+        # -- classify_call() only merges COMMON + the file's OWN language
+        # bucket, with no cross-JVM-language sharing mechanism. Duplicated
+        # here rather than shared.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('System.getProperty', language='scala'), 'env')
+        self.assertIsNone(classify_call('System.getProperty', language='rust'))
+
+    def test_scala_unmapped_before_this_loop_now_scoped(self):
+        # Sanity-lock: before this loop scala had no _TAXONOMY_BY_LANG entry
+        # at all, so it fell back to _COMPILED_COMMON_ONLY (BACK-722's fix),
+        # confirmed for a 4th language. A Python/PHP-only builtin, and the
+        # ubiquitous collection-method bare verbs above, must never leak.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('session_start', language='scala'))
+
+
+class TestScalaInstanceExpressionCalls(unittest.TestCase):
+    """BACK-718/BACK-720: Scala's `new Foo(args)` parses to a DISTINCT
+    tree-sitter node kind, 'instance_expression', not PHP/C#'s
+    'object_creation_expression' -- entirely invisible to --calls/
+    --sideeffects/--boundary before this loop despite the identical source
+    shape. Fixed via a CALL_NODE_TYPES addition (treesitter.py) plus a
+    paired callee-extraction case (nav_calls.py:
+    _extract_scala_instance_callee), mirroring the existing PHP/C#
+    "new <Name>" convention exactly."""
+
+    def test_new_expression_visible_to_range_calls(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        tree, root, get_text, content_bytes = _parse_scala("""
+        object T {
+          def foo(): Unit = {
+            val f = new File("x")
+            val out = new FileOutputStream(f)
+          }
+        }
+        """)
+        calls = range_calls(root, 1, 999, get_text)
+        callees = [c['callee'] for c in calls]
+        self.assertIn('new File', callees)
+        self.assertIn('new FileOutputStream', callees)
+
+    def test_new_expression_effects_classified(self):
+        from reveal.adapters.ast.nav_effects import collect_effects
+        tree, root, get_text, content_bytes = _parse_scala("""
+        object T {
+          def foo(): Unit = {
+            val f = new File("x")
+          }
+        }
+        """)
+        effects = collect_effects(root, 1, 999, get_text, language='scala')
+        kinds = {e['kind'] for e in effects}
+        self.assertIn('file', kinds)
+
+
 if __name__ == '__main__':
     unittest.main()
