@@ -36,7 +36,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | TypeScript | ✅ 100% (VS Code), ⚠️ 68.48%→81.21% (nest¹⁶, BACK-694+BACK-698 both fixed, residual gap open) | ✅ 91.3%¹ (VS Code) | ✅ 100%³⁵ (VS Code) | **Measured** |
 | Java | ✅ 100% (Elasticsearch, guava¹¹) | ✅ 97.5% (Elasticsearch) | ✅ 9.99%→100%³⁸ (Elasticsearch, BACK-734 fixed) | **Measured** |
 | Go | ✅ 100% (Kubernetes, client_golang¹³) | ✅ 96.3% (client-go) | ✅ 100%³⁶ (Go compiler internals) | **Measured** |
-| Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | Not measured | **Measured** |
+| Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | ✅ 22.05%→100%³⁹ (Discourse, BACK-735 fixed) | **Measured** |
 | Kotlin | ✅ 99.1% (tivi, 100%¹⁴ kotlinx.coroutines) | ✅ 82.5% → **92.9%** (tivi, six-category sweep, BACK-727) | Not measured | **Measured** |
 | Rust | ✅ 100% (Meilisearch, ripgrep⁹) | ✅ 97.4% (Meilisearch) | ✅ 95.27%→100%³⁷ (Meilisearch, BACK-733 fixed) | **Measured** |
 | C# | ✅ 100%¹⁹ (Jellyfin), 99.36%¹⁹ (Newtonsoft.Json, BACK-702 fixed) | ✅ 98.3% (Jellyfin) | Not measured | **Measured** |
@@ -852,6 +852,32 @@ actively-maintained parser) plus a locally-installed JDK 17 rather than
 accept a biased sample. See
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
 ("Fifth language: Java" section) for the full write-up.
+³⁹ Ruby `calls://` pilot (BACK-730), Discourse's `app/`+`lib/` (1,899 files),
+reverse-lookup only: a pre-flight tree-sitter grammar dump (done before
+building the oracle at all, prompted by Java's BACK-734 precedent) found
+the same bug class immediately — Ruby's `'call'` node is the same tree-
+sitter kind Python's plain `call()` uses, but a flat receiver/./method/args
+shape, so `child(0)` returned the receiver, not the method, for every
+qualified/self/static call. Filed and fixed as **BACK-735** before the
+first real measurement; a deliberate pre-fix run (via `git stash`, to keep
+a documented before/after pair) measured **22.05%** recall (360/1,633
+oracle edges), 30 false positives. Fixing BACK-735 alone brought recall to
+99.02% — two more distinct bugs surfaced in the residual tail: `setter`/
+`operator`-named methods (`def x=(v)`, `def [](k)`) invisible to
+`--outline` entirely (same invisibility class as BACK-638/BACK-651/
+BACK-724), and `def Class.method` singleton methods (qualified by a class
+constant rather than `self`) naming themselves after the constant instead
+of the method (`_PARAM_LIST_KINDS` was missing Ruby's `method_parameters`
+node kind, so the correct name-extraction strategy never fired for any
+Ruby method). Both fixed same session; re-measured at **100.00%** recall,
+0 false positives, at both an 8-per-bucket (1,633 edges) and a
+20-per-bucket (5,564 edges) sample. Also required compiling Ruby 3.4.1
+from source via `rbenv`/`ruby-build` (Discourse's `Gemfile` requires `~>
+3.4`; Ubuntu jammy's only `apt` Ruby package, 3.0.2, failed to parse 9.4%
+of the corpus — modern hash-literal shorthand syntax) rather than accept a
+biased sample, same precedent as Java's JDK/JavaParser escalation. See
+[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+("Sixth language: Ruby" section) for the full write-up.
 
 ## Import/Dependency Recall
 
@@ -1112,20 +1138,21 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 | Go | Go compiler internals `cmd/compile/internal` (371 files) | reverse | **100.00%** (no gap, clean on first run) | 0 | None — Go structurally cannot produce the JS/TS cascading-attribution shape (no nested named function declarations, only closures, which never get their own scope) |
 | Rust | Meilisearch `milli` crate (238 files) | reverse | 96.98%/95.27% → **100.00%** | 0 (post-fix) | Turbofish generics on a call/method callee defeated the bare-callee-name extractor's naive last-`::`-split (`size_of::<u32>()` → misparsed callee `<u32>`), plus a minor parenthesized-callee gap (`(f)(args)` captured literally) — **BACK-733**, fixed |
 | Java | Elasticsearch `server/src/main/java` (4,837 files) | reverse | **9.99%** → **100.00%** | 167 (pre-fix) → 0 (post-fix) | `method_invocation`'s `object` field precedes `name` positionally, so the generic `child(0)`-based extractor returned the call's qualifier/object as the callee name for every qualified or static call (`obj.method()`, `Class.staticMethod()`) — nearly all real Java call sites — **BACK-734**, fixed |
+| Ruby | Discourse `app/`+`lib/` (1,899 files) | reverse | **22.05%** → **100.00%** | 30 (pre-fix) → 0 (post-fix) | Ruby's `'call'` node is the same tree-sitter kind Python's plain `call()` uses but a flat receiver/./method/args shape, so `child(0)` returned the receiver for every qualified/self/static call — **BACK-735**, fixed, same class as BACK-734. Two more distinct bugs found in the residual tail while at 99%: `setter`/`operator`-named methods (`def x=`/`def []`) invisible to `--outline` (same class as BACK-638/651/724), and `def Class.method` singleton methods naming themselves after the qualifying constant instead of the method (`_PARAM_LIST_KINDS` missing Ruby's `method_parameters` kind) — both fixed same session |
 
 Full methodology, per-corpus commit/snapshot, and the harness scripts
-(`build_oracle*.py`/`.go`/`.js`, `main.rs`, `diff_*.py`) for all four
+(`build_oracle*.py`/`.rb`/`.go`/`.js`, `main.rs`, `diff_*.py`) for all six
 languages: [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
-Not yet measured: Ruby, Kotlin, C#, PHP, Swift, Scala, C++, C, Lua, Dart,
+Not yet measured: Kotlin, C#, PHP, Swift, Scala, C++, C, Lua, Dart,
 GDScript, Zig, TSX/plain JS — a claim not yet checked, not a claim
-`calls://` is broken on those languages. If a sixth language is measured,
+`calls://` is broken on those languages. If a seventh language is measured,
 add it to this table and the status-at-a-glance table above; `_bare_callee_name`
-/`_get_callee_name`'s other dotted-name-family languages (Ruby, Kotlin, C#,
-PHP, Scala all share the module-path/dotted-name resolver core the
-import-recall program already flagged) are a reasonable place to look next,
-given Java's BACK-734 shows even an "unflagged" language can hide a
-systemic callee-extraction bug.
+/`_get_callee_name`'s other dotted-name-family languages (Kotlin, C#, PHP,
+Scala all share the module-path/dotted-name resolver core the import-recall
+program already flagged) are a reasonable place to look next, given both
+Java's BACK-734 and Ruby's BACK-735 show even an "unflagged" language can
+hide a systemic callee-extraction bug.
 
 ## Re-running this yourself
 
