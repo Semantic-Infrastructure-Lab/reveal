@@ -1412,6 +1412,243 @@
     "source": "literal",
     "token": "writeasstringsync"
   },
+  "literal:gdscript:file:get_as_text": {
+    "hits": {
+      "cpp": 50,
+      "gdscript": 2
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:get_as_text",
+    "kind": "file",
+    "source": "literal",
+    "token": "get_as_text"
+  },
+  "literal:gdscript:file:get_buffer": {
+    "hits": {
+      "c": 3,
+      "cpp": 201
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:get_buffer",
+    "kind": "file",
+    "source": "literal",
+    "token": "get_buffer"
+  },
+  "literal:gdscript:file:get_csv_line": {
+    "hits": {
+      "cpp": 9
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:get_csv_line",
+    "kind": "file",
+    "source": "literal",
+    "token": "get_csv_line"
+  },
+  "literal:gdscript:file:get_line": {
+    "hits": {
+      "c": 2,
+      "cpp": 491,
+      "gdscript": 3
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:get_line",
+    "kind": "file",
+    "source": "literal",
+    "token": "get_line"
+  },
+  "literal:gdscript:file:get_var": {
+    "hits": {
+      "cpp": 18,
+      "gdscript": 1,
+      "php": 112
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:get_var",
+    "kind": "file",
+    "source": "literal",
+    "token": "get_var"
+  },
+  "literal:gdscript:file:store_16": {
+    "hits": {
+      "cpp": 40
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:store_16",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_16"
+  },
+  "literal:gdscript:file:store_32": {
+    "hits": {
+      "cpp": 333
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:store_32",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_32"
+  },
+  "literal:gdscript:file:store_64": {
+    "hits": {
+      "cpp": 39
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:store_64",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_64"
+  },
+  "literal:gdscript:file:store_8": {
+    "hits": {
+      "cpp": 38
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:store_8",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_8"
+  },
+  "literal:gdscript:file:store_buffer": {
+    "hits": {
+      "cpp": 184
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:store_buffer",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_buffer"
+  },
+  "literal:gdscript:file:store_csv_line": {
+    "hits": {
+      "cpp": 10
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:store_csv_line",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_csv_line"
+  },
+  "literal:gdscript:file:store_double": {
+    "hits": {
+      "cpp": 4
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:store_double",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_double"
+  },
+  "literal:gdscript:file:store_float": {
+    "hits": {
+      "cpp": 13
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:store_float",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_float"
+  },
+  "literal:gdscript:file:store_line": {
+    "hits": {
+      "cpp": 271,
+      "gdscript": 2
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:store_line",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_line"
+  },
+  "literal:gdscript:file:store_pascal_string": {
+    "hits": {
+      "cpp": 4
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:store_pascal_string",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_pascal_string"
+  },
+  "literal:gdscript:file:store_string": {
+    "hits": {
+      "cpp": 84,
+      "gdscript": 3
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:store_string",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_string"
+  },
+  "literal:gdscript:file:store_var": {
+    "hits": {
+      "cpp": 2,
+      "gdscript": 1
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:file:store_var",
+    "kind": "file",
+    "source": "literal",
+    "token": "store_var"
+  },
+  "literal:gdscript:log:print_rich": {
+    "hits": {
+      "cpp": 6,
+      "gdscript": 19
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:log:print_rich",
+    "kind": "log",
+    "source": "literal",
+    "token": "print_rich"
+  },
+  "literal:gdscript:log:printerr": {
+    "hits": {
+      "cpp": 5,
+      "gdscript": 24,
+      "go": 3
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:log:printerr",
+    "kind": "log",
+    "source": "literal",
+    "token": "printerr"
+  },
+  "literal:gdscript:log:push_error": {
+    "hits": {
+      "cpp": 433,
+      "gdscript": 15,
+      "rust": 5
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:log:push_error",
+    "kind": "log",
+    "source": "literal",
+    "token": "push_error"
+  },
+  "literal:gdscript:log:push_warning": {
+    "hits": {
+      "cpp": 82,
+      "gdscript": 12
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:log:push_warning",
+    "kind": "log",
+    "source": "literal",
+    "token": "push_warning"
+  },
+  "literal:gdscript:sleep:create_timer": {
+    "hits": {
+      "cpp": 5,
+      "gdscript": 10,
+      "lua": 3
+    },
+    "home": "gdscript",
+    "key": "literal:gdscript:sleep:create_timer",
+    "kind": "sleep",
+    "source": "literal",
+    "token": "create_timer"
+  },
   "literal:go:http:roundtrip": {
     "hits": {
       "cpp": 1,

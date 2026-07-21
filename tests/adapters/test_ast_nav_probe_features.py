@@ -4509,5 +4509,182 @@ class TestScalaInstanceExpressionCalls(unittest.TestCase):
         self.assertIn('file', kinds)
 
 
+def _parse_gdscript(code: str):
+    """Parse GDScript code and return (tree, root, get_text, content_bytes)."""
+    parser = ts.get_parser('gdscript')
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+    root = tree.root_node()
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return tree, root, get_text, content_bytes
+
+
+class TestBack724GdscriptTaxonomy(unittest.TestCase):
+    """BACK-718/BACK-724 (GDScript, seventeenth side-effect-recall language,
+    corpus: Pixelorama samples/gdscript_pixelorama, a real production Godot 4
+    pixel-art editor). GDScript had zero _TAXONOMY_BY_LANG entries before this
+    loop; scoped to language='gdscript' so none of these can fire
+    cross-language. All patterns corpus-grounded and corpus-collision-checked
+    (scripts/check_taxonomy_collisions.py)."""
+
+    def test_fileaccess_diraccess_classified_file(self):
+        # Godot 4's FileAccess/DirAccess static-factory API -- dotted,
+        # scoped two-segment (same shape as Dart's http.get/Zig's
+        # io.connect entries).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('FileAccess.open', language='gdscript'), 'file')
+        self.assertEqual(classify_call('FileAccess.file_exists', language='gdscript'), 'file')
+        self.assertEqual(classify_call('DirAccess.open', language='gdscript'), 'file')
+        self.assertEqual(classify_call('DirAccess.remove_absolute', language='gdscript'), 'file')
+
+    def test_fileaccess_instance_methods_bare_verbs_classified_file(self):
+        # FileAccess/StreamPeer instance methods -- bare verbs, since the
+        # receiver is a local var holding FileAccess.open(...)'s return
+        # (`file`, `ase_file`, `palette_file`, ... -- no fixed name to scope
+        # a dotted pattern against).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('file.store_line', language='gdscript'), 'file')
+        self.assertEqual(classify_call('ase_file.get_buffer', language='gdscript'), 'file')
+        self.assertEqual(classify_call('palette_file.store_var', language='gdscript'), 'file')
+        self.assertEqual(classify_call('import_file.get_as_text', language='gdscript'), 'file')
+
+    def test_os_environment_classified_env(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('OS.get_environment', language='gdscript'), 'env')
+        self.assertEqual(classify_call('OS.set_environment', language='gdscript'), 'env')
+        self.assertEqual(classify_call('OS.has_environment', language='gdscript'), 'env')
+
+    def test_push_error_warning_printerr_classified_log_not_bare_print(self):
+        # push_error/push_warning/printerr/print_rich -- bare verbs (GDScript's
+        # print family is always called receiverless), corpus-collision-check
+        # came back clean (the only non-zero cross-language hits are Godot's
+        # OWN C++ engine implementation of these exact builtins). Bare 'print'
+        # itself was TRIED AND DECLINED -- same catastrophic-collision class
+        # as the Swift loop's declined bare print (SWIFT.md).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('push_error', language='gdscript'), 'log')
+        self.assertEqual(classify_call('push_warning', language='gdscript'), 'log')
+        self.assertEqual(classify_call('printerr', language='gdscript'), 'log')
+        self.assertEqual(classify_call('print_rich', language='gdscript'), 'log')
+        self.assertIsNone(classify_call('print', language='gdscript'))
+
+    def test_os_delay_and_create_timer_classified_sleep(self):
+        # OS.delay_msec/delay_usec (blocking) and bare 'create_timer' (the
+        # `get_tree().create_timer(...).timeout` non-blocking idiom -- no
+        # fixed receiver to scope narrower against, same shape as the file
+        # bucket's bare store_*/get_* verbs).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('OS.delay_msec', language='gdscript'), 'sleep')
+        self.assertEqual(classify_call('OS.delay_usec', language='gdscript'), 'sleep')
+        self.assertEqual(classify_call('get_tree().create_timer', language='gdscript'), 'sleep')
+
+    def test_bare_request_declined_for_http(self):
+        # TRIED AND DECLINED: bare 'request' -- the only verb the corpus's
+        # real HTTPRequest.request(...) call sites share -- has catastrophic
+        # cross-language collision (java 785 hits, php 422, lua 308, ...) in
+        # classify_call's unscoped fallback mode. GDScript's 'http' bucket
+        # has no entries this loop; verify it stays unclassified rather than
+        # silently matching some future addition.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('http_request.request', language='gdscript'))
+
+    def test_gdscript_unmapped_before_this_loop_now_scoped(self):
+        # Sanity-lock: before this loop gdscript had no _TAXONOMY_BY_LANG
+        # entry at all, so it fell back to _COMPILED_COMMON_ONLY (BACK-722's
+        # fix, whose own comment names gdscript explicitly as one of the
+        # exposed-but-unmeasured languages). A Python/PHP-only builtin must
+        # still never leak into a GDScript file.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('session_start', language='gdscript'))
+        self.assertIsNone(classify_call('$wpdb', language='gdscript'))
+
+
+class TestBack724GdscriptConstructorDefinition(unittest.TestCase):
+    """BACK-718/BACK-724 GDScript pre-flight structural check: `func _init(...)`
+    parses to its own distinct node kind, `constructor_definition`, not a
+    variant of `function_definition` -- the same class of gap as BACK-638
+    (Java/C# constructors) and BACK-651 (C# operator_declaration), but more
+    total: `_init` was entirely absent from --outline/get_structure() (no
+    wrapping class_declaration for a top-level script to fall through to
+    either) and a direct name lookup errored outright. Verified live on
+    samples/gdscript_pixelorama/src/Classes/SteamManager.gd (a real corpus
+    `env` oracle positive: `_init` sets OS.set_environment(...))."""
+
+    def test_init_visible_in_range_calls_via_call_node(self):
+        # Sanity: attribute-call extraction inside a constructor body works
+        # independent of the node-name fix below (this part was never
+        # broken -- confirms the gap is purely name/element-lookup, not call
+        # extraction).
+        from reveal.adapters.ast.nav_calls import range_calls
+        tree, root, get_text, content_bytes = _parse_gdscript("""
+        extends Node
+
+        func _init():
+            OS.set_environment("SteamAppID", "1")
+        """)
+        calls = range_calls(root, 1, 999, get_text)
+        callees = [c['callee'] for c in calls]
+        self.assertIn('OS.set_environment', callees)
+
+    def test_init_extracted_by_gdscript_analyzer_outline(self):
+        import os
+        import tempfile
+        from reveal.analyzers.gdscript import GDScriptAnalyzer
+
+        code = textwrap.dedent("""\
+            extends Node
+
+            func _init():
+                OS.set_environment("SteamAppID", "1")
+
+            func _ready():
+                pass
+            """)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.gd', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+        try:
+            analyzer = GDScriptAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            func_names = [fn['name'] for fn in structure.get('functions', [])]
+            # Before the fix, '_init' was silently absent here -- only
+            # '_ready' showed up in --outline/get_structure().
+            self.assertIn('_init', func_names)
+            self.assertIn('_ready', func_names)
+        finally:
+            os.unlink(temp_path)
+
+    def test_init_direct_name_lookup_and_sideeffects(self):
+        import os
+        import tempfile
+        from reveal.analyzers.gdscript import GDScriptAnalyzer
+
+        code = textwrap.dedent("""\
+            extends Node
+
+            func _init():
+                OS.set_environment("SteamAppID", "1")
+            """)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.gd', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+        try:
+            from reveal.file_handler import _find_element_node
+
+            analyzer = GDScriptAnalyzer(temp_path)
+            # Before the fix this returned None: '_init' was not a
+            # recognized FUNCTION_NODE_TYPES member, so bare-name element
+            # lookup fell through entirely (unlike BACK-638's Java/C# gap,
+            # which at least fell through to the enclosing class body).
+            node = _find_element_node(analyzer, '_init')
+            self.assertIsNotNone(node)
+        finally:
+            os.unlink(temp_path)
+
+
 if __name__ == '__main__':
     unittest.main()

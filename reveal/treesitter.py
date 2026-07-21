@@ -146,6 +146,26 @@ FUNCTION_NODE_TYPES = (
     # the paired name-extraction fix — the node has no identifier child at
     # all, so the node-type fix alone isn't sufficient.
     'operator_declaration',   # C#
+    # BACK-718/BACK-724 (GDScript sideeffects-recall-oracle pre-flight check,
+    # seventeenth language): GDScript's `func _init(...)` constructor parses
+    # to its OWN distinct node kind, `constructor_definition`, not a variant
+    # of `function_definition` (ordinary `func` methods) — the same shape as
+    # BACK-638 (Java/C#) and BACK-651 (C# operators), except here the gap is
+    # even more total: without this, `_init` was ENTIRELY absent from
+    # --outline/get_structure() (not even folded into the enclosing class —
+    # GDScript has no wrapping class_declaration node for a top-level script
+    # file at all) and a direct name lookup errored outright ("could not
+    # find function or method '_init'"), unlike BACK-638's constructor gap
+    # (which at least fell through to the enclosing class body). Verified
+    # live: samples/gdscript_pixelorama/src/Classes/SteamManager.gd's
+    # `_init` (sets `OS.set_environment(...)`, a real corpus `env` oracle
+    # positive) was invisible to both --outline and `reveal file.gd _init`.
+    # See _constructor_definition_name for the paired name-extraction fix —
+    # the identifier "child" is a fixed keyword-shaped leaf whose node KIND
+    # literally IS the text `_init` (not a `name`/`identifier` kind any
+    # `_name_via_*` strategy recognizes), one node-shape deeper than
+    # operator_declaration's gap.
+    'constructor_definition',  # GDScript `func _init(...)`
 )
 
 # Node types for class extraction
@@ -1261,6 +1281,20 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return f'operator {self._get_node_text(kids[i + 1])}'
         return None
 
+    def _constructor_definition_name(self, node) -> Optional[str]:
+        """GDScript `func _init(...)` parses to `constructor_definition`,
+        whose "name" child is a fixed keyword-shaped leaf whose node KIND
+        literally is the text `_init` — not an `identifier`/`name` kind any
+        `_name_via_*` strategy recognizes (same invisibility class as
+        `_operator_declaration_name`, one node-shape deeper: there the
+        symbol was at least reachable via a sibling-of-`operator` lookup;
+        here the identifier's kind IS the answer, no text extraction
+        needed). Unlike C#/Java constructors (named after the class),
+        GDScript's `_init` is a fixed lifecycle-method name — Godot does not
+        allow renaming it — so this is a constant return, not a lookup.
+        """
+        return '_init'
+
     def _name_via_declarator(self, kids) -> Optional[str]:
         # PRIORITY 1: For C/C++ functions, look inside declarators FIRST —
         # these contain the actual function/variable name, not the type.
@@ -1360,6 +1394,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._struct_type_name(node)
         if _zero_arg(node, 'kind') == 'operator_declaration':
             return self._operator_declaration_name(node)
+        if _zero_arg(node, 'kind') == 'constructor_definition':
+            return self._constructor_definition_name(node)
 
         kids = _children(node)
         for strategy in (

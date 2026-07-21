@@ -1067,7 +1067,139 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             'future.delayed',
         ]),
     ],
+    # BACK-718/BACK-724 (seventeenth side-effect-recall language, GDScript,
+    # samples/gdscript_pixelorama -- Pixelorama, a real production Godot 4
+    # pixel-art editor). GDScript had zero _TAXONOMY_BY_LANG entries before
+    # this loop; every .gd file's classification fell back to
+    # _COMPILED_COMMON_ONLY (BACK-722).
+    'gdscript': [
+        ('file', [
+            # Godot 4's FileAccess/DirAccess static-factory + lookup API
+            # (replaces Godot 3's `File.new()`/`Directory.new()`) -- dotted,
+            # scoped two-segment, same shape as Dart's 'http.get'/Zig's
+            # 'io.connect' entries. Dominant corpus idiom: 36 FileAccess.open
+            # + 15 file_exists + 25 DirAccess.remove_absolute + 21
+            # DirAccess.open call sites (src/Autoload/OpenSave.gd,
+            # src/Autoload/Palettes.gd, src/Classes/SoftwareParsers/*).
+            'fileaccess.open', 'fileaccess.open_compressed',
+            'fileaccess.open_encrypted', 'fileaccess.open_encrypted_with_pass',
+            'fileaccess.create_temp', 'fileaccess.get_file_as_string',
+            'fileaccess.get_file_as_bytes', 'fileaccess.get_sha256',
+            'fileaccess.get_md5', 'fileaccess.file_exists',
+            'diraccess.open', 'diraccess.make_dir_absolute',
+            'diraccess.make_dir_recursive_absolute', 'diraccess.remove_absolute',
+            'diraccess.rename_absolute', 'diraccess.copy_absolute',
+            'diraccess.dir_exists_absolute', 'diraccess.get_files_at',
+            'diraccess.get_directories_at',
+            'resourcesaver.save', 'resourceloader.load',
+            # FileAccess/StreamPeer instance methods -- bare verbs, since the
+            # receiver is a local variable holding the return of
+            # `FileAccess.open(...)` (e.g. `file`, `ase_file`, `palette_file`
+            # -- no fixed receiver name to scope against, same "instance
+            # method with no dot-prefix to anchor on" shape as Kotlin's
+            # SQLDelight executeAsOne/executeAsList). Corpus-checked via
+            # scripts/check_taxonomy_collisions.py before landing: every
+            # non-zero cross-language hit (cpp: store_line 273, store_buffer
+            # 220, store_string 103, get_as_text 87, get_line 501, get_var 25,
+            # get_buffer 295, get_csv_line 10, store_csv_line 12,
+            # store_pascal_string 6, store_8/16/32/64 40/74/335/41,
+            # store_float 15, store_double 6, store_var 4) is
+            # samples/cpp == Godot ENGINE source itself (core/io/file_access.h
+            # -- the literal C++ implementation these GDScript bindings call
+            # into) -- the identical real-world meaning, not a collision.
+            # php's get_var (112 hits, $wpdb->get_var()) is real but harmless:
+            # 'wpdb'/'$wpdb' is a php db-bucket pattern that matches first
+            # (db precedes file in _KIND_ORDER), so wpdb->get_var() resolves
+            # 'db' before this file pattern is even checked. c's get_line/
+            # get_buffer (2/3 hits, curl's local static helpers) and scala's
+            # get_buffer (1 hit, a vendored JS comment) are single-digit,
+            # below the collision-check threshold.
+            'store_line', 'store_string', 'store_var', 'store_buffer',
+            'store_8', 'store_16', 'store_32', 'store_64', 'store_float',
+            'store_double', 'store_csv_line', 'store_pascal_string',
+            'get_line', 'get_as_text', 'get_buffer', 'get_var', 'get_csv_line',
+        ]),
+        ('env', [
+            # OS's process-environment accessors -- dotted, scoped two-
+            # segment. Real corpus users: src/Classes/SteamManager.gd:_init,
+            # src/Autoload/Global.gd:get_system_info,
+            # src/Main.gd:_handle_cmdline_arguments.
+            'os.get_environment', 'os.set_environment', 'os.has_environment',
+            'os.get_environment_or_default',
+        ]),
+        ('log', [
+            # Godot's push_error/push_warning (structured warning/error log,
+            # surfaces in the editor's Debugger panel) and printerr/
+            # print_rich (stderr / BBCode-formatted print) -- bare verbs,
+            # since GDScript's print family is always called receiverless
+            # (no dot-prefix to scope against, same "no receiver at all"
+            # shape as C's declined bare connect/accept -- except here the
+            # corpus-check comes back CLEAN). check_taxonomy_collisions.py:
+            # the only non-zero cross-language hits for push_error (474)/
+            # push_warning (108)/printerr (43) are samples/cpp == Godot's own
+            # C++ engine implementation of these exact builtins
+            # (core/variant/variant_utility.cpp:VariantUtilityFunctions::
+            # push_error/push_warning/printerr) -- the identical function,
+            # not a collision; rust's 5 printerr hits are a local CLI tool's
+            # own same-named helper (harmless, single-digit). print_rich is
+            # zero-collision everywhere checked.
+            #
+            # Bare 'print' was TRIED AND DECLINED (see module note below) --
+            # GDScript's single dominant log-idiom call (59 corpus sites,
+            # more than push_error/push_warning/printerr/print_rich
+            # combined) but far too collision-prone: 7,976 cpp / 1,829 zig /
+            # 1,152 typescript / 352 lua / 282 c hits, the overwhelming
+            # majority genuine unrelated `print(...)` calls in those
+            # languages' own corpora -- would misclassify them as 'log' in
+            # classify_call's unscoped _COMPILED_ALL fallback mode. Same
+            # class of finding as the Swift loop's own declined bare
+            # `print` (SWIFT.md: "log was almost entirely bare print which
+            # reveal deliberately leaves unclassified").
+            'push_error', 'push_warning', 'printerr', 'print_rich',
+        ]),
+        ('sleep', [
+            # OS.delay_msec/delay_usec -- Godot's blocking-sleep primitive
+            # (dotted, scoped two-segment).
+            'os.delay_msec', 'os.delay_usec',
+            # `get_tree().create_timer(...).timeout` (paired with `await`) is
+            # GDScript's dominant non-blocking "pause execution" idiom (UI/
+            # animation timing) -- COMMON's bare 'sleep'/'usleep' never
+            # matches 'create_timer'. Bare verb (the receiver is always
+            # `get_tree()`'s return value, a SceneTree instance -- no fixed
+            # dotted prefix to scope narrower against, same shape as the
+            # file bucket's store_*/get_* verbs above). check_taxonomy_
+            # collisions.py: cpp 68 hits (Godot's own SceneTree::
+            # create_timer implementation, not a collision) and lua 3 hits
+            # (Kong's own periodic-ping `create_timer` wrapper --
+            # semantically timer/scheduling-adjacent too, not a real
+            # miscategorization, and well under the 20-hit review
+            # threshold).
+            'create_timer',
+        ]),
+        # http bucket intentionally has NO entries this loop -- see the
+        # module-level note below (declined bare 'request').
+    ],
 }
+
+# BACK-718/BACK-724 (GDScript): bare 'request' -- the ONLY verb the corpus's
+# 5 real HTTPRequest.request(...)/HTTPClient call sites share -- was TRIED
+# AND DECLINED for the 'http' bucket. Every real corpus call site uses a
+# locally-typed instance variable as the receiver (`http_request.request(...)`,
+# `image_request.request(...)`, `thumbnail_request.request(...)`,
+# `extension_downloader.request(...)`, `store_info_downloader.request(...)`)
+# -- there is no fixed class-name/module prefix (like Dart's `http.get` or
+# Zig's `io.connect`) to scope a dotted pattern against, so the only way to
+# catch these is the bare, receiver-blind verb 'request'. Corpus-checked via
+# scripts/check_taxonomy_collisions.py: catastrophic exposure in unscoped
+# mode -- java 785 hits (`RestClient.request`/servlet `HttpServletRequest`-
+# shaped receivers), php 422 (`$request->request(...)`-shaped WordPress/
+# framework code), lua 308 (OpenResty's own `ngx.location.capture`-adjacent
+# request wrappers -- the SAME idiom the Lua loop already declined a bare
+# `request` pattern for), typescript 138, zig 134, cpp 56, ruby 44 -- same
+# shape and same verdict as the Go loop's declined bare `client.Do` and the
+# C loop's declined `http` bucket entirely. Declined, not fixed -- GDScript's
+# `http` bucket stays unclassified this loop, an honest, corroborated
+# residual miss (5/5 oracle positives, see GDSCRIPT.md).
 
 # Analyzer `language` values that share one _TAXONOMY_BY_LANG bucket.
 _LANG_GROUP: Dict[str, str] = {

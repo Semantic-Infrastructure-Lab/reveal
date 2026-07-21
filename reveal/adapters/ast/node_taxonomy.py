@@ -197,6 +197,11 @@ DEF_NODES: frozenset = frozenset({
     # treesitter.py FUNCTION_NODE_TYPES comment. Without this, --scope
     # silently dropped a generator function declaration as its own ancestor.
     'generator_function_declaration',
+    # BACK-718/BACK-724 (GDScript sideeffects-recall-oracle): GDScript's
+    # `func _init(...)` constructor — same gap, see treesitter.py
+    # FUNCTION_NODE_TYPES comment. Without this, --scope silently dropped a
+    # GDScript `_init` as its own ancestor for a nested line.
+    'constructor_definition',
 })
 CLASS_NODES: frozenset = frozenset({
     'class_definition', 'class_declaration', 'class',
@@ -402,6 +407,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'operator_declaration': 'DEF',  # BACK-547 C# recall-oracle pre-flight
     'singleton_method': 'DEF',  # BACK-647: Ruby `def self.foo`/`def Class.foo`
     'generator_function_declaration': 'DEF',  # BACK-643: JS/TS `async function* name() {}`
+    'constructor_definition': 'DEF',  # BACK-718/BACK-724: GDScript `func _init(...)`
     'lambda': 'LAMBDA',
     'class_definition': 'CLASS', 'class_declaration': 'CLASS', 'class': 'CLASS',
     'class_specifier': 'CLASS', 'anonymous_class': 'CLASS',
