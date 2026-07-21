@@ -638,14 +638,57 @@ class TreeSitterAnalyzer(FileAnalyzer):
     # resolution from one shared implementation.
 
     def _arrow_or_fn_value(self, variable_declarator_node) -> Tuple[Optional[Any], Optional[Any]]:
-        """Return (name_node, value_node) for a variable_declarator, or (None, None)."""
+        """Return (name_node, value_node) for a variable_declarator, or (None, None).
+
+        BACK-726 (sideeffects-recall-oracle/tsx, eighteenth language, pre-flight
+        check on a synthetic HOC-wrapped component): `const Name =
+        React.forwardRef((props, ref) => {...})` / `React.memo(...)` — the
+        dominant "named component wrapped in a higher-order function" shape in
+        modern React/TSX (47 corpus occurrences of forwardRef/memo alone in
+        samples/tsx/excalidraw) — was entirely invisible to both
+        get_structure()/--outline and bare-name lookup. The declarator's value
+        child is a `call_expression` (the HOC call), not a bare
+        `arrow_function`/`function_expression`/`generator_function` directly,
+        so the original direct-child-kind check never matched at all — same
+        "wrapped one level deeper than the direct-child check expects" shape as
+        prior loops' constructor/instance_expression findings, just one call
+        deeper. Fixed by falling through to the call's own direct argument
+        list when the value is a call_expression, looking for the single
+        function-literal argument (the render/component callback every real
+        corpus site — forwardRef, memo, styled-component render props — passes
+        as exactly one argument; a curried second call like
+        `connect(...)(Component)` has no function literal at this level and is
+        correctly left unmatched, not mis-attributed).
+        """
         name_node = value_node = None
         for ch in _children(variable_declarator_node):
             if ch.kind() == 'identifier' and name_node is None:
                 name_node = ch
             elif ch.kind() in ('arrow_function', 'function_expression', 'generator_function'):
                 value_node = ch
+            elif ch.kind() == 'call_expression' and value_node is None:
+                value_node = self._call_wrapped_function_literal(ch)
         return name_node, value_node
+
+    @staticmethod
+    def _call_wrapped_function_literal(call_expression_node) -> Optional[Any]:
+        """Return the sole function-literal argument of a call, or None.
+
+        BACK-726: supports the `HOC(...)((...) => {...})` shape — looks only
+        at the call's own direct `arguments` list (not nested calls), so a
+        curried `outer(...)(inner)` HOC only matches at the level that
+        actually carries the function literal.
+        """
+        for ch in _children(call_expression_node):
+            if ch.kind() != 'arguments':
+                continue
+            candidates = [
+                arg for arg in _children(ch)
+                if arg.kind() in ('arrow_function', 'function_expression', 'generator_function')
+            ]
+            if len(candidates) == 1:
+                return candidates[0]
+        return None
 
     def _extract_arrow_functions(self) -> List[Dict[str, Any]]:
         """Extract named arrow/function-expression declarations (const X = () => {}),

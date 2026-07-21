@@ -4686,5 +4686,183 @@ class TestBack724GdscriptConstructorDefinition(unittest.TestCase):
             os.unlink(temp_path)
 
 
+class TestBack726TsxHocWrappedComponent(unittest.TestCase):
+    """BACK-718/BACK-726 (sideeffects-recall-oracle/tsx, eighteenth and final
+    breadth-program language) pre-flight structural check: a named component
+    wrapped in a higher-order call --
+    `const Name = React.forwardRef((props, ref) => {...})` / `React.memo(...)`
+    -- is the dominant "advanced" component-declaration shape in modern React/
+    TSX (47 corpus occurrences of forwardRef/memo alone in
+    samples/tsx/excalidraw). The variable_declarator's value child is a
+    `call_expression` (the HOC call), never a bare `arrow_function`/
+    `function_expression`/`generator_function` directly, so
+    `_arrow_or_fn_value`'s direct-child-kind check never matched at all --
+    entirely absent from --outline/get_structure() and erroring outright on a
+    direct bare-name lookup. Verified live on real corpus files
+    (QuickSearch.tsx, ToolButton.tsx, Island.tsx): fixed via
+    `_call_wrapped_function_literal`, which looks one level into the call's
+    own direct argument list for the sole function-literal argument."""
+
+    def test_forwardref_wrapped_component_extracted_by_outline(self):
+        import os
+        import tempfile
+        from reveal.registry import get_analyzer
+
+        code = textwrap.dedent("""\
+            import React from "react";
+
+            export const Named = React.forwardRef<HTMLDivElement, {}>(
+              (props, ref) => {
+                console.log("mounted");
+                return <div ref={ref} />;
+              },
+            );
+            """)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.tsx', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            path = f.name
+        try:
+            cls = get_analyzer(path)
+            analyzer = cls(path)
+            structure = analyzer.get_structure()
+            names = {fn['name'] for fn in structure.get('functions', [])}
+            # Before the fix, 'Named' was silently absent here.
+            self.assertIn('Named', names)
+        finally:
+            os.unlink(path)
+
+    def test_forwardref_wrapped_component_direct_lookup_and_sideeffects(self):
+        import os
+        import tempfile
+        from reveal.file_handler import _find_element_node
+        from reveal.registry import get_analyzer
+
+        code = textwrap.dedent("""\
+            import React from "react";
+
+            export const Named = React.forwardRef<HTMLDivElement, {}>(
+              (props, ref) => {
+                console.log("mounted");
+                return <div ref={ref} />;
+              },
+            );
+            """)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.tsx', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            path = f.name
+        try:
+            cls = get_analyzer(path)
+            analyzer = cls(path)
+            # Before the fix this errored: "could not find function or
+            # method 'Named'" -- the HOC-wrapped arrow had no name-lookup
+            # path at all.
+            node = _find_element_node(analyzer, 'Named')
+            self.assertIsNotNone(node)
+        finally:
+            os.unlink(path)
+
+    def test_memo_wrapped_component_extracted_by_outline(self):
+        """React.memo(...) shares the exact same call_expression-wrapping
+        shape as forwardRef -- confirms the fix isn't forwardRef-specific."""
+        import os
+        import tempfile
+        from reveal.registry import get_analyzer
+
+        code = textwrap.dedent("""\
+            import React from "react";
+
+            export const Widget = React.memo(({ theme }: { theme: string }) => {
+              return <div>{theme}</div>;
+            });
+            """)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.tsx', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            path = f.name
+        try:
+            cls = get_analyzer(path)
+            analyzer = cls(path)
+            structure = analyzer.get_structure()
+            names = {fn['name'] for fn in structure.get('functions', [])}
+            self.assertIn('Widget', names)
+        finally:
+            os.unlink(path)
+
+    def test_curried_hoc_without_function_literal_stays_unmatched(self):
+        """A curried HOC call like `connect(mapStateToProps)(Component)` has
+        no function-literal argument at the outer call level (Component is
+        just an identifier reference) -- must NOT be mis-attributed; the
+        fix only fires when there's exactly one function-literal argument to
+        find."""
+        from reveal.treesitter import TreeSitterAnalyzer
+        import os
+        import tempfile
+        from reveal.registry import get_analyzer
+
+        code = textwrap.dedent("""\
+            import { connect } from "react-redux";
+
+            function Component(props) {
+              return null;
+            }
+
+            const Wrapped = connect(mapStateToProps)(Component);
+            """)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.tsx', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            path = f.name
+        try:
+            cls = get_analyzer(path)
+            analyzer = cls(path)
+            structure = analyzer.get_structure()
+            names = {fn['name'] for fn in structure.get('functions', [])}
+            self.assertIn('Component', names)
+            self.assertNotIn('Wrapped', names)
+        finally:
+            os.unlink(path)
+
+
+class TestBack726TsxTaxonomy(unittest.TestCase):
+    """BACK-718/BACK-726 real-corpus taxonomy fixes (samples/tsx/excalidraw,
+    a real production React/TSX drawing app, 292 .tsx/.jsx files)."""
+
+    def test_console_info_debug_trace_classified_log(self):
+        # Real miss: examples/with-script-in-browser/components/
+        # ExampleApp.tsx calls `console.info("Elements :", ...)` twice,
+        # unclassified before this fix (only console.log/error/warn existed).
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('console.info', 'tsx'), 'log')
+        self.assertEqual(classify_call('console.debug', 'tsx'), 'log')
+        self.assertEqual(classify_call('console.trace', 'tsx'), 'log')
+
+    def test_localstorage_classified_db(self):
+        # Real misses: excalidraw-app/components/DebugCanvas.tsx
+        # (localStorage.setItem/getItem), excalidraw-app/
+        # ExcalidrawPlusIframeExport.tsx (localStorage.getItem),
+        # excalidraw-app/components/TopErrorBoundary.tsx
+        # (localStorage.clear) -- 5 real non-test call sites, entirely
+        # unclassified before this fix (only IndexedDB existed in 'db').
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('localStorage.getItem', 'tsx'), 'db')
+        self.assertEqual(classify_call('localStorage.setItem', 'jsx'), 'db')
+        self.assertEqual(classify_call('localStorage.clear', 'javascript'), 'db')
+
+    def test_window_open_bare_verb_collision_declined_not_fixed(self):
+        """Corroborating finding, NOT a fix: `window.open(...)` (opens a
+        browser tab, a UI-navigation action) and `this.portal.open(...)`
+        (opens a socket.io connection) both fire _TAXONOMY_COMMON's
+        pre-existing bare 'open(' pattern and get tagged 'file' -- a false
+        positive, corpus-confirmed on excalidraw-app/App.tsx:ExcalidrawWrapper
+        and excalidraw-app/collab/Collab.tsx:startCollaboration. Same shape
+        and same verdict as every prior loop's declined bare-verb collision
+        (Zig's 'open'/'header' on TigerBeetle's own accessor methods, Go's
+        declined 'Do'): _TAXONOMY_COMMON-scoped, cross-language blast radius,
+        out of scope for a single-language loop to narrow. This test locks in
+        the CURRENT (not-yet-fixed) behavior so a future narrowing of the
+        common 'open(' pattern is a deliberate, reviewed change, not a
+        silent regression of this loop's own findings."""
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('window.open', 'tsx'), 'file')
+
+
 if __name__ == '__main__':
     unittest.main()

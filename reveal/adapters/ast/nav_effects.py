@@ -263,6 +263,18 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             # (src/vs/base/browser/indexedDB.ts:deleteDatabase). Dotted /
             # specific-verb forms => negligible collision risk.
             'indexeddb.open', 'indexeddb.deletedatabase', 'createobjectstore',
+            # BACK-718/BACK-726 (sideeffects-recall-oracle/tsx): browser
+            # localStorage -- the OTHER dominant client-side storage idiom
+            # alongside IndexedDB, simpler key/value form. Real corpus misses:
+            # `localStorage.getItem(...)` (excalidraw-app/
+            # ExcalidrawPlusIframeExport.tsx), `localStorage.setItem(...)`/
+            # `localStorage.getItem(...)` (excalidraw-app/components/
+            # DebugCanvas.tsx), `localStorage.clear()` (excalidraw-app/
+            # components/TopErrorBoundary.tsx) -- 5 real non-test call sites.
+            # Dotted `localstorage.` prefix (browser-global-specific) =>
+            # negligible collision risk.
+            'localstorage.getitem', 'localstorage.setitem',
+            'localstorage.removeitem', 'localstorage.clear',
         ]),
         ('http', [
             'fetch(',
@@ -277,7 +289,17 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             # `.reveal.yaml` project-scoping (BACK-238) if ever addressed.
             'http.get', 'http.request', 'https.get', 'https.request',
         ]),
-        ('log', ['console.log', 'console.error', 'console.warn']),
+        # BACK-718/BACK-726 (sideeffects-recall-oracle/tsx, eighteenth
+        # language): console.info/debug/trace were missing entirely --
+        # verified real corpus miss (Excalidraw's examples/with-script-in-
+        # browser/components/ExampleApp.tsx:ExampleApp calls
+        # `console.info("Elements :", ...)` twice, unclassified before this
+        # fix). Dotted `console.` prefix => zero collision risk, same shape
+        # as the three verbs already listed.
+        ('log', [
+            'console.log', 'console.error', 'console.warn',
+            'console.info', 'console.debug', 'console.trace',
+        ]),
         ('sleep', ['setTimeout', 'setInterval']),
         # NO env bucket, deliberately (BACK-644, fixed): Node's dominant
         # env-read idiom is `process.env.FOO` / `process.env['FOO']` — a plain
