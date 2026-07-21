@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 from ...core import node_children as _children
+from ...core.treesitter_compat import _zero_arg
 from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_KINDS
 
 # _MEMBER_ACCESS_KINDS: promoted to node_taxonomy.MEMBER_ACCESS_NODES
@@ -107,7 +108,7 @@ def range_calls(
         # builder-chain idiom (289 files use `..`). `cascade_section` is a
         # Dart-only kind name, so this is a no-op scan for every other
         # language.
-        if node.kind() == 'cascade_section':
+        if _zero_arg(node, 'kind') == 'cascade_section':
             for call in _extract_dart_cascade_calls(node, get_text):
                 if from_line <= call['line'] <= to_line:
                     results.append(call)
@@ -183,10 +184,10 @@ def _extract_dart_cascade_calls(node: Any, get_text: Callable) -> List[Dict[str,
     results: List[Dict[str, Any]] = []
     base_parts: List[str] = []
     for child in _children(node):
-        kind = child.kind()
+        kind = _zero_arg(child, 'kind')
         if kind == 'cascade_selector':
             sub = _children(child)
-            name_node = next((c for c in sub if c.kind() == 'identifier'), None)
+            name_node = next((c for c in sub if _zero_arg(c, 'kind') == 'identifier'), None)
             member = get_text(name_node).strip() if name_node else ''
             base_parts = [f'.{member}'] if member else []
         elif kind == 'argument_part':
@@ -197,7 +198,7 @@ def _extract_dart_cascade_calls(node: Any, get_text: Callable) -> List[Dict[str,
             base_parts = []
         elif kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
             inner_sub = _children(child)
-            if inner_sub and inner_sub[0].kind() == 'index_selector':
+            if inner_sub and _zero_arg(inner_sub[0], 'kind') == 'index_selector':
                 base_parts = []
             else:
                 member = get_text(inner_sub[-1]).strip() if inner_sub else ''
@@ -315,7 +316,7 @@ def _extract_callee(
     # above despite the identical source shape (BACK-718/BACK-720 Scala
     # sideeffects-recall-oracle). Emit the same "new <name>" text so the
     # exact same taxonomy pattern convention applies unchanged.
-    if call_node.kind() == 'instance_expression':
+    if _zero_arg(call_node, 'kind') == 'instance_expression':
         return _extract_scala_instance_callee(call_node, get_text)
 
     # Java: method_invocation is a flat node `[object? . name argument_list]` —
@@ -477,13 +478,13 @@ def _extract_scala_instance_callee(node: Any, get_text: Callable) -> Optional[st
     type (`new java.io.File(...)`, trailing segment only).
     """
     for child in _children(node):
-        kind = child.kind()
+        kind = _zero_arg(child, 'kind')
         if kind == 'type_identifier':
             name = get_text(child).strip()
             if name:
                 return f"new {name}"
         if kind == 'generic_type':
-            base = next((c for c in _children(child) if c.kind() == 'type_identifier'), None)
+            base = next((c for c in _children(child) if _zero_arg(c, 'kind') == 'type_identifier'), None)
             if base is not None:
                 name = get_text(base).strip()
                 if name:

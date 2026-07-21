@@ -666,7 +666,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 name_node = ch
             elif ch.kind() in ('arrow_function', 'function_expression', 'generator_function'):
                 value_node = ch
-            elif ch.kind() == 'call_expression' and value_node is None:
+            elif _zero_arg(ch, 'kind') == 'call_expression' and value_node is None:
                 value_node = self._call_wrapped_function_literal(ch)
         return name_node, value_node
 
@@ -680,11 +680,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
         actually carries the function literal.
         """
         for ch in _children(call_expression_node):
-            if ch.kind() != 'arguments':
+            if _zero_arg(ch, 'kind') != 'arguments':
                 continue
             candidates = [
                 arg for arg in _children(ch)
-                if arg.kind() in ('arrow_function', 'function_expression', 'generator_function')
+                if _zero_arg(arg, 'kind') in ('arrow_function', 'function_expression', 'generator_function')
             ]
             if len(candidates) == 1:
                 return candidates[0]
