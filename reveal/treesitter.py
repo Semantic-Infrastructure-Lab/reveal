@@ -1628,7 +1628,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return None
 
     def _callee_name_generic(self, call_node) -> Optional[str]:
-        callee_node = call_node.child(0)
+        return self._callee_name_from_node(call_node.child(0))
+
+    def _callee_name_from_node(self, callee_node) -> Optional[str]:
         if callee_node.kind() == 'identifier':
             return self._get_node_text(callee_node)
         if callee_node.kind() in CALLEE_ATTRIBUTE_TYPES:
@@ -1640,6 +1642,29 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     return self._get_node_text(child)
                 if child.kind() in CALLEE_ATTRIBUTE_TYPES:
                     return self._get_node_text(child).lstrip('*')
+        # Rust turbofish (`size_of::<u32>()`, `x.remap_types::<T>()`,
+        # `E::error::<T>()`) parses as generic_function(path, '::',
+        # type_arguments) -- the path is the real callee, type_arguments is
+        # not. Taking the whole node's raw text (old behavior) left the
+        # turbofish in the string, which defeated _bare_callee_name's
+        # last-separator split (BACK-733: the '::' *inside* the generic
+        # argument won, e.g. "size_of::<u32>" -> bare "<u32>" not "size_of").
+        # Recursing into just the path child sidesteps that entirely.
+        if _zero_arg(callee_node, 'kind') == 'generic_function':
+            path_node = callee_node.child(0)
+            if path_node is not None:
+                name = self._callee_name_from_node(path_node)
+                if name:
+                    return name
+        # `(f)(args)` parses callee as parenthesized_expression wrapping the
+        # real expression. Raw text would be the literal, unmatchable "(f)"
+        # (BACK-733) -- unwrap to the inner expression instead.
+        if _zero_arg(callee_node, 'kind') == 'parenthesized_expression':
+            for child in _children(callee_node):
+                if _zero_arg(child, 'kind') not in ('(', ')'):
+                    name = self._callee_name_from_node(child)
+                    if name:
+                        return name
         text = self._get_node_text(callee_node).strip().lstrip('*')
         return text if text else None
 
