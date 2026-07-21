@@ -138,7 +138,24 @@ def _bare_callee_name(callee: str) -> str:
     calls like `Engine::get_singleton()` — were never indexed under the bare
     name callers/callees actually search for). Whichever separator occurs
     last in the string wins, so mixed forms resolve to the final segment.
+
+    Also strips PHP's "new ClassName" constructor-call prefix (from
+    `_callee_name_php_new`) and a leading backslash fully-qualified-namespace
+    marker (PHP's "resolve from the global namespace, not the current one"
+    syntax, e.g. sprintf() written as "\\sprintf", common after any
+    namespaced file that references a global-namespace builtin). Neither is
+    a real-vs-bare distinction any other language has, so both were passed
+    through unbroken — the calls-recall-oracle PHP measurement (BACK-730,
+    seventh language) found real corpus misses this caused: "new
+    Walker_Nav_Menu_Checklist()" and "throw new WP_HTML_Unsupported_Exception"
+    never matched a target lookup for the bare class name, and "\\sprintf"/
+    "\\in_array"/"\\fopen" (PSR-7 vendor code, this corpus) never matched
+    "sprintf"/"in_array"/"fopen".
     """
+    if callee.startswith('new '):
+        callee = callee[4:]
+    if callee.startswith('\\'):
+        callee = callee[1:]
     idx = max(callee.rfind('->'), callee.rfind('.'), callee.rfind('::'))
     if idx == -1:
         return callee

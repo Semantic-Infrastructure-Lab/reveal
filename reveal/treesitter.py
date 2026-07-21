@@ -229,6 +229,19 @@ CALL_NODE_TYPES = {
     'function_call_expression', # PHP
     'member_call_expression',  # PHP $obj->method()
     'object_creation_expression', # PHP new ClassName()
+    # PHP `self::method()` / `parent::method()` / `static::method()` /
+    # `ClassName::method()` (static/scoped calls) parse to a DISTINCT node
+    # kind, 'scoped_call_expression', not a variant of member_call_expression
+    # or function_call_expression — entirely absent from CALL_NODE_TYPES
+    # meant calls:// silently returned zero callers/callees for the whole
+    # class of PHP static-method calls (BACK-736, found via a pre-flight
+    # grammar dump before building the calls-recall-oracle PHP measurement,
+    # same discovery method as BACK-734/BACK-735). Real-world impact is
+    # large: self::/parent::/static:: calls are the dominant idiom for
+    # calling sibling static helpers, parent-class overrides, and late
+    # static binding in any PHP OOP codebase (WordPress, Laravel, etc).
+    # See _callee_name_php_scoped_call for the paired extraction.
+    'scoped_call_expression',  # PHP self::/parent::/static::/Class::method()
     'method_call',             # Ruby, Rust (method syntax)
     'method_call_expression',  # Rust
     'invocation_expression',   # C#
@@ -1655,6 +1668,21 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return f"{receiver_text}->{method_name}" if receiver_text else method_name
         return None
 
+    def _callee_name_php_scoped_call(self, call_node) -> Optional[str]:
+        # PHP: self::method() / parent::method() / static::method() /
+        # Class::method() — scoped_call_expression's 'scope' field is
+        # either a 'relative_scope' node (self/parent/static keyword) or a
+        # plain 'name' node (a class constant), and 'name' is the method
+        # being called (BACK-736).
+        scope_node = call_node.child_by_field_name('scope')
+        name_node = call_node.child_by_field_name('name')
+        if name_node is None:
+            return None
+        name_text = self._get_node_text(name_node)
+        if scope_node is None:
+            return name_text
+        return f"{self._get_node_text(scope_node)}::{name_text}"
+
     def _callee_name_php_new(self, call_node) -> Optional[str]:
         # PHP: new ClassName() — object_creation_expression
         for child in _children(call_node):
@@ -1789,6 +1817,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._callee_name_php_method(call_node)
         if call_node.kind() == 'object_creation_expression':
             return self._callee_name_php_new(call_node)
+        if call_node.kind() == 'scoped_call_expression':
+            return self._callee_name_php_scoped_call(call_node)
         if call_node.kind() == 'method_invocation':
             return self._callee_name_java_method(call_node)
         if _zero_arg(call_node, 'kind') == 'call' and self.language == 'ruby':
