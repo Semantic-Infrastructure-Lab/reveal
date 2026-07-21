@@ -1007,6 +1007,66 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             'system.getenv', 'system.getproperty',
         ]),
     ],
+    'dart': [
+        ('file', [
+            # dart:io's File/Directory constructors -- `File(path)`/
+            # `Directory(path)` -- AppFlowy's dominant file-I/O idiom (73
+            # corpus call sites) -- TRIED AND DECLINED. Only visible as a
+            # call at all via the `_extract_dart_selector_calls` mechanism
+            # (BACK-431), which renders a bare constructor call's callee as
+            # JUST the class name -- there is no way to scope this any
+            # narrower than the bare token 'file'/'directory' (no receiver,
+            # no dotted prefix). `scripts/check_taxonomy_collisions.py`
+            # found this would be catastrophic even language-scoped-only:
+            # bare 'file' has 311 hits in dart's OWN corpus alone (mostly
+            # local variables/parameters literally named `file`, e.g.
+            # `for (final file in files) { ... file.something() ... }`,
+            # which would ALL misclassify as file-effects regardless of
+            # what `.something()` actually is) plus catastrophic
+            # cross-language exposure in _COMPILED_ALL mode (typescript
+            # 11,331; java 4,915; ruby 2,560; go 2,967 hits) -- same
+            # "generic English noun, no receiver to scope against" shape as
+            # C's declined bare connect/accept/socket. `directory` shows
+            # the identical pattern (dart=71, java=1,003, typescript=369).
+            # Declined, not fixed -- `file` bucket residual miss, same
+            # class as C's declined `http` bucket.
+            #
+            # dart:io File/FileSystemEntity instance methods -- distinctive
+            # camelCase compounds (tokenizer doesn't split camelCase, same
+            # shape as C#'s SaveChangesAsync/Zig's openFile), not the bare
+            # `read`/`write` verbs.
+            'readasstring', 'readasbytes', 'writeasstring', 'writeasbytes',
+            'readasstringsync', 'readasbytessync', 'writeasstringsync',
+            'writeasbytessync',
+            # path_provider's directory-lookup idiom -- AppFlowy's own
+            # sandbox/app-data-dir resolution (7 corpus call sites), always
+            # a prelude to real File/Directory I/O on the returned path.
+            'getapplicationdocumentsdirectory', 'gettemporarydirectory',
+            'getapplicationsupportdirectory',
+        ]),
+        ('http', [
+            # package:http's top-level request functions -- two-segment,
+            # scoped like Zig's `io.connect`/Lua's `ngx.socket.` entries
+            # (not a bare verb): AppFlowy's only real HTTP client usage in
+            # this module (member_http_service.dart, password_http_service.dart,
+            # version_checker.dart, several editor-plugin link/image
+            # previewers).
+            'http.get', 'http.post', 'http.put', 'http.delete', 'http.patch',
+            'http.head', 'http.client',
+        ]),
+        ('sleep', [
+            # `Future.delayed(...)` -- Dart/Flutter's dominant "pause
+            # execution" idiom (UI debounce/animation timing, 64 corpus call
+            # sites) -- COMMON's bare 'sleep'/'usleep' never matches
+            # 'delayed'. Scoped two-segment (not bare 'delayed') since a
+            # bare verb this generic ("delayed" as an adjective/property
+            # name) would be corpus-collision-prone in other languages;
+            # `Future.delayed` as an exact dotted pair is Dart-specific
+            # (no other reveal-supported language has a `Future` type with
+            # a `delayed` static constructor).
+            'future.delayed',
+        ]),
+    ],
 }
 
 # Analyzer `language` values that share one _TAXONOMY_BY_LANG bucket.

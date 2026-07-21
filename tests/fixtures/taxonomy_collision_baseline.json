@@ -1304,6 +1304,114 @@
     "source": "literal",
     "token": "logwarning"
   },
+  "literal:dart:file:getapplicationdocumentsdirectory": {
+    "hits": {
+      "dart": 1
+    },
+    "home": "dart",
+    "key": "literal:dart:file:getapplicationdocumentsdirectory",
+    "kind": "file",
+    "source": "literal",
+    "token": "getapplicationdocumentsdirectory"
+  },
+  "literal:dart:file:getapplicationsupportdirectory": {
+    "hits": {
+      "dart": 4
+    },
+    "home": "dart",
+    "key": "literal:dart:file:getapplicationsupportdirectory",
+    "kind": "file",
+    "source": "literal",
+    "token": "getapplicationsupportdirectory"
+  },
+  "literal:dart:file:gettemporarydirectory": {
+    "hits": {
+      "dart": 18
+    },
+    "home": "dart",
+    "key": "literal:dart:file:gettemporarydirectory",
+    "kind": "file",
+    "source": "literal",
+    "token": "gettemporarydirectory"
+  },
+  "literal:dart:file:readasbytes": {
+    "hits": {},
+    "home": "dart",
+    "key": "literal:dart:file:readasbytes",
+    "kind": "file",
+    "source": "literal",
+    "token": "readasbytes"
+  },
+  "literal:dart:file:readasbytessync": {
+    "hits": {
+      "dart": 10
+    },
+    "home": "dart",
+    "key": "literal:dart:file:readasbytessync",
+    "kind": "file",
+    "source": "literal",
+    "token": "readasbytessync"
+  },
+  "literal:dart:file:readasstring": {
+    "hits": {
+      "dart": 9
+    },
+    "home": "dart",
+    "key": "literal:dart:file:readasstring",
+    "kind": "file",
+    "source": "literal",
+    "token": "readasstring"
+  },
+  "literal:dart:file:readasstringsync": {
+    "hits": {
+      "dart": 4
+    },
+    "home": "dart",
+    "key": "literal:dart:file:readasstringsync",
+    "kind": "file",
+    "source": "literal",
+    "token": "readasstringsync"
+  },
+  "literal:dart:file:writeasbytes": {
+    "hits": {
+      "dart": 10
+    },
+    "home": "dart",
+    "key": "literal:dart:file:writeasbytes",
+    "kind": "file",
+    "source": "literal",
+    "token": "writeasbytes"
+  },
+  "literal:dart:file:writeasbytessync": {
+    "hits": {
+      "dart": 20
+    },
+    "home": "dart",
+    "key": "literal:dart:file:writeasbytessync",
+    "kind": "file",
+    "source": "literal",
+    "token": "writeasbytessync"
+  },
+  "literal:dart:file:writeasstring": {
+    "hits": {
+      "dart": 3
+    },
+    "home": "dart",
+    "key": "literal:dart:file:writeasstring",
+    "kind": "file",
+    "source": "literal",
+    "token": "writeasstring"
+  },
+  "literal:dart:file:writeasstringsync": {
+    "hits": {
+      "dart": 11
+    },
+    "home": "dart",
+    "key": "literal:dart:file:writeasstringsync",
+    "kind": "file",
+    "source": "literal",
+    "token": "writeasstringsync"
+  },
   "literal:go:http:roundtrip": {
     "hits": {
       "cpp": 1,

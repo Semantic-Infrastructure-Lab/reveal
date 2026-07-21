@@ -89,6 +89,28 @@ def range_calls(
             for call in _extract_gdscript_attribute_calls(children, get_text):
                 if from_line <= call['line'] <= to_line:
                     results.append(call)
+        # Dart cascade (`recv\n  ..foo()\n  ..bar(x)`) is a THIRD, distinct
+        # shape from the flat identifier+selector chain above: each cascaded
+        # call is its own sibling `cascade_section` node (a sibling of the
+        # base identifier/selector chain, not nested inside it), holding
+        # `..`, a `cascade_selector` (the member name), then either an
+        # `argument_part` directly (plain `..method(args)`) or a further
+        # `unconditional_assignable_selector`/`argument_part` run for a
+        # chained call after the cascade member (`..setup().finish()`) —
+        # note these chained continuations are DIRECT children of
+        # `cascade_section`, unlike the outer flat chain where they're
+        # wrapped in a `selector` node. `_extract_dart_selector_calls` never
+        # looks inside `cascade_section`/`cascade_selector` at all, so every
+        # cascaded call was silently invisible to --calls/--sideeffects/
+        # --boundary (BACK-723 Dart sideeffects-recall-oracle pre-flight
+        # check) despite cascades being AppFlowy's dominant Flutter
+        # builder-chain idiom (289 files use `..`). `cascade_section` is a
+        # Dart-only kind name, so this is a no-op scan for every other
+        # language.
+        if node.kind() == 'cascade_section':
+            for call in _extract_dart_cascade_calls(node, get_text):
+                if from_line <= call['line'] <= to_line:
+                    results.append(call)
         stack.extend(reversed(_children(node)))
 
     results.sort(key=lambda r: r['line'])
@@ -136,6 +158,56 @@ def _extract_dart_selector_calls(children: List[Any], get_text: Callable) -> Lis
                 base_parts = (base_parts + [f'.{member}']) if base_parts and member else ([f'.{member}'] if member else [])
         else:
             base_parts = []
+    return results
+
+
+def _extract_dart_cascade_calls(node: Any, get_text: Callable) -> List[Dict[str, Any]]:
+    """Reconstruct call sites from a Dart `cascade_section`'s own children.
+
+    `recv\n  ..foo()\n  ..bar(x)` parses each cascaded operation as its own
+    `cascade_section` sibling of the base `identifier`/`selector` chain (not
+    nested inside it), with the shape `.. cascade_selector(member)
+    [argument_part | (unconditional_assignable_selector argument_part)*]` --
+    a plain `..method(args)` cascade puts `argument_part` directly under
+    `cascade_section`, while a chained call AFTER the cascade member
+    (`..setup().finish()`) puts a further `unconditional_assignable_selector`/
+    `argument_part` pair directly under `cascade_section` too (unlike the top-
+    level flat chain, where continuations are wrapped in a `selector` node --
+    see `_extract_dart_selector_calls`). A cascaded field WRITE
+    (`..field = 3`, no `argument_part` at all) correctly emits nothing --
+    it's not a call. Each `cascade_section` is walked independently (callers
+    invoke this once per `cascade_section` node encountered), collapsing a
+    chained continuation to `.member` same as every other chained-call
+    convention in this file.
+    """
+    results: List[Dict[str, Any]] = []
+    base_parts: List[str] = []
+    for child in _children(node):
+        kind = child.kind()
+        if kind == 'cascade_selector':
+            sub = _children(child)
+            name_node = next((c for c in sub if c.kind() == 'identifier'), None)
+            member = get_text(name_node).strip() if name_node else ''
+            base_parts = [f'.{member}'] if member else []
+        elif kind == 'argument_part':
+            callee = ''.join(base_parts) if base_parts else None
+            line = child.start_position().row + 1
+            first_arg, has_more = _extract_first_arg(child, get_text)
+            results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
+            base_parts = []
+        elif kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
+            inner_sub = _children(child)
+            if inner_sub and inner_sub[0].kind() == 'index_selector':
+                base_parts = []
+            else:
+                member = get_text(inner_sub[-1]).strip() if inner_sub else ''
+                base_parts = (base_parts + [f'.{member}']) if base_parts and member else ([f'.{member}'] if member else [])
+        else:
+            # `=` (cascaded field write) or any other non-call continuation
+            # resets chain state -- nothing left to attribute a later
+            # argument_part to.
+            if kind != '..':
+                base_parts = []
     return results
 
 
