@@ -45,10 +45,10 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | **Measured** |
 | C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | **Measured** |
 | Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | **Measured** |
-| Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | — not yet run | **Measured** (import only) |
-| GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | — not yet run | **Measured** (import only) |
+| Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | ✅ 84.9%³¹ (AppFlowy, bare `File`/`Directory` declined) | **Measured** |
+| GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | ✅ 69.3%³² (Pixelorama, bare `print`/`request` declined) | **Measured** |
 | Zig | ✅ 100%⁶ (ghostty, TigerBeetle²⁰) | ✅ 98.4%²⁹ (TigerBeetle) | **Measured** |
-| TSX, plain JS | ✅ 100%⁷ (Excalidraw, three.js), 100%²⁵ (react-router) | — not yet run | **Measured** (import only) |
+| TSX, plain JS | ✅ 100%⁷ (Excalidraw, three.js), 100%²⁵ (react-router) | ✅ 98.4%³³ (Excalidraw) | **Measured** |
 
 **How to read this table — three caveats that the ✅ marks do not carry:**
 
@@ -62,9 +62,11 @@ is a claim we have not yet checked, **not** a claim it is broken.
    the easy cases, but a sample is not a census. **Always read the per-language
    Sample column in the detailed results tables below before quoting a number.**
 2. **This table covers two signals, not all of reveal's DD output.**
-   Import/dependency recall is measured on all 19 languages listed. Side-effect
-   recall is measured on 15 of them — Dart, GDScript, and
-   TSX/plain-JS have **no** side-effect measurement. `surface`, `contracts`,
+   Import/dependency recall is measured on all 19 languages listed, and
+   side-effect recall breadth is now complete — every language with import
+   recall measured also has a side-effect measurement (BACK-718). Kotlin's
+   and Swift's each rest on a single category rather than the six-category
+   sweep the rest got (caveat 3 below). `surface`, `contracts`,
    and `patches://`/testability have **no ground-truth validation on any
    language** — see [Scope](#scope).
 3. **Two side-effect ✅s are single-category.** Kotlin's 100% is the `db`
@@ -719,13 +721,69 @@ entry. Found and fixed a bug in this loop's OWN oracle extraction code (not
 reveal): an expression-bodied `def`'s termination heuristic silently
 swallowed an entire file's remaining sibling functions into one 659-line
 bogus record before being caught via the same outlier-length sanity sweep
-every loop since Zig has run. **STATUS: BLOCKED, not closed** — code/test
-changes landed in `external-git`'s working tree and pass 630/2xfail targeted
-suite, but the measuring agent's git-worktree-isolated sandbox hard-blocked
-committing to `external-git` itself (same known limitation the Zig loop hit)
-— see
+every loop since Zig has run. Closed: `external-git` commit `ea30d2f` landed
+by the orchestrating session after independent re-verification (630
+passed/2 xfailed re-confirmed, docs gate clean, diff reviewed) — see
 [sideeffects-recall-oracle/scala/SCALA.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/scala/SCALA.md)
-for the full write-up and exact commit status.
+for the full write-up.
+
+³¹ First side-effect/boundary measurement for Dart (BACK-718/BACK-723,
+sixteenth language in the program), AppFlowy's `frontend/appflowy_flutter/lib`
+corpus (5,231 functions). 44.44% pre-fix → 84.85% post-fix. New structural
+bug found and fixed: `cascade_section` calls (`recv..foo()..bar(x)`, used in
+289 of 1,526 corpus files) were a third distinct no-call-expression-wrapper
+shape invisible to `--calls`/`--sideeffects`, fixed in `nav_calls.py` (zero
+measured recall impact on this loop's six categories — cascades here are
+UI-builder chaining, not effect calls). Taxonomy: `dart:io`
+`readAsString`/`writeAsBytes`-family + `path_provider` dirs (`file`),
+`package:http` (`http`), `Future.delayed` (`sleep`). Bare `File`/`Directory`
+constructor calls declined after `check_taxonomy_collisions.py` found 311
+Dart-own-corpus hits (mostly local variables literally named `file`) plus
+11k+/4.9k+/2.9k+ unscoped TypeScript/Java/Go hits — residual `file`-bucket
+miss, not a fix. See
+[sideeffects-recall-oracle/dart/DART.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/dart/DART.md).
+
+³² First side-effect/boundary measurement for GDScript (BACK-718/BACK-724,
+seventeenth language in the program), Pixelorama's full corpus (3,131
+functions — a real production Godot 4 pixel-art editor). 20.00% pre-fix →
+69.33% post-fix. New structural bug found and fixed: `func _init(...)`
+(GDScript's fixed-name lifecycle constructor) parses to its own
+`constructor_definition` node kind, entirely absent from
+`FUNCTION_NODE_TYPES` — GDScript has no wrapping class node for a top-level
+script, so `_init` was invisible to `--outline` and errored on direct name
+lookup, not just mis-scoped. Fixed via `treesitter.py`'s
+`_constructor_definition_name`. Taxonomy: Godot 4's
+`FileAccess`/`DirAccess` file API, `OS.*environment` accessors,
+`push_error`/`push_warning`/`printerr`/`print_rich` logging,
+`OS.delay_*`/`create_timer` sleep. Bare `print` (log) and bare `request`
+(http) declined — both are the single dominant call for their category in
+this corpus, but collision-checking showed thousands of unrelated hits
+(7,976 C++, 1,829 Zig, 1,152 TypeScript for `print`; 785 Java, 422 PHP, 308
+Lua for `request`) in every other measured language. `db` recall stays
+honestly 0/0: no SQL/NoSQL client exists in Godot core or GDScript stdlib.
+See
+[sideeffects-recall-oracle/gdscript/GDSCRIPT.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/gdscript/GDSCRIPT.md).
+
+³³ First side-effect/boundary measurement for TSX/plain-JS (BACK-718/BACK-726,
+eighteenth and final language in the breadth program), Excalidraw's
+`samples/tsx/excalidraw` corpus (292 `.tsx`/`.jsx` files, 606 functions).
+90.16% pre-fix → 98.36% post-fix. New structural bug found and fixed: a
+named component wrapped in a higher-order call (`const Name =
+React.forwardRef((props, ref) => {...})` / `React.memo(...)`, 47 corpus
+occurrences) was entirely invisible to `--outline`/name-lookup because the
+declarator's value is a `call_expression`, not a bare arrow/function
+expression — fixed via `_call_wrapped_function_literal` in `treesitter.py`,
+which looks one level into the call's own argument list for a sole
+function-literal argument (a curried HOC like `connect(...)(Component)`
+correctly stays unmatched). Taxonomy: `console.info`/`.debug`/`.trace`
+(log, only `.log`/`.error`/`.warn` existed before) and browser
+`localStorage` (`db`, IndexedDB's simpler key/value counterpart). Bare
+`window.open` false-tagged as `file` declined — same cross-language
+collision class as Zig/Go's declined bare verbs. `db`/`env`/`file` were an
+honest corpus-*scope* absence for `.tsx`/`.jsx` specifically (this same
+app's `.ts` files already have `process.env`/`fs`/IndexedDB coverage from
+the prior TypeScript loop). See
+[sideeffects-recall-oracle/tsx/TSX.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/tsx/TSX.md).
 
 ## Import/Dependency Recall
 
