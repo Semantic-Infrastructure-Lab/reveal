@@ -11,12 +11,14 @@ tree-sitter node kinds for callee-name extraction:
     calls:// actually depends on
 
 A language-specific fix landing in only one of the two lets the OTHER path
-stay silently wrong while looking complete — this happened for real:
-Scala's `instance_expression` (BACK-718/720) was fixed in nav_calls.py but
-missing from treesitter.py until BACK-730 note #17 caught it; PHP's
-`scoped_call_expression` (BACK-736) and Rust's `generic_function`/
-`parenthesized_expression` (BACK-733) were fixed in treesitter.py but are
-still missing from nav_calls.py as of this writing.
+stay silently wrong while looking complete — this happened for real three
+times: Scala's `instance_expression` (BACK-718/720) was fixed in
+nav_calls.py but missing from treesitter.py until BACK-730 note #17 caught
+it (fixed there too, BACK-739); PHP's `scoped_call_expression` (BACK-736)
+and Rust's `generic_function`/`parenthesized_expression` (BACK-733) were
+fixed in treesitter.py but were missing from nav_calls.py until BACK-740/
+BACK-741 mirrored them. All three are now fixed in both files — this test
+exists to catch the *next* occurrence, not these specific ones.
 
 This test hardcodes the definitive set of node kinds that must be
 special-cased in BOTH files (from a manual audit of the calls-recall
