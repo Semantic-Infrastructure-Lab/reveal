@@ -1514,6 +1514,35 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return self._get_node_text(child)
         return None
 
+    def _name_via_swift_operator_function(self, kids) -> Optional[str]:
+        # Swift operator overload (`static func -(left: CGPoint, right:
+        # CGPoint) -> CGPoint`, `static func *(...)`, `static func *=(...)`)
+        # -- the "name" is a literal operator-symbol token whose tree-sitter
+        # KIND literally IS the operator text (e.g. kind '-'), not an
+        # identifier-family kind any `_name_via_*` strategy above
+        # recognizes, and Swift's grammar has no wrapping parameter-list
+        # node kind at all (`(`/`parameter`/`)` are direct siblings, not
+        # nested under a `parameters`-kind node), so
+        # `_name_via_param_adjacent` never even applies to Swift. Found via
+        # the calls-recall-oracle Swift measurement (BACK-730, tenth
+        # language): every operator overload (CGPoint/CGSize arithmetic --
+        # a common idiom in any Swift codebase with custom geometry/value
+        # types) was entirely absent from --outline/get_structure(), so
+        # every call made from inside one had no caller scope to attribute
+        # to at all. Same invisibility class as BACK-651 (C#
+        # operator_declaration) and Ruby's `operator` node kind above --
+        # here the symbol is a plain sibling token (no wrapping node), so
+        # it's found positionally: the sibling immediately after the
+        # literal `func` keyword child, only used as a last-resort fallback
+        # (i.e. no earlier strategy already found a name).
+        for i, child in enumerate(kids):
+            if _zero_arg(child, 'kind') == 'func' and i + 1 < len(kids):
+                nxt = kids[i + 1]
+                nxt_kind = _zero_arg(nxt, 'kind')
+                if nxt_kind not in _NAME_KINDS and nxt_kind != '(':
+                    return self._get_node_text(nxt)
+        return None
+
     def _name_via_type_identifier(self, kids) -> Optional[str]:
         # PRIORITY 3: type_identifier (fallback for structs, classes) — only
         # used if no name was found in declarators.
@@ -1565,6 +1594,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             self._name_via_dot_index,
             self._name_via_method_index,
             self._name_via_ruby_special_name,
+            self._name_via_swift_operator_function,
             self._name_via_type_identifier,
             self._name_via_field_identifier,
         ):
@@ -1782,6 +1812,39 @@ class TreeSitterAnalyzer(FileAnalyzer):
         text = self._get_node_text(type_node).strip()
         return f"new {text}" if text else None
 
+    def _callee_name_scala_instance(self, call_node) -> Optional[str]:
+        # Scala: new ClassName(args) / new ArrayList[String](args) /
+        # new java.io.File(args) — instance_expression. A DISTINCT node
+        # kind from PHP/C#/C++'s object_creation_expression/new_expression
+        # above despite the identical source shape (BACK-730 note #17):
+        # child(0) is the literal 'new' token, so the generic
+        # _callee_name_generic fallback returned the bare keyword "new" as
+        # the callee, not the class name. Mirrors
+        # nav_calls.py:_extract_scala_instance_callee (the ast:// nav path,
+        # fixed separately under BACK-718/720 — that fix never touched this
+        # get_structure()/calls:// path, which is exactly the gap flagged
+        # in BACK-730 note #17).
+        for child in _children(call_node):
+            kind = _zero_arg(child, 'kind')
+            if kind == 'type_identifier':
+                text = self._get_node_text(child).strip()
+                if text:
+                    return f"new {text}"
+            if kind == 'generic_type':
+                base = next(
+                    (c for c in _children(child) if _zero_arg(c, 'kind') == 'type_identifier'),
+                    None,
+                )
+                if base is not None:
+                    text = self._get_node_text(base).strip()
+                    if text:
+                        return f"new {text}"
+            if kind == 'field_expression':
+                text = self._get_node_text(child).strip()
+                if text:
+                    return f"new {text.split('.')[-1]}"
+        return None
+
     def _callee_name_java_method(self, call_node) -> Optional[str]:
         # Java: obj.method() / Class.staticMethod() / method() —
         # method_invocation's grammar puts an optional `object` field BEFORE
@@ -1913,6 +1976,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._callee_name_php_scoped_call(call_node)
         if _zero_arg(call_node, 'kind') == 'new_expression':
             return self._callee_name_cpp_new(call_node)
+        if _zero_arg(call_node, 'kind') == 'instance_expression':
+            return self._callee_name_scala_instance(call_node)
         if call_node.kind() == 'method_invocation':
             return self._callee_name_java_method(call_node)
         if _zero_arg(call_node, 'kind') == 'call' and self.language == 'ruby':

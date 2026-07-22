@@ -328,7 +328,35 @@ class Plain {
 
             self.assertEqual(classes['Bar']['bases'], [])
             self.assertEqual(classes['Foo']['bases'], ['Bar', 'Baz'])
-            self.assertEqual(classes['Plain']['bases'], [])
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_instance_expression_callee_name(self):
+        """BACK-730 note #17: Scala's `new ClassName(args)` parses to a
+        distinct 'instance_expression' node (not PHP/C#/C++'s
+        object_creation_expression/new_expression). get_structure()'s
+        'calls' field — the one build_callers_index/calls:// actually
+        depends on — must report 'new File', not the bare literal 'new'."""
+        code = '''class Reader {
+  def load(): Unit = {
+    val f = new File("/tmp/x")
+    println(f)
+  }
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.scala', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = ScalaAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            functions = {fn['name']: fn for fn in structure['functions']}
+
+            self.assertIn('new File', functions['load']['calls'])
+            self.assertNotIn('new', functions['load']['calls'])
         finally:
             os.unlink(temp_path)
 
