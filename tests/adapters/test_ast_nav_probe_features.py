@@ -4719,6 +4719,121 @@ class TestSwiftInitDeinitDeclaration(unittest.TestCase):
             os.unlink(temp_path)
 
 
+class TestSwiftPrefixExpressionCallee(unittest.TestCase):
+    """BACK-730 (tenth calls:// language, 8/bucket measurement): Swift
+    `!isRunning(x)` (logical negation of a call's boolean result -- a
+    common predicate-negation idiom) parses the whole `!isRunning` as one
+    `prefix_expression(bang, simple_identifier)` callee node, not a plain
+    identifier. Taking the whole node's raw text (old behavior) left the
+    leading "!" in the callee string, and `_bare_callee_name` has no
+    separator to act on a bare identifier, so the index key was literally
+    "!isRunning", never matching a bare `?target=isRunning` lookup. Real
+    corpus miss: SignalServiceKit's `BackupAttachmentCoordinator.swift`
+    `kickOffNextOperation`, which calls `!isRunning(...)` four times. Fixed
+    by recursing into `prefix_expression`'s last child (the operand) in
+    `_callee_name_from_node`, which also covers Swift's `.foo(...)`
+    implicit-member call shape (same node kind, different operator token)
+    without changing its already-correct behavior."""
+
+    def test_negated_call_strips_bang_from_callee(self):
+        from reveal.analyzers.swift import SwiftAnalyzer
+        import os
+        import tempfile
+
+        code = textwrap.dedent("""\
+            func kickOffNextOperation() {
+                if needsToRun(.thumbnail) && !isRunning(.thumbnail) {
+                    runOperation(.thumbnail)
+                }
+            }
+            """)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.swift', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+        try:
+            analyzer = SwiftAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            calls = structure['functions'][0]['calls']
+            # Before the fix this was '!isRunning', not 'isRunning'.
+            self.assertIn('isRunning', calls)
+            self.assertNotIn('!isRunning', calls)
+        finally:
+            os.unlink(temp_path)
+
+    def test_implicit_member_call_still_resolves_correctly(self):
+        # Sanity: the same prefix_expression node shape covers `.foo(...)`
+        # (implicit-member call, leading '.' not '!') -- confirm the fix
+        # doesn't regress this already-working case.
+        from reveal.analyzers.swift import SwiftAnalyzer
+        import os
+        import tempfile
+
+        code = textwrap.dedent("""\
+            func run() {
+                let x: E = .foo(timestamp: 5)
+            }
+            """)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.swift', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+        try:
+            analyzer = SwiftAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            calls = structure['functions'][0]['calls']
+            self.assertIn('foo', calls)
+        finally:
+            os.unlink(temp_path)
+
+
+class TestSwiftOperatorOverloadName(unittest.TestCase):
+    """BACK-730 (tenth calls:// language, 8/bucket measurement): Swift
+    operator overloads (`static func -(left: CGSize, right: CGSize) ->
+    CGSize`, `static func *(...)`) name themselves with a literal
+    operator-symbol token whose tree-sitter KIND literally IS the operator
+    text (e.g. kind '-'), not an identifier-family kind any `_name_via_*`
+    strategy recognized -- and Swift's grammar has no wrapping
+    parameter-list node kind at all, so `_name_via_param_adjacent` never
+    even applies. Before this fix, every operator overload (CGPoint/CGSize
+    arithmetic -- a common idiom in any Swift codebase with custom
+    geometry/value types) was entirely absent from
+    --outline/get_structure(), so calls made from inside one had no caller
+    scope to attribute to at all. Real corpus example: SignalServiceKit's
+    `Util/UIView+OWS.swift`, five operator overloads (`-`, `*`, `*=` twice
+    more)."""
+
+    def test_operator_overload_extracted_with_symbol_name(self):
+        from reveal.analyzers.swift import SwiftAnalyzer
+        import os
+        import tempfile
+
+        code = textwrap.dedent("""\
+            struct CGSize {
+                static func -(left: CGSize, right: CGSize) -> CGSize {
+                    return subtract(left, right)
+                }
+                static func *(left: CGSize, right: CGFloat) -> CGSize {
+                    return multiply(left, right)
+                }
+            }
+            """)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.swift', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+        try:
+            analyzer = SwiftAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            func_names = [fn['name'] for fn in structure.get('functions', [])]
+            # Before the fix, both operator overloads were silently absent
+            # from --outline/get_structure() entirely.
+            self.assertIn('-', func_names)
+            self.assertIn('*', func_names)
+            by_name = {fn['name']: fn for fn in structure['functions']}
+            self.assertIn('subtract', by_name['-'].get('calls', []))
+            self.assertIn('multiply', by_name['*'].get('calls', []))
+        finally:
+            os.unlink(temp_path)
+
+
 def _parse_gdscript(code: str):
     """Parse GDScript code and return (tree, root, get_text, content_bytes)."""
     parser = ts.get_parser('gdscript')

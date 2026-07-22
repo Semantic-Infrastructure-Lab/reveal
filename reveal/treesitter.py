@@ -1944,6 +1944,33 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     name = self._callee_name_from_node(child)
                     if name:
                         return name
+        # Swift `!isRunning(x)` (logical negation of a call's result --
+        # common for boolean-returning predicate functions/methods) parses
+        # the whole `!isRunning` as a single call-suffix-adjacent
+        # `prefix_expression(bang, simple_identifier)`, not a plain
+        # identifier -- taking the whole node's raw text (old behavior)
+        # left the leading "!" in the callee string, and
+        # `_bare_callee_name` has no separator to act on a bare identifier,
+        # so the index key was literally "!isRunning", never matching a
+        # bare `?target=isRunning` lookup. Confirmed via the calls-recall-
+        # oracle Swift measurement (BACK-730, tenth language): real corpus
+        # miss on `BackupAttachmentCoordinator.swift`'s
+        # `kickOffNextOperation`, which calls `!isRunning(...)` four times.
+        # This same node shape (`prefix_expression`) is ALSO how Swift
+        # parses an implicit-member call's leading dot (`.foo(...)` ->
+        # `prefix_expression('.', simple_identifier)`) -- recursing into
+        # the last child (the operand, always positioned after the
+        # operator token for any Swift prefix operator) handles both
+        # uniformly and doesn't change the already-correct `.foo` case
+        # (its raw-text fallback below produced the same bare name via
+        # `_bare_callee_name`'s separate leading-dot handling; this makes
+        # it explicit instead of accidental).
+        if _zero_arg(callee_node, 'kind') == 'prefix_expression':
+            kids = _children(callee_node)
+            if kids:
+                name = self._callee_name_from_node(kids[-1])
+                if name:
+                    return name
         text = self._get_node_text(callee_node).strip().lstrip('*')
         return text if text else None
 
