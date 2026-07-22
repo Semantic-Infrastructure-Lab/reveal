@@ -311,6 +311,18 @@ def _extract_callee(
     if call_node.kind() == 'object_creation_expression':
         return _extract_object_creation_callee(call_node, get_text)
 
+    # PHP: self::method() / parent::method() / static::method() /
+    # Class::method() — scoped_call_expression is a DISTINCT node kind from
+    # member_call_expression above, entirely absent from this dispatch
+    # (BACK-740, the ast:// nav side of BACK-736's calls:// fix, found via
+    # the nav_calls.py/treesitter.py dispatch-parity test, BACK-739). The
+    # generic child(0) fallback below returns only the 'scope' node's text
+    # (self/parent/static/ClassName), silently dropping the method name
+    # entirely — confirmed live: `self::baz()` rendered as bare `self`, not
+    # `self::baz`. Mirrors treesitter.py:_callee_name_php_scoped_call.
+    if _zero_arg(call_node, 'kind') == 'scoped_call_expression':
+        return _extract_php_scoped_call_callee(call_node, get_text)
+
     # Scala: new ClassName(args) / new ClassName[T](args) — a DISTINCT node
     # kind ('instance_expression') from PHP/C#'s object_creation_expression
     # above despite the identical source shape (BACK-718/BACK-720 Scala
@@ -354,6 +366,25 @@ def _extract_callee(
         return _extract_ruby_call_callee(call_node, get_text, call_node_types)
 
     callee_node = call_node.child(0)
+
+    # Rust turbofish (`size_of::<u32>()`, `x.remap_types::<T>()`,
+    # `E::error::<T>()`) parses as generic_function(path, '::',
+    # type_arguments) — the path is the real callee, type_arguments is not.
+    # `(f)(args)` parses callee as parenthesized_expression wrapping the
+    # real expression. Both left the raw wrapper text (the turbofish suffix,
+    # or the literal unmatchable "(f)") in the callee string before this
+    # unwrap (BACK-741, the ast:// nav side of BACK-733's calls:// fix,
+    # found via the nav_calls.py/treesitter.py dispatch-parity test,
+    # BACK-739). Mirrors treesitter.py:_callee_name_from_node's identical
+    # unwrap loop.
+    while _zero_arg(callee_node, 'kind') in ('generic_function', 'parenthesized_expression'):
+        inner = next(
+            (c for c in _children(callee_node) if _zero_arg(c, 'kind') not in ('(', ')')),
+            None,
+        ) if _zero_arg(callee_node, 'kind') == 'parenthesized_expression' else callee_node.child(0)
+        if inner is None:
+            break
+        callee_node = inner
 
     # Chained/fluent call: `rimrafUnlink(x).catch(...)`, `fetch(x).then(...).catch(...)`.
     # The callee is a member-access whose *receiver* is itself a call, so its raw
@@ -508,6 +539,26 @@ def _extract_scala_instance_callee(node: Any, get_text: Callable) -> Optional[st
             if text:
                 return f"new {text.split('.')[-1]}"
     return None
+
+
+def _extract_php_scoped_call_callee(node: Any, get_text: Callable) -> Optional[str]:
+    """PHP `scoped_call_expression`: self::method() / parent::method() /
+    static::method() / Class::method(). The 'scope' field is either a
+    'relative_scope' node (self/parent/static keyword) or a plain 'name'
+    node (a class constant); 'name' is the method being called (BACK-740,
+    mirrors treesitter.py:_callee_name_php_scoped_call exactly).
+    """
+    scope_node = node.child_by_field_name('scope')
+    name_node = node.child_by_field_name('name')
+    if name_node is None:
+        return None
+    name_text = get_text(name_node).strip()
+    if not name_text:
+        return None
+    if scope_node is None:
+        return name_text
+    scope_text = get_text(scope_node).strip()
+    return f"{scope_text}::{name_text}" if scope_text else name_text
 
 
 def _extract_swift_constructor_callee(node: Any, get_text: Callable) -> Optional[str]:
