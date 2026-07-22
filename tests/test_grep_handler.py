@@ -164,6 +164,36 @@ class TestGrepInvalidPattern(unittest.TestCase):
         self.assertIn('invalid pattern', r.stderr)
 
 
+class TestGrepDirectoryBinaryDetection(unittest.TestCase):
+    """BACK-743: extensionless binaries must not be grepped as text."""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        with open(os.path.join(self.d, 'notes.txt'), 'w') as f:
+            f.write('needle in a text file\n')
+        # No extension, but contains a NUL byte early on, like an ELF binary --
+        # the tell _BINARY_EXTENSIONS' suffix allowlist can't catch.
+        with open(os.path.join(self.d, 'compiled-binary'), 'wb') as f:
+            f.write(b'\x7fELF\x00\x00\x00needle\x00' + os.urandom(256))
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def test_extensionless_binary_not_matched(self):
+        r = run_reveal(self.d, '--grep', 'needle')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('notes.txt', r.stdout)
+        self.assertNotIn('compiled-binary', r.stdout)
+
+    def test_extensionless_text_file_still_matched(self):
+        with open(os.path.join(self.d, 'plain-no-ext'), 'w') as f:
+            f.write('needle here too\n')
+        r = run_reveal(self.d, '--grep', 'needle')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('plain-no-ext', r.stdout)
+
+
 class TestGrepSearchHintHyphen(unittest.TestCase):
     """BACK-308: --search on terms with hyphens that exist in file should show --grep hint."""
 

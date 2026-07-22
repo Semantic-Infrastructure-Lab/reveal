@@ -20,6 +20,21 @@ _BINARY_EXTENSIONS = frozenset({
     '.pyc', '.pyo', '.pyd', '.so', '.dylib', '.dll', '.exe', '.bin', '.o', '.a',
 })
 
+_BINARY_SNIFF_SIZE = 8192
+
+
+def _looks_binary(fpath: Path) -> bool:
+    """Heuristic binary detection: a NUL byte in the leading chunk (the same
+    signal git/grep use). Catches compiled binaries with no distinguishing
+    extension, e.g. extensionless ELF executables, that _BINARY_EXTENSIONS misses.
+    """
+    try:
+        with open(fpath, 'rb') as f:
+            chunk = f.read(_BINARY_SNIFF_SIZE)
+    except OSError:
+        return False
+    return b'\x00' in chunk
+
 
 def handle_grep(path: str, pattern: str, args: Namespace) -> None:
     """Text search over a single file, grouped by enclosing structural element."""
@@ -269,6 +284,8 @@ def _collect_dir_results(
         for fname in sorted(files):
             fpath = Path(root) / fname
             if fpath.suffix in _BINARY_EXTENSIONS:
+                continue
+            if fpath.suffix == '' and _looks_binary(fpath):
                 continue
             if gitignore_patterns:
                 try:
