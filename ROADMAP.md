@@ -173,9 +173,6 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
      oracle to borrow (no `go list` equivalent for "what is this module's
      public surface"), so this needs a design doc before any measurement —
      closer to the side-effect program's from-scratch-oracle shape (BACK-719).
-  3. C++ import-recall corpus widening past the engine-core-only corpus
-     (`editor/`/`modules/`/`thirdparty/` currently excluded, see the harness
-     README) (BACK-707).
 
   *Not on this list, deliberately:* `patches://`/testability language breadth
   past Python + TS is filed as an idea rather than committed work — see
