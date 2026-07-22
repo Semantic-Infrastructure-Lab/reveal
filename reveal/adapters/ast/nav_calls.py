@@ -319,6 +319,12 @@ def _extract_callee(
     if _zero_arg(call_node, 'kind') == 'instance_expression':
         return _extract_scala_instance_callee(call_node, get_text)
 
+    # Swift: `<callee><TypeArgs>(args)` — generic function call or generic
+    # type initializer, both parse to 'constructor_expression' rather than
+    # call_expression (BACK-730 Swift pre-flight).
+    if _zero_arg(call_node, 'kind') == 'constructor_expression':
+        return _extract_swift_constructor_callee(call_node, get_text)
+
     # Java: method_invocation is a flat node `[object? . name argument_list]` —
     # child(0) is only the *object* (`Files`, `path`), so the old logic dropped
     # the method name entirely (`Files.createDirectories()` → "Files",
@@ -493,6 +499,34 @@ def _extract_scala_instance_callee(node: Any, get_text: Callable) -> Optional[st
             text = get_text(child).strip()
             if text:
                 return f"new {text.split('.')[-1]}"
+    return None
+
+
+def _extract_swift_constructor_callee(node: Any, get_text: Callable) -> Optional[str]:
+    """Swift `constructor_expression`: `constructed_type<TypeArgs>` field
+    (a `user_type` wrapping a `type_identifier` plus `type_arguments`) +
+    `constructor_suffix` args. Covers BOTH a generic function call
+    (`identity<Int>(5)`) and a generic type initializer (`Array<Int>()`) —
+    unlike Scala/PHP's `object_creation_expression`/`instance_expression`,
+    this node is not always semantically a construction, so it emits the
+    bare callee name (`identity`, `Array`) with no "new " prefix, matching
+    the plain call_expression convention instead.
+    """
+    constructed = node.child_by_field_name('constructed_type')
+    if constructed is None:
+        return None
+    if _zero_arg(constructed, 'kind') == 'user_type':
+        base = next(
+            (c for c in _children(constructed) if _zero_arg(c, 'kind') == 'type_identifier'),
+            None,
+        )
+        if base is not None:
+            name = get_text(base).strip()
+            if name:
+                return name
+    text = get_text(constructed).strip()
+    if text:
+        return text.split('<')[0].strip() or None
     return None
 
 

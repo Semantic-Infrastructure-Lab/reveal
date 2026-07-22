@@ -4592,6 +4592,58 @@ class TestScalaInstanceExpressionCalls(unittest.TestCase):
         self.assertIn('file', kinds)
 
 
+def _parse_swift(code: str):
+    """Parse Swift code and return (tree, root, get_text, content_bytes)."""
+    parser = ts.get_parser('swift')
+    src = textwrap.dedent(code).lstrip('\n')
+    content_bytes = src.encode('utf-8')
+    tree = parser.parse(src)
+    root = tree.root_node()
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+
+    return tree, root, get_text, content_bytes
+
+
+class TestSwiftConstructorExpressionCalls(unittest.TestCase):
+    """BACK-730 (tenth calls:// language, pre-flight grammar dump): Swift's
+    `<callee><TypeArgs>(args)` -- both a generic function call
+    (`identity<Int>(5)`) AND a generic type initializer (`Array<Int>()`) --
+    parses to a DISTINCT tree-sitter node kind, 'constructor_expression',
+    not call_expression. Entirely invisible to --calls/--sideeffects/
+    --boundary before this fix despite being a common shape in any Swift
+    codebase using generics. Fixed via a CALL_NODE_TYPES addition
+    (treesitter.py) plus a paired callee-extraction case (nav_calls.py:
+    _extract_swift_constructor_callee), which emits the bare callee name
+    (no "new " prefix, unlike Scala/PHP's object_creation/instance_expression)
+    since this node isn't always semantically a construction."""
+
+    def test_generic_function_call_visible_to_range_calls(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        tree, root, get_text, content_bytes = _parse_swift("""
+        func run() {
+            let x = identity<Int>(5)
+        }
+        """)
+        calls = range_calls(root, 1, 999, get_text)
+        callees = [c['callee'] for c in calls]
+        self.assertIn('identity', callees)
+
+    def test_generic_type_initializer_visible_to_range_calls(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        tree, root, get_text, content_bytes = _parse_swift("""
+        func run() {
+            let a = Array<Int>()
+            let d = Dictionary<String, Int>()
+        }
+        """)
+        calls = range_calls(root, 1, 999, get_text)
+        callees = [c['callee'] for c in calls]
+        self.assertIn('Array', callees)
+        self.assertIn('Dictionary', callees)
+
+
 def _parse_gdscript(code: str):
     """Parse GDScript code and return (tree, root, get_text, content_bytes)."""
     parser = ts.get_parser('gdscript')

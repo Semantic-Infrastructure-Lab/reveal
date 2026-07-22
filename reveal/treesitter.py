@@ -273,6 +273,20 @@ CALL_NODE_TYPES = {
     # convention already established for PHP/C#, so the same taxonomy
     # pattern shape works unchanged).
     'instance_expression',      # Scala
+    # Swift: any call with an explicit generic type argument — both a
+    # generic function call (`identity<Int>(5)`) AND a generic type
+    # initializer (`Array<Int>()`, `Dictionary<K, V>()`) — parses to a
+    # DISTINCT node kind, 'constructor_expression', not call_expression
+    # (found via pre-flight grammar dump before the Swift calls-recall-oracle
+    # measurement, tenth language, BACK-730). Entirely absent from
+    # CALL_NODE_TYPES meant calls:// silently returned zero callers/callees
+    # for every generic call/initializer in a Swift file — a common shape in
+    # any Swift codebase using generics (collections, generic helpers). See
+    # nav_calls.py:_extract_swift_constructor_callee for the paired
+    # callee-text extraction — unlike Scala/PHP's "new <Name>" convention,
+    # this node covers plain generic *function* calls too (not always
+    # construction), so it emits the bare callee name with no "new" prefix.
+    'constructor_expression',   # Swift
 }
 
 # Callee node types for attribute/member access (self.foo, obj.method, pkg.Func)
