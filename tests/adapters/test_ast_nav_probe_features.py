@@ -4644,6 +4644,81 @@ class TestSwiftConstructorExpressionCalls(unittest.TestCase):
         self.assertIn('Dictionary', callees)
 
 
+class TestSwiftInitDeinitDeclaration(unittest.TestCase):
+    """BACK-730 (tenth calls:// language, pre-flight grammar dump follow-up):
+    Swift `init(...) { ... }` / `deinit { ... }` parse to their OWN distinct
+    node kinds, `init_declaration`/`deinit_declaration`, not a variant of
+    `function_declaration` (plain `func` methods) -- same class of gap as
+    BACK-638 (Java/C# constructors) and BACK-724 (GDScript
+    `constructor_definition`). Before this fix, every Swift
+    initializer/deinitializer -- arguably the most common lifecycle method
+    in any Swift OOP codebase -- was entirely absent from
+    --outline/get_structure(), and every call made from inside one had no
+    caller scope to attribute to at all (a total edge loss to calls://, not
+    just a misattribution). Neither node has an identifier child (like
+    GDScript's `_init`, the node KIND itself carries the fixed lifecycle
+    name), so a new `_get_node_name` special case was needed alongside the
+    FUNCTION_NODE_TYPES addition."""
+
+    def test_init_visible_in_range_calls_via_call_node(self):
+        # Sanity: attribute-call extraction inside init/deinit bodies works
+        # independent of the node-name fix below (confirms the gap is
+        # purely name/element-lookup, not call extraction itself).
+        from reveal.adapters.ast.nav_calls import range_calls
+        tree, root, get_text, content_bytes = _parse_swift("""
+        class Foo {
+            init() {
+                setup()
+            }
+            deinit {
+                cleanup()
+            }
+        }
+        """)
+        calls = range_calls(root, 1, 999, get_text)
+        callees = [c['callee'] for c in calls]
+        self.assertIn('setup', callees)
+        self.assertIn('cleanup', callees)
+
+    def test_init_and_deinit_extracted_by_swift_analyzer_outline(self):
+        import os
+        import tempfile
+        from reveal.analyzers.swift import SwiftAnalyzer
+
+        code = textwrap.dedent("""\
+            class Foo {
+                init() {
+                    setup()
+                }
+                deinit {
+                    cleanup()
+                }
+                func greet() {
+                    speak()
+                }
+            }
+            """)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.swift', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+        try:
+            analyzer = SwiftAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            func_names = [fn['name'] for fn in structure.get('functions', [])]
+            # Before the fix, 'init'/'deinit' were silently absent here --
+            # only 'greet' showed up in --outline/get_structure().
+            self.assertIn('init', func_names)
+            self.assertIn('deinit', func_names)
+            self.assertIn('greet', func_names)
+            # Each caller's own calls list should attribute its call to
+            # itself, not fall through to being unattributed/dropped.
+            by_name = {fn['name']: fn for fn in structure['functions']}
+            self.assertIn('setup', by_name['init'].get('calls', []))
+            self.assertIn('cleanup', by_name['deinit'].get('calls', []))
+        finally:
+            os.unlink(temp_path)
+
+
 def _parse_gdscript(code: str):
     """Parse GDScript code and return (tree, root, get_text, content_bytes)."""
     parser = ts.get_parser('gdscript')

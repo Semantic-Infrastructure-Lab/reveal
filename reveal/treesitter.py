@@ -166,6 +166,24 @@ FUNCTION_NODE_TYPES = (
     # `_name_via_*` strategy recognizes), one node-shape deeper than
     # operator_declaration's gap.
     'constructor_definition',  # GDScript `func _init(...)`
+    # Swift `init(...) { ... }` / `deinit { ... }` parse to their OWN
+    # distinct node kinds, `init_declaration`/`deinit_declaration`, not a
+    # variant of `function_declaration` (plain `func` methods) — same bug
+    # class as BACK-638 (Java/C# constructors) and BACK-724 (GDScript
+    # `constructor_definition`), found via a pre-flight check before the
+    # Swift calls-recall-oracle measurement (BACK-730, tenth language).
+    # Without this, every Swift initializer/deinitializer — arguably THE
+    # most common lifecycle method in any Swift OOP codebase, since nearly
+    # every class/struct declares at least one `init` — was entirely
+    # invisible to --outline/get_structure(), and every call made from
+    # inside one had no caller scope to attribute to at all (worse than a
+    # misattribution: a total edge loss, same shape as BACK-731's
+    # decorator-argument gap). Neither node has an identifier child (like
+    # GDScript's `_init`, the node KIND itself carries the fixed lifecycle
+    # name) — see `_get_node_name`'s special-case branch for the paired
+    # name-extraction fix.
+    'init_declaration',    # Swift `init(...) { ... }`
+    'deinit_declaration',  # Swift `deinit { ... }`
 )
 
 # Node types for class extraction
@@ -1534,6 +1552,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._operator_declaration_name(node)
         if _zero_arg(node, 'kind') == 'constructor_definition':
             return self._constructor_definition_name(node)
+        if _zero_arg(node, 'kind') == 'init_declaration':
+            return 'init'
+        if _zero_arg(node, 'kind') == 'deinit_declaration':
+            return 'deinit'
 
         kids = _children(node)
         for strategy in (
