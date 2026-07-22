@@ -5315,5 +5315,99 @@ class TestBack728SwiftSixCategoryWidening(unittest.TestCase):
         self.assertEqual(classify_call('client.perform', language='swift'), 'http')
 
 
+class TestBack740PhpScopedCallInNavCalls(unittest.TestCase):
+    """BACK-740: PHP `scoped_call_expression` (self::/parent::/static::/
+    Class::method()) was already handled in treesitter.py's calls:// path
+    (BACK-736) but missing from nav_calls.py's range-based --calls/
+    --sideeffects/--boundary path -- every scoped call there fell through
+    to the generic extractor and returned the bare receiver ('self'/
+    'parent'/'Foo'), dropping the method name entirely. Fixed by mirroring
+    treesitter.py's _extract_php_scoped_call_callee logic into nav_calls.py.
+    No behavioral test landed with the original fix (7e257d4) -- this is
+    that missing coverage."""
+
+    def test_self_scoped_call_visible_to_range_calls(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        tree, root, get_text, content_bytes = _parse_php("""
+        <?php
+        class Foo {
+            function bar() {
+                self::baz();
+            }
+        }
+        """)
+        calls = range_calls(root, 1, 999, get_text)
+        callees = [c['callee'] for c in calls]
+        # Regression: pre-fix this returned bare 'self', dropping '::baz'.
+        self.assertIn('self::baz', callees)
+        self.assertNotIn('self', callees)
+
+    def test_parent_and_class_scoped_calls_visible_to_range_calls(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        tree, root, get_text, content_bytes = _parse_php("""
+        <?php
+        class Foo extends Base {
+            function bar() {
+                parent::init();
+                static::hook();
+                Base::helper();
+            }
+        }
+        """)
+        calls = range_calls(root, 1, 999, get_text)
+        callees = [c['callee'] for c in calls]
+        self.assertIn('parent::init', callees)
+        self.assertIn('static::hook', callees)
+        self.assertIn('Base::helper', callees)
+
+
+class TestBack741RustTurbofishAndParenCalleeInNavCalls(unittest.TestCase):
+    """BACK-741: Rust turbofish generic calls (`size_of::<u32>()`) and
+    parenthesized callees (`(f)(args)`) were already handled in
+    treesitter.py's calls:// path (BACK-733) but missing from nav_calls.py's
+    range-based --calls/--sideeffects/--boundary path -- turbofish calls
+    kept the '::<T>' generic suffix in the callee name, and paren-wrapped
+    callees never resolved past the literal '(f)' text. Fixed by mirroring
+    treesitter.py's generic_function/parenthesized_expression unwrap loop
+    into nav_calls.py. No behavioral test landed with the original fix
+    (7e257d4) -- this is that missing coverage."""
+
+    def _parse(self, src):
+        parser = ts.get_parser('rust')
+        content_bytes = src.encode('utf-8')
+        tree = parser.parse(src)
+        root = tree.root_node()
+
+        def get_text(node):
+            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return root, get_text
+
+    def test_turbofish_call_strips_generic_suffix(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        root, get_text = self._parse(textwrap.dedent("""
+        fn foo() {
+            let n = size_of::<u32>();
+        }
+        """).lstrip('\n'))
+        calls = range_calls(root, 1, 999, get_text)
+        callees = [c['callee'] for c in calls]
+        # Regression: pre-fix this returned 'size_of::<u32>' verbatim.
+        self.assertIn('size_of', callees)
+        self.assertNotIn('size_of::<u32>', callees)
+
+    def test_parenthesized_callee_resolves_to_bare_name(self):
+        from reveal.adapters.ast.nav_calls import range_calls
+        root, get_text = self._parse(textwrap.dedent("""
+        fn foo() {
+            let f = get_handler();
+            (f)(1, 2);
+        }
+        """).lstrip('\n'))
+        calls = range_calls(root, 1, 999, get_text)
+        callees = [c['callee'] for c in calls]
+        # Regression: pre-fix this never resolved past the literal '(f)' text.
+        self.assertIn('f', callees)
+
+
 if __name__ == '__main__':
     unittest.main()

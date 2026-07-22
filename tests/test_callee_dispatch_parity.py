@@ -20,17 +20,33 @@ fixed in treesitter.py but were missing from nav_calls.py until BACK-740/
 BACK-741 mirrored them. All three are now fixed in both files — this test
 exists to catch the *next* occurrence, not these specific ones.
 
-This test hardcodes the definitive set of node kinds that must be
-special-cased in BOTH files (from a manual audit of the calls-recall
-measurement program's commit history), so any future one-sided fix fails
-CI instead of drifting silently. `ONE_SIDED_EXCEPTIONS` documents the one
-case that's genuinely fine to leave asymmetric.
+Two layers of protection, both required:
+
+1. `test_callee_dispatch_kind_handled_in_both_files` — a fast textual grep
+   over both source files, catching the case where a node kind is added to
+   one dispatcher and simply forgotten in the other (no source-level trace
+   of it at all).
+2. `TestCalleeDispatchBehavioralParity` — actually parses a real code
+   fixture per node kind and runs it through BOTH extraction paths (nav_calls
+   ::_extract_callee via range_calls(), and the language analyzer's real
+   get_structure()), then asserts they produce the *same* callee string. The
+   textual grep alone is not sufficient: a stub dispatch case that's present
+   but wrong (wrong field access, wrong node child) passes the grep while
+   still being behaviorally broken — this is exactly the shape of bug the
+   grep would miss. `ONE_SIDED_EXPECTATIONS` documents the one case that's
+   genuinely fine to diverge, and pins down *what* the divergence must look
+   like rather than blanket-skipping it.
 """
 
 import re
+import tempfile
+import textwrap
+import unittest
 from pathlib import Path
+from typing import Any, Callable
 
 import pytest
+import tree_sitter_language_pack as ts
 
 REVEAL_DIR = Path(__file__).resolve().parent.parent / "reveal"
 NAV_CALLS = REVEAL_DIR / "adapters" / "ast" / "nav_calls.py"
@@ -94,3 +110,208 @@ def test_callee_dispatch_kind_handled_in_both_files(kind):
         f"BACK-730 note #17 Scala bug). Add a dispatch case mirroring "
         f"nav_calls.py."
     )
+
+
+# ---------------------------------------------------------------------------
+# Behavioral parity: same fixture, both extraction paths, same answer.
+#
+# A textual grep can't tell a correct dispatch case from a present-but-wrong
+# one (e.g. reading the wrong child index, or a field name that doesn't
+# exist on this node shape). Each fixture below is real source for the node
+# kind it targets; both paths are run against it and must agree.
+# ---------------------------------------------------------------------------
+
+def _nav_calls_callees(language: str, code: str) -> list:
+    from reveal.adapters.ast.nav_calls import range_calls
+
+    parser = ts.get_parser(language)
+    src = textwrap.dedent(code).lstrip("\n")
+    content_bytes = src.encode("utf-8")
+    tree = parser.parse(src)
+    root = tree.root_node()
+
+    def get_text(node):
+        return content_bytes[node.start_byte():node.end_byte()].decode("utf-8")
+
+    calls = range_calls(root, 1, 999, get_text)
+    return [c["callee"] for c in calls]
+
+
+def _treesitter_callees(analyzer_cls, suffix: str, code: str) -> list:
+    import os
+
+    src = textwrap.dedent(code).lstrip("\n")
+    with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False, encoding="utf-8") as f:
+        f.write(src)
+        f.flush()
+        temp_path = f.name
+
+    try:
+        analyzer = analyzer_cls(temp_path)
+        structure = analyzer.get_structure()
+        callees = []
+        for fn in structure["functions"]:
+            callees.extend(fn.get("calls") or [])
+        return callees
+    finally:
+        os.unlink(temp_path)
+
+
+class TestCalleeDispatchBehavioralParity(unittest.TestCase):
+    """Each case parses a real fixture for one REQUIRED_IN_BOTH node kind
+    through both extraction paths and asserts they agree on the callee
+    string — not just that both files "mention" the node kind."""
+
+    def test_php_member_call_expression(self):
+        from reveal.analyzers.php import PhpAnalyzer
+
+        code = """
+        <?php
+        class Foo {
+            function bar($obj) {
+                $obj->method();
+            }
+        }
+        """
+        nav = _nav_calls_callees("php", code)
+        ts_calls = _treesitter_callees(PhpAnalyzer, ".php", code)
+        self.assertIn("$obj->method", nav)
+        self.assertIn("$obj->method", ts_calls)
+
+    def test_php_object_creation_expression(self):
+        from reveal.analyzers.php import PhpAnalyzer
+
+        code = """
+        <?php
+        class Foo {
+            function bar() {
+                new Baz();
+            }
+        }
+        """
+        nav = _nav_calls_callees("php", code)
+        ts_calls = _treesitter_callees(PhpAnalyzer, ".php", code)
+        self.assertIn("new Baz", nav)
+        self.assertIn("new Baz", ts_calls)
+
+    def test_php_scoped_call_expression(self):
+        from reveal.analyzers.php import PhpAnalyzer
+
+        code = """
+        <?php
+        class Foo {
+            function bar() {
+                self::baz();
+            }
+        }
+        """
+        nav = _nav_calls_callees("php", code)
+        ts_calls = _treesitter_callees(PhpAnalyzer, ".php", code)
+        self.assertIn("self::baz", nav)
+        self.assertIn("self::baz", ts_calls)
+        # The specific bug BACK-740 fixed: dropping the method name entirely.
+        self.assertNotIn("self", nav)
+
+    def test_scala_instance_expression(self):
+        from reveal.analyzers.scala import ScalaAnalyzer
+
+        code = """
+        object T {
+          def foo(): Unit = {
+            val f = new File("x")
+          }
+        }
+        """
+        nav = _nav_calls_callees("scala", code)
+        ts_calls = _treesitter_callees(ScalaAnalyzer, ".scala", code)
+        self.assertIn("new File", nav)
+        self.assertIn("new File", ts_calls)
+
+    def test_cpp_new_expression(self):
+        from reveal.analyzers.cpp import CppAnalyzer
+
+        code = """
+        class Foo {
+        public:
+            Foo(int x) {}
+        };
+
+        void run() {
+            Foo* f = new Foo(5);
+        }
+        """
+        nav = _nav_calls_callees("cpp", code)
+        ts_calls = _treesitter_callees(CppAnalyzer, ".cpp", code)
+        self.assertIn("new Foo", nav)
+        self.assertIn("new Foo", ts_calls)
+
+    def test_java_method_invocation(self):
+        from reveal.analyzers.java import JavaAnalyzer
+
+        code = """
+        class Foo {
+            void bar() {
+                Files.createDirectories(x);
+            }
+        }
+        """
+        nav = _nav_calls_callees("java", code)
+        ts_calls = _treesitter_callees(JavaAnalyzer, ".java", code)
+        self.assertIn("Files.createDirectories", nav)
+        self.assertIn("Files.createDirectories", ts_calls)
+
+    def test_rust_generic_function_turbofish(self):
+        from reveal.analyzers.rust import RustAnalyzer
+
+        code = """
+        fn foo() {
+            let n = size_of::<u32>();
+        }
+        """
+        nav = _nav_calls_callees("rust", code)
+        ts_calls = _treesitter_callees(RustAnalyzer, ".rs", code)
+        self.assertIn("size_of", nav)
+        self.assertIn("size_of", ts_calls)
+        self.assertNotIn("size_of::<u32>", nav)
+        self.assertNotIn("size_of::<u32>", ts_calls)
+
+    def test_rust_parenthesized_callee(self):
+        from reveal.analyzers.rust import RustAnalyzer
+
+        code = """
+        fn foo() {
+            let f = get_handler();
+            (f)(1, 2);
+        }
+        """
+        nav = _nav_calls_callees("rust", code)
+        ts_calls = _treesitter_callees(RustAnalyzer, ".rs", code)
+        self.assertIn("f", nav)
+        self.assertIn("f", ts_calls)
+
+    def test_swift_constructor_expression_documented_one_sided_asymmetry(self):
+        """The one node kind ONE_SIDED_EXCEPTIONS documents as intentionally
+        divergent — pinned down precisely rather than skipped outright, so a
+        change to *either* side's actual behavior fails this test instead of
+        silently drifting further from the documented rationale."""
+        from reveal.analyzers.swift import SwiftAnalyzer
+
+        code = """
+        func identity<T>(_ x: T) -> T { return x }
+        func run() {
+            let n = identity<Int>(5)
+        }
+        """
+        nav = _nav_calls_callees("swift", code)
+        ts_calls = _treesitter_callees(SwiftAnalyzer, ".swift", code)
+        # nav_calls.py has a dedicated dispatch case: bare name.
+        self.assertIn("identity", nav)
+        # treesitter.py has NO dedicated case for constructor_expression —
+        # get_structure() itself still carries the generic suffix. It's only
+        # rescued at calls:// index-build time (_bare_callee_name), not here.
+        self.assertIn("identity<Int>", ts_calls)
+        self.assertNotIn("identity", [c for c in ts_calls if c != "identity<Int>"])
+
+
+if __name__ == "__main__":
+    unittest.main()

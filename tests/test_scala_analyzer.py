@@ -328,6 +328,7 @@ class Plain {
 
             self.assertEqual(classes['Bar']['bases'], [])
             self.assertEqual(classes['Foo']['bases'], ['Bar', 'Baz'])
+            self.assertEqual(classes['Plain']['bases'], [])
 
         finally:
             os.unlink(temp_path)
