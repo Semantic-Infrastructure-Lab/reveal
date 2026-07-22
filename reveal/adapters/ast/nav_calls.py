@@ -325,6 +325,14 @@ def _extract_callee(
     if _zero_arg(call_node, 'kind') == 'constructor_expression':
         return _extract_swift_constructor_callee(call_node, get_text)
 
+    # C++: `new ClassName(args)` / `new NS::ClassName(args)` — a DISTINCT
+    # node kind ('new_expression') from PHP/C#'s object_creation_expression
+    # despite the identical source shape (BACK-730 C++ pre-flight). Emit the
+    # same "new <name>" text so the existing taxonomy convention applies
+    # unchanged.
+    if _zero_arg(call_node, 'kind') == 'new_expression':
+        return _extract_cpp_new_callee(call_node, get_text)
+
     # Java: method_invocation is a flat node `[object? . name argument_list]` —
     # child(0) is only the *object* (`Files`, `path`), so the old logic dropped
     # the method name entirely (`Files.createDirectories()` → "Files",
@@ -527,6 +535,29 @@ def _extract_swift_constructor_callee(node: Any, get_text: Callable) -> Optional
     text = get_text(constructed).strip()
     if text:
         return text.split('<')[0].strip() or None
+    return None
+
+
+def _extract_cpp_new_callee(node: Any, get_text: Callable) -> Optional[str]:
+    """C++ `new_expression`: `new <type_identifier|qualified_identifier>(args)`.
+    Emits "new <name>" — the same convention `_extract_object_creation_callee`
+    already established for PHP/C#'s `object_creation_expression`. A
+    qualified type (`new NS::Other(...)`) collapses to its trailing segment
+    only (`Other`), matching Scala's field_expression handling for
+    fully-qualified constructor types.
+    """
+    type_node = node.child_by_field_name('type')
+    if type_node is None:
+        return None
+    kind = _zero_arg(type_node, 'kind')
+    if kind == 'type_identifier':
+        name = get_text(type_node).strip()
+        if name:
+            return f"new {name}"
+    if kind == 'qualified_identifier':
+        text = get_text(type_node).strip()
+        if text:
+            return f"new {text.split('::')[-1]}"
     return None
 
 

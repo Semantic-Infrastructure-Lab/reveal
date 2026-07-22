@@ -287,6 +287,20 @@ CALL_NODE_TYPES = {
     # this node covers plain generic *function* calls too (not always
     # construction), so it emits the bare callee name with no "new" prefix.
     'constructor_expression',   # Swift
+    # C++ `new ClassName(args)` / `new NS::ClassName(args)` is a DISTINCT
+    # node kind, 'new_expression', not PHP/C#'s 'object_creation_expression'
+    # despite the identical source shape — found via a pre-flight grammar
+    # dump for the 11th calls-recall-oracle candidate language, C++
+    # (BACK-730). Entirely absent from CALL_NODE_TYPES meant calls://
+    # silently returned zero callers/callees for every heap-allocated C++
+    # constructor call. See nav_calls.py:_extract_cpp_new_callee for the
+    # paired callee-text extraction (same "new <Name>" convention as
+    # PHP/C#/Scala). NOTE: this does NOT cover C++'s OTHER constructor-call
+    # syntax, direct-initialization (`ClassName obj(args);`) — that parses
+    # to a `declaration`/`init_declarator` shape with no call-expression-
+    # family node at all, a distinct gap needing its own extraction
+    # approach, tracked separately (not fixed here).
+    'new_expression',           # C++
 }
 
 # Callee node types for attribute/member access (self.foo, obj.method, pkg.Func)
@@ -1724,6 +1738,28 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return f"new {self._get_node_text(child)}"
         return None
 
+    def _callee_name_cpp_new(self, call_node) -> Optional[str]:
+        # C++: new ClassName(args) / new NS::ClassName(args) — new_expression.
+        # A DISTINCT node kind from PHP's object_creation_expression above
+        # despite the identical source shape (BACK-730 C++ pre-flight,
+        # calls-recall-oracle 11th candidate). child(0) is the literal 'new'
+        # token, so the generic _callee_name_generic fallback returned the
+        # bare keyword "new" as the callee, not the class name — and unlike
+        # Swift's constructor_expression (rescued by _bare_callee_name's
+        # generic-suffix stripping since its raw text still carries the real
+        # name), "new" has no '<' to strip, so this needed its own dispatch
+        # case, same shape as _callee_name_php_new.
+        type_node = call_node.child_by_field_name('type')
+        if type_node is None:
+            return None
+        kind = _zero_arg(type_node, 'kind')
+        if kind == 'qualified_identifier':
+            text = self._get_node_text(type_node).strip()
+            if text:
+                return f"new {text.split('::')[-1]}"
+        text = self._get_node_text(type_node).strip()
+        return f"new {text}" if text else None
+
     def _callee_name_java_method(self, call_node) -> Optional[str]:
         # Java: obj.method() / Class.staticMethod() / method() —
         # method_invocation's grammar puts an optional `object` field BEFORE
@@ -1853,6 +1889,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._callee_name_php_new(call_node)
         if call_node.kind() == 'scoped_call_expression':
             return self._callee_name_php_scoped_call(call_node)
+        if _zero_arg(call_node, 'kind') == 'new_expression':
+            return self._callee_name_cpp_new(call_node)
         if call_node.kind() == 'method_invocation':
             return self._callee_name_java_method(call_node)
         if _zero_arg(call_node, 'kind') == 'call' and self.language == 'ruby':

@@ -423,6 +423,48 @@ void bar() {
         self.assertEqual(result['total_callers'], 2)
 
 
+class TestCppNewExpressionCallers(unittest.TestCase):
+    """BACK-730 (C++ pre-flight, calls-recall-oracle 11th candidate): `new
+    ClassName(args)` parses to a DISTINCT node kind, 'new_expression', not
+    PHP's 'object_creation_expression' -- calls:// silently returned zero
+    callers for every heap-allocated C++ constructor call before this fix.
+    Unlike Swift's constructor_expression (rescued for free by
+    _bare_callee_name's generic-suffix stripping, since its raw callee text
+    still carries the real name before a '<'), new_expression's raw callee
+    text from the old generic child(0) fallback was the bare literal "new"
+    keyword -- no generic suffix to strip, so it needed its own
+    _get_callee_name dispatch case (treesitter.py:_callee_name_cpp_new),
+    mirroring _callee_name_php_new exactly."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        _write(self.tmpdir, 'main.cpp', '''
+class Foo {
+public:
+    Foo(int x) {}
+};
+
+void run() {
+    Foo* f = new Foo(5);
+}
+
+void run2() {
+    auto* g = new NS::Foo(6);
+}
+''')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_new_expression_call_site_found(self):
+        result = find_callers(self.tmpdir, 'Foo', depth=1)
+        caller_names = {r['caller'] for r in result['levels'][0]['callers']} if result['levels'] else set()
+        self.assertIn('run', caller_names)
+        self.assertIn('run2', caller_names)
+        self.assertEqual(result['total_callers'], 2)
+
+
 # ---------------------------------------------------------------------------
 # Unit: cross-directory caller hint (BUG-148)
 # ---------------------------------------------------------------------------
