@@ -41,7 +41,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Rust | ✅ 100% (Meilisearch, ripgrep⁹) | ✅ 97.4% (Meilisearch) | ✅ 95.27%→100%³⁷ (Meilisearch, BACK-733 fixed) | **Measured** |
 | C# | ✅ 100%¹⁹ (Jellyfin), 99.36%¹⁹ (Newtonsoft.Json, BACK-702 fixed) | ✅ 98.3% (Jellyfin) | ✅ 69.74%→100%⁴¹ (Jellyfin, BACK-737 fixed) | **Measured** |
 | PHP | ✅ 100% (WordPress), 74.65% (osCommerce¹²) | ✅ 97.5% (WordPress) | ✅ 98.87%→100%⁴⁰ (WordPress, BACK-736 fixed) | **Measured** |
-| Swift | ✅ 100% of declared targets resolved (Kickstarter iOS — module-index coverage, not an edge-recall ratio), 98.42%¹⁸ (swift-collections, 14,824 edges, BACK-704 fixed) | ✅ 43.3% → **100.0%** (Kickstarter iOS, six-category sweep, BACK-728) | Not measured | **Measured** |
+| Swift | ✅ 100% of declared targets resolved (Kickstarter iOS — module-index coverage, not an edge-recall ratio), 98.42%¹⁸ (swift-collections, 14,824 edges, BACK-704 fixed) | ✅ 43.3% → **100.0%** (Kickstarter iOS, six-category sweep, BACK-728) | ✅ 97.62%→99.92%⁴³ (8/bucket); 99.79%⁴³ (20/bucket, Signal-iOS, BACK-742 open — two grammar bugs, not fixable in reveal) | **Measured** |
 | Scala | ✅ 100% (GitBucket — n=1 qualifying edge), 100%¹⁵ (cats-effect, 24 edges) | ✅ 66.3%³⁰ (GitBucket, `db`/Slick declined) | Not measured | **Measured** |
 | C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | Not measured | **Measured** |
 | C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | Not measured | **Measured** |
@@ -68,8 +68,8 @@ is a claim we have not yet checked, **not** a claim it is broken.
    recall measured also has a side-effect measurement (BACK-718), and every
    one of those now has the full six-category sweep (Kotlin deepened in
    BACK-727, Swift deepened in BACK-728 — the last narrow entry). Call-graph
-   recall (`calls://`) is measured for 9 of the 19 (Python, TypeScript, Go,
-   Rust, Java, Ruby, PHP, C#, Kotlin — BACK-730); the other 10 are not yet measured, not known-broken.
+   recall (`calls://`) is measured for 10 of the 19 (Python, TypeScript, Go,
+   Rust, Java, Ruby, PHP, C#, Kotlin, Swift — BACK-730); the other 9 are not yet measured, not known-broken.
    `surface`, `contracts`, and `patches://`/testability have **no
    ground-truth validation on any language** — see [Scope](#scope).
 3. **Sample size still varies.** Java's 97.5% includes `db` and `http`
@@ -960,6 +960,38 @@ BACK-620 core-API migration (deferred pending a concrete driver). Filed
 trigger it now. See
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
 ("Ninth language: Kotlin" section) for the full write-up.
+⁴³ Swift `calls://` pilot (BACK-730), Signal-iOS's `SignalServiceKit`
+module (1,190 files), reverse-lookup only: a pre-flight grammar dump
+(done just before this session) had already found and fixed a real gap
+(`constructor_expression`, Swift's generic-call/generic-initializer node,
+missing from `CALL_NODE_TYPES`); a second pre-flight check found and fixed
+`init`/`deinit` — their own distinct node kinds
+(`init_declaration`/`deinit_declaration`), entirely absent from
+`FUNCTION_NODE_TYPES` — before the oracle even ran. First real
+measurement: **97.62%** recall (821/841 edges, 8/bucket), 0 false
+positives. Tracing every miss found two real `calls://` bugs: (1)
+`!isRunning(x)` (negated predicate call) parses as one
+`prefix_expression` callee node — the leading `!` survived into the index
+key, never matching a bare `?target=isRunning` lookup; (2) operator
+overloads (`static func -(left: CGSize, right: CGSize)`) name themselves
+with a literal operator-symbol token whose tree-sitter KIND *is* the
+operator text, invisible to every `_name_via_*` strategy — every operator
+overload was entirely absent from `--outline`/`get_structure()`. Both
+fixed: **99.92%** recall (1,178/1,179 edges, 8/bucket), 0 false
+positives. At 20/bucket (2,821 edges): **99.79%** recall — the 6 residual
+misses trace to two distinct upstream `tree-sitter-swift` grammar bugs,
+neither fixable in reveal's Python layer: `return <name>.member` inside a
+`case let .x(name):` switch pattern produces a parse `ERROR` that
+cascades to drop most/all of the *rest of the file* from structure
+extraction (confirmed via a 7-line repro; same "whole function vanishes"
+symptom shape as Kotlin's BACK-738), and `A * B(args)`/`A - B(args)` (a
+multiplicative/additive operator immediately before a call) misparses the
+call suffix onto the whole binary expression instead of just the call,
+corrupting the extracted callee text (comparison operators like `==` do
+not exhibit this). Both blocked on the same BACK-573/BACK-620
+grammar-pack ceiling as BACK-738. Filed **BACK-742**, open. See
+[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+("Tenth language: Swift" section) for the full write-up.
 
 ## Import/Dependency Recall
 
@@ -1224,15 +1256,17 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 | PHP | WordPress `wp-admin/`+`wp-includes/` (1,328 files) | reverse | **98.87%** → **100.00%** | 0 | `self::`/`parent::`/`static::`/`Class::method()` (PHP's static/scoped call syntax) all parse to `scoped_call_expression`, a node kind entirely absent from `CALL_NODE_TYPES` — every PHP static call was silently invisible to `calls://` — **BACK-736**, fixed. A second, distinct bug surfaced in the residual tail: `_bare_callee_name` didn't strip PHP's `"new ClassName"` constructor-call prefix or a leading `\` fully-qualified-namespace marker, so neither ever matched a bare `?target=` lookup (same bug class as BACK-733's Rust turbofish gap — a bare-name-normalization miss, not an extraction miss) — fixed same session |
 | C# | Jellyfin (2,098 files) | reverse | **69.74%** → **100.00%** | 8 (pre-fix) → 0 (post-fix) | Three distinct bugs, all fixed as **BACK-737**: (1) generic methods (`Task Enqueue<T>(...)`) had their definition name misattributed to the return type, since C#'s `type_parameter_list` sits between the method name and parameter list, breaking `_name_via_param_adjacent`'s "name immediately precedes param list" check — a caller-side gap, unlike every prior language's callee-side bugs, since it corrupts the source of every call-graph edge from an affected method; (2) explicit generic-argument suffixes (`new List<Video>()`, `Method<string>()`) survived into `_bare_callee_name`, never matching a bare `?target=` lookup — same bug class as BACK-733's Rust turbofish gap; (3) multi-line fluent call chains (Moq's `_mock.\n    Setup(...)`, a common C# test idiom) left literal newline+indentation in the bare callee name |
 | Kotlin | Tivi (629 `.kt` files) | reverse | 99.69% → **100.00%** (8/bucket); **99.79%** (20/bucket) | 0 | An oracle-side design inconsistency (not a `calls://` bug) explained the first 2 misses: the oracle attributed primary-constructor parameter-default calls to the class name, which `calls://` never does for any language (only function/method bodies are caller scopes) — fixed in the oracle to match precedent. The remaining 20/bucket residual is the first gap in this program traced to an upstream **grammar** bug rather than a reveal extraction bug: `tree-sitter-kotlin` cannot parse `@Annotation` directly preceding a function type (`@Composable () -> Unit`, ubiquitous in Jetpack Compose code) — the `()` is consumed as the annotation's own argument list, producing an `ERROR` node that drops the entire enclosing function from structure extraction. Not fixable in reveal's Python layer (vendored grammar binary); the grammar-pack version that might fix it is blocked by the already-tracked BACK-573/BACK-620 core-API migration (deferred). Filed **BACK-738**, open |
+| Swift | Signal-iOS's `SignalServiceKit` module (1,190 files) | reverse | 97.62% → **99.92%** (8/bucket); **99.79%** (20/bucket) | 0 | Two real, distinct `calls://` bugs found and fixed: (1) `!isRunning(x)` (negated predicate call) parses the whole `!isRunning` as one `prefix_expression` callee node — the leading `!` survived into the index key, never matching a bare `?target=isRunning` lookup; (2) operator overloads (`static func -(left: CGSize, right: CGSize)`) name themselves with a literal operator-symbol token whose tree-sitter KIND *is* the operator text, invisible to every `_name_via_*` strategy — every operator overload was entirely absent from `--outline`/`get_structure()`. Both fixed. The residual gap is **two** distinct upstream `tree-sitter-swift` grammar bugs, not reveal bugs: `return <name>.member` inside a `case let .x(name):` switch pattern produces a parse `ERROR` that cascades to drop most/all of the *rest of the file* from structure extraction (same "whole function vanishes" symptom shape as Kotlin's BACK-738); and `A * B(args)`/`A - B(args)` (a multiplicative/additive operator immediately before a call) misparses the call suffix onto the *whole binary expression*, corrupting the extracted callee text. Neither is fixable in reveal's Python layer — blocked on the same BACK-573/BACK-620 grammar-pack ceiling as BACK-738. Filed **BACK-742**, open |
 
 Full methodology, per-corpus commit/snapshot, and the harness scripts
 (`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, Kotlin
-`KotlinOracle.kt`, `diff_*.py`) for all nine languages:
+`KotlinOracle.kt`, Swift `swift-oracle/main.swift`, `diff_*.py`) for all ten
+languages:
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
-Not yet measured: Swift, Scala, C++, C, Lua, Dart,
+Not yet measured: Scala, C++, C, Lua, Dart,
 GDScript, Zig, TSX/plain JS — a claim not yet checked, not a claim
-`calls://` is broken on those languages. If a tenth language is measured,
+`calls://` is broken on those languages. If an eleventh language is measured,
 add it to this table and the status-at-a-glance table above; `_bare_callee_name`
 /`_get_callee_name`'s other dotted-name-family languages (Scala shares
 the module-path/dotted-name resolver core the import-recall program already
