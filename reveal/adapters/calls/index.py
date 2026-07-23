@@ -179,12 +179,28 @@ def _bare_callee_name(callee: str) -> str:
     `?target=Setup` lookup (calls-recall-oracle C# measurement, BACK-730,
     eighth language). Identifiers can never legally contain whitespace, so
     a plain `.strip()` on the final segment is always safe.
+
+    Also handles Lua's single-colon method-call idiom (`db:init_connector`,
+    `self:check_version_compat`) -- Lua's DOMINANT OOP method-call syntax
+    (calls-recall-oracle Lua measurement, BACK-730, sixteenth language).
+    `_extract_callee` leaves colon-calls receiver-qualified same as dotted
+    calls (by design, see nav_calls.py), but this function never split on a
+    bare single `:` -- only `->`/`.`/`::` -- so every colon-method call's
+    bare callee stayed the full "receiver:method" string and never matched
+    a bare `?target=method` lookup. Adding a plain `rfind(':')` to the same
+    `max(...)` is safe for `::`-using languages too: for an actual `::`
+    occurrence, `rfind(':')` can only land one character to the right of
+    `rfind('::')` (the second colon of the same pair), and both branches
+    below resolve to the identical split point (either the literal `::`
+    branch consumes 2 chars from the `::` start, or the single-`:` branch
+    consumes 1 char from one position later) -- so C++'s
+    `Engine::get_singleton` and PHP/Java's `Class::method` are unaffected.
     """
     if callee.startswith('new '):
         callee = callee[4:]
     if callee.startswith('\\'):
         callee = callee[1:]
-    idx = max(callee.rfind('->'), callee.rfind('.'), callee.rfind('::'))
+    idx = max(callee.rfind('->'), callee.rfind('.'), callee.rfind('::'), callee.rfind(':'))
     if idx == -1:
         bare = callee
     elif callee[idx:idx + 2] in ('->', '::'):
