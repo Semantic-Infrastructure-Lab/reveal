@@ -181,6 +181,7 @@ def _render_dict_heatmap(data: Dict[str, Any], output_format: str) -> None:
     from reveal.adapters.ast.nav_dict_heatmap import render_dict_heatmap
     path = data.get('path', '.')
     results = data.get('results', [])
+    unsupported_language = data.get('unsupported_language', '')
 
     if output_format == 'json':
         print(safe_json_dumps(data))
@@ -191,7 +192,7 @@ def _render_dict_heatmap(data: Dict[str, Any], output_format: str) -> None:
             print(f"{item.get('file', '')}:{item.get('line', 0)}:{item.get('function', '')}:{item.get('param', '')}:{item.get('key_count', 0)}")
         return
 
-    print(render_dict_heatmap(results, path))
+    print(render_dict_heatmap(results, path, unsupported_language))
 
 
 def _render_reveal_type(data: Dict[str, Any], output_format: str) -> None:

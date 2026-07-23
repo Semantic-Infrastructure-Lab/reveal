@@ -2,6 +2,7 @@
 
 import os
 
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from .queries import (
@@ -136,8 +137,12 @@ class AstAdapter(ResourceAdapter):
         """
         # show=dict-heatmap: ranked bare-dict param heatmap
         if self.show_mode == 'dict-heatmap':
-            from .nav_dict_heatmap import collect_dict_heatmap
+            from .nav_dict_heatmap import collect_dict_heatmap, has_python_files
             items = collect_dict_heatmap(self.path)
+            unsupported_language = ''
+            if not items and not has_python_files(self.path):
+                from ...utils.path_utils import detect_non_python_language
+                unsupported_language = detect_non_python_language(Path(self.path))
             meta = self.create_meta(parse_mode='python_ast',
                                     confidence=1.0, warnings=[], errors=[])
             result = ResultBuilder.create(
@@ -148,6 +153,7 @@ class AstAdapter(ResourceAdapter):
                     'path': self.path,
                     'total_results': len(items),
                     'results': items,
+                    'unsupported_language': unsupported_language,
                 },
             )
             result['meta'] = meta

@@ -6,6 +6,7 @@ import unittest
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.ast.nav_dict_heatmap import (
     collect_dict_heatmap,
+    has_python_files,
     render_dict_heatmap,
     _suggest_typeddict_name,
 )
@@ -189,11 +190,60 @@ def f(x: dict):
             self.assertIn('suggested_name', item)
 
 
+class TestDictHeatmapNonPython(unittest.TestCase):
+    """BACK-749: non-Python projects used to silently render as '0 found'
+    instead of naming the unsupported language."""
+
+    def test_has_python_files_false_for_non_python_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, 'main.rb'), 'w') as f:
+                f.write("def f(x); end\n")
+            self.assertFalse(has_python_files(d))
+
+    def test_has_python_files_true_when_py_present(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, 'main.rb'), 'w') as f:
+                f.write("def f(x); end\n")
+            with open(os.path.join(d, 'helper.py'), 'w') as f:
+                f.write("def f(x): pass\n")
+            self.assertTrue(has_python_files(d))
+
+    def test_has_python_files_false_for_non_python_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'main.rb')
+            with open(path, 'w') as f:
+                f.write("def f(x); end\n")
+            self.assertFalse(has_python_files(path))
+
+    def test_adapter_reports_unsupported_language_for_non_python_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, 'main.rb'), 'w') as f:
+                f.write("def f(x)\n  x['a']\nend\n")
+            adapter = AstAdapter(d, 'show=dict-heatmap')
+            result = adapter.get_structure()
+            self.assertEqual(result.get('total_results'), 0)
+            self.assertEqual(result.get('unsupported_language'), 'Ruby')
+
+    def test_adapter_no_unsupported_language_for_clean_python_project(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, 'main.py'), 'w') as f:
+                f.write("def f(x: int) -> int: return x\n")
+            adapter = AstAdapter(d, 'show=dict-heatmap')
+            result = adapter.get_structure()
+            self.assertEqual(result.get('total_results'), 0)
+            self.assertEqual(result.get('unsupported_language'), '')
+
+
 class TestDictHeatmapRenderer(unittest.TestCase):
 
     def test_render_empty(self):
         text = render_dict_heatmap([], '/some/path')
         self.assertIn('no bare-dict params', text)
+
+    def test_render_unsupported_language(self):
+        text = render_dict_heatmap([], '/some/path', 'Ruby')
+        self.assertIn('Ruby', text)
+        self.assertNotIn('no bare-dict params', text)
 
     def test_render_shows_function(self):
         items = [{

@@ -51,6 +51,27 @@ def collect_dict_heatmap(path: str) -> List[Dict[str, Any]]:
     return items
 
 
+def has_python_files(path: str) -> bool:
+    """True if `path` is, or contains, at least one .py/.pyi file.
+
+    Used to tell "genuinely clean Python project" apart from "no Python
+    source here at all" when `collect_dict_heatmap` comes back empty —
+    the two must not render the same message (BACK-749).
+    """
+    path_obj = Path(path)
+    if path_obj.is_file():
+        return path_obj.suffix in ('.py', '.pyi')
+    if path_obj.is_dir():
+        for root, dirs, files in os.walk(str(path_obj)):
+            dirs[:] = [
+                d for d in dirs
+                if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
+            ]
+            if any(name.endswith(('.py', '.pyi')) for name in files):
+                return True
+    return False
+
+
 # ─────────────────────────── file scanner ────────────────────────────────────
 
 def _scan_file(file_path: str, items: List[Dict[str, Any]]) -> None:
@@ -139,8 +160,13 @@ def _suggest_typeddict_name(param_name: str) -> str:
 
 # ─────────────────────────── renderer ────────────────────────────────────────
 
-def render_dict_heatmap(items: List[Dict[str, Any]], path: str) -> str:
+def render_dict_heatmap(items: List[Dict[str, Any]], path: str, unsupported_language: str = '') -> str:
     if not items:
+        if unsupported_language:
+            return (
+                f"dict heatmap: Python-only — no .py/.pyi files found in {path}\n"
+                f"  (detected {unsupported_language}; this report only analyzes Python source)"
+            )
         return (
             f"dict heatmap: no bare-dict params with key accesses found in {path}\n"
             f"  (functions must be annotated as `param: dict` or `param: Dict[...]`\n"
