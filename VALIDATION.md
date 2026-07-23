@@ -68,8 +68,10 @@ is a claim we have not yet checked, **not** a claim it is broken.
    recall measured also has a side-effect measurement (BACK-718), and every
    one of those now has the full six-category sweep (Kotlin deepened in
    BACK-727, Swift deepened in BACK-728 — the last narrow entry). Call-graph
-   recall (`calls://`) is measured for 12 of the 19 (Python, TypeScript, Go,
-   Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala — BACK-730); the other 7 are not yet measured, not known-broken.
+   recall (`calls://`) is measured for 13 of the 19 (Python, TypeScript, Go,
+   Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX — BACK-730);
+   the other 5 (C, Lua, Dart, GDScript, Zig) are not yet measured, not
+   known-broken.
    `surface`, `contracts`, and `patches://`/testability have **no
    ground-truth validation on any language** — see [Scope](#scope).
 3. **Sample size still varies.** Java's 97.5% includes `db` and `http`
@@ -1317,20 +1319,24 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 
 | Scala | GitBucket `src/main/scala` (213 files) | reverse | 96.64% → **100.00%** (both 8/bucket 1,039 edges and 20/bucket 1,651 edges) | 0 | Three distinct, real `calls://` bugs, all fixed. (1) **BACK-746**: Scala infix method calls (`a :: b`, `list map f`, `Accounts filter pred` — Scala lets any single-arg method be called without a dot/parens, and operators ARE methods) parse to `infix_expression`, a node kind entirely absent from `CALL_NODE_TYPES` — every infix call was invisible to `calls://` (the dominant gap: infix invocations of `filter`/`getOrElse`/`map`/`flatMap`). The `operator` field is the method name. (2) **BACK-747**: fully-qualified constructor types `new java.io.File(...)` (a `stable_type_identifier`, not a `field_expression`) and qualified generics `new scala.Array[Byte](...)` were dropped by the instance_expression handler. (3) A **symbolic-named method definition** residual: Slick projections (`def *`) and operator overloads (`def +`, `def ::`) use an `operator_identifier` name node — absent from `--outline`/`get_structure()` (or mis-named after a body/param identifier, e.g. `def +(o) = o` → "o"), so calls inside their bodies had no caller scope. Found via a scalameta oracle (Scala's canonical syntax-only parser). Symbolic-operator *callees* (`==`, `&&`, `+`, `::`) are excluded from the automatically-sampled target pool — a bare `?target=+` URL reverse query is a URL/CLI-encoding edge case — but were verified faithful separately via direct `find_callers` (e.g. `==` 128/128, `+` 97/97, `::` 2/2, matching the oracle exactly) |
 
+| JS/TSX | three.js `src/` (750 `.js` files) + Excalidraw (626 `.ts`/`.tsx` files) | reverse | **100.00%** (both corpora, both 8/bucket and 20/bucket samples) | 0 | Two distinct, real `calls://` bugs, both found via a pre-flight AST dump *before* any oracle ran, both fixed: (1) **BACK-751** — `adapters/ast/adapter.py` had its own independent, unconditional `PYTHON_BUILTINS` filter on the `ast://` adapter's `calls` field, missed when BACK-748 (Scala) fixed the identical bug in `adapters/calls/index.py` — `xs.map(fn)` silently lost its `map` call. (2) **BACK-752** — `new_expression` is shared by C++ (BACK-730) and JS/TS/TSX with two mutually exclusive field shapes (C++'s callee sits in a `type` field, JS/TS/TSX's in a `constructor` field); dispatch always routed to the C++ handler, which returns `None` for the JS/TS shape, so every `new Foo()`/`new ns.Foo()` call was silently invisible. Fixed in both `treesitter.py` and `nav_calls.py` (parity), dispatched structurally on which field is populated. The oracle also needed a genuinely new scope-creation rule not modeled by the earlier TS-only oracle: Jest/Vitest `describe`/`it`/`test`/etc. callbacks (BACK-334/BACK-662) get their own synthetic scope, surfaced only once the corpus included real Jest spec files (Excalidraw) — mirrored 1:1 from `analyzers/_js_test_callbacks.py`, including a minor label quote-stripping quirk (cosmetic, not filed) |
+
 Full methodology, per-corpus commit/snapshot, and the harness scripts
 (`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, Kotlin
 `KotlinOracle.kt`, Swift `swift-oracle/main.swift`, C++ via libclang, Scala
-`build_oracle_scala.scala` via scalameta, `diff_*.py`) for all twelve languages:
+`build_oracle_scala.scala` via scalameta, `build_oracle_js.js` for JS/TSX,
+`diff_*.py`) for all thirteen languages:
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
 Not yet measured: C, Lua, Dart,
-GDScript, Zig, TSX/plain JS — a claim not yet checked, not a claim
-`calls://` is broken on those languages. If a thirteenth language is measured,
+GDScript, Zig — a claim not yet checked, not a claim
+`calls://` is broken on those languages. If a fourteenth language is measured,
 add it to this table and the status-at-a-glance table above; `_bare_callee_name`
 /`_get_callee_name`'s other dotted-name-family languages are a reasonable place
 to look next, given Java's BACK-734, Ruby's BACK-735, PHP's BACK-736, C#'s
-BACK-737, Kotlin's BACK-738, and Scala's BACK-746/747 all show even an
-"unflagged" language can hide a systemic callee-, caller-, or grammar-level bug.
+BACK-737, Kotlin's BACK-738, Scala's BACK-746/747, and JS/TSX's BACK-751/752
+all show even an "unflagged" language can hide a systemic callee-, caller-, or
+grammar-level bug.
 
 ## Re-running this yourself
 
@@ -1380,11 +1386,11 @@ program), **side-effect/boundary classification recall** (`--sideeffects` /
 `--boundary`), and **cross-file call-graph recall** (`calls://` — BACK-730,
 the same silent-wrong-answer risk as BACK-542: a whole-project graph query
 where a false negative reads as a confident, checked answer). `calls://` is
-measured for 12 of the 19 languages so far (Python across three query
+measured for 13 of the 19 languages so far (Python across three query
 directions, TypeScript, Go, Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++,
-Scala — all now clean or fixed-and-reverified, see
+Scala, JS/TSX — all now clean or fixed-and-reverified, see
 [Cross-File Call-Graph Recall](#cross-file-call-graph-recall)); the
-remaining 7 (C, Lua, Dart, GDScript, Zig, TSX/plain JS) are open
+remaining 5 (C, Lua, Dart, GDScript, Zig) are open
 validation work, tracked the same way as any not-yet-measured import/
 side-effect language. It does not yet cover recall
 for `surface` or `contracts` (BACK-719). The languages marked *not measured*
