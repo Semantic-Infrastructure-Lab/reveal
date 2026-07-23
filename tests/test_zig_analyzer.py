@@ -753,6 +753,28 @@ fn run(cell: Cell) bool {
         finally:
             os.unlink(path)
 
+    def test_calls_finds_builtin_call(self):
+        """BACK-753: `@as`/`@import`/etc. parse as BUILTINIDENTIFIER, a
+        distinct leaf kind from a regular IDENTIFIER — `@import` alone
+        appears in nearly every real Zig file, so this was a high-impact
+        gap, not an edge case.
+        """
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('''\
+fn run() void {
+    const b = @as(i32, 10);
+    _ = b;
+}
+''')
+        try:
+            func_node, get_text = _resolve_zig_func(path)
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            callees = [c['callee'] for c in calls]
+            self.assertIn('@as', callees)
+        finally:
+            os.unlink(path)
+
 
 class TestZigDepsExcludesMemberNamesAndOwnName(unittest.TestCase):
     """BACK-431 feature-breadth pass (--deps, same Ghostty dogfood): three

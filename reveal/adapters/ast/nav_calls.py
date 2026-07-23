@@ -221,12 +221,22 @@ def _extract_zig_suffix_calls(children: List[Any], get_text: Callable) -> List[D
     optionally carrying its own call arguments, all under one node (unlike
     Dart's flat siblings, but equally invisible to a plain node-kind check
     since there's still no wrapper naming "the call" itself).
+
+    `@as(i32, 10)` / `@import("std")` / `@panic(...)` are `SuffixExpr` →
+    [BUILTINIDENTIFIER, FnCallArguments] — a distinct leaf kind from a
+    regular `IDENTIFIER` for Zig's `@`-prefixed compiler builtins. Without
+    seeding `base_parts` for this kind too, `base_parts` stays empty and the
+    `FnCallArguments` branch below computes `callee = None` (falsy,
+    silently dropped downstream) — every builtin call was invisible to
+    `calls://`, despite `@import` alone appearing in nearly every real Zig
+    file (found via pre-flight AST dump before the JS/TSX successor
+    measurement, BACK-730).
     """
     results: List[Dict[str, Any]] = []
     if not children:
         return results
     base_parts: List[str] = []
-    if children[0].kind() == 'IDENTIFIER':
+    if children[0].kind() in ('IDENTIFIER', 'BUILTINIDENTIFIER'):
         base_parts = [get_text(children[0])]
     for child in children[1:]:
         kind = child.kind()
