@@ -4096,6 +4096,40 @@ class TestBack650OverloadDisambiguation(unittest.TestCase):
         from reveal.file_handler import _pick_best_candidate
         self.assertEqual(_pick_best_candidate(['only']), 'only')
 
+    def test_dart_abstract_and_override_same_name_resolves_to_override(self):
+        # BACK-729: the plain 'block'-child scan above can never see a Dart
+        # method's real body -- Dart's function_signature/function_body pair
+        # are disjoint SIBLINGS, not parent/child (see
+        # treesitter.py:_function_end_node's docstring). Without resolving
+        # each candidate's paired body first, an interface+impl same-name
+        # pair always fell through to the first tree-order candidate: the
+        # bodyless abstract signature.
+        import pathlib
+        import tempfile
+        from reveal.analyzers.dart import DartAnalyzer
+        from reveal.file_handler import _find_element_node
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / 'parser.dart'
+            f.write_text(
+                "abstract class Parser {\n"
+                "  int parse(String input);\n"
+                "}\n"
+                "\n"
+                "class RealParser implements Parser {\n"
+                "  @override\n"
+                "  int parse(String input) {\n"
+                "    return input.length;\n"
+                "  }\n"
+                "}\n"
+            )
+            analyzer = DartAnalyzer(str(f))
+            node = _find_element_node(analyzer, 'parse')
+            self.assertIsNotNone(node)
+            # Regression: pre-fix, this returned the abstract signature at
+            # line 2 (a 1-line node with no sibling body), not the real
+            # implementation at line 7-9.
+            self.assertEqual(node.start_position().row, 6)  # 0-indexed: line 7
+
 
 # ─── BACK-547 ninth loop (Rust sideeffects-recall-oracle, real-corpus
 # measurement on Meilisearch's milli engine): `macro_invocation` (Rust's

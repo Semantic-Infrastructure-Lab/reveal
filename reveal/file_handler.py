@@ -256,7 +256,7 @@ def _find_hierarchical_element_node(analyzer, element: str):
     return None
 
 
-def _pick_best_candidate(candidates):
+def _pick_best_candidate(candidates, analyzer=None):
     """Disambiguate multiple same-named nodes (overloads, abstract+override
     pairs) by preferring one with a real 'block'-kind body over a bodyless
     signature (abstract/interface) or an expression-bodied one (BACK-650).
@@ -264,10 +264,28 @@ def _pick_best_candidate(candidates):
     Falls back to the first tree-order candidate when every candidate is
     equally block-bodied (true overloads with no signal to disambiguate) or
     equally bodyless — same shape as the pre-fix behavior for that case.
+
+    BACK-729: Dart's `function_signature`/`function_body` pair are disjoint
+    SIBLINGS, not parent/child (see treesitter.py:_function_end_node's
+    docstring) — the plain 'block'-child scan below can never see a Dart
+    method's real body, so an interface+impl same-name pair (e.g. an
+    abstract `int parse(String input);` and its concrete override) always
+    fell through to the first tree-order candidate, which is the bodyless
+    abstract signature (found live: `reveal file.dart parse` resolved to
+    the 1-line abstract declaration, never the implementation). When an
+    analyzer with `_function_end_node` is available, resolve each
+    candidate's paired body first — for Dart this walks to the sibling
+    `function_body`; for every other language `_function_end_node` is a
+    no-op (returns the same node), so this changes nothing for them.
     """
     if len(candidates) == 1:
         return candidates[0]
+    end_node = getattr(analyzer, '_function_end_node', None)
     for node in candidates:
+        if end_node is not None:
+            body = end_node(node)
+            if body is not node and _zero_arg(body, 'kind') == 'function_body':
+                return node
         if any(_zero_arg(child, 'kind') == 'block' for child in node_children(node)):
             return node
     return candidates[0]
@@ -291,7 +309,7 @@ def _find_element_node(analyzer, element: str):
                 if analyzer._get_node_name(node) == element
             ]
             if candidates:
-                return _pick_best_candidate(candidates)
+                return _pick_best_candidate(candidates, analyzer)
 
     # JS-family `const f = (...) => {}` — not a FUNCTION_NODE_TYPES member at
     # all (it's a filtered variable_declarator, not a flat kind match), so it
