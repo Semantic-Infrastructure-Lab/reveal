@@ -202,6 +202,14 @@ DEF_NODES: frozenset = frozenset({
     # FUNCTION_NODE_TYPES comment. Without this, --scope silently dropped a
     # GDScript `_init` as its own ancestor for a nested line.
     'constructor_definition',
+    # Swift `init(...)`/`deinit` and Dart constructor/getter/setter node
+    # kinds — same gap, see treesitter.py FUNCTION_NODE_TYPES comment.
+    # Without these, --scope silently dropped the enclosing Swift
+    # initializer/deinitializer or Dart constructor/getter/setter as its
+    # own ancestor for a nested line.
+    'init_declaration', 'deinit_declaration',
+    'constructor_signature', 'factory_constructor_signature',
+    'getter_signature', 'setter_signature', 'constant_constructor_signature',
 })
 CLASS_NODES: frozenset = frozenset({
     'class_definition', 'class_declaration', 'class',
@@ -408,6 +416,10 @@ KEYWORD_LABEL: Dict[str, str] = {
     'singleton_method': 'DEF',  # BACK-647: Ruby `def self.foo`/`def Class.foo`
     'generator_function_declaration': 'DEF',  # BACK-643: JS/TS `async function* name() {}`
     'constructor_definition': 'DEF',  # BACK-718/BACK-724: GDScript `func _init(...)`
+    'init_declaration': 'DEF', 'deinit_declaration': 'DEF',  # Swift `init(...)`/`deinit`
+    'constructor_signature': 'DEF', 'factory_constructor_signature': 'DEF',  # Dart constructors
+    'getter_signature': 'DEF', 'setter_signature': 'DEF',  # Dart `get`/`set`
+    'constant_constructor_signature': 'DEF',  # Dart `const` constructor
     'lambda': 'LAMBDA',
     'class_definition': 'CLASS', 'class_declaration': 'CLASS', 'class': 'CLASS',
     'class_specifier': 'CLASS', 'anonymous_class': 'CLASS',
