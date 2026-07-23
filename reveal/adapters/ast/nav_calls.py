@@ -458,6 +458,18 @@ def _extract_callee(
             break
         callee_node = inner
 
+    # Chained/IIFE call: `f(...)()` — the outer call's callee is itself a
+    # bare call node (not wrapped in member-access, unlike the fluent-chain
+    # case below). The inner call is already captured as its own edge by
+    # the tree walk, so returning its raw text here would emit a second,
+    # un-normalized entry for the same call site (BACK-732, the nav_calls.py
+    # side of treesitter.py:_callee_name_from_node's identical fix — found
+    # via Home Assistant's helpers/temperature.py display_temp(), which
+    # calls TemperatureConverter.converter_factory(...)(temperature)). The
+    # outer call has no nameable callee of its own.
+    if call_node_types and _zero_arg(callee_node, 'kind') in call_node_types:
+        return None
+
     # Chained/fluent call: `rimrafUnlink(x).catch(...)`, `fetch(x).then(...).catch(...)`.
     # The callee is a member-access whose *receiver* is itself a call, so its raw
     # text folds the entire (possibly multi-line, 150+ char) chain into one bogus

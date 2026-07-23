@@ -2703,6 +2703,20 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return self._callee_name_from_node(call_node.child(0))
 
     def _callee_name_from_node(self, callee_node) -> Optional[str]:
+        # Chained/IIFE calls (`f(...)()`) parse as call(call(...), args) --
+        # the outer call's callee is itself a call node. The inner call
+        # already gets its own top-level entry from the tree walk (it's a
+        # CALL_NODE_TYPES node in its own right), so falling through to the
+        # raw-text branch below would emit a SECOND, un-normalized entry for
+        # the same call site (BACK-732: confirmed on Home Assistant's
+        # helpers/temperature.py display_temp(), which calls
+        # TemperatureConverter.converter_factory(...)(temperature) --
+        # produced both the correct "TemperatureConverter.converter_factory"
+        # and the raw "TemperatureConverter.converter_factory(temperature_unit, ha_unit)").
+        # The outer call has no nameable callee of its own -- its target is
+        # a call result, not an identifier/attribute -- so return None.
+        if callee_node.kind() in CALL_NODE_TYPES:
+            return None
         if callee_node.kind() == 'identifier':
             return self._get_node_text(callee_node)
         if callee_node.kind() in CALLEE_ATTRIBUTE_TYPES:

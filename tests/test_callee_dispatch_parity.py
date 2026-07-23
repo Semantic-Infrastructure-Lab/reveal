@@ -314,6 +314,34 @@ class TestCalleeDispatchBehavioralParity(unittest.TestCase):
         self.assertIn("vector<int>", nav)
         self.assertIn("vector<int>", ts_calls)
 
+    def test_python_iife_chained_call_no_duplicate_raw_text(self):
+        # BACK-732: `f(...)()` -- an outer call whose callee is itself a call
+        # node (chained/IIFE-style). The inner call already gets its own
+        # entry from the tree walk; both paths used to ALSO emit a second,
+        # un-normalized entry holding the inner call's raw source text (found
+        # via Home Assistant's helpers/temperature.py display_temp(), which
+        # calls TemperatureConverter.converter_factory(unit, ha)(temperature)).
+        # Only the normalized "Class.method" entry should survive.
+        from reveal.analyzers.python import PythonAnalyzer
+
+        code = """
+        class TemperatureConverter:
+            @staticmethod
+            def converter_factory(unit, ha_unit):
+                def convert(t):
+                    return t
+                return convert
+
+        def display_temp(temperature_unit, ha_unit, temperature):
+            return TemperatureConverter.converter_factory(temperature_unit, ha_unit)(temperature)
+        """
+        nav = _nav_calls_callees("python", code)
+        ts_calls = _treesitter_callees(PythonAnalyzer, ".py", code)
+        self.assertIn("TemperatureConverter.converter_factory", nav)
+        self.assertIn("TemperatureConverter.converter_factory", ts_calls)
+        for callee in nav + ts_calls:
+            self.assertNotIn("(", callee, f"un-normalized raw call text leaked into callee list: {callee!r}")
+
     def test_cpp_direct_init_excludes_plain_and_copy_init(self):
         # BACK-744 regression guard: 'init_declarator' is shared with EVERY
         # other initialized declaration, not just direct-init. A plain
