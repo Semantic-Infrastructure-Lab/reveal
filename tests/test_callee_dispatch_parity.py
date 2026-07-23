@@ -60,6 +60,7 @@ REQUIRED_IN_BOTH = {
     "object_creation_expression",  # PHP/C# new ClassName()
     "scoped_call_expression",   # PHP self::/parent::/static::/Class::method() (BACK-736)
     "instance_expression",      # Scala new ClassName() (BACK-718/720/730#17)
+    "infix_expression",         # Scala a :: b / list map f (BACK-746)
     "new_expression",           # C++ new ClassName() (BACK-730 C++ pre-flight)
     "method_invocation",        # Java obj.method() (BACK-734)
     "generic_function",         # Rust turbofish size_of::<u32>() (BACK-733)
@@ -226,6 +227,47 @@ class TestCalleeDispatchBehavioralParity(unittest.TestCase):
         ts_calls = _treesitter_callees(ScalaAnalyzer, ".scala", code)
         self.assertIn("new File", nav)
         self.assertIn("new File", ts_calls)
+
+    def test_scala_instance_expression_qualified(self):
+        # BACK-747: `new java.io.File(...)` (a stable_type_identifier), and
+        # `new scala.Array[Byte](...)` (a stable_type_identifier inside a
+        # generic_type) both resolve to the simple type name in both paths.
+        from reveal.analyzers.scala import ScalaAnalyzer
+
+        code = """
+        object T {
+          def foo(): Unit = {
+            val f = new java.io.File("x")
+            val a = new scala.Array[Byte](8)
+          }
+        }
+        """
+        nav = _nav_calls_callees("scala", code)
+        ts_calls = _treesitter_callees(ScalaAnalyzer, ".scala", code)
+        self.assertIn("new File", nav)
+        self.assertIn("new File", ts_calls)
+        self.assertIn("new Array", nav)
+        self.assertIn("new Array", ts_calls)
+
+    def test_scala_infix_expression(self):
+        # BACK-746: infix method calls (`a :: b`, `list map f`) resolve to the
+        # bare operator/method name in BOTH extraction paths.
+        from reveal.analyzers.scala import ScalaAnalyzer
+
+        code = """
+        object T {
+          def foo(): Unit = {
+            val r = list map doubler
+            val s = a :: rest
+          }
+        }
+        """
+        nav = _nav_calls_callees("scala", code)
+        ts_calls = _treesitter_callees(ScalaAnalyzer, ".scala", code)
+        self.assertIn("map", nav)
+        self.assertIn("map", ts_calls)
+        self.assertIn("::", nav)
+        self.assertIn("::", ts_calls)
 
     def test_cpp_new_expression(self):
         from reveal.analyzers.cpp import CppAnalyzer

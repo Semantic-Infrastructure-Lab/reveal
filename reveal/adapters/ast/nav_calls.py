@@ -331,6 +331,14 @@ def _extract_callee(
     if _zero_arg(call_node, 'kind') == 'instance_expression':
         return _extract_scala_instance_callee(call_node, get_text)
 
+    # Scala: infix method calls (`a :: b`, `list map doubler`) parse to
+    # 'infix_expression' — the `operator` field is the method name. Absent from
+    # CALL_NODE_TYPES/this dispatch, every infix call was invisible to
+    # calls:// and --calls/--sideeffects/--boundary (BACK-746). Mirrors
+    # treesitter.py:_callee_name_scala_infix.
+    if _zero_arg(call_node, 'kind') == 'infix_expression':
+        return _extract_scala_infix_callee(call_node, get_text)
+
     # Swift: `<callee><TypeArgs>(args)` — generic function call or generic
     # type initializer, both parse to 'constructor_expression' rather than
     # call_expression (BACK-730 Swift pre-flight).
@@ -523,21 +531,58 @@ def _extract_scala_instance_callee(node: Any, get_text: Callable) -> Optional[st
     type (`new java.io.File(...)`, trailing segment only).
     """
     for child in _children(node):
-        kind = _zero_arg(child, 'kind')
-        if kind == 'type_identifier':
-            name = get_text(child).strip()
+        if _zero_arg(child, 'kind') in _SCALA_TYPE_KINDS:
+            name = _scala_simple_type_name(child, get_text)
             if name:
                 return f"new {name}"
-        if kind == 'generic_type':
-            base = next((c for c in _children(child) if _zero_arg(c, 'kind') == 'type_identifier'), None)
-            if base is not None:
-                name = get_text(base).strip()
-                if name:
-                    return f"new {name}"
-        if kind == 'field_expression':
-            text = get_text(child).strip()
-            if text:
-                return f"new {text.split('.')[-1]}"
+    return None
+
+
+# Scala type-node kinds that can appear as the constructed type in an
+# instance_expression (mirror of treesitter._SCALA_TYPE_KINDS).
+_SCALA_TYPE_KINDS = frozenset({
+    'type_identifier', 'generic_type', 'stable_type_identifier', 'field_expression',
+})
+
+
+def _scala_simple_type_name(type_node: Any, get_text: Callable) -> Optional[str]:
+    """Simple (last) name of a Scala constructor type, unwrapping generics
+    (`new Array[Byte]`), qualified paths (`new java.io.File`, BACK-747), and
+    qualified generics (`new scala.Array[Byte]`). Mirror of
+    treesitter._scala_simple_type_name."""
+    kind = _zero_arg(type_node, 'kind')
+    if kind == 'type_identifier':
+        return get_text(type_node).strip() or None
+    if kind == 'generic_type':
+        base = next((c for c in _children(type_node)
+                     if _zero_arg(c, 'kind') in _SCALA_TYPE_KINDS), None)
+        return _scala_simple_type_name(base, get_text) if base is not None else None
+    if kind == 'stable_type_identifier':
+        names = [c for c in _children(type_node)
+                 if _zero_arg(c, 'kind') == 'type_identifier']
+        return (get_text(names[-1]).strip() or None) if names else None
+    if kind == 'field_expression':
+        text = get_text(type_node).strip()
+        return text.split('.')[-1] if text else None
+    return None
+
+
+def _extract_scala_infix_callee(node: Any, get_text: Callable) -> Optional[str]:
+    """Scala `infix_expression`: `a :: b` / `list map doubler` /
+    `xs filterNot q`. The `operator` field is the method name — an
+    `identifier` (alphabetic infix) or `operator_identifier` (symbolic).
+    Emit the bare name. Mirrors treesitter.py:_callee_name_scala_infix
+    (BACK-746)."""
+    op = node.child_by_field_name('operator')
+    if op is not None:
+        text = get_text(op).strip()
+        if text:
+            return text
+    kids = _children(node)
+    if len(kids) >= 3:
+        text = get_text(kids[1]).strip()
+        if text:
+            return text
     return None
 
 

@@ -241,6 +241,14 @@ ELEMENT_TYPE_MAP = {
 }
 
 # Node types for call expression extraction (call graph)
+# Scala type-node kinds that can appear as the constructed type in an
+# `instance_expression` (`new X(...)`) — used by _scala_simple_type_name /
+# nav_calls._extract_scala_instance_callee to peel qualified/generic types
+# down to the simple class name (BACK-747).
+_SCALA_TYPE_KINDS = frozenset({
+    'type_identifier', 'generic_type', 'stable_type_identifier', 'field_expression',
+})
+
 CALL_NODE_TYPES = {
     'call',                    # Python
     'call_expression',         # JS, TS, Go, Rust, C, C++, Kotlin
@@ -291,6 +299,16 @@ CALL_NODE_TYPES = {
     # convention already established for PHP/C#, so the same taxonomy
     # pattern shape works unchanged).
     'instance_expression',      # Scala
+    # Scala infix method calls: `a :: b`, `list map doubler`, `xs filterNot q`
+    # — Scala lets any single-arg method be called without a dot/parens, and
+    # operators ARE methods (`a + b` == `a.+(b)`). tree-sitter parses all of
+    # these to 'infix_expression', a node kind absent from CALL_NODE_TYPES, so
+    # every infix call was silently invisible to calls:// (BACK-746, twelfth
+    # calls-recall language). Found via pre-flight grammar dump + a scalameta
+    # oracle on GitBucket (96.64% -> 100% recall). See
+    # _callee_name_scala_infix (the `operator` field is the method name) and
+    # nav_calls.py:_extract_scala_infix_callee for the paired ast:// nav path.
+    'infix_expression',         # Scala
     # Swift: any call with an explicit generic type argument — both a
     # generic function call (`identity<Int>(5)`) AND a generic type
     # initializer (`Array<Int>()`, `Dictionary<K, V>()`) — parses to a
@@ -1543,6 +1561,32 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     return self._get_node_text(nxt)
         return None
 
+    def _name_via_scala_operator_function(self, kids) -> Optional[str]:
+        # Scala symbolic-name method definitions: `def +(o)`, `def ::(x)`,
+        # `def *` (Slick projection), and any operator overload. The name is
+        # an `operator_identifier` node (not an identifier-family kind any
+        # earlier strategy recognizes), the sibling right after the `def`
+        # keyword. Same invisibility class as Swift's operator overloads
+        # (_name_via_swift_operator_function), C#'s operator_declaration, and
+        # Ruby's `operator` kind: without this, every symbolic-named def was
+        # absent from --outline/get_structure(), so any call inside its body
+        # had no caller scope to attribute to. Found via the calls-recall-
+        # oracle Scala measurement (BACK-730, twelfth language): the sole
+        # residual miss was a `Some(...)` call inside GitBucket's Slick
+        # `def *` projection in Repository.scala. Gated on language because
+        # Python's function_definition also has a `def` keyword child (always
+        # followed by an `identifier`, never an `operator_identifier`).
+        if self.language != 'scala':
+            return None
+        for i, child in enumerate(kids):
+            if _zero_arg(child, 'kind') == 'def' and i + 1 < len(kids):
+                nxt = kids[i + 1]
+                if _zero_arg(nxt, 'kind') == 'operator_identifier':
+                    text = self._get_node_text(nxt).strip()
+                    if text:
+                        return text
+        return None
+
     def _name_via_type_identifier(self, kids) -> Optional[str]:
         # PRIORITY 3: type_identifier (fallback for structs, classes) — only
         # used if no name was found in declarators.
@@ -1588,6 +1632,12 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         kids = _children(node)
         for strategy in (
+            # Scala operator-name defs first: the `operator_identifier` right
+            # after `def` is unambiguously the name, but for `def +(o) = o` /
+            # `def ::(x) = this` an identifier in the body/params would
+            # otherwise be grabbed by _name_via_identifier_kind before this
+            # ran (gated on language, so no cost/risk for other languages).
+            self._name_via_scala_operator_function,
             self._name_via_declarator,
             self._name_via_param_adjacent,
             self._name_via_identifier_kind,
@@ -1825,24 +1875,61 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # get_structure()/calls:// path, which is exactly the gap flagged
         # in BACK-730 note #17).
         for child in _children(call_node):
-            kind = _zero_arg(child, 'kind')
-            if kind == 'type_identifier':
-                text = self._get_node_text(child).strip()
-                if text:
-                    return f"new {text}"
-            if kind == 'generic_type':
-                base = next(
-                    (c for c in _children(child) if _zero_arg(c, 'kind') == 'type_identifier'),
-                    None,
-                )
-                if base is not None:
-                    text = self._get_node_text(base).strip()
-                    if text:
-                        return f"new {text}"
-            if kind == 'field_expression':
-                text = self._get_node_text(child).strip()
-                if text:
-                    return f"new {text.split('.')[-1]}"
+            if _zero_arg(child, 'kind') in _SCALA_TYPE_KINDS:
+                name = self._scala_simple_type_name(child)
+                if name:
+                    return f"new {name}"
+        return None
+
+    def _scala_simple_type_name(self, type_node) -> Optional[str]:
+        # Simple (last) name of a Scala constructor type, unwrapping every
+        # nesting seen in practice:
+        #   type_identifier            -> `File`          (new File)
+        #   generic_type               -> recurse on base (new Array[Byte])
+        #   stable_type_identifier     -> trailing name   (new java.io.File,
+        #                                                   BACK-747; also the
+        #                                                   base of a qualified
+        #                                                   generic new scala.
+        #                                                   Array[Byte])
+        #   field_expression           -> last dotted seg (older grammar shape)
+        kind = _zero_arg(type_node, 'kind')
+        if kind == 'type_identifier':
+            return self._get_node_text(type_node).strip() or None
+        if kind == 'generic_type':
+            base = next((c for c in _children(type_node)
+                         if _zero_arg(c, 'kind') in _SCALA_TYPE_KINDS), None)
+            return self._scala_simple_type_name(base) if base is not None else None
+        if kind == 'stable_type_identifier':
+            names = [c for c in _children(type_node)
+                     if _zero_arg(c, 'kind') == 'type_identifier']
+            return (self._get_node_text(names[-1]).strip() or None) if names else None
+        if kind == 'field_expression':
+            text = self._get_node_text(type_node).strip()
+            return text.split('.')[-1] if text else None
+        return None
+
+    def _callee_name_scala_infix(self, call_node) -> Optional[str]:
+        # Scala infix method calls: `a :: b`, `list map doubler`,
+        # `xs filterNot q` — every single-argument method can be called without
+        # a dot or parens, and operators ARE methods (`a + b` desugars to
+        # `a.+(b)`). tree-sitter parses all of these to `infix_expression`, a
+        # node kind that was entirely absent from CALL_NODE_TYPES, so every
+        # infix call was silently invisible to calls:// (BACK-746, twelfth
+        # calls-recall language). The `operator` field holds the method name —
+        # an `identifier` for alphabetic infix (`map`, `filterNot`) or an
+        # `operator_identifier` for symbolic operators (`::`, `+`). Emit the
+        # bare name (no "new "/qualifier), matching the plain-call convention.
+        op = call_node.child_by_field_name('operator')
+        if op is not None:
+            text = self._get_node_text(op).strip()
+            if text:
+                return text
+        # Fallback: middle child (left, OP, right) if the field is unavailable.
+        kids = _children(call_node)
+        if len(kids) >= 3:
+            text = self._get_node_text(kids[1]).strip()
+            if text:
+                return text
         return None
 
     def _callee_name_java_method(self, call_node) -> Optional[str]:
@@ -2005,6 +2092,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._callee_name_cpp_new(call_node)
         if _zero_arg(call_node, 'kind') == 'instance_expression':
             return self._callee_name_scala_instance(call_node)
+        if _zero_arg(call_node, 'kind') == 'infix_expression':
+            return self._callee_name_scala_infix(call_node)
         if call_node.kind() == 'method_invocation':
             return self._callee_name_java_method(call_node)
         if _zero_arg(call_node, 'kind') == 'call' and self.language == 'ruby':

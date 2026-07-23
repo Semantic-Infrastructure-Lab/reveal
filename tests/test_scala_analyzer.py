@@ -361,6 +361,77 @@ class Plain {
         finally:
             os.unlink(temp_path)
 
+    def _structure_for(self, code):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.scala', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+        try:
+            return ScalaAnalyzer(temp_path).get_structure()
+        finally:
+            os.unlink(temp_path)
+
+    def test_infix_method_call_callee_name(self):
+        """BACK-746 (twelfth calls-recall language): Scala infix method calls
+        (`a :: b`, `list map f`, `xs filterNot p`) parse to 'infix_expression',
+        a node kind that was absent from CALL_NODE_TYPES — every infix call was
+        invisible to calls://. The `operator` field is the method name (an
+        `identifier` for alphabetic infix, `operator_identifier` for symbolic
+        operators). Emit the bare name."""
+        code = '''class C {
+  def run(): Unit = {
+    val a = list map doubler
+    val b = xs filterNot pred
+    val c = x :: rest
+    val d = p + q
+  }
+}
+'''
+        calls = {fn['name']: fn for fn in self._structure_for(code)['functions']}['run']['calls']
+        self.assertIn('map', calls)
+        self.assertIn('filterNot', calls)
+        self.assertIn('::', calls)
+        self.assertIn('+', calls)
+
+    def test_qualified_constructor_callee_name(self):
+        """BACK-747: `new java.io.File(...)` (a stable_type_identifier) and
+        `new scala.Array[Byte](...)` (a stable_type_identifier inside a
+        generic_type) must resolve to the simple type name, not be dropped."""
+        code = '''class C {
+  def run(): Unit = {
+    val f = new java.io.File("x")
+    val a = new scala.Array[Byte](8)
+    val g = new Array[Int](4)
+  }
+}
+'''
+        calls = {fn['name']: fn for fn in self._structure_for(code)['functions']}['run']['calls']
+        self.assertIn('new File', calls)
+        self.assertIn('new Array', calls)
+
+    def test_operator_named_method_definitions_in_outline(self):
+        """BACK-746 residual: symbolic-named method definitions (`def +(o)`,
+        `def ::(x)`, `def *` — Slick projections and operator overloads) use an
+        `operator_identifier` name node, not an `identifier`. Without a
+        dedicated name strategy they were absent from --outline/get_structure()
+        (or mis-named after a body/param identifier), so any call inside their
+        body had no caller scope. Each must appear under its own operator name."""
+        code = '''class Vec {
+  def +(o: Vec): Vec = o
+  def ::(x: Int): Vec = this
+  def * = (userName, repositoryName)
+  def plain(): Int = 1
+}
+'''
+        names = {fn['name'] for fn in self._structure_for(code)['functions']}
+        self.assertIn('+', names)
+        self.assertIn('::', names)
+        self.assertIn('*', names)
+        self.assertIn('plain', names)
+        # The specific regression: an operator def must NOT be named after an
+        # identifier in its body/params (`def +(o) = o` was mis-named "o").
+        self.assertNotIn('o', names)
+
 
 if __name__ == '__main__':
     unittest.main()
