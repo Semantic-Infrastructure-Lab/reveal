@@ -184,6 +184,65 @@ FUNCTION_NODE_TYPES = (
     # name-extraction fix.
     'init_declaration',    # Swift `init(...) { ... }`
     'deinit_declaration',  # Swift `deinit { ... }`
+    # Dart `Dog(...)` / `Dog.named(...)` / `factory Dog.fromJson(...)` --
+    # neither constructor form is a variant of `function_signature` (plain
+    # methods, already covered above); they parse to their own DISTINCT node
+    # kinds, entirely absent from FUNCTION_NODE_TYPES before this. Found via
+    # the Dart calls-recall-oracle measurement (BACK-730, eighteenth and
+    # final language): without these, every Dart constructor -- the
+    # PRIMARY entry point for object construction in idiomatic Dart, used
+    # far more than `ClassName()` calls to a hidden default -- had no
+    # caller scope of its own at all, so every call made from inside one
+    # (a super-init-list helper call, a named-constructor delegate, a
+    # factory's internal setup call) was silently dropped, not just
+    # misattributed (same "total edge loss" shape as Swift's BACK-742
+    # init/deinit gap). Same disjoint function_signature/function_body
+    # sibling shape as plain methods -- see `_function_end_node`'s matching
+    # update and `_dart_constructor_name` for the paired name extraction
+    # (BACK-760).
+    'constructor_signature',          # Dart `Dog(...)` / `Dog.named(...)`
+    'factory_constructor_signature',  # Dart `factory Dog.fromJson(...)`
+    # Dart getters/setters (`int get x { ... }` / `set x(int value) { ... }`)
+    # parse to their OWN distinct node kinds, NOT a variant of
+    # 'function_signature' -- same disjoint function_signature/function_body
+    # sibling shape (see `_function_end_node`), same
+    # method_signature-wrapper convention as constructors above. Found via
+    # the Dart calls-recall-oracle measurement (BACK-730, eighteenth and
+    # final language): a getter/setter -- a common Dart idiom for computed
+    # properties on both classes AND extensions (`extension X on Y { int
+    # get z { ... } }`) -- was entirely absent from FUNCTION_NODE_TYPES, so
+    # its body (and every call inside it) had no caller scope at all,
+    # invisible to --outline/get_structure() (real corpus example:
+    # AppFlowy's `String.fileSize` extension getter, whose body calls
+    # `File(...).existsSync()`, silently had NO scope whatsoever -- the
+    # whole file showed zero functions). The name (`identifier` child) and
+    # the disjoint function_signature/function_body sibling pairing both
+    # already work via the existing generic strategies once the node kind
+    # is listed here -- no dedicated name-extraction special case needed
+    # (kids include a `type_identifier` for the return/property type, which
+    # is a DIFFERENT node kind than `identifier`, so PRIORITY 2b's
+    # first-identifier-child scan already lands on the right name by the
+    # same coincidence plain `function_signature` methods rely on).
+    'getter_signature',  # Dart `int get x { ... }`
+    'setter_signature',  # Dart `set x(int value) { ... }`
+    # Dart `const Foo({this.x = 1, ...});` -- a `const`-marked constructor
+    # is a DISTINCT node kind, 'constant_constructor_signature', not a
+    # variant of 'constructor_signature' -- AND wrapped in a `declaration`
+    # node, not `method_signature` (a const constructor's body, if any, is
+    # restricted to redirecting/empty by Dart's own language rules, so
+    # there's rarely a separate function_body sibling to pair with at
+    # all). Found via the Dart calls-recall-oracle measurement (BACK-730,
+    # eighteenth and final language): a const constructor -- Flutter's
+    # single most common StatelessWidget/StatefulWidget constructor
+    # pattern (`const MyWidget({super.key, this.title = "..."})`) -- was
+    # entirely invisible to --outline/get_structure(), so a call inside a
+    # parameter DEFAULT VALUE (`this.duration = const Duration(seconds:
+    # 1)`, ubiquitous for const-constructed default widget/value
+    # properties) had no caller scope whatsoever. See
+    # `_dart_constructor_name` (name extraction, unchanged, already
+    # kind-agnostic) and `_dart_merge_signature_extra_calls` (parameter-
+    # default-value call extraction).
+    'constant_constructor_signature',  # Dart `const Foo({this.x = 1, ...})`
 )
 
 # Node types for class extraction
@@ -356,6 +415,51 @@ CALL_NODE_TYPES = {
     # (receiver, '.', segment, '.', segment, ...) list rather than nested
     # call-of-a-member-access the way Python/JS do.
     'attribute_call',           # GDScript `self.foo()` / `obj.method()` / `Class.new()`
+    # Dart: tree-sitter-dart has NO dedicated call-expression node kind at
+    # all -- a plain call, a receiver-qualified call, a cascade call, and a
+    # null-safe (`?.`) call are all built from a flat sequence of SIBLINGS
+    # (primary expression + zero or more 'selector' nodes), not a single
+    # nested node the way every other language in this program is shaped.
+    # `foo()` parses to identifier('foo') + selector(argument_part); a
+    # qualified `obj.method()` parses to identifier('obj') +
+    # selector(unconditional_assignable_selector: '.' identifier('method'))
+    # + selector(argument_part) -- three siblings, no receiver/name FIELD
+    # to read the way Java/Ruby's fix shape works. Found via a pre-flight
+    # grammar dump before the Dart calls-recall-oracle measurement
+    # (BACK-730, eighteenth and final language): entirely absent from
+    # CALL_NODE_TYPES meant calls:// returned ZERO callers/callees for
+    # EVERY Dart call site, not just a subset -- the single largest total
+    # blind spot in this whole program (GDScript's attribute_call gap was
+    # "only" the dominant idiom; Dart had no working call detection at
+    # all). See _callee_name_dart_argument_part for the paired sibling-walk
+    # extraction (BACK-760).
+    'argument_part',            # Dart: the `(args)` selector marking ANY call
+    # Dart's OTHER call shape: a generic-typed constructor call with an
+    # explicit or named constructor segment (`List<int>.from(...)`,
+    # `Map<String, int>()`) parses to a DISTINCT node, 'constructor_invocation'
+    # (child of 'postfix_expression'), where 'arguments' IS a direct child
+    # -- structurally closer to every other language's call node than the
+    # 'argument_part'-selector shape above. See
+    # _callee_name_dart_flat_type_call.
+    'constructor_invocation',   # Dart `List<int>.from(...)` / `Map<K, V>()`
+    # Dart's THIRD flat-constructor-call shape: an explicitly `const`-
+    # evaluated constructor call (`const Duration(milliseconds: 300)`,
+    # `const EdgeInsets.all(8)`, `const Color(0xFFFFFFFF)`) -- ubiquitous
+    # in Flutter code (compile-time-constant widget/value construction is
+    # the recommended default whenever every argument is itself constant).
+    # Parses to a DISTINCT node kind, 'const_object_expression', NOT a
+    # variant of 'constructor_invocation' above despite the near-identical
+    # flat shape (const_builtin, type_identifier, type_arguments?, '.',
+    # identifier?, arguments) -- entirely absent from CALL_NODE_TYPES meant
+    # every `const`-constructed value's constructor call was invisible to
+    # calls://. Found via the Dart calls-recall-oracle measurement
+    # (BACK-730, eighteenth and final language): AppFlowy's real corpus
+    # dominant residual miss (`Duration`, `BoxShadow`, `CircleBorder`,
+    # `Positioned` — every one of them a `const Foo(...)` construction).
+    # See _callee_name_dart_flat_type_call (shared with
+    # constructor_invocation above, same flat shape modulo the leading
+    # 'const' token, which the extractor simply ignores).
+    'const_object_expression',  # Dart `const Duration(milliseconds: 300)`
 }
 
 # Callee node types for attribute/member access (self.foo, obj.method, pkg.Func)
@@ -1077,6 +1181,22 @@ class TreeSitterAnalyzer(FileAnalyzer):
         body_node = end_node if end_node is not bounds_node else node
 
         complexity, depth, calls = self._complexity_depth_and_calls(body_node)
+        # Dart signature-adjacent call sites -- a constructor's initializer
+        # list (`Foo(...) : super(compute()), x = y, assert(cond) { ... }`)
+        # and ANY signature's parameter DEFAULT VALUES (`{int x =
+        # paramDefault()}`) -- live entirely OUTSIDE body_node (they're
+        # part of the disjoint signature node / a THIRD sibling, see
+        # _function_end_node), so the walk above never sees calls made
+        # there. Same "call in a signature-adjacent expression, not the
+        # body proper" shape as Python's BACK-731 decorator-argument gap.
+        # Found real corpus impact via the Dart calls-recall-oracle
+        # measurement (BACK-730): `super(...)` calls (Flutter/BLoC's
+        # dominant constructor idiom) and `const`-constructed default
+        # parameter values (Flutter's dominant const-constructor-argument
+        # idiom, e.g. `this.duration = const Duration(seconds: 1)`) were
+        # both silently absent from every affected signature's own calls
+        # list even after the _function_end_node fix above. (BACK-760)
+        calls = self._dart_merge_signature_extra_calls(node, calls)
         return {
             'line': line_start,
             'line_end': line_end,
@@ -1500,8 +1620,31 @@ class TreeSitterAnalyzer(FileAnalyzer):
         references found" for a variable declared and read three lines into
         the body).
         """
-        if node.kind() == 'function_signature':
+        if _zero_arg(node, 'kind') in (
+            'function_signature', 'constructor_signature', 'factory_constructor_signature',
+            'getter_signature', 'setter_signature', 'constant_constructor_signature',
+        ):
             sibling = _next_sibling(node)
+            # A constructor WITH an initializer list (`SpaceBloc(...) :
+            # super(...) { ... }` / `: x = y, assert(...)`) has an
+            # 'initializers' node wedged in as ANOTHER sibling of
+            # constructor_signature, inside the SAME method_signature
+            # wrapper, BEFORE the real function_body (which is still one
+            # level up, next to method_signature -- initializers is never
+            # itself the body). Without this check, `sibling` here is
+            # 'initializers' (not None), so the "sibling is None" fallback
+            # below never fired, and the final `sibling.kind() ==
+            # 'function_body'` check failed -- silently returning `node`
+            # itself (bounds truncated to the bare signature, calls list
+            # empty) for EVERY constructor with an initializer list, a
+            # common, high-impact Dart/Flutter idiom (BLoC constructors
+            # almost universally use `: super(...)`). Found via the Dart
+            # calls-recall-oracle measurement (BACK-730, eighteenth and
+            # final language): AppFlowy's `SpaceBloc` constructor -- real
+            # calls to `super(...)`, `on<SpaceEvent>(...)`, and everything
+            # inside that handler -- reported ZERO calls before this fix.
+            if sibling is not None and _zero_arg(sibling, 'kind') == 'initializers':
+                sibling = None
             if sibling is None:
                 # Methods wrap function_signature in a method_signature node
                 # (`class_body: method_signature(function_signature), function_body`)
@@ -1509,13 +1652,60 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 # own next-sibling is None; the real function_body sibling is
                 # one level up, next to method_signature (dogfood audit against
                 # AppFlowy: every class method showed "[1 lines]" in --outline
-                # even after the top-level-function fix above).
+                # even after the top-level-function fix above). Constructors
+                # (BACK-760) wrap the same way: `method_signature(constructor_
+                # signature)` / `method_signature(factory_constructor_signature)`,
+                # optionally followed by `initializers` (handled above).
                 parent = node.parent()
-                if parent is not None and parent.kind() == 'method_signature':
+                # 'constant_constructor_signature' wraps in 'declaration',
+                # not 'method_signature' -- checked defensively even though
+                # a real `const` constructor can't carry an imperative body
+                # under Dart's own language rules (so this branch is not
+                # expected to ever actually find a function_body sibling
+                # for it in practice).
+                if parent is not None and _zero_arg(parent, 'kind') in ('method_signature', 'declaration'):
                     sibling = _next_sibling(parent)
             if sibling is not None and sibling.kind() == 'function_body':
                 return sibling
         return node
+
+    def _dart_merge_signature_extra_calls(self, node, calls: List[str]) -> List[str]:
+        """Merge calls found in a Dart signature node's OWN
+        signature-adjacent children into its calls list: a constructor's
+        initializer list (`: super(...), x = y, assert(cond)`) and ANY
+        signature's `formal_parameter_list` DEFAULT VALUES (`{int x =
+        paramDefault()}`) -- see `_build_function_dict`'s call site for
+        why both live outside `body_node` entirely (BACK-760/BACK-764).
+
+        Safe to call unconditionally (including when `body_node` already
+        equals `node` itself, e.g. a bodyless `const` constructor or any
+        non-Dart language): the `seen`-based dedup below makes a redundant
+        re-walk of already-included calls harmless, and the kind check up
+        front makes this a no-op for every non-Dart-signature node.
+        """
+        if _zero_arg(node, 'kind') not in (
+            'function_signature', 'constructor_signature', 'factory_constructor_signature',
+            'getter_signature', 'setter_signature', 'constant_constructor_signature',
+        ):
+            return calls
+        extra: List[str] = []
+        for child in _children(node):
+            if _zero_arg(child, 'kind') == 'formal_parameter_list':
+                _, _, param_calls = self._complexity_depth_and_calls(child)
+                extra.extend(param_calls)
+        sibling = _next_sibling(node)
+        if sibling is not None and _zero_arg(sibling, 'kind') == 'initializers':
+            _, _, init_calls = self._complexity_depth_and_calls(sibling)
+            extra.extend(init_calls)
+        if not extra:
+            return calls
+        seen = set(calls)
+        merged = list(calls)
+        for name in extra:
+            if name not in seen:
+                merged.append(name)
+                seen.add(name)
+        return merged
 
     def _struct_type_name(self, node) -> Optional[str]:
         """BACK-478: Go `type Foo struct { ... }` parses the struct body as a
@@ -1569,6 +1759,28 @@ class TreeSitterAnalyzer(FileAnalyzer):
         allow renaming it — so this is a constant return, not a lookup.
         """
         return '_init'
+
+    def _dart_constructor_name(self, node) -> Optional[str]:
+        """Dart `ClassName(...)` / `ClassName.named(...)` /
+        `factory ClassName.make(...)` -- 'constructor_signature'/
+        'factory_constructor_signature'. Kids are a flat
+        [('factory')?, identifier(Class), ('.', identifier(named))?,
+        formal_parameter_list]. Dart's 'formal_parameter_list' isn't a
+        member of `_PARAM_LIST_KINDS` (BACK-413's set is JS/Go/Java/C#-
+        shaped, never audited against Dart), so PRIORITY-2's param-adjacent
+        strategy never applies here, and PRIORITY-2b's first-identifier scan
+        (`_name_via_identifier_kind`) would grab ONLY the class name --
+        `Dog.named` and `Dog.fromJson` would both collapse to bare "Dog",
+        indistinguishable from the unnamed default constructor and from
+        each other. Returns 'Class' for the unnamed/default form or
+        'Class.named' when a named/factory segment is present (BACK-760).
+        """
+        idents = [c for c in _children(node) if _zero_arg(c, 'kind') == 'identifier']
+        if not idents:
+            return None
+        if len(idents) == 1:
+            return self._get_node_text(idents[0])
+        return f"{self._get_node_text(idents[0])}.{self._get_node_text(idents[1])}"
 
     def _name_via_declarator(self, kids) -> Optional[str]:
         # PRIORITY 1: For C/C++ functions, look inside declarators FIRST —
@@ -1771,6 +1983,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return 'init'
         if _zero_arg(node, 'kind') == 'deinit_declaration':
             return 'deinit'
+        if _zero_arg(node, 'kind') in (
+            'constructor_signature', 'factory_constructor_signature', 'constant_constructor_signature',
+        ):
+            return self._dart_constructor_name(node)
 
         kids = _children(node)
         for strategy in (
@@ -2013,13 +2229,40 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return None
 
     def _callee_name_new_expression(self, call_node) -> Optional[str]:
-        # 'new_expression' is shared by C++ and JS/TS/TSX with two mutually
-        # exclusive field shapes ('type' vs 'constructor') — dispatch on
-        # which field is actually populated rather than self.language, so
-        # this stays correct for tree-sitter fallback languages too.
+        # 'new_expression' is shared by C++, JS/TS/TSX, AND Dart with THREE
+        # mutually exclusive shapes — dispatch on which shape is actually
+        # present rather than self.language, so this stays correct for
+        # tree-sitter fallback languages too. C++/JS-TS-TSX both carry
+        # explicit 'constructor'/'type' FIELDS; Dart's grammar has no field
+        # names at all here (like the rest of its grammar — flat siblings),
+        # so both field lookups return None for it. Dart's explicit `new
+        # Foo(...)` / `new List<int>.from(...)` (the pre-Dart-2 constructor
+        # syntax, still valid and used in real corpora even though modern
+        # style omits `new`) was found entirely invisible to calls:// via
+        # the calls-recall-oracle Dart measurement (BACK-730, eighteenth
+        # and final language) — `new_expression` was already a
+        # CALL_NODE_TYPES member (added for C++), so the node WAS visited,
+        # but both existing field-based extractors returned None for
+        # Dart's flat shape, silently dropping the call rather than
+        # misnaming it. See _callee_name_dart_new_expression. (BACK-760)
         if call_node.child_by_field_name('constructor') is not None:
             return self._callee_name_js_new(call_node)
-        return self._callee_name_cpp_new(call_node)
+        if call_node.child_by_field_name('type') is not None:
+            return self._callee_name_cpp_new(call_node)
+        return self._callee_name_dart_new_expression(call_node)
+
+    def _callee_name_dart_new_expression(self, call_node) -> Optional[str]:
+        """Dart `new Foo(...)` / `new List<int>.from(...)` -- 'new_expression'
+        with NO named fields (Dart's grammar never uses fields): flat
+        children `new`, type_identifier (the class), optional type_arguments
+        (generics, ignored), optional '.' + identifier (named constructor),
+        'arguments'. Same flat shape as `_callee_name_dart_flat_type_call`
+        handles for constructor_invocation/const_object_expression, just
+        prefixed with an explicit 'new' keyword instead of being bare or
+        'const'-prefixed -- the shared extractor already ignores whatever
+        leading token precedes the type_identifier, so it applies unchanged.
+        """
+        return self._callee_name_dart_flat_type_call(call_node)
 
     def _callee_name_cpp_new(self, call_node) -> Optional[str]:
         # C++: new ClassName(args) / new NS::ClassName(args) — new_expression.
@@ -2206,6 +2449,203 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return name_text
         return f"{receiver_text}.{name_text}"
 
+    def _callee_name_dart_flat_type_call(self, call_node) -> Optional[str]:
+        """Shared extractor for Dart's flat type-then-arguments call shapes:
+        'constructor_invocation' (`List<int>.from(...)`, `Map<K,V>()`) and
+        'const_object_expression' (`const Duration(milliseconds: 300)`,
+        `const EdgeInsets.all(8)`). Both have the identical flat child
+        layout modulo a leading token this extractor ignores (nothing for
+        constructor_invocation, a 'const_builtin' token for
+        const_object_expression): a type_identifier (the class, e.g.
+        'List'/'Duration'), an optional type_arguments node (generic
+        params, ignored -- same "don't let a generic suffix leak into the
+        callee name" discipline as Rust's turbofish fix, BACK-733), an
+        optional '.' + identifier (a NAMED constructor, e.g. 'from'/'all'),
+        and 'arguments'. Returns 'List.from' for a named constructor or
+        bare 'List'/'Duration' for the unnamed/default one (BACK-760).
+        """
+        base = None
+        named = None
+        seen_dot = False
+        for child in _children(call_node):
+            kind = _zero_arg(child, 'kind')
+            if kind == 'type_identifier' and base is None:
+                base = self._get_node_text(child).strip()
+            elif kind == '.':
+                seen_dot = True
+            elif kind == 'identifier' and seen_dot and named is None:
+                named = self._get_node_text(child).strip()
+        if not base:
+            return None
+        return f"{base}.{named}" if named else base
+
+    def _callee_name_dart_argument_part(self, call_node) -> Optional[str]:
+        """Dart `foo()` / `obj.method()` / `this.foo()` / `Class.static()` /
+        `obj?.method()` / `obj!.method()` / cascaded `..method()` --
+        'argument_part' (the '(args)' selector that marks a call site).
+
+        Unlike every other dotted-call node in this program (Java's
+        method_invocation, Ruby's/GDScript's receiver-qualified nodes),
+        Dart's grammar has NO node that wraps "receiver + call" together at
+        all: a call is just the primary expression (identifier/`this`)
+        followed by a flat run of SIBLING 'selector' nodes -- one per `.foo`
+        segment, one per `(args)` call, one per bare `!`/`?.` operator. This
+        node (the 'argument_part') only ever holds its own arguments; the
+        qualifier, if any, is the selector immediately preceding this one's
+        wrapping 'selector' in that flat sibling list, and the ultimate base
+        (`obj`/`this`/`Class`) is whatever precedes that.
+
+        Reconstructs one level of "receiver.method" (enough for
+        `_bare_callee_name`'s last-segment split to resolve correctly for
+        chains of any depth, matching every prior language's precedent that
+        a full multi-segment reconstruction isn't required for recall).
+        `!` (null-assertion) selectors are transparently skipped when
+        walking backward for the receiver, since they carry no name.
+        A cascade (`..method()`) has no adjacent receiver at all (the cascade
+        target is the base expression of the whole cascade chain, not a
+        structurally-local sibling) -- returns the bare method name only,
+        same "no receiver available, bare name still resolves" convention
+        as BACK-732's Python IIFE quirk. (BACK-760)
+        """
+        parent = _zero_arg(call_node, 'parent')
+        if parent is None:
+            return None
+        parent_kind = _zero_arg(parent, 'kind')
+
+        if parent_kind == 'cascade_section':
+            for sib in _children(parent):
+                if _zero_arg(sib, 'kind') == 'cascade_selector':
+                    text = self._get_node_text(sib).strip()
+                    return text or None
+            return None
+
+        if parent_kind != 'selector':
+            return None
+
+        container = _zero_arg(parent, 'parent')
+        if container is None:
+            return None
+        siblings = _children(container)
+
+        # Node equality isn't reliable across the tree-sitter 1.x binding
+        # (BACK-573), so locate `parent`'s position among its own siblings
+        # by matching start_byte instead of identity/`in`.
+        target_start = _zero_arg(parent, 'start_byte')
+        idx = None
+        for i, sib in enumerate(siblings):
+            if _zero_arg(sib, 'kind') == 'selector' and _zero_arg(sib, 'start_byte') == target_start:
+                idx = i
+                break
+        if idx is None or idx == 0:
+            return None
+
+        def _is_bang_selector(node) -> bool:
+            kids = _children(node)
+            return len(kids) == 1 and _zero_arg(kids[0], 'kind') == '!'
+
+        def _qualifier_identifier(qual_node) -> Optional[str]:
+            for sub in _children(qual_node):
+                if _zero_arg(sub, 'kind') == 'identifier':
+                    return self._get_node_text(sub).strip()
+            return None
+
+        def _qualifier_in(node, depth: int = 0) -> Optional[str]:
+            # A `.foo`/`?.foo` qualifier is USUALLY wrapped in its own
+            # 'selector' node (the common case, siblings of a plain
+            # identifier/this primary at container top level) -- but
+            # `super.foo` puts it as a BARE direct sibling with no
+            # 'selector' wrapper at all (verified live: `super.plainInit()`
+            # has NO 'selector' around its 'unconditional_assignable_
+            # selector'), and any unary-prefixed call (`await
+            # x.foo()`/`await super.foo()`) nests the WHOLE receiver+
+            # qualifier chain one level deeper inside the unary node
+            # (`await_expression`'s own children are `[await, super,
+            # unconditional_assignable_selector]` -- no 'selector' wrapper
+            # there either). Both found via the Dart calls-recall-oracle
+            # measurement (BACK-730): `super.initialize(...)`/`await
+            # super.initialize(...)` (a common override-delegation idiom)
+            # were silently dropped, not just misattributed. Recurses into
+            # a wrapper node's LAST child (bounded depth) to find a nested
+            # qualifier, matching Dart's actual "primary + trailing
+            # selector-like suffixes, sometimes nested one level under a
+            # prefix keyword" shape rather than assuming one fixed depth.
+            if depth > 4:
+                return None
+            kind = _zero_arg(node, 'kind')
+            if kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
+                return _qualifier_identifier(node)
+            if kind == 'selector':
+                kids = _children(node)
+                if len(kids) == 1:
+                    return _qualifier_in(kids[0], depth + 1)
+                return None
+            if kind in ('argument_part', 'arguments', 'identifier', 'this', 'super'):
+                return None
+            kids = _children(node)
+            return _qualifier_in(kids[-1], depth + 1) if kids else None
+
+        j = idx - 1
+        while j >= 0 and _zero_arg(siblings[j], 'kind') == 'selector' and _is_bang_selector(siblings[j]):
+            j -= 1
+
+        if j < 0:
+            return None
+
+        prior = siblings[j]
+        prior_kind = _zero_arg(prior, 'kind')
+
+        if prior_kind == 'selector':
+            prior_kids = _children(prior)
+            if len(prior_kids) == 1 and _zero_arg(prior_kids[0], 'kind') in (
+                'unconditional_assignable_selector', 'conditional_assignable_selector',
+            ):
+                method = _qualifier_identifier(prior_kids[0])
+                if not method:
+                    return None
+                k = j - 1
+                while k >= 0 and _zero_arg(siblings[k], 'kind') == 'selector' and _is_bang_selector(siblings[k]):
+                    k -= 1
+                if k >= 0 and _zero_arg(siblings[k], 'kind') in ('identifier', 'this', 'super'):
+                    receiver = self._get_node_text(siblings[k]).strip()
+                    if receiver:
+                        return f"{receiver}.{method}"
+                return method
+            # Some other selector shape precedes this call (e.g. the call is
+            # invoked on the result of a preceding call, `compute()?.process()`
+            # -- `compute`'s own 'argument_part' selector sits here, not a
+            # property qualifier) -- no clean receiver, structural precedent
+            # (BACK-732) says a bare name is the right fallback, not a miss.
+            return None
+
+        if prior_kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
+            # `super.foo()` -- the qualifier is a BARE sibling, no 'selector'
+            # wrapper (see `_qualifier_in`'s docstring above).
+            method = _qualifier_identifier(prior)
+            if not method:
+                return None
+            k = j - 1
+            while k >= 0 and _zero_arg(siblings[k], 'kind') == 'selector' and _is_bang_selector(siblings[k]):
+                k -= 1
+            if k >= 0 and _zero_arg(siblings[k], 'kind') in ('identifier', 'this', 'super'):
+                receiver = self._get_node_text(siblings[k]).strip()
+                if receiver:
+                    return f"{receiver}.{method}"
+            return method
+
+        if prior_kind in ('identifier', 'this'):
+            text = self._get_node_text(prior).strip()
+            return text or None
+
+        # `await x.foo()` / `await super.foo()` -- the receiver+qualifier
+        # chain is nested one level inside the unary `await_expression`
+        # (or a similar prefix-operator node), not a flat sibling of this
+        # call's own selector at all. No clean receiver reconstruction
+        # attempted here (the base is nested too, not a plain adjacent
+        # sibling) -- bare method name only, same "no receiver available,
+        # bare name still resolves" convention as the cascade/computed-
+        # target cases above.
+        return _qualifier_in(prior)
+
     def _callee_name_generic(self, call_node) -> Optional[str]:
         return self._callee_name_from_node(call_node.child(0))
 
@@ -2313,6 +2753,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._callee_name_ruby_call(call_node)
         if _zero_arg(call_node, 'kind') == 'attribute_call':
             return self._callee_name_gdscript_attribute_call(call_node)
+        if _zero_arg(call_node, 'kind') in ('constructor_invocation', 'const_object_expression'):
+            return self._callee_name_dart_flat_type_call(call_node)
+        if _zero_arg(call_node, 'kind') == 'argument_part':
+            return self._callee_name_dart_argument_part(call_node)
         return self._callee_name_generic(call_node)
 
     def _extract_calls_in_function(self, func_node) -> List[str]:
@@ -2404,7 +2848,40 @@ class TreeSitterAnalyzer(FileAnalyzer):
             if kind in FUNCTION_NODE_TYPES:
                 continue
 
-            for child in reversed(_children(node)):
+            children = _children(node)
+            # BACK-760 (Dart): a nested named local function
+            # (`local_function_declaration > lambda_expression >
+            # function_signature, function_body`) is the ONE shape in this
+            # program where the FUNCTION_NODE_TYPES stop-condition above
+            # doesn't actually stop the walk from seeing the nested
+            # function's body — Dart's function_signature/function_body
+            # pair are disjoint SIBLINGS (see `_function_end_node`'s
+            # docstring), so `continue`-ing at the signature leaves its
+            # paired body as an ordinary, unguarded sibling of `node`'s
+            # OTHER children, which the walk below would otherwise descend
+            # into and double-count: every call inside the nested function
+            # would be credited to BOTH its own scope (via its own
+            # top-level entry) AND every enclosing scope on the path
+            # (unbounded cascading, unlike any other language measured in
+            # this program — confirmed via a direct repro, `nested()`
+            # containing `void inner() { innerCall(); }` originally
+            # reported `innerCall` in both `nested`'s and `inner`'s own
+            # calls list). `_function_end_node` is a no-op (returns the
+            # same node) for every other language's FUNCTION_NODE_TYPES
+            # shape, so this exclusion costs nothing and changes nothing
+            # for them.
+            occluded_bodies = None
+            for sibling in children:
+                if _zero_arg(sibling, 'kind') in FUNCTION_NODE_TYPES:
+                    paired_body = self._function_end_node(sibling)
+                    if paired_body is not sibling:
+                        if occluded_bodies is None:
+                            occluded_bodies = set()
+                        occluded_bodies.add(_zero_arg(paired_body, 'start_byte'))
+
+            for child in reversed(children):
+                if occluded_bodies is not None and _zero_arg(child, 'start_byte') in occluded_bodies:
+                    continue
                 child_kind = child.kind()
                 child_depth = depth + 1 if child_kind in _NESTING_TYPES else depth
                 stack.append((child, kind, child_depth))
