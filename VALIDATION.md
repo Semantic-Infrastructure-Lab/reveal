@@ -325,9 +325,16 @@ ancestor `lerna.json`/`pnpm-workspace.yaml`/`package.json` with a
 `"workspaces"` field, gated so other languages and single-package JS/TS repos
 are unaffected): re-running the full diff with **no root override** now
 reproduces the same **81.21%** (2,347/2,890) automatically, confirming the
-root-inference fix generalizes the manual pin. The residual gap to 100% is
-attributed to out-of-scope resolution gaps (tsconfig `extends` chains,
-`package.json` `exports` map resolution), tracked as **BACK-705**.
+root-inference fix generalizes the manual pin. The residual gap to 100% was
+attributed to two further out-of-scope resolution gaps, tracked as
+**BACK-705**: tsconfig `extends` chains (fixed, chilling-lightning-0723 —
+`_get_tsconfig_aliases` now walks the extends chain, nearest-declared-key
+wins) and `package.json` `exports` map resolution (split off to **BACK-772**,
+not yet attempted — a materially larger, separate mechanism). The
+extends-chain fix has targeted unit-test coverage only; the full nest-corpus
+diff has not been re-run to confirm its real-world recall effect — a future
+session should re-run `ts-recall-oracle` against nest before revising the
+81.21% figure above.
 See the [harness
 README](../internal-docs/planning/dogfood-findings/ts-recall-oracle/README.md#second-corpus-back-669-nest--overfit-guard)
 for the full write-up.
