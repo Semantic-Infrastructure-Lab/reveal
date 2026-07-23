@@ -704,6 +704,119 @@ class TestTsconfigPathsResolution:
         assert e.is_intra_project_import(stmt, src_dir, search_paths=[scan_root]) is False
 
 
+# ─── tsconfig `extends` chain resolution (BACK-705) ────────────────────────
+#
+# A project whose paths/baseUrl live in a shared base config (a common
+# monorepo pattern -- "extends": "./tsconfig.base.json") was previously
+# treated as declaring none at all: _get_tsconfig_aliases only ever read
+# the ONE file it was pointed at, never chasing `extends`. Found on the
+# `nest` second-corpus overfit-guard measurement (BACK-669 note #10):
+# residual gap after BACK-694/BACK-698, 81.21% recall.
+
+class TestTsconfigExtendsChain:
+
+    def _stmt(self, module_name: str, base_path: Path) -> ImportStatement:
+        return ImportStatement(
+            file_path=base_path / 'main.ts', line_number=1, module_name=module_name,
+            imported_names=[], is_relative=module_name.startswith('.'),
+            import_type='es6_import')
+
+    def test_paths_inherited_from_extended_base_config(self, tmp_path):
+        """Leaf tsconfig.json declares no paths/baseUrl of its own -- both
+        must be inherited from the base config it extends."""
+        (tmp_path / 'tsconfig.base.json').write_text(
+            '{"compilerOptions": {"baseUrl": ".", "paths": {"@app/*": ["src/*"]}}}')
+        (tmp_path / 'tsconfig.json').write_text(
+            '{"extends": "./tsconfig.base.json", "compilerOptions": {"target": "es2020"}}')
+        target = tmp_path / 'src' / 'util.ts'
+        target.parent.mkdir(parents=True)
+        target.write_text('export const helper = 1;')
+        src_dir = tmp_path / 'src'
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@app/util', src_dir)
+        assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) == target.resolve()
+        assert e.is_intra_project_import(stmt, src_dir, search_paths=[tmp_path]) is True
+
+    def test_extends_without_json_suffix_resolves(self, tmp_path):
+        """TS convention: an extends entry with no .json suffix gets one
+        appended ("./tsconfig.base" -> tsconfig.base.json)."""
+        (tmp_path / 'tsconfig.base.json').write_text(
+            '{"compilerOptions": {"baseUrl": ".", "paths": {"@app/*": ["src/*"]}}}')
+        (tmp_path / 'tsconfig.json').write_text('{"extends": "./tsconfig.base"}')
+        target = tmp_path / 'src' / 'util.ts'
+        target.parent.mkdir(parents=True)
+        target.write_text('export const helper = 1;')
+        src_dir = tmp_path / 'src'
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@app/util', src_dir)
+        assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) == target.resolve()
+
+    def test_leaf_paths_override_base_entirely(self, tmp_path):
+        """A leaf config's OWN paths REPLACE the base's outright (TS's own
+        per-key override semantics), rather than merging with it."""
+        (tmp_path / 'tsconfig.base.json').write_text(
+            '{"compilerOptions": {"baseUrl": ".", "paths": {"@base/*": ["base_src/*"]}}}')
+        (tmp_path / 'tsconfig.json').write_text(
+            '{"extends": "./tsconfig.base.json", '
+            '"compilerOptions": {"baseUrl": ".", "paths": {"@app/*": ["src/*"]}}}')
+        src_dir = tmp_path / 'src'
+        src_dir.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        # The base-only alias must NOT be visible once the leaf declares its own.
+        base_stmt = self._stmt('@base/x', src_dir)
+        assert e.is_intra_project_import(base_stmt, src_dir, search_paths=[tmp_path]) is False
+
+    def test_multi_level_extends_chain(self, tmp_path):
+        """Leaf -> mid -> root, three files deep; paths live on the root."""
+        (tmp_path / 'tsconfig.root.json').write_text(
+            '{"compilerOptions": {"baseUrl": ".", "paths": {"@app/*": ["src/*"]}}}')
+        (tmp_path / 'tsconfig.mid.json').write_text(
+            '{"extends": "./tsconfig.root.json"}')
+        (tmp_path / 'tsconfig.json').write_text(
+            '{"extends": "./tsconfig.mid.json"}')
+        target = tmp_path / 'src' / 'util.ts'
+        target.parent.mkdir(parents=True)
+        target.write_text('export const helper = 1;')
+        src_dir = tmp_path / 'src'
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@app/util', src_dir)
+        assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) == target.resolve()
+
+    def test_extends_cycle_does_not_hang(self, tmp_path):
+        """Two configs extending each other must not infinite-loop."""
+        (tmp_path / 'a.json').write_text('{"extends": "./b.json"}')
+        (tmp_path / 'b.json').write_text('{"extends": "./a.json"}')
+        (tmp_path / 'tsconfig.json').write_text('{"extends": "./a.json"}')
+        src_dir = tmp_path / 'src'
+        src_dir.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@app/util', src_dir)
+        # No paths declared anywhere in the cycle -- must decline cleanly,
+        # not hang or raise.
+        assert e.is_intra_project_import(stmt, src_dir, search_paths=[tmp_path]) is False
+
+    def test_package_name_extends_is_ignored_not_crashed(self, tmp_path):
+        """A node_modules package-name extends (no node_modules resolution
+        in reveal's buildless design) must be skipped cleanly, not crash --
+        the leaf config's own paths (if any) still apply."""
+        (tmp_path / 'tsconfig.json').write_text(
+            '{"extends": "@tsconfig/node18/tsconfig.json", '
+            '"compilerOptions": {"baseUrl": ".", "paths": {"@app/*": ["src/*"]}}}')
+        target = tmp_path / 'src' / 'util.ts'
+        target.parent.mkdir(parents=True)
+        target.write_text('export const helper = 1;')
+        src_dir = tmp_path / 'src'
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@app/util', src_dir)
+        assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) == target.resolve()
+
+
 # ─── _resolve_relative_js ────────────────────────────────────────────────────
 
 class TestResolveRelativeJs:

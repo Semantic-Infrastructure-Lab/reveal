@@ -99,29 +99,91 @@ def _find_tsconfig(start_dir: Path, stop_at: Optional[Path]) -> Optional[Path]:
     return result
 
 
+def _next_extends_path(tsconfig_path: Path, data: dict) -> Optional[Path]:
+    """The next tsconfig in an `extends` chain, or None.
+
+    Only relative/absolute-path `extends` entries are chased (`"./base"`,
+    `"../shared/tsconfig.json"`) -- a package-name extends (e.g.
+    `"@tsconfig/node18/tsconfig.json"`) would need node_modules resolution,
+    out of scope for reveal's buildless design (same boundary this file's
+    other resolvers already draw). TS 5.0+'s array form (`"extends":
+    ["./a.json", "./b.json"]`, later entries overriding earlier) is only
+    partially honored: the first resolvable relative entry is chased, not
+    every entry merged -- the dominant real-world shape is a single string
+    extends, and multi-base merging would need a materially different data
+    structure than this single-chain walk for marginal additional recall.
+    A path with no `.json` suffix gets one appended (TS's own convention).
+    """
+    ext = data.get('extends')
+    if ext is None:
+        return None
+    entries = ext if isinstance(ext, list) else [ext]
+    for entry in entries:
+        if not isinstance(entry, str) or not (entry.startswith('.') or entry.startswith('/')):
+            continue
+        cand_str = str(tsconfig_path.parent / entry)
+        if not cand_str.endswith('.json'):
+            cand_str += '.json'
+        cand = Path(cand_str)
+        if cand.is_file():
+            return cand.resolve()
+    return None
+
+
+def _load_tsconfig_chain(tsconfig_path: Path) -> List[Tuple[Path, dict]]:
+    """[(path, raw_data), ...] for tsconfig_path and every ancestor reached
+    by walking `extends`, nearest (tsconfig_path itself) first. Cycle-safe:
+    stops the moment a path repeats rather than looping forever on a
+    self-referencing or mutually-extending pair."""
+    chain: List[Tuple[Path, dict]] = []
+    seen: Set[Path] = set()
+    current: Optional[Path] = tsconfig_path
+    while current is not None and current not in seen:
+        seen.add(current)
+        data = _load_tsconfig_raw(current)
+        chain.append((current, data))
+        current = _next_extends_path(current, data)
+    return chain
+
+
 def _get_tsconfig_aliases(tsconfig_path: Path) -> Tuple[Optional[Path], Dict[str, List[str]]]:
-    """(baseUrl, paths) declared directly in this tsconfig.json. Does NOT
-    chase `extends` -- BACK-694's fix scope didn't require it for the
-    corpora exercised (nest's tsconfig.json declares paths/baseUrl
-    directly). A project whose *only* paths/baseUrl live in a base config
-    reached via `extends` will still miss those aliases; a future BACK
-    should walk the extends chain if that turns out to matter in practice."""
+    """(baseUrl, paths) for tsconfig_path, chasing `extends` (BACK-705) so a
+    project whose paths/baseUrl live in a shared base config -- a common
+    monorepo pattern, `"extends": "./tsconfig.base.json"` -- isn't silently
+    treated as declaring none. The nearest config in the chain that
+    declares a given key wins: matches TS's own per-key override semantics,
+    where a leaf config's own `paths` REPLACES the base's outright rather
+    than merging with it key-by-key."""
     key = str(tsconfig_path)
     if key in _TSCONFIG_ALIAS_CACHE:
         return _TSCONFIG_ALIAS_CACHE[key]
-    data = _load_tsconfig_raw(tsconfig_path)
-    co = data.get('compilerOptions')
-    co = co if isinstance(co, dict) else {}
-    paths = co.get('paths')
-    paths = paths if isinstance(paths, dict) else {}
-    base_url_raw = co.get('baseUrl')
+
     base_url: Optional[Path] = None
-    if isinstance(base_url_raw, str):
-        base_url = (tsconfig_path.parent / base_url_raw).resolve()
-    elif paths:
-        # `paths` without an explicit `baseUrl` resolves relative to the
-        # tsconfig.json's own directory (TS default).
-        base_url = tsconfig_path.parent.resolve()
+    paths: Dict[str, List[str]] = {}
+    paths_owner: Optional[Path] = None
+    have_base_url = False
+    have_paths = False
+    for cfg_path, data in _load_tsconfig_chain(tsconfig_path):
+        co = data.get('compilerOptions')
+        co = co if isinstance(co, dict) else {}
+        if not have_paths:
+            cfg_paths = co.get('paths')
+            if isinstance(cfg_paths, dict) and cfg_paths:
+                paths = cfg_paths
+                paths_owner = cfg_path
+                have_paths = True
+        if not have_base_url:
+            base_url_raw = co.get('baseUrl')
+            if isinstance(base_url_raw, str):
+                base_url = (cfg_path.parent / base_url_raw).resolve()
+                have_base_url = True
+
+    if base_url is None and paths:
+        # `paths` without an explicit `baseUrl` anywhere in the chain
+        # resolves relative to the tsconfig.json that DECLARED `paths`
+        # (TS default), not necessarily the leaf config resolution started
+        # from.
+        base_url = (paths_owner or tsconfig_path).parent.resolve()
     result = (base_url, paths)
     _TSCONFIG_ALIAS_CACHE[key] = result
     return result
