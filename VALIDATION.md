@@ -330,11 +330,12 @@ attributed to two further out-of-scope resolution gaps, tracked as
 **BACK-705**: tsconfig `extends` chains (fixed, chilling-lightning-0723 —
 `_get_tsconfig_aliases` now walks the extends chain, nearest-declared-key
 wins) and `package.json` `exports` map resolution (split off to **BACK-772**,
-not yet attempted — a materially larger, separate mechanism). The
-extends-chain fix has targeted unit-test coverage only; the full nest-corpus
-diff has not been re-run to confirm its real-world recall effect — a future
-session should re-run `ts-recall-oracle` against nest before revising the
-81.21% figure above.
+fixed stormy-mistral-0723 — workspace-member discovery + subpath/wildcard/
+conditional exports resolution as a fallback after tsconfig fails). Both
+fixes have targeted unit-test coverage only; the full nest-corpus diff has
+not been re-run to confirm their combined real-world recall effect — a
+future session should re-run `ts-recall-oracle` against nest before revising
+the 81.21% figure above.
 See the [harness
 README](../internal-docs/planning/dogfood-findings/ts-recall-oracle/README.md#second-corpus-back-669-nest--overfit-guard)
 for the full write-up.

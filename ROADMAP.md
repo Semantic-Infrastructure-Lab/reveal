@@ -140,8 +140,9 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   82.5%→92.9%, Swift's original `http`-only sample deepened to
   43.3%→100.0%, the two narrow-depth gaps, both now closed). Every baseline
   loop found a real bug except Zig's and C's (both clean 100% on first
-  measurement); every found bug is fixed, and four documented residuals
-  remain tracked (BACK-772, BACK-681, BACK-704 residual, BACK-703). **The
+  measurement); every found bug is fixed, and three documented residuals
+  remain tracked (BACK-681, BACK-704 residual, BACK-703) — BACK-772
+  (package.json exports-map resolution) fixed stormy-mistral-0723. **The
   single-corpus overfit-guard sweep is complete** — BACK-669 for the
   original eleven languages, and BACK-708 with children BACK-709–715 for C,
   C++, Lua, Dart, GDScript, Zig, and TSX/plain-JS (closed
@@ -160,11 +161,12 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   sequenced first:
 
   1. **Close the tracked import-recall residuals, worst first:**
-     TypeScript/nest 81.21% (tsconfig-extends-chain resolution fixed
-     chilling-lightning-0723, not yet re-measured against nest; the
-     package.json exports-map half split off as **BACK-772**, not yet
-     attempted — still the lowest number in VALIDATION.md, on a flagship
-     language, with real headroom), PHP/osCommerce 74.65% (BACK-681),
+     TypeScript/nest 81.21% (both known resolution gaps now fixed —
+     tsconfig-extends chains chilling-lightning-0723, package.json
+     exports-map stormy-mistral-0723 — but neither yet re-measured against
+     nest; still the lowest number in VALIDATION.md, on a flagship
+     language, with real headroom pending that re-measurement),
+     PHP/osCommerce 74.65% (BACK-681),
      C#/Newtonsoft.Json 99.36% (BACK-703). The latter two are documented as
      deliberately out of scope for a generic resolver; revisit only if a
      corpus shows the shape is commoner than measured.
