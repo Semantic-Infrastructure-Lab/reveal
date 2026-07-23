@@ -33,7 +33,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Language | Import recall | Side-effect recall | Call-graph recall | Status |
 |---|---|---|---|---|
 | Python | ✅ 100% (Home Assistant, celery¹⁰) | ✅ 83.5% (Home Assistant) | ✅ 99.96%→100%³⁴ (Home Assistant, 3 query directions) | **Measured** |
-| TypeScript | ✅ 100% (VS Code), ⚠️ 68.48%→81.21% (nest¹⁶, BACK-694+BACK-698 both fixed, residual gap open) | ✅ 91.3%¹ (VS Code) | ✅ 100%³⁵ (VS Code) | **Measured** |
+| TypeScript | ✅ 100% (VS Code), ⚠️ 68.48%→81.21% (nest¹⁶, BACK-694/698/705/772 all fixed, held at 81.21% — new residual BACK-773) | ✅ 91.3%¹ (VS Code) | ✅ 100%³⁵ (VS Code) | **Measured** |
 | Java | ✅ 100% (Elasticsearch, guava¹¹) | ✅ 97.5% (Elasticsearch) | ✅ 9.99%→100%³⁸ (Elasticsearch, BACK-734 fixed) | **Measured** |
 | Go | ✅ 100% (Kubernetes, client_golang¹³) | ✅ 96.3% (client-go) | ✅ 100%³⁶ (Go compiler internals) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | ✅ 22.05%→100%³⁹ (Discourse, BACK-735 fixed) | **Measured** |
@@ -331,11 +331,31 @@ attributed to two further out-of-scope resolution gaps, tracked as
 `_get_tsconfig_aliases` now walks the extends chain, nearest-declared-key
 wins) and `package.json` `exports` map resolution (split off to **BACK-772**,
 fixed stormy-mistral-0723 — workspace-member discovery + subpath/wildcard/
-conditional exports resolution as a fallback after tsconfig fails). Both
-fixes have targeted unit-test coverage only; the full nest-corpus diff has
-not been re-run to confirm their combined real-world recall effect — a
-future session should re-run `ts-recall-oracle` against nest before revising
-the 81.21% figure above.
+conditional exports resolution as a fallback after tsconfig fails).
+
+Re-ran the full nest-corpus diff with both fixes live
+(exploding-parsec-0723): **recall held at exactly 81.21% (2,347/2,890)** —
+not because the fixes are ineffective, but because of two separate
+findings that surfaced only by digging into why the number didn't move:
+
+- BACK-772 *is* correctly resolving new edges (~90, verified by hand
+  against real import statements) from `*.spec.ts` test files using
+  package subpath specifiers — but `ts_oracle_nest.json` never captured
+  test-file imports to begin with (`build_oracle.js` walks each package's
+  *build-scoped* tsconfig, which `exclude`s `test/**/*`/`*.spec.ts`), so
+  these correct new resolutions score as false positives against an
+  incomplete oracle rather than as recall gains. Tracked as **BACK-774**
+  (oracle methodology gap, not a `depends://` bug).
+- The real driver of the remaining 543 missed edges: several nest
+  packages split their TS config into `tsconfig.json` (no
+  `compilerOptions.paths`) and a sibling `tsconfig.build.json` (has the
+  real `@nestjs/*` path map), linked via TypeScript's project
+  `"references"` field rather than `"extends"`. `_find_tsconfig` only
+  ever looks for a file literally named `tsconfig.json` and only chases
+  `extends`, so the real path map is invisible for any importer whose
+  package uses this split-config pattern — confirmed directly on
+  `packages/core/router/router-execution-context.ts`. Tracked as
+  **BACK-773**, a real gap distinct from BACK-694/698/772.
 See the [harness
 README](../internal-docs/planning/dogfood-findings/ts-recall-oracle/README.md#second-corpus-back-669-nest--overfit-guard)
 for the full write-up.
@@ -1439,7 +1459,7 @@ ask first:
 
 | Language / corpus | Recall | Missing | Task | Why it is still open |
 |---|---|---|---|---|
-| TypeScript / nest | **81.21%** | 543 edges | **BACK-705** | `tsconfig` `extends` chains and `package.json` `exports` map resolution — out of scope for the BACK-694/698 fixes that took it from 68.48%. The lowest number in this document, on a flagship language. |
+| TypeScript / nest | **81.21%** | 543 edges | **BACK-773** | `tsconfig extends`/`exports` map (BACK-705/772) both fixed and re-measured (exploding-parsec-0723) — recall held exactly at 81.21%, root-caused to a *different* gap: path aliases declared in a sibling `tsconfig.build.json` linked via TS project `"references"` (not `"extends"`) are invisible to `_find_tsconfig`. Separately, the oracle itself undercounts test-file edges (**BACK-774**), masking part of BACK-772's real effect. The lowest number in this document, on a flagship language. |
 | PHP / osCommerce | **74.65%** | 73 edges | **BACK-681** | `chdir()`/CWD-dependent bare-literal `require`s in legacy scripts. Deliberately not chased: a generic resolver would need symbolic `chdir` tracking, and an ancestor-directory-walk heuristic risks false edges elsewhere. |
 | Swift / swift-collections | **98.42%** | 234 edges (one target) | **BACK-704** (residual) | `_RopeModule` is declared via a programmatically-built `targets:` array; resolving it would require evaluating arbitrary `Package.swift` code, which the buildless design will not do. Now an honest reduced-confidence decline rather than a silent miss. |
 | C# / Newtonsoft.Json | **99.36%** | 308 edges (one file) | **BACK-703** | tree-sitter-c-sharp cannot parse a `#if`/`#else` pair whose branches declare *different* headers over one shared body; the file's namespace body collapses into an `ERROR` node. Honest-decline caveated. 4 of 945 files affected. |
