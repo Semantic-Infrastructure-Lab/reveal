@@ -43,7 +43,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | PHP | ✅ 100% (WordPress), 74.65% (osCommerce¹²) | ✅ 97.5% (WordPress) | ✅ 98.87%→100%⁴⁰ (WordPress, BACK-736 fixed) | **Measured** |
 | Swift | ✅ 100% of declared targets resolved (Kickstarter iOS — module-index coverage, not an edge-recall ratio), 98.42%¹⁸ (swift-collections, 14,824 edges, BACK-704 fixed) | ✅ 43.3% → **100.0%** (Kickstarter iOS, six-category sweep, BACK-728) | ✅ 97.62%→99.92%⁴³ (8/bucket); 99.79%⁴³ (20/bucket, Signal-iOS, BACK-742 open — two grammar bugs, not fixable in reveal) | **Measured** |
 | Scala | ✅ 100% (GitBucket — n=1 qualifying edge), 100%¹⁵ (cats-effect, 24 edges) | ✅ 66.3%³⁰ (GitBucket, `db`/Slick declined) | Not measured | **Measured** |
-| C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | Not measured | **Measured** |
+| C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | ✅ 95.73%⁴⁴ (assimp) | **Measured** |
 | C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | Not measured | **Measured** |
 | Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | Not measured | **Measured** |
 | Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | ✅ 84.9%³¹ (AppFlowy, bare `File`/`Directory` declined) | Not measured | **Measured** |
@@ -68,8 +68,8 @@ is a claim we have not yet checked, **not** a claim it is broken.
    recall measured also has a side-effect measurement (BACK-718), and every
    one of those now has the full six-category sweep (Kotlin deepened in
    BACK-727, Swift deepened in BACK-728 — the last narrow entry). Call-graph
-   recall (`calls://`) is measured for 10 of the 19 (Python, TypeScript, Go,
-   Rust, Java, Ruby, PHP, C#, Kotlin, Swift — BACK-730); the other 9 are not yet measured, not known-broken.
+   recall (`calls://`) is measured for 11 of the 19 (Python, TypeScript, Go,
+   Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++ — BACK-730); the other 8 are not yet measured, not known-broken.
    `surface`, `contracts`, and `patches://`/testability have **no
    ground-truth validation on any language** — see [Scope](#scope).
 3. **Sample size still varies.** Java's 97.5% includes `db` and `http`
@@ -993,6 +993,31 @@ grammar-pack ceiling as BACK-738. Filed **BACK-742**, open. See
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
 ("Tenth language: Swift" section) for the full write-up.
 
+⁴⁴ C++ `calls://` pilot (BACK-730), assimp's `code/` subdir (218 `.cpp`/
+~220 `.h`/`.hpp`, 400/440 files parsed clean), reverse-lookup only. Pre-
+flight found no new `CALL_NODE_TYPES` gap (a prior session had already
+fixed `new_expression`); the one finding, member-function-pointer
+declarations without `typedef` misparsing as nested `call_expression`
+(an upstream `tree-sitter-cpp` grammar ambiguity), was filed as **BACK-745**,
+open, not fixable in reveal. Unusually, no `calls://` bugs were found or
+fixed this session — all corrections were on the *oracle* side (built
+against libclang, which semantically resolves straight through typedefs
+and macro expansions to targets a syntax-only tool can never match): fixed
+member-initializer-list calls being counted as caller scope, typedef/
+macro over-resolution of callee names (both fixed via one general
+correction — derive the name from the cursor's raw source-extent text
+instead of any semantic API), direct-initialization variable declarations
+(BACK-744's own ambiguity) being misread as calls, and whole-method codegen
+macros collapsing every nested extent to the macro-invocation site. First
+measurement: **95.28%** recall (8/bucket) → **95.73%** (3,277/3,423 edges,
+20/bucket), 632 false positives — cross-checked and found to be mostly
+oracle-incompleteness (the ~40 skipped files), not `calls://` bugs. Two
+narrow residual misses left undiagnosed (~1% of sampled edges, a further
+partial-macro-collapse variant and one unexplained case) — not filed, no
+evidence either is a real `calls://` gap. See
+[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+("Eleventh language: C++" section) for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -1258,10 +1283,12 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 | Kotlin | Tivi (629 `.kt` files) | reverse | 99.69% → **100.00%** (8/bucket); **99.79%** (20/bucket) | 0 | An oracle-side design inconsistency (not a `calls://` bug) explained the first 2 misses: the oracle attributed primary-constructor parameter-default calls to the class name, which `calls://` never does for any language (only function/method bodies are caller scopes) — fixed in the oracle to match precedent. The remaining 20/bucket residual is the first gap in this program traced to an upstream **grammar** bug rather than a reveal extraction bug: `tree-sitter-kotlin` cannot parse `@Annotation` directly preceding a function type (`@Composable () -> Unit`, ubiquitous in Jetpack Compose code) — the `()` is consumed as the annotation's own argument list, producing an `ERROR` node that drops the entire enclosing function from structure extraction. Not fixable in reveal's Python layer (vendored grammar binary); the grammar-pack version that might fix it is blocked by the already-tracked BACK-573/BACK-620 core-API migration (deferred). Filed **BACK-738**, open |
 | Swift | Signal-iOS's `SignalServiceKit` module (1,190 files) | reverse | 97.62% → **99.92%** (8/bucket); **99.79%** (20/bucket) | 0 | Two real, distinct `calls://` bugs found and fixed: (1) `!isRunning(x)` (negated predicate call) parses the whole `!isRunning` as one `prefix_expression` callee node — the leading `!` survived into the index key, never matching a bare `?target=isRunning` lookup; (2) operator overloads (`static func -(left: CGSize, right: CGSize)`) name themselves with a literal operator-symbol token whose tree-sitter KIND *is* the operator text, invisible to every `_name_via_*` strategy — every operator overload was entirely absent from `--outline`/`get_structure()`. Both fixed. The residual gap is **two** distinct upstream `tree-sitter-swift` grammar bugs, not reveal bugs: `return <name>.member` inside a `case let .x(name):` switch pattern produces a parse `ERROR` that cascades to drop most/all of the *rest of the file* from structure extraction (same "whole function vanishes" symptom shape as Kotlin's BACK-738); and `A * B(args)`/`A - B(args)` (a multiplicative/additive operator immediately before a call) misparses the call suffix onto the *whole binary expression*, corrupting the extracted callee text. Neither is fixable in reveal's Python layer — blocked on the same BACK-573/BACK-620 grammar-pack ceiling as BACK-738. Filed **BACK-742**, open |
 
+| C++ | assimp `code/` subdir (218 `.cpp`/~220 `.h`/`.hpp`, 400/440 files parsed clean) | reverse | 95.28% (8/bucket); **95.73%** (20/bucket) | 632 (largely oracle-incompleteness, not `calls://` bugs — cross-checked `push_back`: `calls://` found 441 real project-wide callers vs. the oracle's 405, the gap fully explained by the oracle's 91% file coverage) | No new `calls://` bugs found — unusually, all corrections needed were on the *oracle* side: libclang (the ground-truth tool) semantically resolves straight through typedefs (`aiVector3D` → `aiVector3t`) and macro expansions (`ai_assert(x)` → `aiAssertViolation(...)`) to targets a syntax-only tool like `calls://` can never match, plus mis-modeling constructor member-initializer-list calls, direct-initialization declarations (BACK-744's own ambiguity), and whole-method codegen macros as real call sites. All fixed oracle-side once traced. Two narrow residual misses (a partial-function-body codegen macro, `ASSIMP_END_EXCEPTION_REGION`; one unexplained `operator<<`-chain artifact, `mOutput`) left undiagnosed, combined ~1% of sampled edges — not filed as `calls://` bugs, no evidence either is a real gap rather than oracle noise |
+
 Full methodology, per-corpus commit/snapshot, and the harness scripts
 (`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, Kotlin
-`KotlinOracle.kt`, Swift `swift-oracle/main.swift`, `diff_*.py`) for all ten
-languages:
+`KotlinOracle.kt`, Swift `swift-oracle/main.swift`, C++ via libclang, `diff_*.py`)
+for all eleven languages:
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
 Not yet measured: Scala, C++, C, Lua, Dart,
@@ -1323,12 +1350,13 @@ program), **side-effect/boundary classification recall** (`--sideeffects` /
 `--boundary`), and **cross-file call-graph recall** (`calls://` — BACK-730,
 the same silent-wrong-answer risk as BACK-542: a whole-project graph query
 where a false negative reads as a confident, checked answer). `calls://` is
-measured for 8 of the 19 languages so far (Python across three query
-directions, TypeScript, Go, Rust, Java, Ruby, PHP, C# — all now clean or
-fixed-and-reverified, see
+measured for 11 of the 19 languages so far (Python across three query
+directions, TypeScript, Go, Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++ —
+all now clean or fixed-and-reverified, see
 [Cross-File Call-Graph Recall](#cross-file-call-graph-recall)); the
-remaining 11 are open validation work, tracked the same way as any
-not-yet-measured import/side-effect language. It does not yet cover recall
+remaining 8 (Scala, C, Lua, Dart, GDScript, Zig, TSX/plain JS) are open
+validation work, tracked the same way as any not-yet-measured import/
+side-effect language. It does not yet cover recall
 for `surface` or `contracts` (BACK-719). The languages marked *not measured*
 / *spot-checked* in the status table above are not yet through a full oracle
 loop — all tracked as open validation work. See `ROADMAP.md` for the forward
