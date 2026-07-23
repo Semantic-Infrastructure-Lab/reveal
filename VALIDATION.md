@@ -63,12 +63,12 @@ is a claim we have not yet checked, **not** a claim it is broken.
    the easy cases, but a sample is not a census. **Always read the per-language
    Sample column in the detailed results tables below before quoting a number.**
 2. **This table covers three signals, not all of reveal's DD output.**
-   Import/dependency recall is measured on all 19 languages listed, and
+   Import/dependency recall is measured on all 18 languages listed, and
    side-effect recall breadth is now complete — every language with import
    recall measured also has a side-effect measurement (BACK-718), and every
    one of those now has the full six-category sweep (Kotlin deepened in
    BACK-727, Swift deepened in BACK-728 — the last narrow entry). Call-graph
-   recall (`calls://`) is now measured for all 19 (Python, TypeScript, Go,
+   recall (`calls://`) is now measured for all 18 (Python, TypeScript, Go,
    Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX, Zig, C, Lua,
    GDScript, Dart — BACK-730, closed).
    `surface`, `contracts`, and `patches://`/testability have **no
@@ -1271,7 +1271,7 @@ draft used the unstripped dotted type text as ground truth, manufacturing
 name; fixed oracle-side by taking the final dotted segment. See
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
 ("Eighteenth language: Dart" section) for the full write-up. This was the
-LAST of the 19 `VALIDATION.md`-tracked languages — the full calls://
+LAST of the 18 `VALIDATION.md`-tracked languages — the full calls://
 recall sweep BACK-730 opened is now complete.
 
 ## Import/Dependency Recall
@@ -1565,7 +1565,7 @@ for Lua via `luaparse`, `build_oracle_gdscript.js` for GDScript via the npm
 via `package:analyzer`, `diff_*.py`) for all eighteen languages:
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
-All nineteen `VALIDATION.md`-tracked languages are now measured for
+All eighteen `VALIDATION.md`-tracked languages are now measured for
 cross-file call-graph recall. Import/dependency and side-effect recall
 remain the authority for full per-language coverage status — see those
 sections' own tables; `_bare_callee_name`
@@ -1624,7 +1624,7 @@ program), **side-effect/boundary classification recall** (`--sideeffects` /
 `--boundary`), and **cross-file call-graph recall** (`calls://` — BACK-730,
 the same silent-wrong-answer risk as BACK-542: a whole-project graph query
 where a false negative reads as a confident, checked answer). `calls://` is now
-measured for all 19 languages (Python across three query directions,
+measured for all 18 languages (Python across three query directions,
 TypeScript, Go, Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX,
 Zig, C, Lua, GDScript, and Dart — the eighteenth and final language, see
 [Cross-File Call-Graph Recall](#cross-file-call-graph-recall)) — all now
@@ -1632,8 +1632,5 @@ clean or fixed-and-reverified, save a handful of documented,
 upstream-grammar-level residuals (Kotlin's BACK-738, Swift's BACK-742, C++'s
 BACK-745, C's BACK-756, and Dart's BACK-768), none fixable in reveal's Python
 extraction layer. This closes the full calls:// recall sweep BACK-730 opened.
-It does not yet cover recall
-for `surface` or `contracts` (BACK-719). The languages marked *not measured*
-/ *spot-checked* in the status table above are not yet through a full oracle
-loop — all tracked as open validation work. See `ROADMAP.md` for the forward
-plan.
+It does not yet cover recall for `surface` or `contracts` (BACK-719) — see
+`ROADMAP.md` for the forward plan.
