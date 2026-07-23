@@ -375,6 +375,25 @@ def _extract_gdscript_attribute_calls(children: List[Any], get_text: Callable) -
     return results
 
 
+def _is_cpp_member_function_pointer_misparse(call_node: Any) -> bool:
+    """True if `call_node` is actually a member-function-pointer
+    declaration/assignment misparsed as a call (BACK-745).
+
+    Mirrors treesitter.py:TreeSitterAnalyzer._is_cpp_member_function_pointer_
+    misparse exactly -- see that method's docstring for the full shape.
+    """
+    args = call_node.child_by_field_name('arguments')
+    if args is None:
+        return False
+    stack = _children(args)
+    while stack:
+        n = stack.pop()
+        if _zero_arg(n, 'kind') == 'pointer_type_declarator':
+            return True
+        stack.extend(_children(n))
+    return False
+
+
 def _extract_callee(
     call_node: Any,
     get_text: Callable,
@@ -382,6 +401,17 @@ def _extract_callee(
 ) -> Optional[str]:
     """Extract callee name from a call expression node."""
     if not call_node.child_count():
+        return None
+
+    # C++ member-function-pointer declaration misparse (BACK-745): mirrors
+    # treesitter.py:_is_cpp_member_function_pointer_misparse's identical
+    # check on the calls:// side. See that method's docstring for the full
+    # shape -- `void (Base::*mfp)() = &Base::plain;` parses as nested
+    # call_expression nodes with `Base::*mfp` (a declarator, never a valid
+    # call argument) inside the inner call's argument list. No language gate
+    # needed: 'pointer_type_declarator' is a C/C++-only tree-sitter node
+    # kind, so this is a no-op scan for every other language.
+    if _zero_arg(call_node, 'kind') == 'call_expression' and _is_cpp_member_function_pointer_misparse(call_node):
         return None
 
     # PHP: $obj->method(args) — emit "<receiver>-><name>" so taxonomy patterns

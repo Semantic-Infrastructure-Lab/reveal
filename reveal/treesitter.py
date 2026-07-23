@@ -2347,6 +2347,38 @@ class TreeSitterAnalyzer(FileAnalyzer):
         text = self._get_node_text(type_node).strip()
         return f"new {text}" if text else None
 
+    def _is_cpp_member_function_pointer_misparse(self, call_node) -> bool:
+        """True if `call_node` is actually a member-function-pointer
+        declaration/assignment misparsed as a call (BACK-745).
+
+        `void (Base::*mfp)() = &Base::plain;` (a pointer-to-member-function
+        variable, no typedef) has no dedicated node shape in tree-sitter-cpp
+        -- it parses as NESTED call_expression nodes instead:
+        `call_expression(call_expression(primitive_type 'void',
+        argument_list('Base::*mfp')), argument_list())`. The inner call's
+        'arguments' field holds `qualified_identifier(Base, ::,
+        pointer_type_declarator(*, mfp))` -- `Base::*mfp` is a declarator,
+        not a valid call-argument expression, so a `pointer_type_declarator`
+        anywhere in a call's argument list is a reliable, narrow signal that
+        this is the mfp-declaration misparse rather than a real call (no
+        legitimate C++ call can have a bare pointer-to-member declarator as
+        an argument). Confirmed live via tree_sitter_language_pack: without
+        this check, the inner call's generic callee fallback returned the
+        primitive type keyword itself ("void") as a garbage callee, and
+        (independently, BACK-732) the outer call's callee-is-a-call fallback
+        returned the inner call's raw, un-normalized source text.
+        """
+        args = call_node.child_by_field_name('arguments')
+        if args is None:
+            return False
+        stack = _children(args)
+        while stack:
+            n = stack.pop()
+            if _zero_arg(n, 'kind') == 'pointer_type_declarator':
+                return True
+            stack.extend(_children(n))
+        return False
+
     def _callee_name_cpp_direct_init(self, call_node) -> Optional[str]:
         """C++ direct-initialization: `ClassName obj(args);`,
         `std::vector<int> v(10);` — `init_declarator` with a bare
@@ -2848,6 +2880,12 @@ class TreeSitterAnalyzer(FileAnalyzer):
                              BACK-734-shaped)
         """
         if not call_node.child_count():
+            return None
+        if (
+            _zero_arg(call_node, 'kind') == 'call_expression'
+            and self.language == 'cpp'
+            and self._is_cpp_member_function_pointer_misparse(call_node)
+        ):
             return None
         if call_node.kind() == 'member_call_expression':
             return self._callee_name_php_method(call_node)

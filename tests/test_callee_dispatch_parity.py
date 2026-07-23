@@ -314,6 +314,38 @@ class TestCalleeDispatchBehavioralParity(unittest.TestCase):
         self.assertIn("vector<int>", nav)
         self.assertIn("vector<int>", ts_calls)
 
+    def test_cpp_member_function_pointer_declaration_not_a_call(self):
+        # BACK-745: `void (Base::*mfp)() = &Base::plain;` (a pointer-to-
+        # member-function variable, no typedef) has no dedicated node shape
+        # in tree-sitter-cpp -- it parses as NESTED call_expression nodes,
+        # with `Base::*mfp` (a declarator, never a valid call argument)
+        # inside the inner call's argument list. Pre-fix, the inner call's
+        # generic callee fallback returned the primitive-type keyword itself
+        # ("void") as a garbage callee. A real call in the same function
+        # must still be extracted normally.
+        from reveal.analyzers.cpp import CppAnalyzer
+
+        code = """
+        class Base {
+        public:
+            void plain() {}
+        };
+
+        void real_call();
+
+        void run() {
+            void (Base::*mfp)() = &Base::plain;
+            real_call();
+            (void)mfp;
+        }
+        """
+        nav = _nav_calls_callees("cpp", code)
+        ts_calls = _treesitter_callees(CppAnalyzer, ".cpp", code)
+        self.assertIn("real_call", nav)
+        self.assertIn("real_call", ts_calls)
+        self.assertNotIn("void", nav)
+        self.assertNotIn("void", ts_calls)
+
     def test_python_iife_chained_call_no_duplicate_raw_text(self):
         # BACK-732: `f(...)()` -- an outer call whose callee is itself a call
         # node (chained/IIFE-style). The inner call already gets its own
