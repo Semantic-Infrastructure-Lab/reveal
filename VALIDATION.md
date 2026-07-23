@@ -33,7 +33,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Language | Import recall | Side-effect recall | Call-graph recall | Status |
 |---|---|---|---|---|
 | Python | ✅ 100% (Home Assistant, celery¹⁰) | ✅ 83.5% (Home Assistant) | ✅ 99.96%→100%³⁴ (Home Assistant, 3 query directions) | **Measured** |
-| TypeScript | ✅ 100% (VS Code), ⚠️ 68.48%→81.21% (nest¹⁶, BACK-694/698/705/772 all fixed, held at 81.21% — new residual BACK-773) | ✅ 91.3%¹ (VS Code) | ✅ 100%³⁵ (VS Code) | **Measured** |
+| TypeScript | ✅ 100% (VS Code), ✅ 68.48%→99.93%¹⁶ (nest, BACK-694/698/705/772/773 all fixed; 2-edge unexplored residual) | ✅ 91.3%¹ (VS Code) | ✅ 100%³⁵ (VS Code) | **Measured** |
 | Java | ✅ 100% (Elasticsearch, guava¹¹) | ✅ 97.5% (Elasticsearch) | ✅ 9.99%→100%³⁸ (Elasticsearch, BACK-734 fixed) | **Measured** |
 | Go | ✅ 100% (Kubernetes, client_golang¹³) | ✅ 96.3% (client-go) | ✅ 100%³⁶ (Go compiler internals) | **Measured** |
 | Ruby | ✅ Zeitwerk-inferred (Discourse), 100%¹⁷ (solidus, BACK-700+BACK-701 fixed) | ✅ 98.8% (Discourse) | ✅ 22.05%→100%³⁹ (Discourse, BACK-735 fixed) | **Measured** |
@@ -356,6 +356,22 @@ findings that surfaced only by digging into why the number didn't move:
   package uses this split-config pattern — confirmed directly on
   `packages/core/router/router-execution-context.ts`. Tracked as
   **BACK-773**, a real gap distinct from BACK-694/698/772.
+
+**BACK-773 fixed** (super-overlord-0723): `_get_tsconfig_aliases` now falls
+back to chasing `references` entries (each resolved the same way as
+`extends` — directory-implies-`tsconfig.json`, `.json` suffix appended if
+missing, cycle-safe) whenever the `extends` chain alone supplies no
+`paths`, trying each referenced sibling config's own `extends` chain in
+declared order until one supplies a path map. Re-ran the full nest-corpus
+diff (843 targets) with the fix live: **99.93% (2,888/2,890, +541 edges)**,
+essentially closing the gap in one shot — confirming path-alias-via-
+`references` was indeed the dominant residual cause, not the oracle-
+methodology gap (BACK-774, still open, unaffected by this fix). The 2
+remaining missed edges are a distinct, unrelated case (an `integration/`
+test package resolving `@nestjs/common` via implicit workspace/npm-link
+resolution with no tsconfig `paths`/`extends`/`references` at all) — too
+small (0.07% of edges) to justify further investigation as its own
+backlog item.
 See the [harness
 README](../internal-docs/planning/dogfood-findings/ts-recall-oracle/README.md#second-corpus-back-669-nest--overfit-guard)
 for the full write-up.
@@ -1345,7 +1361,7 @@ actually closes the gap without introducing false positives.
 |---|---|---|---|---|---|---|
 | TypeScript | VS Code (`src/`, 7,401 files) | `ts.resolveModuleName` (real compiler API) | 29-file stratified sample, 1,714 edges | 2.98% → **100%** | 0 | Resolver stripped *characters* not a *prefix* on multi-level `../../` relatives, destroying most deep-tree imports; chained suffix-handling mangled multi-dot filenames (`foo.contribution.js`) |
 | TypeScript (barrel follow-up) | VS Code extensions | same | 21-target sample, 158 edges | 98.10% → **100%** | 0 | Bare `.`/`..` directory-barrel specifiers misclassified as having a file extension, skipping directory/index resolution |
-| TypeScript (overfit guard, BACK-669) | nestjs/nest (pnpm/lerna workspace monorepo, no `node_modules/@nestjs/*`) | Same oracle mechanism (`ts.resolveModuleName`, pinned TS 5.6.3), full population | Full population, 843 targets, 2,890 edges | **68.48%→81.21%** (BACK-694+BACK-698 both fixed; residual gap open) | 701 pre-fix / 1,071 post-fix (undercount, not safe over-inclusion) | Not a barrel re-export depth bug — `_parse_reexport_statement` correctly extracts `export * from`/`export { X } from` edges. Root cause: `resolve_import()` unconditionally returned `None` for any bare/non-relative specifier (`@nestjs/common`, `@nestjs/common/enums/route-paramtypes.enum`); reveal's TS/JS extractor never read `tsconfig.json` `compilerOptions.paths`/`baseUrl`, the only way to resolve cross-package imports in a workspace monorepo with no `node_modules` packages installed. Compounding: `is_intra_project_import()` classified these as `False` (definitely external) rather than unknown, so misses never incremented `_unresolved_intra` — the tool's own undercount-disclosure safety net never fired, and `depends://` reported `confidence: high` on results that were 1–30% complete for the worst-hit barrel files. Fixed in BACK-694: both functions now consult the nearest `tsconfig.json`'s `paths`/`baseUrl`. Re-running the diff with the fix alone left recall unchanged at 68.48% — masked by a second bug: project-root inference stopped at the nearest `package.json`, so sibling packages were never scanned. Forcing the correct workspace root isolated the fix's real effect: 81.21% (+368 edges) vs. 68.48% at the same root without it. Fixed in BACK-698: `resolve_project_root` now climbs past a plain `package.json` to an ancestor `lerna.json`/`pnpm-workspace.yaml`/`package.json` `"workspaces"` field, JS/TS-gated so other languages and single-package repos are unaffected. Re-running with no root override reproduces 81.21% automatically. Residual gap to 100% (tsconfig `extends` chains, `package.json` `exports` map resolution) is out of scope for both fixes and tracked as **BACK-705**. |
+| TypeScript (overfit guard, BACK-669) | nestjs/nest (pnpm/lerna workspace monorepo, no `node_modules/@nestjs/*`) | Same oracle mechanism (`ts.resolveModuleName`, pinned TS 5.6.3), full population | Full population, 843 targets, 2,890 edges | **68.48%→81.21%→99.93%** (BACK-694+698+705+772+773 all fixed; 2-edge residual open, no active gap) | 701 pre-fix / 1,071 mid-fix / 1,165 post-fix (undercount, not safe over-inclusion) | Not a barrel re-export depth bug — `_parse_reexport_statement` correctly extracts `export * from`/`export { X } from` edges. Root cause: `resolve_import()` unconditionally returned `None` for any bare/non-relative specifier (`@nestjs/common`, `@nestjs/common/enums/route-paramtypes.enum`); reveal's TS/JS extractor never read `tsconfig.json` `compilerOptions.paths`/`baseUrl`, the only way to resolve cross-package imports in a workspace monorepo with no `node_modules` packages installed. Compounding: `is_intra_project_import()` classified these as `False` (definitely external) rather than unknown, so misses never incremented `_unresolved_intra` — the tool's own undercount-disclosure safety net never fired, and `depends://` reported `confidence: high` on results that were 1–30% complete for the worst-hit barrel files. Fixed in BACK-694: both functions now consult the nearest `tsconfig.json`'s `paths`/`baseUrl`. Re-running the diff with the fix alone left recall unchanged at 68.48% — masked by a second bug: project-root inference stopped at the nearest `package.json`, so sibling packages were never scanned. Forcing the correct workspace root isolated the fix's real effect: 81.21% (+368 edges) vs. 68.48% at the same root without it. Fixed in BACK-698: `resolve_project_root` now climbs past a plain `package.json` to an ancestor `lerna.json`/`pnpm-workspace.yaml`/`package.json` `"workspaces"` field, JS/TS-gated so other languages and single-package repos are unaffected. Re-running with no root override reproduces 81.21% automatically. Residual gap to 100% (tsconfig `extends` chains, `package.json` `exports` map resolution, TS project `references`) was split into BACK-705 (extends, fixed), BACK-772 (exports map, fixed), and BACK-773 (`references`-linked sibling configs, fixed) — recall held flat at 81.21% after BACK-705/772 alone (see below), then jumped to 99.93% once BACK-773 landed, confirming `references` was the dominant residual cause all along. |
 | Java | Elasticsearch (`server/src/main/java`, 4,837 files) | Buildless JLS package/filename convention | Stratified sample, 975 edges | 97.54% → 99.69% → **100%** | 0 | Nested-type and static-member imports (`import a.b.Outer.Inner`) never fell back from the (non-existent) `Inner.java` to the real enclosing `Outer.java` (BACK-551). The last 3/975 misses were all importers inside `org.elasticsearch.env`, a real source package silently excluded because `env` was in the global directory skip-set — closed by BACK-552 (context-sensitive `is_skippable_dir`), verified this loop: `ClusterState`/`Sets` now resolve their `env/NodeEnvironment`/`NodeRepurposeCommand` importers. |
 | Java (overfit guard, BACK-669) | guava (single-library tree, 611 files) | Same oracle, unmodified, re-run on a second corpus | Full population (small corpus), 159 targets, 2,066 edges | **100%** (no fix needed) | 0 | None — full-population diff confirmed 100% recall immediately, including the exact BACK-551 nested-type/static-member idiom (`MoreObjects.ToStringHelper`, `Map.Entry`, 353 distinct `import static` statements) on a second, independent corpus; the BACK-551/BACK-552 fixes generalize. Wildcard imports (`import a.b.*;`) are not exercised — Guava's style guide forbids them — so that path remains covered only by the Elasticsearch measurement above. |
 | Go | Kubernetes (`pkg/`, 2,266 files) | `go list -json` (real toolchain) + independent per-file import parse | 25-target stratified sample, 822 edges | **0%** effective (every single-file query returned zero, unconditionally) → **100%** | 8 (documented, safe — see below) | Go resolves an import to its package *directory*, but the file-level query path did an exact-key lookup against the file itself — a key that could never match a directory-keyed edge. Affected every Go dependents query, always. |
@@ -1452,14 +1468,19 @@ over-inclusion — see that row and BACK-694/BACK-698.
 
 ### Open residual gaps
 
-Four measured languages sit below 100% with a gap that is real, still open, and
-tracked. They are listed here rather than left to be discovered inside a table
-cell, because "what is still wrong" is the question a DD reader is entitled to
-ask first:
+Three measured languages sit below 100% with a gap that is real, still open,
+and tracked. They are listed here rather than left to be discovered inside a
+table cell, because "what is still wrong" is the question a DD reader is
+entitled to ask first. (TypeScript / nest dropped off this table
+super-overlord-0723: BACK-773 fixed the `references`-linked sibling-config
+gap, taking recall from 81.21% to **99.93%** (2,888/2,890) in one shot — the
+2 remaining edges are an unrelated, unexplored implicit-workspace-resolution
+case too small (0.07%) to justify its own backlog item. The oracle's own
+test-file undercount, **BACK-774**, is still open but is a measurement-
+methodology gap, not a `depends://` recall gap.)
 
 | Language / corpus | Recall | Missing | Task | Why it is still open |
 |---|---|---|---|---|
-| TypeScript / nest | **81.21%** | 543 edges | **BACK-773** | `tsconfig extends`/`exports` map (BACK-705/772) both fixed and re-measured (exploding-parsec-0723) — recall held exactly at 81.21%, root-caused to a *different* gap: path aliases declared in a sibling `tsconfig.build.json` linked via TS project `"references"` (not `"extends"`) are invisible to `_find_tsconfig`. Separately, the oracle itself undercounts test-file edges (**BACK-774**), masking part of BACK-772's real effect. The lowest number in this document, on a flagship language. |
 | PHP / osCommerce | **74.65%** | 73 edges | **BACK-681** | `chdir()`/CWD-dependent bare-literal `require`s in legacy scripts. Deliberately not chased: a generic resolver would need symbolic `chdir` tracking, and an ancestor-directory-walk heuristic risks false edges elsewhere. |
 | Swift / swift-collections | **98.42%** | 234 edges (one target) | **BACK-704** (residual) | `_RopeModule` is declared via a programmatically-built `targets:` array; resolving it would require evaluating arbitrary `Package.swift` code, which the buildless design will not do. Now an honest reduced-confidence decline rather than a silent miss. |
 | C# / Newtonsoft.Json | **99.36%** | 308 edges (one file) | **BACK-703** | tree-sitter-c-sharp cannot parse a `#if`/`#else` pair whose branches declare *different* headers over one shared body; the file's namespace body collapses into an `ERROR` node. Honest-decline caveated. 4 of 945 files affected. |

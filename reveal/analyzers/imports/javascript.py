@@ -151,6 +151,38 @@ def _load_tsconfig_chain(tsconfig_path: Path) -> List[Tuple[Path, dict]]:
     return chain
 
 
+def _referenced_tsconfig_paths(tsconfig_path: Path, data: dict) -> List[Path]:
+    """Sibling tsconfigs named by this config's TS project `references`
+    (BACK-773) -- a *different* linkage than `extends`: it declares a build
+    dependency, not config inheritance, but real-world monorepos (e.g. Nest)
+    exploit it to keep a dev-facing tsconfig.json (no `paths`) pointing at a
+    build-scoped tsconfig.build.json that holds the real path map. Each
+    `references[].path` entry may name a directory (implying its
+    tsconfig.json) or a file directly; entries that resolve to neither are
+    skipped rather than erroring, same tolerance as `extends`."""
+    refs = data.get('references')
+    if not isinstance(refs, list):
+        return []
+    out = []
+    for entry in refs:
+        if not isinstance(entry, dict):
+            continue
+        ref = entry.get('path')
+        if not isinstance(ref, str):
+            continue
+        cand = tsconfig_path.parent / ref
+        if cand.is_dir():
+            cand = cand / 'tsconfig.json'
+        else:
+            cand_str = str(cand)
+            if not cand_str.endswith('.json'):
+                cand_str += '.json'
+            cand = Path(cand_str)
+        if cand.is_file():
+            out.append(cand.resolve())
+    return out
+
+
 def _get_tsconfig_aliases(tsconfig_path: Path) -> Tuple[Optional[Path], Dict[str, List[str]]]:
     """(baseUrl, paths) for tsconfig_path, chasing `extends` (BACK-705) so a
     project whose paths/baseUrl live in a shared base config -- a common
@@ -158,7 +190,13 @@ def _get_tsconfig_aliases(tsconfig_path: Path) -> Tuple[Optional[Path], Dict[str
     treated as declaring none. The nearest config in the chain that
     declares a given key wins: matches TS's own per-key override semantics,
     where a leaf config's own `paths` REPLACES the base's outright rather
-    than merging with it key-by-key."""
+    than merging with it key-by-key.
+
+    If the `extends` chain supplies no `paths` at all, falls back to TS
+    project `references` (BACK-773): each chain member's `references`
+    entries are chased, in order, until one's own `extends` chain supplies
+    `paths` -- covering the dev-tsconfig.json-references-build-tsconfig
+    pattern real monorepos use (Nest ships exactly this)."""
     key = str(tsconfig_path)
     if key in _TSCONFIG_ALIAS_CACHE:
         return _TSCONFIG_ALIAS_CACHE[key]
@@ -168,7 +206,8 @@ def _get_tsconfig_aliases(tsconfig_path: Path) -> Tuple[Optional[Path], Dict[str
     paths_owner: Optional[Path] = None
     have_base_url = False
     have_paths = False
-    for cfg_path, data in _load_tsconfig_chain(tsconfig_path):
+    chain = _load_tsconfig_chain(tsconfig_path)
+    for cfg_path, data in chain:
         co = data.get('compilerOptions')
         co = co if isinstance(co, dict) else {}
         if not have_paths:
@@ -182,6 +221,32 @@ def _get_tsconfig_aliases(tsconfig_path: Path) -> Tuple[Optional[Path], Dict[str
             if isinstance(base_url_raw, str):
                 base_url = (cfg_path.parent / base_url_raw).resolve()
                 have_base_url = True
+
+    if not have_paths:
+        seen_refs: Set[Path] = {cfg_path for cfg_path, _ in chain}
+        for cfg_path, data in chain:
+            if have_paths:
+                break
+            for ref_path in _referenced_tsconfig_paths(cfg_path, data):
+                if ref_path in seen_refs:
+                    continue
+                seen_refs.add(ref_path)
+                for rc_path, rc_data in _load_tsconfig_chain(ref_path):
+                    rc_co = rc_data.get('compilerOptions')
+                    rc_co = rc_co if isinstance(rc_co, dict) else {}
+                    rc_paths = rc_co.get('paths')
+                    if isinstance(rc_paths, dict) and rc_paths:
+                        paths = rc_paths
+                        paths_owner = rc_path
+                        have_paths = True
+                        if not have_base_url:
+                            rc_base_url = rc_co.get('baseUrl')
+                            if isinstance(rc_base_url, str):
+                                base_url = (rc_path.parent / rc_base_url).resolve()
+                                have_base_url = True
+                        break
+                if have_paths:
+                    break
 
     if base_url is None and paths:
         # `paths` without an explicit `baseUrl` anywhere in the chain

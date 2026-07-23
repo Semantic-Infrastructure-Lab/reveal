@@ -817,6 +817,131 @@ class TestTsconfigExtendsChain:
         assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) == target.resolve()
 
 
+# ─── tsconfig project `references` fallback (BACK-773) ─────────────────────
+#
+# TS project `references` is a DIFFERENT linkage than `extends`: it declares
+# a build-ordering dependency, not config inheritance. Real monorepos (Nest)
+# exploit it anyway -- a dev-facing tsconfig.json with no paths/baseUrl of
+# its own `references` a sibling tsconfig.build.json that holds the real
+# path map, and tsc/ts-node resolve through it in practice. Found on the
+# `nest` corpus re-measurement after BACK-772 shipped: recall stayed flat at
+# 81.21% because BACK-772's exports-map fix and this gap are independent --
+# neither one masks the other. Root cause: `_find_tsconfig` only ever
+# discovers a file literally named tsconfig.json, and `_get_tsconfig_aliases`
+# only ever chased `extends`, so a `references`-only sibling's paths were
+# invisible outright.
+
+class TestTsconfigReferences:
+
+    def _stmt(self, module_name: str, base_path: Path) -> ImportStatement:
+        return ImportStatement(
+            file_path=base_path / 'main.ts', line_number=1, module_name=module_name,
+            imported_names=[], is_relative=module_name.startswith('.'),
+            import_type='es6_import')
+
+    def test_paths_found_via_sibling_referenced_build_config(self, tmp_path):
+        """tsconfig.json has no paths of its own and does not `extends` the
+        config that has them -- it only `references` it (Nest's own
+        pattern: tsconfig.json -> tsconfig.build.json). paths/baseUrl must
+        still be found."""
+        (tmp_path / 'tsconfig.json').write_text(
+            '{"references": [{"path": "./tsconfig.build.json"}]}')
+        (tmp_path / 'tsconfig.build.json').write_text(
+            '{"compilerOptions": {"baseUrl": ".", "paths": {"@app/*": ["src/*"]}}}')
+        target = tmp_path / 'src' / 'util.ts'
+        target.parent.mkdir(parents=True)
+        target.write_text('export const helper = 1;')
+        src_dir = tmp_path / 'src'
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@app/util', src_dir)
+        assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) == target.resolve()
+        assert e.is_intra_project_import(stmt, src_dir, search_paths=[tmp_path]) is True
+
+    def test_extends_chain_paths_win_over_references(self, tmp_path):
+        """If the `extends` chain already supplies paths, `references` is
+        never even consulted -- extends stays the primary, higher-priority
+        path."""
+        (tmp_path / 'tsconfig.base.json').write_text(
+            '{"compilerOptions": {"baseUrl": ".", "paths": {"@app/*": ["src/*"]}}}')
+        (tmp_path / 'tsconfig.json').write_text(
+            '{"extends": "./tsconfig.base.json", '
+            '"references": [{"path": "./tsconfig.build.json"}]}')
+        (tmp_path / 'tsconfig.build.json').write_text(
+            '{"compilerOptions": {"baseUrl": ".", "paths": {"@other/*": ["lib/*"]}}}')
+        target = tmp_path / 'src' / 'util.ts'
+        target.parent.mkdir(parents=True)
+        target.write_text('export const helper = 1;')
+        src_dir = tmp_path / 'src'
+
+        e = JavaScriptExtractor()
+        assert e.resolve_import(self._stmt('@app/util', src_dir), src_dir,
+                                 search_paths=[tmp_path]) == target.resolve()
+        # The references-only sibling's alias must not leak through.
+        assert e.is_intra_project_import(self._stmt('@other/x', src_dir), src_dir,
+                                          search_paths=[tmp_path]) is False
+
+    def test_references_entry_naming_a_directory_resolves_its_tsconfig(self, tmp_path):
+        """A `references[].path` may name a directory (implying its
+        tsconfig.json inside), not just a file directly."""
+        (tmp_path / 'tsconfig.json').write_text(
+            '{"references": [{"path": "./build"}]}')
+        build_dir = tmp_path / 'build'
+        build_dir.mkdir()
+        (build_dir / 'tsconfig.json').write_text(
+            '{"compilerOptions": {"baseUrl": ".", "paths": {"@app/*": ["../src/*"]}}}')
+        target = tmp_path / 'src' / 'util.ts'
+        target.parent.mkdir(parents=True)
+        target.write_text('export const helper = 1;')
+        src_dir = tmp_path / 'src'
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@app/util', src_dir)
+        assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) == target.resolve()
+
+    def test_multiple_references_first_with_paths_wins(self, tmp_path):
+        """Several references entries -- the first one (in declared order)
+        that actually supplies paths wins, matching the extends chain's own
+        first-match-wins semantics."""
+        (tmp_path / 'tsconfig.json').write_text(
+            '{"references": [{"path": "./empty.json"}, {"path": "./tsconfig.build.json"}]}')
+        (tmp_path / 'empty.json').write_text('{"compilerOptions": {"target": "es2020"}}')
+        (tmp_path / 'tsconfig.build.json').write_text(
+            '{"compilerOptions": {"baseUrl": ".", "paths": {"@app/*": ["src/*"]}}}')
+        target = tmp_path / 'src' / 'util.ts'
+        target.parent.mkdir(parents=True)
+        target.write_text('export const helper = 1;')
+        src_dir = tmp_path / 'src'
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@app/util', src_dir)
+        assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) == target.resolve()
+
+    def test_references_cycle_does_not_hang(self, tmp_path):
+        """A references entry pointing back at the referring config (or a
+        cycle among references) must not infinite-loop."""
+        (tmp_path / 'tsconfig.json').write_text(
+            '{"references": [{"path": "./a.json"}]}')
+        (tmp_path / 'a.json').write_text('{"references": [{"path": "./tsconfig.json"}]}')
+        src_dir = tmp_path / 'src'
+        src_dir.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@app/util', src_dir)
+        assert e.is_intra_project_import(stmt, src_dir, search_paths=[tmp_path]) is False
+
+    def test_no_references_and_no_extends_paths_declines_cleanly(self, tmp_path):
+        """No paths anywhere (no extends, no references, no own paths) --
+        must decline cleanly rather than crash or hang."""
+        (tmp_path / 'tsconfig.json').write_text('{"compilerOptions": {"target": "es2020"}}')
+        src_dir = tmp_path / 'src'
+        src_dir.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@app/util', src_dir)
+        assert e.is_intra_project_import(stmt, src_dir, search_paths=[tmp_path]) is False
+
+
 # ─── package.json exports-map resolution (BACK-772) ────────────────────────
 #
 # The other real way a monorepo cross-package import resolves with no
