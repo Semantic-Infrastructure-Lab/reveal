@@ -42,7 +42,23 @@ def range_calls(
         line = node.start_position().row + 1
         if node.end_position().row + 1 < from_line or line > to_line:
             continue
-        if node.kind() in call_node_types and from_line <= line <= to_line:
+        # GDScript's 'attribute_call' is deliberately excluded here even
+        # though it's now a CALL_NODE_TYPES member (added for treesitter.py's
+        # get_structure()/calls:// path, BACK-730 seventeenth language): the
+        # dedicated `attribute`-chain scan below (_extract_gdscript_attribute_
+        # calls) already visits every attribute_call in the enclosing chain
+        # and reconstructs its FULL qualified callee (`x.field.method`, not
+        # just the bare `method`). Without this guard, the generic per-node
+        # check ALSO matches attribute_call directly during the same stack
+        # walk, emitting a second, wrongly-bare duplicate entry for every
+        # dotted GDScript call (caught by
+        # test_calls_ignores_bare_property_access_in_chain regressing to
+        # ['x.field.method', 'method'] instead of ['x.field.method']).
+        if (
+            node.kind() in call_node_types
+            and node.kind() != 'attribute_call'
+            and from_line <= line <= to_line
+        ):
             callee = _extract_callee(node, get_text, call_node_types)
             first_arg, has_more = _extract_first_arg(node, get_text)
             results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})

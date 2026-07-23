@@ -337,6 +337,25 @@ CALL_NODE_TYPES = {
     # family node at all, a distinct gap needing its own extraction
     # approach, tracked separately (not fixed here).
     'new_expression',           # C++
+    # GDScript: any dotted method call -- `self.foo()`, `obj.method()`,
+    # `Class.static()`/`Class.new()`, and every segment of a chained call
+    # (`a.b().c()`) -- parses to a DISTINCT node kind, 'attribute_call', NOT
+    # a variant of 'function_call' (GDScript's plain `foo()` node kind,
+    # already covered above). Found via a pre-flight grammar dump before the
+    # GDScript calls-recall-oracle measurement (BACK-730, seventeenth
+    # language): entirely absent from CALL_NODE_TYPES meant calls:// silently
+    # returned zero callers/callees for the single most common GDScript call
+    # idiom -- `self.`-qualified calls and Godot's constructor convention
+    # (`ClassName.new()`, since GDScript has no `new` keyword) are both this
+    # shape. See _callee_name_gdscript_attribute_call for the paired callee-
+    # text extraction; unlike every other dotted-call node in this table
+    # (Java's method_invocation, Ruby's call, PHP's member_call_expression),
+    # the receiver here is NOT a child/field of this node at all -- it's a
+    # preceding SIBLING in the flat 'attribute' parent node, since
+    # tree-sitter-gdscript models `a.b().c()` as one flat
+    # (receiver, '.', segment, '.', segment, ...) list rather than nested
+    # call-of-a-member-access the way Python/JS do.
+    'attribute_call',           # GDScript `self.foo()` / `obj.method()` / `Class.new()`
 }
 
 # Callee node types for attribute/member access (self.foo, obj.method, pkg.Func)
@@ -2155,6 +2174,38 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return method_text
         return f"{self._get_node_text(receiver_node)}.{method_text}"
 
+    def _callee_name_gdscript_attribute_call(self, call_node) -> Optional[str]:
+        """GDScript `self.foo()` / `obj.method()` / `Class.new()` / chained
+        `a.b().c()` -- 'attribute_call'. Unlike Java/Ruby's method_invocation/
+        call (an explicit 'object'/'receiver' field on the SAME node), the
+        receiver here is a preceding SIBLING inside the enclosing 'attribute'
+        node's flat (receiver, '.', segment, '.', segment, ...) child list --
+        this node itself only ever holds its own name + arguments. Reconstructs
+        the qualified callee name (`self.setup`, `obj.method`, `Foo.new`,
+        chained `a.b().c`) by slicing raw source text from the enclosing
+        attribute's start up to (excluding) the '.' immediately preceding this
+        node -- there's no receiver *node* to read text from directly, so this
+        mirrors Java/Ruby's receiver-qualified convention using a text span
+        instead of a field lookup.
+        """
+        name_node = next(
+            (c for c in _children(call_node) if _zero_arg(c, 'kind') == 'identifier'), None
+        )
+        if name_node is None:
+            return None
+        name_text = self._get_node_text(name_node)
+        parent = _zero_arg(call_node, 'parent')
+        if parent is None or _zero_arg(parent, 'kind') != 'attribute':
+            return name_text
+        receiver_text = self._get_text_span(
+            _zero_arg(parent, 'start_byte'), _zero_arg(call_node, 'start_byte')
+        ).rstrip()
+        if receiver_text.endswith('.'):
+            receiver_text = receiver_text[:-1].rstrip()
+        if not receiver_text:
+            return name_text
+        return f"{receiver_text}.{name_text}"
+
     def _callee_name_generic(self, call_node) -> Optional[str]:
         return self._callee_name_from_node(call_node.child(0))
 
@@ -2260,6 +2311,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._callee_name_java_method(call_node)
         if _zero_arg(call_node, 'kind') == 'call' and self.language == 'ruby':
             return self._callee_name_ruby_call(call_node)
+        if _zero_arg(call_node, 'kind') == 'attribute_call':
+            return self._callee_name_gdscript_attribute_call(call_node)
         return self._callee_name_generic(call_node)
 
     def _extract_calls_in_function(self, func_node) -> List[str]:
