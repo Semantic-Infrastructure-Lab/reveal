@@ -526,10 +526,6 @@ reveal 'calls://.?target=fn'       # use project root for full coverage
 
 **Module-level call sites are not indexed.** The callers index tracks calls inside function and method bodies only. A function called only at module level — e.g., in a list literal, dict literal, or top-level code outside any function — will not appear in the index and will be flagged as uncalled. This affects factory helpers like `_make_output_type('...', ...)` called to build module-level data structures.
 
-**Decorator-argument calls are not attributed to the decorated function.** Call extraction scans a function's body only — decorator expressions are a separate node, not part of the body — so a call made *inside a decorator's arguments* (e.g. `@validate(Schema(...))`) is invisible to `calls://` entirely: not counted as a call from the decorated function, and not indexed anywhere else either (BACK-731).
-
-**`?callees=` on a chained/immediately-invoked call emits raw, un-normalized text for the outer call.** For `f(...)()` (calling the return value of a call), the outer call's `func` expression is itself a call — its raw source text is included in the `calls` list verbatim (e.g. `TemperatureConverter.converter_factory(temperature_unit, ha_unit)`) alongside the properly normalized inner callee name, rather than being reduced to a name or omitted. Narrow pattern; if you're parsing `calls` entries as bare names, filter out any entry containing `(` (BACK-732).
-
 **`line` in a caller record is the caller function's definition line, not the call-site line.** Each record is built per-*function*, not per-*call-expression* — repeat calls to the same target within one function collapse to a single record, and that record's `line` is where the caller function is `def`ined, not where the call itself appears in the body. Don't use it to jump to the exact call; use it to locate the calling function.
 
 **`called_by` in `ast://` is within-file only.** If a function has callers only in other files, `called_by` will be empty in `ast://` output. The `calls://` adapter is the authoritative source for cross-file callers.
