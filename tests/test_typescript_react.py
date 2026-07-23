@@ -542,3 +542,33 @@ class TestBack335TypeAnnotationImports:
         f.write_text(src)
         detections = rule.check(str(f), None, f.read_text())
         assert any('TrulyUnused' in d.context for d in detections)
+
+
+# ─── BACK-752: JS/TS/TSX `new ClassName()` invisible to calls:// ─────────────
+# `new_expression` is shared by C++ and JS/TS/TSX with two mutually exclusive
+# field shapes: C++ puts the callee in a 'type' field, JS/TS/TSX in a
+# 'constructor' field. The dispatch always routed to the C++ handler, which
+# returned None for every JS/TS constructor call (found via the
+# calls-recall-oracle JS/TSX pre-flight dump, 13th language, BACK-730).
+
+class TestBack752JsNewExpressionCallee:
+    def test_bare_constructor_call_indexed(self, tmp_path):
+        f = tmp_path / 'file.ts'
+        f.write_text("function f() {\n  new Foo();\n}\n")
+        structure = TypeScriptAnalyzer(str(f)).get_structure()
+        fn = next(fn for fn in structure['functions'] if fn['name'] == 'f')
+        assert 'new Foo' in fn['calls']
+
+    def test_dotted_constructor_call_indexed(self, tmp_path):
+        f = tmp_path / 'file.ts'
+        f.write_text("function f() {\n  new ns.Foo();\n}\n")
+        structure = TypeScriptAnalyzer(str(f)).get_structure()
+        fn = next(fn for fn in structure['functions'] if fn['name'] == 'f')
+        assert 'new Foo' in fn['calls']
+
+    def test_tsx_constructor_call_indexed(self, tmp_path):
+        f = tmp_path / 'file.tsx'
+        f.write_text("function f() {\n  new Foo();\n}\n")
+        structure = TSXAnalyzer(str(f)).get_structure()
+        fn = next(fn for fn in structure['functions'] if fn['name'] == 'f')
+        assert 'new Foo' in fn['calls']

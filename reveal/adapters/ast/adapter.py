@@ -16,6 +16,7 @@ from .help import get_help as _get_help, get_schema as _get_schema
 from .renderer import AstRenderer
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from ...core import suppress_treesitter_warnings
+from ...registry import language_for_extension
 from ...utils.query import (
     parse_result_control,
     apply_result_control,
@@ -222,10 +223,16 @@ class AstAdapter(ResourceAdapter):
                 )
             })
 
-        # Filter builtins from calls lists unless ?builtins=true
+        # Filter builtins from calls lists unless ?builtins=true. Python-file
+        # elements only -- PYTHON_BUILTINS names (map/filter/sorted/...) can
+        # collide with real methods in other languages (Scala/Ruby `.map`,
+        # `.filter`), same cross-language bug class as BACK-748's calls://
+        # adapter fix; this ast:// copy of the filter was missed there.
         if not self.include_builtins:
             for elem in controlled:
-                if elem.get('calls'):
+                if elem.get('calls') and language_for_extension(
+                    os.path.splitext(elem.get('file', ''))[1].lower()
+                ) == 'python':
                     elem['calls'] = [c for c in elem['calls'] if c.split('.')[-1] not in PYTHON_BUILTINS]
 
         # Build result using ResultBuilder (automatically handles contract_version, source, source_type)

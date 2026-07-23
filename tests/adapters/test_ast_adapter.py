@@ -310,6 +310,33 @@ class TestAstAdapterBuiltinFiltering(unittest.TestCase):
         )
 
 
+class TestAstAdapterBuiltinFilteringCrossLanguage(unittest.TestCase):
+    """BACK-751: PYTHON_BUILTINS filtering must be scoped to Python files —
+    same bug class as BACK-748's calls:// adapter fix, missed here."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        _write(self.tmpdir, 'sample.rb', '''
+def process(items)
+  items.map { |x| x * 2 }.filter { |x| x > 0 }
+end
+''')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_ruby_map_filter_not_filtered_by_default(self):
+        adapter = AstAdapter(self.tmpdir, 'show=calls')
+        result = adapter.get_structure()
+        all_calls = []
+        for elem in result['results']:
+            all_calls.extend(elem.get('calls', []))
+        bare_names = {c.split('.')[-1] for c in all_calls}
+        self.assertIn('map', bare_names)
+        self.assertIn('filter', bare_names)
+
+
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------

@@ -1840,6 +1840,45 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return f"new {self._get_node_text(child)}"
         return None
 
+    def _callee_name_js_new(self, call_node) -> Optional[str]:
+        # JS/TS/TSX: new ClassName(args) / new ns.ClassName(args) —
+        # new_expression, the SAME node kind C++ uses (_callee_name_cpp_new
+        # below) but a completely different grammar shape: the callee sits
+        # in a field named 'constructor' (identifier, or member_expression
+        # for a dotted form like `new a.b.ClassName()`), not C++'s 'type'
+        # field. child_by_field_name('type') is always None on a JS
+        # new_expression, so every `new Foo()` call was silently invisible
+        # to calls:// (found via the calls-recall-oracle JS/TSX pre-flight
+        # dump, 13th language, BACK-730). Dispatched structurally by
+        # _callee_name_new_expression (checks which field is populated)
+        # rather than by self.language, so tree-sitter fallback languages
+        # with no dedicated analyzer class still resolve correctly.
+        ctor_node = call_node.child_by_field_name('constructor')
+        if ctor_node is None:
+            return None
+        kind = _zero_arg(ctor_node, 'kind')
+        if kind == 'identifier':
+            name = self._get_node_text(ctor_node).strip()
+            return f"new {name}" if name else None
+        if kind == 'member_expression':
+            prop = None
+            for child in _children(ctor_node):
+                if _zero_arg(child, 'kind') == 'property_identifier':
+                    prop = child
+            if prop is not None:
+                name = self._get_node_text(prop).strip()
+                return f"new {name}" if name else None
+        return None
+
+    def _callee_name_new_expression(self, call_node) -> Optional[str]:
+        # 'new_expression' is shared by C++ and JS/TS/TSX with two mutually
+        # exclusive field shapes ('type' vs 'constructor') — dispatch on
+        # which field is actually populated rather than self.language, so
+        # this stays correct for tree-sitter fallback languages too.
+        if call_node.child_by_field_name('constructor') is not None:
+            return self._callee_name_js_new(call_node)
+        return self._callee_name_cpp_new(call_node)
+
     def _callee_name_cpp_new(self, call_node) -> Optional[str]:
         # C++: new ClassName(args) / new NS::ClassName(args) — new_expression.
         # A DISTINCT node kind from PHP's object_creation_expression above
@@ -2089,7 +2128,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if call_node.kind() == 'scoped_call_expression':
             return self._callee_name_php_scoped_call(call_node)
         if _zero_arg(call_node, 'kind') == 'new_expression':
-            return self._callee_name_cpp_new(call_node)
+            return self._callee_name_new_expression(call_node)
         if _zero_arg(call_node, 'kind') == 'instance_expression':
             return self._callee_name_scala_instance(call_node)
         if _zero_arg(call_node, 'kind') == 'infix_expression':

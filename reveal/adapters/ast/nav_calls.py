@@ -345,12 +345,18 @@ def _extract_callee(
     if _zero_arg(call_node, 'kind') == 'constructor_expression':
         return _extract_swift_constructor_callee(call_node, get_text)
 
-    # C++: `new ClassName(args)` / `new NS::ClassName(args)` — a DISTINCT
-    # node kind ('new_expression') from PHP/C#'s object_creation_expression
-    # despite the identical source shape (BACK-730 C++ pre-flight). Emit the
-    # same "new <name>" text so the existing taxonomy convention applies
-    # unchanged.
+    # 'new_expression' is shared by C++ and JS/TS/TSX with two mutually
+    # exclusive field shapes: C++ (`new ClassName(args)` / `new NS::Name(args)`)
+    # puts the callee in a 'type' field; JS/TS/TSX (`new Foo()` / `new
+    # ns.Foo()`) puts it in a 'constructor' field instead — a completely
+    # different field name for the identical node kind, so C++'s handler
+    # returned None for every JS/TS constructor call (found via the
+    # calls-recall-oracle JS/TSX pre-flight dump, 13th language, BACK-730;
+    # mirrors treesitter.py:_callee_name_new_expression). Dispatch
+    # structurally on which field is populated.
     if _zero_arg(call_node, 'kind') == 'new_expression':
+        if call_node.child_by_field_name('constructor') is not None:
+            return _extract_js_new_callee(call_node, get_text)
         return _extract_cpp_new_callee(call_node, get_text)
 
     # Java: method_invocation is a flat node `[object? . name argument_list]` —
@@ -631,6 +637,30 @@ def _extract_swift_constructor_callee(node: Any, get_text: Callable) -> Optional
     text = get_text(constructed).strip()
     if text:
         return text.split('<')[0].strip() or None
+    return None
+
+
+def _extract_js_new_callee(node: Any, get_text: Callable) -> Optional[str]:
+    """JS/TS/TSX `new_expression`: `new ClassName(args)` / `new ns.ClassName(args)`.
+    Emits "new <name>" — same convention as `_extract_cpp_new_callee`. The
+    callee lives in a 'constructor' field (identifier, or member_expression
+    for a dotted form), unlike C++'s 'type' field on the same node kind.
+    """
+    ctor_node = node.child_by_field_name('constructor')
+    if ctor_node is None:
+        return None
+    kind = _zero_arg(ctor_node, 'kind')
+    if kind == 'identifier':
+        name = get_text(ctor_node).strip()
+        return f"new {name}" if name else None
+    if kind == 'member_expression':
+        prop = None
+        for child in _children(ctor_node):
+            if _zero_arg(child, 'kind') == 'property_identifier':
+                prop = child
+        if prop is not None:
+            name = get_text(prop).strip()
+            return f"new {name}" if name else None
     return None
 
 
