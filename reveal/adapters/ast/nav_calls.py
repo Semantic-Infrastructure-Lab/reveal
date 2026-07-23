@@ -60,8 +60,18 @@ def range_calls(
             and from_line <= line <= to_line
         ):
             callee = _extract_callee(node, get_text, call_node_types)
-            first_arg, has_more = _extract_first_arg(node, get_text)
-            results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
+            # BACK-744: 'init_declarator' is a CALL_NODE_TYPES member for C++
+            # direct-init (`ClassName obj(args);`) but is ALSO the node kind
+            # for every other initialized declaration (`int y = 5;`,
+            # `Foo obj2 = Foo(3, 4);`) — shapes _extract_callee correctly
+            # returns None for (mirrors treesitter.py:_extract_calls_in_
+            # function's `if name` guard). Without this check, every such
+            # plain/copy-init declaration in C/C++ would emit a bogus
+            # unknown-callee ('?') entry here, since this loop unconditionally
+            # appended regardless of whether a callee was actually found.
+            if callee:
+                first_arg, has_more = _extract_first_arg(node, get_text)
+                results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
         # Dart has no call-expression wrapper node at all — `obj.method(x)`
         # parses as a bare `identifier` followed by flat sibling `selector`
         # nodes (`.method`, then `(x)`), so it's invisible to the node-kind
@@ -401,6 +411,12 @@ def _extract_callee(
             return _extract_js_new_callee(call_node, get_text)
         return _extract_cpp_new_callee(call_node, get_text)
 
+    # C++ direct-initialization (`ClassName obj(args);`, no `new` keyword) —
+    # 'init_declarator' with a bare `argument_list` in its 'value' field.
+    # Mirrors treesitter.py:_callee_name_cpp_direct_init (BACK-744).
+    if _zero_arg(call_node, 'kind') == 'init_declarator':
+        return _extract_cpp_direct_init_callee(call_node, get_text)
+
     # Java: method_invocation is a flat node `[object? . name argument_list]` —
     # child(0) is only the *object* (`Files`, `path`), so the old logic dropped
     # the method name entirely (`Files.createDirectories()` → "Files",
@@ -727,6 +743,39 @@ def _extract_cpp_new_callee(node: Any, get_text: Callable) -> Optional[str]:
         if text:
             return f"new {text.split('::')[-1]}"
     return None
+
+
+def _extract_cpp_direct_init_callee(node: Any, get_text: Callable) -> Optional[str]:
+    """C++ direct-initialization: `ClassName obj(args);`, `std::vector<int> v(10);`
+    — an `init_declarator` whose 'value' field is a bare `argument_list`
+    (no `new` keyword, no call-expression wrapper at all). Distinct from
+    plain declaration (`int x;`, no 'value' field) and copy-init
+    (`Foo obj2 = Foo(3, 4);`, whose 'value' field is a `call_expression`,
+    already visible via the ordinary call_expression dispatch) — checking
+    the 'value' field's kind is what isolates this shape (BACK-744).
+
+    The callee name lives on the *parent* `declaration` node's 'type'
+    field, not on this node — `init_declarator` only holds the variable
+    name + args. No "new " prefix, unlike `_extract_cpp_new_callee` —
+    there's no `new` keyword in the source to echo. Mirrors
+    treesitter.py:_callee_name_cpp_direct_init.
+    """
+    value_node = node.child_by_field_name('value')
+    if value_node is None or _zero_arg(value_node, 'kind') != 'argument_list':
+        return None
+    decl_node = _zero_arg(node, 'parent')
+    if decl_node is None:
+        return None
+    type_node = decl_node.child_by_field_name('type')
+    if type_node is None:
+        return None
+    kind = _zero_arg(type_node, 'kind')
+    if kind not in ('type_identifier', 'qualified_identifier'):
+        return None
+    text = get_text(type_node).strip()
+    if not text:
+        return None
+    return text.split('::')[-1] if kind == 'qualified_identifier' else text
 
 
 def _extract_java_method_invocation_callee(

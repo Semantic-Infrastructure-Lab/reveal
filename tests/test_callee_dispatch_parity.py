@@ -65,6 +65,7 @@ REQUIRED_IN_BOTH = {
     "method_invocation",        # Java obj.method() (BACK-734)
     "generic_function",         # Rust turbofish size_of::<u32>() (BACK-733)
     "parenthesized_expression",  # (f)(args) (BACK-733)
+    "init_declarator",          # C++ direct-init: ClassName obj(args); (BACK-744)
 }
 
 # node_kind -> reason it's allowed to be one-sided, and which file may omit it.
@@ -286,6 +287,61 @@ class TestCalleeDispatchBehavioralParity(unittest.TestCase):
         ts_calls = _treesitter_callees(CppAnalyzer, ".cpp", code)
         self.assertIn("new Foo", nav)
         self.assertIn("new Foo", ts_calls)
+
+    def test_cpp_direct_init(self):
+        # BACK-744: C++'s OTHER constructor-call syntax, direct-initialization
+        # (no `new` keyword, no call-expression wrapper at all) — parses to
+        # `declaration > init_declarator` with a bare `argument_list` in its
+        # 'value' field. Both paths must resolve the bare type name (no "new "
+        # prefix), including through a qualified type (`std::vector`).
+        from reveal.analyzers.cpp import CppAnalyzer
+
+        code = """
+        class Foo {
+        public:
+            Foo(int x, int y) {}
+        };
+
+        void run() {
+            Foo obj(1, 2);
+            std::vector<int> v(10);
+        }
+        """
+        nav = _nav_calls_callees("cpp", code)
+        ts_calls = _treesitter_callees(CppAnalyzer, ".cpp", code)
+        self.assertIn("Foo", nav)
+        self.assertIn("Foo", ts_calls)
+        self.assertIn("vector<int>", nav)
+        self.assertIn("vector<int>", ts_calls)
+
+    def test_cpp_direct_init_excludes_plain_and_copy_init(self):
+        # BACK-744 regression guard: 'init_declarator' is shared with EVERY
+        # other initialized declaration, not just direct-init. A plain
+        # declaration (no initializer), a copy-init (`= Foo(...)`, already
+        # captured as its own call_expression), and a primitive direct-init
+        # (`int x(5);`, no user-defined constructor) must NOT produce a
+        # bogus/duplicate entry in either path.
+        from reveal.analyzers.cpp import CppAnalyzer
+
+        code = """
+        class Foo {
+        public:
+            Foo(int x, int y) {}
+        };
+
+        void run() {
+            Foo uninitialized;
+            Foo copy = Foo(3, 4);
+            int x(5);
+        }
+        """
+        nav = _nav_calls_callees("cpp", code)
+        ts_calls = _treesitter_callees(CppAnalyzer, ".cpp", code)
+        self.assertEqual(nav.count("Foo"), 1)  # only the copy-init call_expression
+        self.assertEqual(ts_calls.count("Foo"), 1)
+        self.assertNotIn(None, nav)
+        self.assertNotIn("int", nav)
+        self.assertNotIn("int", ts_calls)
 
     def test_java_method_invocation(self):
         from reveal.analyzers.java import JavaAnalyzer

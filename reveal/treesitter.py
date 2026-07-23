@@ -390,12 +390,26 @@ CALL_NODE_TYPES = {
     # silently returned zero callers/callees for every heap-allocated C++
     # constructor call. See nav_calls.py:_extract_cpp_new_callee for the
     # paired callee-text extraction (same "new <Name>" convention as
-    # PHP/C#/Scala). NOTE: this does NOT cover C++'s OTHER constructor-call
-    # syntax, direct-initialization (`ClassName obj(args);`) — that parses
-    # to a `declaration`/`init_declarator` shape with no call-expression-
-    # family node at all, a distinct gap needing its own extraction
-    # approach, tracked separately (not fixed here).
+    # PHP/C#/Scala).
     'new_expression',           # C++
+    # C++'S OTHER constructor-call syntax, direct-initialization
+    # (`ClassName obj(args);`, `std::vector<int> v(10);`) has no
+    # call-expression-family node at all — it parses to a `declaration`
+    # holding an `init_declarator` whose 'value' field is a bare
+    # `argument_list` (no wrapping call node), a DISTINCT shape from
+    # copy-init (`Foo obj2 = Foo(3, 4);`, whose 'value' field is a real
+    # `call_expression` and is already covered by the generic dispatch
+    # above). Confirmed via a live grammar dump (BACK-744): the type name
+    # lives on the *parent* `declaration` node's 'type' field, not on
+    # `init_declarator` itself, so this entry alone doesn't visit a
+    # meaningful callee node — `init_declarator` must ALSO be excluded
+    # from every OTHER language's plain-assignment case
+    # (`int y = 5;` / `int x;`), which the 'value'-is-argument_list check
+    # in _callee_name_cpp_direct_init/_extract_cpp_direct_init_callee
+    # handles by returning None for non-direct-init shapes. See
+    # nav_calls.py:_extract_cpp_direct_init_callee for the paired ast://
+    # nav extraction.
+    'init_declarator',          # C++ direct-init: ClassName obj(args);
     # GDScript: any dotted method call -- `self.foo()`, `obj.method()`,
     # `Class.static()`/`Class.new()`, and every segment of a chained call
     # (`a.b().c()`) -- parses to a DISTINCT node kind, 'attribute_call', NOT
@@ -2286,6 +2300,45 @@ class TreeSitterAnalyzer(FileAnalyzer):
         text = self._get_node_text(type_node).strip()
         return f"new {text}" if text else None
 
+    def _callee_name_cpp_direct_init(self, call_node) -> Optional[str]:
+        """C++ direct-initialization: `ClassName obj(args);`,
+        `std::vector<int> v(10);` — `init_declarator` with a bare
+        `argument_list` in its 'value' field (no `new` keyword, no
+        call-expression wrapper at all).
+
+        `init_declarator` is shared with every OTHER language/shape that
+        merely assigns a value (`int y = 5;`, whose 'value' field is a
+        `number_literal` or `call_expression`, already handled by the
+        generic call_expression dispatch) — checking 'value' is literally
+        an `argument_list` node is what isolates the direct-init shape
+        from plain declarations (`int x;`, no 'value' field at all) and
+        copy-init (`Foo obj2 = Foo(3, 4);`) alike (BACK-744).
+
+        The callee name is NOT on this node — it's the TYPE, which lives
+        on the *parent* `declaration` node's 'type' field (`init_declarator`
+        only holds the variable name + args). A qualified type
+        (`std::vector<int>`) collapses to its trailing `::`-segment only,
+        matching `_callee_name_cpp_new`'s convention for `new NS::Name(...)`.
+        No "new " prefix — unlike heap allocation, direct-init has no `new`
+        keyword in the source to echo.
+        """
+        value_node = call_node.child_by_field_name('value')
+        if value_node is None or _zero_arg(value_node, 'kind') != 'argument_list':
+            return None
+        decl_node = _zero_arg(call_node, 'parent')
+        if decl_node is None:
+            return None
+        type_node = decl_node.child_by_field_name('type')
+        if type_node is None:
+            return None
+        kind = _zero_arg(type_node, 'kind')
+        if kind not in ('type_identifier', 'qualified_identifier'):
+            return None
+        text = self._get_node_text(type_node).strip()
+        if not text:
+            return None
+        return text.split('::')[-1] if kind == 'qualified_identifier' else text
+
     def _callee_name_scala_instance(self, call_node) -> Optional[str]:
         # Scala: new ClassName(args) / new ArrayList[String](args) /
         # new java.io.File(args) — instance_expression. A DISTINCT node
@@ -2743,6 +2796,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._callee_name_php_scoped_call(call_node)
         if _zero_arg(call_node, 'kind') == 'new_expression':
             return self._callee_name_new_expression(call_node)
+        if _zero_arg(call_node, 'kind') == 'init_declarator':
+            return self._callee_name_cpp_direct_init(call_node)
         if _zero_arg(call_node, 'kind') == 'instance_expression':
             return self._callee_name_scala_instance(call_node)
         if _zero_arg(call_node, 'kind') == 'infix_expression':
