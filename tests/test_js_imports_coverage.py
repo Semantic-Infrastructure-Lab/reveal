@@ -817,6 +817,142 @@ class TestTsconfigExtendsChain:
         assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) == target.resolve()
 
 
+# ─── package.json exports-map resolution (BACK-772) ────────────────────────
+#
+# The other real way a monorepo cross-package import resolves with no
+# node_modules installed: a workspace member's own package.json `exports`
+# map, independent of the consumer's tsconfig `paths` (BACK-694/705). Filed
+# as the residual gap left after the `nest` corpus's tsconfig-extends fix
+# (BACK-705, 81.21% recall).
+
+class TestWorkspaceExportsMap:
+
+    def _stmt(self, module_name: str, base_path: Path, import_type: str = 'es6_import') -> ImportStatement:
+        return ImportStatement(
+            file_path=base_path / 'main.ts', line_number=1, module_name=module_name,
+            imported_names=[], is_relative=module_name.startswith('.'),
+            import_type=import_type)
+
+    def _write_workspace(self, root: Path, exports: dict, globs=None) -> Path:
+        root.mkdir(parents=True, exist_ok=True)
+        (root / 'package.json').write_text(json.dumps(
+            {'name': 'monorepo-root', 'private': True, 'workspaces': globs or ['packages/*']}))
+        pkg_dir = root / 'packages' / 'utils'
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / 'package.json').write_text(json.dumps({'name': '@myorg/utils', 'exports': exports}))
+        return pkg_dir
+
+    def test_subpath_export_resolves_to_real_file(self, tmp_path):
+        pkg_dir = self._write_workspace(tmp_path, {'./helpers': './dist/helpers.js'})
+        (pkg_dir / 'dist').mkdir()
+        target = pkg_dir / 'dist' / 'helpers.js'
+        target.write_text('export function helper() {}')
+        base = tmp_path / 'apps' / 'web'
+        base.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@myorg/utils/helpers', base)
+        assert e.resolve_import(stmt, base, search_paths=[tmp_path]) == target.resolve()
+        assert e.is_intra_project_import(stmt, base, search_paths=[tmp_path]) is True
+
+    def test_root_export_bare_package_specifier(self, tmp_path):
+        pkg_dir = self._write_workspace(tmp_path, {'.': './dist/index.js'})
+        (pkg_dir / 'dist').mkdir()
+        target = pkg_dir / 'dist' / 'index.js'
+        target.write_text('export default {};')
+        base = tmp_path / 'apps' / 'web'
+        base.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@myorg/utils', base)
+        assert e.resolve_import(stmt, base, search_paths=[tmp_path]) == target.resolve()
+
+    def test_wildcard_subpath_export(self, tmp_path):
+        pkg_dir = self._write_workspace(tmp_path, {'./features/*': './dist/features/*.js'})
+        (pkg_dir / 'dist' / 'features').mkdir(parents=True)
+        target = pkg_dir / 'dist' / 'features' / 'foo.js'
+        target.write_text('export function foo() {}')
+        base = tmp_path / 'apps' / 'web'
+        base.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@myorg/utils/features/foo', base)
+        assert e.resolve_import(stmt, base, search_paths=[tmp_path]) == target.resolve()
+
+    def test_conditional_export_prefers_require_for_commonjs_require(self, tmp_path):
+        pkg_dir = self._write_workspace(tmp_path, {
+            '.': {'require': './dist/index.cjs', 'import': './dist/index.mjs', 'default': './dist/index.js'},
+        })
+        (pkg_dir / 'dist').mkdir()
+        cjs = pkg_dir / 'dist' / 'index.cjs'
+        cjs.write_text('module.exports = {};')
+        mjs = pkg_dir / 'dist' / 'index.mjs'
+        mjs.write_text('export default {};')
+        base = tmp_path / 'apps' / 'web'
+        base.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        require_stmt = self._stmt('@myorg/utils', base, import_type='commonjs_require')
+        import_stmt = self._stmt('@myorg/utils', base, import_type='es6_import')
+        assert e.resolve_import(require_stmt, base, search_paths=[tmp_path]) == cjs.resolve()
+        assert e.resolve_import(import_stmt, base, search_paths=[tmp_path]) == mjs.resolve()
+
+    def test_negated_workspace_glob_excludes_package(self, tmp_path):
+        """Real npm/pnpm workspace syntax: a `!`-prefixed glob entry excludes
+        matching directories from workspace-member discovery."""
+        pkg_dir = self._write_workspace(
+            tmp_path, {'.': './dist/index.js'}, globs=['packages/*', '!packages/utils'])
+        (pkg_dir / 'dist').mkdir()
+        (pkg_dir / 'dist' / 'index.js').write_text('export default {};')
+        base = tmp_path / 'apps' / 'web'
+        base.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@myorg/utils', base)
+        assert e.resolve_import(stmt, base, search_paths=[tmp_path]) is None
+        assert e.is_intra_project_import(stmt, base, search_paths=[tmp_path]) is False
+
+    def test_unmatched_specifier_is_genuine_external_dependency(self, tmp_path):
+        self._write_workspace(tmp_path, {'.': './dist/index.js'})
+        base = tmp_path / 'apps' / 'web'
+        base.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('react', base)
+        assert e.resolve_import(stmt, base, search_paths=[tmp_path]) is None
+        assert e.is_intra_project_import(stmt, base, search_paths=[tmp_path]) is False
+
+    def test_pnpm_workspace_yaml_packages_list(self, tmp_path):
+        """pnpm monorepos declare members in pnpm-workspace.yaml, not
+        package.json `workspaces` (npm/yarn-only field)."""
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        (tmp_path / 'package.json').write_text(json.dumps({'name': 'monorepo-root', 'private': True}))
+        (tmp_path / 'pnpm-workspace.yaml').write_text('packages:\n  - "packages/*"\n')
+        pkg_dir = tmp_path / 'packages' / 'utils'
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / 'package.json').write_text(json.dumps({'name': '@myorg/utils', 'exports': {'.': './index.js'}}))
+        target = pkg_dir / 'index.js'
+        target.write_text('export default {};')
+        base = tmp_path / 'apps' / 'web'
+        base.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@myorg/utils', base)
+        assert e.resolve_import(stmt, base, search_paths=[tmp_path]) == target.resolve()
+
+    def test_no_workspace_declaration_declines_cleanly(self, tmp_path):
+        """A single-package repo (no `workspaces` field, no pnpm-workspace.yaml)
+        has no workspace members to match against -- must decline, not crash."""
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        (tmp_path / 'package.json').write_text(json.dumps({'name': 'standalone-app'}))
+        base = tmp_path / 'src'
+        base.mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('@myorg/utils', base)
+        assert e.resolve_import(stmt, base, search_paths=[tmp_path]) is None
+
+
 # ─── _resolve_relative_js ────────────────────────────────────────────────────
 
 class TestResolveRelativeJs:

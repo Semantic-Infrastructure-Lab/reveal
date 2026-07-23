@@ -37,6 +37,11 @@ _IMPORTS_CACHE = ImportsDiskCache("javascript_imports")
 _TSCONFIG_FIND_CACHE: Dict[str, Optional[Path]] = {}
 _TSCONFIG_ALIAS_CACHE: Dict[str, Tuple[Optional[Path], Dict[str, List[str]]]] = {}
 
+# BACK-772: process-lifetime cache of workspace_root -> {package name: dir},
+# same rationale as the tsconfig caches above -- avoid re-globbing/re-parsing
+# every workspace member's package.json once per importing file.
+_WORKSPACE_PACKAGES_CACHE: Dict[str, Dict[str, Path]] = {}
+
 _JSONC_TOKEN_RE = re.compile(r'"(?:\\.|[^"\\])*"|//[^\n]*|/\*.*?\*/', re.DOTALL)
 _TRAILING_COMMA_RE = re.compile(r',(\s*[}\]])')
 
@@ -214,6 +219,171 @@ def _match_tsconfig_path(module_path: str, base_url: Path, paths: Dict[str, List
     key, prefix, suffix = best_key
     matched = module_path[len(prefix): len(module_path) - len(suffix)] if suffix else module_path[len(prefix):]
     return [base_url / target.replace('*', matched) for target in paths[key]]
+
+
+def _load_workspace_package_globs(workspace_root: Path) -> List[str]:
+    """The workspace-member glob list declared at *workspace_root* — npm/yarn
+    `package.json` `"workspaces"` (array, or `{"packages": [...]}`), else
+    pnpm's `pnpm-workspace.yaml` `packages:`. Empty list if neither declares
+    one (a single-package repo, not a monorepo)."""
+    pkg = workspace_root / 'package.json'
+    if pkg.exists():
+        try:
+            data = json.loads(pkg.read_text(encoding='utf-8', errors='replace'))
+        except (OSError, ValueError):
+            data = {}
+        if isinstance(data, dict):
+            workspaces = data.get('workspaces')
+            if isinstance(workspaces, list):
+                return [g for g in workspaces if isinstance(g, str)]
+            if isinstance(workspaces, dict):
+                packages = workspaces.get('packages')
+                if isinstance(packages, list):
+                    return [g for g in packages if isinstance(g, str)]
+
+    pnpm_file = workspace_root / 'pnpm-workspace.yaml'
+    if pnpm_file.exists():
+        try:
+            import yaml
+            data = yaml.safe_load(pnpm_file.read_text(encoding='utf-8', errors='replace'))
+        except Exception:
+            data = None
+        if isinstance(data, dict):
+            packages = data.get('packages')
+            if isinstance(packages, list):
+                return [g for g in packages if isinstance(g, str)]
+    return []
+
+
+def _find_workspace_packages(workspace_root: Path) -> Dict[str, Path]:
+    """BACK-772: map every workspace-member package's declared `name` to its
+    directory, so a bare specifier (`@myorg/utils`, `@myorg/utils/helpers`)
+    can be resolved to an in-tree package even with no `node_modules`
+    installed (same buildless-monorepo problem BACK-694/698 solved for
+    tsconfig `paths` -- this is the sibling gap for packages that resolve via
+    their own `package.json` `exports` map instead of a tsconfig alias).
+
+    Negated glob entries (`"!packages/excluded-*"`, real npm/pnpm workspace
+    syntax) exclude matching directories from the result.
+    """
+    key = str(workspace_root)
+    if key in _WORKSPACE_PACKAGES_CACHE:
+        return _WORKSPACE_PACKAGES_CACHE[key]
+
+    globs = _load_workspace_package_globs(workspace_root)
+    result: Dict[str, Path] = {}
+    if not globs:
+        _WORKSPACE_PACKAGES_CACHE[key] = result
+        return result
+
+    includes = [g for g in globs if not g.startswith('!')]
+    excludes = [g[1:] for g in globs if g.startswith('!')]
+    excluded_dirs = set()
+    for pattern in excludes:
+        excluded_dirs.update(workspace_root.glob(pattern))
+
+    for pattern in includes:
+        for candidate in workspace_root.glob(pattern):
+            if not candidate.is_dir() or candidate in excluded_dirs:
+                continue
+            pkg_json = candidate / 'package.json'
+            if not pkg_json.is_file():
+                continue
+            try:
+                data = json.loads(pkg_json.read_text(encoding='utf-8', errors='replace'))
+            except (OSError, ValueError):
+                continue
+            name = data.get('name') if isinstance(data, dict) else None
+            if isinstance(name, str):
+                result[name] = candidate
+
+    _WORKSPACE_PACKAGES_CACHE[key] = result
+    return result
+
+
+def _match_workspace_package(module_path: str, packages: Dict[str, Path]) -> Optional[Tuple[Path, str]]:
+    """(package directory, exports subpath) for module_path against the
+    known workspace package names, or None if no package name is a prefix.
+    Longest matching name wins (mirrors npm's own longest-specifier-match,
+    relevant when one workspace package's name is itself a prefix of
+    another's, e.g. `@myorg/core` and `@myorg/core-utils`)."""
+    if module_path in packages:
+        return packages[module_path], '.'
+    best_name = None
+    for name in packages:
+        if module_path.startswith(name + '/') and (best_name is None or len(name) > len(best_name)):
+            best_name = name
+    if best_name is None:
+        return None
+    return packages[best_name], '.' + module_path[len(best_name):]
+
+
+def _resolve_export_condition(value: Any, prefer_require: bool) -> Optional[str]:
+    """Descend a package.json `exports` conditional-export value (string,
+    nested condition object, or fallback array) to a single target path
+    string, or None. Condition preference order approximates Node's own
+    resolution: the statement's own call style (`require`/`import`) first,
+    then `node`, then `default` -- `types`-only branches (declaration files,
+    never a real runtime module) are skipped unless nothing else matches."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        for item in value:
+            resolved = _resolve_export_condition(item, prefer_require)
+            if resolved:
+                return resolved
+        return None
+    if isinstance(value, dict):
+        order = ['require', 'node', 'default'] if prefer_require else ['import', 'node', 'default']
+        for cond in order:
+            if cond in value:
+                resolved = _resolve_export_condition(value[cond], prefer_require)
+                if resolved:
+                    return resolved
+        for cond, cond_value in value.items():
+            if cond in order or cond == 'types':
+                continue
+            resolved = _resolve_export_condition(cond_value, prefer_require)
+            if resolved:
+                return resolved
+    return None
+
+
+def _resolve_exports_subpath(exports: Any, subpath: str, prefer_require: bool) -> Optional[str]:
+    """Target path string for `subpath` ('.' or './name') through a
+    package's `exports` field, or None if unresolvable. Handles all three
+    real shapes: a bare string (root export only), a subpath map (keys are
+    '.'/'./*'), and a flat condition map (conditional root export, no
+    subpaths at all)."""
+    if isinstance(exports, str):
+        return exports if subpath == '.' else None
+    if not isinstance(exports, dict):
+        return None
+
+    is_subpath_map = any(k == '.' or k.startswith('./') for k in exports)
+    if not is_subpath_map:
+        return _resolve_export_condition(exports, prefer_require) if subpath == '.' else None
+
+    if subpath in exports:
+        return _resolve_export_condition(exports[subpath], prefer_require)
+
+    best_key = None
+    best_prefix_len = -1
+    for key in exports:
+        if '*' not in key:
+            continue
+        prefix, _, suffix = key.partition('*')
+        if (subpath.startswith(prefix) and subpath.endswith(suffix)
+                and len(subpath) >= len(prefix) + len(suffix)):
+            if len(prefix) > best_prefix_len:
+                best_prefix_len = len(prefix)
+                best_key = (key, prefix, suffix)
+    if not best_key:
+        return None
+    key, prefix, suffix = best_key
+    matched = subpath[len(prefix): len(subpath) - len(suffix)] if suffix else subpath[len(prefix):]
+    target = _resolve_export_condition(exports[key], prefer_require)
+    return target.replace('*', matched) if target and '*' in target else target
 
 
 def _line_text(analyzer, line_number: int) -> str:
@@ -736,11 +906,20 @@ class JavaScriptExtractor(LanguageExtractor):
         packages installed (e.g. pnpm/lerna), that alias map is the *only*
         way `@scope/pkg`-style cross-package imports resolve; a genuine npm
         dependency (no matching alias) still correctly returns None.
+
+        BACK-772: if no tsconfig alias matches either, try resolving against
+        a sibling workspace package's own `package.json` `exports` map (the
+        other real way a monorepo cross-package import resolves with no
+        `node_modules` installed -- a package that ships subpath exports
+        instead of relying on the consumer's tsconfig paths).
         """
         module_path = stmt.module_name
 
         if not module_path.startswith('.'):
-            return self._resolve_via_tsconfig(module_path, base_path, search_paths)
+            resolved = self._resolve_via_tsconfig(module_path, base_path, search_paths)
+            if resolved:
+                return resolved
+            return self._resolve_via_workspace_exports(stmt, base_path, search_paths)
 
         # Resolve relative imports
         return self._resolve_relative_js(module_path, base_path)
@@ -754,16 +933,22 @@ class JavaScriptExtractor(LanguageExtractor):
     ) -> Optional[bool]:
         """A relative specifier (`./x`, `../x`) is intra-project; a bare
         specifier (`react`, `@angular/core`) is an npm dependency (external)
-        UNLESS it matches a tsconfig `paths` alias (BACK-694), in which case
-        it's intra-project by the project's own configuration even when
-        resolve_import ultimately can't find the target file -- that case
-        must count as a real miss (honest-decline), not a silent external
-        classification that hides the gap from confidence/known_limits."""
+        UNLESS it matches a tsconfig `paths` alias (BACK-694) or a sibling
+        workspace package's name (BACK-772), in which case it's intra-project
+        by the monorepo's own layout even when resolve_import ultimately
+        can't find the target file -- that case must count as a real miss
+        (honest-decline), not a silent external classification that hides
+        the gap from confidence/known_limits."""
         module_path = stmt.module_name
         if module_path.startswith('.'):
             return True
         if self._tsconfig_alias_matches(module_path, base_path, search_paths):
             return True
+        workspace_root = search_paths[0] if search_paths else None
+        if workspace_root is not None:
+            packages = _find_workspace_packages(workspace_root)
+            if _match_workspace_package(module_path, packages):
+                return True
         return False
 
     def _resolve_via_tsconfig(
@@ -781,6 +966,38 @@ class JavaScriptExtractor(LanguageExtractor):
             if resolved:
                 return resolved
         return None
+
+    def _resolve_via_workspace_exports(
+        self, stmt: ImportStatement, base_path: Path, search_paths: Optional[List[Path]],
+    ) -> Optional[Path]:
+        """BACK-772: resolve a bare specifier as a sibling workspace
+        package's own `package.json` `exports` map. Returns None if
+        search_paths carries no workspace root, the root declares no
+        workspace members, no member's name matches, or the matched
+        package's `exports` doesn't resolve the subpath -- all "not this
+        mechanism", not a resolution failure."""
+        if not search_paths:
+            return None
+        packages = _find_workspace_packages(search_paths[0])
+        if not packages:
+            return None
+        match = _match_workspace_package(stmt.module_name, packages)
+        if not match:
+            return None
+        pkg_dir, subpath = match
+        pkg_json = pkg_dir / 'package.json'
+        try:
+            data = json.loads(pkg_json.read_text(encoding='utf-8', errors='replace'))
+        except (OSError, ValueError):
+            return None
+        exports = data.get('exports') if isinstance(data, dict) else None
+        if exports is None:
+            return None
+        prefer_require = 'require' in stmt.import_type
+        target = _resolve_exports_subpath(exports, subpath, prefer_require)
+        if not target:
+            return None
+        return self._resolve_target_path((pkg_dir / target).resolve())
 
     def _tsconfig_alias_matches(
         self, module_path: str, base_path: Path, search_paths: Optional[List[Path]],
