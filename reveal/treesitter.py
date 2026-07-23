@@ -1211,6 +1211,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # both silently absent from every affected signature's own calls
         # list even after the _function_end_node fix above. (BACK-760)
         calls = self._dart_merge_signature_extra_calls(node, calls)
+        calls = self._decorator_extra_calls(decorated_node, calls)
         return {
             'line': line_start,
             'line_end': line_end,
@@ -1711,6 +1712,52 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if sibling is not None and _zero_arg(sibling, 'kind') == 'initializers':
             _, _, init_calls = self._complexity_depth_and_calls(sibling)
             extra.extend(init_calls)
+        if not extra:
+            return calls
+        seen = set(calls)
+        merged = list(calls)
+        for name in extra:
+            if name not in seen:
+                merged.append(name)
+                seen.add(name)
+        return merged
+
+    def _decorator_extra_calls(self, decorated_node, calls: List[str]) -> List[str]:
+        """Merge calls made in a Python decorator's own arguments into the
+        decorated function's calls list.
+
+        `@validator(vol.Schema(...))` / `@singleton(DATA_RESOLVER)` /
+        `@lru_cache(maxsize=512)` parse decorator expressions as SIBLINGS of
+        the function node under `decorated_definition`, not part of
+        `body_node` -- the walk in `_complexity_depth_and_calls` never sees
+        them (BACK-731, same "call in a signature-adjacent expression, not
+        the body proper" shape as Dart's `_dart_merge_signature_extra_calls`
+        above). Confirmed via Home Assistant's helpers/data_entry_flow.py:
+        two `post` methods decorated `@RequestDataValidator(vol.Schema(...))`
+        -- calls://...?target=Schema reported zero callers in that file at
+        all, in both the reverse (?target=) and forward (?callees=)
+        directions.
+
+        Safe to call unconditionally (including with `decorated_node=None`
+        for an undecorated function, or any non-Python language with no
+        `decorated_definition` wrapper): both are no-ops.
+        """
+        if decorated_node is None:
+            return calls
+        extra: List[str] = []
+        seen_extra: set = set()
+        for child in _children(decorated_node):
+            if _zero_arg(child, 'kind') != 'decorator':
+                continue
+            stack = _children(child)
+            while stack:
+                dec_node = stack.pop()
+                if _zero_arg(dec_node, 'kind') in CALL_NODE_TYPES:
+                    name = self._get_callee_name(dec_node)
+                    if name and name not in seen_extra:
+                        extra.append(name)
+                        seen_extra.add(name)
+                stack.extend(reversed(_children(dec_node)))
         if not extra:
             return calls
         seen = set(calls)

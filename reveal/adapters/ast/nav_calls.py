@@ -140,6 +140,37 @@ def range_calls(
                     results.append(call)
         stack.extend(reversed(_children(node)))
 
+    # Python decorator arguments (`@validator(vol.Schema(...))`) are SIBLINGS
+    # of func_node under decorated_definition, not part of func_node's own
+    # subtree -- the stack walk above never sees them, mirroring
+    # treesitter.py:_decorator_extra_calls's identical BACK-731 gap on the
+    # calls:// side (confirmed on Home Assistant's helpers/data_entry_flow.py:
+    # two `post` methods decorated `@RequestDataValidator(vol.Schema(...))`
+    # were entirely invisible to --calls). Merged in unconditionally, not
+    # range-filtered, same convention as the Dart signature-adjacent extras
+    # above -- a decorator belongs to the whole function regardless of which
+    # --calls sub-range was requested.
+    parent = func_node.parent()
+    if parent is not None and _zero_arg(parent, 'kind') == 'decorated_definition':
+        seen_callees = {r['callee'] for r in results}
+        for sibling in _children(parent):
+            if _zero_arg(sibling, 'kind') != 'decorator':
+                continue
+            dec_stack = _children(sibling)
+            while dec_stack:
+                dnode = dec_stack.pop()
+                if _zero_arg(dnode, 'kind') in call_node_types:
+                    callee = _extract_callee(dnode, get_text, call_node_types)
+                    if callee and callee not in seen_callees:
+                        dline = dnode.start_position().row + 1
+                        first_arg, has_more = _extract_first_arg(dnode, get_text)
+                        results.append({
+                            'line': dline, 'callee': callee,
+                            'first_arg': first_arg, 'has_more_args': has_more,
+                        })
+                        seen_callees.add(callee)
+                dec_stack.extend(_children(dnode))
+
     results.sort(key=lambda r: r['line'])
     return results
 

@@ -813,6 +813,75 @@ def process(x):
 
 
 # ---------------------------------------------------------------------------
+# BACK-731: decorator-argument calls attributed to the decorated function.
+#
+# `@validator(vol.Schema(...))` / `@RequestDataValidator(vol.Schema(...))`
+# parse decorator expressions as SIBLINGS of the function node under
+# decorated_definition, not part of body_node -- call extraction only ever
+# walked body_node, so calls made inside a decorator's own arguments were
+# silently dropped: invisible to ?target= (reverse lookup) AND ?callees=
+# (forward lookup) alike. Found via Home Assistant's real
+# helpers/data_entry_flow.py (two `post` methods decorated
+# @RequestDataValidator(vol.Schema(...)); calls://...?target=Schema reported
+# zero callers in that file at all).
+# ---------------------------------------------------------------------------
+
+class TestDecoratorArgumentCalls(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        _write(self.tmpdir, 'entry_flow.py', '''
+import voluptuous as vol
+
+
+class RequestDataValidator:
+    def __init__(self, schema):
+        self.schema = schema
+
+    def __call__(self, func):
+        return func
+
+
+@RequestDataValidator(vol.Schema({"type": str}))
+def post(self, request):
+    return handle(request)
+
+
+@RequestDataValidator(vol.Schema({"other": int}))
+def post2(self, request):
+    return handle2(request)
+''')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_reverse_lookup_finds_decorator_argument_call(self):
+        result = find_callers(self.tmpdir, 'Schema', depth=1)
+        callers_at_level1 = result['levels'][0]['callers'] if result['levels'] else []
+        caller_names = {r['caller'] for r in callers_at_level1}
+        self.assertIn('post', caller_names)
+        self.assertIn('post2', caller_names)
+
+    def test_forward_lookup_includes_decorator_argument_calls(self):
+        result = find_callees(self.tmpdir, 'post')
+        calls = result['matches'][0]['calls']
+        self.assertIn('handle', calls)
+        self.assertIn('RequestDataValidator', calls)
+        self.assertIn('vol.Schema', calls)
+
+    def test_undecorated_function_unaffected(self):
+        """decorated_node=None (no decorator at all) is a no-op, not a crash."""
+        _write(self.tmpdir, 'plain.py', '''
+def plain():
+    return helper()
+''')
+        result = find_callees(self.tmpdir, 'plain')
+        matches = [m for m in result['matches'] if m['file'].endswith('plain.py')]
+        self.assertEqual(matches[0]['calls'], ['helper'])
+
+
+# ---------------------------------------------------------------------------
 # CallsAdapter: ?callees= query param (forward lookup)
 # ---------------------------------------------------------------------------
 

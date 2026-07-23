@@ -805,6 +805,35 @@ class TestRangeCalls(unittest.TestCase):
         if bar_calls:
             self.assertTrue(bar_calls[0]['has_more_args'])
 
+    def test_decorator_argument_calls_included(self):
+        # BACK-731: `@RequestDataValidator(vol.Schema(...))` parses the
+        # decorator as a SIBLING of the function node under
+        # decorated_definition, not part of func_node's own subtree -- the
+        # stack walk never saw it, so decorator-argument calls were silently
+        # dropped from --calls entirely (mirrors treesitter.py:
+        # _decorator_extra_calls's identical calls:// gap). Merged in
+        # unconditionally (not range-filtered), same convention as the Dart
+        # signature-adjacent extras.
+        code = """
+        @RequestDataValidator(vol.Schema({"type": str}))
+        def post(self, request):
+            return handle(request)
+        """
+        _, root, get_text, _ = _parse_python(code)
+        func = _find_func_with_text(root, get_text, 'post')
+        from reveal.adapters.ast.nav import range_calls
+        calls = range_calls(func, 1, 999, get_text)
+        callees = [c['callee'] for c in calls]
+        self.assertIn('handle', callees)
+        self.assertIn('RequestDataValidator', callees)
+        self.assertIn('vol.Schema', callees)
+
+    def test_undecorated_function_decorator_merge_is_noop(self):
+        # func_node.parent() is not a decorated_definition for a plain
+        # function -- the merge step must be a no-op, not a crash.
+        calls = self._calls(1, 999)
+        self.assertIsInstance(calls, list)
+
 
 # ---------------------------------------------------------------------------
 # BACK-415: chained/fluent calls must not fold the whole chain into one callee
