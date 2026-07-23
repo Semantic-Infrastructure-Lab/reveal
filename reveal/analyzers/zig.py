@@ -273,11 +273,24 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         return containers
 
     def _get_test_name(self, test_node) -> Optional[str]:
-        """Extract the name string from a TestDecl node, or None."""
+        """Extract the name string from a TestDecl node, or None.
+
+        `test "name" {}` names itself via a STRINGLITERALSINGLE child;
+        `test SomeType {}` (the idiomatic way to colocate tests with a
+        generic type/fn, e.g. testing a `pub fn Foo(comptime T: type) type`
+        factory) names itself via a bare IDENTIFIER child instead — without
+        this second case, every identifier-named test (and every call made
+        from inside one) was entirely absent from get_structure(), not just
+        blind to its calls (BACK-755, found via the Zig calls-recall-oracle
+        measurement, BACK-730).
+        """
         for child in _children(test_node):
-            if child.kind() == 'STRINGLITERALSINGLE':
+            kind = child.kind()
+            if kind == 'STRINGLITERALSINGLE':
                 name = self._get_node_text(child)
                 return name[1:-1] if name.startswith('"') and name.endswith('"') else name
+            if kind == 'IDENTIFIER':
+                return self._get_node_text(child)
         return None
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:

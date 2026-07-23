@@ -236,9 +236,25 @@ def _extract_zig_suffix_calls(children: List[Any], get_text: Callable) -> List[D
     if not children:
         return results
     base_parts: List[str] = []
+    rest = children[1:]
     if children[0].kind() in ('IDENTIFIER', 'BUILTINIDENTIFIER'):
         base_parts = [get_text(children[0])]
-    for child in children[1:]:
+    elif _zero_arg(children[0], 'kind') == '.' and len(children) > 1 and _zero_arg(children[1], 'kind') == 'IDENTIFIER':
+        # `.fixed(&buf)` — Zig's type-inferred enum-literal call syntax
+        # (`var w: std.Io.Writer = .fixed(&buf)` / `= .init(...)`, a common
+        # modern-Zig idiom relying on result-location type inference): a
+        # bare `.` token directly followed by the name, never wrapped in
+        # `FieldOrFnCall` the way a real receiver-qualified chain segment
+        # is. Without unwrapping this pair first, `children[0]` is the `.`
+        # token (matches no case below), `base_parts` stays empty, and the
+        # `IDENTIFIER` is silently skipped by the loop (only
+        # `FnCallArguments`/`FieldOrFnCall` are handled per iteration) —
+        # found via the Zig calls-recall-oracle measurement (BACK-730/BACK-754), a
+        # 208/209-miss target (`fixed`) traced to this exact pattern in
+        # real Ghostty source.
+        base_parts = [get_text(children[1])]
+        rest = children[2:]
+    for child in rest:
         kind = child.kind()
         if kind == 'FnCallArguments':
             callee = ''.join(base_parts) if base_parts else None

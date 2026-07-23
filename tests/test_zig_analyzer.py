@@ -775,6 +775,62 @@ fn run() void {
         finally:
             os.unlink(path)
 
+    def test_calls_finds_type_inferred_enum_literal_call(self):
+        """BACK-730 (Zig calls-recall-oracle): `.fixed(&buf)` (Zig's
+        type-inferred enum-literal call syntax, e.g. `var w: std.Io.Writer
+        = .fixed(&buf)` / `= .init(...)`, common in modern Zig relying on
+        result-location type inference) is a `SuffixExpr` -> [`.`,
+        IDENTIFIER, FnCallArguments] — a bare `.` token directly followed
+        by the name, never wrapped in `FieldOrFnCall` like a real
+        receiver-qualified chain segment. A real Ghostty target
+        (`fixed`) measured 0.48% recall (1/209) before this fix.
+        """
+        from reveal.adapters.ast.nav_calls import range_calls
+        from reveal.treesitter import CALL_NODE_TYPES
+        path = self._write('''\
+fn run() void {
+    var w: MyType = .fixed(&buf);
+    _ = w;
+}
+''')
+        try:
+            func_node, get_text = _resolve_zig_func(path)
+            calls = range_calls(func_node, 1, 999, get_text, CALL_NODE_TYPES)
+            callees = [c['callee'] for c in calls]
+            self.assertIn('fixed', callees)
+        finally:
+            os.unlink(path)
+
+    def test_extract_tests_includes_identifier_named_test(self):
+        """BACK-755 (Zig calls-recall-oracle): `test SomeType {}` (an
+        identifier name, not a string literal) is the idiomatic way to
+        colocate tests with a generic type/fn (`pub fn Foo(comptime T:
+        type) type`). `_get_test_name` only recognized STRINGLITERALSINGLE
+        children, so every identifier-named test — and every call made
+        from inside one — was entirely absent from get_structure(), not
+        just blind to its calls. Real Ghostty examples: `test WeakRef {}`,
+        `test getIndex {}`.
+        """
+        path = self._write('''\
+pub fn WeakRef(comptime T: type) type {
+    return struct {};
+}
+
+test WeakRef {
+    helper();
+}
+
+fn helper() void {}
+''')
+        try:
+            analyzer = ZigAnalyzer(path)
+            structure = analyzer.get_structure()
+            tests = {t['name']: t for t in structure.get('tests', [])}
+            self.assertIn('WeakRef', tests)
+            self.assertIn('helper', tests['WeakRef']['calls'])
+        finally:
+            os.unlink(path)
+
 
 class TestZigDepsExcludesMemberNamesAndOwnName(unittest.TestCase):
     """BACK-431 feature-breadth pass (--deps, same Ghostty dogfood): three

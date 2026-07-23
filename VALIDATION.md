@@ -68,9 +68,9 @@ is a claim we have not yet checked, **not** a claim it is broken.
    recall measured also has a side-effect measurement (BACK-718), and every
    one of those now has the full six-category sweep (Kotlin deepened in
    BACK-727, Swift deepened in BACK-728 — the last narrow entry). Call-graph
-   recall (`calls://`) is measured for 13 of the 19 (Python, TypeScript, Go,
-   Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX — BACK-730);
-   the other 5 (C, Lua, Dart, GDScript, Zig) are not yet measured, not
+   recall (`calls://`) is measured for 14 of the 19 (Python, TypeScript, Go,
+   Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX, Zig — BACK-730);
+   the other 4 (C, Lua, Dart, GDScript) are not yet measured, not
    known-broken.
    `surface`, `contracts`, and `patches://`/testability have **no
    ground-truth validation on any language** — see [Scope](#scope).
@@ -1321,22 +1321,25 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 
 | JS/TSX | three.js `src/` (750 `.js` files) + Excalidraw (626 `.ts`/`.tsx` files) | reverse | **100.00%** (both corpora, both 8/bucket and 20/bucket samples) | 0 | Two distinct, real `calls://` bugs, both found via a pre-flight AST dump *before* any oracle ran, both fixed: (1) **BACK-751** — `adapters/ast/adapter.py` had its own independent, unconditional `PYTHON_BUILTINS` filter on the `ast://` adapter's `calls` field, missed when BACK-748 (Scala) fixed the identical bug in `adapters/calls/index.py` — `xs.map(fn)` silently lost its `map` call. (2) **BACK-752** — `new_expression` is shared by C++ (BACK-730) and JS/TS/TSX with two mutually exclusive field shapes (C++'s callee sits in a `type` field, JS/TS/TSX's in a `constructor` field); dispatch always routed to the C++ handler, which returns `None` for the JS/TS shape, so every `new Foo()`/`new ns.Foo()` call was silently invisible. Fixed in both `treesitter.py` and `nav_calls.py` (parity), dispatched structurally on which field is populated. The oracle also needed a genuinely new scope-creation rule not modeled by the earlier TS-only oracle: Jest/Vitest `describe`/`it`/`test`/etc. callbacks (BACK-334/BACK-662) get their own synthetic scope, surfaced only once the corpus included real Jest spec files (Excalidraw) — mirrored 1:1 from `analyzers/_js_test_callbacks.py`, including a minor label quote-stripping quirk (cosmetic, not filed) |
 
+| Zig | Ghostty `src/` (.zig only, 709 files, test/ and `*_test.zig` excluded) | reverse | 92.28% → **99.98%** (8,403/8,405 edges, 20/bucket) | 221 (pre-fix) → 0 (post-fix) | Three distinct, real gaps found via a pre-flight AST dump *before* any oracle ran, all fixed: (1) **BACK-753** — `@as`/`@import`/`@panic`/etc. (Zig's `@`-prefixed compiler builtins) parse as a `BUILTINIDENTIFIER` leaf, a distinct kind from a regular `IDENTIFIER`, so `_extract_zig_suffix_calls` never seeded a callee for them — every builtin call was invisible, despite `@import` alone appearing in nearly every real Zig file. (2) **BACK-754** — `.fixed(&buf)`/`.init(...)` (Zig's type-inferred enum-literal call syntax, e.g. `var w: std.Io.Writer = .fixed(&buf)`, common in modern Zig via result-location inference) is a bare `.` token directly followed by the name, never wrapped in `FieldOrFnCall` the way a real receiver-qualified chain segment is — silently dropped (one target, `fixed`, measured 0.48% recall pre-fix). (3) **BACK-755** — `test SomeType {}` (Zig's identifier-named test form, the idiomatic way to colocate tests with a generic type/fn factory, e.g. `test WeakRef {}`) was entirely invisible to `get_structure()` — `_get_test_name` only recognized string-literal names, so the whole test scope (and every call inside it) was missing, not just its calls. All the FPs (221 pre-fix) traced to two oracle-modeling gaps, not `calls://` bugs: the oracle initially only walked `.fn_decl` scopes (missing `test "name" {}` string-named scopes entirely — Zig colocates tests inline, unlike every prior language's separately-directoried test suite) and the staged corpus initially included Ghostty's non-Zig files (189 Swift, 32 C, plus others — the macOS GUI shell), which `calls://`'s multi-language index happily scanned. One residual miss (2/8,405 edges, both `list_themes.zig`) traced to a pre-existing `tree-sitter-zig` parse error on that one file (`has_error: true`), not reproduced in isolation — narrow, undiagnosed, not filed |
+
 Full methodology, per-corpus commit/snapshot, and the harness scripts
 (`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, Kotlin
 `KotlinOracle.kt`, Swift `swift-oracle/main.swift`, C++ via libclang, Scala
 `build_oracle_scala.scala` via scalameta, `build_oracle_js.js` for JS/TSX,
-`diff_*.py`) for all thirteen languages:
+`zig-oracle/build_oracle_zig.zig` for Zig via `std.zig.Ast`, `diff_*.py`) for
+all fourteen languages:
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
 Not yet measured: C, Lua, Dart,
-GDScript, Zig — a claim not yet checked, not a claim
-`calls://` is broken on those languages. If a fourteenth language is measured,
+GDScript — a claim not yet checked, not a claim
+`calls://` is broken on those languages. If a fifteenth language is measured,
 add it to this table and the status-at-a-glance table above; `_bare_callee_name`
 /`_get_callee_name`'s other dotted-name-family languages are a reasonable place
 to look next, given Java's BACK-734, Ruby's BACK-735, PHP's BACK-736, C#'s
-BACK-737, Kotlin's BACK-738, Scala's BACK-746/747, and JS/TSX's BACK-751/752
-all show even an "unflagged" language can hide a systemic callee-, caller-, or
-grammar-level bug.
+BACK-737, Kotlin's BACK-738, Scala's BACK-746/747, JS/TSX's BACK-751/752, and
+Zig's BACK-753/754/755 all show even an "unflagged" language can hide a
+systemic callee-, caller-, or grammar-level bug.
 
 ## Re-running this yourself
 
@@ -1386,11 +1389,11 @@ program), **side-effect/boundary classification recall** (`--sideeffects` /
 `--boundary`), and **cross-file call-graph recall** (`calls://` — BACK-730,
 the same silent-wrong-answer risk as BACK-542: a whole-project graph query
 where a false negative reads as a confident, checked answer). `calls://` is
-measured for 13 of the 19 languages so far (Python across three query
+measured for 14 of the 19 languages so far (Python across three query
 directions, TypeScript, Go, Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++,
-Scala, JS/TSX — all now clean or fixed-and-reverified, see
+Scala, JS/TSX, Zig — all now clean or fixed-and-reverified, see
 [Cross-File Call-Graph Recall](#cross-file-call-graph-recall)); the
-remaining 5 (C, Lua, Dart, GDScript, Zig) are open
+remaining 4 (C, Lua, Dart, GDScript) are open
 validation work, tracked the same way as any not-yet-measured import/
 side-effect language. It does not yet cover recall
 for `surface` or `contracts` (BACK-719). The languages marked *not measured*
