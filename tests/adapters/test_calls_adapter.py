@@ -1031,6 +1031,20 @@ def build_path(base, name):
         # 'join' is not a Python builtin function — should be visible
         self.assertTrue(any('join' in c for c in calls))
 
+    def test_non_python_calls_not_filtered_as_builtins(self):
+        """BACK-748: 'map'/'filter' are PYTHON_BUILTINS names but real Ruby
+        methods — filtering must be scoped to Python files only."""
+        _write(self.tmpdir, 'sample.rb', '''
+def process(items)
+  items.map { |x| x * 2 }.filter { |x| x > 0 }
+end
+''')
+        result = find_callees(self.tmpdir, 'process', include_builtins=False)
+        rb_match = next(m for m in result['matches'] if m['file'].endswith('.rb'))
+        calls = rb_match['calls']
+        self.assertTrue(any(c.split('.')[-1] == 'filter' for c in calls))
+        self.assertTrue(any(c.split('.')[-1] == 'map' for c in calls))
+
 
 # ---------------------------------------------------------------------------
 # Adapter: ?builtins=true query param
@@ -1191,6 +1205,43 @@ class TestRankByCallers(unittest.TestCase):
         result = rank_by_callers(self.tmpdir)
         counts = [e['caller_count'] for e in result['entries']]
         self.assertEqual(counts, sorted(counts, reverse=True))
+
+
+class TestRankByCallersCrossLanguageBuiltins(unittest.TestCase):
+    """BACK-748: PYTHON_BUILTINS filtering must be language-scoped."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_ruby_map_filter_survive_default_ranking(self):
+        _write(self.tmpdir, 'sample.rb', '''
+def process(items)
+  items.map { |x| x * 2 }.filter { |x| x > 0 }
+end
+''')
+        result = rank_by_callers(self.tmpdir)
+        names = {e['name'].split('.')[-1] for e in result['entries']}
+        self.assertIn('map', names)
+        self.assertIn('filter', names)
+
+    def test_python_builtin_still_filtered_in_mixed_project(self):
+        _write(self.tmpdir, 'sample.rb', '''
+def process(items)
+  items.map { |x| x }
+end
+''')
+        _write(self.tmpdir, 'sample.py', '''
+def run(items):
+    return sorted(items)
+''')
+        result = rank_by_callers(self.tmpdir)
+        names = {e['name'].split('.')[-1] for e in result['entries']}
+        self.assertIn('map', names)
+        self.assertNotIn('sorted', names)
 
 
 class TestRankRendering(unittest.TestCase):

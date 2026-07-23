@@ -347,7 +347,10 @@ def find_callees(
         target: Function/method name to look up.
         include_builtins: When False (default), Python builtins (``len``,
             ``str``, ``sorted``, ``isinstance``, exception types, etc.) are
-            stripped from the call list.  Pass True to see the raw list.
+            stripped from the call list of Python-file matches only — other
+            languages' calls (e.g. Scala/Ruby ``.map``/``.filter``) are never
+            filtered, since PYTHON_BUILTINS names can collide with other
+            languages' real methods.  Pass True to see the raw list.
 
     Returns:
         Dict with ``target``, ``matches`` (one entry per definition found),
@@ -371,7 +374,7 @@ def find_callees(
             if elem.get('name', '') != target:
                 continue
             calls = elem.get('calls', [])
-            if not include_builtins:
+            if not include_builtins and _lang_family(file_path) == 'python':
                 filtered = [c for c in calls if c.split('.')[-1] not in PYTHON_BUILTINS]
                 builtins_hidden += len(calls) - len(filtered)
                 calls = filtered
@@ -408,7 +411,7 @@ def _build_forward_index(
             if not name:
                 continue
             calls = elem.get('calls', [])
-            if not include_builtins:
+            if not include_builtins and _lang_family(file_path) == 'python':
                 calls = [c for c in calls if c.split('.')[-1] not in PYTHON_BUILTINS]
             forward.setdefault(name, []).append({
                 'file': file_path,
@@ -816,7 +819,9 @@ def rank_by_callers(
     Args:
         path: Root directory (or file) to analyse.
         top: Maximum number of entries to return (default 10, capped at 100).
-        include_builtins: If False (default), skip Python builtins from the ranking.
+        include_builtins: If False (default), skip Python-file callers of
+            Python builtins from the ranking; callers of same-named methods
+            in other languages (e.g. Scala/Ruby ``.map``) are unaffected.
         include_test_framework: If False (default), suppress test-framework symbols
             (expect, describe, it, vi, jest, cy, etc.) that dominate TS rankings
             with fake in-degree.  Pass ``?test-framework=true`` in the URI to opt in.
@@ -843,7 +848,12 @@ def rank_by_callers(
     entries = []
     for callee_name, caller_records in index.items():
         if not include_builtins and callee_name.split('.')[-1] in PYTHON_BUILTINS:
-            continue
+            # PYTHON_BUILTINS names can collide with real methods in other
+            # languages (Scala/Ruby `.map`, `.filter`, ...) — only drop the
+            # callers that are actually Python, keep the rest (BACK-748).
+            caller_records = [r for r in caller_records if _lang_family(r['file']) != 'python']
+            if not caller_records:
+                continue
         if not include_test_framework and callee_name.split('.')[-1] in TEST_FRAMEWORK_CALLEE_NAMES:
             continue
         # Deduplicate caller records by (file, caller) to count unique callers
