@@ -35,7 +35,7 @@ jobs:
       - name: Run tests
         env:
           PYTHONIOENCODING: utf-8
-        run: pytest tests/ -v
+        run: pytest tests/
 
       - name: Test Windows compatibility checks
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'

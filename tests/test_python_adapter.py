@@ -8,6 +8,7 @@ are tested via integration through the adapter's public interface.
 
 import unittest
 import sys
+import tempfile
 from pathlib import Path
 from reveal.adapters.python import PythonAdapter
 
@@ -116,7 +117,12 @@ class TestPythonAdapter(unittest.TestCase):
 
     def test_handle_debug_bytecode(self):
         """Test _handle_debug handles bytecode debug type."""
-        result = self.adapter._handle_debug("bytecode")
+        # Scan an isolated empty dir, not the live repo cwd: scanning the repo
+        # tree races with other test processes' concurrent __pycache__ writes
+        # (esp. under pytest-xdist), which can trip the scan's except-clause
+        # and return status "error" instead of "clean"/"issues_found".
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            result = self.adapter._handle_debug("bytecode", root_path=tmp_dir)
 
         self.assertIn("status", result)
         # Status should be "clean" or "issues_found"

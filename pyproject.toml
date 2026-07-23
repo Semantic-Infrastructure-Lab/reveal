@@ -124,8 +124,9 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 # Disable plugins that reveal doesn't use (prevents auto-load failures)
 # Coverage removed from default opts - use 'pytest --cov=reveal' for coverage
-# Use 'pytest -n auto' for parallel execution (3.1x speedup)
-addopts = "-v -p no:postgresql -p no:redis -p no:deepeval"
+# Parallel by default via pytest-xdist (~2.5x speedup); override with '-n 0' for
+# serial runs (needed for --pdb / -s interactive debugging under xdist).
+addopts = "-v -n auto -p no:postgresql -p no:redis -p no:deepeval"
 markers = [
     "unit: fast unit tests (< 0.1s each)",
     "integration: integration tests (subprocess-based, slower)",
