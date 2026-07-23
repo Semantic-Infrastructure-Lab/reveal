@@ -46,10 +46,10 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | ✅ 95.73%⁴⁴ (assimp) | **Measured** |
 | C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | ✅ 89.52%→100%⁴⁶ (Redis, BACK-756 open — grammar bug, not fixable in reveal) | **Measured** |
 | Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | ✅ 100.00%⁴⁷ (Kong, BACK-757/758 fixed) | **Measured** |
-| Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | ✅ 84.9%³¹ (AppFlowy, bare `File`/`Directory` declined) | Not measured | **Measured** |
+| Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | ✅ 84.9%³¹ (AppFlowy, bare `File`/`Directory` declined) | ✅ 100%→97.55%⁴⁹ (AppFlowy, BACK-760/761/763/764/765/766/767/769 fixed; BACK-768 open — grammar bug, not fixable in reveal) | **Measured** |
 | GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | ✅ 69.3%³² (Pixelorama, bare `print`/`request` declined) | ✅ 100.00%⁴⁸ (Pixelorama, BACK-759 fixed) | **Measured** |
-| Zig | ✅ 100%⁶ (ghostty, TigerBeetle²⁰) | ✅ 98.4%²⁹ (TigerBeetle) | Not measured | **Measured** |
-| TSX, plain JS | ✅ 100%⁷ (Excalidraw, three.js), 100%²⁵ (react-router) | ✅ 98.4%³³ (Excalidraw) | Not measured | **Measured** |
+| Zig | ✅ 100%⁶ (ghostty, TigerBeetle²⁰) | ✅ 98.4%²⁹ (TigerBeetle) | ✅ 92.28%→99.98% (ghostty, BACK-753/754/755 fixed) | **Measured** |
+| TSX, plain JS | ✅ 100%⁷ (Excalidraw, three.js), 100%²⁵ (react-router) | ✅ 98.4%³³ (Excalidraw) | ✅ 100% (three.js + Excalidraw, BACK-751/752 fixed) | **Measured** |
 
 **How to read this table — three caveats that the ✅ marks do not carry:**
 
@@ -68,10 +68,9 @@ is a claim we have not yet checked, **not** a claim it is broken.
    recall measured also has a side-effect measurement (BACK-718), and every
    one of those now has the full six-category sweep (Kotlin deepened in
    BACK-727, Swift deepened in BACK-728 — the last narrow entry). Call-graph
-   recall (`calls://`) is measured for 17 of the 19 (Python, TypeScript, Go,
+   recall (`calls://`) is now measured for all 19 (Python, TypeScript, Go,
    Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX, Zig, C, Lua,
-   GDScript — BACK-730); the other 1 (Dart) is not yet measured, not
-   known-broken.
+   GDScript, Dart — BACK-730, closed).
    `surface`, `contracts`, and `patches://`/testability have **no
    ground-truth validation on any language** — see [Scope](#scope).
 3. **Sample size still varies.** Java's 97.5% includes `db` and `http`
@@ -1207,6 +1206,74 @@ low-stakes here regardless). See
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
 ("Seventeenth language: GDScript" section) for the full write-up.
 
+⁴⁹ Dart `calls://` measurement (BACK-730, eighteenth and FINAL language),
+AppFlowy's `frontend/appflowy_flutter/lib` (1,526 `.dart` files, one
+coherent Flutter app package, 100% parsed clean), reverse-lookup, oracle
+built against Dart's own canonical `package:analyzer` (purely syntactic
+`parseFile`, no semantic/type resolution needed). `calls://` had
+effectively NO Dart call-graph support before this session — Dart's
+grammar has no dedicated call-expression node kind at all, a total blind
+spot larger than any prior language's gap. Six distinct bugs found, all
+but one fixed: **BACK-760** — plain/dotted/cascaded/null-safe calls parse
+to a flat `(primary, selector*)` sibling run with no wrapping call node
+(`argument_part`, the `(args)` selector, is the only call marker), and
+`List<int>.from(...)`-style generic-typed constructor calls parse to a
+separate `constructor_invocation` node — both absent from
+`CALL_NODE_TYPES`. **BACK-761** — `constructor_signature`/
+`factory_constructor_signature` absent from `FUNCTION_NODE_TYPES`: every
+constructor had no caller scope. **BACK-763** — the explicit pre-Dart-2
+`new Foo(...)` form shares `new_expression` with C++/JS/TS but neither
+existing field-based extractor handles Dart's flat, field-less shape.
+**BACK-764** — a constructor WITH an initializer list (`Foo(...) :
+super(...) { ... }`, Flutter/BLoC's dominant constructor idiom) wedges an
+`initializers` sibling between the signature and the body, defeating
+`_function_end_node`'s pairing lookup and truncating the WHOLE body's
+calls to empty; initializer-list calls themselves also live outside
+`body_node` and need a separate merge. **BACK-765** — `const
+Duration(...)`-style explicitly-const constructor calls (Flutter's
+recommended default whenever every argument is constant) parse to a
+third flat-constructor node, `const_object_expression`, also absent from
+`CALL_NODE_TYPES`. **BACK-766**/**BACK-767** — getters/setters
+(`getter_signature`/`setter_signature`) and `const`-marked constructors
+(`constant_constructor_signature`) were BOTH absent from
+`FUNCTION_NODE_TYPES` (no caller scope at all), and parameter DEFAULT
+VALUES for any signature kind (`{int x = compute()}`) live outside
+`body_node` the same way initializer lists do. **BACK-769** —
+`super.method()`/`await super.method()` (override delegation) has its
+qualifier as a bare sibling with no wrapping `selector` node, or nested
+one level inside `await_expression`'s own children — a shape the initial
+flat-sibling extractor didn't handle. A structural cascading bug was also
+found and fixed pre-oracle: Dart's disjoint `function_signature`/
+`function_body` sibling pairing meant the shared complexity/calls walk's
+`FUNCTION_NODE_TYPES`-boundary stop condition didn't actually stop at a
+NESTED named local function — its body, a separate sibling, kept being
+walked by every enclosing scope, double-counting its calls; fixed by
+detecting and skipping a nested signature's paired body sibling. **100%**
+recall at 8/bucket (2,337 edges, 0 false positives); **97.55%** at
+20/bucket (4,668/4,785 edges, 0 false positives) — every residual miss
+traces to the ONE class left open, **BACK-768**: an upstream
+`tree-sitter-dart` grammar ambiguity, not a reveal bug — a single-argument
+generic call (`getIt<Foo>(x)`, `getIt<Foo>(name: x)`,
+`BlocBuilder<A,B>(builder: ...)`) is misparsed as a
+`relational_expression`/record-literal chain instead of a generic
+function call whenever the argument list has exactly one element (0 or
+2+ arguments parse correctly) — genuinely ambiguous to a context-free
+grammar without semantic/import resolution, not fixable in reveal's
+Python extraction layer. A second, oracle-side-only bug was also found
+and fixed before trusting the final numbers: `package:analyzer`'s
+`InstanceCreationExpression` for an un-namespaced dotted `const`/`new`
+NAMED constructor call (`const EdgeInsetsDirectional.only(...)`) leaves
+`constructorName.name` null and puts the WHOLE dotted path in
+`constructorName.type` (can't distinguish "Class.namedCtor" from a
+library-prefixed plain type without semantic info) — the oracle's first
+draft used the unstripped dotted type text as ground truth, manufacturing
+191 false positives against `calls://`'s own (correct) bare-last-segment
+name; fixed oracle-side by taking the final dotted segment. See
+[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+("Eighteenth language: Dart" section) for the full write-up. This was the
+LAST of the 19 `VALIDATION.md`-tracked languages — the full calls://
+recall sweep BACK-730 opened is now complete.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -1486,24 +1553,28 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 
 | GDScript | Pixelorama (pixel-art editor), `samples/gdscript_pixelorama/` (247 `.gd` files, one coherent Godot project — 246 parsed clean; 1 excluded, see below) | reverse | **100.00%** (both 8/bucket 1,099 edges and 20/bucket 2,678 edges) | 6 (8/bucket) / 18 (20/bucket), all traced to the one excluded file, none `calls://` defects | One real, dominant `calls://` bug found via pre-flight AND fixed: **BACK-759** — `self.foo()`/`obj.method()`/`Class.static()`/`ClassName.new()` (GDScript has no `new` keyword; `.new()` IS the constructor-call idiom) and every segment of a chained call (`a.b().c()`) parse to `attribute_call`, a node kind entirely absent from `CALL_NODE_TYPES` — the single most common GDScript call idiom (any `self.`-qualified call, and every object instantiation) was silently invisible to `calls://`. Unlike Java/Ruby/PHP's dotted-call node kinds, the receiver here is not a field/child of the call node at all — it's a preceding SIBLING inside the enclosing `attribute` node's flat `(receiver, '.', segment, '.', segment, ...)` child list — so the fix reconstructs the qualified name from a raw source-text span rather than a field lookup. Fixing this also required guarding `nav_calls.py`'s `range_calls` (the `ast://`/`--calls`/`--sideeffects`/`--boundary` path) against double-counting: it already special-cased this exact flat chain (`_extract_gdscript_attribute_calls`, added earlier under BACK-431) to reconstruct the FULL qualified callee, so once `attribute_call` became a `CALL_NODE_TYPES` member the generic per-node walk started ALSO matching it directly and emitting a second, wrongly-bare duplicate entry — caught by an existing regression test, fixed by excluding `attribute_call` from that generic check. One file, `ExportDialog.gd`, is excluded from the oracle: it contains a bare call to a function literally named `export` (`func export() -> void: ...` / `export()`), which this oracle's npm `tree-sitter-gdscript` (6.1.0) build parses as a grammar `ERROR` — `export` is treated as reserved even in plain call position — while reveal's own bundled `tree_sitter_language_pack` (1.8.1) build of the SAME upstream grammar parses the identical file with zero errors and correctly extracts the call (confirmed directly against `GDScriptAnalyzer`). A genuine grammar-BUILD skew between two independently vendored copies of the same grammar, running in the OPPOSITE direction of every prior residual in this program (the tool under test is fine; the oracle's tool is not) — excluding the file (rather than fabricating a false miss) is the correct call, and every sampled false positive traces to exactly this one file. No cascading attribution for named functions (ordinary `FUNCTION_NODE_TYPES` boundary-stop, same as Go/Rust/Lua); GDScript's anonymous/named `lambda` function-VALUE syntax is confirmed (empirically, not assumed) to have NO scope of its own at all — calls inside any lambda, named or not, bleed straight through to the nearest enclosing named function, the same "transparent boundary" shape as Lua's BACK-758 precedent, not a bug (0 named-lambda-variable occurrences in this exact corpus, so low-stakes here) |
 
+| Dart | AppFlowy's `frontend/appflowy_flutter/lib` (1,526 `.dart` files, one coherent Flutter app package, 100% parsed clean) | reverse | 86.58% → **100.00%** (8/bucket, 2,337 edges); → **97.55%** (20/bucket, 4,785 edges) | 0 at both sample sizes, post-fix | Six distinct, real `calls://` bugs found, all but one fixed. `calls://` had effectively NO Dart call-graph support before this session (Dart's grammar has no dedicated call-expression node kind at all): (1) **BACK-760** — every plain/dotted/cascaded/null-safe call (`foo()`, `obj.method()`, `this.foo()`, `Class.static()`, `obj?.method()`, `obj!.method()`, `..method()`) parses to a flat `(primary, selector*)` sibling run with no wrapping call node, and `List<int>.from(...)`-style generic-typed constructor calls parse to a separate `constructor_invocation` node — both entirely absent from `CALL_NODE_TYPES`, the single largest total blind spot in this whole program. (2) **BACK-761** — `constructor_signature`/`factory_constructor_signature` absent from `FUNCTION_NODE_TYPES`: every constructor had no caller scope at all. (3) **BACK-763** — the explicit pre-Dart-2 `new Foo(...)` form parses to `new_expression` (shared with C++/JS/TS), but the existing field-based extractors return `None` for Dart's flat, field-less shape. (4) **BACK-764** — a constructor WITH an initializer list (`Foo(...) : super(...) { ... }`, Flutter/BLoC's dominant constructor idiom) wedges an `initializers` sibling between the signature and the real body, defeating `_function_end_node`'s pairing lookup and truncating the WHOLE body's calls to empty; initializer-list calls themselves also live outside `body_node`. (5) **BACK-765** — `const Duration(...)`-style explicitly-const-evaluated constructor calls (ubiquitous in Flutter — the recommended default whenever every argument is constant) parse to a third distinct flat-constructor node, `const_object_expression`, also absent from `CALL_NODE_TYPES`. (6) **BACK-766/BACK-767** — getters/setters (`getter_signature`/`setter_signature`) and `const`-marked constructors (`constant_constructor_signature`) were BOTH entirely absent from `FUNCTION_NODE_TYPES` (no caller scope at all), and parameter DEFAULT VALUES for any signature kind (`{int x = compute()}`) live outside `body_node` the same way initializer lists do. (7) **BACK-769** — `super.method()`/`await super.method()` (override-delegation, a common Dart idiom) has its qualifier as a BARE sibling with no wrapping `selector` node (or nested one level inside `await_expression`'s own children), a shape the initial flat-sibling extractor didn't handle. A structural cascading bug was also found and fixed pre-oracle: Dart's disjoint `function_signature`/`function_body` sibling pairing (needed for `_function_end_node`'s outline-range fix) meant the shared complexity/calls walk's `FUNCTION_NODE_TYPES`-boundary stop condition didn't actually stop at a NESTED named local function — its body, a separate sibling, kept getting walked by every enclosing scope, double-counting its calls; fixed by having the walk detect and skip a nested signature's paired body sibling. The ONE residual, left open and documented rather than worked around — **BACK-768** — is an upstream `tree-sitter-dart` grammar ambiguity, not a reveal bug: a single-argument generic call (`getIt<Foo>(x)`, `getIt<Foo>(name: x)`, `BlocBuilder<A,B>(builder: ...)`) is misparsed as a `relational_expression`/record-literal chain instead of a generic function call whenever the argument list has exactly one element (0 or 2+ arguments parse correctly) — genuinely ambiguous to a context-free grammar without semantic/import resolution, and not fixable in reveal's Python extraction layer. All 20/bucket residual misses traced to exactly this one class. A second, distinct upstream-grammar-adjacent finding was traced to the ORACLE, not `calls://`: `analyzer`'s `InstanceCreationExpression` for an un-namespaced dotted `const`/`new` NAMED constructor call (`const EdgeInsetsDirectional.only(...)`) leaves `constructorName.name` null and puts the WHOLE dotted path in `constructorName.type` (can't distinguish "Class.namedCtor" from a library-prefixed plain type without semantic info) — the oracle's first draft used the unstripped dotted type text as ground truth, manufacturing 191 false positives against `calls://`'s (correct) bare-last-segment name; fixed oracle-side by taking the final dotted segment, same bare-name convention the rest of the oracle already follows. Dart was the EIGHTEENTH and FINAL language in this program — no unmeasured languages remain. |
+
 Full methodology, per-corpus commit/snapshot, and the harness scripts
 (`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, Kotlin
 `KotlinOracle.kt`, Swift `swift-oracle/main.swift`, C++/C via libclang, Scala
 `build_oracle_scala.scala` via scalameta, `build_oracle_js.js` for JS/TSX,
 `zig-oracle/build_oracle_zig.zig` for Zig via `std.zig.Ast`, `build_oracle_lua.js`
 for Lua via `luaparse`, `build_oracle_gdscript.js` for GDScript via the npm
-`tree-sitter-gdscript` grammar, `diff_*.py`) for all seventeen languages:
+`tree-sitter-gdscript` grammar, `dart-oracle/build_oracle_dart.dart` for Dart
+via `package:analyzer`, `diff_*.py`) for all eighteen languages:
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
-Not yet measured: Dart — a claim not yet checked, not a claim
-`calls://` is broken on that language. If Dart is measured, add it to this
-table and the status-at-a-glance table above; `_bare_callee_name`
+All nineteen `VALIDATION.md`-tracked languages are now measured for
+cross-file call-graph recall. Import/dependency and side-effect recall
+remain the authority for full per-language coverage status — see those
+sections' own tables; `_bare_callee_name`
 /`_get_callee_name`'s other dotted-name-family languages are a reasonable place
 to look next, given Java's BACK-734, Ruby's BACK-735, PHP's BACK-736, C#'s
 BACK-737, Kotlin's BACK-738, Scala's BACK-746/747, JS/TSX's BACK-751/752,
-Zig's BACK-753/754/755, Lua's BACK-757/758, and GDScript's BACK-759 all show
-even an "unflagged" language can hide a
-systemic callee-, caller-, or grammar-level bug.
+Zig's BACK-753/754/755, Lua's BACK-757/758, GDScript's BACK-759, and Dart's
+BACK-760/761/763/764/765/766/767/769 all show even an "unflagged" language
+can hide a systemic callee-, caller-, or grammar-level bug.
 
 ## Re-running this yourself
 
@@ -1552,14 +1623,16 @@ BACK-542, an 18-importer module reported as having zero, motivated the whole
 program), **side-effect/boundary classification recall** (`--sideeffects` /
 `--boundary`), and **cross-file call-graph recall** (`calls://` — BACK-730,
 the same silent-wrong-answer risk as BACK-542: a whole-project graph query
-where a false negative reads as a confident, checked answer). `calls://` is
-measured for 17 of the 19 languages so far (Python across three query
-directions, TypeScript, Go, Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++,
-Scala, JS/TSX, Zig, C, Lua, GDScript — all now clean or fixed-and-reverified,
-see [Cross-File Call-Graph Recall](#cross-file-call-graph-recall)); the
-remaining 1 (Dart) is open
-validation work, tracked the same way as any not-yet-measured import/
-side-effect language. It does not yet cover recall
+where a false negative reads as a confident, checked answer). `calls://` is now
+measured for all 19 languages (Python across three query directions,
+TypeScript, Go, Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX,
+Zig, C, Lua, GDScript, and Dart — the eighteenth and final language, see
+[Cross-File Call-Graph Recall](#cross-file-call-graph-recall)) — all now
+clean or fixed-and-reverified, save a handful of documented,
+upstream-grammar-level residuals (Kotlin's BACK-738, Swift's BACK-742, C++'s
+BACK-745, C's BACK-756, and Dart's BACK-768), none fixable in reveal's Python
+extraction layer. This closes the full calls:// recall sweep BACK-730 opened.
+It does not yet cover recall
 for `surface` or `contracts` (BACK-719). The languages marked *not measured*
 / *spot-checked* in the status table above are not yet through a full oracle
 loop — all tracked as open validation work. See `ROADMAP.md` for the forward
