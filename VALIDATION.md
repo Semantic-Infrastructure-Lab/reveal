@@ -45,7 +45,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Scala | ✅ 100% (GitBucket — n=1 qualifying edge), 100%¹⁵ (cats-effect, 24 edges) | ✅ 66.3%³⁰ (GitBucket, `db`/Slick declined) | ✅ 96.64% → **100.00%**⁴⁵ (GitBucket, BACK-746/747 fixed) | **Measured** |
 | C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | ✅ 95.73%⁴⁴ (assimp) | **Measured** |
 | C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | ✅ 89.52%→100%⁴⁶ (Redis, BACK-756 open — grammar bug, not fixable in reveal) | **Measured** |
-| Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | Not measured | **Measured** |
+| Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | ✅ 100.00%⁴⁷ (Kong, BACK-757/758 fixed) | **Measured** |
 | Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | ✅ 84.9%³¹ (AppFlowy, bare `File`/`Directory` declined) | Not measured | **Measured** |
 | GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | ✅ 69.3%³² (Pixelorama, bare `print`/`request` declined) | Not measured | **Measured** |
 | Zig | ✅ 100%⁶ (ghostty, TigerBeetle²⁰) | ✅ 98.4%²⁹ (TigerBeetle) | Not measured | **Measured** |
@@ -1085,6 +1085,62 @@ defects. See
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
 ("Fifteenth language: C" section) for the full write-up.
 
+⁴⁷ Lua `calls://` measurement (BACK-730, sixteenth language), Kong API
+gateway's `kong/` package dir (605 `.lua` files, 604 parsed clean under
+luaVersion 5.3 — 1 excluded, `router/transform.lua`'s `0x01ULL`, a
+LuaJIT-only 64-bit-integer literal suffix no standard-Lua parser
+recognizes), reverse-lookup, oracle built against `luaparse` (npm, 0.3.1).
+Two real, distinct `calls://` bugs found and fixed. **BACK-757**:
+`_bare_callee_name` split only on `->`/`.`/`::`, never a lone Lua `:`
+(`db:init_connector()`, `self:check_version_compat()` — Lua's DOMINANT
+OOP method-call idiom, confirmed via a real Kong grep), so every
+colon-method call's bare callee stayed the full `"receiver:method"`
+string and never matched a bare `?target=method` lookup — the single
+highest real-world-impact gap this session, same bug class as Rust's
+turbofish (BACK-733) / PHP's namespace-prefix (BACK-736) / C#'s
+generic-suffix (BACK-737) normalization misses; adding a plain
+`rfind(':')` to the same `max(...)` is safe for `::`-using languages too
+(C++/PHP/Java's `Class::method` unaffected — confirmed both by direct
+test and by reasoning about where the two rfind results can land).
+**BACK-758**: `name = function(...) end` / `tbl.k = function(...) end`
+(module-table method idiom) / `{ key = function(...) end }`
+(table-constructor field, Lua's metatable-dispatch/event-handler-table
+idiom) were ALL entirely invisible to `get_structure()`/`--outline` — not
+just their calls, the whole scope — found via a real Kong corpus grep
+(643 occurrences of `= function(` across 176 files); fixed by adding
+Lua-specific scope extraction (mirroring JS/TS's `_arrow_or_fn_value`
+precedent for a function-literal value that carries no name of its own).
+Fixing BACK-758 surfaced its own false-positive bug in the same session
+(caught and fixed before the measurement ran, not filed separately): the
+table-constructor-field extraction naively took "the first identifier
+child" of a `field` node, which also matches a COMPUTED key's bracketed
+expression (`{ [CONTENT_TYPE_POST] = function(...) end }`, a real
+dynamic-dispatch idiom in `pdk/service/request.lua`) — misattributing the
+value function's calls to the key expression's name, not a real function
+name at all; fixed by requiring the identifier be the field's structural
+FIRST child (a literal string key), never one preceded by `[`.
+**100.00%** recall, 0 misses at both 8/bucket (1,422 edges, 11 false
+positives) and 20/bucket (3,549 edges, 23 false positives) — every
+remaining false positive traces to the one excluded unparseable file
+(`router/transform.lua`) or one inherent bare-name-matching limitation (a
+function *parameter* named `fmt` shadowing the corpus-wide `fmt` module
+in `dns/stats.lua` — `calls://` does no scope/binding resolution, so a
+local name shadowing a global is indistinguishable from the real thing;
+not a Lua-specific bug, the same class of limitation as every other
+language's bare-name matching). No cascading attribution (confirmed
+empirically before writing the oracle, unlike Zig/JS-TS): Lua's
+`function_declaration`/`function_definition` are both ordinary
+`FUNCTION_NODE_TYPES` members, so the shared complexity/calls walk stops
+at every nested function boundary the same as Go/Rust. Also confirmed via
+a real-CLI dogfood detour: the installed `reveal_cli` site-packages
+copy (0.107.1) is stale relative to `external-git` and gets silently
+picked up instead of it whenever the CLI runs from a directory outside
+`external-git` with no `PYTHONPATH` set — cost real debugging time before
+being traced to `sys.path` ordering, not a new Lua-specific bug, but
+worth flagging again for the next language's session. See
+[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+("Sixteenth language: Lua" section) for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -1360,22 +1416,25 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 
 | C | Redis `src/` (125 `.c` + 83 `.h`, `deps/`/`curl/`/`modules/`/`src/modules/`/`tests/` excluded) | reverse | 89.52% → **100.00%** (both 8/bucket 1,196 edges and 20/bucket 2,826 edges) | 433 (pre-fix, 8/bucket) → 17/33 (post-fix) | No new `calls://` extraction bugs found — every real fix landed in the libclang oracle, adapted from the C++ oracle. Two general oracle-side bugs new to this program: byte-offset-vs-char-offset slicing of `cursor.extent` (silently wrong on any file with a non-ASCII byte, e.g. one curly-apostrophe comment corrupted ~6 targets' extraction), and a macro-vararg-nested call (`serverLog(level, fmt, ..., strerror(errno))`) losing ALL position info under macro re-expansion (`cursor.extent` collapses to zero-width) — a `cursor.spelling` fallback was added, guarded to require ≥1 real argument so it doesn't also fabricate calls from object-like macro constants like `HUGE_VAL`. The dominant false-positive source (433 at first run) was Redis's extensive `#ifdef`-gated optional-feature/self-test code — `calls://` (never preprocessing) sees every branch unconditionally where libclang can only compile one; fixed by building the oracle with a maximal "every optional feature on" flag set. One real, narrow tree-sitter-c grammar bug found and filed as **BACK-756** (open, not fixed, same class as Kotlin's BACK-738/Swift's BACK-742/C++'s BACK-745): a multi-line macro definition in `ziplist.c` desyncs the parser into ERROR-recovery, dropping the following function from `get_structure()` entirely. Remaining false positives all trace to documented, accepted residual classes (2 unparseable Solaris/BSD-only files, several headers-unavailable feature flags, two permanently-`#if 0`-disabled dead-code blocks), none `calls://` defects |
 
+| Lua | Kong API gateway's `kong/` package dir (605 `.lua` files, 604 parsed clean — 1 excluded, a LuaJIT-only `0x01ULL` 64-bit-integer literal no standard-Lua parser recognizes) | reverse | **100.00%** (both 8/bucket 1,422 edges and 20/bucket 3,549 edges) | 11 (8/bucket) / 23 (20/bucket), all traced to documented residuals, none `calls://` defects | Two real, distinct `calls://` bugs found via pre-flight AND fixed: **BACK-757** — `_bare_callee_name` split only on `->`/`.`/`::`, never a lone Lua `:` (`db:init_connector()`, Lua's DOMINANT OOP method-call idiom), so every colon-method call's bare callee stayed the full `"receiver:method"` string and never matched a bare `?target=method` lookup — the single highest real-world-impact gap this session, same bug class as Rust's turbofish/PHP's namespace-prefix/C#'s generic-suffix normalization misses. **BACK-758** — `name = function(...) end` / `tbl.k = function(...) end` (module-table method idiom) / `{ key = function(...) end }` (table-constructor field, Lua's metatable-dispatch/event-handler-table idiom) were ALL entirely invisible to `get_structure()`/`--outline` — not just their calls, the whole scope — found via a real Kong corpus grep (643 occurrences of `= function(` across 176 files); fixed by adding Lua-specific scope extraction (mirroring JS/TS's `_arrow_or_fn_value` precedent for a value that carries no name of its own). Fixing BACK-758 surfaced its own false-positive bug in the same session (not filed separately, fixed pre-measurement): the table-constructor-field extraction naively took "the first identifier child" of a `field` node, which also matches a COMPUTED key's bracketed expression (`{ [CONTENT_TYPE_POST] = function(...) end }`, a dynamic-dispatch idiom) — misattributing the value function's calls to the key expression's name; fixed by requiring the identifier be the field's structural first child (a literal string key), not preceded by `[`. All remaining false positives trace to the one excluded unparseable file (`router/transform.lua`) plus one inherent bare-name-matching limitation (a function parameter named `fmt` shadowing the corpus-wide `fmt` module in `dns/stats.lua`, not a Lua-specific bug). No cascading attribution (confirmed empirically, unlike Zig/JS-TS): Lua's `function_declaration`/`function_definition` are ordinary `FUNCTION_NODE_TYPES` members, so the shared complexity/calls walk stops at every nested function boundary |
+
 Full methodology, per-corpus commit/snapshot, and the harness scripts
 (`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, Kotlin
 `KotlinOracle.kt`, Swift `swift-oracle/main.swift`, C++/C via libclang, Scala
 `build_oracle_scala.scala` via scalameta, `build_oracle_js.js` for JS/TSX,
-`zig-oracle/build_oracle_zig.zig` for Zig via `std.zig.Ast`, `diff_*.py`) for
-all fifteen languages:
+`zig-oracle/build_oracle_zig.zig` for Zig via `std.zig.Ast`, `build_oracle_lua.js`
+for Lua via `luaparse`, `diff_*.py`) for all sixteen languages:
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
-Not yet measured: Lua, Dart,
+Not yet measured: Dart,
 GDScript — a claim not yet checked, not a claim
-`calls://` is broken on those languages. If a sixteenth language is measured,
+`calls://` is broken on those languages. If a seventeenth language is measured,
 add it to this table and the status-at-a-glance table above; `_bare_callee_name`
 /`_get_callee_name`'s other dotted-name-family languages are a reasonable place
 to look next, given Java's BACK-734, Ruby's BACK-735, PHP's BACK-736, C#'s
-BACK-737, Kotlin's BACK-738, Scala's BACK-746/747, JS/TSX's BACK-751/752, and
-Zig's BACK-753/754/755 all show even an "unflagged" language can hide a
+BACK-737, Kotlin's BACK-738, Scala's BACK-746/747, JS/TSX's BACK-751/752,
+Zig's BACK-753/754/755, and Lua's BACK-757/758 all show even an "unflagged"
+language can hide a
 systemic callee-, caller-, or grammar-level bug.
 
 ## Re-running this yourself
@@ -1426,11 +1485,11 @@ program), **side-effect/boundary classification recall** (`--sideeffects` /
 `--boundary`), and **cross-file call-graph recall** (`calls://` — BACK-730,
 the same silent-wrong-answer risk as BACK-542: a whole-project graph query
 where a false negative reads as a confident, checked answer). `calls://` is
-measured for 14 of the 19 languages so far (Python across three query
+measured for 16 of the 19 languages so far (Python across three query
 directions, TypeScript, Go, Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++,
-Scala, JS/TSX, Zig — all now clean or fixed-and-reverified, see
+Scala, JS/TSX, Zig, C, Lua — all now clean or fixed-and-reverified, see
 [Cross-File Call-Graph Recall](#cross-file-call-graph-recall)); the
-remaining 4 (C, Lua, Dart, GDScript) are open
+remaining 2 (Dart, GDScript) are open
 validation work, tracked the same way as any not-yet-measured import/
 side-effect language. It does not yet cover recall
 for `surface` or `contracts` (BACK-719). The languages marked *not measured*
