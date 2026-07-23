@@ -4130,6 +4130,38 @@ class TestBack650OverloadDisambiguation(unittest.TestCase):
             # implementation at line 7-9.
             self.assertEqual(node.start_position().row, 6)  # 0-indexed: line 7
 
+    def test_dart_abstract_and_override_same_name_bare_extraction_resolves_to_override(self):
+        # BACK-771: display.element._find_named_node (the bare `reveal
+        # file.dart name` extraction path, independent of file_handler's
+        # _find_element_node fixed by BACK-729) had zero disambiguation --
+        # plain next(...) over tree-order always returned the first match,
+        # the bodyless abstract signature, never the concrete override.
+        import pathlib
+        import tempfile
+        from reveal.analyzers.dart import DartAnalyzer
+        from reveal.display.element import _find_named_node
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / 'parser.dart'
+            f.write_text(
+                "abstract class Parser {\n"
+                "  int parse(String input);\n"
+                "}\n"
+                "\n"
+                "class RealParser implements Parser {\n"
+                "  @override\n"
+                "  int parse(String input) {\n"
+                "    return input.length;\n"
+                "  }\n"
+                "}\n"
+            )
+            analyzer = DartAnalyzer(str(f))
+            node = _find_named_node(analyzer, 'function_signature', 'parse')
+            self.assertIsNotNone(node)
+            # Regression: pre-fix, this returned the abstract signature at
+            # line 2 (a 1-line node with no sibling body), not the real
+            # implementation at line 7-9.
+            self.assertEqual(node.start_position().row, 6)  # 0-indexed: line 7
+
 
 # ─── BACK-547 ninth loop (Rust sideeffects-recall-oracle, real-corpus
 # measurement on Meilisearch's milli engine): `macro_invocation` (Rust's

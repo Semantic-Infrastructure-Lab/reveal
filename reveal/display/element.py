@@ -242,11 +242,19 @@ def _try_treesitter_extraction(analyzer, element: str):
 
 
 def _find_named_node(analyzer, node_type: str, name: str):
-    """Find first node of node_type whose name matches name, or None."""
-    return next(
-        (n for n in analyzer._find_nodes_by_type(node_type) if analyzer._get_node_name(n) == name),
-        None
-    )
+    """Find node of node_type whose name matches name, or None.
+
+    BACK-771: disambiguates same-named candidates (e.g. an abstract
+    interface method and its concrete override) the same way
+    file_handler._find_element_node does — first-tree-order-match alone
+    always picked the bodyless signature over the real implementation.
+    """
+    from ..file_handler import _pick_best_candidate  # noqa: I006 — deferred, avoids display/file_handler cycle
+
+    candidates = [n for n in analyzer._find_nodes_by_type(node_type) if analyzer._get_node_name(n) == name]
+    if not candidates:
+        return None
+    return _pick_best_candidate(candidates, analyzer)
 
 
 def _try_grep_extraction(analyzer, element: str):
