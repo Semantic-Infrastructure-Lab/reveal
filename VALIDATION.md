@@ -47,7 +47,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | ✅ 89.52%→100%⁴⁶ (Redis, BACK-756 open — grammar bug, not fixable in reveal) | **Measured** |
 | Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | ✅ 100.00%⁴⁷ (Kong, BACK-757/758 fixed) | **Measured** |
 | Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | ✅ 84.9%³¹ (AppFlowy, bare `File`/`Directory` declined) | Not measured | **Measured** |
-| GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | ✅ 69.3%³² (Pixelorama, bare `print`/`request` declined) | Not measured | **Measured** |
+| GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | ✅ 69.3%³² (Pixelorama, bare `print`/`request` declined) | ✅ 100.00%⁴⁸ (Pixelorama, BACK-759 fixed) | **Measured** |
 | Zig | ✅ 100%⁶ (ghostty, TigerBeetle²⁰) | ✅ 98.4%²⁹ (TigerBeetle) | Not measured | **Measured** |
 | TSX, plain JS | ✅ 100%⁷ (Excalidraw, three.js), 100%²⁵ (react-router) | ✅ 98.4%³³ (Excalidraw) | Not measured | **Measured** |
 
@@ -68,9 +68,9 @@ is a claim we have not yet checked, **not** a claim it is broken.
    recall measured also has a side-effect measurement (BACK-718), and every
    one of those now has the full six-category sweep (Kotlin deepened in
    BACK-727, Swift deepened in BACK-728 — the last narrow entry). Call-graph
-   recall (`calls://`) is measured for 14 of the 19 (Python, TypeScript, Go,
-   Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX, Zig — BACK-730);
-   the other 4 (C, Lua, Dart, GDScript) are not yet measured, not
+   recall (`calls://`) is measured for 17 of the 19 (Python, TypeScript, Go,
+   Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX, Zig, C, Lua,
+   GDScript — BACK-730); the other 1 (Dart) is not yet measured, not
    known-broken.
    `surface`, `contracts`, and `patches://`/testability have **no
    ground-truth validation on any language** — see [Scope](#scope).
@@ -1141,6 +1141,72 @@ worth flagging again for the next language's session. See
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
 ("Sixteenth language: Lua" section) for the full write-up.
 
+⁴⁸ GDScript `calls://` measurement (BACK-730, seventeenth language),
+Pixelorama (pixel-art editor), `samples/gdscript_pixelorama/` (247 `.gd`
+files, one coherent Godot project — single `project.godot` — 246 parsed
+clean, 1 excluded), reverse-lookup, oracle built against the npm
+`tree-sitter-gdscript` package (6.1.0, native `node-tree-sitter` binding
+— an independent runtime/binding from reveal's own Python
+`tree_sitter_language_pack`, per this program's independence bar). One
+real, dominant `calls://` bug found via a pre-flight grammar dump and
+fixed. **BACK-759**: `self.foo()` / `obj.method()` / `Class.static()` /
+`ClassName.new()` (GDScript has no `new` keyword — `.new()` on the class
+name IS the constructor-call convention) and every segment of a chained
+call (`a.b().c()`) parse to `attribute_call`, a node kind entirely absent
+from `CALL_NODE_TYPES` — arguably the single most common call idiom in
+any real GDScript codebase (every `self.`-qualified call and every object
+instantiation), silently invisible to `calls://` entirely. Unlike every
+other dotted-call node kind in this table (Java's `method_invocation`,
+Ruby's `call`, PHP's `member_call_expression`), the receiver is not a
+field or child of the call node — `tree-sitter-gdscript` models
+`a.b().c()` as one flat `attribute` parent with a
+`(receiver, '.', segment, '.', segment, ...)` sibling list, so
+`attribute_call` only ever carries its own name + arguments. Fixed with a
+new `_callee_name_gdscript_attribute_call` that reconstructs the
+qualified name from a raw source-text span (the enclosing `attribute`
+node's start up to the `.` immediately preceding this call), mirroring
+Java/Ruby's receiver-qualified convention without a receiver *node* to
+read from directly. This surfaced a second, narrower regression once
+`attribute_call` became a `CALL_NODE_TYPES` member: `nav_calls.py`'s
+`range_calls` (the `ast://`/`--calls`/`--sideeffects`/`--boundary` path,
+separate from the `calls://` cross-file adapter) already had its own
+GDScript-specific flat-chain reconstruction (`_extract_gdscript_
+attribute_calls`, added earlier under BACK-431) that never depended on
+`CALL_NODE_TYPES` membership — with `attribute_call` now a member, the
+walk's generic per-node check ALSO matched it directly mid-chain,
+emitting a second, wrongly-bare duplicate entry for every dotted call
+(caught immediately by an existing regression test going from 1 to 2
+callees on `x.field.method()`); fixed by excluding `attribute_call` from
+that generic check, since the dedicated chain scan already covers it
+correctly. **100.00%** recall, 0 misses at both 8/bucket (1,099 edges, 6
+false positives) and 20/bucket (2,678 edges, 18 false positives) — every
+false positive traces to one excluded file, `ExportDialog.gd`: it
+declares and calls a function literally named `export`
+(`func export() -> void: ...`), and this oracle's npm grammar build
+parses the bare call `export()` as a grammar `ERROR` (`export` treated as
+reserved even in call position), while reveal's own bundled
+`tree_sitter_language_pack` (1.8.1) build of the identical upstream
+grammar parses the same file with zero errors and correctly extracts
+both the function and its one call site (confirmed directly against
+`GDScriptAnalyzer.get_structure()`) — a genuine grammar-BUILD skew
+between two independently vendored copies of the same grammar, running
+in the OPPOSITE direction of every prior residual in this program (the
+tool under test parses it fine; the oracle's tool does not), so excluding
+the file is the correct call rather than fabricating a false miss. No
+cascading attribution for named `function_definition`/
+`constructor_definition` scopes (ordinary `FUNCTION_NODE_TYPES`
+boundary-stop, same no-bleed shape as Go/Rust/Lua); GDScript's `lambda`
+(anonymous/optionally-named function-VALUE syntax, `func(...): ...` /
+`func inner(...): ...`) is confirmed empirically — not assumed — to get
+NO scope of its own at all, named or not: calls inside any lambda bleed
+straight through to the nearest enclosing named function, the identical
+"transparent boundary, no cascading mechanism" shape as Lua's BACK-758
+anonymous-function-value precedent, not a bug (a pre-flight corpus grep
+found 0 named-lambda-variable occurrences in this exact corpus, so
+low-stakes here regardless). See
+[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+("Seventeenth language: GDScript" section) for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -1418,23 +1484,25 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 
 | Lua | Kong API gateway's `kong/` package dir (605 `.lua` files, 604 parsed clean — 1 excluded, a LuaJIT-only `0x01ULL` 64-bit-integer literal no standard-Lua parser recognizes) | reverse | **100.00%** (both 8/bucket 1,422 edges and 20/bucket 3,549 edges) | 11 (8/bucket) / 23 (20/bucket), all traced to documented residuals, none `calls://` defects | Two real, distinct `calls://` bugs found via pre-flight AND fixed: **BACK-757** — `_bare_callee_name` split only on `->`/`.`/`::`, never a lone Lua `:` (`db:init_connector()`, Lua's DOMINANT OOP method-call idiom), so every colon-method call's bare callee stayed the full `"receiver:method"` string and never matched a bare `?target=method` lookup — the single highest real-world-impact gap this session, same bug class as Rust's turbofish/PHP's namespace-prefix/C#'s generic-suffix normalization misses. **BACK-758** — `name = function(...) end` / `tbl.k = function(...) end` (module-table method idiom) / `{ key = function(...) end }` (table-constructor field, Lua's metatable-dispatch/event-handler-table idiom) were ALL entirely invisible to `get_structure()`/`--outline` — not just their calls, the whole scope — found via a real Kong corpus grep (643 occurrences of `= function(` across 176 files); fixed by adding Lua-specific scope extraction (mirroring JS/TS's `_arrow_or_fn_value` precedent for a value that carries no name of its own). Fixing BACK-758 surfaced its own false-positive bug in the same session (not filed separately, fixed pre-measurement): the table-constructor-field extraction naively took "the first identifier child" of a `field` node, which also matches a COMPUTED key's bracketed expression (`{ [CONTENT_TYPE_POST] = function(...) end }`, a dynamic-dispatch idiom) — misattributing the value function's calls to the key expression's name; fixed by requiring the identifier be the field's structural first child (a literal string key), not preceded by `[`. All remaining false positives trace to the one excluded unparseable file (`router/transform.lua`) plus one inherent bare-name-matching limitation (a function parameter named `fmt` shadowing the corpus-wide `fmt` module in `dns/stats.lua`, not a Lua-specific bug). No cascading attribution (confirmed empirically, unlike Zig/JS-TS): Lua's `function_declaration`/`function_definition` are ordinary `FUNCTION_NODE_TYPES` members, so the shared complexity/calls walk stops at every nested function boundary |
 
+| GDScript | Pixelorama (pixel-art editor), `samples/gdscript_pixelorama/` (247 `.gd` files, one coherent Godot project — 246 parsed clean; 1 excluded, see below) | reverse | **100.00%** (both 8/bucket 1,099 edges and 20/bucket 2,678 edges) | 6 (8/bucket) / 18 (20/bucket), all traced to the one excluded file, none `calls://` defects | One real, dominant `calls://` bug found via pre-flight AND fixed: **BACK-759** — `self.foo()`/`obj.method()`/`Class.static()`/`ClassName.new()` (GDScript has no `new` keyword; `.new()` IS the constructor-call idiom) and every segment of a chained call (`a.b().c()`) parse to `attribute_call`, a node kind entirely absent from `CALL_NODE_TYPES` — the single most common GDScript call idiom (any `self.`-qualified call, and every object instantiation) was silently invisible to `calls://`. Unlike Java/Ruby/PHP's dotted-call node kinds, the receiver here is not a field/child of the call node at all — it's a preceding SIBLING inside the enclosing `attribute` node's flat `(receiver, '.', segment, '.', segment, ...)` child list — so the fix reconstructs the qualified name from a raw source-text span rather than a field lookup. Fixing this also required guarding `nav_calls.py`'s `range_calls` (the `ast://`/`--calls`/`--sideeffects`/`--boundary` path) against double-counting: it already special-cased this exact flat chain (`_extract_gdscript_attribute_calls`, added earlier under BACK-431) to reconstruct the FULL qualified callee, so once `attribute_call` became a `CALL_NODE_TYPES` member the generic per-node walk started ALSO matching it directly and emitting a second, wrongly-bare duplicate entry — caught by an existing regression test, fixed by excluding `attribute_call` from that generic check. One file, `ExportDialog.gd`, is excluded from the oracle: it contains a bare call to a function literally named `export` (`func export() -> void: ...` / `export()`), which this oracle's npm `tree-sitter-gdscript` (6.1.0) build parses as a grammar `ERROR` — `export` is treated as reserved even in plain call position — while reveal's own bundled `tree_sitter_language_pack` (1.8.1) build of the SAME upstream grammar parses the identical file with zero errors and correctly extracts the call (confirmed directly against `GDScriptAnalyzer`). A genuine grammar-BUILD skew between two independently vendored copies of the same grammar, running in the OPPOSITE direction of every prior residual in this program (the tool under test is fine; the oracle's tool is not) — excluding the file (rather than fabricating a false miss) is the correct call, and every sampled false positive traces to exactly this one file. No cascading attribution for named functions (ordinary `FUNCTION_NODE_TYPES` boundary-stop, same as Go/Rust/Lua); GDScript's anonymous/named `lambda` function-VALUE syntax is confirmed (empirically, not assumed) to have NO scope of its own at all — calls inside any lambda, named or not, bleed straight through to the nearest enclosing named function, the same "transparent boundary" shape as Lua's BACK-758 precedent, not a bug (0 named-lambda-variable occurrences in this exact corpus, so low-stakes here) |
+
 Full methodology, per-corpus commit/snapshot, and the harness scripts
 (`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, Kotlin
 `KotlinOracle.kt`, Swift `swift-oracle/main.swift`, C++/C via libclang, Scala
 `build_oracle_scala.scala` via scalameta, `build_oracle_js.js` for JS/TSX,
 `zig-oracle/build_oracle_zig.zig` for Zig via `std.zig.Ast`, `build_oracle_lua.js`
-for Lua via `luaparse`, `diff_*.py`) for all sixteen languages:
+for Lua via `luaparse`, `build_oracle_gdscript.js` for GDScript via the npm
+`tree-sitter-gdscript` grammar, `diff_*.py`) for all seventeen languages:
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
-Not yet measured: Dart,
-GDScript — a claim not yet checked, not a claim
-`calls://` is broken on those languages. If a seventeenth language is measured,
-add it to this table and the status-at-a-glance table above; `_bare_callee_name`
+Not yet measured: Dart — a claim not yet checked, not a claim
+`calls://` is broken on that language. If Dart is measured, add it to this
+table and the status-at-a-glance table above; `_bare_callee_name`
 /`_get_callee_name`'s other dotted-name-family languages are a reasonable place
 to look next, given Java's BACK-734, Ruby's BACK-735, PHP's BACK-736, C#'s
 BACK-737, Kotlin's BACK-738, Scala's BACK-746/747, JS/TSX's BACK-751/752,
-Zig's BACK-753/754/755, and Lua's BACK-757/758 all show even an "unflagged"
-language can hide a
+Zig's BACK-753/754/755, Lua's BACK-757/758, and GDScript's BACK-759 all show
+even an "unflagged" language can hide a
 systemic callee-, caller-, or grammar-level bug.
 
 ## Re-running this yourself
@@ -1485,11 +1553,11 @@ program), **side-effect/boundary classification recall** (`--sideeffects` /
 `--boundary`), and **cross-file call-graph recall** (`calls://` — BACK-730,
 the same silent-wrong-answer risk as BACK-542: a whole-project graph query
 where a false negative reads as a confident, checked answer). `calls://` is
-measured for 16 of the 19 languages so far (Python across three query
+measured for 17 of the 19 languages so far (Python across three query
 directions, TypeScript, Go, Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++,
-Scala, JS/TSX, Zig, C, Lua — all now clean or fixed-and-reverified, see
-[Cross-File Call-Graph Recall](#cross-file-call-graph-recall)); the
-remaining 2 (Dart, GDScript) are open
+Scala, JS/TSX, Zig, C, Lua, GDScript — all now clean or fixed-and-reverified,
+see [Cross-File Call-Graph Recall](#cross-file-call-graph-recall)); the
+remaining 1 (Dart) is open
 validation work, tracked the same way as any not-yet-measured import/
 side-effect language. It does not yet cover recall
 for `surface` or `contracts` (BACK-719). The languages marked *not measured*
