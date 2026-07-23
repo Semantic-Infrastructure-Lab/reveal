@@ -44,7 +44,7 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Swift | ✅ 100% of declared targets resolved (Kickstarter iOS — module-index coverage, not an edge-recall ratio), 98.42%¹⁸ (swift-collections, 14,824 edges, BACK-704 fixed) | ✅ 43.3% → **100.0%** (Kickstarter iOS, six-category sweep, BACK-728) | ✅ 97.62%→99.92%⁴³ (8/bucket); 99.79%⁴³ (20/bucket, Signal-iOS, BACK-742 open — two grammar bugs, not fixable in reveal) | **Measured** |
 | Scala | ✅ 100% (GitBucket — n=1 qualifying edge), 100%¹⁵ (cats-effect, 24 edges) | ✅ 66.3%³⁰ (GitBucket, `db`/Slick declined) | ✅ 96.64% → **100.00%**⁴⁵ (GitBucket, BACK-746/747 fixed) | **Measured** |
 | C++ | ✅ 100%³ (Godot), 100%²⁶ (assimp) | ✅ 83.3% (Godot) | ✅ 95.73%⁴⁴ (assimp) | **Measured** |
-| C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | Not measured | **Measured** |
+| C | ✅ 100%⁸ (Redis, curl²¹) | ✅ 92.0%²⁷ (Redis, `http` declined) | ✅ 89.52%→100%⁴⁶ (Redis, BACK-756 open — grammar bug, not fixable in reveal) | **Measured** |
 | Lua | ✅ 99.87% (Kong, 99.33%²² AwesomeWM) | ✅ 98.0%²⁸ (Kong, `truncate`/`connect` declined) | Not measured | **Measured** |
 | Dart | ✅ 99.76%⁴ (AppFlowy), 96.63%²³ (drift) — 100% of *real* edges in both, residuals are oracle false positives | ✅ 84.9%³¹ (AppFlowy, bare `File`/`Directory` declined) | Not measured | **Measured** |
 | GDScript | ✅ 100%⁵ (godot-demo-projects), 100%²⁴ (Pixelorama) | ✅ 69.3%³² (Pixelorama, bare `print`/`request` declined) | Not measured | **Measured** |
@@ -1050,6 +1050,41 @@ reverse-lookup path this measurement uses is unaffected. See
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
 ("Twelfth language: Scala" section) for the full write-up.
 
+⁴⁶ C `calls://` measurement (BACK-730, fifteenth language), Redis's `src/`
+(125 `.c` + 83 `.h`, `deps/`/`curl/`/`modules/`/`src/modules/`/`tests/`
+excluded), reverse-lookup, oracle built against **libclang** (adapted from
+the C++ oracle — C is a strict subset of what libclang parses). No new
+`calls://` bugs found in the extraction layer; every real fix landed in the
+oracle. Two general oracle-side bugs, both new to this program: (1) Clang's
+`cursor.extent` offsets are BYTE offsets, but the C++ oracle (and this one's
+first draft) sliced a Python `str` — silently wrong the moment a file has any
+non-ASCII byte (one curly-apostrophe comment in `networking.c` corrupted
+~6 targets' extraction by 2 characters each); fixed by slicing raw `bytes`.
+(2) A plain call physically nested inside a variadic logging macro's `...`
+argument (`serverLog(LL_WARNING, "%s", strerror(errno))`) loses ALL position
+info under macro re-expansion (`cursor.extent` collapses to zero-width,
+unlike every prior macro case in this program); `cursor.spelling` is safe to
+trust here (nothing is aliased, just uncoordinated), guarded to require ≥1
+real argument so it doesn't also fabricate calls from object-like macro
+constants like `HUGE_VAL`. The dominant false-positive source was Redis's
+extensive `#ifdef`-gated optional-feature/self-test code — calls:// (never
+preprocessing) sees every branch unconditionally; fixed by compiling with a
+maximal "every optional feature on" flag set (`DEBUG_DEFRAG_FORCE` alone
+fixed ~45 of the first run's remaining false positives, unlocking
+`defrag.c`'s entire real implementation). One real, narrow tree-sitter-c
+grammar bug found and filed as **BACK-756** (open, not fixed — same class as
+Kotlin's BACK-738/Swift's BACK-742/C++'s BACK-745): a multi-line macro
+definition in `ziplist.c` desyncs the parser into ERROR-recovery, silently
+dropping the following function from `get_structure()` entirely. **89.52%**
+(first run) → **100.00%** recall, 17 false positives (8/bucket, 1,196 edges),
+100.00% recall, 33 false positives (20/bucket, 2,826 edges) — all remaining
+false positives trace to documented, accepted residual classes (2
+unparseable Solaris/BSD-only files, several headers-unavailable feature
+flags, two permanently-`#if 0`-disabled dead-code blocks), none `calls://`
+defects. See
+[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+("Fifteenth language: C" section) for the full write-up.
+
 ## Import/Dependency Recall
 
 ### Method
@@ -1323,17 +1358,19 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 
 | Zig | Ghostty `src/` (.zig only, 709 files, test/ and `*_test.zig` excluded) | reverse | 92.28% → **99.98%** (8,403/8,405 edges, 20/bucket) | 221 (pre-fix) → 0 (post-fix) | Three distinct, real gaps found via a pre-flight AST dump *before* any oracle ran, all fixed: (1) **BACK-753** — `@as`/`@import`/`@panic`/etc. (Zig's `@`-prefixed compiler builtins) parse as a `BUILTINIDENTIFIER` leaf, a distinct kind from a regular `IDENTIFIER`, so `_extract_zig_suffix_calls` never seeded a callee for them — every builtin call was invisible, despite `@import` alone appearing in nearly every real Zig file. (2) **BACK-754** — `.fixed(&buf)`/`.init(...)` (Zig's type-inferred enum-literal call syntax, e.g. `var w: std.Io.Writer = .fixed(&buf)`, common in modern Zig via result-location inference) is a bare `.` token directly followed by the name, never wrapped in `FieldOrFnCall` the way a real receiver-qualified chain segment is — silently dropped (one target, `fixed`, measured 0.48% recall pre-fix). (3) **BACK-755** — `test SomeType {}` (Zig's identifier-named test form, the idiomatic way to colocate tests with a generic type/fn factory, e.g. `test WeakRef {}`) was entirely invisible to `get_structure()` — `_get_test_name` only recognized string-literal names, so the whole test scope (and every call inside it) was missing, not just its calls. All the FPs (221 pre-fix) traced to two oracle-modeling gaps, not `calls://` bugs: the oracle initially only walked `.fn_decl` scopes (missing `test "name" {}` string-named scopes entirely — Zig colocates tests inline, unlike every prior language's separately-directoried test suite) and the staged corpus initially included Ghostty's non-Zig files (189 Swift, 32 C, plus others — the macOS GUI shell), which `calls://`'s multi-language index happily scanned. One residual miss (2/8,405 edges, both `list_themes.zig`) traced to a pre-existing `tree-sitter-zig` parse error on that one file (`has_error: true`), not reproduced in isolation — narrow, undiagnosed, not filed |
 
+| C | Redis `src/` (125 `.c` + 83 `.h`, `deps/`/`curl/`/`modules/`/`src/modules/`/`tests/` excluded) | reverse | 89.52% → **100.00%** (both 8/bucket 1,196 edges and 20/bucket 2,826 edges) | 433 (pre-fix, 8/bucket) → 17/33 (post-fix) | No new `calls://` extraction bugs found — every real fix landed in the libclang oracle, adapted from the C++ oracle. Two general oracle-side bugs new to this program: byte-offset-vs-char-offset slicing of `cursor.extent` (silently wrong on any file with a non-ASCII byte, e.g. one curly-apostrophe comment corrupted ~6 targets' extraction), and a macro-vararg-nested call (`serverLog(level, fmt, ..., strerror(errno))`) losing ALL position info under macro re-expansion (`cursor.extent` collapses to zero-width) — a `cursor.spelling` fallback was added, guarded to require ≥1 real argument so it doesn't also fabricate calls from object-like macro constants like `HUGE_VAL`. The dominant false-positive source (433 at first run) was Redis's extensive `#ifdef`-gated optional-feature/self-test code — `calls://` (never preprocessing) sees every branch unconditionally where libclang can only compile one; fixed by building the oracle with a maximal "every optional feature on" flag set. One real, narrow tree-sitter-c grammar bug found and filed as **BACK-756** (open, not fixed, same class as Kotlin's BACK-738/Swift's BACK-742/C++'s BACK-745): a multi-line macro definition in `ziplist.c` desyncs the parser into ERROR-recovery, dropping the following function from `get_structure()` entirely. Remaining false positives all trace to documented, accepted residual classes (2 unparseable Solaris/BSD-only files, several headers-unavailable feature flags, two permanently-`#if 0`-disabled dead-code blocks), none `calls://` defects |
+
 Full methodology, per-corpus commit/snapshot, and the harness scripts
 (`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, Kotlin
-`KotlinOracle.kt`, Swift `swift-oracle/main.swift`, C++ via libclang, Scala
+`KotlinOracle.kt`, Swift `swift-oracle/main.swift`, C++/C via libclang, Scala
 `build_oracle_scala.scala` via scalameta, `build_oracle_js.js` for JS/TSX,
 `zig-oracle/build_oracle_zig.zig` for Zig via `std.zig.Ast`, `diff_*.py`) for
-all fourteen languages:
+all fifteen languages:
 [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
 
-Not yet measured: C, Lua, Dart,
+Not yet measured: Lua, Dart,
 GDScript — a claim not yet checked, not a claim
-`calls://` is broken on those languages. If a fifteenth language is measured,
+`calls://` is broken on those languages. If a sixteenth language is measured,
 add it to this table and the status-at-a-glance table above; `_bare_callee_name`
 /`_get_callee_name`'s other dotted-name-family languages are a reasonable place
 to look next, given Java's BACK-734, Ruby's BACK-735, PHP's BACK-736, C#'s
