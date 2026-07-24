@@ -105,7 +105,6 @@ from .schema import (
     _SCHEMA_QUERY_PARAMS,
     _SCHEMA_CLI_FLAGS,
     _SCHEMA_ELEMENTS,
-    _make_output_type,
     _SCHEMA_OUTPUT_TYPES,
     _SCHEMA_EXAMPLE_QUERIES,
     _SCHEMA_NOTES,
@@ -154,6 +153,206 @@ def _resolve_claude_projects_dir() -> Path:
             if alt.exists():
                 return alt
     return primary
+
+
+_HELP_EXAMPLES: List[Dict[str, str]] = [
+    {
+        'uri': 'claude://session/2627362f-6f72-45e1-b7bb-d5a61519a388',
+        'description': 'Session overview (messages, tools, duration) — session name is the UUID directory name under ~/.claude/projects/<project>/ (or a friendly name if using a session-naming layer)'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118/workflow',
+        'description': 'Chronological sequence of tool operations'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118/files',
+        'description': 'All files read, written, or edited'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118/tools',
+        'description': 'All tool usage with success rates'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118?errors',
+        'description': 'Find errors with context'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118/context',
+        'description': 'Track directory and branch changes'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118/thinking',
+        'description': 'Extract all thinking blocks with token estimates'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118?tools=Bash',
+        'description': 'Filter to specific tool calls'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118/messages',
+        'description': 'All assistant narrative turns (text only) — best resource for reading what was said'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118/prompts',
+        'description': 'Human-typed prompts only (excludes tool-result wrapper messages)'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118/user',
+        'description': 'User messages: initial prompt + tool-result turns'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118/assistant',
+        'description': 'Assistant messages: text responses only (skip thinking/tools)'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118/message/5',
+        'description': 'Read a specific message by index'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118/message/-1',
+        'description': 'Read the last message (negative index supported)'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118?last',
+        'description': 'Show last assistant turn — fast session recovery'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118?tail=3',
+        'description': 'Show last 3 assistant turns'
+    },
+    {
+        'uri': 'claude://session/infernal-earth-0118?search=verify',
+        'description': 'Search all content (text, thinking, tool inputs) for a term'
+    },
+    {
+        'uri': "claude://sessions/?search=validate_token",
+        'description': 'Cross-session content search — find sessions mentioning a term (20 by default)'
+    },
+    {
+        'uri': "claude://sessions/?search=auth&since=2026-03-01",
+        'description': 'Cross-session search scoped to recent sessions (?since= reduces scan time)'
+    },
+    {
+        'uri': 'claude://info',
+        'description': 'Diagnostic: where are all my Claude Code data files?'
+    },
+    {
+        'uri': 'claude://settings',
+        'description': 'Claude Code settings: model, permissions, timeout, hooks'
+    },
+    {
+        'uri': "claude://settings?key=permissions.additionalDirectories",
+        'description': 'Extract a specific nested settings value'
+    },
+    {
+        'uri': 'claude://history',
+        'description': 'Recent prompt history — last 50 prompts across all projects'
+    },
+    {
+        'uri': "claude://history?search=validate_token",
+        'description': 'Find prompts mentioning a term'
+    },
+    {
+        'uri': 'claude://plans',
+        'description': 'List all saved implementation plans (~/.claude/plans/)'
+    },
+    {
+        'uri': 'claude://plans/gentle-foraging-candy',
+        'description': 'Read a specific plan by name'
+    },
+    {
+        'uri': "claude://plans?search=token",
+        'description': 'Search across all plan content for a term'
+    },
+    {
+        'uri': 'claude://config',
+        'description': 'Per-install config: project count, MCP servers, feature flags'
+    },
+    {
+        'uri': "claude://config?key=installMethod",
+        'description': 'Extract a specific config value (dot-notation path)'
+    },
+    {
+        'uri': 'claude://memory',
+        'description': 'All memory files across projects (~/.claude/projects/*/memory/)'
+    },
+    {
+        'uri': "claude://memory?search=feedback",
+        'description': 'Search memory file content across all projects'
+    },
+    {
+        'uri': 'claude://agents',
+        'description': 'List all agent definitions (~/.claude/agents/)'
+    },
+    {
+        'uri': 'claude://agents/reveal-codereview',
+        'description': 'Read a specific agent definition'
+    },
+    {
+        'uri': 'claude://hooks',
+        'description': 'List all hook event types and scripts (~/.claude/hooks/)'
+    },
+]
+
+_HELP_WORKFLOWS: List[Dict[str, Any]] = [
+    {
+        'name': 'Post-Session Review',
+        'scenario': 'Understand what happened in a completed session',
+        'steps': [
+            'reveal claude://session/session-name',
+            'reveal claude://session/session-name?summary',
+            'reveal claude://session/session-name/tools'
+        ]
+    },
+    {
+        'name': 'Debug Failed Session',
+        'scenario': 'Find why a session failed',
+        'steps': [
+            'reveal claude://session/failed-build?errors',
+            'reveal claude://session/failed-build/message/67',
+            'reveal claude://session/failed-build?tools=Bash'
+        ]
+    },
+    {
+        'name': 'Token Optimization',
+        'scenario': 'Identify token waste',
+        'steps': [
+            'reveal claude://session/current?summary',
+            'reveal claude://session/current/thinking',
+            'reveal claude://session/current?tools=Read'
+        ]
+    },
+    {
+        'name': 'Read Session Content',
+        'scenario': 'Extract the prompt and findings from a session',
+        'steps': [
+            'reveal claude://session/session-name/prompts',
+            'reveal claude://session/session-name/assistant',
+            'reveal claude://session/session-name/thinking',
+        ]
+    },
+    {
+        'name': 'Prompt Comparison',
+        'scenario': 'Compare what two sessions found on the same codebase',
+        'steps': [
+            'reveal claude://session/session-a/user',
+            'reveal claude://session/session-b/user',
+            'reveal claude://session/session-a?search=<finding>',
+            'reveal claude://session/session-b?search=<finding>',
+        ]
+    },
+    {
+        'name': 'Browse Claude Setup',
+        'scenario': 'Audit your Claude Code install: MCP servers, agents, hooks, memory',
+        'steps': [
+            'reveal claude://info',
+            'reveal claude://config',
+            'reveal claude://agents',
+            'reveal claude://hooks',
+            'reveal claude://memory',
+        ]
+    }
+]
 
 
 @register_adapter('claude')
@@ -708,211 +907,6 @@ class ClaudeAdapter(ResourceAdapter):
             'notes': _SCHEMA_NOTES,
         }
 
-    @staticmethod
-    def _get_help_examples() -> List[Dict[str, str]]:
-        """Get example URIs for help documentation."""
-        return [
-            {
-                'uri': 'claude://session/2627362f-6f72-45e1-b7bb-d5a61519a388',
-                'description': 'Session overview (messages, tools, duration) — session name is the UUID directory name under ~/.claude/projects/<project>/ (or a friendly name if using a session-naming layer)'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118/workflow',
-                'description': 'Chronological sequence of tool operations'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118/files',
-                'description': 'All files read, written, or edited'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118/tools',
-                'description': 'All tool usage with success rates'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118?errors',
-                'description': 'Find errors with context'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118/context',
-                'description': 'Track directory and branch changes'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118/thinking',
-                'description': 'Extract all thinking blocks with token estimates'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118?tools=Bash',
-                'description': 'Filter to specific tool calls'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118/messages',
-                'description': 'All assistant narrative turns (text only) — best resource for reading what was said'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118/prompts',
-                'description': 'Human-typed prompts only (excludes tool-result wrapper messages)'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118/user',
-                'description': 'User messages: initial prompt + tool-result turns'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118/assistant',
-                'description': 'Assistant messages: text responses only (skip thinking/tools)'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118/message/5',
-                'description': 'Read a specific message by index'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118/message/-1',
-                'description': 'Read the last message (negative index supported)'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118?last',
-                'description': 'Show last assistant turn — fast session recovery'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118?tail=3',
-                'description': 'Show last 3 assistant turns'
-            },
-            {
-                'uri': 'claude://session/infernal-earth-0118?search=verify',
-                'description': 'Search all content (text, thinking, tool inputs) for a term'
-            },
-            {
-                'uri': "claude://sessions/?search=validate_token",
-                'description': 'Cross-session content search — find sessions mentioning a term (20 by default)'
-            },
-            {
-                'uri': "claude://sessions/?search=auth&since=2026-03-01",
-                'description': 'Cross-session search scoped to recent sessions (?since= reduces scan time)'
-            },
-            {
-                'uri': 'claude://info',
-                'description': 'Diagnostic: where are all my Claude Code data files?'
-            },
-            {
-                'uri': 'claude://settings',
-                'description': 'Claude Code settings: model, permissions, timeout, hooks'
-            },
-            {
-                'uri': "claude://settings?key=permissions.additionalDirectories",
-                'description': 'Extract a specific nested settings value'
-            },
-            {
-                'uri': 'claude://history',
-                'description': 'Recent prompt history — last 50 prompts across all projects'
-            },
-            {
-                'uri': "claude://history?search=validate_token",
-                'description': 'Find prompts mentioning a term'
-            },
-            {
-                'uri': 'claude://plans',
-                'description': 'List all saved implementation plans (~/.claude/plans/)'
-            },
-            {
-                'uri': 'claude://plans/gentle-foraging-candy',
-                'description': 'Read a specific plan by name'
-            },
-            {
-                'uri': "claude://plans?search=token",
-                'description': 'Search across all plan content for a term'
-            },
-            {
-                'uri': 'claude://config',
-                'description': 'Per-install config: project count, MCP servers, feature flags'
-            },
-            {
-                'uri': "claude://config?key=installMethod",
-                'description': 'Extract a specific config value (dot-notation path)'
-            },
-            {
-                'uri': 'claude://memory',
-                'description': 'All memory files across projects (~/.claude/projects/*/memory/)'
-            },
-            {
-                'uri': "claude://memory?search=feedback",
-                'description': 'Search memory file content across all projects'
-            },
-            {
-                'uri': 'claude://agents',
-                'description': 'List all agent definitions (~/.claude/agents/)'
-            },
-            {
-                'uri': 'claude://agents/reveal-codereview',
-                'description': 'Read a specific agent definition'
-            },
-            {
-                'uri': 'claude://hooks',
-                'description': 'List all hook event types and scripts (~/.claude/hooks/)'
-            },
-        ]
-
-    @staticmethod
-    def _get_help_workflows() -> List[Dict[str, Any]]:
-        """Get workflow examples for help documentation."""
-        return [
-            {
-                'name': 'Post-Session Review',
-                'scenario': 'Understand what happened in a completed session',
-                'steps': [
-                    'reveal claude://session/session-name',
-                    'reveal claude://session/session-name?summary',
-                    'reveal claude://session/session-name/tools'
-                ]
-            },
-            {
-                'name': 'Debug Failed Session',
-                'scenario': 'Find why a session failed',
-                'steps': [
-                    'reveal claude://session/failed-build?errors',
-                    'reveal claude://session/failed-build/message/67',
-                    'reveal claude://session/failed-build?tools=Bash'
-                ]
-            },
-            {
-                'name': 'Token Optimization',
-                'scenario': 'Identify token waste',
-                'steps': [
-                    'reveal claude://session/current?summary',
-                    'reveal claude://session/current/thinking',
-                    'reveal claude://session/current?tools=Read'
-                ]
-            },
-            {
-                'name': 'Read Session Content',
-                'scenario': 'Extract the prompt and findings from a session',
-                'steps': [
-                    'reveal claude://session/session-name/prompts',
-                    'reveal claude://session/session-name/assistant',
-                    'reveal claude://session/session-name/thinking',
-                ]
-            },
-            {
-                'name': 'Prompt Comparison',
-                'scenario': 'Compare what two sessions found on the same codebase',
-                'steps': [
-                    'reveal claude://session/session-a/user',
-                    'reveal claude://session/session-b/user',
-                    'reveal claude://session/session-a?search=<finding>',
-                    'reveal claude://session/session-b?search=<finding>',
-                ]
-            },
-            {
-                'name': 'Browse Claude Setup',
-                'scenario': 'Audit your Claude Code install: MCP servers, agents, hooks, memory',
-                'steps': [
-                    'reveal claude://info',
-                    'reveal claude://config',
-                    'reveal claude://agents',
-                    'reveal claude://hooks',
-                    'reveal claude://memory',
-                ]
-            }
-        ]
-
     def post_process(self, result: Dict[str, Any], args: Any) -> Dict[str, Any]:
         """Apply display hints and claude-specific filtering after get_structure().
 
@@ -978,7 +972,7 @@ class ClaudeAdapter(ResourceAdapter):
                 'claude://agents                                    # agent definitions\n'
                 'claude://hooks                                     # hook configurations'
             ),
-            'examples': ClaudeAdapter._get_help_examples(),
+            'examples': _HELP_EXAMPLES,
             'features': [
                 'Progressive disclosure (overview → details → specifics)',
                 'Tool usage analytics with success rates',
@@ -989,7 +983,7 @@ class ClaudeAdapter(ResourceAdapter):
                 'Thinking block extraction and analysis',
                 'Token usage estimates and optimization insights'
             ],
-            'workflows': ClaudeAdapter._get_help_workflows(),
+            'workflows': _HELP_WORKFLOWS,
             'try_now': [
                 'reveal claude://                                   # list all sessions',
                 'reveal claude://info                               # install overview',

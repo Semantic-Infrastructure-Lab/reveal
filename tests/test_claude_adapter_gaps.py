@@ -2006,9 +2006,8 @@ class TestBack346MessagesDiscoverable:
         assert any('/messages' in u for u in uris)
 
     def test_messages_in_help_examples(self):
-        from reveal.adapters.claude.adapter import ClaudeAdapter
-        examples = ClaudeAdapter._get_help_examples()
-        uris = [e.get('uri', '') for e in examples]
+        from reveal.adapters.claude.adapter import _HELP_EXAMPLES
+        uris = [e.get('uri', '') for e in _HELP_EXAMPLES]
         assert any('/messages' in u for u in uris)
 
     def test_messages_output_type_in_schema(self):
