@@ -37,6 +37,39 @@ _CPP_FINAL_RE = re.compile(r'final\b')
 _CPP_WS = ' \t\r\n'
 
 
+def _skip_trivia(source: str, pos: int) -> int:
+    """Advance past whitespace, `//`/`/* */` comments, and preprocessor
+    directive lines (`#ifndef SWIG` / `#endif` / etc, to end of line) —
+    real-world macro-prefixed class headers commonly interleave a
+    conditional base-class clause this way (`class ASSIMP_API IOStream
+    #ifndef SWIG
+        : public Base
+    #endif
+    { ... }`, confirmed in Assimp's own `IOStream.hpp`/`Logger.hpp`/4 other
+    files) between the class name and its `{`/`:`, which a naive
+    whitespace-only skip can't see past."""
+    n = len(source)
+    moved = True
+    while moved:
+        moved = False
+        while pos < n and source[pos] in _CPP_WS:
+            pos += 1
+            moved = True
+        if source[pos:pos + 2] == '//':
+            end = source.find('\n', pos)
+            pos = n if end == -1 else end
+            moved = True
+        elif source[pos:pos + 2] == '/*':
+            end = source.find('*/', pos + 2)
+            pos = n if end == -1 else end + 2
+            moved = True
+        elif pos < n and source[pos] == '#':
+            end = source.find('\n', pos)
+            pos = n if end == -1 else end
+            moved = True
+    return pos
+
+
 def normalize_cpp_macro_class_modifiers(source: str) -> str:
     """Blank a bare macro/attribute identifier sitting between `class`/
     `struct` and the real class name — `class ASSIMP_API BaseProcess {`,
@@ -96,14 +129,14 @@ def normalize_cpp_macro_class_modifiers(source: str) -> str:
         m2 = _CPP_IDENT_RE.match(source, j)
         if not m2:
             continue  # only one identifier present before the next token
-        k = m2.end()
-        while k < n and source[k] in _CPP_WS:
-            k += 1
+        if m2.group(0) == 'final':
+            continue  # `class Name final : ...` — ident1 IS the real name,
+            # `final` is the trailing specifier, not a second real
+            # identifier; blanking ident1 here would corrupt the real name.
+        k = _skip_trivia(source, m2.end())
         fm = _CPP_FINAL_RE.match(source, k)
         if fm:
-            k = fm.end()
-            while k < n and source[k] in _CPP_WS:
-                k += 1
+            k = _skip_trivia(source, fm.end())
         if k < n and source[k] in '{:':
             if out is None:
                 out = list(source)

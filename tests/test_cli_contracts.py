@@ -1641,6 +1641,24 @@ class TestScanContractsCpp(unittest.TestCase):
         report = _scan_contracts(Path(self.tmp))
         self.assertEqual([p['name'] for p in report['protocols']], ['Point'])
 
+    def test_final_specifier_subclass_not_renamed(self):
+        """Regression (found alongside BACK-796): `class MemStore final :
+        public Store { ... }` must still resolve to the real class name
+        `MemStore`, not `final`."""
+        self._write_cpp('store.cpp', '''\
+            class Store {
+            public:
+                virtual int get() = 0;
+            };
+            class MemStore final : public Store {
+            public:
+                int get() override { return 1; }
+            };
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertIn('MemStore', [c['name'] for c in report['dataclasses']])
+        self.assertNotIn('final', [c['name'] for c in report['dataclasses']])
+
 
 class TestNormalizeCppMacroClassModifiers(unittest.TestCase):
     """Direct unit tests for BACK-796's fix
@@ -1674,6 +1692,43 @@ class TestNormalizeCppMacroClassModifiers(unittest.TestCase):
     def test_leaves_forward_declaration_untouched(self):
         src = 'class Foo;\n'
         self.assertEqual(self._norm(src), src)
+
+    def test_leaves_final_specifier_class_untouched(self):
+        """Regression: `class Name final : public Base {` also has two bare
+        identifiers in a row (`Name`, `final`) — but `final` is the
+        trailing specifier, not a second real identifier, so `Name` (the
+        real class name) must NOT be blanked. Caught during the BACK-795
+        measurement session against Godot's own
+        `JoltCustomRayShapeSupport final : ...` — the fix's first draft
+        blanked the real class name and kept `final` as if it were the
+        class."""
+        src = 'class JoltCustomRayShapeSupport final : public Base {\n};\n'
+        self.assertEqual(self._norm(src), src)
+
+    def test_blanks_macro_with_preprocessor_conditional_before_colon(self):
+        """`class ASSIMP_API Name\\n#ifndef SWIG\\n    : public Base\\n#endif\\n{`
+        — Assimp's own `IOStream.hpp`/`IOSystem.hpp`/`Logger.hpp`/etc (5
+        files) guard the base-class clause behind a SWIG-binding
+        preprocessor conditional, putting `#ifndef`/`#endif` lines between
+        the class name and the `:`/`{` the lookahead checks for. The
+        lookahead must skip preprocessor-directive lines (not just
+        whitespace) to still recognize this as a genuine definition."""
+        out = self._norm(
+            'class ASSIMP_API IOStream\n'
+            '#ifndef SWIG\n'
+            '    : public Base\n'
+            '#endif\n'
+            '{\n};\n'
+        )
+        self.assertNotIn('ASSIMP_API', out)
+        self.assertIn('IOStream', out)
+
+    def test_blanks_macro_before_final_specifier_class(self):
+        """`class MACRO Name final : public Base {` — three bare tokens —
+        must still blank only the macro, keeping both `Name` and `final`."""
+        out = self._norm('class ASSIMP_API_WINONLY Foo final : public Base {\n};\n')
+        self.assertNotIn('ASSIMP_API_WINONLY', out)
+        self.assertIn('Foo final : public Base', out)
 
 
 class TestScanContractsPolyglot(unittest.TestCase):
