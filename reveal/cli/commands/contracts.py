@@ -677,17 +677,23 @@ def _scan_contracts_rust(
 
     trait_by_name = {t['name']: t for t in traits}
     # A type may implement several traits — collect its trait list for the
-    # "implementing types" slot; populate each trait's implementers.
-    type_traits: Dict[str, Dict[str, Any]] = {}
+    # "implementing types" slot; populate each trait's implementers. Keyed by
+    # (type, file), not bare type name: a short/generic name like `Error` or
+    # `Result` is commonly reused for unrelated types across files in a large
+    # real workspace (BACK-794) — keying by name alone silently conflated
+    # every same-named type's trait list into whichever file's impl was
+    # processed first.
+    type_traits: Dict[tuple, Dict[str, Any]] = {}
     if show_implementations:
         for impl in impls:
             entry = {'name': impl['type'], 'file': impl['file'], 'line': impl['line']}
             tr = trait_by_name.get(impl['trait'])
             if tr is not None:
                 tr['implementations'].append(entry)
-            rec = type_traits.setdefault(impl['type'], {'name': impl['type'],
-                                                        'file': impl['file'],
-                                                        'line': impl['line'], 'bases': set()})
+            key = (impl['type'], impl['file'])
+            rec = type_traits.setdefault(key, {'name': impl['type'],
+                                               'file': impl['file'],
+                                               'line': impl['line'], 'bases': set()})
             rec['bases'].add(impl['trait'])
 
     implementers: List[Dict[str, Any]] = []

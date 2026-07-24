@@ -1469,6 +1469,28 @@ class TestScanContractsRust(unittest.TestCase):
         self.assertEqual(report['dataclasses'], [])
         self.assertEqual([p['name'] for p in report['protocols']], ['Store'])
 
+    def test_same_named_type_in_different_files_not_conflated(self):
+        """BACK-794: a short/generic type name (e.g. `Error`) reused for
+        unrelated types across files must not collapse into one bogus
+        implementer entry with a unioned `bases` list — each file's type
+        gets its own implementer row."""
+        self._write_rs('a/error.rs', '''\
+            trait ErrorCode { fn code(&self); }
+            struct Error;
+            impl ErrorCode for Error { fn code(&self) {} }
+        ''')
+        self._write_rs('b/error.rs', '''\
+            trait Display { fn fmt(&self); }
+            struct Error;
+            impl Display for Error { fn fmt(&self) {} }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        error_impls = [c for c in report['dataclasses'] if c['name'] == 'Error']
+        self.assertEqual(len(error_impls), 2)
+        files = {Path(c['file']).parent.name: c['bases'] for c in error_impls}
+        self.assertEqual(files['a'], ['ErrorCode'])
+        self.assertEqual(files['b'], ['Display'])
+
 
 class TestScanContractsCpp(unittest.TestCase):
     """Tests for C++ contract detection — abstract classes + subclasses
