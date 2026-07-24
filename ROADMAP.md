@@ -156,7 +156,14 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   merging-universe-0720). BACK-621's original six-language breadth plan is
   fully closed. Honest-decline invariant shipped (reveal caveats an
   unresolved result instead of asserting a false "nothing here"), and
-  release is now gated on CI (BACK-578).
+  release is now gated on CI (BACK-578). `contracts`/`surface` correctness:
+  a polyglot-repo dispatch bug that silently dropped every non-winning
+  language's contracts (BACK-780), plus 5 further Python taxonomy bugs found
+  by direct probing — subscripted generic bases, metaclass keyword-arg ABCs,
+  BaseModel subclass linking, `os.environ[...]` subscript access, non-file
+  `.write()` false positives (BACK-777/778/781/782/783) — all fixed; one
+  further finding (BACK-779) ruled a taxonomy-completeness gap rather than a
+  bug, deferred to a dedicated sweep.
 - **Next, in priority order.** Import recall and side-effect recall are both
   now the program's strongest signals — 19 languages (two corpora each) and
   18 languages (full six-category sweep each) respectively. The remaining
@@ -185,13 +192,10 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
      this needed a design doc before any measurement — closer to the
      side-effect program's from-scratch-oracle shape. Design doc:
      `internal-docs/planning/BACK-719-surface-contracts-oracle-design.md`.
-     That design surfaced a correctness bug blocking any `contracts` oracle —
-     `_scan_contracts` dispatched per *directory* on a mutually-exclusive
-     language priority chain, silently dropping every non-winning language's
-     contracts in a polyglot repo (BACK-780) — now fixed (per-language
-     dispatch + merge; single-language repos unaffected). `surface`/`contracts`
-     also have 6 further open Python taxonomy gaps found by direct probing,
-     unconfirmed as bugs vs. deliberate scope (BACK-777/778/779/781/782/783).
+     The correctness bugs that design surfaced are now all fixed (see Done,
+     above) — the remaining open step is building a polyglot/contract-rich
+     pilot corpus (no existing corpus is contract-rich enough) to actually
+     run the oracle against, not further bug-hunting.
 
   *Not on this list, deliberately:* `patches://`/testability language breadth
   past Python + TS is filed as an idea rather than committed work — see
