@@ -389,7 +389,11 @@ def _scan_contracts_python(
                 contract_names.add(cls['name'])
 
     if show_implementations:
-        _add_implementations(all_classes, contract_names, abcs + protocols + path_heuristic)
+        # BACK-783: basemodels are inheritance-based contracts like abcs/protocols
+        # (a subclass of a pydantic BaseModel is a real implementation edge);
+        # typeddicts/dataclasses are structural, not inheritance hierarchies,
+        # so they're deliberately excluded here.
+        _add_implementations(all_classes, contract_names, abcs + protocols + basemodels + path_heuristic)
 
     return {
         'path': str(path),
@@ -815,26 +819,32 @@ def _has_pass_only_methods(cls: Dict[str, Any]) -> bool:
     return bool(cls.get('abstract_methods'))
 
 
+def _base_tail(base: str) -> str:
+    """Strip a dotted path and a generic subscript: 'pkg.Protocol[T]' -> 'Protocol'.
+
+    BACK-781: subscripted generic bases (class Foo(Protocol[T])) tail-matched
+    on the literal string 'Protocol[T]', which never equals 'Protocol'.
+    """
+    return base.split('[', 1)[0].split('.')[-1]
+
+
 def _is_abc(bases: List[str]) -> bool:
     for b in bases:
-        tail = b.split('.')[-1]
-        if tail in ('ABC', 'ABCMeta'):
+        if _base_tail(b) in ('ABC', 'ABCMeta'):
             return True
     return False
 
 
 def _is_protocol(bases: List[str]) -> bool:
     for b in bases:
-        tail = b.split('.')[-1]
-        if tail == 'Protocol':
+        if _base_tail(b) == 'Protocol':
             return True
     return False
 
 
 def _is_typeddict(bases: List[str]) -> bool:
     for b in bases:
-        tail = b.split('.')[-1]
-        if tail == 'TypedDict':
+        if _base_tail(b) == 'TypedDict':
             return True
     return False
 
@@ -849,8 +859,7 @@ def _is_dataclass(decorators: List[str]) -> bool:
 
 def _is_basemodel(bases: List[str]) -> bool:
     for b in bases:
-        tail = b.split('.')[-1]
-        if tail in ('BaseModel', 'BaseSettings'):
+        if _base_tail(b) in ('BaseModel', 'BaseSettings'):
             return True
     return False
 
@@ -863,7 +872,7 @@ def _add_implementations(
     contract_map = {c['name']: c for c in contract_list}
     for cls in all_classes:
         for base in cls['bases']:
-            tail = base.split('.')[-1]
+            tail = _base_tail(base)
             if tail in contract_map and cls['name'] != tail:
                 contract_map[tail]['implementations'].append({
                     'name': cls['name'],

@@ -276,6 +276,52 @@ class TestScanContracts(unittest.TestCase):
         report = _scan_contracts(Path(self.tmp))
         self.assertEqual(report['total_contracts'], 0)
 
+    def test_finds_protocol_with_generic_subscript(self):
+        # BACK-781: class Foo(Protocol[T]) — the subscripted base used to be
+        # dropped by the tree-sitter extraction entirely, so the class was
+        # invisible to every contract category.
+        _write(self.tmp, 'proto.py', '''\
+            from typing import Protocol, TypeVar
+            T = TypeVar("T")
+            class Reader(Protocol[T]):
+                def read(self) -> T: ...
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['protocols']), 1)
+        self.assertEqual(report['protocols'][0]['name'], 'Reader')
+
+    def test_basemodel_subclass_linked_as_implementation(self):
+        # BACK-783: _add_implementations only got abcs+protocols+path_heuristic,
+        # so a pydantic BaseModel hierarchy lost its subclass links even though
+        # BaseModel is an inheritance-based contract like ABC/Protocol.
+        _write(self.tmp, 'models.py', '''\
+            from pydantic import BaseModel
+            class OkBaseModel(BaseModel):
+                x: int
+            class IndirectFromBaseModel(OkBaseModel):
+                y: int
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        basemodels = report['basemodels']
+        self.assertEqual(len(basemodels), 1)
+        impls = basemodels[0]['implementations']
+        self.assertEqual(len(impls), 1)
+        self.assertEqual(impls[0]['name'], 'IndirectFromBaseModel')
+
+    def test_finds_abc_with_metaclass_kwarg(self):
+        # BACK-782: class Foo(metaclass=ABCMeta) — ABCMeta passed as a keyword
+        # argument, not a base, so it was invisible to _is_abc. Detection
+        # used to depend entirely on the filename matching a path heuristic.
+        _write(self.tmp, 'engine.py', '''\
+            from abc import ABCMeta
+            class Base(metaclass=ABCMeta):
+                pass
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(len(report['abcs']), 1)
+        self.assertEqual(report['abcs'][0]['name'], 'Base')
+        self.assertEqual(report['path_heuristic'], [])
+
 
 class TestRenderReport(unittest.TestCase):
 

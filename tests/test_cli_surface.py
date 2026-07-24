@@ -253,6 +253,54 @@ class TestScanSurface(unittest.TestCase):
         fs = report['surfaces']['fs']
         self.assertGreater(len(fs), 0)
 
+    def test_finds_env_subscript_forms(self):
+        # BACK-777: os.environ['X'] read/write is ast.Subscript, not ast.Call —
+        # structurally invisible to the old ast.Call-only dispatch.
+        _write(self.tmp, 'app.py', '''\
+            import os
+            READ = os.environ['DATABASE_URL']
+            os.environ['SECRET_KEY'] = 'x'
+            os.environ.setdefault('DEFAULT_KEY', '1')
+            os.environ.pop('REMOVE_KEY', None)
+            os.putenv('PUTENV_KEY', '2')
+        ''')
+        report = _scan_surface(Path(self.tmp))
+        names = [e['name'] for e in report['surfaces']['env']]
+        self.assertIn('DATABASE_URL', names)
+        self.assertIn('SECRET_KEY', names)
+        self.assertIn('DEFAULT_KEY', names)
+        self.assertIn('REMOVE_KEY', names)
+        self.assertIn('PUTENV_KEY', names)
+
+    def test_fs_write_excludes_non_file_receivers(self):
+        # BACK-778: a bare tail-match on .write/.writelines fired on any
+        # receiver, including sys.stdout and io.StringIO() — neither touches
+        # the filesystem.
+        _write(self.tmp, 'app.py', '''\
+            import sys
+            import io
+            def f():
+                sys.stdout.write("hello")
+                io.StringIO().write("world")
+        ''')
+        report = _scan_surface(Path(self.tmp))
+        fs = report['surfaces']['fs']
+        self.assertEqual(fs, [])
+
+    def test_fs_write_chained_open_not_double_counted(self):
+        # BACK-778: open(path, 'w').write(data) used to report twice — once
+        # for the open() call (correct target=path) and once for the chained
+        # .write() call (target=data, the wrong thing entirely).
+        _write(self.tmp, 'app.py', '''\
+            def f():
+                open('/tmp/real.txt', 'w').write('data')
+        ''')
+        report = _scan_surface(Path(self.tmp))
+        fs = report['surfaces']['fs']
+        self.assertEqual(len(fs), 1)
+        self.assertEqual(fs[0]['name'], 'open')
+        self.assertEqual(fs[0]['target'], '/tmp/real.txt')
+
     def test_type_filter(self):
         _write(self.tmp, 'app.py', '''\
             import os

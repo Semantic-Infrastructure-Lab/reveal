@@ -64,6 +64,10 @@ def _scan_tree(
             _process_function_def(node, file_path, surfaces, aliases, cli_groups)
         elif isinstance(node, ast.Call):
             _process_call(node, file_path, aliases, surfaces)
+        elif isinstance(node, ast.Subscript):
+            # BACK-777: os.environ['X'] (read or write) is ast.Subscript, not
+            # ast.Call — _process_call's dispatch never sees it.
+            _process_subscript(node, file_path, surfaces)
 
     return surfaces
 
@@ -328,14 +332,62 @@ def _is_mcp_tool(deco: str) -> bool:
 
 
 def _is_env_access(func_str: str) -> bool:
-    return func_str in ('os.environ.get', 'os.getenv', 'environ.get', 'getenv', 'os.environ.__getitem__')
+    return func_str in (
+        'os.environ.get', 'os.getenv', 'environ.get', 'getenv', 'os.environ.__getitem__',
+        'os.environ.setdefault', 'environ.setdefault', 'os.environ.pop', 'environ.pop',
+        'os.putenv',
+    )
+
+
+def _process_subscript(node: ast.Subscript, file_path: str, surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
+    # BACK-777: os.environ['X'] read or write — the subscript form is
+    # structurally invisible to _process_call's ast.Call dispatch.
+    receiver = _unparse_expr(node.value)
+    if receiver not in ('os.environ', 'environ'):
+        return
+    key = None
+    if isinstance(node.slice, ast.Constant):
+        key = str(node.slice.value)
+    if key is None or key.startswith('{'):
+        return
+    surfaces['env'].append({
+        'type': 'env_var',
+        'name': key,
+        'expr': f'{receiver}[...]',
+        'file': file_path,
+        'line': node.lineno,
+    })
 
 
 def _is_fs_write(func_str: str, node: ast.Call) -> bool:
     if func_str == 'open':
         return _get_open_mode(node) in _WRITE_MODES
     tail = func_str.split('.')[-1]
-    return tail in ('write_text', 'write_bytes', 'write', 'writelines') and len(func_str) > len(tail)
+    if tail not in ('write_text', 'write_bytes', 'write', 'writelines') or len(func_str) <= len(tail):
+        return False
+    # BACK-778: a bare `.write`/`.writelines` matches any receiver, including
+    # sys.stdout/sys.stderr and io.StringIO()/io.BytesIO() — none of which
+    # touch the filesystem.
+    if any(func_str.startswith(p) for p in _NON_FILE_WRITE_PREFIXES):
+        return False
+    if _is_chained_open_write(node):
+        # open(...).write(...) is already counted via the inner open() call
+        # (which reports the real path as target, not the data written).
+        return False
+    return True
+
+
+_NON_FILE_WRITE_PREFIXES: tuple = (
+    'sys.stdout.', 'sys.stderr.', 'stdout.', 'stderr.',
+    'io.StringIO(', 'io.BytesIO(', 'StringIO(', 'BytesIO(',
+)
+
+
+def _is_chained_open_write(node: ast.Call) -> bool:
+    func = node.func
+    if not isinstance(func, ast.Attribute) or not isinstance(func.value, ast.Call):
+        return False
+    return _unparse_expr(func.value.func) == 'open'
 
 
 def _get_open_mode(node: ast.Call) -> str:
