@@ -3,9 +3,13 @@
 import sys
 import re
 import base64
+import csv
 import io
+import struct
 import zipfile
 import xml.etree.ElementTree as ET
+import zlib as _zlib
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Set
 from .base import ResourceAdapter, register_adapter, register_renderer
@@ -113,7 +117,6 @@ class XlsxRenderer:
     @staticmethod
     def _render_csv(rows_data: List[List[Any]]) -> None:
         """Render as CSV format."""
-        import csv
         output = io.StringIO()
         writer = csv.writer(output)
         for row in rows_data:
@@ -143,7 +146,6 @@ class XlsxRenderer:
     def _render_search_results(result: dict, format: str) -> None:
         """Render cross-sheet search results."""
         if format == 'json':
-            from ..utils import safe_json_dumps
             print(safe_json_dumps(result))
             return
 
@@ -237,7 +239,6 @@ class XlsxRenderer:
         filename: str, relationships: list, xmla_available: bool
     ) -> None:
         """Render ?powerpivot=relationships output."""
-        from collections import defaultdict
         print(f"Power Pivot Relationships: {filename}\n")
         if not relationships:
             if not xmla_available:
@@ -510,6 +511,84 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'xlsx:///path/to/file.xlsx?powerpivot=dax', 'description': 'Show DAX measure expressions', 'output_type': 'xlsx_powerpivot'},
 ]
 
+_HELP_EXAMPLES = [
+    {'uri': 'xlsx:///data/sales.xlsx', 'description': 'Show workbook overview with all sheets'},
+    {'uri': 'xlsx:///data/sales.xlsx?sheet=Q1', 'description': 'Extract "Q1" sheet data'},
+    {'uri': 'xlsx:///data/sales.xlsx?sheet=0', 'description': 'Extract first sheet (by index)'},
+    {'uri': 'xlsx:///data/sales.xlsx?sheet=Q1&range=A1:D10', 'description': 'Extract cell range A1:D10 from Q1 sheet'},
+    {'uri': 'xlsx:///data/sales.xlsx?sheet=Q1&limit=50', 'description': 'Extract first 50 rows from Q1 sheet'},
+    {'uri': 'xlsx:///data/sales.xlsx?sheet=Q1&format=csv', 'description': 'Export Q1 sheet as CSV'},
+    {'uri': 'xlsx:///data/sales.xlsx?search=revenue', 'description': 'Search for "revenue" across all sheets'},
+    {'uri': 'xlsx:///data/model.xlsx?powerpivot=schema', 'description': 'Show Power Pivot data model tables and columns'},
+    {'uri': 'xlsx:///data/model.xlsx?powerpivot=dax', 'description': 'Show all DAX measure expressions'},
+    {'uri': 'xlsx:///data/model.xlsx?powerpivot=relationships', 'description': 'Show table relationship graph'},
+    {'uri': 'xlsx:///data/model.xlsx?powerquery=list', 'description': 'List Power Query (M) queries embedded in the workbook'},
+    {'uri': 'xlsx:///data/model.xlsx?powerquery=show', 'description': 'Show all Power Query M code'},
+    {'uri': 'xlsx:///data/model.xlsx?powerquery=SalesData', 'description': 'Show M code for the "SalesData" query'},
+    {'uri': 'xlsx:///data/model.xlsx?names=list', 'description': 'List all named ranges and defined names'},
+    {'uri': 'xlsx:///data/model.xlsx?connections=list', 'description': 'List external data connections (ODBC, web, etc.)'},
+    {'uri': 'xlsx:///data/model.xlsx?connections=show', 'description': 'Show full connection strings and SQL commands'},
+]
+
+_HELP_FEATURES = [
+    'Workbook overview with sheet list',
+    'Sheet extraction by name or index',
+    'Cell range extraction (A1 notation)',
+    'CSV export',
+    'Row limiting',
+    'Cross-sheet search',
+    'Power Pivot data model (tables, columns, DAX measures, relationships)',
+    'Power Query M code extraction (?powerquery=)',
+    'Named ranges / defined names (?names=list)',
+    'External data connections (?connections=)',
+    'JSON and text output',
+]
+
+_HELP_TRY_NOW = [
+    "reveal xlsx:///path/to/file.xlsx",
+    "reveal xlsx:///path/to/file.xlsx?sheet=0",
+    "reveal xlsx:///path/to/file.xlsx?powerpivot=schema",
+    "reveal xlsx:///path/to/file.xlsx?powerquery=list",
+]
+
+_HELP_WORKFLOWS = [
+    {
+        'name': 'Extract Sheet Data',
+        'scenario': 'Export Excel sheet to CSV for processing',
+        'steps': [
+            "reveal xlsx:///data/sales.xlsx              # See all sheets",
+            "reveal xlsx:///data/sales.xlsx?sheet=Q1&format=csv > output.csv",
+        ],
+    },
+    {
+        'name': 'Quick Data Inspection',
+        'scenario': 'Preview large Excel file',
+        'steps': [
+            "reveal xlsx:///data/huge.xlsx              # List sheets",
+            "reveal xlsx:///data/huge.xlsx?sheet=Summary&limit=20  # Preview first 20 rows",
+        ],
+    },
+    {
+        'name': 'Explore Power BI Export',
+        'scenario': 'Understand a Power BI xlsx export data model',
+        'steps': [
+            "reveal xlsx:///data/report.xlsx                    # Overview — see model detected",
+            "reveal xlsx:///data/report.xlsx?powerpivot=schema  # Tables + columns",
+            "reveal xlsx:///data/report.xlsx?powerpivot=dax     # DAX measures",
+            "reveal xlsx:///data/report.xlsx?powerquery=list    # Power Query ETL queries",
+        ],
+    },
+    {
+        'name': 'Audit Data Sources',
+        'scenario': 'Find where a workbook pulls its data from',
+        'steps': [
+            "reveal xlsx:///data/report.xlsx?connections=list   # External connections",
+            "reveal xlsx:///data/report.xlsx?connections=show   # Full connection strings + SQL",
+            "reveal xlsx:///data/report.xlsx?powerquery=list    # Power Query sources",
+        ],
+    },
+]
+
 
 @register_adapter('xlsx')
 @register_renderer(XlsxRenderer)
@@ -550,128 +629,10 @@ class XlsxAdapter(ResourceAdapter):
             'name': 'xlsx',
             'description': 'Extract and analyze Excel spreadsheet data',
             'syntax': 'xlsx:///path/to/file.xlsx[?query_params]',
-            'examples': [
-                {
-                    'uri': 'xlsx:///data/sales.xlsx',
-                    'description': 'Show workbook overview with all sheets'
-                },
-                {
-                    'uri': 'xlsx:///data/sales.xlsx?sheet=Q1',
-                    'description': 'Extract "Q1" sheet data'
-                },
-                {
-                    'uri': 'xlsx:///data/sales.xlsx?sheet=0',
-                    'description': 'Extract first sheet (by index)'
-                },
-                {
-                    'uri': 'xlsx:///data/sales.xlsx?sheet=Q1&range=A1:D10',
-                    'description': 'Extract cell range A1:D10 from Q1 sheet'
-                },
-                {
-                    'uri': 'xlsx:///data/sales.xlsx?sheet=Q1&limit=50',
-                    'description': 'Extract first 50 rows from Q1 sheet'
-                },
-                {
-                    'uri': 'xlsx:///data/sales.xlsx?sheet=Q1&format=csv',
-                    'description': 'Export Q1 sheet as CSV'
-                },
-                {
-                    'uri': 'xlsx:///data/sales.xlsx?search=revenue',
-                    'description': 'Search for "revenue" across all sheets'
-                },
-                {
-                    'uri': 'xlsx:///data/model.xlsx?powerpivot=schema',
-                    'description': 'Show Power Pivot data model tables and columns'
-                },
-                {
-                    'uri': 'xlsx:///data/model.xlsx?powerpivot=dax',
-                    'description': 'Show all DAX measure expressions'
-                },
-                {
-                    'uri': 'xlsx:///data/model.xlsx?powerpivot=relationships',
-                    'description': 'Show table relationship graph'
-                },
-                {
-                    'uri': 'xlsx:///data/model.xlsx?powerquery=list',
-                    'description': 'List Power Query (M) queries embedded in the workbook'
-                },
-                {
-                    'uri': 'xlsx:///data/model.xlsx?powerquery=show',
-                    'description': 'Show all Power Query M code'
-                },
-                {
-                    'uri': 'xlsx:///data/model.xlsx?powerquery=SalesData',
-                    'description': 'Show M code for the "SalesData" query'
-                },
-                {
-                    'uri': 'xlsx:///data/model.xlsx?names=list',
-                    'description': 'List all named ranges and defined names'
-                },
-                {
-                    'uri': 'xlsx:///data/model.xlsx?connections=list',
-                    'description': 'List external data connections (ODBC, web, etc.)'
-                },
-                {
-                    'uri': 'xlsx:///data/model.xlsx?connections=show',
-                    'description': 'Show full connection strings and SQL commands'
-                }
-            ],
-            'features': [
-                'Workbook overview with sheet list',
-                'Sheet extraction by name or index',
-                'Cell range extraction (A1 notation)',
-                'CSV export',
-                'Row limiting',
-                'Cross-sheet search',
-                'Power Pivot data model (tables, columns, DAX measures, relationships)',
-                'Power Query M code extraction (?powerquery=)',
-                'Named ranges / defined names (?names=list)',
-                'External data connections (?connections=)',
-                'JSON and text output'
-            ],
-            'try_now': [
-                "reveal xlsx:///path/to/file.xlsx",
-                "reveal xlsx:///path/to/file.xlsx?sheet=0",
-                "reveal xlsx:///path/to/file.xlsx?powerpivot=schema",
-                "reveal xlsx:///path/to/file.xlsx?powerquery=list",
-            ],
-            'workflows': [
-                {
-                    'name': 'Extract Sheet Data',
-                    'scenario': 'Export Excel sheet to CSV for processing',
-                    'steps': [
-                        "reveal xlsx:///data/sales.xlsx              # See all sheets",
-                        "reveal xlsx:///data/sales.xlsx?sheet=Q1&format=csv > output.csv",
-                    ],
-                },
-                {
-                    'name': 'Quick Data Inspection',
-                    'scenario': 'Preview large Excel file',
-                    'steps': [
-                        "reveal xlsx:///data/huge.xlsx              # List sheets",
-                        "reveal xlsx:///data/huge.xlsx?sheet=Summary&limit=20  # Preview first 20 rows",
-                    ],
-                },
-                {
-                    'name': 'Explore Power BI Export',
-                    'scenario': 'Understand a Power BI xlsx export data model',
-                    'steps': [
-                        "reveal xlsx:///data/report.xlsx                    # Overview — see model detected",
-                        "reveal xlsx:///data/report.xlsx?powerpivot=schema  # Tables + columns",
-                        "reveal xlsx:///data/report.xlsx?powerpivot=dax     # DAX measures",
-                        "reveal xlsx:///data/report.xlsx?powerquery=list    # Power Query ETL queries",
-                    ],
-                },
-                {
-                    'name': 'Audit Data Sources',
-                    'scenario': 'Find where a workbook pulls its data from',
-                    'steps': [
-                        "reveal xlsx:///data/report.xlsx?connections=list   # External connections",
-                        "reveal xlsx:///data/report.xlsx?connections=show   # Full connection strings + SQL",
-                        "reveal xlsx:///data/report.xlsx?powerquery=list    # Power Query sources",
-                    ],
-                }
-            ],
+            'examples': _HELP_EXAMPLES,
+            'features': _HELP_FEATURES,
+            'try_now': _HELP_TRY_NOW,
+            'workflows': _HELP_WORKFLOWS,
             'output_formats': ['text', 'json', 'csv'],
             'see_also': ['stats://', 'json://']
         }
@@ -1168,9 +1129,6 @@ class XlsxAdapter(ResourceAdapter):
         files.  We scan for local file headers directly rather than relying on
         Python's ZipFile central-directory reader.
         """
-        import struct
-        import zlib as _zlib
-
         raw = zf.read(item_path)
 
         # Decode the XML (may be UTF-16 or UTF-8)
