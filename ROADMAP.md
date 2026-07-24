@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-07-15 (glossy-spectrum-0715 — v0.109.0 release: 11-language contracts/surface, disk-cache program, depends:// scan-root rewrite, CI-red recovery)
+> **Last updated**: 2026-07-23 (desert-tempest-0723 — v0.110.0 release: calls:// call-graph recall complete across all 19 languages, side-effects taxonomy sweep, TS import resolution deepened)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,13 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.110.0 — calls:// call-graph recall complete across all 19 languages + side-effects taxonomy sweep + TS import resolution deepened
+- ✅ `calls://` recall-oracle program (BACK-730) complete — all 19 supported languages now measured against independent-oracle ground truth at 89–100% recall. Biggest find: Dart had no dedicated call-expression node kind at all, so every call site was invisible to `calls://` (BACK-760/761/763-767/769).
+- ✅ Side-effect taxonomy recall sweep closes BACK-718 — Zig, Scala, Dart, and GDScript brought from partial to near-complete recall, plus cross-language `classify_call` false-positive fixes.
+- ✅ TS/JS import resolution deepened — tsconfig `extends` chains, `paths`/`baseUrl` aliases, project references, and monorepo `package.json` exports maps (BACK-705/694/772/773).
+- ✅ BACK-775 hotspot thresholds now honor per-project `.reveal.yaml` rule config instead of a hardcoded second copy; BACK-776 C902 no longer counts docstrings toward function length.
+- ✅ `pytest-xdist` parallel tests by default; `release.sh` gates on GitHub Actions CI status for HEAD (BACK-578); a missing `pytest-xdist` dev-dependency that had been failing CI on every push since xdist went default, root-caused and fixed.
 
 ### v0.109.0 — contracts/surface 11-language coverage complete + persistent disk-cache program + depends:// scan-root rewrite + master CI red recovery
 - ✅ `contracts`/`surface` reach all 11 languages — Go, Rust, C++ added, plus C++ `.h`-only classes and plain JS/JSX residuals closed (BACK-403 pt 2 / BACK-588).
