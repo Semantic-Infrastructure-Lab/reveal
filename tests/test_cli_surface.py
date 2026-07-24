@@ -16,7 +16,6 @@ from reveal.adapters.ast.nav_surface import (
     _is_fs_write,
     _is_http_route,
     _is_mock_patch_decorator,
-    _is_mcp_tool,
 )
 from reveal.cli.commands.surface import (
     _render_report,
@@ -99,15 +98,9 @@ class TestClassifiers(unittest.TestCase):
     def test_is_mock_patch_decorator_real_route_false(self):
         self.assertFalse(_is_mock_patch_decorator("app.patch('/endpoint')"))
 
-    # CLI-command classification is provenance-based (BACK-534), not a string
-    # heuristic — covered by TestCliCommandProvenance below.
-
-    def test_is_mcp_tool(self):
-        self.assertTrue(_is_mcp_tool("mcp.tool()"))
-        self.assertTrue(_is_mcp_tool("server.tool()"))
-
-    def test_is_mcp_tool_false(self):
-        self.assertFalse(_is_mcp_tool("app.route('/x')"))
+    # CLI-command and MCP-tool classification are both provenance-based
+    # (BACK-534, BACK-786), not a string heuristic — covered by
+    # TestCliCommandProvenance / TestMcpToolProvenance below.
 
     def test_is_env_access_os_getenv(self):
         self.assertTrue(_is_env_access("os.getenv"))
@@ -466,6 +459,83 @@ class TestCliCommandProvenance(unittest.TestCase):
                 pass
         ''')
         self.assertIn('run', self._cli_names())
+
+
+class TestMcpToolProvenance(unittest.TestCase):
+    """BACK-786: @x.tool() is an MCP surface only with mcp/fastmcp provenance —
+    same shape as BACK-534's CLI-command fix."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _mcp_names(self):
+        report = _scan_surface(Path(self.tmp))
+        return [e['name'] for e in report['surfaces']['mcp']]
+
+    def test_fastmcp_instance_tool_detected(self):
+        _write(self.tmp, 'server.py', '''\
+            from mcp.server.fastmcp import FastMCP
+
+            mcp = FastMCP("demo")
+
+            @mcp.tool()
+            def add(x: int, y: int) -> int:
+                return x + y
+        ''')
+        self.assertIn('add', self._mcp_names())
+
+    def test_aliased_fastmcp_constructor_detected(self):
+        _write(self.tmp, 'server.py', '''\
+            from fastmcp import FastMCP as MCPServer
+
+            server = MCPServer("demo")
+
+            @server.tool()
+            def ping() -> str:
+                return "pong"
+        ''')
+        self.assertIn('ping', self._mcp_names())
+
+    def test_bare_tool_import_detected(self):
+        _write(self.tmp, 'server.py', '''\
+            from mcp.server.fastmcp import tool
+
+            @tool
+            def echo(x: str) -> str:
+                return x
+        ''')
+        self.assertIn('echo', self._mcp_names())
+
+    def test_unrelated_tool_decorator_excluded(self):
+        # LangChain's @tool is a different concept entirely, not MCP — same
+        # bare decorator name, no mcp/fastmcp provenance.
+        _write(self.tmp, 'agent.py', '''\
+            from langchain.tools import tool
+
+            @tool
+            def search(query: str) -> str:
+                """Look something up."""
+                return query
+        ''')
+        self.assertEqual(self._mcp_names(), [])
+
+    def test_tool_on_unknown_object_excluded(self):
+        _write(self.tmp, 'toolbox.py', '''\
+            class Toolbox:
+                def tool(self, fn):
+                    return fn
+
+            tb = Toolbox()
+
+            @tb.tool()
+            def hammer():
+                pass
+        ''')
+        self.assertEqual(self._mcp_names(), [])
 
 
 class TestRenderReport(unittest.TestCase):

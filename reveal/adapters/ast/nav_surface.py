@@ -56,12 +56,16 @@ def _scan_tree(
     aliases: Dict[str, str] = {}
     _collect_aliases(tree, aliases)
     cli_groups = _collect_cli_groups(tree, aliases)
+    # BACK-786: same treatment for @x.tool() — a bare decorator-name match
+    # mistakes any unrelated `.tool()`-shaped decorator (e.g. LangChain's
+    # `@tool`) for an MCP tool.
+    mcp_instances = _collect_mcp_instances(tree, aliases)
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             _process_import(node, file_path, aliases, surfaces)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            _process_function_def(node, file_path, surfaces, aliases, cli_groups)
+            _process_function_def(node, file_path, surfaces, aliases, cli_groups, mcp_instances)
         elif isinstance(node, ast.Call):
             _process_call(node, file_path, aliases, surfaces)
         elif isinstance(node, ast.Subscript):
@@ -114,9 +118,11 @@ def _process_function_def(
     surfaces: Dict[str, List[Dict[str, Any]]],
     aliases: Optional[Dict[str, str]] = None,
     cli_groups: Optional[set] = None,
+    mcp_instances: Optional[set] = None,
 ) -> None:
     aliases = aliases or {}
     cli_groups = cli_groups or set()
+    mcp_instances = mcp_instances or set()
     for decorator in node.decorator_list:
         deco_str = _unparse_expr(decorator)
 
@@ -141,7 +147,7 @@ def _process_function_def(
                 'file': file_path,
                 'line': node.lineno,
             })
-        elif _is_mcp_tool(deco_str):
+        elif _mcp_tool_has_provenance(decorator, aliases, mcp_instances):
             surfaces['mcp'].append({
                 'type': 'tool',
                 'name': node.name,
@@ -327,8 +333,64 @@ def _cli_command_has_provenance(deco: ast.expr, aliases: Dict[str, str], cli_gro
     return False
 
 
-def _is_mcp_tool(deco: str) -> bool:
-    return '.tool(' in deco.lower() or deco.lower() in ('tool', 'mcp.tool')
+# BACK-786: same shape as BACK-534 (CLI provenance) — a `.tool()`/bare `tool`
+# decorator name alone is not evidence of MCP; it must resolve to `mcp`/
+# `fastmcp` (import root or an instance those packages construct), or it
+# mistakes any unrelated `.tool()`-shaped decorator — e.g. LangChain's
+# `@tool` — for an MCP tool registration.
+_MCP_FRAMEWORK_ROOTS: frozenset = frozenset({'mcp', 'fastmcp'})
+_MCP_CONSTRUCTORS: frozenset = frozenset({'FastMCP'})
+
+
+def _resolves_to_mcp_framework(name: Optional[str], aliases: Dict[str, str]) -> bool:
+    if not name:
+        return False
+    return aliases.get(name, name).split('.')[0] in _MCP_FRAMEWORK_ROOTS
+
+
+def _is_mcp_constructor(call: ast.expr, aliases: Dict[str, str]) -> bool:
+    """`FastMCP(...)` (or `mcp.server.fastmcp.FastMCP(...)`), the server object
+    whose `.tool()` method registers MCP tools."""
+    if not isinstance(call, ast.Call):
+        return False
+    func = call.func
+    if isinstance(func, ast.Attribute) and func.attr in _MCP_CONSTRUCTORS:
+        return _resolves_to_mcp_framework(_leftmost_name(func.value), aliases)
+    if isinstance(func, ast.Name):
+        # resolve through the import alias map first — `FastMCP as MCPServer`
+        # must not require the local name to literally read "FastMCP".
+        resolved = aliases.get(func.id, func.id)
+        return (
+            resolved.split('.')[-1] in _MCP_CONSTRUCTORS
+            and resolved.split('.')[0] in _MCP_FRAMEWORK_ROOTS
+        )
+    return False
+
+
+def _collect_mcp_instances(tree: ast.Module, aliases: Dict[str, str]) -> set:
+    """Variable names bound to an MCP server instance (`mcp = FastMCP(...)`) —
+    the base of the `@mcp.tool()` pattern."""
+    instances: set = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and _is_mcp_constructor(node.value, aliases):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    instances.add(target.id)
+    return instances
+
+
+def _mcp_tool_has_provenance(deco: ast.expr, aliases: Dict[str, str], mcp_instances: set) -> bool:
+    """True when a `tool`-shaped decorator actually resolves to mcp/fastmcp."""
+    func = deco.func if isinstance(deco, ast.Call) else deco
+    if isinstance(func, ast.Name):
+        # bare @tool (e.g. `from mcp.server.fastmcp import tool`)
+        return _resolves_to_mcp_framework(func.id, aliases)
+    if isinstance(func, ast.Attribute) and func.attr == 'tool':
+        base = func.value
+        if isinstance(base, ast.Name) and base.id in mcp_instances:
+            return True
+        return _resolves_to_mcp_framework(_leftmost_name(base), aliases)
+    return False
 
 
 def _is_env_access(func_str: str) -> bool:
