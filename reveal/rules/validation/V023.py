@@ -209,6 +209,18 @@ class V023(BaseRule):
         # The fields live in those callees; checking the dispatcher is a false positive.
         if 'return self._get_' in method_body or 'return self._' in method_body:
             return []
+
+        # Analyzer-subclass delegation: `structure = super().get_structure(...)` then
+        # mutated/returned. Language analyzers (analyzers/*.py) that override get_structure()
+        # to add language-specific fields (e.g. bash's top-level 'variables') aren't
+        # independently responsible for the v1.0 output contract -- that envelope is built
+        # by the adapter layer that wraps analyzer output, not by TreeSitterAnalyzer's own
+        # get_structure(), which the ~20 analyzers that DON'T override it already inherit
+        # silently (no def to scan = no detection). Flagging only the overriding subset is
+        # an inconsistency, not a real gap -- same "fields live in the callee" reasoning as
+        # the dispatcher carve-out above.
+        if 'super().get_structure(' in method_body:
+            return []
         # Module-level delegation: all paths return via an imported helper (e.g. return files.get_X(...))
         import re as _re
         delegated_returns = _re.findall(r'\breturn \w+\.\w+\(', method_body)

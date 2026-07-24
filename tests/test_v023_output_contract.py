@@ -233,6 +233,27 @@ class TestAdapter(ResourceAdapter):
         self.assertGreater(len(detections), 0)
         self.assertIn("source", detections[0].message)
 
+    def test_super_get_structure_delegation_not_flagged(self):
+        """BACK: analyzer subclasses that mutate super().get_structure()'s
+        result (e.g. bash.py adding top-level 'variables') aren't
+        independently responsible for the output contract -- those fields
+        belong to the adapter layer that wraps analyzer output, not to
+        TreeSitterAnalyzer.get_structure(), which non-overriding analyzers
+        already inherit silently (no def to scan = no detection)."""
+        content = """
+class TestAnalyzer(TreeSitterAnalyzer):
+    def get_structure(self, head=None, tail=None, range=None, **kwargs):
+        structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
+        structure['variables'] = self._extract_variables()
+        return structure
+"""
+        detections = self.rule._check_output_code_patterns(
+            file_path="/analyzers/test.py",
+            content=content,
+            method_name="get_structure"
+        )
+        self.assertEqual(len(detections), 0)
+
     def test_missing_source_type_detected(self):
         """Missing source_type field should trigger detection."""
         content = """
