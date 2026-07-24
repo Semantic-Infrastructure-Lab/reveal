@@ -163,8 +163,159 @@ def _apply_autossl_filters(result: Dict[str, Any], only_failures: bool = False,
     return result
 
 
+_SCHEMA: Dict[str, Any] = {
+    'adapter': 'autossl',
+    'description': 'Inspect cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures',
+    'uri_syntax': 'autossl://[TIMESTAMP|DOMAIN]',
+    'query_params': {
+        'only-failures': 'Omit domains with tls_status=ok; drop users with no remaining failures (also: --only-failures)',
+        'summary': 'Strip per-user/domain detail — return only the run header and summary counts (also: --summary)',
+        'user': 'Filter to a single named user, case-sensitive (also: --user=USERNAME)',
+    },
+    'elements': {},
+    'cli_flags': ['--format=json', '--only-failures', '--user=USERNAME', '--summary', '--all'],
+    'supports_batch': False,
+    'output_types': [
+        {
+            'type': 'autossl_runs',
+            'description': 'List of available AutoSSL run timestamps',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'type': {'type': 'string', 'const': 'autossl_runs'},
+                    'run_count': {'type': 'integer'},
+                    'runs': {'type': 'array', 'items': {'type': 'string'}},
+                },
+            },
+        },
+        {
+            'type': 'autossl_run',
+            'description': 'Parsed AutoSSL run — per-user/domain TLS outcomes',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'type': {'type': 'string', 'const': 'autossl_run'},
+                    'run_timestamp': {'type': 'string'},
+                    'provider': {'type': 'string'},
+                    'domain_count': {'type': 'integer'},
+                    'summary': {
+                        'type': 'object',
+                        'description': 'Counts keyed by tls_status: ok/incomplete/defective',
+                    },
+                    'users': {
+                        'type': 'array',
+                        'items': {
+                            'type': 'object',
+                            'properties': {
+                                'username': {'type': 'string'},
+                                'domain_count': {'type': 'integer'},
+                                'domains': {
+                                    'type': 'array',
+                                    'items': {
+                                        'type': 'object',
+                                        'properties': {
+                                            'domain': {'type': 'string'},
+                                            'tls_status': {
+                                                'type': 'string',
+                                                'enum': ['ok', 'incomplete', 'defective'],
+                                            },
+                                            'cert_expiry_days': {'type': ['number', 'null']},
+                                            'detail': {
+                                                'type': 'string',
+                                                'description': 'Synthesized summary: defect codes + impediment codes (e.g. "CERT_HAS_EXPIRED, DCV:TOTAL_DCV_FAILURE")',
+                                            },
+                                            'defect_codes': {'type': 'array', 'items': {'type': 'string'}},
+                                            'impediments': {'type': 'array'},
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        {
+            'type': 'autossl_domain_history',
+            'description': 'TLS history for a specific domain across all runs',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'type': {'type': 'string', 'const': 'autossl_domain_history'},
+                    'domain': {'type': 'string'},
+                    'run_count': {'type': 'integer'},
+                    'summary': {
+                        'type': 'object',
+                        'description': 'Counts by tls_status across all runs: ok/defective/incomplete',
+                    },
+                    'history': {
+                        'type': 'array',
+                        'items': {
+                            'type': 'object',
+                            'properties': {
+                                'run_timestamp': {'type': 'string'},
+                                'run_start': {'type': ['string', 'null']},
+                                'username': {'type': 'string'},
+                                'tls_status': {'type': 'string'},
+                                'cert_expiry_days': {'type': ['number', 'null']},
+                                'defect_codes': {'type': 'array', 'items': {'type': 'string'}},
+                                'impediments': {'type': 'array'},
+                                'detail': {'type': 'string'},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    ],
+    'example_queries': [
+        {
+            'uri': 'autossl://',
+            'description': 'List all available AutoSSL run timestamps on this server',
+            'output_type': 'autossl_runs',
+        },
+        {
+            'uri': 'autossl://2024-01-15_03-00-00',
+            'description': 'Inspect a specific AutoSSL run — per-user/domain TLS outcomes',
+            'output_type': 'autossl_run',
+        },
+        {
+            'uri': 'autossl://latest?only-failures',
+            'description': 'Most recent run — failures only (no ok domains)',
+            'output_type': 'autossl_run',
+        },
+        {
+            'uri': 'autossl://latest?summary',
+            'description': 'Most recent run — header and counts only, no per-domain detail',
+            'output_type': 'autossl_run',
+        },
+        {
+            'uri': 'autossl://latest?user=bob&only-failures',
+            'description': 'Most recent run filtered to a single user, failures only',
+            'output_type': 'autossl_run',
+        },
+        {
+            'uri': 'autossl://app.example.com',
+            'description': 'Domain history — TLS status for one domain across all runs',
+            'output_type': 'autossl_domain_history',
+        },
+    ],
+    'notes': [
+        'Reads /var/cpanel/logs/autossl/ directly — no WHM API or credentials required',
+        'Timestamps are in YYYY-MM-DD_HH-MM-SS format matching log filenames',
+        'tls_status values: ok (cert valid), incomplete (pending), defective (failed)',
+        'defect_codes explain why AutoSSL failed: DCV_ERROR, RATE_LIMIT, etc.',
+        'Only available on cPanel servers — adapter errors cleanly on non-cPanel systems',
+        'jq: get timestamp of most recent run — reveal autossl:// --format=json | jq \'.runs[-1]\'',
+        'jq: chain into the most recent run directly — reveal autossl://$(reveal autossl:// --format=json | jq -r \'.runs[-1]\')',
+    ],
+}
+
+
 @register_adapter('autossl')
 @register_renderer(AutosslRenderer)
+
+
 class AutosslAdapter(ResourceAdapter):
     """Adapter for inspecting cPanel AutoSSL run logs via autossl:// URIs.
 
@@ -318,153 +469,7 @@ class AutosslAdapter(ResourceAdapter):
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         """Machine-readable schema for AI agent integration."""
-        return {
-            'adapter': 'autossl',
-            'description': 'Inspect cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures',
-            'uri_syntax': 'autossl://[TIMESTAMP|DOMAIN]',
-            'query_params': {
-                'only-failures': 'Omit domains with tls_status=ok; drop users with no remaining failures (also: --only-failures)',
-                'summary': 'Strip per-user/domain detail — return only the run header and summary counts (also: --summary)',
-                'user': 'Filter to a single named user, case-sensitive (also: --user=USERNAME)',
-            },
-            'elements': {},
-            'cli_flags': ['--format=json', '--only-failures', '--user=USERNAME', '--summary', '--all'],
-            'supports_batch': False,
-            'output_types': [
-                {
-                    'type': 'autossl_runs',
-                    'description': 'List of available AutoSSL run timestamps',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'autossl_runs'},
-                            'run_count': {'type': 'integer'},
-                            'runs': {'type': 'array', 'items': {'type': 'string'}},
-                        },
-                    },
-                },
-                {
-                    'type': 'autossl_run',
-                    'description': 'Parsed AutoSSL run — per-user/domain TLS outcomes',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'autossl_run'},
-                            'run_timestamp': {'type': 'string'},
-                            'provider': {'type': 'string'},
-                            'domain_count': {'type': 'integer'},
-                            'summary': {
-                                'type': 'object',
-                                'description': 'Counts keyed by tls_status: ok/incomplete/defective',
-                            },
-                            'users': {
-                                'type': 'array',
-                                'items': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'username': {'type': 'string'},
-                                        'domain_count': {'type': 'integer'},
-                                        'domains': {
-                                            'type': 'array',
-                                            'items': {
-                                                'type': 'object',
-                                                'properties': {
-                                                    'domain': {'type': 'string'},
-                                                    'tls_status': {
-                                                        'type': 'string',
-                                                        'enum': ['ok', 'incomplete', 'defective'],
-                                                    },
-                                                    'cert_expiry_days': {'type': ['number', 'null']},
-                                                    'detail': {
-                                                        'type': 'string',
-                                                        'description': 'Synthesized summary: defect codes + impediment codes (e.g. "CERT_HAS_EXPIRED, DCV:TOTAL_DCV_FAILURE")',
-                                                    },
-                                                    'defect_codes': {'type': 'array', 'items': {'type': 'string'}},
-                                                    'impediments': {'type': 'array'},
-                                                },
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-                {
-                    'type': 'autossl_domain_history',
-                    'description': 'TLS history for a specific domain across all runs',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'autossl_domain_history'},
-                            'domain': {'type': 'string'},
-                            'run_count': {'type': 'integer'},
-                            'summary': {
-                                'type': 'object',
-                                'description': 'Counts by tls_status across all runs: ok/defective/incomplete',
-                            },
-                            'history': {
-                                'type': 'array',
-                                'items': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'run_timestamp': {'type': 'string'},
-                                        'run_start': {'type': ['string', 'null']},
-                                        'username': {'type': 'string'},
-                                        'tls_status': {'type': 'string'},
-                                        'cert_expiry_days': {'type': ['number', 'null']},
-                                        'defect_codes': {'type': 'array', 'items': {'type': 'string'}},
-                                        'impediments': {'type': 'array'},
-                                        'detail': {'type': 'string'},
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            ],
-            'example_queries': [
-                {
-                    'uri': 'autossl://',
-                    'description': 'List all available AutoSSL run timestamps on this server',
-                    'output_type': 'autossl_runs',
-                },
-                {
-                    'uri': 'autossl://2024-01-15_03-00-00',
-                    'description': 'Inspect a specific AutoSSL run — per-user/domain TLS outcomes',
-                    'output_type': 'autossl_run',
-                },
-                {
-                    'uri': 'autossl://latest?only-failures',
-                    'description': 'Most recent run — failures only (no ok domains)',
-                    'output_type': 'autossl_run',
-                },
-                {
-                    'uri': 'autossl://latest?summary',
-                    'description': 'Most recent run — header and counts only, no per-domain detail',
-                    'output_type': 'autossl_run',
-                },
-                {
-                    'uri': 'autossl://latest?user=bob&only-failures',
-                    'description': 'Most recent run filtered to a single user, failures only',
-                    'output_type': 'autossl_run',
-                },
-                {
-                    'uri': 'autossl://app.example.com',
-                    'description': 'Domain history — TLS status for one domain across all runs',
-                    'output_type': 'autossl_domain_history',
-                },
-            ],
-            'notes': [
-                'Reads /var/cpanel/logs/autossl/ directly — no WHM API or credentials required',
-                'Timestamps are in YYYY-MM-DD_HH-MM-SS format matching log filenames',
-                'tls_status values: ok (cert valid), incomplete (pending), defective (failed)',
-                'defect_codes explain why AutoSSL failed: DCV_ERROR, RATE_LIMIT, etc.',
-                'Only available on cPanel servers — adapter errors cleanly on non-cPanel systems',
-                'jq: get timestamp of most recent run — reveal autossl:// --format=json | jq \'.runs[-1]\'',
-                'jq: chain into the most recent run directly — reveal autossl://$(reveal autossl:// --format=json | jq -r \'.runs[-1]\')',
-            ],
-        }
+        return _SCHEMA
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
