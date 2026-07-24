@@ -1467,13 +1467,26 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return bases
 
     def _extract_ts_extends_names(self, extends_clause) -> List[str]:
-        # extends_clause: "extends <identifier>"
+        # extends_clause: "extends <identifier>" or "extends <ns>.<identifier>"
+        # (generic type args, if any, are flat siblings here — not nested in
+        # a generic_type wrapper — so a dotted base like `React.Component`
+        # or `React.Component<Props, State>` both surface as a bare
+        # member_expression child; BACK-719 dogfood found this tail-dropped
+        # entirely, silently emptying `bases` for any class extending a
+        # namespaced base, e.g. every React.Component-based class component)
         names = []
         for item in _children(extends_clause):
-            if item.kind() in ('identifier', 'type_identifier'):
+            item_kind = _zero_arg(item, 'kind')
+            if item_kind in ('identifier', 'type_identifier'):
                 text = self._get_node_text(item).strip()
                 if text:
                     names.append(text)
+            elif item_kind == 'member_expression':
+                for child in _children(item):
+                    if _zero_arg(child, 'kind') == 'property_identifier':
+                        text = self._get_node_text(child).strip()
+                        if text:
+                            names.append(text)
         return names
 
     def _extract_ts_implements_names(self, implements_clause) -> List[str]:

@@ -572,3 +572,37 @@ class TestBack752JsNewExpressionCallee:
         structure = TSXAnalyzer(str(f)).get_structure()
         fn = next(fn for fn in structure['functions'] if fn['name'] == 'f')
         assert 'new Foo' in fn['calls']
+
+
+class TestBack784TsDottedExtendsBase:
+    """BACK-719 dogfood (Dagster pilot corpus): extends_clause's base expression
+    is a flat member_expression sibling, not wrapped in an identifier/type_identifier
+    node — silently dropped by _extract_ts_extends_names, emptying `bases` for
+    every class extending a namespaced base (e.g. any `extends React.Component`
+    class component, an extremely common real-world pattern)."""
+
+    def test_bare_extends_base_still_works(self, tmp_path):
+        f = tmp_path / 'file.ts'
+        f.write_text("class Foo extends Base {}\n")
+        structure = TypeScriptAnalyzer(str(f)).get_structure()
+        assert structure['classes'][0]['bases'] == ['Base']
+
+    def test_dotted_extends_base_extracted(self, tmp_path):
+        f = tmp_path / 'file.ts'
+        f.write_text("class Foo extends Bar.Baz {}\n")
+        structure = TypeScriptAnalyzer(str(f)).get_structure()
+        assert structure['classes'][0]['bases'] == ['Baz']
+
+    def test_dotted_generic_extends_base_extracted(self, tmp_path):
+        f = tmp_path / 'file.tsx'
+        f.write_text(
+            "class ErrorBoundary extends React.Component<Props, State> {}\n"
+        )
+        structure = TSXAnalyzer(str(f)).get_structure()
+        assert structure['classes'][0]['bases'] == ['Component']
+
+    def test_bare_generic_extends_base_still_works(self, tmp_path):
+        f = tmp_path / 'file.ts'
+        f.write_text("class Foo extends Base<T> {}\n")
+        structure = TypeScriptAnalyzer(str(f)).get_structure()
+        assert structure['classes'][0]['bases'] == ['Base']
