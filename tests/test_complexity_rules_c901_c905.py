@@ -147,6 +147,55 @@ class TestC902:
         detections = rule.check("test.py", None, "")
         assert len(detections) == 0
 
+    def test_c902_code_line_count_overrides_threshold(self):
+        """A docstring-heavy function isn't flagged once code_line_count
+        (comments/docstring excluded) drops it under the threshold, even
+        though the raw line_count span is still reported in the message.
+        """
+        rule = C902()
+        structure = {
+            'functions': [{
+                'name': 'well_documented',
+                'line': 1,
+                'line_count': 150,
+                'code_line_count': 40,
+            }]
+        }
+        detections = rule.check("test.py", structure, "")
+        assert len(detections) == 0
+
+    def test_c902_code_line_count_still_flags_dense_logic(self):
+        """A function whose code_line_count itself exceeds the threshold
+        is still flagged, and the message reports the raw line_count.
+        """
+        rule = C902()
+        structure = {
+            'functions': [{
+                'name': 'dense_logic',
+                'line': 1,
+                'line_count': 180,
+                'code_line_count': 150,
+            }]
+        }
+        detections = rule.check("test.py", structure, "")
+        assert len(detections) == 1
+        assert "180 lines" in detections[0].message
+
+    def test_c902_falls_back_to_line_count_without_code_line_count(self):
+        """Analyzers that don't populate code_line_count keep the old
+        raw-span behavior unchanged.
+        """
+        rule = C902()
+        structure = {
+            'functions': [{
+                'name': 'legacy_func',
+                'line': 1,
+                'line_count': 150,
+            }]
+        }
+        detections = rule.check("test.py", structure, "")
+        assert len(detections) == 1
+
 
 class TestC905:
     """Test C905: Nesting depth detection."""

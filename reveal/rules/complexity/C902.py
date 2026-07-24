@@ -53,13 +53,19 @@ class C902(BaseRule):
 
         for func in functions:
             line_count = func.get('line_count', 0)
+            # code_line_count excludes blank lines and lines fully consumed
+            # by a comment/docstring -- a well-documented function (e.g.
+            # one that records *why* a non-obvious branch exists) shouldn't
+            # trip this threshold on documentation alone. Falls back to the
+            # raw span for analyzers that don't populate it yet.
+            threshold_count = func.get('code_line_count', line_count)
 
             # Skip if no line count available
             if line_count == 0:
                 continue
 
             # Determine severity and message
-            if line_count > self.THRESHOLD_ERROR:
+            if threshold_count > self.THRESHOLD_ERROR:
                 severity = Severity.HIGH
                 msg = f"{self.message}: {func.get('name', '<unknown>')} ({line_count} lines, max: {self.THRESHOLD_ERROR})"
                 suggestion = (
@@ -68,7 +74,7 @@ class C902(BaseRule):
                     f"Target: <{self.THRESHOLD_ERROR} lines per function. "
                     f"LLM cost: ~{line_count * 15} tokens for this function alone."
                 )
-            elif line_count > self.THRESHOLD_WARN:
+            elif threshold_count > self.THRESHOLD_WARN:
                 severity = Severity.MEDIUM
                 msg = f"{self.message}: {func.get('name', '<unknown>')} ({line_count} lines, consider refactoring at {self.THRESHOLD_ERROR})"
                 suggestion = (

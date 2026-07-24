@@ -4,7 +4,7 @@ import hashlib
 import logging
 import os
 from collections import OrderedDict
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Set, Tuple
 from .base import FileAnalyzer
 from .complexity import (
     calculate_complexity_and_depth,
@@ -1218,11 +1218,100 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'name': name,
             'signature': self._get_signature(node),
             'line_count': line_end - line_start + 1,
+            'code_line_count': self._code_line_count(body_node, line_start, line_end),
             'depth': depth,
             'complexity': complexity,
             'decorators': decorators,
             'calls': calls,
         }
+
+    def _mark_non_code_rows(self, node, non_code_rows: Set[int]) -> None:
+        """Add a comment/docstring node's fully-self-contained rows to
+        `non_code_rows` (0-indexed). A row is only added when nothing but
+        the node itself occupies it -- a trailing `x = 1  # why` comment
+        leaves its line counted as code; a comment/docstring on its own
+        line(s) does not.
+        """
+        sp = _zero_arg(node, 'start_position')
+        ep = _zero_arg(node, 'end_position')
+        start_row, start_col = sp.row, sp.column
+        end_row, end_col = ep.row, ep.column
+
+        if start_row == end_row:
+            line = self.lines[start_row] if start_row < len(self.lines) else ''
+            if not line[:start_col].strip() and not line[end_col:].strip():
+                non_code_rows.add(start_row)
+            return
+
+        # Multi-row (block comment / triple-quoted docstring): interior
+        # rows are always fully consumed by the node; the two boundary
+        # rows are only blanked if no other content shares them.
+        for row in range(start_row + 1, end_row):
+            non_code_rows.add(row)
+        first_line = self.lines[start_row] if start_row < len(self.lines) else ''
+        if not first_line[:start_col].strip():
+            non_code_rows.add(start_row)
+        last_line = self.lines[end_row] if end_row < len(self.lines) else ''
+        if not last_line[end_col:].strip():
+            non_code_rows.add(end_row)
+
+    def _leading_docstring_node(self, body_node):
+        """The function's first statement, if it's a bare string literal
+        used as a docstring (Python convention only -- other supported
+        languages don't use a leading string expression this way).
+
+        `body_node` may be the outer `function_definition` (its 'block'
+        child holds the actual statements) or already the block itself
+        (Dart's disjoint-sibling body) -- look one level in either shape.
+        """
+        if self.language != 'python' or body_node is None:
+            return None
+        block = body_node
+        if _zero_arg(block, 'kind') != 'block':
+            block = next(
+                (c for c in _children(body_node) if _zero_arg(c, 'kind') == 'block'),
+                None,
+            )
+        if block is None:
+            return None
+        for child in _children(block):
+            kind = _zero_arg(child, 'kind')
+            return child if kind == 'string' else None
+        return None
+
+    def _code_line_count(self, body_node, line_start: int, line_end: int) -> int:
+        """Lines that carry real code, excluding blank lines and lines
+        consumed entirely by a comment or a leading docstring.
+
+        `line_count` (the raw start-to-end span) stays as-is for LLM-cost
+        estimates -- comments still cost real tokens to read -- but using
+        it alone for C902's *length* threshold conflates documentation
+        with logic: a function with a large explanatory docstring (e.g.
+        recording *why* a non-obvious branch exists, a specific
+        corpus-verified bug fix) reads as equally "too long" as one with
+        the same line count of dense branching. This under-counts the
+        threshold-relevant length instead.
+        """
+        lo, hi = line_start - 1, line_end - 1  # 0-indexed, inclusive
+        non_code_rows: Set[int] = {
+            row for row in range(lo, min(hi, len(self.lines) - 1) + 1)
+            if not self.lines[row].strip()
+        }
+
+        self._find_nodes_by_type('comment')  # ensure the node-kind cache is built
+        for kind, nodes in (self._node_cache or {}).items():
+            if 'comment' not in kind:
+                continue
+            for comment_node in nodes:
+                row = _zero_arg(comment_node, 'start_position').row
+                if lo <= row <= hi:
+                    self._mark_non_code_rows(comment_node, non_code_rows)
+
+        docstring = self._leading_docstring_node(body_node)
+        if docstring is not None:
+            self._mark_non_code_rows(docstring, non_code_rows)
+
+        return (hi - lo + 1) - len(non_code_rows)
 
     def _extract_classes(self) -> List[Dict[str, Any]]:
         """Extract class definitions with decorators.

@@ -85,12 +85,16 @@ def extract_complexity_metrics(functions: list, content: str) -> dict:
         if complexity:
             complexities.append(complexity)
 
-        # Check for long functions (>100 lines)
-        func_lines = func.get('line_count', 0)
+        # Check for long functions (>100 lines). code_line_count
+        # (comments/docstrings excluded) falls back to the raw line_count
+        # span for analyzers that don't populate it -- same threshold
+        # (100) C902 uses, just kept consistent with its docstring-aware
+        # length now that C902 has one.
+        func_lines = func.get('code_line_count', func.get('line_count', 0))
         if func_lines > 100:
             long_functions.append({
                 'name': func.get('name', '<unknown>'),
-                'lines': func_lines,
+                'lines': func.get('line_count', 0),
                 'start_line': func.get('line', 0)
             })
 
