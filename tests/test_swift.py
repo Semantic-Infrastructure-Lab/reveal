@@ -336,6 +336,72 @@ class Stack<Element> {
         finally:
             os.unlink(temp_path)
 
+    def test_extension_conformance_populates_bases(self):
+        """extension Foo: Protocol { } must appear in `classes` with bases populated.
+
+        BACK-8xx (Swift surface/contracts recall oracle): tree-sitter-swift
+        parses `extension` as a 'class_declaration' node, same as class/struct/
+        enum, distinguished only by a leading 'extension' token child. But its
+        name is nested one level deeper (class_declaration -> user_type ->
+        type_identifier) than a primary declaration's direct type_identifier
+        child, so every `_name_via_*` strategy in the shared base class missed
+        it, `_get_node_name` returned None, and `_extract_undecorated_classes`
+        silently dropped the ENTIRE extension (not just its bases) since only
+        PHP's anonymous_class gets a synthetic-name fallback for a nameless
+        node. This made extension-based protocol conformance -- a common Swift
+        idiom for adding conformance separately from a type's primary
+        declaration -- entirely invisible to `contracts`.
+        """
+        code = '''protocol Drawable {
+    func draw()
+}
+
+struct Circle {
+    var r: Double
+}
+
+extension Circle: Drawable {
+    func draw() {}
+}
+
+extension Circle {
+    func area() -> Double {
+        return r * r * 3.14159
+    }
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.swift', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = SwiftAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            classes = structure['classes']
+            circle_entries = [c for c in classes if c['name'] == 'Circle']
+            # Primary struct decl + BOTH extensions (conforming and bare) now
+            # all resolve a name and appear -- the name-extraction fix applies
+            # regardless of whether the extension declares conformance. The
+            # bare `extension Circle { }` correctly still has bases == [];
+            # contracts.py's `_classify_ts` filters `bases: []` classes out of
+            # implementer output downstream, so it stays invisible to
+            # `contracts` even though the analyzer layer now sees it.
+            self.assertEqual(len(circle_entries), 3)
+
+            struct_entry = next(c for c in circle_entries if c['line'] == 5)
+            self.assertEqual(struct_entry['bases'], [])
+
+            ext_entry = next(c for c in circle_entries if c['line'] == 9)
+            self.assertEqual(ext_entry['bases'], ['Drawable'])
+
+            bare_ext_entry = next(c for c in circle_entries if c['line'] == 13)
+            self.assertEqual(bare_ext_entry['bases'], [])
+
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()
