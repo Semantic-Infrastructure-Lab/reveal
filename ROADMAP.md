@@ -180,17 +180,24 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   2. **Design a ground-truth methodology for `surface` and `contracts`.**
      These reach 11 languages of *coverage* but have **zero** recall validation
      on any language — the single largest remaining confidence gap in this
-     track, ahead of item 1 by size, but sequenced after it since there is
-     no existing harness to reuse. Unlike import recall there is no external
-     oracle to borrow (no `go list` equivalent for "what is this module's
-     public surface"), so this needs a design doc before any measurement —
-     closer to the side-effect program's from-scratch-oracle shape (BACK-719).
+     track. Unlike import recall there is no external oracle to borrow (no
+     `go list` equivalent for "what is this module's public surface"), so
+     this needed a design doc before any measurement — closer to the
+     side-effect program's from-scratch-oracle shape. Design doc:
+     `internal-docs/planning/BACK-719-surface-contracts-oracle-design.md`.
+     That design surfaced a correctness bug blocking any `contracts` oracle —
+     `_scan_contracts` dispatched per *directory* on a mutually-exclusive
+     language priority chain, silently dropping every non-winning language's
+     contracts in a polyglot repo (BACK-780) — now fixed (per-language
+     dispatch + merge; single-language repos unaffected). `surface`/`contracts`
+     also have 6 further open Python taxonomy gaps found by direct probing,
+     unconfirmed as bugs vs. deliberate scope (BACK-777/778/779/781/782/783).
 
   *Not on this list, deliberately:* `patches://`/testability language breadth
   past Python + TS is filed as an idea rather than committed work — see
   `tt show BACK-632`. Note that `surface`/`contracts` themselves already reached
-  11-language parity (BACK-588/630/631); only `patches://`/testability is still
-  Python + TS. Swift's `_RopeModule` residual is closed by design (BACK-704):
+  11-language *coverage* parity (BACK-588/630/631) — real recall validation is
+  the item above, not this note. Swift's `_RopeModule` residual is closed by design (BACK-704):
   resolving it would require evaluating arbitrary `Package.swift` code, which
   the buildless architecture will not do.
 

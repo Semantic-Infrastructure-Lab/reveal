@@ -1523,5 +1523,89 @@ class TestScanContractsCpp(unittest.TestCase):
         self.assertFalse(report.get('_cpp_mode'))
 
 
+class TestScanContractsPolyglot(unittest.TestCase):
+    """BACK-780: a repo with more than one contract-bearing language must not
+    silently drop every non-winning language's contracts."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write(self, filename: str, content: str) -> str:
+        return _write(self.tmp, filename, content)
+
+    def test_python_and_go_both_reported(self):
+        self._write('svc.py', '''\
+            from abc import ABC, abstractmethod
+            class PyContract(ABC):
+                @abstractmethod
+                def run(self): ...
+        ''')
+        self._write('svc.go', '''\
+            package svc
+            type GoContract interface {
+            \tRun() error
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertNotIn('abcs', report)  # flat single-language shape must not leak through
+        by_language = report['by_language']
+        self.assertEqual(report['total_contracts'], 2)
+        self.assertEqual([a['name'] for a in by_language['python']['abcs']], ['PyContract'])
+        self.assertEqual([p['name'] for p in by_language['go']['protocols']], ['GoContract'])
+
+    def test_coverage_reflects_both_languages_present(self):
+        self._write('svc.py', '''\
+            from abc import ABC, abstractmethod
+            class PyContract(ABC):
+                @abstractmethod
+                def run(self): ...
+        ''')
+        self._write('svc.go', '''\
+            package svc
+            type GoContract interface {
+            \tRun() error
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual(report['coverage']['analyzed_files'], 2)
+
+    def test_single_language_shape_unaffected(self):
+        """A pure-Python repo must keep the flat (non-`by_language`) shape."""
+        self._write('svc.py', '''\
+            from abc import ABC, abstractmethod
+            class PyContract(ABC):
+                @abstractmethod
+                def run(self): ...
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertNotIn('by_language', report)
+        self.assertEqual([a['name'] for a in report['abcs']], ['PyContract'])
+
+    def test_render_report_shows_both_languages(self):
+        self._write('svc.py', '''\
+            from abc import ABC, abstractmethod
+            class PyContract(ABC):
+                @abstractmethod
+                def run(self): ...
+        ''')
+        self._write('svc.go', '''\
+            package svc
+            type GoContract interface {
+            \tRun() error
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        buf = StringIO()
+        with patch('sys.stdout', buf):
+            _render_report(report)
+        output = buf.getvalue()
+        self.assertIn('PyContract', output)
+        self.assertIn('GoContract', output)
+
+
 if __name__ == '__main__':
     unittest.main()

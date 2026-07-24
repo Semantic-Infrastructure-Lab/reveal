@@ -228,19 +228,40 @@ def _scan_contracts(
     abstract_only: bool = False,
     show_implementations: bool = True,
 ) -> Dict[str, Any]:
-    from reveal.adapters.ast.analysis import collect_structures
+    """Dispatch to one contract scanner per language present, and merge.
 
-    unsupported_language = ''
+    BACK-780: this used to be a mutually-exclusive if-chain (interface_family
+    > ruby > go > rust > cpp > python, python last) that silently dropped
+    every non-winning language's contracts in a polyglot repo. Each language
+    predicate is now independent, every language actually present gets
+    scanned, and results merge into `by_language` when more than one is
+    active. Single-language repos (the overwhelming common case) still
+    return the exact flat shape (`abcs`/`protocols`/... at the top level)
+    unchanged — only the polyglot case gets the new `by_language` shape,
+    since that case was never correct before and had no shape to preserve.
+    """
     is_interface_family = _has_interface_family_files(path)
-    is_ruby = not is_interface_family and _has_ruby_files(path)
-    is_go = not is_interface_family and not is_ruby and _has_go_files(path)
-    is_rust = not is_interface_family and not is_ruby and not is_go and _has_rust_files(path)
-    is_cpp = (not is_interface_family and not is_ruby and not is_go and not is_rust
-              and _has_cpp_files(path))
+    is_ruby = _has_ruby_files(path)
+    is_go = _has_go_files(path)
+    is_rust = _has_rust_files(path)
+    is_cpp = _has_cpp_files(path)
+    has_python = _has_python_files(path)
 
-    if (not _has_python_files(path) and not is_interface_family and not is_ruby
-            and not is_go and not is_rust and not is_cpp):
-        unsupported_language = detect_non_python_language(path)
+    active: List[str] = []
+    if is_interface_family:
+        active.append('ts')
+    if is_ruby:
+        active.append('ruby')
+    if is_go:
+        active.append('go')
+    if is_rust:
+        active.append('rust')
+    if is_cpp:
+        active.append('cpp')
+    if has_python:
+        active.append('python')
+
+    unsupported_language = detect_non_python_language(path) if not active else ''
 
     # BACK-518: guard against a few stray supported-language files standing in
     # for a mostly-unsupported tree (see surface.py / assess_language_coverage).
@@ -257,36 +278,75 @@ def _scan_contracts(
         'warning': coverage.warning_line('contracts'),
     }
 
-    if is_ruby:
-        result = _scan_contracts_ruby(path, abstract_only, show_implementations)
+    if not active:
+        return {
+            'path': str(path),
+            'total_contracts': 0,
+            'abcs': [],
+            'protocols': [],
+            'typeddicts': [],
+            'dataclasses': [],
+            'basemodels': [],
+            'path_heuristic': [],
+            'unsupported_language': unsupported_language,
+            'coverage': coverage_dict,
+        }
+
+    # collect_structures parses every tree-sitter-supported file in `path` in
+    # one pass — 'ts' and 'python' both consume it, so compute it once, lazily
+    # (skip entirely for repos where neither is active, e.g. pure Go/Rust).
+    structures_cache: List[Dict[str, Any]] = []
+
+    def _structures() -> List[Dict[str, Any]]:
+        if not structures_cache:
+            from reveal.adapters.ast.analysis import collect_structures
+            structures_cache.extend(collect_structures(str(path)))
+        return structures_cache
+
+    def _run(name: str) -> Dict[str, Any]:
+        if name == 'ts':
+            return _scan_contracts_ts(path, _structures(), abstract_only, show_implementations)
+        if name == 'ruby':
+            return _scan_contracts_ruby(path, abstract_only, show_implementations)
+        if name == 'go':
+            return _scan_contracts_go(path, abstract_only, show_implementations)
+        if name == 'rust':
+            return _scan_contracts_rust(path, abstract_only, show_implementations)
+        if name == 'cpp':
+            return _scan_contracts_cpp(path, abstract_only, show_implementations)
+        return _scan_contracts_python(path, _structures(), abstract_only, show_implementations)
+
+    if len(active) == 1:
+        result = _run(active[0])
         result['coverage'] = coverage_dict
         return result
 
-    if is_go:
-        result = _scan_contracts_go(path, abstract_only, show_implementations)
-        result['coverage'] = coverage_dict
-        return result
+    by_language = {name: _run(name) for name in active}
+    return {
+        'path': str(path),
+        'total_contracts': sum(g['total_contracts'] for g in by_language.values()),
+        'unsupported_language': '',
+        'coverage': coverage_dict,
+        'by_language': by_language,
+    }
 
-    if is_rust:
-        result = _scan_contracts_rust(path, abstract_only, show_implementations)
-        result['coverage'] = coverage_dict
-        return result
 
-    if is_cpp:
-        result = _scan_contracts_cpp(path, abstract_only, show_implementations)
-        result['coverage'] = coverage_dict
-        return result
+def _scan_contracts_python(
+    path: Path,
+    structures: List[Dict[str, Any]],
+    abstract_only: bool,
+    show_implementations: bool,
+) -> Dict[str, Any]:
+    """Python-specific contract scanner — ABCs, Protocols, TypedDicts, dataclasses, BaseModels.
 
-    structures = collect_structures(str(path))
+    `structures` may cover other languages too when scanning a polyglot repo
+    (it's shared with `_scan_contracts_ts`) — filtered to `.py` files here so
+    a class from another language never gets run through the Python
+    classifier (bases/decorators mean different things per language).
+    """
+    py_structures = [s for s in structures if Path(s.get('file', '')).suffix.lower() == '.py']
+    all_classes = _extract_all_classes(py_structures)
 
-    if is_interface_family:
-        result = _scan_contracts_ts(path, structures, abstract_only, show_implementations)
-        result['coverage'] = coverage_dict
-        return result
-
-    all_classes = _extract_all_classes(structures)
-
-    # Classify contracts
     abcs: List[Dict[str, Any]] = []
     protocols: List[Dict[str, Any]] = []
     typeddicts: List[Dict[str, Any]] = []
@@ -340,8 +400,7 @@ def _scan_contracts(
         'dataclasses': dataclasses_,
         'basemodels': basemodels,
         'path_heuristic': path_heuristic,
-        'unsupported_language': unsupported_language,
-        'coverage': coverage_dict,
+        'unsupported_language': '',
     }
 
 
@@ -813,14 +872,64 @@ def _add_implementations(
                 })
 
 
+_LANGUAGE_LABELS: Dict[str, str] = {
+    'python': 'Python',
+    'ts': 'TypeScript / Java / C# / PHP / Swift / Kotlin / JS',
+    'ruby': 'Ruby',
+    'go': 'Go',
+    'rust': 'Rust',
+    'cpp': 'C++',
+}
+
+# Fixed render order for the polyglot (`by_language`) case — arbitrary but stable.
+_LANGUAGE_RENDER_ORDER: List[str] = ['python', 'ts', 'ruby', 'go', 'rust', 'cpp']
+
+
+def _render_contract_groups(mode: str, report: Dict[str, Any]) -> None:
+    """Render one language's contract groups under its own labels/groupings."""
+    if mode == 'ts':
+        _render_group("Abstract Classes", report['abcs'], show_methods=False, show_impls=True)
+        _render_group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
+        _render_group("Type Aliases", report['typeddicts'], show_methods=False, show_impls=False)
+        _render_group("Implementing Classes", report['dataclasses'], show_methods=False, show_impls=False)
+    elif mode == 'ruby':
+        _render_group("Mixins (Modules)", report['protocols'], show_methods=False, show_impls=True)
+        _render_group("Including Classes", report['dataclasses'], show_methods=False, show_impls=False)
+    elif mode == 'go':
+        _render_group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
+        _render_group("Implementing Types (structural)", report['dataclasses'], show_methods=False, show_impls=False)
+    elif mode == 'rust':
+        _render_group("Traits", report['protocols'], show_methods=False, show_impls=True)
+        _render_group("Implementing Types", report['dataclasses'], show_methods=False, show_impls=False)
+    elif mode == 'cpp':
+        _render_group("Abstract Classes (interfaces)", report['protocols'], show_methods=False, show_impls=True)
+        _render_group("Subclasses", report['dataclasses'], show_methods=False, show_impls=False)
+    else:
+        _render_group("Abstract Base Classes", report['abcs'], show_methods=True, show_impls=True)
+        _render_group("Protocols", report['protocols'], show_methods=True, show_impls=True)
+        _render_group("TypedDicts", report['typeddicts'], show_methods=False, show_impls=False)
+        _render_group("Dataclasses", report['dataclasses'], show_methods=False, show_impls=False)
+        _render_group("Pydantic BaseModels", report['basemodels'], show_methods=False, show_impls=False)
+        _render_group("Path-heuristic bases", report['path_heuristic'], show_methods=True, show_impls=True)
+
+
+def _no_contracts_hint(mode: str) -> str:
+    if mode == 'ts':
+        return "  Try widening the path or checking for interface/abstract class usage."
+    if mode == 'ruby':
+        return "  Try widening the path or checking for module/include/extend (mixin) usage."
+    if mode == 'go':
+        return "  Try widening the path or checking for interface type declarations."
+    if mode == 'rust':
+        return "  Try widening the path or checking for trait / impl-for declarations."
+    if mode == 'cpp':
+        return "  Try widening the path or checking for abstract classes (pure virtual methods)."
+    return "  Try widening the path or checking imports for ABC/Protocol usage."
+
+
 def _render_report(report: Dict[str, Any]) -> None:
     path = report['path']
     total = report['total_contracts']
-    ts_mode = report.get('_ts_mode', False)
-    ruby_mode = report.get('_ruby_mode', False)
-    go_mode = report.get('_go_mode', False)
-    rust_mode = report.get('_rust_mode', False)
-    cpp_mode = report.get('_cpp_mode', False)
 
     print()
     print(f"Contracts: {path}")
@@ -837,6 +946,32 @@ def _render_report(report: Dict[str, Any]) -> None:
     print(f"Total contracts found: {total}")
     print()
 
+    by_language = report.get('by_language')
+    if by_language is not None:
+        # BACK-780: more than one language present — render each language's
+        # section under its own labels rather than picking one winner.
+        if total == 0:
+            if not warning:
+                print("  No contracts or seams found.")
+                print()
+            return
+        for name in _LANGUAGE_RENDER_ORDER:
+            group = by_language.get(name)
+            if group is None:
+                continue
+            print(f"── {_LANGUAGE_LABELS[name]} ──")
+            print()
+            _render_contract_groups(name, group)
+        return
+
+    ts_mode = report.get('_ts_mode', False)
+    ruby_mode = report.get('_ruby_mode', False)
+    go_mode = report.get('_go_mode', False)
+    rust_mode = report.get('_rust_mode', False)
+    cpp_mode = report.get('_cpp_mode', False)
+    mode = ('ts' if ts_mode else 'ruby' if ruby_mode else 'go' if go_mode
+            else 'rust' if rust_mode else 'cpp' if cpp_mode else 'python')
+
     if total == 0:
         if not warning:
             lang = report.get('unsupported_language', '')
@@ -845,45 +980,11 @@ def _render_report(report: Dict[str, Any]) -> None:
                 print(f"  No supported files found — detected {lang}.")
             else:
                 print("  No contracts or seams found.")
-                if ts_mode:
-                    print("  Try widening the path or checking for interface/abstract class usage.")
-                elif ruby_mode:
-                    print("  Try widening the path or checking for module/include/extend (mixin) usage.")
-                elif go_mode:
-                    print("  Try widening the path or checking for interface type declarations.")
-                elif rust_mode:
-                    print("  Try widening the path or checking for trait / impl-for declarations.")
-                elif cpp_mode:
-                    print("  Try widening the path or checking for abstract classes (pure virtual methods).")
-                else:
-                    print("  Try widening the path or checking imports for ABC/Protocol usage.")
+                print(_no_contracts_hint(mode))
             print()
         return
 
-    if ts_mode:
-        _render_group("Abstract Classes", report['abcs'], show_methods=False, show_impls=True)
-        _render_group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
-        _render_group("Type Aliases", report['typeddicts'], show_methods=False, show_impls=False)
-        _render_group("Implementing Classes", report['dataclasses'], show_methods=False, show_impls=False)
-    elif ruby_mode:
-        _render_group("Mixins (Modules)", report['protocols'], show_methods=False, show_impls=True)
-        _render_group("Including Classes", report['dataclasses'], show_methods=False, show_impls=False)
-    elif go_mode:
-        _render_group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
-        _render_group("Implementing Types (structural)", report['dataclasses'], show_methods=False, show_impls=False)
-    elif rust_mode:
-        _render_group("Traits", report['protocols'], show_methods=False, show_impls=True)
-        _render_group("Implementing Types", report['dataclasses'], show_methods=False, show_impls=False)
-    elif cpp_mode:
-        _render_group("Abstract Classes (interfaces)", report['protocols'], show_methods=False, show_impls=True)
-        _render_group("Subclasses", report['dataclasses'], show_methods=False, show_impls=False)
-    else:
-        _render_group("Abstract Base Classes", report['abcs'], show_methods=True, show_impls=True)
-        _render_group("Protocols", report['protocols'], show_methods=True, show_impls=True)
-        _render_group("TypedDicts", report['typeddicts'], show_methods=False, show_impls=False)
-        _render_group("Dataclasses", report['dataclasses'], show_methods=False, show_impls=False)
-        _render_group("Pydantic BaseModels", report['basemodels'], show_methods=False, show_impls=False)
-        _render_group("Path-heuristic bases", report['path_heuristic'], show_methods=True, show_impls=True)
+    _render_contract_groups(mode, report)
 
 
 def _render_group(
