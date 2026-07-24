@@ -67,8 +67,27 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
                     break
         return lines
 
+    def _get_class_node_types(self) -> List[str]:
+        # BACK-805: Kotlin `object Foo : Bar { ... }` / `companion object : Bar
+        # { ... }` singleton declarations parse to their OWN node kinds
+        # (`object_declaration` / `companion_object`), never `class_declaration`
+        # — confirmed via `--show-ast` on `object Registry : Drawable { }`.
+        # Neither was in the shared CLASS_NODE_TYPES (which lists only
+        # `class_declaration` for Kotlin), so a named object implementing an
+        # interface/extending a class was entirely invisible to
+        # get_structure()['classes'], --outline, AND the `contracts`
+        # implementer classifier — the same "whole declaration silently
+        # dropped" shape as Swift's BACK-804 `extension Foo: Protocol`
+        # finding. `object_declaration` only (not `companion_object`, whose
+        # optional name and "Companion"-default make it a separate, lower-
+        # value follow-up not needed by this corpus — see the Kotlin recall
+        # oracle README's Decision section) is added here, Kotlin-scoped via
+        # this override rather than editing the shared CLASS_NODE_TYPES, so
+        # no other language's class extraction is touched.
+        return list(super()._get_class_node_types()) + ['object_declaration']
+
     def _extract_class_bases(self, node) -> List[str]:
-        if node.kind() == 'class_declaration':
+        if node.kind() in ('class_declaration', 'object_declaration'):
             return self._extract_kotlin_delegation(node)
         return super()._extract_class_bases(node)
 
@@ -92,6 +111,33 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
                     return name
             elif child.kind() == 'user_type':
                 return self._kotlin_first_type_identifier(child)
+            elif child.kind() == 'explicit_delegation':
+                # BACK-805: `class Foo(...) : Bar by delegateExpr` — Kotlin's
+                # interface-delegation-by-object language feature. Confirmed
+                # via `--show-ast`: this is a THIRD delegation_specifier
+                # shape, distinct from a plain `user_type` (no-parens
+                # interface) and a `constructor_invocation` (superclass
+                # constructor call) — a `delegation_specifier` wrapping an
+                # `explicit_delegation` node whose own children are
+                # `[user_type, 'by', <delegate expression>]`. Neither
+                # existing branch above matched this node kind at all, so
+                # every `by`-delegated interface was silently dropped from
+                # `bases` — the whole class, not just this one base, then
+                # became invisible to `contracts` (no bases -> not an
+                # implementer) whenever `by`-delegation was its ONLY
+                # supertype clause. Confirmed live and non-vacuous: 25+
+                # files in samples/kotlin (Tivi) use this idiom, e.g.
+                # `class ShowStore(...) : Store<Long, TiviShow> by
+                # storeBuilder(...)`. The delegate expression itself
+                # (`storeBuilder(...)`) is irrelevant to `bases` — only the
+                # user_type being delegated TO matters.
+                name = None
+                for sub in _children(child):
+                    if sub.kind() == 'user_type':
+                        name = self._kotlin_first_type_identifier(sub)
+                        break
+                if name:
+                    return name
         return None
 
     def _kotlin_user_type_name(self, container) -> Optional[str]:

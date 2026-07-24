@@ -439,6 +439,90 @@ enum class Direction(val degrees: Int) {
         finally:
             os.unlink(temp_path)
 
+    def test_object_declaration_populates_bases(self):
+        """BACK-805: `object Foo : Bar { ... }` singleton declarations must be
+        visible in structure['classes'] with a populated `bases` list, not
+        silently dropped.
+
+        `object_declaration` is a tree-sitter-kotlin node kind entirely
+        distinct from `class_declaration` — before this fix it wasn't in
+        KotlinAnalyzer's class node types at all, so a named object
+        implementing an interface (a common Kotlin singleton/DI-module/
+        Compose-screen-object idiom) never appeared in --outline or the
+        `contracts` implementer classification.
+        """
+        code = '''interface Drawable {
+    fun draw()
+}
+
+object Registry : Drawable {
+    override fun draw() {}
+}
+
+object Empty {
+    fun noop() {}
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.kt', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = KotlinAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            classes = {c['name']: c for c in structure['classes']}
+            self.assertIn('Registry', classes)
+            self.assertEqual(classes['Registry']['bases'], ['Drawable'])
+
+            # An object with no supertype should still be visible (bases: []),
+            # not dropped either.
+            self.assertIn('Empty', classes)
+            self.assertEqual(classes['Empty']['bases'], [])
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_explicit_delegation_by_populates_bases(self):
+        """BACK-805: `class Foo(...) : Bar by delegateExpr { ... }` — Kotlin's
+        interface-delegation-by-object feature — must populate `bases` with
+        the delegated-to interface, not silently drop it.
+
+        `delegation_specifier` wraps an `explicit_delegation` node
+        (`[user_type, 'by', <delegate expression>]`) for this form — a
+        third shape distinct from a plain `user_type` (no-parens interface)
+        and a `constructor_invocation` (superclass constructor call), which
+        `_kotlin_delegation_name` didn't handle at all before this fix.
+        """
+        code = '''interface Store<K, V> {
+    fun get(key: K): V
+}
+
+fun storeBuilder(): Store<Long, String> = TODO()
+
+class ShowStore(
+    private val dep: Int,
+) : Store<Long, String> by storeBuilder() {
+    fun extra() {}
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.kt', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = KotlinAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            classes = {c['name']: c for c in structure['classes']}
+            self.assertIn('ShowStore', classes)
+            self.assertEqual(classes['ShowStore']['bases'], ['Store'])
+
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()
