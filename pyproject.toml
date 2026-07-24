@@ -49,6 +49,7 @@ dependencies = [
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "pytest-xdist>=3.0",  # Parallel test execution via -n auto (see [tool.pytest.ini_options].addopts)
     "black>=23.0",
     "ruff>=0.1.0",
     "pymysql>=1.0.0",  # Required for MySQL adapter tests
