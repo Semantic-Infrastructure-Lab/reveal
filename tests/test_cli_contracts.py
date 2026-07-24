@@ -1590,6 +1590,91 @@ class TestScanContractsCpp(unittest.TestCase):
         report = _scan_contracts(Path(self.tmp))
         self.assertFalse(report.get('_cpp_mode'))
 
+    def test_macro_prefixed_abstract_class_not_dropped(self):
+        """BACK-796 (BACK-795 measurement): a DLL-export/visibility macro
+        between `class`/`struct` and the real class name (`class ASSIMP_API
+        BaseProcess { ... }` — Assimp's own convention, also Qt's
+        `Q_CORE_EXPORT`, wxWidgets' `WXDLLIMPEXP_CORE`, etc) used to make the
+        class invisible entirely: tree-sitter-cpp has no grammar rule for two
+        bare identifiers in a row after `class`/`struct`, so it produced a
+        bodyless, wrong-named `class_specifier` (named after the macro) and
+        absorbed the real body elsewhere in the tree. Confirmed against
+        Assimp's real `BaseProcess` (2 pure-virtual methods) during the
+        BACK-795 C++ recall-oracle measurement.
+        """
+        self._write_cpp('base_process.h', '''\
+            class ASSIMP_API BaseProcess {
+            public:
+                virtual bool IsActive(unsigned int flags) const = 0;
+                virtual void Execute(int scene) = 0;
+            };
+            class ASSIMP_API_WINONLY ConcreteProcess final : public BaseProcess {
+            public:
+                bool IsActive(unsigned int flags) const override { return true; }
+                void Execute(int scene) override {}
+            };
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertTrue(report.get('_cpp_mode'))
+        names = [p['name'] for p in report['protocols']]
+        self.assertIn('BaseProcess', names)
+        base = next(p for p in report['protocols'] if p['name'] == 'BaseProcess')
+        self.assertTrue(base['is_abstract'])
+        self.assertIn('ConcreteProcess', [c['name'] for c in report['dataclasses']])
+
+    def test_elaborated_type_specifier_declaration_not_corrupted(self):
+        """A C-compatibility elaborated-type-specifier variable declaration
+        (`struct stat st;` / `class Point p;`) also has two bare identifiers
+        back-to-back after the keyword, but ends the statement in `;` — not
+        `{`/`:` — so it must NOT be treated as a macro-prefixed class
+        definition (that would wrongly blank a real type name). Point's own
+        definition carries a pure virtual so the fix's blanking (if wrongly
+        triggered on the later `struct Point p;` reference) would be
+        detectable via a corrupted/duplicated contract name.
+        """
+        self._write_cpp('legacy.cpp', '''\
+            struct Point { public: virtual int norm() = 0; };
+            void f() {
+                struct Point p;
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual([p['name'] for p in report['protocols']], ['Point'])
+
+
+class TestNormalizeCppMacroClassModifiers(unittest.TestCase):
+    """Direct unit tests for BACK-796's fix
+    (`normalize_cpp_macro_class_modifiers`, `nav_surface_common.py`)."""
+
+    def _norm(self, source: str) -> str:
+        from reveal.adapters.ast.nav_surface_common import normalize_cpp_macro_class_modifiers
+        return normalize_cpp_macro_class_modifiers(source)
+
+    def test_blanks_macro_before_class_definition(self):
+        out = self._norm('class ASSIMP_API BaseProcess {\n};\n')
+        self.assertNotIn('ASSIMP_API', out)
+        self.assertIn('BaseProcess', out)
+        # Length and line count preserved (byte offsets stay valid).
+        self.assertEqual(len(out), len('class ASSIMP_API BaseProcess {\n};\n'))
+
+    def test_blanks_macro_before_inheritance_list(self):
+        out = self._norm('class ASSIMP_API_WINONLY Foo final : public Base {\n};\n')
+        self.assertNotIn('ASSIMP_API_WINONLY', out)
+        self.assertIn('Foo final : public Base', out)
+
+    def test_leaves_ordinary_class_untouched(self):
+        src = 'class Widget {\npublic:\n    int compute();\n};\n'
+        self.assertEqual(self._norm(src), src)
+
+    def test_leaves_elaborated_type_specifier_untouched(self):
+        """`struct Point p;` ends in `;`, not `{`/`:` — must not be blanked."""
+        src = 'struct Point p;\n'
+        self.assertEqual(self._norm(src), src)
+
+    def test_leaves_forward_declaration_untouched(self):
+        src = 'class Foo;\n'
+        self.assertEqual(self._norm(src), src)
+
 
 class TestScanContractsPolyglot(unittest.TestCase):
     """BACK-780: a repo with more than one contract-bearing language must not

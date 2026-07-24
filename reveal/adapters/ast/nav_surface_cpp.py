@@ -26,7 +26,7 @@ guess.
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once
+from .nav_surface_common import _get_text, _get_line, _add_once, normalize_cpp_macro_class_modifiers
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
@@ -64,6 +64,7 @@ def scan_file_surface_cpp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     try:
         from tree_sitter_language_pack import get_parser
         source = Path(file_path).read_text(errors='replace')
+        source = normalize_cpp_macro_class_modifiers(source)
         parser = get_parser('cpp')
         tree = ts_parse(parser, source)
     except Exception:
