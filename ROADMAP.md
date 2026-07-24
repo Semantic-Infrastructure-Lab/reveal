@@ -163,16 +163,19 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   BaseModel subclass linking, `os.environ[...]` subscript access, non-file
   `.write()` false positives (BACK-777/778/781/782/783) — all fixed; one
   further finding (BACK-779) ruled a taxonomy-completeness gap rather than a
-  bug, deferred to a dedicated sweep.
-- **Next, in priority order.** Import recall and side-effect recall are both
-  now the program's strongest signals — 19 languages (two corpora each) and
-  18 languages (full six-category sweep each) respectively. The remaining
-  confidence gaps are in the *other* DD signals and in a handful of tracked
-  residuals; the ordering below is by cost-to-close and dependency, not
-  strictly by gap size — item 2 is actually the largest remaining gap (zero
-  validation vs. item 1's partial-credit percentages), but item 1 reuses
-  harness and infrastructure that's already built and warm, so it's
-  sequenced first:
+  bug, deferred to a dedicated sweep. **BACK-719 (surface/contracts
+  ground-truth oracle methodology) is now fully closed**: `contracts`
+  (Dagster corpus, 100%/100% both languages, BACK-784 found+fixed) and
+  `surface`'s `cli`/`mcp` (MCP-SDK/click/typer/commander corpus, 100%/100%
+  both languages, BACK-787/788 found+fixed) and `http` routes (Flask/
+  FastAPI/Express corpus, 100%/100% both languages via a static
+  approximation — the execution-based-oracle question was raised and
+  resolved by the static attempt succeeding, no `flask routes`/Django
+  `show_urls` harness needed) all have real-corpus recall measurement now.
+  Design doc: `internal-docs/planning/BACK-719-surface-contracts-oracle-design.md`.
+- **Next, in priority order.** Import recall, side-effect recall, and now
+  surface/contracts recall are all measured (see Done, above). The remaining
+  confidence gap in this track is the tracked import-recall residuals below:
 
   1. **Close the tracked import-recall residuals, worst first:**
      TypeScript/nest 81.21% (both known resolution gaps now fixed —
@@ -184,18 +187,6 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
      C#/Newtonsoft.Json 99.36% (BACK-703). The latter two are documented as
      deliberately out of scope for a generic resolver; revisit only if a
      corpus shows the shape is commoner than measured.
-  2. **Design a ground-truth methodology for `surface` and `contracts`.**
-     These reach 11 languages of *coverage* but have **zero** recall validation
-     on any language — the single largest remaining confidence gap in this
-     track. Unlike import recall there is no external oracle to borrow (no
-     `go list` equivalent for "what is this module's public surface"), so
-     this needed a design doc before any measurement — closer to the
-     side-effect program's from-scratch-oracle shape. Design doc:
-     `internal-docs/planning/BACK-719-surface-contracts-oracle-design.md`.
-     The correctness bugs that design surfaced are now all fixed (see Done,
-     above) — the remaining open step is building a polyglot/contract-rich
-     pilot corpus (no existing corpus is contract-rich enough) to actually
-     run the oracle against, not further bug-hunting.
 
   *Not on this list, deliberately:* `patches://`/testability language breadth
   past Python + TS is filed as an idea rather than committed work — see
