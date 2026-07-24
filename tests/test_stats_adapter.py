@@ -1301,3 +1301,56 @@ class TestStatsAnalysisFunctions:
             assert str(other_file) == display
         finally:
             other_file.unlink()  # Clean up
+
+
+class TestHotspotThresholdsRespectRuleConfig:
+    """BACK-775: long_functions/deep_nesting must honor .reveal.yaml's
+    per-rule config (C902/C905), same as --check, instead of hardcoding
+    a second copy of the rules' defaults."""
+
+    def _make_deep_function(self, depth: int) -> dict:
+        return {'name': f'fn_depth_{depth}', 'depth': depth, 'line': 1, 'line_count': 5}
+
+    def test_default_depth_threshold_matches_c905_default(self):
+        from reveal.adapters.stats.metrics import extract_complexity_metrics
+
+        functions = [self._make_deep_function(5)]
+        metrics = extract_complexity_metrics(functions, "", file_path=None)
+        assert len(metrics['deep_nesting']) == 1
+
+    def test_project_C905_max_depth_override_is_honored(self, tmp_path, monkeypatch):
+        from reveal.config import get_config
+        from reveal.adapters.stats.metrics import extract_complexity_metrics
+
+        (tmp_path / ".reveal.yaml").write_text(
+            "root: true\nrules:\n  C905:\n    MAX_DEPTH: 6\n"
+        )
+        target = tmp_path / "deep.py"
+        target.write_text("def fn_depth_5(): pass\n")
+
+        # Force fresh config resolution rooted at tmp_path (get_config caches globally).
+        get_config(start_path=tmp_path)
+
+        functions = [self._make_deep_function(5)]
+        metrics = extract_complexity_metrics(functions, "", file_path=target)
+
+        # Depth 5 is within this project's override (MAX_DEPTH: 6) — must NOT
+        # be flagged, matching what `--check` already reports for such a file.
+        assert metrics['deep_nesting'] == []
+
+    def test_project_C905_max_depth_override_still_flags_beyond_it(self, tmp_path):
+        from reveal.config import get_config
+        from reveal.adapters.stats.metrics import extract_complexity_metrics
+
+        (tmp_path / ".reveal.yaml").write_text(
+            "root: true\nrules:\n  C905:\n    MAX_DEPTH: 6\n"
+        )
+        target = tmp_path / "deep.py"
+        target.write_text("def fn_depth_7(): pass\n")
+
+        get_config(start_path=tmp_path)
+
+        functions = [self._make_deep_function(7)]
+        metrics = extract_complexity_metrics(functions, "", file_path=target)
+
+        assert len(metrics['deep_nesting']) == 1

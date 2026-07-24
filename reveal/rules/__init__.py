@@ -340,6 +340,36 @@ class RuleRegistry:
         return cls._rules_by_code.get(code)
 
     @classmethod
+    def get_configured_rule(cls, code: str, file_path: str) -> Optional[BaseRule]:
+        """
+        Instantiate a rule with this file's .reveal.yaml config applied.
+
+        Lets callers outside the check pipeline (e.g. stats/hotspots scoring)
+        read a rule's *effective* threshold attributes (BACK-775) instead of
+        hardcoding a second copy of the default, so a project only has to
+        configure a threshold once.
+
+        Args:
+            code: Rule code (e.g., "C902")
+            file_path: Path to file, used to resolve config precedence
+
+        Returns:
+            Configured rule instance, or None if the rule code is unknown
+        """
+        rule_class = cls.get_rule(code)
+        if rule_class is None:
+            return None
+
+        rule = rule_class()
+        config = get_config(start_path=Path(file_path).parent)
+        file_config = config.get_file_config(Path(file_path))
+        rules_config = file_config._config.get('rules', {})
+        rule_config = rules_config.get(code, {})
+        if rule_config and isinstance(rule_config, dict):
+            cls._apply_rule_config(rule, rule_config)
+        return rule
+
+    @classmethod
     def _matches_patterns(cls, rule_class: Type[BaseRule], patterns: List[str]) -> bool:
         """
         Check if rule matches any of the given patterns.

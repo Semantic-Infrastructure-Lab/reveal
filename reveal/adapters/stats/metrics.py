@@ -65,12 +65,40 @@ def estimate_complexity(func: Dict[str, Any], content: str) -> Optional[int]:
     return complexity
 
 
-def extract_complexity_metrics(functions: list, content: str) -> dict:
+def _get_check_thresholds(file_path: Optional[Path]) -> tuple:
+    """Resolve the effective C902/C905 thresholds for a file.
+
+    Reads the SAME per-file .reveal.yaml rule config the real `--check`
+    pipeline applies (RuleRegistry.get_configured_rule), instead of a second
+    hardcoded copy of the rules' defaults — so a project that overrides
+    C905's MAX_DEPTH (or any future C902 threshold key) doesn't see the
+    hotspot tally flag functions its own config says are fine (BACK-775).
+    Falls back to the rules' class defaults if config resolution fails for
+    any reason (e.g. no file_path available).
+
+    Returns:
+        Tuple of (long_function_lines, deep_nesting_depth)
+    """
+    try:
+        from ...rules import RuleRegistry
+        c902 = RuleRegistry.get_configured_rule('C902', str(file_path)) if file_path else None
+        c905 = RuleRegistry.get_configured_rule('C905', str(file_path)) if file_path else None
+        long_threshold = c902.THRESHOLD_ERROR if c902 else 100
+        depth_threshold = c905.MAX_DEPTH if c905 else 4
+        return long_threshold, depth_threshold
+    except Exception:
+        return 100, 4
+
+
+def extract_complexity_metrics(functions: list, content: str, file_path: Optional[Path] = None) -> dict:
     """Extract complexity metrics from functions.
 
     Args:
         functions: List of function structures
         content: File content
+        file_path: Path to the file, used to resolve per-project .reveal.yaml
+            rule config for the long-function/deep-nesting thresholds
+            (BACK-775). Optional — falls back to the rules' class defaults.
 
     Returns:
         Dict with complexities, long functions, and deep nesting
@@ -78,6 +106,7 @@ def extract_complexity_metrics(functions: list, content: str) -> dict:
     complexities = []
     long_functions = []
     deep_nesting = []
+    long_threshold, depth_threshold = _get_check_thresholds(file_path)
 
     for func in functions:
         # Get complexity if available
@@ -85,22 +114,21 @@ def extract_complexity_metrics(functions: list, content: str) -> dict:
         if complexity:
             complexities.append(complexity)
 
-        # Check for long functions (>100 lines). code_line_count
-        # (comments/docstrings excluded) falls back to the raw line_count
-        # span for analyzers that don't populate it -- same threshold
-        # (100) C902 uses, just kept consistent with its docstring-aware
-        # length now that C902 has one.
+        # Check for long functions. code_line_count (comments/docstrings
+        # excluded) falls back to the raw line_count span for analyzers
+        # that don't populate it -- same field C902 thresholds on, kept
+        # consistent with its docstring-aware length.
         func_lines = func.get('code_line_count', func.get('line_count', 0))
-        if func_lines > 100:
+        if func_lines > long_threshold:
             long_functions.append({
                 'name': func.get('name', '<unknown>'),
                 'lines': func.get('line_count', 0),
                 'start_line': func.get('line', 0)
             })
 
-        # Check for deep nesting (>4 levels)
+        # Check for deep nesting
         depth = func.get('depth', 0)
-        if depth > 4:
+        if depth > depth_threshold:
             deep_nesting.append({
                 'name': func.get('name', '<unknown>'),
                 'depth': depth,
@@ -254,7 +282,7 @@ def calculate_file_stats(
     imports = structure.get('imports', [])
 
     # Extract complexity metrics
-    metrics = extract_complexity_metrics(functions, content)
+    metrics = extract_complexity_metrics(functions, content, file_path)
 
     # Run check rules using already-computed structure + content (no re-parsing)
     check_issue_counts = _count_check_issues(file_path, structure, content)
