@@ -187,6 +187,49 @@ class TestScanSurface(unittest.TestCase):
         self.assertIn('anthropic', names)
         self.assertIn('openai', names)
 
+    def test_boto3_classified_sdk_not_db(self):
+        _write(self.tmp, 'aws.py', '''\
+            import boto3
+            import botocore
+        ''')
+        report = _scan_surface(Path(self.tmp))
+        sdk_names = [e['name'] for e in report['surfaces']['sdk']]
+        db_names = [e['name'] for e in report['surfaces']['db']]
+        self.assertIn('boto3', sdk_names)
+        self.assertIn('botocore', sdk_names)
+        self.assertNotIn('boto3', db_names)
+        self.assertNotIn('botocore', db_names)
+
+    def test_finds_additional_sdk_imports(self):
+        _write(self.tmp, 'llm.py', '''\
+            import litellm
+            import anthropic_bedrock
+        ''')
+        report = _scan_surface(Path(self.tmp))
+        names = [e['name'] for e in report['surfaces']['sdk']]
+        self.assertIn('litellm', names)
+        self.assertIn('anthropic_bedrock', names)
+
+    def test_finds_additional_db_imports(self):
+        _write(self.tmp, 'stores.py', '''\
+            import clickhouse_driver
+            import confluent_kafka
+            import supabase
+            import minio
+        ''')
+        report = _scan_surface(Path(self.tmp))
+        names = [e['name'] for e in report['surfaces']['db']]
+        self.assertIn('clickhouse_driver', names)
+        self.assertIn('confluent_kafka', names)
+        self.assertIn('supabase', names)
+        self.assertIn('minio', names)
+
+    def test_httpcore_classified_network(self):
+        _write(self.tmp, 'transport.py', 'import httpcore\n')
+        report = _scan_surface(Path(self.tmp))
+        names = [e['name'] for e in report['surfaces']['network']]
+        self.assertIn('httpcore', names)
+
     def test_finds_http_routes(self):
         _write(self.tmp, 'routes.py', '''\
             from flask import Flask

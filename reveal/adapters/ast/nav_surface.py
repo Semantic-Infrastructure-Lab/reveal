@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from .nav_surface_common import _add_once
 
 _NET_PACKAGES: frozenset = frozenset({
-    'requests', 'httpx', 'aiohttp', 'urllib', 'urllib3', 'socket',
+    'requests', 'httpx', 'httpcore', 'aiohttp', 'urllib', 'urllib3', 'socket',
     'http', 'ftplib', 'smtplib', 'imaplib', 'poplib', 'xmlrpc',
     'grpc', 'websocket', 'websockets',
 })
@@ -14,14 +14,16 @@ _NET_PACKAGES: frozenset = frozenset({
 _DB_PACKAGES: frozenset = frozenset({
     'psycopg2', 'psycopg', 'pymysql', 'MySQLdb', 'sqlite3',
     'pymongo', 'motor', 'redis', 'aioredis', 'elasticsearch',
-    'boto3', 'botocore', 'sqlalchemy', 'databases', 'asyncpg',
+    'sqlalchemy', 'databases', 'asyncpg',
     'aiomysql', 'cx_Oracle', 'pyodbc', 'cassandra', 'pika',
+    'clickhouse_driver', 'confluent_kafka', 'supabase', 'minio',
 })
 
 _SDK_PACKAGES: frozenset = frozenset({
     'anthropic', 'openai', 'cohere', 'google.cloud', 'azure',
     'stripe', 'twilio', 'sendgrid', 'slack_sdk', 'github',
     'atlassian', 'jira', 'pagerduty',
+    'boto3', 'botocore', 'litellm', 'anthropic_bedrock',
 })
 
 _WRITE_MODES: frozenset = frozenset({'w', 'wb', 'a', 'ab', 'x', 'xb'})
