@@ -38,7 +38,13 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
 
     def _extract_class_bases(self, node) -> List[str]:
         node_type = node.kind()
-        if node_type in ('class_declaration', 'interface_declaration'):
+        # BACK-797: 'record_declaration' shares the same 'base_list' heritage
+        # shape as class/interface (`record Foo(...) : IBar { ... }`) — added
+        # alongside CLASS_NODE_TYPES gaining 'record_declaration', otherwise
+        # a record's bases would fall through to the TS-shaped base handler
+        # below, which looks for 'class_heritage' (doesn't exist in C#) and
+        # always returns [].
+        if node_type in ('class_declaration', 'interface_declaration', 'record_declaration'):
             return self._extract_csharp_base_list(node)
         return super()._extract_class_bases(node)
 
@@ -70,6 +76,25 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
 
     def _csharp_base_item_name(self, item) -> Optional[str]:
         kind = item.kind()
+        if kind == 'qualified_name':
+            # BACK-797: a namespace-qualified base (`System.IDisposable`,
+            # `MediaBrowser.Controller.Resolvers.ItemResolver<T>`) is a
+            # DISTINCT tree-sitter-c-sharp node kind from bare `identifier` —
+            # previously unhandled here, so _csharp_base_item_name fell
+            # through to `return None` and the base was silently dropped
+            # from `bases` entirely (not even the qualified text — gone).
+            # Confirmed live on samples/csharp (Jellyfin):
+            # `BaseVideoResolver<T> : MediaBrowser.Controller.Resolvers.
+            # ItemResolver<T>` lost its only base, so a real abstract-class
+            # implementer relationship (`ItemResolver<T>` is a genuine
+            # project-local abstract class) was invisible to `contracts`.
+            # `qualified_name` nests left-associatively (`Ns.Sub.Name` is
+            # `qualified_name(qualified_name(Ns, Sub), Name)`) — the base's
+            # own simple name is always the rightmost non-'.' child, which
+            # may itself be a plain `identifier` or (for `Ns.Foo<T>`) a
+            # `generic_name`; recurse to unwrap either.
+            children = [c for c in _children(item) if c.kind() != '.']
+            return self._csharp_base_item_name(children[-1]) if children else None
         if kind == 'generic_name':
             # IFoo<T> — extract the base identifier, drop the type args
             ident = next(

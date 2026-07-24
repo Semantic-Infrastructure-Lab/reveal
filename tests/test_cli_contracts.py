@@ -816,6 +816,47 @@ class TestScanContractsCSharp(unittest.TestCase):
         report = _scan_contracts(Path(self.tmp))
         self.assertEqual(report['total_contracts'], 0)
 
+    def test_qualified_namespace_base_still_captured(self):
+        """BACK-797: `class Foo : Ns.Sub.IBar` — a namespace-qualified base
+        parses to a `qualified_name` node, distinct from bare `identifier`,
+        that `_csharp_base_item_name` used to fall through and drop
+        entirely. Confirmed live on samples/csharp (Jellyfin):
+        `BaseVideoResolver<T> : MediaBrowser.Controller.Resolvers.
+        ItemResolver<T>` lost its only base, hiding a real abstract-class
+        implementer relationship."""
+        self._write_cs('Qualified.cs', '''\
+            namespace Ns.Sub {
+                public abstract class Base {
+                    public abstract void Do();
+                }
+            }
+            class Foo : Ns.Sub.Base {
+                public override void Do() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl = next(c for c in report['dataclasses'] if c['name'] == 'Foo')
+        self.assertIn('Base', impl['bases'])
+
+    def test_record_implementing_interface_classified_as_dataclass(self):
+        """BACK-797: `record_declaration` is a distinct tree-sitter-c-sharp
+        node kind from `class_declaration`/`struct_declaration` — it was
+        entirely absent from CLASS_NODE_TYPES before this fix, so a record
+        implementing an interface (a common C# 9+ DTO idiom) was invisible
+        to get_structure()'s classes extraction and never appeared as an
+        implementer here. Confirmed live on samples/csharp (Jellyfin)."""
+        self._write_cs('PointRec.cs', '''\
+            interface IPoint {
+                int X { get; }
+            }
+            public record PointRec(int X, int Y) : IPoint;
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl_names = [c['name'] for c in report['dataclasses']]
+        self.assertIn('PointRec', impl_names)
+        impl = next(c for c in report['dataclasses'] if c['name'] == 'PointRec')
+        self.assertIn('IPoint', impl['bases'])
+
 
 class TestScanContractsPhp(unittest.TestCase):
     """Tests for PHP contract detection (BACK-403 pt 2)."""

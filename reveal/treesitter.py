@@ -258,6 +258,18 @@ CLASS_NODE_TYPES = (
     # and Structs in get_structure()/--outline (confirmed live). It's a
     # struct, and STRUCT_NODE_TYPES below already extracts it correctly —
     # removed here rather than adding it to keep the label honest.
+    # BACK-797 (C# recall oracle): `record Foo(...) : IBase { ... }` parses to
+    # a *distinct* node kind in both tree-sitter-c-sharp and tree-sitter-java
+    # (Java 16+ records share the same grammar node name) — entirely absent
+    # from CLASS_NODE_TYPES before this, so every record was invisible to
+    # get_structure()'s classes extraction, --outline, and (critically) the
+    # `contracts` interface-family classifier: a record implementing an
+    # interface never appeared as an implementer. Confirmed live against
+    # `samples/csharp` (Jellyfin) — 12 files declare a record, 2 of which
+    # implement an interface via `record Foo(...) : IBar`, both silently
+    # dropped. Added here (not just in CSharpAnalyzer) so Java 16+ records
+    # benefit too, though only the C# path has been measured/tested.
+    'record_declaration',
 )
 
 # Node types for struct extraction

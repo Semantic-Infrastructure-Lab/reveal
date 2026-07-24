@@ -144,10 +144,29 @@ def _find_method_attributes(method_node: Any) -> List[Any]:
 
 
 def _method_name(method_node: Any, content_bytes: bytes) -> Optional[str]:
+    # BACK-797: a `method_declaration`'s direct children can carry TWO bare
+    # 'identifier' nodes, not one, whenever the return type is itself a bare
+    # (non-generic, non-predefined) type name: `public Task Main(...)` and
+    # `public ActionResult Foo(...)` both emit `identifier('Task'/'ActionResult')`
+    # for the return type immediately followed by `identifier('Main'/'Foo')`
+    # for the real method name — confirmed via direct tree-sitter parse
+    # (`Task<T>`/`ActionResult<T>` don't have this problem: a generic return
+    # type is a single `generic_name` node whose own `identifier` child is
+    # nested, not a direct child, so it's invisible here either way).
+    # Taking the FIRST identifier (as this used to) silently grabs the return
+    # type instead of the name — confirmed live on samples/csharp (Jellyfin):
+    # every ASP.NET action returning bare `ActionResult`/`ContentResult`
+    # reported its HTTP route under the return-type name, and `async Task
+    # Main(string[] args)` (the standard modern .NET entrypoint shape) was
+    # invisible to `cli` detection entirely. The method's own name is always
+    # the LAST bare identifier before the parameter list — an
+    # `explicit_interface_specifier` (`void IFoo.Bar()`) wraps its own
+    # identifier as a non-direct child, so it never interferes.
+    name = None
     for ch in _children(method_node):
         if ch.kind() == 'identifier':
-            return _get_text(ch, content_bytes)
-    return None
+            name = _get_text(ch, content_bytes)
+    return name
 
 
 def _is_static_modifier_present(method_node: Any) -> bool:

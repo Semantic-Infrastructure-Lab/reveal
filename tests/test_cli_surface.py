@@ -1229,6 +1229,37 @@ class TestNavSurfaceCSharp(unittest.TestCase):
         ''')
         self.assertEqual(len(result['cli']), 0)
 
+    def test_csharp_async_task_main_entrypoint(self):
+        """BACK-797: `static Task Main(...)` (async Main, the standard modern
+        .NET entrypoint shape) used to be invisible — `Task` is a bare
+        `identifier` return type, not `predefined_type`, so the old
+        first-identifier `_method_name` grabbed 'Task' instead of 'Main'."""
+        result = self._scan_cs('Program.cs', '''\
+            class Program {
+                public static Task Main(string[] args) { return Task.CompletedTask; }
+            }
+        ''')
+        entries = result['cli']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['name'], 'Main')
+
+    def test_csharp_http_route_bare_return_type_name_not_swallowed(self):
+        """BACK-797: `public ActionResult Foo()` — a bare (non-generic)
+        return type is a second direct 'identifier' child sitting before the
+        method's own name; taking the first identifier reported the route's
+        name as the return type ('ActionResult') instead of the real method
+        name. Confirmed live on samples/csharp (Jellyfin): 50/388 http routes
+        misnamed this way before the fix."""
+        result = self._scan_cs('Controller.cs', '''\
+            class UserController {
+                [HttpPost("/restart")]
+                public ActionResult RestartApplication() { return null; }
+            }
+        ''')
+        entries = result['http']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['name'], 'RestartApplication')
+
 
 class TestNavSurfacePhp(unittest.TestCase):
     """Unit tests for the PHP surface scanner (nav_surface_php, BACK-403 pt 2)."""
