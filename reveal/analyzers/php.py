@@ -40,8 +40,22 @@ class PhpAnalyzer(TreeSitterAnalyzer):
 
     def _extract_class_bases(self, node) -> List[str]:
         node_type = node.kind()
-        if node_type == 'class_declaration':
-            # extends (base_clause) + implements (class_interface_clause)
+        if node_type in ('class_declaration', 'anonymous_class'):
+            # extends (base_clause) + implements (class_interface_clause).
+            # BACK-801 (PHP recall oracle): 'anonymous_class' (`new class(...)
+            # extends Foo implements Bar { ... }`) shares the exact same
+            # base_clause/class_interface_clause heritage shape as a named
+            # class_declaration (confirmed via direct tree-sitter parse), but
+            # was falling through to the TS-shaped base implementation (which
+            # looks for 'class_heritage'/'extends_type_clause' — neither
+            # exists in PHP's grammar) and always returned []. Confirmed live
+            # on samples/php (WordPress): 4 files use
+            # `new class(...) extends WP_HTML_Tag_Processor { ... }` /
+            # `extends WP_HTML_Processor { ... }` — both real, in-corpus
+            # base classes — and all 4 anonymous classes silently reported
+            # zero bases (invisible to `contracts`' implementer
+            # classification and to the base class's own `implementations`
+            # list) before this fix.
             bases = self._extract_php_clause_names(node, 'base_clause')
             bases.extend(self._extract_php_clause_names(node, 'class_interface_clause'))
             return bases

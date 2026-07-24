@@ -488,6 +488,33 @@ $v = new class extends NodeVisitorAbstract {
         finally:
             os.unlink(path)
 
+    def test_anonymous_class_extends_populates_bases(self):
+        """BACK-801 (PHP recall oracle): 'new class(...) extends Base' must
+        populate structure['classes'][i]['bases'], not just the synthetic
+        name. Before this fix, PhpAnalyzer._extract_class_bases() only
+        dispatched 'class_declaration'/'interface_declaration' — 'anonymous_class'
+        fell through to the TS-shaped base implementation (which looks for
+        node kinds that don't exist in PHP's grammar) and always returned [],
+        making an anonymous class's real base invisible to `contracts`'
+        implementer classification and to the base class's own
+        `implementations` list. Confirmed live on samples/php (WordPress):
+        wp-includes/blocks/image.php uses
+        `new class( $content ) extends WP_HTML_Tag_Processor { ... }`.
+        """
+        code = '''<?php
+$v = new class extends NodeVisitorAbstract implements Countable {
+    public function enterNode($node) { return null; }
+};
+'''
+        path = self._make_php_file(code)
+        try:
+            structure = PhpAnalyzer(path).get_structure()
+            classes = structure.get('classes', [])
+            self.assertEqual(len(classes), 1)
+            self.assertEqual(classes[0]['bases'], ['NodeVisitorAbstract', 'Countable'])
+        finally:
+            os.unlink(path)
+
     def test_anonymous_class_without_extends_detected(self):
         """Anonymous class with no base clause gets a fallback 'anonymous@L{line}' name."""
         code = '''<?php
