@@ -787,6 +787,54 @@ class TestNavSurfaceTS(unittest.TestCase):
         self.assertIn('axios', names)
 
 
+class TestMcpToolProvenanceTS(unittest.TestCase):
+    """BACK-785: TS's mcp category didn't exist at all — server.tool(...) is an
+    MCP surface only when `server` was constructed from the official MCP TS
+    SDK's McpServer (same provenance discipline as BACK-786 in Python)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _scan_ts(self, filename: str, content: str):
+        from reveal.adapters.ast.nav_surface_ts import scan_file_surface_ts
+        path = _write(self.tmp, filename, content)
+        return scan_file_surface_ts(path)
+
+    def test_mcp_server_tool_detected(self):
+        result = self._scan_ts('server.ts', '''\
+            import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+            const server = new McpServer({ name: "demo" });
+            server.tool("add", schema, handler);
+        ''')
+        names = [e['name'] for e in result['mcp']]
+        self.assertIn('add', names)
+
+    def test_aliased_mcp_server_constructor_detected(self):
+        result = self._scan_ts('server.ts', '''\
+            import { McpServer as Server2 } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+            const s = new Server2({ name: "demo" });
+            s.tool("ping", schema, handler);
+        ''')
+        names = [e['name'] for e in result['mcp']]
+        self.assertIn('ping', names)
+
+    def test_unrelated_tool_call_excluded(self):
+        # Some other object with a `.tool()` method — no MCP SDK provenance.
+        result = self._scan_ts('agent.ts', 'langchainTool.tool("search", schema, handler);\n')
+        self.assertEqual(result['mcp'], [])
+
+    def test_tool_on_unconstructed_object_excluded(self):
+        # `server` never assigned from `new McpServer(...)` in this file.
+        result = self._scan_ts('agent.ts', 'server.tool("add", schema, handler);\n')
+        self.assertEqual(result['mcp'], [])
+
+
 class TestScanSurfaceTS(unittest.TestCase):
     """Integration tests: _scan_surface picks up .ts/.tsx files."""
 

@@ -6,6 +6,7 @@ from .nav_surface_common import _get_text, _get_line, _add_once
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 _NET_PACKAGES: frozenset = frozenset({
     'axios', 'fetch', 'node-fetch', 'got', 'ky', 'undici', 'ws', 'http', 'https', 'net',
@@ -37,7 +38,15 @@ _SUBPROCESS_CALLEE_NAMES: frozenset = frozenset({'execa', 'execaSync', 'execaCom
 
 _CLI_METHODS: frozenset = frozenset({'command', 'option'})
 
-_EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
+# BACK-785: mirrors BACK-786's Python mcp provenance fix — a bare `.tool()`
+# call is not evidence of MCP registration on its own (many objects expose a
+# `tool` method); it must resolve to an instance constructed from the
+# official MCP TypeScript SDK's `McpServer`, tracked through import aliasing.
+_MCP_PACKAGE_ROOTS: frozenset = frozenset({'@modelcontextprotocol/sdk'})
+_MCP_CONSTRUCTORS: frozenset = frozenset({'McpServer'})
+_MCP_METHODS: frozenset = frozenset({'tool'})
+
+_EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess', 'mcp')
 
 
 def scan_file_surface_ts(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -69,6 +78,9 @@ def _scan_tree(
 ) -> Dict[str, List[Dict[str, Any]]]:
     surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _EMPTY_KEYS}
 
+    mcp_ctor_names = _collect_mcp_constructor_aliases(tree, content_bytes)
+    mcp_instances = _collect_mcp_instances(tree, content_bytes, mcp_ctor_names)
+
     # Walk all nodes
     stack = [tree_root(tree)]
     while stack:
@@ -78,7 +90,7 @@ def _scan_tree(
         if kind == 'import_statement':
             _process_import(node, file_path, content_bytes, surfaces)
         elif kind == 'call_expression':
-            _process_call(node, file_path, content_bytes, surfaces)
+            _process_call(node, file_path, content_bytes, surfaces, mcp_instances)
         elif kind in ('member_expression', 'subscript_expression'):
             _process_member(node, file_path, content_bytes, surfaces)
 
@@ -86,6 +98,81 @@ def _scan_tree(
             stack.append(ch)
 
     return surfaces
+
+
+def _is_mcp_module(module: str) -> bool:
+    return module in _MCP_PACKAGE_ROOTS or any(
+        module.startswith(root + '/') for root in _MCP_PACKAGE_ROOTS
+    )
+
+
+def _get_import_clause_specifiers(node: Any, content_bytes: bytes) -> List[tuple]:
+    """Return (imported_name, local_name) pairs for an import_statement's clause —
+    named imports (`{ McpServer }`, `{ McpServer as Server2 }`) and default imports."""
+    specifiers: List[tuple] = []
+    for ch in _children(node):
+        if _zero_arg(ch, 'kind') != 'import_clause':
+            continue
+        for clause_ch in _children(ch):
+            if _zero_arg(clause_ch, 'kind') == 'named_imports':
+                for spec in _children(clause_ch):
+                    if _zero_arg(spec, 'kind') != 'import_specifier':
+                        continue
+                    idents = [c for c in _children(spec) if _zero_arg(c, 'kind') == 'identifier']
+                    if len(idents) == 1:
+                        name = _get_text(idents[0], content_bytes)
+                        specifiers.append((name, name))
+                    elif len(idents) == 2:
+                        imported = _get_text(idents[0], content_bytes)
+                        local = _get_text(idents[1], content_bytes)
+                        specifiers.append((imported, local))
+            elif _zero_arg(clause_ch, 'kind') == 'identifier':
+                specifiers.append(('default', _get_text(clause_ch, content_bytes)))
+    return specifiers
+
+
+def _collect_mcp_constructor_aliases(tree: Any, content_bytes: bytes) -> set:
+    """Local names bound to the MCP SDK's `McpServer` export via import
+    (alias-aware — `McpServer as Server2` resolves to `Server2`)."""
+    aliases: set = set()
+    stack = [tree_root(tree)]
+    while stack:
+        node = stack.pop()
+        if _zero_arg(node, 'kind') == 'import_statement':
+            module = _get_import_source(node, content_bytes)
+            if module and _is_mcp_module(module):
+                for imported, local in _get_import_clause_specifiers(node, content_bytes):
+                    if imported in _MCP_CONSTRUCTORS:
+                        aliases.add(local)
+        for ch in _children(node):
+            stack.append(ch)
+    return aliases
+
+
+def _collect_mcp_instances(tree: Any, content_bytes: bytes, mcp_ctor_names: set) -> set:
+    """Variable names bound to `new McpServer(...)` — the base of the
+    `server.tool(name, schema, handler)` registration pattern."""
+    instances: set = set()
+    if not mcp_ctor_names:
+        return instances
+    stack = [tree_root(tree)]
+    while stack:
+        node = stack.pop()
+        if _zero_arg(node, 'kind') == 'variable_declarator':
+            children = _children(node)
+            if children and _zero_arg(children[0], 'kind') == 'identifier':
+                value = children[-1]
+                if (
+                    _zero_arg(value, 'kind') == 'new_expression'
+                    and any(
+                        _zero_arg(ch, 'kind') == 'identifier' and _get_text(ch, content_bytes) in mcp_ctor_names
+                        for ch in _children(value)
+                    )
+                ):
+                    instances.add(_get_text(children[0], content_bytes))
+        for ch in _children(node):
+            stack.append(ch)
+    return instances
 
 
 def _get_import_source(node, content_bytes: bytes) -> Optional[str]:
@@ -191,6 +278,7 @@ def _process_call(
     file_path: str,
     content_bytes: bytes,
     surfaces: Dict[str, List[Dict[str, Any]]],
+    mcp_instances: set,
 ) -> None:
     line = _get_line(node)
     obj, method = _get_callee_parts(node, content_bytes)
@@ -249,6 +337,19 @@ def _process_call(
                 'line': line,
             })
             return
+
+    # MCP tool registration: server.tool(name, schema, handler) — only when
+    # `server` was constructed from the MCP SDK's McpServer (see BACK-785).
+    if method in _MCP_METHODS and obj in mcp_instances:
+        arg = _get_call_first_arg_string(node, content_bytes)
+        _add_once(surfaces['mcp'], {
+            'type': 'tool',
+            'name': arg or '?',
+            'expr': f'{obj}.{method}',
+            'file': file_path,
+            'line': line,
+        })
+        return
 
     # CLI: yargs.command / commander.command / yargs.option / commander.option
     if method in _CLI_METHODS:
