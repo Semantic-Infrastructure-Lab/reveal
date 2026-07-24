@@ -824,6 +824,45 @@ class TestMcpToolProvenanceTS(unittest.TestCase):
         names = [e['name'] for e in result['mcp']]
         self.assertIn('ping', names)
 
+    def test_mcp_server_register_tool_detected(self):
+        # BACK-785 follow-up: real MCP TS SDK usage has moved to registerTool
+        # (v2 API) — the legacy .tool() form (still detected above) is being
+        # migrated away from by the SDK's own v1-to-v2 codemod.
+        result = self._scan_ts('server.ts', '''\
+            import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+            const server = new McpServer({ name: "demo" });
+            server.registerTool("add", { description: "add two numbers" }, handler);
+        ''')
+        names = [e['name'] for e in result['mcp']]
+        self.assertIn('add', names)
+
+    def test_mcp_server_typed_arrow_param_detected(self):
+        # BACK-785 follow-up: the dominant real-world shape — modular tool
+        # files import McpServer only for the type, and register against a
+        # function parameter typed `: McpServer`, never constructing it
+        # locally (confirmed against the official reference-servers repo).
+        result = self._scan_ts('echo.ts', '''\
+            import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+            export const registerEchoTool = (server: McpServer) => {
+              server.registerTool("echo", config, handler);
+            };
+        ''')
+        names = [e['name'] for e in result['mcp']]
+        self.assertIn('echo', names)
+
+    def test_mcp_server_typed_function_param_detected(self):
+        result = self._scan_ts('tools.ts', '''\
+            import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+            function registerTools(server: McpServer) {
+              server.tool("add", schema, handler);
+            }
+        ''')
+        names = [e['name'] for e in result['mcp']]
+        self.assertIn('add', names)
+
     def test_unrelated_tool_call_excluded(self):
         # Some other object with a `.tool()` method — no MCP SDK provenance.
         result = self._scan_ts('agent.ts', 'langchainTool.tool("search", schema, handler);\n')

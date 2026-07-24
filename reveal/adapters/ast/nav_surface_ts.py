@@ -44,7 +44,7 @@ _CLI_METHODS: frozenset = frozenset({'command', 'option'})
 # official MCP TypeScript SDK's `McpServer`, tracked through import aliasing.
 _MCP_PACKAGE_ROOTS: frozenset = frozenset({'@modelcontextprotocol/sdk'})
 _MCP_CONSTRUCTORS: frozenset = frozenset({'McpServer'})
-_MCP_METHODS: frozenset = frozenset({'tool'})
+_MCP_METHODS: frozenset = frozenset({'tool', 'registerTool'})
 
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess', 'mcp')
 
@@ -150,15 +150,19 @@ def _collect_mcp_constructor_aliases(tree: Any, content_bytes: bytes) -> set:
 
 
 def _collect_mcp_instances(tree: Any, content_bytes: bytes, mcp_ctor_names: set) -> set:
-    """Variable names bound to `new McpServer(...)` — the base of the
-    `server.tool(name, schema, handler)` registration pattern."""
+    """Variable/parameter names bound to an `McpServer` — either a local
+    constructed via `new McpServer(...)`, or a function/arrow-function
+    parameter typed `: McpServer` (the dominant real-world shape: modular
+    servers pass the instance into per-tool `register(server: McpServer)`
+    functions rather than constructing it inline — see BACK-785 follow-up)."""
     instances: set = set()
     if not mcp_ctor_names:
         return instances
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        if _zero_arg(node, 'kind') == 'variable_declarator':
+        kind = _zero_arg(node, 'kind')
+        if kind == 'variable_declarator':
             children = _children(node)
             if children and _zero_arg(children[0], 'kind') == 'identifier':
                 value = children[-1]
@@ -170,6 +174,18 @@ def _collect_mcp_instances(tree: Any, content_bytes: bytes, mcp_ctor_names: set)
                     )
                 ):
                     instances.add(_get_text(children[0], content_bytes))
+        elif kind in ('required_parameter', 'optional_parameter'):
+            children = _children(node)
+            if children and _zero_arg(children[0], 'kind') == 'identifier':
+                for ch in children:
+                    if _zero_arg(ch, 'kind') != 'type_annotation':
+                        continue
+                    if any(
+                        _zero_arg(tch, 'kind') == 'type_identifier'
+                        and _get_text(tch, content_bytes) in mcp_ctor_names
+                        for tch in _children(ch)
+                    ):
+                        instances.add(_get_text(children[0], content_bytes))
         for ch in _children(node):
             stack.append(ch)
     return instances
@@ -338,8 +354,9 @@ def _process_call(
             })
             return
 
-    # MCP tool registration: server.tool(name, schema, handler) — only when
-    # `server` was constructed from the MCP SDK's McpServer (see BACK-785).
+    # MCP tool registration: server.tool(name, schema, handler) (legacy v1 API)
+    # or server.registerTool(name, config, handler) (current v2 API) — only
+    # when `server` was constructed from the MCP SDK's McpServer (see BACK-785).
     if method in _MCP_METHODS and obj in mcp_instances:
         arg = _get_call_first_arg_string(node, content_bytes)
         _add_once(surfaces['mcp'], {
