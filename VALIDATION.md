@@ -71,8 +71,10 @@ is a claim we have not yet checked, **not** a claim it is broken.
    recall (`calls://`) is now measured for all 18 (Python, TypeScript, Go,
    Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX, Zig, C, Lua,
    GDScript, Dart — BACK-730, closed).
-   `surface`, `contracts`, and `patches://`/testability have **no
-   ground-truth validation on any language** — see [Scope](#scope).
+   `surface`/`contracts` recall is now measured too (10 languages/
+   categories, BACK-719/791/815, see [Scope](#scope) below) — the one
+   remaining gap is `patches://`/testability, which has **no ground-truth
+   validation on any language**.
 3. **Sample size still varies.** Java's 97.5% includes `db` and `http`
    categories with one oracle instance each, both at 0% recall — the figure
    is carried by env/file/log/sleep. Swift's own sparsest category (`env`)
@@ -1684,20 +1686,39 @@ extraction layer. This closes the full calls:// recall sweep BACK-730 opened.
 It does not yet cover recall for `surface` or `contracts` (BACK-719) — see
 `ROADMAP.md` for the forward plan.
 
-**Update (arcane-fate-0724):** BACK-719 is now closed — `surface`'s `cli`,
-`http`, `mcp`, and `contracts` (interfaces + structural implementers) all
-have real-corpus recall measurement, most recently extended to 9 more
-languages via BACK-791/792 (Go, Rust, C++, Java, C#, PHP, Swift, Kotlin,
-Ruby — see each language's `dogfood-findings/*-surface-contracts-recall-oracle/README.md`).
-This program has **not yet** been through the second-corpus overfit-guard
-pass every other program in this doc required before being trusted (see
-BACK-669 above) — tracked as **BACK-815**. Go and Rust slices are done:
-Go's second corpus (`prometheus/client_golang`) held `cli`/`contracts-
-interfaces` at 100%/100% but found `contracts-structs` precision drops to
-93.15% on same-named/different-signature methods — a disclosed heuristic
-tradeoff, not a new bug, filed as BACK-816. Rust's second corpus
-(`tokio-rs/axum`) held all four categories at true 100%/100% after fixing
-one real oracle-only bug (the `http` oracle's `.route()` regex was silently
-dropping entries with a non-bare-identifier 2nd argument — not a reveal
-defect); details in `rust-surface-contracts-recall-oracle/README.md`'s
-"Second corpus (BACK-815)" section. 8 language slices remain.
+**Update (calm-thaw-0724): `surface`/`contracts` recall is now a fully
+closed, second-corpus-verified program — the same confidence tier as
+import/side-effect/call-graph recall above.** BACK-719 closed `surface`'s
+`cli`, `http`, `mcp`, and `contracts` (interfaces + structural implementers)
+against a first real corpus per language/category; BACK-791 then extended
+breadth to 9 more languages (Go, Rust, C++, Java, C#, PHP, Swift, Kotlin,
+Ruby); and **BACK-815 has now taken the whole program through the same
+second-corpus overfit-guard pass every other recall program in this doc
+required before being trusted** (see BACK-669 above) — the last gap this
+document flagged for `surface`/`contracts`. All 10 language/category
+slices (Go, Rust, C++, Java, C#, PHP, Ruby, Swift, Kotlin, and HTTP-routes
+Python+TS/JS — BACK-816 through BACK-825) are done, each re-run against a
+deliberately different second real-world corpus (a single-module library
+instead of a multi-binary app, a framework's own repo instead of a
+downstream consumer, a CLI tool instead of a web app, etc. — see each
+language's own `dogfood-findings/*-surface-contracts-recall-oracle/README.md`
+for its specific second corpus and results). Aggregate result: every
+measured category holds at 100%/100% or a disclosed-heuristic near-100%
+on the second corpus too — no category collapsed the way TypeScript's
+import recall once did (BACK-669's original motivation). Along the way the
+overfit-guard pass found and fixed 3 real oracle-side bugs (regression-
+checked byte-identical against each original corpus's committed results)
+and found and filed 6 new, narrow reveal-side residuals as tracked,
+not-yet-fixed tickets: BACK-816 (Go `contracts-structs`, same-named/
+different-return-type method matching), BACK-827/BACK-828 (C++ pure-
+virtual-destructor-only classes; out-of-line qualified nested classes),
+BACK-829 (Swift `~Copyable`/suppressed-conformance bases), BACK-830 (Kotlin
+class implementing a bare function-type supertype), and BACK-831 (TS `http`
+provenance missing a destructured-parameter-with-inline-object-type
+Express binding). None of these are recall collapses — each is a single
+disclosed idiom gap in an otherwise 100%-passing category, the same shape
+as this table's other footnoted residuals (BACK-738, BACK-742, BACK-756,
+BACK-768). `surface`/`contracts` recall is no longer the newest, least-
+verified signal in this document — see `tt show BACK-815` for the full
+ten-slice rollup and `internal-docs/planning/dogfood-findings/http-routes-recall-oracle/README.md`'s
+"Second corpus (BACK-815)" section for the closing slice's detail.
