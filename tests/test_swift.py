@@ -135,6 +135,38 @@ struct Rectangle {
         finally:
             os.unlink(temp_path)
 
+    def test_suppressed_conformance_noncopyable(self):
+        """~Copyable (Swift 5.9+ suppressed conformance) must not vanish from bases.
+
+        BACK-829: when ~Copyable is a type's ONLY conformance,
+        _swift_specifier_name previously returned None for the
+        inheritance_specifier -> suppressed_constraint -> ('~', type_identifier)
+        shape, so bases ended up [] and the type disappeared from contracts/
+        implementers output entirely.
+        """
+        code = '''struct Foo: ~Copyable {
+    var x: Int
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.swift', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = SwiftAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            classes = structure.get('classes', [])
+            foo = next((c for c in classes if c['name'] == 'Foo'), None)
+            self.assertIsNotNone(foo, "Foo should still be extracted as a type")
+            self.assertIn('bases', foo)
+            self.assertTrue(foo['bases'], "bases should not be empty for ~Copyable-only conformance")
+            self.assertIn('~Copyable', foo['bases'])
+
+        finally:
+            os.unlink(temp_path)
+
     def test_extract_protocols(self):
         """Should handle protocol definitions."""
         code = '''protocol Greetable {

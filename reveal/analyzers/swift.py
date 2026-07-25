@@ -122,4 +122,19 @@ class SwiftAnalyzer(TreeSitterAnalyzer):
                 text = self._get_node_text(child).strip()
                 if text:
                     return text
+            elif child.kind() == 'suppressed_constraint':
+                # Suppressed-conformance / noncopyable-type syntax (Swift 5.9+):
+                # `struct Foo: ~Copyable {}` parses as inheritance_specifier ->
+                # suppressed_constraint -> ('~', type_identifier). Without this
+                # branch the specifier is silently dropped; if `~Copyable` is a
+                # type's ONLY conformance, bases ends up [] and the type vanishes
+                # from 'contracts' implementers output entirely (BACK-829).
+                # Report as '~Copyable' (not 'Copyable') so it reads as a
+                # suppression rather than a normal conformance — distinct and
+                # informative to consumers of bases.
+                for sub in _children(child):
+                    if sub.kind() == 'type_identifier':
+                        text = self._get_node_text(sub).strip()
+                        if text:
+                            return f'~{text}'
         return None
