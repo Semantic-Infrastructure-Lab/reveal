@@ -732,6 +732,80 @@ class TestScanContractsJava(unittest.TestCase):
         report = _scan_contracts(Path(self.tmp))
         self.assertEqual(report['total_contracts'], 0)
 
+    def test_record_implementing_interface_classified_as_dataclass(self):
+        """BACK-810: `record_declaration` (Java 16+ records) is a distinct
+        tree-sitter-java node kind, sibling to (not matching)
+        `class_declaration` — previously fell through
+        `JavaAnalyzer._extract_class_bases`'s dispatch entirely (only
+        `class_declaration`/`interface_declaration` were recognized) to the
+        base TreeSitterAnalyzer's Python-shaped fallback, always returning
+        `[]` for a Java node. A record implementing an interface was
+        therefore completely invisible to `contracts`' implementer
+        classification (empty bases -> `_classify_ts` never assigns the
+        'implementation' category). Confirmed live against samples/java
+        (Elasticsearch)."""
+        self._write_java('Point.java', '''\
+            interface Named {
+                String name();
+            }
+            record Point(int x, int y) implements Named {
+                public String name() { return "point"; }
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl = next(c for c in report['dataclasses'] if c['name'] == 'Point')
+        self.assertIn('Named', impl['bases'])
+
+    def test_generic_and_qualified_bases_captured(self):
+        """BACK-810: a heritage-clause base carrying type arguments parses
+        to a `generic_type` node wrapping the real `type_identifier`
+        (`extends Bar<Baz>`), and a package/outer-class-qualified base
+        parses to a `scoped_type_identifier` (`extends pkg.Bar`) — NEITHER
+        wrapper kind matched `_extract_java_class_bases`'s/
+        `_extract_java_type_list`'s old bare-`type_identifier`-only check,
+        so any generic or qualified base name was silently dropped from
+        `bases` entirely. Not a rare shape: it's the dominant idiom for a
+        typed abstract-base/generic-interface implementer
+        (`extends AbstractIndexAnalyzerProvider<ArabicAnalyzer>`,
+        `implements ActionListener<Response>`) — confirmed to account for
+        the large majority (517/2527) of `contracts` implementer false
+        negatives measured against samples/java (Elasticsearch)."""
+        self._write_java('Generic.java', '''\
+            interface ActionListener<T> {
+                void onResponse(T response);
+            }
+            abstract class AbstractProvider<T> implements ActionListener<T> {
+            }
+            class ConcreteProvider extends AbstractProvider<String> implements Comparable<String> {
+                public void onResponse(String response) {}
+                public int compareTo(String o) { return 0; }
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        abstract_provider = next(c for c in report['abcs'] if c['name'] == 'AbstractProvider')
+        self.assertIn('ActionListener', abstract_provider['bases'])
+        concrete = next(c for c in report['dataclasses'] if c['name'] == 'ConcreteProvider')
+        self.assertIn('AbstractProvider', concrete['bases'])
+        self.assertIn('Comparable', concrete['bases'])
+
+    def test_qualified_superclass_base_captured(self):
+        """BACK-810: a package-qualified `extends` base (`extends pkg.Bar`,
+        no generics) parses to a `scoped_type_identifier` — the base's own
+        simple name is the RIGHTMOST `type_identifier` child of the
+        (possibly left-recursively nested) scoped identifier."""
+        self._write_java('Qualified.java', '''\
+            package app;
+            abstract class Base {
+                abstract void run();
+            }
+            class Impl extends app.Base {
+                void run() {}
+            }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl = next(c for c in report['dataclasses'] if c['name'] == 'Impl')
+        self.assertIn('Base', impl['bases'])
+
 
 class TestScanContractsCSharp(unittest.TestCase):
     """Tests for C# contract detection (BACK-403 pt 2)."""
