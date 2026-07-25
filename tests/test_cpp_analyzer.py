@@ -832,6 +832,47 @@ public:
         finally:
             os.unlink(temp_path)
 
+    def test_contracts_out_of_line_qualified_nested_class(self):
+        """BACK-828: an out-of-line qualified nested-class definition
+        (`class Outer::Inner : public Base { ... }`) names itself with a
+        `qualified_identifier` node, not a bare `type_identifier` — verified
+        via `reveal file.cpp --show-ast`. `nav_contracts_cpp._class_name`
+        previously only matched `type_identifier`, so `_process_class`
+        silently dropped the whole class (and its `Base` inheritance) from
+        `contracts` output. Regression: the class must be visible under its
+        unqualified name "Inner", carrying `Base` in its bases, and `Base`
+        (a pure-virtual abstract class) must show as abstract."""
+        code = '''class Base {
+public:
+    virtual void foo() = 0;
+};
+
+class Outer {
+public:
+    class Inner;
+};
+
+class Outer::Inner : public Base {
+public:
+    void foo() override {}
+};
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            from reveal.adapters.ast.nav_contracts_cpp import scan_file_contracts_cpp
+            scanned = scan_file_contracts_cpp(temp_path)
+            classes = {c['name']: c for c in scanned['classes']}
+
+            self.assertIn('Inner', classes)
+            self.assertIn('Base', classes['Inner']['bases'])
+            self.assertTrue(classes['Base']['is_abstract'])
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()

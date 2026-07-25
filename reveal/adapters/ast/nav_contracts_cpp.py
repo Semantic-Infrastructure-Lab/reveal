@@ -59,8 +59,26 @@ def scan_file_contracts_cpp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _class_name(node: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(node):
-        if _zero_arg(ch, 'kind') == 'type_identifier':
+        kind = _zero_arg(ch, 'kind')
+        if kind == 'type_identifier':
             return _get_text(ch, content_bytes)
+        # BACK-828: an out-of-line qualified nested-class definition
+        # (`class Outer::Inner : public Base { ... }`) names itself with a
+        # `qualified_identifier` (namespace_identifier "Outer", "::",
+        # type_identifier "Inner") directly under `class_specifier` — never
+        # a bare `type_identifier` — verified via `reveal file.cpp
+        # --show-ast`. Without this branch, `_class_name` returned None and
+        # `_process_class` dropped the class entirely: neither the class
+        # itself nor its base-class relationship (real one, e.g. `Base`)
+        # ever reached `contracts`. Reuse `_type_tail`'s rightmost-segment
+        # unwrap (same one already used for base-class names below) so the
+        # class is visible under its unqualified name "Inner" — matching
+        # how the nested forward declaration (`class Outer { class Inner;
+        # };`) would already report it.
+        if kind == 'qualified_identifier':
+            name = _type_tail(ch, content_bytes)
+            if name is not None:
+                return name
     return None
 
 
