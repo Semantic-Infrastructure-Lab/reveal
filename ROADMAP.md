@@ -175,9 +175,18 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   Design doc: `internal-docs/planning/BACK-719-surface-contracts-oracle-design.md`.
 - **Next, in priority order.** Import recall, side-effect recall, and now
   surface/contracts recall are all measured (see Done, above). The remaining
-  confidence gap in this track is the tracked import-recall residuals below:
+  confidence gaps in this track:
 
-  1. **Close the tracked import-recall residual:**
+  1. **BACK-815 — second-corpus overfit guard for surface/contracts.**
+     Every other recall program above (import, side-effect, call-graph) was
+     re-run against a second, unrelated real corpus before being trusted
+     (see Done, above), and that pass found real bugs in 6+ languages. The
+     surface/contracts program never got that treatment. Go slice done
+     (arcane-fate-0724): held 100%/100% on `cli` and `contracts-interfaces`,
+     but `contracts-structs` precision dropped to 93.15% on a second
+     corpus — a disclosed name-only-matching tradeoff, not a new bug
+     (BACK-816). 9 language slices remain.
+  2. **Close the tracked import-recall residual:**
      TypeScript/nest 81.21% (both known resolution gaps now fixed —
      tsconfig-extends chains chilling-lightning-0723, package.json
      exports-map stormy-mistral-0723 — but neither yet re-measured against

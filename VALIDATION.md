@@ -1683,3 +1683,16 @@ BACK-745, C's BACK-756, and Dart's BACK-768), none fixable in reveal's Python
 extraction layer. This closes the full calls:// recall sweep BACK-730 opened.
 It does not yet cover recall for `surface` or `contracts` (BACK-719) — see
 `ROADMAP.md` for the forward plan.
+
+**Update (arcane-fate-0724):** BACK-719 is now closed — `surface`'s `cli`,
+`http`, `mcp`, and `contracts` (interfaces + structural implementers) all
+have real-corpus recall measurement, most recently extended to 9 more
+languages via BACK-791/792 (Go, Rust, C++, Java, C#, PHP, Swift, Kotlin,
+Ruby — see each language's `dogfood-findings/*-surface-contracts-recall-oracle/README.md`).
+This program has **not yet** been through the second-corpus overfit-guard
+pass every other program in this doc required before being trusted (see
+BACK-669 above) — tracked as **BACK-815**. The Go slice is done (a second
+corpus, `prometheus/client_golang`, held `cli`/`contracts-interfaces` at
+100%/100% but found `contracts-structs` precision drops to 93.15% on
+same-named/different-signature methods — a disclosed heuristic tradeoff,
+not a new bug, filed as BACK-816). 9 language slices remain.
