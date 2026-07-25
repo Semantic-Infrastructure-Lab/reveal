@@ -1691,8 +1691,13 @@ languages via BACK-791/792 (Go, Rust, C++, Java, C#, PHP, Swift, Kotlin,
 Ruby — see each language's `dogfood-findings/*-surface-contracts-recall-oracle/README.md`).
 This program has **not yet** been through the second-corpus overfit-guard
 pass every other program in this doc required before being trusted (see
-BACK-669 above) — tracked as **BACK-815**. The Go slice is done (a second
-corpus, `prometheus/client_golang`, held `cli`/`contracts-interfaces` at
-100%/100% but found `contracts-structs` precision drops to 93.15% on
-same-named/different-signature methods — a disclosed heuristic tradeoff,
-not a new bug, filed as BACK-816). 9 language slices remain.
+BACK-669 above) — tracked as **BACK-815**. Go and Rust slices are done:
+Go's second corpus (`prometheus/client_golang`) held `cli`/`contracts-
+interfaces` at 100%/100% but found `contracts-structs` precision drops to
+93.15% on same-named/different-signature methods — a disclosed heuristic
+tradeoff, not a new bug, filed as BACK-816. Rust's second corpus
+(`tokio-rs/axum`) held all four categories at true 100%/100% after fixing
+one real oracle-only bug (the `http` oracle's `.route()` regex was silently
+dropping entries with a non-bare-identifier 2nd argument — not a reveal
+defect); details in `rust-surface-contracts-recall-oracle/README.md`'s
+"Second corpus (BACK-815)" section. 8 language slices remain.
