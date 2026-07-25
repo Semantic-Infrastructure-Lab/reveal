@@ -99,6 +99,42 @@ class Derived : Base() {
         finally:
             os.unlink(temp_path)
 
+    def test_function_type_supertype_bases_not_dropped(self):
+        """BACK-830: a bare function-type supertype (class Foo(...) : () -> T)
+        must not silently drop the whole bases list / vanish the class from
+        implementer output — it should report a synthetic name instead."""
+        code = '''import java.io.InputStream
+
+class ChildLoadedClass(private val resourceName: String) : () -> InputStream? {
+    override fun invoke(): InputStream? {
+        return null
+    }
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.kt', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = KotlinAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            self.assertIn('classes', structure)
+            classes = {c['name']: c for c in structure['classes']}
+
+            # The class itself must not vanish from the output.
+            self.assertIn('ChildLoadedClass', classes)
+
+            # The delegation clause must contribute a synthetic base name
+            # rather than silently producing an empty bases list.
+            bases = classes['ChildLoadedClass'].get('bases', [])
+            self.assertTrue(bases, "bases should not be empty for a function-type supertype")
+            self.assertTrue(any('InputStream' in b for b in bases))
+
+        finally:
+            os.unlink(temp_path)
+
     def test_data_classes(self):
         """Should extract data class definitions."""
         code = '''data class User(val id: Int, val name: String, val email: String)

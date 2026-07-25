@@ -138,6 +138,16 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
                         break
                 if name:
                     return name
+            elif child.kind() == 'function_type':
+                # class Foo(...) : () -> T — a bare function-type supertype has
+                # no identifiable base name (it's structural, not nominal), but
+                # dropping it silently vanishes the whole delegation clause (and
+                # any sibling bases) from bases. Report the literal source text
+                # ('() -> T') as a synthetic name so the class still shows up in
+                # contracts/implementers output (BACK-830).
+                text = self._get_node_text(child).strip()
+                if text:
+                    return text
         return None
 
     def _kotlin_user_type_name(self, container) -> Optional[str]:
