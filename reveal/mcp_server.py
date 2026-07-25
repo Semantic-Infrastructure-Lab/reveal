@@ -22,8 +22,17 @@ import os
 import sys
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from .cli.defaults import _default_args
+
+# All reveal-mcp tools are read-only (no writes, no side effects) and
+# idempotent (same args -> same result, modulo underlying files changing).
+# reveal_query is the exception for openWorldHint: several of its adapters
+# (ssl://, domain://, mysql://) reach external network services, while the
+# rest of the tools only ever touch the local filesystem/git repo.
+_LOCAL_READONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False)
+_OPEN_WORLD_READONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True)
 
 # Suppress update-check prints that would corrupt MCP tool responses.
 os.environ.setdefault('REVEAL_NO_UPDATE_CHECK', '1')
@@ -94,7 +103,7 @@ def _run_and_capture(fn, *args, **kwargs) -> str:
 
 
 
-@mcp.tool()
+@mcp.tool(annotations=_LOCAL_READONLY)
 def reveal_structure(path: str) -> str:
     """Get the semantic structure of a file or directory.
 
@@ -139,7 +148,7 @@ def reveal_structure(path: str) -> str:
     return _run_and_capture(show_structure, analyzer, 'text', args)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_LOCAL_READONLY)
 def reveal_element(path: str, element: str) -> str:
     """Extract a specific function or class from a file.
 
@@ -190,7 +199,7 @@ _NAV_VAR_NAME_FLAGS = {
 }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_LOCAL_READONLY)
 def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
     """Run a nav analysis flag on a function or line range — the deep-dive layer.
 
@@ -238,7 +247,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
     return _run_and_capture(handle_file, path, element, False, 'text', args)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_OPEN_WORLD_READONLY)
 def reveal_query(uri: str) -> str:
     """Run a reveal URI query across any adapter (``scheme://resource?query`` syntax).
 
@@ -259,7 +268,7 @@ def reveal_query(uri: str) -> str:
     return _run_and_capture(handle_uri, uri, None, args)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_LOCAL_READONLY)
 def reveal_pack(
     path: str,
     budget: int = 8000,
@@ -319,7 +328,7 @@ def reveal_pack(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_LOCAL_READONLY)
 def reveal_check(path: str, severity: str = '') -> str:
     """Run quality checks on a file or directory.
 
