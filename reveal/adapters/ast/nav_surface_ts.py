@@ -276,11 +276,99 @@ def _is_express_constructor_call(call_node: Any, content_bytes: bytes, default_n
     return False
 
 
+def _type_node_is_express_instance(type_node: Any, content_bytes: bytes) -> bool:
+    """True if `type_node` (the value inside a `type_annotation`, e.g. the
+    `Application` in `: Application` or the `express.Application` in
+    `: express.Application`) names one of `_EXPRESS_INSTANCE_TYPES` — either
+    a bare `type_identifier` or the rightmost segment of a qualified
+    `nested_type_identifier` (BACK-831: `express.Application` is the
+    dominant real-world shape once `express` is imported as a namespace
+    rather than destructuring `Application` by name)."""
+    kind = _zero_arg(type_node, 'kind')
+    if kind == 'type_identifier':
+        return _get_text(type_node, content_bytes) in _EXPRESS_INSTANCE_TYPES
+    if kind == 'nested_type_identifier':
+        children = _children(type_node)
+        return bool(children) and _type_node_is_express_instance(children[-1], content_bytes)
+    return False
+
+
+def _annotation_is_express_instance(type_annotation_node: Any, content_bytes: bytes) -> bool:
+    """True if a `type_annotation` node's contained type resolves to an
+    Express instance type."""
+    return any(
+        _type_node_is_express_instance(tch, content_bytes)
+        for tch in _children(type_annotation_node)
+    )
+
+
+def _destructured_express_names(param_node: Any, content_bytes: bytes) -> set:
+    """BACK-831: a destructured parameter with an inline object-type
+    annotation — `({ app }: { app: express.Application }) => ...` — binds
+    `app` to the Express instance, but the type lives on a
+    `property_signature` inside the annotation's `object_type`, one level
+    removed from the identifier itself (unlike the plain `(app: Application)`
+    shape). Match each destructured property name against its sibling
+    `property_signature`'s type and return the bound local names whose type
+    resolves to an Express instance."""
+    names: set = set()
+    children = _children(param_node)
+    if not children or _zero_arg(children[0], 'kind') != 'object_pattern':
+        return names
+    pattern_node = children[0]
+    annotation_node = next(
+        (ch for ch in children if _zero_arg(ch, 'kind') == 'type_annotation'), None
+    )
+    if annotation_node is None:
+        return names
+    object_type_node = next(
+        (ch for ch in _children(annotation_node) if _zero_arg(ch, 'kind') == 'object_type'), None
+    )
+    if object_type_node is None:
+        return names
+
+    # property name -> its declared type (property_signature's type_annotation)
+    declared_types: Dict[str, Any] = {}
+    for prop in _children(object_type_node):
+        if _zero_arg(prop, 'kind') != 'property_signature':
+            continue
+        prop_children = _children(prop)
+        if not prop_children or _zero_arg(prop_children[0], 'kind') != 'property_identifier':
+            continue
+        prop_name = _get_text(prop_children[0], content_bytes)
+        prop_annotation = next(
+            (pch for pch in prop_children if _zero_arg(pch, 'kind') == 'type_annotation'), None
+        )
+        if prop_annotation is not None:
+            declared_types[prop_name] = prop_annotation
+
+    for pch in _children(pattern_node):
+        pk = _zero_arg(pch, 'kind')
+        if pk == 'shorthand_property_identifier_pattern':
+            # `{ app }` — bound local name is the same as the property name
+            source_name = local_name = _get_text(pch, content_bytes)
+        elif pk == 'pair_pattern':
+            # `{ app: theApp }` — renamed binding
+            pair_children = _children(pch)
+            if len(pair_children) < 2 or _zero_arg(pair_children[0], 'kind') != 'property_identifier':
+                continue
+            source_name = _get_text(pair_children[0], content_bytes)
+            local_name = _get_text(pair_children[-1], content_bytes)
+        else:
+            continue
+        prop_annotation = declared_types.get(source_name)
+        if prop_annotation is not None and _annotation_is_express_instance(prop_annotation, content_bytes):
+            names.add(local_name)
+    return names
+
+
 def _collect_express_instances(tree: Any, content_bytes: bytes) -> set:
     """Variable names bound to an Express app/router — `express()`,
     `express.Router()`, a bare `Router()` (named import, the dominant
     modular-router shape — see node-express-realworld-example-app) — plus
-    function parameters typed `Application`/`Express`/`Router`."""
+    function parameters typed `Application`/`Express`/`Router` (bare or
+    `express.`-qualified), including destructured parameters with an inline
+    object-type annotation (BACK-831)."""
     default_name, router_names = _collect_express_import_names(tree, content_bytes)
     instances: set = set()
     stack = [tree_root(tree)]
@@ -301,12 +389,10 @@ def _collect_express_instances(tree: Any, content_bytes: bytes) -> set:
                 for ch in children:
                     if _zero_arg(ch, 'kind') != 'type_annotation':
                         continue
-                    if any(
-                        _zero_arg(tch, 'kind') == 'type_identifier'
-                        and _get_text(tch, content_bytes) in _EXPRESS_INSTANCE_TYPES
-                        for tch in _children(ch)
-                    ):
+                    if _annotation_is_express_instance(ch, content_bytes):
                         instances.add(_get_text(children[0], content_bytes))
+            else:
+                instances |= _destructured_express_names(node, content_bytes)
         for ch in _children(node):
             stack.append(ch)
     return instances

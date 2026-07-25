@@ -1013,6 +1013,63 @@ cache.get("/not/a/route");
 ''')
         self.assertEqual(result['http'], [])
 
+    def test_qualified_typed_parameter_detected(self):
+        # BACK-831 follow-up: `express.Application` (a namespace-qualified
+        # type, not a destructured `Application` import) wasn't matched by
+        # the plain, non-destructured typed-parameter case either.
+        result = self._scan_ts('routes.ts', '''\
+import express from "express";
+
+export const setupRoutes = (app: express.Application) => {
+  app.get("/y", handler);
+};
+''')
+        self.assertIn('/y', [e['path'] for e in result['http']])
+
+    def test_destructured_typed_parameter_detected(self):
+        # BACK-831: real-world shape from santiq/bulletproof-nodejs's
+        # loaders/express.ts — `app` arrives via object-destructuring with
+        # an inline object-type annotation, not a direct `identifier:
+        # TypeIdentifier` parameter. Both routes on `app` were silently
+        # dropped before this fix.
+        result = self._scan_ts('express.ts', '''\
+import express from "express";
+
+export default ({ app }: { app: express.Application }) => {
+  app.get("/status", handler);
+  app.head("/status", handler);
+};
+''')
+        paths = [(e['path'], e['methods']) for e in result['http']]
+        self.assertIn(('/status', 'GET'), paths)
+        self.assertIn(('/status', 'HEAD'), paths)
+
+    def test_destructured_renamed_typed_parameter_detected(self):
+        # Renamed destructuring binding (`{ app: theApp }`) should resolve
+        # against the local name, not the original property name.
+        result = self._scan_ts('express.ts', '''\
+import express from "express";
+
+export default ({ app: theApp }: { app: express.Application }) => {
+  theApp.get("/renamed", handler);
+};
+''')
+        self.assertIn('/renamed', [e['path'] for e in result['http']])
+
+    def test_destructured_unrelated_property_excluded(self):
+        # Precision guard: a destructured property whose declared type is
+        # not an Express instance type must not be treated as one.
+        result = self._scan_ts('cache.ts', '''\
+class Cache {
+  get(path: string) { return null; }
+}
+
+export const setup = ({ cache }: { cache: Cache }) => {
+  cache.get("/not/a/route");
+};
+''')
+        self.assertEqual(result['http'], [])
+
 
 class TestMcpToolProvenanceTS(unittest.TestCase):
     """BACK-785: TS's mcp category didn't exist at all — server.tool(...) is an
