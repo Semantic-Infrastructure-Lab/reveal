@@ -190,22 +190,32 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   rollup, `VALIDATION.md`'s Scope section for the promoted confidence-tier
   summary, and each language's own
   `internal-docs/planning/dogfood-findings/*-surface-contracts-recall-oracle/README.md`.
-- **Next, in priority order.** Import recall, side-effect recall, and
-  surface/contracts recall (now including its second-corpus pass) are all
-  measured (see Done, above). The remaining confidence gap in this track:
+- **Next, in priority order.** Import recall, side-effect recall,
+  call-graph recall, and surface/contracts recall (now including its
+  second-corpus pass) are all measured (see Done, above), including the
+  TypeScript/nest import-recall residual — fixed (81.21% → 99.93%) and
+  re-measured and confirmed against nest (super-overlord-0723); it no
+  longer appears in VALIDATION.md's residual table. The remaining
+  confidence gap in this track:
 
-  1. **Close the tracked import-recall residual:**
-     TypeScript/nest 81.21% (both known resolution gaps now fixed —
-     tsconfig-extends chains chilling-lightning-0723, package.json
-     exports-map stormy-mistral-0723 — but neither yet re-measured against
-     nest; still the lowest number in VALIDATION.md, on a flagship
-     language, with real headroom pending that re-measurement).
+  1. **`patches://`/testability has no ground-truth validation on any
+     language** — not even Python or TS, where the signal is implemented
+     (VALIDATION.md footnote 2). This is a different kind of gap than the
+     other three signals: it isn't a residual within a measured program,
+     it's a signal that has never been run through the
+     independent-oracle-diff method at all. Building that first oracle loop
+     (Python or TS, whichever has an easier ground truth — e.g. an existing
+     test-coverage tool) would establish the method for this signal the same
+     way the import-recall program's first oracle loops did.
 
   *Not on this list, deliberately:* `patches://`/testability language breadth
   past Python + TS is filed as an idea rather than committed work — see
-  `tt show BACK-632`. Note that `surface`/`contracts` themselves already reached
-  11-language *coverage* parity (BACK-588/630/631) — real recall validation is
-  the item above, not this note. Swift's `_RopeModule` residual is closed by design (BACK-704):
+  `tt show BACK-632`. That ticket is about extending coverage to more
+  languages, which is a step *after* the item above (a first ground-truth
+  loop doesn't exist yet for any language). Note that `surface`/`contracts`
+  themselves already reached 11-language *coverage* parity (BACK-588/630/631)
+  — real recall validation is the item above, not this note. Swift's
+  `_RopeModule` residual is closed by design (BACK-704):
   resolving it would require evaluating arbitrary `Package.swift` code, which
   the buildless architecture will not do. PHP/osCommerce 74.65% (BACK-681,
   CWD/chdir-dependent bare-literal `require`/`include`) and C#/Newtonsoft.Json

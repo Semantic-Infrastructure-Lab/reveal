@@ -56,7 +56,7 @@ reveal reveal/file_handler.py handle_file  # +809 tokens: drill into the one tha
 | `cat reveals/adapters/calls/adapter.py` | 4,128 | baseline |
 | `reveal reveal/adapters/calls/adapter.py` | 275 | **15x** |
 
-15x is near the top of the claimed 10–150x range. It's typical for a focused module with many small functions.
+15x is the top of the typical measured range. It's characteristic of a focused module with many small functions — the shape where structure carries almost all the meaning and the bodies carry almost none.
 
 ---
 
@@ -141,7 +141,19 @@ The 33x reduction is real: Reveal eliminates the manual cross-reference work. Wh
 - The file is large and only part of it matters (structure vs cat)
 - The question has a direct answer (uncalled, callers) vs requiring synthesis (manual cross-reference)
 
-**Why not always 150x?** The 10–150x claim is the architectural range. The lower end applies to smaller files or cases where you read the whole structure. The upper end applies to deep dives into large files where only one function matters.
+**On the retired "10–150x" claim.** Earlier docs headlined a 10–150x range. These
+measurements do not support it at either end: the floor is 3.9x, not 10x (the
+most ordinary case — reading one large file — is the *worst* ratio, not a
+mid-range one), and nothing here approaches 150x. That number came from
+comparing unlike operations — a directory-structure listing against `cat` of a
+whole file — which measures the difference between two questions, not the
+saving on one. **3.9–33x measured, typically 3.9–15x, is the claim this file
+supports, and this file is the only source for it.** If a number appears
+elsewhere in the docs, it is either sourced here or it is wrong.
+
+What actually moves the ratio: how large the file is relative to the part you
+need, and whether the question has a direct structural answer (callers,
+uncalled) versus requiring you to read and synthesize.
 
 ---
 

@@ -15,7 +15,7 @@ env access: ``getenv('KEY')`` and the ``$_ENV['KEY']`` superglobal (``$_SERVER``
 is deliberately excluded — it is a request superglobal, not env config, and
 folding it in floods the read with request-header noise).
 
-network/db/sdk egress: ``use`` import-root taxonomy (PHP namespaces use ``\``
+network/db/sdk egress: ``use`` import-root taxonomy (PHP namespaces use ``\\``
 separators). PHP builtins (PDO/mysqli/curl) are language constructs, not ``use``
 imports, so — as with the other curated-taxonomy scanners — they are not tracked.
 

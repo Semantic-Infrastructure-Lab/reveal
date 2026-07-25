@@ -176,10 +176,17 @@ class TestCLIFlagParsing:
     """Test --validate-schema flag parsing."""
 
     def test_validate_schema_flag_exists(self):
-        """Test that --validate-schema flag is recognized."""
+        """Test that --validate-schema flag is recognized.
+
+        The flag lives in a file-specific group, so default --help lists it in
+        that group's collapsed digest and --help-all carries the full signature.
+        """
         result = run_reveal(['--help'], check=True)
         assert '--validate-schema' in result.stdout
-        assert 'SCHEMA' in result.stdout
+
+        full = run_reveal(['--help-all'], check=True)
+        assert '--validate-schema' in full.stdout
+        assert 'SCHEMA' in full.stdout
 
     def test_validate_schema_requires_argument(self, valid_session_readme):
         """Test that --validate-schema requires a schema argument."""

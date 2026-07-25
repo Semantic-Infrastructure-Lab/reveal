@@ -67,7 +67,11 @@ class TestBack522ScopedUsageError:
         Directly asserts the old (unscoped) argparse.ArgumentParser.error
         path is what BACK-522 replaced, by checking format_usage() on the
         raw parser contains the unrelated flag the scoped path suppresses.
+
+        Built with ``full_help=True`` because the default parser now collapses
+        adapter-specific groups out of the usage block — this pin is about the
+        unscoped usage baseline, which is what --help-all renders.
         """
-        parser = create_argument_parser('test')
+        parser = create_argument_parser('test', full_help=True)
         full_usage = parser.format_usage()
         assert '--cpanel-certs' in full_usage

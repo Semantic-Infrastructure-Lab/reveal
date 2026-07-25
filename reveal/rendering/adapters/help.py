@@ -782,10 +782,43 @@ def _render_schema_footer(adapter: str) -> None:
     print()
 
 
+def _render_output_type_schema(data: Dict[str, Any]) -> None:
+    """Render help://schemas/<adapter>/<output_type> — one type's drill-down."""
+    adapter = data.get('adapter', '')
+    output_type = data.get('output_type', '')
+    detail = data.get('detail', {}) or {}
+    print(f"# {adapter}:// Schema — {output_type}")
+    print()
+    if detail.get('description'):
+        print(f"**Description:** {detail['description']}")
+        print()
+    properties = (detail.get('schema') or {}).get('properties') or {}
+    if properties:
+        print("## Fields")
+        for name, prop in properties.items():
+            if not isinstance(prop, dict):
+                continue
+            ptype = prop.get('const', prop.get('type', ''))
+            line = f"  {name}: {ptype}"
+            if prop.get('description'):
+                line += f" — {prop['description']}"
+            print(line)
+        print()
+    print("---")
+    print()
+    print("## See Also")
+    print(f"  reveal help://schemas/{adapter}            # back to adapter summary")
+    print()
+
+
 def _render_adapter_schema(data: Dict[str, Any]) -> None:
     """Render help://schemas/<adapter> — machine-readable adapter schema."""
     if 'error' in data or (not data.get('adapter') and data.get('available_adapters')):
         _render_schema_error(data)
+        return
+
+    if 'detail' in data and 'output_type' in data:
+        _render_output_type_schema(data)
         return
 
     adapter = data.get('adapter', '')

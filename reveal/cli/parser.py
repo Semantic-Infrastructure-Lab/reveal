@@ -3,6 +3,7 @@
 import sys
 import argparse
 import shutil
+from typing import Optional
 
 
 def _build_core_examples() -> str:
@@ -159,17 +160,37 @@ Agents: reveal --agent-help  ·  Task routing: reveal help://quick
 '''
 
 
-def build_help_epilog() -> str:
-    """Build dynamic help with conditional jq examples."""
+def build_help_epilog(full: bool = True) -> str:
+    """Build dynamic help with conditional jq examples.
+
+    Args:
+        full: Include the adapter and jq example blocks. The default ``--help``
+            omits them — the adapter examples restate what ``help://quick`` and
+            ``help://adapters`` already serve on demand, so carrying them here
+            charges every reader for a second copy.
+    """
     has_jq = shutil.which('jq') is not None
 
     help_text = _build_subcommands_section()
     help_text += _build_core_examples()
+    if not full:
+        return help_text + _build_more_help_pointer()
     if has_jq:
         help_text += _build_jq_examples()
     help_text += _build_adapter_examples()
 
     return help_text
+
+
+def _build_more_help_pointer() -> str:
+    """Point at the tiers that hold what the collapsed help leaves out."""
+    return '''
+More:
+  reveal --help-all              # every flag, including adapter-specific groups
+  reveal help://quick            # which adapter/flag fits what you want to do
+  reveal help://examples         # task-based query recipes
+  reveal --agent-help            # orientation written for AI agents
+'''
 
 
 def _add_global_options(target) -> None:
@@ -209,6 +230,63 @@ def _add_positional_arguments(parser: argparse.ArgumentParser, version: str) -> 
     parser.add_argument('path', nargs='?', help='File or directory to reveal')
     parser.add_argument('element', nargs='?', help='Element to extract: name (load_config), Class.method, :N or bare integer (line number → enclosing element), :N-M (line range), @N (Nth element)')
     parser.add_argument('--version', action='version', version=f'reveal {version}')
+    parser.add_argument('--help-all', action=_HelpAllAction, nargs=0,
+                        help='Show every flag, including file- and adapter-specific groups')
+
+
+class _HelpAllAction(argparse.Action):
+    """``--help-all``: print the uncollapsed help.
+
+    The parser is built uncollapsed whenever ``--help-all`` appears in argv (see
+    ``create_parser``), so plain ``print_help()`` already renders every group.
+    """
+
+    # type: ignore[no-untyped-def]
+    def __call__(self, parser, namespace, values, option_string=None):
+        parser.print_help()
+        parser.exit()
+
+
+# Groups kept fully expanded in the default --help. Everything else collapses to
+# a title + one-line flag digest, because a flat dump of every file- and
+# adapter-specific flag made --help the most expensive help tier reveal has
+# (~8,200 tokens, 532 lines) — the opposite of the progressive disclosure the
+# rest of the help system is built on.
+_ALWAYS_EXPANDED_GROUPS = (
+    'Output',
+    'Discovery',
+    'Navigation',
+    'Display',
+)
+
+
+def _collapse_specialized_groups(parser: argparse.ArgumentParser) -> None:
+    """Hide specialized groups' individual flags behind a one-line digest.
+
+    Suppressed actions still parse normally — they only stop being *printed*,
+    which also drops them from argparse's usage block (the bulk of the old
+    output). ``--help-all`` rebuilds the parser without this pass.
+    """
+    for group in parser._action_groups:
+        title = (group.title or '')
+        if title.split(' ')[0] in _ALWAYS_EXPANDED_GROUPS:
+            continue
+        if title in ('positional arguments', 'options'):
+            continue
+        flags = [
+            action.option_strings[0]
+            for action in group._group_actions
+            if action.option_strings and action.help is not argparse.SUPPRESS
+        ]
+        if not flags:
+            continue
+        shown, rest = flags[:4], flags[4:]
+        digest = ', '.join(shown)
+        if rest:
+            digest += f', +{len(rest)} more'
+        group.description = f'  {digest}\n  (reveal --help-all to expand)'
+        for action in group._group_actions:
+            action.help = argparse.SUPPRESS
 
 
 def _add_discovery_options(group) -> None:
@@ -627,19 +705,26 @@ class _ScopedErrorArgumentParser(argparse.ArgumentParser):
         return f'[{metavar}]' if action.nargs == '?' else metavar
 
 
-def create_argument_parser(version: str) -> argparse.ArgumentParser:
+def create_argument_parser(
+    version: str, full_help: Optional[bool] = None
+) -> argparse.ArgumentParser:
     """Create and configure the command-line argument parser.
 
     Args:
         version: Version string to display with --version
+        full_help: Render every flag group instead of collapsing the specialized
+            ones. Defaults to whether ``--help-all`` appears in argv, so the
+            expanded parser exists by the time that flag's action fires.
 
     Returns:
         Configured ArgumentParser instance
     """
+    if full_help is None:
+        full_help = '--help-all' in sys.argv
     parser = _ScopedErrorArgumentParser(
         description='Reveal: Explore code semantically - The simplest way to understand code',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=build_help_epilog(),
+        epilog=build_help_epilog(full=full_help),
     )
 
     # Positionals and --version go on the parser directly (not in any group)
@@ -705,6 +790,9 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
         'Nginx / cPanel  [adapter-specific — nginx config files and cpanel:// URIs]'
     )
     _add_extraction_options(g_nginx)
+
+    if not full_help:
+        _collapse_specialized_groups(parser)
 
     return parser
 

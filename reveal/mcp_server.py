@@ -273,7 +273,7 @@ def reveal_query(uri: str) -> str:
       ``calls://src/?uncalled``                       dead code detection
       ``calls://src/?rank=callers&top=20``            most-coupled functions
       ``imports://src/?unused``                       unused imports
-      ``diff://git://main/.:git://HEAD/.``            PR structural diff
+      ``diff://git://HEAD~1/.:git://HEAD/.``          PR structural diff
       ``ssl://api.example.com``                       certificate status
       ``domain://example.com``                        DNS/WHOIS/email health
       ``mysql://db/?type=replication``                database replication

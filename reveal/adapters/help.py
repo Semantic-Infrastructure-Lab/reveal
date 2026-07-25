@@ -577,8 +577,13 @@ class HelpAdapter(ResourceAdapter):
                 ],
             }
         if topic.startswith('schemas/'):
-            adapter_name = topic.split('/', 1)[1]
-            return self._get_adapter_schema(adapter_name)
+            remainder = topic.split('/', 1)[1]
+            # help://schemas/<adapter>/<output_type> drills into one output type;
+            # help://schemas/<adapter>/full returns the unsummarized payload.
+            if '/' in remainder:
+                adapter_name, section = remainder.split('/', 1)
+                return self._get_adapter_schema(adapter_name, section=section)
+            return self._get_adapter_schema(remainder)
 
         # Check for examples route: help://examples/security
         # Bare 'examples' and 'examples/' show the task list (same as passing empty task)
@@ -982,7 +987,7 @@ class HelpAdapter(ResourceAdapter):
                 {'want': 'check import health / circular deps',
                  'use': 'imports://', 'example': "reveal imports://src/"},
                 {'want': 'compare files or git revisions',
-                 'use': 'diff://', 'example': "reveal diff://git://main/.:git://HEAD/."},
+                 'use': 'diff://', 'example': "reveal diff://git://HEAD~1/.:git://HEAD/."},
                 {'want': 'SSL/TLS certificate status',
                  'use': 'ssl://', 'example': "reveal ssl://example.com --check"},
                 {'want': 'full server audit (SSL + ACL + nginx)',
@@ -1144,6 +1149,7 @@ class HelpAdapter(ResourceAdapter):
         return {
             'type': 'static_help',
             'topic': 'anti-patterns',
+            'file': 'AGENT_HELP.md',
             'content': '\n'.join(section_lines),
             'note': 'Extracted from AGENT_HELP.md — use help://agent for the complete guide.',
         }
@@ -1336,11 +1342,110 @@ class HelpAdapter(ResourceAdapter):
                 continue
         return sorted(schemes)
 
-    def _get_adapter_schema(self, adapter_name: str) -> Optional[Dict[str, Any]]:
+    # Only adapters far above the typical example count are trimmed; at 15 this
+    # bites claude:// (43) alone and leaves every other adapter's list intact.
+    _MAX_DEFAULT_EXAMPLES = 15
+
+    def _summarize_schema(
+        self, adapter_name: str, schema_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Trim a schema payload to its discovery tier.
+
+        Two reductions, both reversible via ``help://schemas/<adapter>/full``:
+
+        * Per-output-type JSON-Schema bodies are dropped. They are the bulk of a
+          large adapter's payload (47% of claude://'s, once ~10,000 tokens) and
+          nothing consumes them programmatically — ``--discover`` already reduces
+          output_types to bare names and the contract-compliance tests read only
+          ``['type']``. Names and descriptions stay, so the discovery answer
+          ("what shapes can this adapter return?") survives intact.
+        * Runaway example lists are capped, preserving authored order.
+        """
+        pointers: List[str] = []
+
+        output_types = schema_data.get('output_types')
+        if isinstance(output_types, list):
+            summarized = []
+            omitted = 0
+            for entry in output_types:
+                if not isinstance(entry, dict):
+                    summarized.append(entry)
+                    continue
+                if 'schema' in entry:
+                    omitted += 1
+                    entry = {k: v for k, v in entry.items() if k != 'schema'}
+                summarized.append(entry)
+            if omitted:
+                schema_data['output_types'] = summarized
+                schema_data['output_types_detail'] = (
+                    f'{omitted} output type(s) have a full JSON-Schema available '
+                    f'on demand: reveal help://schemas/{adapter_name}/<output_type>'
+                )
+                first = summarized[0].get('type') if summarized else None
+                if first:
+                    pointers.append(
+                        f'reveal help://schemas/{adapter_name}/{first}'
+                    )
+
+        examples = schema_data.get('example_queries')
+        if isinstance(examples, list) and len(examples) > self._MAX_DEFAULT_EXAMPLES:
+            total = len(examples)
+            schema_data['example_queries'] = examples[:self._MAX_DEFAULT_EXAMPLES]
+            schema_data['example_queries_detail'] = (
+                f'Showing {self._MAX_DEFAULT_EXAMPLES} of {total} examples — '
+                f'reveal help://schemas/{adapter_name}/full for all of them.'
+            )
+            pointers.append(f'reveal help://schemas/{adapter_name}/full')
+
+        if pointers:
+            existing = schema_data.setdefault('next', [])
+            for p in pointers + [f'reveal help://schemas/{adapter_name}/full']:
+                if p not in existing:
+                    existing.append(p)
+        return schema_data
+
+    def _get_output_type_schema(
+        self, adapter_name: str, schema_data: Dict[str, Any], type_name: str
+    ) -> Dict[str, Any]:
+        """Return one output type's full JSON-Schema (the drill-down tier)."""
+        output_types = schema_data.get('output_types') or []
+        available = [
+            e.get('type') for e in output_types
+            if isinstance(e, dict) and e.get('type')
+        ]
+        for entry in output_types:
+            if isinstance(entry, dict) and entry.get('type') == type_name:
+                # contract_version is stamped by get_element()'s setdefault
+                # (BACK-696) — setting it here to a possibly-None value would
+                # suppress that stamp.
+                return {
+                    'type': 'adapter_schema',
+                    'adapter': adapter_name,
+                    'output_type': type_name,
+                    'detail': entry,
+                    'next': [f'reveal help://schemas/{adapter_name}'],
+                }
+        return {
+            'type': 'adapter_schema',
+            'adapter': adapter_name,
+            'error': 'Unknown output type',
+            'message': (
+                f"No output type '{type_name}' on {adapter_name}://. "
+                f"Available: {', '.join(available)}"
+            ),
+            'available_output_types': available,
+            'next': [f'reveal help://schemas/{adapter_name}'],
+        }
+
+    def _get_adapter_schema(
+        self, adapter_name: str, section: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """Get machine-readable schema for an adapter.
 
         Args:
             adapter_name: Adapter scheme name (e.g., 'ssl', 'ast')
+            section: ``None`` for the summarized default, ``'full'`` for the
+                complete payload, or an output-type name to drill into one type.
 
         Returns:
             Schema dict or error dict if adapter not found or has no schema
@@ -1387,7 +1492,13 @@ class HelpAdapter(ResourceAdapter):
                 }
             schema_data['adapter'] = adapter_name  # Ensure adapter is included
             schema_data['type'] = 'adapter_schema'
-            return schema_data  # type: ignore[no-any-return]
+            if section and section != 'full':
+                return self._get_output_type_schema(
+                    adapter_name, schema_data, section
+                )
+            if section == 'full':
+                return schema_data  # type: ignore[no-any-return]
+            return self._summarize_schema(adapter_name, schema_data)
         except Exception as e:
             return {
                 'type': 'adapter_schema',

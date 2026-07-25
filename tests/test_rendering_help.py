@@ -16,6 +16,7 @@ from reveal.rendering.adapters.help import (
     _render_help_adapter_summary,
     _render_help_section,
     _render_help_adapter_specific,
+    _render_adapter_schema,
     _select_index_entries,
     render_help,
     help_error_exit_code,
@@ -750,6 +751,55 @@ class TestRenderHelp(unittest.TestCase):
 
     def test_help_error_exit_code_no_error_key(self):
         self.assertEqual(help_error_exit_code({'type': 'help_quick'}), 0)
+
+
+class TestRenderAdapterSchemaOutputTypeDrilldown(unittest.TestCase):
+    """help://schemas/<adapter>/<output_type> drill-down (BACK-838 schemas tiering)."""
+
+    def test_renders_description_and_fields(self):
+        """Regression: the drill-down dict nests content under 'detail' —
+        rendering must reach into it, not read top-level keys (which are
+        absent for this shape and previously rendered a blank page)."""
+        data = {
+            'type': 'adapter_schema',
+            'adapter': 'claude',
+            'output_type': 'claude_exchanges',
+            'detail': {
+                'type': 'claude_exchanges',
+                'description': 'Each human prompt paired with its answer',
+                'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'exchange_count': {'type': 'integer'},
+                        'exchanges': {
+                            'type': 'array',
+                            'description': 'message_index, prompt, answer',
+                        },
+                    },
+                },
+            },
+            'next': ['reveal help://schemas/claude'],
+        }
+        output = capture_stdout(_render_adapter_schema, data)
+        self.assertIn('claude:// Schema', output)
+        self.assertIn('claude_exchanges', output)
+        self.assertIn('Each human prompt paired with its answer', output)
+        self.assertIn('exchange_count: integer', output)
+        self.assertIn('exchanges: array — message_index, prompt, answer', output)
+
+    def test_unknown_output_type_still_errors(self):
+        """The error shape (no 'detail' key) must keep going through the
+        existing error renderer, not the new drill-down path."""
+        data = {
+            'type': 'adapter_schema',
+            'adapter': 'ssl',
+            'error': 'Unknown output type',
+            'message': "No output type 'bogus' on ssl://. Available: ssl_certificate",
+            'available_output_types': ['ssl_certificate'],
+            'next': ['reveal help://schemas/ssl'],
+        }
+        with self.assertRaises(SystemExit):
+            capture_stdout(_render_adapter_schema, data)
 
 
 class TestHelpQuick(unittest.TestCase):

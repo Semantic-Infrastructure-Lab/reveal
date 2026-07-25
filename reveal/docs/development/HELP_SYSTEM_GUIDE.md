@@ -29,16 +29,21 @@ Reveal has a **three-tier help system** designed for different users and use cas
 
 **Usage:**
 ```bash
-reveal --help
+reveal --help          # global flags in full; specialized groups collapsed (~3,300 tokens)
+reveal --help-all      # every flag, including file- and adapter-specific groups (~8,300 tokens)
 ```
 
 **Audience:** Human users typing commands manually
 
-**Content:** Standard argparse output showing:
-- All available flags
-- Positional arguments
-- Basic examples
-- File type support
+**Content:** Argparse output, itself progressively disclosed:
+- Positional arguments and the four global groups (Output, Discovery,
+  Navigation, Display) in full
+- Specialized groups (Code analysis, Quality checks, Markdown, HTML, SSL,
+  Nginx/cPanel, …) collapsed to a title plus a one-line flag digest
+- Core examples and the subcommand list
+
+Collapsed flags still **parse** normally — they are hidden from the help text
+and the usage block, not disabled. `--help-all` renders everything.
 
 **When to use:** Need to know what flags exist or basic command syntax
 
@@ -85,6 +90,8 @@ reveal help://adapters        # Summary of all adapters
 reveal help://agent           # Same as --agent-help (static guide)
 reveal help://schemas         # Machine-readable adapter schemas (AI agents)
 reveal help://schemas/ast     # Schema for ast:// (query params, output types)
+reveal help://schemas/ast/ast_query    # One output type's full JSON-Schema
+reveal help://schemas/ast/full         # Unsummarized schema payload
 reveal help://examples        # Canonical query recipes by task
 reveal help://examples/quality  # Recipes for code quality analysis
 ```
@@ -287,14 +294,29 @@ Start broad, drill down as needed. Don't force users to load everything.
 
 **Good:**
 ```bash
-reveal help://              # List (500 tokens)
-reveal help://ast           # Deep dive (250 tokens)
+reveal help://examples/quality  # A task recipe (~160 tokens)
+reveal help://quick             # Intent router (~1,000 tokens) — cheapest orientation
+reveal --agent-help             # Agent orientation (~2,250 tokens)
+reveal help://schemas/ast       # One adapter's query syntax (~2,400 tokens)
 ```
 
 **Bad:**
 ```bash
-reveal --show-all-help      # Everything at once (20,000 tokens)
+reveal help://agent/full    # Everything at once (~44,000 tokens)
 ```
+
+Every expensive tier has a cheaper default with a drill-down beneath it:
+
+| Broad | Drill-down |
+|-------|-----------|
+| `--help` (~3,300) | `--help-all` (~8,300) |
+| `help://schemas/<adapter>` | `help://schemas/<adapter>/<output_type>`, `/full` |
+| `--agent-help` (~2,250) | `help://agent/full` (~44,000) |
+| `help://<guide>` | `help://<guide>/full`, `--section NAME` |
+
+Costs above measured on v0.110.0. They drift as adapters and guides are added —
+re-measure with `reveal <entry> | wc -c` (÷4 for tokens) rather than trusting
+these numbers indefinitely.
 
 ### 2. Source Attribution
 Always show where content comes from. No mystery meat.

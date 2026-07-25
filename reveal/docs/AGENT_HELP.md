@@ -82,10 +82,22 @@ reveal help://examples/<task>    # Canonical query recipes per task category
 reveal --agent-help              # First section of this file (~2,200 tokens); reveal help://agent/full for all
 
 # Raw flag/subcommand listing (different surface — argparse-generated)
-reveal --help                    # Every flag, every subcommand, with one-liners
+reveal --help                    # Global flags in full, specialized groups collapsed
+reveal --help-all                # Every flag, every subcommand, with one-liners
 ```
 
-**For agents: the canonical discovery recipe** is `reveal --discover` (full registry as JSON in one call) or, for a single adapter, `reveal help://schemas/<adapter> --format=json`. Both return query params, operators, output schemas, and example queries — generate valid queries from the schema rather than hardcoding URI syntax.
+**For agents: the canonical discovery recipe** is `reveal --discover` (full registry as JSON in one call) or, for a single adapter, `reveal help://schemas/<adapter> --format=json`. Both return query params, operators, output type names, and example queries — generate valid queries from the schema rather than hardcoding URI syntax.
+
+`help://schemas/<adapter>` returns the discovery tier: every query param and
+operator, plus each output type's **name and description**. The full JSON-Schema
+body for a type is one drill-down away — take it only when you actually need to
+validate a payload's shape:
+
+```bash
+reveal help://schemas/claude                        # discovery tier
+reveal help://schemas/claude/claude_workflow        # one output type's full schema
+reveal help://schemas/claude/full                   # every schema body at once
+```
 
 ```bash
 # List all available adapter schemas
