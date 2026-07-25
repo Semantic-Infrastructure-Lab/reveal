@@ -181,11 +181,13 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
      Every other recall program above (import, side-effect, call-graph) was
      re-run against a second, unrelated real corpus before being trusted
      (see Done, above), and that pass found real bugs in 6+ languages. The
-     surface/contracts program never got that treatment. Go slice done
-     (arcane-fate-0724): held 100%/100% on `cli` and `contracts-interfaces`,
-     but `contracts-structs` precision dropped to 93.15% on a second
-     corpus — a disclosed name-only-matching tradeoff, not a new bug
-     (BACK-816). 9 language slices remain.
+     surface/contracts program never got that treatment. Go and Rust
+     slices done: Go (arcane-fate-0724) held 100%/100% on `cli` and
+     `contracts-interfaces`, but `contracts-structs` precision dropped to
+     93.15% on a second corpus — a disclosed name-only-matching tradeoff,
+     not a new bug (BACK-816). Rust (passing-sunlight-0724) held all four
+     categories at true 100%/100% after fixing one real oracle-only `http`
+     regex bug (not a reveal defect). 8 language slices remain.
   2. **Close the tracked import-recall residual:**
      TypeScript/nest 81.21% (both known resolution gaps now fixed —
      tsconfig-extends chains chilling-lightning-0723, package.json
