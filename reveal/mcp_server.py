@@ -195,46 +195,24 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
     """Run a nav analysis flag on a function or line range — the deep-dive layer.
 
     Use after reveal_structure + reveal_element to analyse the internals of
-    a specific function without reading its full source.
+    a specific function without reading its full source. Highest-value flags:
+    boundary (inputs+environment+effects), sideeffects (db/http/cache/log/file
+    calls), deps (inputs), mutations (outputs), varflow (trace one variable).
+
+    Full flag catalog + examples: reveal_query('help://nav')
 
     Args:
         path:        File containing the element (absolute or relative to cwd)
         element:     Function/method name (e.g. 'process_order') or line ref
                      (e.g. ':120-340' for flat/procedural files)
-        flag:        Nav analysis to run. Boolean flags (no flag_value needed):
-                       deps        — variables flowing INTO the range (inputs/params)
-                       mutations   — variables written in range and read after (outputs)
-                       sideeffects — classified side-effect calls: db/http/cache/log/file/sleep/hard_stop
-                       returns     — return/exit paths with their gate conditions
-                       boundary    — combined contract: INPUTS + ENVIRONMENT + EFFECTS
-                       exits       — all exit points (return/raise/throw/die)
-                       flowto      — exits with reachability verdict
-                       ifmap       — if/elif/else branch skeleton
-                       catchmap    — try/except/finally skeleton
-                       outline     — control-flow skeleton (for/while/if/with)
-                       scope       — ancestor scope chain (requires :LINE element)
-                       loopmap     — loop nesting skeleton (for/while/foreach)
-                       fanout      — call fan-out per loop iteration
-                       statewrites — writes to external/shared state (attrs, globals, params)
-                     Value flags (pass flag_value):
-                       varflow     — trace one variable's reads/writes (flag_value = var name)
-                       keys        — dict/object/array key access on a variable: READ/WRITE/COND
-                                     per key (flag_value = var name, e.g. 'config' or '$row')
-                       narrow      — type-narrowing through control-flow branches
-                                     (flag_value = var name, e.g. 'x')
-                       calls       — call sites in range (flag_value = range like '89-120' or blank for all)
-                       around      — verbatim lines centred on a line (flag_value = context lines, default 20)
+        flag:        Nav analysis to run — see reveal_query('help://nav') for
+                     the full list. Boolean flags need no flag_value; value
+                     flags (varflow, keys, narrow) require one.
         flag_value:  Required for varflow, keys, and narrow (variable name). Optional for
                      calls (range string) and around (integer context lines).
 
-    Examples:
+    Example:
         reveal_nav('app.py', 'process_order', 'boundary')
-        reveal_nav('app.py', 'process_order', 'sideeffects')
-        reveal_nav('flat.php', ':477-531', 'deps')
-        reveal_nav('app.py', 'process_order', 'varflow', 'result')
-        reveal_nav('app.py', 'normalize', 'keys', 'config')
-        reveal_nav('app.py', 'process_order', 'narrow', 'x')
-        reveal_nav('app.py', 'process_order', 'calls', '20-60')
     """
     from .file_handler import handle_file  # noqa: I006
 
@@ -262,29 +240,18 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
 
 @mcp.tool()
 def reveal_query(uri: str) -> str:
-    """Run a reveal URI query across any of reveal's adapters.
+    """Run a reveal URI query across any adapter (``scheme://resource?query`` syntax).
 
-    Full access to all reveal adapters using the ``scheme://resource?query`` syntax.
-    Same operators, same output format across all adapters.
+    Use for anything outside the file/nav workflow: call graphs, dead-code
+    detection, import health, git history, SSL/domain checks, database/Excel
+    inspection, doc search, and more — same operators and output shape across
+    every adapter.
 
-    Common patterns:
-      ``ast://src/?complexity>10&sort=-complexity``   high-complexity code
-      ``calls://src/?target=my_fn&depth=3``           call graph analysis
-      ``calls://src/?uncalled``                       dead code detection
-      ``calls://src/?rank=callers&top=20``            most-coupled functions
-      ``imports://src/?unused``                       unused imports
-      ``diff://git://HEAD~1/.:git://HEAD/.``          PR structural diff
-      ``ssl://api.example.com``                       certificate status
-      ``domain://example.com``                        DNS/WHOIS/email health
-      ``mysql://db/?type=replication``                database replication
-      ``sqlite://path/to/db``                         SQLite schema
-      ``nginx://nginx.conf``                          nginx config analysis
-      ``markdown://docs/?aggregate=type``             doc taxonomy
-      ``claude://sessions/``                          AI session history
-      ``help://quick``                                orientation map of all adapters/tasks
+    Lost, or need an adapter you don't know the name of? Start with
+    reveal_query('help://quick') — a map of every adapter and common task.
 
     Args:
-        uri: Full reveal URI (scheme://resource or scheme://resource?query)
+        uri: Full reveal URI, e.g. 'calls://src/?target=my_fn' or 'help://quick'
     """
     from .cli.routing import handle_uri
 
