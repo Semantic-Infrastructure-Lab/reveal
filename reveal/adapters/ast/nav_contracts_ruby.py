@@ -107,7 +107,19 @@ def _superclass_name(node: Any, content_bytes: bytes) -> Optional[str]:
 
 
 def _mixin_names(node: Any, content_bytes: bytes) -> List[str]:
-    """Modules pulled in via a direct `include`/`extend` call in the class body."""
+    """Modules pulled in via a direct `include`/`extend`/`prepend` call in
+    the class body.
+
+    BACK-809: `prepend` (Ruby's third mixin-inclusion mechanism, alongside
+    `include`/`extend` -- inserts the module ABOVE the class in the
+    ancestor chain rather than below, commonly used for monkey-patch-style
+    method wrapping) was missing here, so `class Foo; prepend Bar; end`
+    left `bases` entirely empty -- confirmed via direct
+    `scan_file_contracts_ruby` inspection of
+    `samples/ruby/lib/freedom_patches/rspec_mocks_from_described_class.rb`
+    (`class MethodDouble; prepend MethodDoubleExtensions; end`), found
+    during the BACK-808 Ruby recall-oracle slice.
+    """
     names: List[str] = []
     for ch in _children(node):
         if ch.kind() != 'body_statement':
@@ -117,7 +129,7 @@ def _mixin_names(node: Any, content_bytes: bytes) -> List[str]:
                 continue
             stmt_children = _children(stmt)
             ident = next((c for c in stmt_children if c.kind() == 'identifier'), None)
-            if ident is None or _get_text(ident, content_bytes) not in ('include', 'extend'):
+            if ident is None or _get_text(ident, content_bytes) not in ('include', 'extend', 'prepend'):
                 continue
             args = next((c for c in stmt_children if c.kind() == 'argument_list'), None)
             if args is None:

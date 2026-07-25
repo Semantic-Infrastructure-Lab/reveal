@@ -1230,6 +1230,27 @@ class TestScanContractsRuby(unittest.TestCase):
         impl_names = [i['name'] for i in mod['implementations']]
         self.assertIn('Widget', impl_names)
 
+    def test_prepend_also_counts_as_implementation(self):
+        """BACK-809: `prepend` (Ruby's third mixin mechanism, alongside
+        `include`/`extend`) was invisible to `_mixin_names` -- confirmed via
+        the BACK-808 Ruby recall-oracle slice against
+        samples/ruby/lib/freedom_patches/rspec_mocks_from_described_class.rb
+        (`class MethodDouble; prepend MethodDoubleExtensions; end`)."""
+        self._write_rb('wrappable.rb', '''\
+            module Wrappable
+            end
+
+            class MethodDouble
+              prepend Wrappable
+            end
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        impl_names = [c['name'] for c in report['dataclasses']]
+        self.assertIn('MethodDouble', impl_names)
+        mod = next(p for p in report['protocols'] if p['name'] == 'Wrappable')
+        mod_impl_names = [i['name'] for i in mod['implementations']]
+        self.assertIn('MethodDouble', mod_impl_names)
+
     def test_superclass_and_mixin_both_captured(self):
         self._write_rb('animal.rb', '''\
             module Derived
