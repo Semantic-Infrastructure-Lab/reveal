@@ -70,246 +70,32 @@ def _structure_cache_max_files() -> int:
 # =============================================================================
 # TREE-SITTER NODE TYPE CONSTANTS
 # =============================================================================
-# Single source of truth for tree-sitter node types across languages.
-# Used by treesitter.py and display/element.py for consistent extraction.
+# BACK-814: FUNCTION_NODE_TYPES/CLASS_NODE_TYPES/STRUCT_NODE_TYPES/
+# IMPORT_NODE_TYPES/ELEMENT_TYPE_MAP are defined at the BOTTOM of this file
+# (after TreeSitterAnalyzer), derived from node_taxonomy.py's DEF_NODES/
+# CLASS_NODES/STRUCT_NODES/IMPORT_NODES — the actual single source of truth
+# for "which tree-sitter node kinds mean X across every supported grammar"
+# (see that module's docstring for the BACK-427/430/431/478 history this
+# consolidates). Per-node-kind provenance/corpus comments now live there too.
 #
-# MAINTENANCE: When adding new language support, update these lists.
-# Run `reveal file.ext --show-ast` to discover node types for new languages.
+# Placed at module end, not here, because a module-level import of
+# node_taxonomy.py (which lives under reveal.adapters.ast) triggers that
+# package's __init__ chain, which transitively imports analyzers/python.py,
+# which does `from ..treesitter import TreeSitterAnalyzer` — a genuine
+# circular import if TreeSitterAnalyzer isn't bound yet (confirmed live: this
+# was tried at the top of the file first and failed with exactly that
+# ImportError). By the time Python re-enters this partially-initialized
+# module via that cycle, TreeSitterAnalyzer is already defined, so the import
+# succeeds. Same shape nav_exits.py/nav_calls.py already solve for
+# CALL_NODE_TYPES via a function-local deferred import — this can't use that
+# exact form because ELEMENT_TYPE_MAP is consumed at true module scope
+# elsewhere in this file's history; module-end placement covers that too
+# since nothing calls into TreeSitterAnalyzer before this module finishes
+# importing.
+#
+# MAINTENANCE: to add new language support, edit node_taxonomy.py's families,
+# not tuples here.
 # =============================================================================
-
-# Node types for function extraction
-FUNCTION_NODE_TYPES = (
-    'function_definition',   # Python
-    'function_declaration',  # Go, C, JavaScript, Kotlin, Swift
-    'function_item',         # Rust
-    'function_signature',    # Dart
-    'method_declaration',    # Java, C#
-    'method_definition',     # Ruby
-    'function',              # Generic
-    'method',                # Ruby
-    'Decl',                   # Zig (wraps FnProto + body; see ZigAnalyzer._get_node_name)
-    # BACK-638: Java/C# constructors parse to a DISTINCT node kind from
-    # method_declaration, not a same-name variant of it. Without this, a
-    # constructor's name lookup (--boundary/--effects/--scope/element
-    # extraction) fell through _find_element_node's 'function' pass entirely
-    # and matched the enclosing class_declaration instead (same string name),
-    # silently returning the WHOLE CLASS BODY as the constructor's range —
-    # sibling methods' effects leaked into constructor --sideeffects results.
-    # Found via the Java sideeffects-recall-oracle loop (BACK-547 third
-    # language): reveal RecoveryMetricsCollector.java RecoveryMetricsCollector
-    # --boundary showed effects from an unrelated method ~70 lines later.
-    'constructor_declaration',  # Java, C#
-    # BACK-643: `async function* name() {}` parses to a DISTINCT node kind,
-    # 'generator_function_declaration', not a same-name variant of
-    # 'function_declaration' — same shape of gap as constructor_declaration
-    # above. Verified via direct tree-sitter-typescript parse: a generator
-    # declared inside another function's body was entirely absent from
-    # get_structure()['functions'] / --outline, and bare-name lookup
-    # ('reveal file.ts genName') errored "could not find function or
-    # method" even though the enclosing function's --sideeffects correctly
-    # included its effects. The whole-tree walk in _find_nodes_by_type
-    # already covers any nesting depth once the kind is listed here, so
-    # this one addition fixes both outline and name-lookup for the shape.
-    'generator_function_declaration',  # JS/TS/TSX generator function statement
-    # BACK-478: 'function_definition_statement'/'local_function_definition_statement'
-    # used to be listed here as Lua's global/local function kinds. Verified via
-    # direct tree-sitter inspection: both `function foo() end` and
-    # `local function foo() end` parse to the same 'function_declaration' kind
-    # (already covered above) — these two names never matched any real Lua
-    # grammar node. Dead entries, removed rather than fixed.
-    # Ruby sideeffects-recall-oracle loop (BACK-547 sixth language): `def
-    # self.foo` / `def Class.foo` parses to a DISTINCT node kind,
-    # 'singleton_method', not a same-name variant of 'method' (`def foo`).
-    # BACK-451/477 already added 'singleton_method' to CHILD_NODE_TYPES (so
-    # dotted hierarchical lookup like `Class.method_name` worked), but never
-    # to FUNCTION_NODE_TYPES/ALL_ELEMENT_NODE_TYPES — the exact same
-    # cross-taxonomy fragmentation BACK-638 (Java/C# constructors) and
-    # BACK-519 (JS class-field arrows) hit. Without this, every `def self.x`
-    # method — the dominant Ruby/Rails idiom for module-level utility, job,
-    # and service-object entry points — was entirely invisible to
-    # `--outline`/`get_structure()`, and a bare (non-dotted) name lookup for
-    # one failed outright ("could not find function or method"), even when
-    # the name was unique in the file. Verified live: Discourse's
-    # `lib/discourse.rb` (107 `def self.` methods) showed only 6 functions in
-    # `--outline`; `reveal discourse.rb allow_dev_populate?` (unique name)
-    # errored not-found despite the method existing at line 1321.
-    'singleton_method',       # Ruby class method (`def self.foo`/`def Class.foo`)
-    # BACK-547 C# sideeffects-recall-oracle pre-flight check (JAVA.md's "notes
-    # for the next language" flagged operator overloads specifically as a
-    # name-collision-prone node kind worth checking): C# operator overloads
-    # (`public static bool operator ==(...)`) parse to their own distinct node
-    # kind, `operator_declaration`, not a variant of `method_declaration`.
-    # Without this, they were entirely absent from --outline/--boundary/
-    # --sideeffects and any name lookup failed outright ("could not find
-    # function or method"), unlike BACK-638's constructor gap (which at least
-    # fell through to the enclosing class). See _operator_declaration_name for
-    # the paired name-extraction fix — the node has no identifier child at
-    # all, so the node-type fix alone isn't sufficient.
-    'operator_declaration',   # C#
-    # BACK-718/BACK-724 (GDScript sideeffects-recall-oracle pre-flight check,
-    # seventeenth language): GDScript's `func _init(...)` constructor parses
-    # to its OWN distinct node kind, `constructor_definition`, not a variant
-    # of `function_definition` (ordinary `func` methods) — the same shape as
-    # BACK-638 (Java/C#) and BACK-651 (C# operators), except here the gap is
-    # even more total: without this, `_init` was ENTIRELY absent from
-    # --outline/get_structure() (not even folded into the enclosing class —
-    # GDScript has no wrapping class_declaration node for a top-level script
-    # file at all) and a direct name lookup errored outright ("could not
-    # find function or method '_init'"), unlike BACK-638's constructor gap
-    # (which at least fell through to the enclosing class body). Verified
-    # live: samples/gdscript_pixelorama/src/Classes/SteamManager.gd's
-    # `_init` (sets `OS.set_environment(...)`, a real corpus `env` oracle
-    # positive) was invisible to both --outline and `reveal file.gd _init`.
-    # See _constructor_definition_name for the paired name-extraction fix —
-    # the identifier "child" is a fixed keyword-shaped leaf whose node KIND
-    # literally IS the text `_init` (not a `name`/`identifier` kind any
-    # `_name_via_*` strategy recognizes), one node-shape deeper than
-    # operator_declaration's gap.
-    'constructor_definition',  # GDScript `func _init(...)`
-    # Swift `init(...) { ... }` / `deinit { ... }` parse to their OWN
-    # distinct node kinds, `init_declaration`/`deinit_declaration`, not a
-    # variant of `function_declaration` (plain `func` methods) — same bug
-    # class as BACK-638 (Java/C# constructors) and BACK-724 (GDScript
-    # `constructor_definition`), found via a pre-flight check before the
-    # Swift calls-recall-oracle measurement (BACK-730, tenth language).
-    # Without this, every Swift initializer/deinitializer — arguably THE
-    # most common lifecycle method in any Swift OOP codebase, since nearly
-    # every class/struct declares at least one `init` — was entirely
-    # invisible to --outline/get_structure(), and every call made from
-    # inside one had no caller scope to attribute to at all (worse than a
-    # misattribution: a total edge loss, same shape as BACK-731's
-    # decorator-argument gap). Neither node has an identifier child (like
-    # GDScript's `_init`, the node KIND itself carries the fixed lifecycle
-    # name) — see `_get_node_name`'s special-case branch for the paired
-    # name-extraction fix.
-    'init_declaration',    # Swift `init(...) { ... }`
-    'deinit_declaration',  # Swift `deinit { ... }`
-    # Dart `Dog(...)` / `Dog.named(...)` / `factory Dog.fromJson(...)` --
-    # neither constructor form is a variant of `function_signature` (plain
-    # methods, already covered above); they parse to their own DISTINCT node
-    # kinds, entirely absent from FUNCTION_NODE_TYPES before this. Found via
-    # the Dart calls-recall-oracle measurement (BACK-730, eighteenth and
-    # final language): without these, every Dart constructor -- the
-    # PRIMARY entry point for object construction in idiomatic Dart, used
-    # far more than `ClassName()` calls to a hidden default -- had no
-    # caller scope of its own at all, so every call made from inside one
-    # (a super-init-list helper call, a named-constructor delegate, a
-    # factory's internal setup call) was silently dropped, not just
-    # misattributed (same "total edge loss" shape as Swift's BACK-742
-    # init/deinit gap). Same disjoint function_signature/function_body
-    # sibling shape as plain methods -- see `_function_end_node`'s matching
-    # update and `_dart_constructor_name` for the paired name extraction
-    # (BACK-760).
-    'constructor_signature',          # Dart `Dog(...)` / `Dog.named(...)`
-    'factory_constructor_signature',  # Dart `factory Dog.fromJson(...)`
-    # Dart getters/setters (`int get x { ... }` / `set x(int value) { ... }`)
-    # parse to their OWN distinct node kinds, NOT a variant of
-    # 'function_signature' -- same disjoint function_signature/function_body
-    # sibling shape (see `_function_end_node`), same
-    # method_signature-wrapper convention as constructors above. Found via
-    # the Dart calls-recall-oracle measurement (BACK-730, eighteenth and
-    # final language): a getter/setter -- a common Dart idiom for computed
-    # properties on both classes AND extensions (`extension X on Y { int
-    # get z { ... } }`) -- was entirely absent from FUNCTION_NODE_TYPES, so
-    # its body (and every call inside it) had no caller scope at all,
-    # invisible to --outline/get_structure() (real corpus example:
-    # AppFlowy's `String.fileSize` extension getter, whose body calls
-    # `File(...).existsSync()`, silently had NO scope whatsoever -- the
-    # whole file showed zero functions). The name (`identifier` child) and
-    # the disjoint function_signature/function_body sibling pairing both
-    # already work via the existing generic strategies once the node kind
-    # is listed here -- no dedicated name-extraction special case needed
-    # (kids include a `type_identifier` for the return/property type, which
-    # is a DIFFERENT node kind than `identifier`, so PRIORITY 2b's
-    # first-identifier-child scan already lands on the right name by the
-    # same coincidence plain `function_signature` methods rely on).
-    'getter_signature',  # Dart `int get x { ... }`
-    'setter_signature',  # Dart `set x(int value) { ... }`
-    # Dart `const Foo({this.x = 1, ...});` -- a `const`-marked constructor
-    # is a DISTINCT node kind, 'constant_constructor_signature', not a
-    # variant of 'constructor_signature' -- AND wrapped in a `declaration`
-    # node, not `method_signature` (a const constructor's body, if any, is
-    # restricted to redirecting/empty by Dart's own language rules, so
-    # there's rarely a separate function_body sibling to pair with at
-    # all). Found via the Dart calls-recall-oracle measurement (BACK-730,
-    # eighteenth and final language): a const constructor -- Flutter's
-    # single most common StatelessWidget/StatefulWidget constructor
-    # pattern (`const MyWidget({super.key, this.title = "..."})`) -- was
-    # entirely invisible to --outline/get_structure(), so a call inside a
-    # parameter DEFAULT VALUE (`this.duration = const Duration(seconds:
-    # 1)`, ubiquitous for const-constructed default widget/value
-    # properties) had no caller scope whatsoever. See
-    # `_dart_constructor_name` (name extraction, unchanged, already
-    # kind-agnostic) and `_dart_merge_signature_extra_calls` (parameter-
-    # default-value call extraction).
-    'constant_constructor_signature',  # Dart `const Foo({this.x = 1, ...})`
-)
-
-# Node types for class extraction
-CLASS_NODE_TYPES = (
-    'class_definition',           # Python
-    'class_declaration',          # Java, C#, JavaScript, PHP
-    'abstract_class_declaration', # TypeScript: abstract class Foo { ... }
-    'class_specifier',            # C++
-    'class',                      # Ruby
-    'anonymous_class',            # PHP: new class(...) extends Foo { ... }
-    # BACK-478: 'struct_item' (Rust) used to be listed here too ("treated as
-    # class"), so every Rust struct was double-counted under both Classes
-    # and Structs in get_structure()/--outline (confirmed live). It's a
-    # struct, and STRUCT_NODE_TYPES below already extracts it correctly —
-    # removed here rather than adding it to keep the label honest.
-    # BACK-797 (C# recall oracle): `record Foo(...) : IBase { ... }` parses to
-    # a *distinct* node kind in both tree-sitter-c-sharp and tree-sitter-java
-    # (Java 16+ records share the same grammar node name) — entirely absent
-    # from CLASS_NODE_TYPES before this, so every record was invisible to
-    # get_structure()'s classes extraction, --outline, and (critically) the
-    # `contracts` interface-family classifier: a record implementing an
-    # interface never appeared as an implementer. Confirmed live against
-    # `samples/csharp` (Jellyfin) — 12 files declare a record, 2 of which
-    # implement an interface via `record Foo(...) : IBar`, both silently
-    # dropped. Added here (not just in CSharpAnalyzer) so Java 16+ records
-    # benefit too, though only the C# path has been measured/tested.
-    'record_declaration',
-)
-
-# Node types for struct extraction
-STRUCT_NODE_TYPES = (
-    'struct_item',           # Rust
-    'struct_specifier',      # C/C++
-    # BACK-478: this entry was labeled "Go" but is actually C#'s real struct
-    # node kind (verified via direct tree-sitter inspection: `struct Foo { }`
-    # in C# parses to `struct_declaration`; Go has no node of this kind at
-    # all). Go's real struct kind is `struct_type` below — it was entirely
-    # absent, so Go structs were invisible to --structs/--outline/--scope
-    # regardless of this mislabel.
-    'struct_declaration',    # C#
-    # Go `type Foo struct { ... }` — the struct body parses as `struct_type`
-    # nested inside `type_declaration -> type_spec -> [type_identifier,
-    # struct_type]`. Unlike every other member here, struct_type carries no
-    # name of its own; see TreeSitterAnalyzer._get_node_name's struct_type
-    # branch, which reaches into the parent type_spec for the sibling
-    # type_identifier.
-    'struct_type',            # Go
-)
-
-# Node types for import extraction
-IMPORT_NODE_TYPES = (
-    'import_statement',      # Python, JavaScript
-    'import_declaration',    # Go, Java
-    'use_declaration',       # Rust
-    'using_directive',       # C#
-    'import_from_statement',  # Python
-    'preproc_include',       # C/C++
-    'namespace_use_declaration',  # PHP: use App\Models\User;
-    'import_header',         # Kotlin
-)
-
-# Mapping from element type to node types (for element extraction)
-ELEMENT_TYPE_MAP = {
-    'function': FUNCTION_NODE_TYPES,
-    'class': CLASS_NODE_TYPES,
-    'struct': STRUCT_NODE_TYPES,
-}
 
 # Node types for call expression extraction (call graph)
 # Scala type-node kinds that can appear as the constructed type in an
@@ -3188,3 +2974,36 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         return decision_count + 1, max_depth, calls
 
+
+
+# =============================================================================
+# Deferred derivation of the node-type constants declared near the top of
+# this file (BACK-814) — see the comment there for why this must live here,
+# at module end, rather than at the top: a module-level import of
+# node_taxonomy.py at this file's top would trigger a circular import
+# (adapters.ast's package __init__ chain reaches back into this module
+# before TreeSitterAnalyzer is bound). By this point in the file,
+# TreeSitterAnalyzer is fully defined, so the same import here is safe.
+# =============================================================================
+from .adapters.ast.node_taxonomy import (  # noqa: E402
+    DEF_NODES as _DEF_NODES,
+    CLASS_NODES as _CLASS_NODES,
+    STRUCT_NODES as _STRUCT_NODES,
+    IMPORT_NODES as _IMPORT_NODES,
+)
+
+# arrow_function is deliberately excluded: JS-family arrow functions are
+# extracted via a dedicated path (_extract_arrow_functions/file_handler.py),
+# not this generic node-kind scan, to avoid double-extracting every nested
+# callback arrow expression as a false top-level function.
+FUNCTION_NODE_TYPES = tuple(_DEF_NODES - {'arrow_function'})
+CLASS_NODE_TYPES = tuple(_CLASS_NODES)
+STRUCT_NODE_TYPES = tuple(_STRUCT_NODES)
+IMPORT_NODE_TYPES = tuple(_IMPORT_NODES)
+
+# Mapping from element type to node types (for element extraction)
+ELEMENT_TYPE_MAP = {
+    'function': FUNCTION_NODE_TYPES,
+    'class': CLASS_NODE_TYPES,
+    'struct': STRUCT_NODE_TYPES,
+}

@@ -181,35 +181,86 @@ DEF_NODES: frozenset = frozenset({
     # FUNCTION_NODE_TYPES but were already covered here via 'function_declaration'
     # (real Lua node kind; the treesitter.py comment naming them appears stale).
     'method', 'function_signature', 'Decl',
-    # BACK-638: Java/C# constructor_declaration — same gap as treesitter.py's
-    # FUNCTION_NODE_TYPES (see comment there); without this, --scope also
-    # silently dropped a constructor as its own ancestor for a nested line.
-    'constructor_declaration',
-    # BACK-547 C# recall-oracle pre-flight: operator_declaration — same gap,
-    # see treesitter.py FUNCTION_NODE_TYPES comment. Without this, --scope
-    # silently dropped a C# operator overload as its own ancestor.
-    'operator_declaration',
-    # BACK-647: Ruby singleton_method (`def self.foo`/`def Class.foo`) — same
-    # gap, see treesitter.py FUNCTION_NODE_TYPES comment. Without this,
-    # --scope silently dropped a Ruby class method as its own ancestor.
-    'singleton_method',
-    # BACK-643: JS/TS/TSX `async function* name() {}` — same gap, see
-    # treesitter.py FUNCTION_NODE_TYPES comment. Without this, --scope
-    # silently dropped a generator function declaration as its own ancestor.
-    'generator_function_declaration',
-    # BACK-718/BACK-724 (GDScript sideeffects-recall-oracle): GDScript's
-    # `func _init(...)` constructor — same gap, see treesitter.py
-    # FUNCTION_NODE_TYPES comment. Without this, --scope silently dropped a
-    # GDScript `_init` as its own ancestor for a nested line.
-    'constructor_definition',
-    # Swift `init(...)`/`deinit` and Dart constructor/getter/setter node
-    # kinds — same gap, see treesitter.py FUNCTION_NODE_TYPES comment.
-    # Without these, --scope silently dropped the enclosing Swift
-    # initializer/deinitializer or Dart constructor/getter/setter as its
-    # own ancestor for a nested line.
-    'init_declaration', 'deinit_declaration',
-    'constructor_signature', 'factory_constructor_signature',
-    'getter_signature', 'setter_signature', 'constant_constructor_signature',
+    # BACK-638: Java/C# constructors parse to a DISTINCT node kind from
+    # method_declaration, not a same-name variant of it. Without this, a
+    # constructor's name lookup (--boundary/--effects/--scope/element
+    # extraction) fell through to the enclosing class_declaration instead
+    # (same string name), silently returning the WHOLE CLASS BODY as the
+    # constructor's range — sibling methods' effects leaked into constructor
+    # --sideeffects results. Found via the Java sideeffects-recall-oracle
+    # loop (BACK-547 third language): RecoveryMetricsCollector.java's
+    # --boundary showed effects from an unrelated method ~70 lines later.
+    'constructor_declaration',  # Java, C#
+    # BACK-547 C# sideeffects-recall-oracle pre-flight check: C# operator
+    # overloads (`public static bool operator ==(...)`) parse to their own
+    # distinct node kind, not a variant of method_declaration. Without this,
+    # they were entirely absent from --outline/--boundary/--sideeffects/
+    # --scope and any name lookup failed outright ("could not find function
+    # or method") — the node has no identifier child at all, so the paired
+    # name-extraction fix (_operator_declaration_name) is also required.
+    'operator_declaration',  # C#
+    # BACK-647: Ruby's `def self.foo`/`def Class.foo` parses to a DISTINCT
+    # node kind, 'singleton_method', not a same-name variant of 'method'
+    # (`def foo`) — the dominant Ruby/Rails idiom for module-level utility,
+    # job, and service-object entry points. Without this, every such method
+    # was entirely invisible to --outline/get_structure()/--scope, and a
+    # bare name lookup failed outright even when the name was unique in the
+    # file. Verified live: Discourse's lib/discourse.rb (107 `def self.`
+    # methods) showed only 6 functions in --outline.
+    'singleton_method',  # Ruby class method
+    # BACK-643: JS/TS/TSX `async function* name() {}` parses to a DISTINCT
+    # node kind, 'generator_function_declaration', not a variant of
+    # 'function_declaration'. Without this, a generator declared inside
+    # another function's body was entirely absent from get_structure()/
+    # --outline/--scope, and bare-name lookup errored "could not find
+    # function or method" even though the enclosing function's
+    # --sideeffects correctly included its effects.
+    'generator_function_declaration',  # JS/TS/TSX generator function statement
+    # BACK-718/BACK-724 (GDScript sideeffects-recall-oracle, seventeenth
+    # language): GDScript's `func _init(...)` constructor parses to its OWN
+    # distinct node kind, 'constructor_definition' — not even folded into
+    # the enclosing class (GDScript has no wrapping class_declaration for a
+    # top-level script file at all). Without this, `_init` was ENTIRELY
+    # absent from --outline/get_structure()/--scope and direct name lookup
+    # errored outright. Verified live: samples/gdscript_pixelorama's
+    # SteamManager.gd `_init` (a real corpus `env` oracle positive) was
+    # invisible to both --outline and direct lookup.
+    'constructor_definition',  # GDScript `func _init(...)`
+    # Swift `init(...)`/`deinit` (BACK-730 tenth language pre-flight, found
+    # before the Swift calls-recall-oracle measurement) parse to their OWN
+    # distinct node kinds, not a variant of `function_declaration` — arguably
+    # THE most common lifecycle method in any Swift OOP codebase. Without
+    # these, every initializer/deinitializer was entirely invisible to
+    # --outline/get_structure()/--scope, and every call made from inside one
+    # had no caller/ancestor scope to attribute to at all (a total edge
+    # loss, not just a misattribution). Neither node has an identifier
+    # child — the node KIND itself carries the fixed lifecycle name (see
+    # TreeSitterAnalyzer._get_node_name's special-case branch).
+    'init_declaration',    # Swift `init(...) { ... }`
+    'deinit_declaration',  # Swift `deinit { ... }`
+    # Dart constructors/getters/setters (BACK-730 eighteenth and final
+    # language: `Dog(...)`, `Dog.named(...)`, `factory Dog.fromJson(...)`,
+    # `int get x { ... }`, `set x(int value) { ... }`, `const Foo({...})`)
+    # each parse to their OWN distinct node kinds, not variants of
+    # `function_signature` (plain methods). Constructors are the PRIMARY
+    # entry point for object construction in idiomatic Dart, and a `const`
+    # constructor is Flutter's single most common StatelessWidget/
+    # StatefulWidget constructor pattern — without these, none had a
+    # caller/ancestor scope of their own, so every call made inside one
+    # (a super-init-list helper, a named-constructor delegate, a call inside
+    # a parameter default value) was silently dropped entirely, not just
+    # misattributed. Getters/setters are a common idiom for computed
+    # properties on both classes AND extensions (real corpus example:
+    # AppFlowy's `String.fileSize` extension getter showed zero functions
+    # in the whole file without this). See `_function_end_node` (disjoint
+    # function_signature/function_body sibling shape) and
+    # `_dart_constructor_name`/`_dart_merge_signature_extra_calls` for the
+    # paired name-extraction and parameter-default-value call handling.
+    'constructor_signature',           # Dart `Dog(...)` / `Dog.named(...)`
+    'factory_constructor_signature',   # Dart `factory Dog.fromJson(...)`
+    'getter_signature',                # Dart `int get x { ... }`
+    'setter_signature',                # Dart `set x(int value) { ... }`
+    'constant_constructor_signature',  # Dart `const Foo({this.x = 1, ...})`
 })
 CLASS_NODES: frozenset = frozenset({
     'class_definition', 'class_declaration', 'class',
@@ -222,6 +273,13 @@ CLASS_NODES: frozenset = frozenset({
     # three languages (confirmed live: Python correctly showed CLASS as an
     # ancestor, C++/PHP/TS did not).
     'class_specifier', 'anonymous_class', 'abstract_class_declaration',
+    # BACK-798 (C# recall oracle) added 'record_declaration' to treesitter.py's
+    # CLASS_NODE_TYPES (a C# 9+/Java 16+ record is a distinct node kind from
+    # class/struct) but never here — the exact drift BACK-814's guard-rail
+    # test exists to catch, caught live by that test the same session. Without
+    # this, a record member was silently dropped from --scope's ancestor chain
+    # even after BACK-798 fixed get_structure()/contracts for it.
+    'record_declaration',
 })
 # C/C++ struct-with-methods (`struct Foo { void bar() {...} }`) has the same
 # --scope gap as CLASS_NODES above, confirmed live — kept as its own family
@@ -424,6 +482,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'class_definition': 'CLASS', 'class_declaration': 'CLASS', 'class': 'CLASS',
     'class_specifier': 'CLASS', 'anonymous_class': 'CLASS',
     'abstract_class_declaration': 'CLASS',
+    'record_declaration': 'CLASS',  # BACK-798: C# 9+/Java 16+ record
     'struct_specifier': 'STRUCT',
     'struct_item': 'STRUCT',
     'struct_declaration': 'STRUCT',
