@@ -2,8 +2,8 @@
 
 Tests verify that each tool returns plausible output for real inputs.
 They do NOT test the MCP protocol itself (that's the SDK's job) — they
-test reveal_structure, reveal_element, reveal_query, reveal_pack, and
-reveal_check as callable Python functions.
+test reveal_structure, reveal_element, reveal_nav, reveal_query, reveal_pack,
+reveal_check, reveal_grep, and reveal_trace as callable Python functions.
 """
 
 import os
@@ -313,6 +313,76 @@ class TestRevealCheckTool(unittest.TestCase):
         self.assertIsInstance(result, str)
 
 
+class TestRevealGrepTool(unittest.TestCase):
+
+    def setUp(self):
+        from reveal.mcp_server import reveal_grep
+        self.reveal_grep = reveal_grep
+
+    def test_file_search_finds_match(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("def greet(name):\n    return f'Hello {name}'\n")
+            fpath = f.name
+        try:
+            result = self.reveal_grep(fpath, 'greet')
+            self.assertIsInstance(result, str)
+            self.assertIn('greet', result)
+        finally:
+            os.unlink(fpath)
+
+    def test_directory_search_finds_match(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'a.py').write_text("API_TIMEOUT = 30\n")
+            (Path(d) / 'b.py').write_text("x = 1\n")
+            result = self.reveal_grep(d, 'API_TIMEOUT')
+            self.assertIsInstance(result, str)
+            self.assertIn('a.py', result)
+
+    def test_ignore_case(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("VALUE = 1\n")
+            fpath = f.name
+        try:
+            result = self.reveal_grep(fpath, 'value', ignore_case=True)
+            self.assertIn('1 hit', result)
+        finally:
+            os.unlink(fpath)
+
+    def test_missing_path_returns_error_string(self):
+        result = self.reveal_grep('/nonexistent/path/xyz', 'pattern')
+        self.assertIsInstance(result, str)
+        self.assertIn('not found', result)
+
+
+class TestRevealTraceTool(unittest.TestCase):
+
+    def setUp(self):
+        from reveal.mcp_server import reveal_trace
+        self.reveal_trace = reveal_trace
+
+    def test_trace_from_entry_point(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'app.py').write_text(
+                "def helper():\n    pass\n\n"
+                "def main():\n    helper()\n"
+            )
+            result = self.reveal_trace(d, 'main', depth=2)
+            self.assertIsInstance(result, str)
+            self.assertIn('main', result)
+
+    def test_unresolved_entry_point_returns_error_string(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'app.py').write_text("def main():\n    pass\n")
+            result = self.reveal_trace(d, 'does_not_exist_xyz')
+            self.assertIsInstance(result, str)
+            self.assertIn('not found', result)
+
+    def test_missing_path_returns_error_string(self):
+        result = self.reveal_trace('/nonexistent/path/xyz', 'main')
+        self.assertIsInstance(result, str)
+        self.assertIn('not found', result)
+
+
 class TestCaptureHelper(unittest.TestCase):
     """Tests for the _run_and_capture() internal helper."""
 
@@ -401,10 +471,12 @@ class TestMcpServerRegistration(unittest.TestCase):
         self.assertIn('reveal_query', tool_names)
         self.assertIn('reveal_pack', tool_names)
         self.assertIn('reveal_check', tool_names)
+        self.assertIn('reveal_grep', tool_names)
+        self.assertIn('reveal_trace', tool_names)
 
     def test_tool_count(self):
         from reveal.mcp_server import mcp
-        self.assertEqual(len(mcp._tool_manager._tools), 6)
+        self.assertEqual(len(mcp._tool_manager._tools), 8)
 
     def test_tool_count_matches_guide(self):
         """Validate that MCP_SETUP.md tool count matches actual registered tools."""

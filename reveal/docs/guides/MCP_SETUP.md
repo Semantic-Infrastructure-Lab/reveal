@@ -7,7 +7,7 @@ beth_topics:
   - claude-code
   - agent-integration
 help_topic: mcp
-help_description: "MCP server setup — 6 tools for Claude Code, Cursor, Windsurf"
+help_description: "MCP server setup — 8 tools for Claude Code, Cursor, Windsurf"
 help_category: ai_guides
 help_token_estimate: "~2,000"
 ---
@@ -140,6 +140,27 @@ reveal_nav("src/auth.py", "validate_token", "varflow")      → variable data-fl
 
 Answers "what does this function touch outside itself?" without ever reading source.
 
+### `reveal_grep(path, pattern, ignore_case)`
+
+Cross-file text/identifier search grouped by enclosing function — use instead of
+shell grep when you want matches tied to the function/class they're in.
+
+```
+reveal_grep("src/", "API_TIMEOUT")
+reveal_grep("src/auth.py", "validate_.*token", ignore_case=True)
+```
+
+### `reveal_trace(path, entry_point, depth)`
+
+Depth-indented call-graph narrative from one entry point — each frame shows
+location, parameters, classified side effects, and what it calls next.
+Complements `reveal_query("calls://...")`, which answers structural
+caller/callee queries rather than rendering a readable walk-through.
+
+```
+reveal_trace("src/", "process_order", depth=2)
+```
+
 ## Recommended Agent Workflow
 
 ```
@@ -206,6 +227,8 @@ reveal_query("help://quick")   # compact intent router, ~750 tokens
 | `reveal_element(file, fn)` | 100–300 | 20–50× less than cat |
 | `reveal_pack(dir, budget=8000)` | ~8,000 | One call instead of N calls |
 | `reveal_query("calls://...?uncalled")` | 200–500 | 33× less than manual cross-ref |
+| `reveal_grep(dir, pattern)` | 100–500 | grouped by function vs raw grep output |
+| `reveal_trace(dir, entry_point)` | 300–1000 | one call vs manual multi-file call chasing |
 
 ## Debugging
 

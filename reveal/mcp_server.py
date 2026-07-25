@@ -56,6 +56,10 @@ mcp = FastMCP(
         "5. reveal_query('help://quick') — lost or need an adapter outside this "
         "workflow (ssl, git, imports, sqlite, ...)? Start here for an orientation "
         "map of everything else reveal://* can do.\n\n"
+        "Other tools: reveal_grep(path, pattern) — cross-file text/identifier "
+        "search grouped by enclosing function (use instead of shell grep). "
+        "reveal_trace(dir, entry_point) — depth-indented call-graph narrative "
+        "from one entry point (\"walk me through what happens when X runs\").\n\n"
         "This is 3-33x more token-efficient than reading files directly. "
         "Use reveal_structure before reveal_element — always progressive disclosure."
     ),
@@ -383,6 +387,58 @@ def reveal_check(path: str, severity: str = '') -> str:
 
     lines.append(f"\n{total_issues} issue{'s' if total_issues != 1 else ''} found.")
     return "\n".join(lines)
+
+
+@mcp.tool(annotations=_LOCAL_READONLY)
+def reveal_grep(path: str, pattern: str, ignore_case: bool = False) -> str:
+    """Search text or an identifier across a file or directory, grouped by enclosing function.
+
+    Structural cross-file search: matches are grouped under the function/class
+    they fall in, not just raw line numbers — prefer this over shell grep for
+    finding a symbol's usages or a string across a codebase.
+
+    Args:
+        path: File or directory to search
+        pattern: Regex pattern to search for
+        ignore_case: Case-insensitive match (default False)
+    """
+    from pathlib import Path
+    from .grep_handler import handle_grep, handle_grep_directory
+
+    p = Path(path)
+    if not p.exists():
+        return f"[reveal error: path not found: {path}]"
+
+    args = _default_args(ignore_case=ignore_case)
+    if p.is_dir():
+        return _run_and_capture(handle_grep_directory, str(p), pattern, args)
+    return _run_and_capture(handle_grep, str(p), pattern, args)
+
+
+@mcp.tool(annotations=_LOCAL_READONLY)
+def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
+    """Walk the call graph from a named entry point as a depth-indented execution narrative.
+
+    Each frame shows the function's location, parameters, classified side
+    effects (db/http/log/file/...), and what it calls next. Unlike
+    reveal_query('calls://...'), which answers structural caller/callee
+    queries, this renders a readable top-down trace starting from one function
+    — useful for "walk me through what happens when X runs."
+
+    Args:
+        path: Source directory to analyse
+        entry_point: Entry-point function name to start the trace from
+        depth: Call levels to expand, 1-5 (default 2)
+    """
+    from pathlib import Path
+    from .cli.commands.trace import run_trace
+
+    p = Path(path)
+    if not p.exists():
+        return f"[reveal error: path not found: {path}]"
+
+    args = _default_args(path=str(p), root=entry_point, depth=depth, format='text')
+    return _run_and_capture(run_trace, args)
 
 
 def main() -> None:
