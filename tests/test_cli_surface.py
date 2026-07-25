@@ -581,6 +581,114 @@ class TestMcpToolProvenance(unittest.TestCase):
         self.assertEqual(self._mcp_names(), [])
 
 
+class TestHttpRouteProvenance(unittest.TestCase):
+    """BACK-790: @x.route()/@x.get()/etc is an HTTP surface only with
+    Flask/FastAPI provenance — same shape as BACK-534's CLI-command fix."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _http_paths(self):
+        report = _scan_surface(Path(self.tmp))
+        return [e['path'] for e in report['surfaces']['http']]
+
+    def test_flask_app_and_blueprint_detected(self):
+        _write(self.tmp, 'app.py', '''\
+            from flask import Flask, Blueprint
+
+            app = Flask(__name__)
+            bp = Blueprint('admin', __name__)
+
+            @app.route('/health')
+            def health():
+                pass
+
+            @bp.get('/admin/users')
+            def users():
+                pass
+        ''')
+        paths = self._http_paths()
+        self.assertIn('/health', paths)
+        self.assertIn('/admin/users', paths)
+
+    def test_fastapi_app_and_router_detected(self):
+        _write(self.tmp, 'app.py', '''\
+            from fastapi import FastAPI, APIRouter
+
+            app = FastAPI()
+            router = APIRouter()
+
+            @app.get('/items')
+            def items():
+                pass
+
+            @router.post('/items')
+            def create_item():
+                pass
+        ''')
+        paths = self._http_paths()
+        self.assertIn('/items', paths)
+
+    def test_route_on_unknown_object_excluded(self):
+        # An arbitrary class with a same-named .get()/.route() method (e.g. a
+        # cache or dict-like wrapper) is not an HTTP surface (BACK-790).
+        _write(self.tmp, 'cache.py', '''\
+            class Cache:
+                def route(self, path):
+                    def deco(fn):
+                        return fn
+                    return deco
+
+                def get(self, path):
+                    def deco(fn):
+                        return fn
+                    return deco
+
+            cache = Cache()
+
+            @cache.route('/not/a/route')
+            def handler():
+                pass
+
+            @cache.get('/also/not/a/route')
+            def getter():
+                pass
+        ''')
+        self.assertEqual(self._http_paths(), [])
+
+    def test_fastapi_webhooks_subrouter_detected(self):
+        # @app.webhooks.post(...) — FastAPI's webhooks sub-router reached as
+        # an attribute chain off `app`, not a separately assigned variable.
+        _write(self.tmp, 'app.py', '''\
+            from fastapi import FastAPI
+
+            app = FastAPI()
+
+            @app.webhooks.post('new-subscription')
+            def new_subscription():
+                pass
+        ''')
+        self.assertIn('new_subscription', [
+            e['name'] for e in _scan_surface(Path(self.tmp))['surfaces']['http']
+        ])
+
+    def test_aliased_flask_import_detected(self):
+        _write(self.tmp, 'app.py', '''\
+            from flask import Flask as F
+
+            app = F(__name__)
+
+            @app.route('/status')
+            def status():
+                pass
+        ''')
+        self.assertIn('/status', self._http_paths())
+
+
 class TestRenderReport(unittest.TestCase):
 
     def _capture(self, report, **kwargs):
@@ -758,14 +866,22 @@ class TestNavSurfaceTS(unittest.TestCase):
         self.assertIn('Bun.write', names)
 
     def test_ts_http_route_get(self):
-        result = self._scan_ts('routes.ts', 'app.get("/health", handler);\n')
+        result = self._scan_ts('routes.ts', '''\
+import express from "express";
+const app = express();
+app.get("/health", handler);
+''')
         entries = result['http']
         self.assertGreater(len(entries), 0)
         paths = [e['path'] for e in entries]
         self.assertIn('/health', paths)
 
     def test_ts_http_route_post(self):
-        result = self._scan_ts('routes.ts', 'router.post("/users", createUser);\n')
+        result = self._scan_ts('routes.ts', '''\
+import { Router } from "express";
+const router = Router();
+router.post("/users", createUser);
+''')
         entries = result['http']
         self.assertGreater(len(entries), 0)
         methods = [e['methods'] for e in entries]
@@ -798,7 +914,11 @@ class TestNavSurfaceTS(unittest.TestCase):
 
     def test_ts_supertest_not_flagged_as_http_route(self):
         # request(app).get('/path') is a supertest assertion, not a route registration
-        result = self._scan_ts('routes.test.ts', 'request(app).get("/health");\n')
+        result = self._scan_ts('routes.test.ts', '''\
+import express from "express";
+const app = express();
+request(app).get("/health");
+''')
         self.assertEqual(result['http'], [], "supertest calls should not be detected as HTTP routes")
 
     def test_ts_invalid_file_returns_empty(self):
@@ -828,6 +948,70 @@ class TestNavSurfaceTS(unittest.TestCase):
         result = self._scan_ts('App.jsx', 'import axios from "axios";\nfunction App() { return <div />; }\n')
         names = [e['name'] for e in result['network']]
         self.assertIn('axios', names)
+
+
+class TestHttpRouteProvenanceTS(unittest.TestCase):
+    """BACK-790: obj.get()/.post()/etc is an HTTP surface only when obj
+    resolves to an Express app/router — same shape as BACK-785's MCP fix."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _scan_ts(self, filename: str, content: str):
+        from reveal.adapters.ast.nav_surface_ts import scan_file_surface_ts
+        path = _write(self.tmp, filename, content)
+        return scan_file_surface_ts(path)
+
+    def test_default_express_import_detected(self):
+        result = self._scan_ts('app.ts', '''\
+import express from "express";
+const app = express();
+app.get("/health", handler);
+''')
+        self.assertIn('/health', [e['path'] for e in result['http']])
+
+    def test_express_dot_router_detected(self):
+        result = self._scan_ts('routes.ts', '''\
+import express from "express";
+const router = express.Router();
+router.post("/users", createUser);
+''')
+        self.assertIn('/users', [e['path'] for e in result['http']])
+
+    def test_named_router_import_detected(self):
+        # the node-express-realworld-example-app corpus shape: a bare
+        # `Router()` bound to a named import, not the default `express` import.
+        result = self._scan_ts('routes.ts', '''\
+import { Router } from "express";
+const router = Router();
+router.get("/articles", getArticles);
+''')
+        self.assertIn('/articles', [e['path'] for e in result['http']])
+
+    def test_router_typed_parameter_detected(self):
+        result = self._scan_ts('controller.ts', '''\
+import { Router } from "express";
+function register(router: Router) {
+  router.get("/tags", getTags);
+}
+''')
+        self.assertIn('/tags', [e['path'] for e in result['http']])
+
+    def test_route_on_unrelated_object_excluded(self):
+        # a same-named .get() on an object with no Express provenance at all
+        # (no express import anywhere in the file) is not an HTTP surface.
+        result = self._scan_ts('cache.ts', '''\
+class Cache {
+  get(path) { return null; }
+}
+const cache = new Cache();
+cache.get("/not/a/route");
+''')
+        self.assertEqual(result['http'], [])
 
 
 class TestMcpToolProvenanceTS(unittest.TestCase):

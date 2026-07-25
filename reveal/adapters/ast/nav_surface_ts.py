@@ -46,6 +46,13 @@ _MCP_PACKAGE_ROOTS: frozenset = frozenset({'@modelcontextprotocol/sdk'})
 _MCP_CONSTRUCTORS: frozenset = frozenset({'McpServer'})
 _MCP_METHODS: frozenset = frozenset({'tool', 'registerTool'})
 
+# BACK-790: same discipline as BACK-785's MCP fix — an `obj.get()`/`.post()`/
+# etc call is not evidence of an HTTP route on its own; `obj` must resolve to
+# an Express app/router. CommonJS `require('express')` is out of scope, same
+# precedent as the MCP collector (ESM import only).
+_EXPRESS_PACKAGE: str = 'express'
+_EXPRESS_INSTANCE_TYPES: frozenset = frozenset({'Application', 'Express', 'Router'})
+
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess', 'mcp')
 
 
@@ -80,6 +87,7 @@ def _scan_tree(
 
     mcp_ctor_names = _collect_mcp_constructor_aliases(tree, content_bytes)
     mcp_instances = _collect_mcp_instances(tree, content_bytes, mcp_ctor_names)
+    express_instances = _collect_express_instances(tree, content_bytes)
 
     # Walk all nodes
     stack = [tree_root(tree)]
@@ -90,7 +98,7 @@ def _scan_tree(
         if kind == 'import_statement':
             _process_import(node, file_path, content_bytes, surfaces)
         elif kind == 'call_expression':
-            _process_call(node, file_path, content_bytes, surfaces, mcp_instances)
+            _process_call(node, file_path, content_bytes, surfaces, mcp_instances, express_instances)
         elif kind in ('member_expression', 'subscript_expression'):
             _process_member(node, file_path, content_bytes, surfaces)
 
@@ -183,6 +191,119 @@ def _collect_mcp_instances(tree: Any, content_bytes: bytes, mcp_ctor_names: set)
                     if any(
                         _zero_arg(tch, 'kind') == 'type_identifier'
                         and _get_text(tch, content_bytes) in mcp_ctor_names
+                        for tch in _children(ch)
+                    ):
+                        instances.add(_get_text(children[0], content_bytes))
+        for ch in _children(node):
+            stack.append(ch)
+    return instances
+
+
+def _get_require_call_module(node: Any, content_bytes: bytes) -> Optional[str]:
+    """`require('express')` → 'express'; None if `node` isn't a require call
+    with a string-literal argument."""
+    children = _children(node)
+    if not children or _zero_arg(children[0], 'kind') != 'identifier':
+        return None
+    if _get_text(children[0], content_bytes) != 'require':
+        return None
+    for ch in children[1:]:
+        if _zero_arg(ch, 'kind') != 'arguments':
+            continue
+        for arg in _children(ch):
+            if _zero_arg(arg, 'kind') == 'string':
+                for sch in _children(arg):
+                    if _zero_arg(sch, 'kind') == 'string_fragment':
+                        return _get_text(sch, content_bytes)
+    return None
+
+
+def _collect_express_import_names(tree: Any, content_bytes: bytes) -> tuple:
+    """`(default_local_name, router_named_import_locals)` — covers ESM
+    (`import express from 'express'`, `import { Router } from 'express'`)
+    and CommonJS (`const express = require('express')`,
+    `const { Router } = require('express')`), the still-dominant real-world
+    shape (BACK-790 recall verification against expressjs/express's own
+    examples/, which are 100% CommonJS, showed 100%→25% recall without this)."""
+    default_name: Optional[str] = None
+    router_names: set = set()
+    stack = [tree_root(tree)]
+    while stack:
+        node = stack.pop()
+        kind = _zero_arg(node, 'kind')
+        if kind == 'import_statement':
+            module = _get_import_source(node, content_bytes)
+            if module == _EXPRESS_PACKAGE:
+                for imported, local in _get_import_clause_specifiers(node, content_bytes):
+                    if imported == 'default':
+                        default_name = local
+                    elif imported == 'Router':
+                        router_names.add(local)
+        elif kind == 'variable_declarator':
+            children = _children(node)
+            if children and _zero_arg(children[-1], 'kind') == 'call_expression':
+                if _get_require_call_module(children[-1], content_bytes) == _EXPRESS_PACKAGE:
+                    target = children[0]
+                    if _zero_arg(target, 'kind') == 'identifier':
+                        default_name = _get_text(target, content_bytes)
+                    elif _zero_arg(target, 'kind') == 'object_pattern':
+                        for pch in _children(target):
+                            if _zero_arg(pch, 'kind') == 'shorthand_property_identifier_pattern':
+                                if _get_text(pch, content_bytes) == 'Router':
+                                    router_names.add('Router')
+        for ch in _children(node):
+            stack.append(ch)
+    return default_name, router_names
+
+
+def _is_express_constructor_call(call_node: Any, content_bytes: bytes, default_name: Optional[str], router_names: set) -> bool:
+    """`express(...)` / `express.Router(...)` / a bare `Router(...)` bound to
+    a named `Router` import from express."""
+    children = _children(call_node)
+    if not children:
+        return False
+    callee = children[0]
+    ck = _zero_arg(callee, 'kind')
+    if ck == 'identifier':
+        name = _get_text(callee, content_bytes)
+        return name == default_name or name in router_names
+    if ck == 'member_expression':
+        parts = _children(callee)
+        if len(parts) >= 2 and _zero_arg(parts[0], 'kind') == 'identifier':
+            obj_name = _get_text(parts[0], content_bytes)
+            prop_name = _get_text(parts[-1], content_bytes)
+            return obj_name == default_name and prop_name == 'Router'
+    return False
+
+
+def _collect_express_instances(tree: Any, content_bytes: bytes) -> set:
+    """Variable names bound to an Express app/router — `express()`,
+    `express.Router()`, a bare `Router()` (named import, the dominant
+    modular-router shape — see node-express-realworld-example-app) — plus
+    function parameters typed `Application`/`Express`/`Router`."""
+    default_name, router_names = _collect_express_import_names(tree, content_bytes)
+    instances: set = set()
+    stack = [tree_root(tree)]
+    while stack:
+        node = stack.pop()
+        kind = _zero_arg(node, 'kind')
+        if kind == 'variable_declarator' and (default_name or router_names):
+            children = _children(node)
+            if children and _zero_arg(children[0], 'kind') == 'identifier':
+                value = children[-1]
+                if _zero_arg(value, 'kind') == 'call_expression' and _is_express_constructor_call(
+                    value, content_bytes, default_name, router_names
+                ):
+                    instances.add(_get_text(children[0], content_bytes))
+        elif kind in ('required_parameter', 'optional_parameter'):
+            children = _children(node)
+            if children and _zero_arg(children[0], 'kind') == 'identifier':
+                for ch in children:
+                    if _zero_arg(ch, 'kind') != 'type_annotation':
+                        continue
+                    if any(
+                        _zero_arg(tch, 'kind') == 'type_identifier'
+                        and _get_text(tch, content_bytes) in _EXPRESS_INSTANCE_TYPES
                         for tch in _children(ch)
                     ):
                         instances.add(_get_text(children[0], content_bytes))
@@ -295,6 +416,7 @@ def _process_call(
     content_bytes: bytes,
     surfaces: Dict[str, List[Dict[str, Any]]],
     mcp_instances: set,
+    express_instances: set,
 ) -> None:
     line = _get_line(node)
     obj, method = _get_callee_parts(node, content_bytes)
@@ -341,7 +463,9 @@ def _process_call(
 
     # HTTP routes: app.get/post/put/delete/patch, router.get/post/...
     # Exclude supertest-style `request(app).get(...)` — obj_node is a call_expression, not an identifier
-    if method in _HTTP_METHODS and not _callee_obj_is_call(node):
+    # BACK-790: obj must resolve to an Express app/router, not just any
+    # object exposing a same-named method.
+    if method in _HTTP_METHODS and not _callee_obj_is_call(node) and obj in express_instances:
         path_arg = _get_call_first_arg_string(node, content_bytes)
         if path_arg and path_arg.startswith('/'):
             _add_once(surfaces['http'], {

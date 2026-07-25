@@ -62,12 +62,16 @@ def _scan_tree(
     # mistakes any unrelated `.tool()`-shaped decorator (e.g. LangChain's
     # `@tool`) for an MCP tool.
     mcp_instances = _collect_mcp_instances(tree, aliases)
+    # BACK-790: same treatment for @x.route()/@x.get()/etc — a bare
+    # decorator-name match mistakes any object with a same-named method for
+    # an HTTP surface.
+    http_apps = _collect_http_apps(tree, aliases)
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             _process_import(node, file_path, aliases, surfaces)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            _process_function_def(node, file_path, surfaces, aliases, cli_groups, mcp_instances)
+            _process_function_def(node, file_path, surfaces, aliases, cli_groups, mcp_instances, http_apps)
         elif isinstance(node, ast.Call):
             _process_call(node, file_path, aliases, surfaces)
         elif isinstance(node, ast.Subscript):
@@ -121,14 +125,16 @@ def _process_function_def(
     aliases: Optional[Dict[str, str]] = None,
     cli_groups: Optional[set] = None,
     mcp_instances: Optional[set] = None,
+    http_apps: Optional[set] = None,
 ) -> None:
     aliases = aliases or {}
     cli_groups = cli_groups or set()
     mcp_instances = mcp_instances or set()
+    http_apps = http_apps or set()
     for decorator in node.decorator_list:
         deco_str = _unparse_expr(decorator)
 
-        if _is_http_route(deco_str):
+        if _is_http_route(deco_str) and _http_route_has_provenance(decorator, aliases, http_apps):
             path_arg = _extract_first_arg(decorator)
             methods = _extract_kwarg(decorator, 'methods')
             surfaces['http'].append({
@@ -332,6 +338,67 @@ def _cli_command_has_provenance(deco: ast.expr, aliases: Dict[str, str], cli_gro
         if isinstance(base, ast.Name) and base.id in cli_groups:
             return True
         return _resolves_to_cli_framework(_leftmost_name(base), aliases)
+    return False
+
+
+# BACK-790: same discipline as BACK-534 (CLI) and BACK-786 (MCP) — an
+# `@x.route()`/`@x.get()`/etc decorator only names a real HTTP surface when
+# `x` resolves to a Flask/FastAPI app, blueprint, or router, not just any
+# object that happens to expose a same-named method.
+_HTTP_FRAMEWORK_ROOTS: frozenset = frozenset({'flask', 'fastapi'})
+_APP_CONSTRUCTORS: frozenset = frozenset({'Flask', 'FastAPI', 'Blueprint', 'APIRouter'})
+
+
+def _resolves_to_http_framework(name: Optional[str], aliases: Dict[str, str]) -> bool:
+    if not name:
+        return False
+    return aliases.get(name, name).split('.')[0] in _HTTP_FRAMEWORK_ROOTS
+
+
+def _is_app_constructor(call: ast.expr, aliases: Dict[str, str]) -> bool:
+    """`Flask(...)` / `FastAPI(...)` / `Blueprint(...)` / `APIRouter(...)`,
+    qualified (`flask.Flask(...)`) or imported directly."""
+    if not isinstance(call, ast.Call):
+        return False
+    func = call.func
+    if isinstance(func, ast.Attribute) and func.attr in _APP_CONSTRUCTORS:
+        return _resolves_to_http_framework(_leftmost_name(func.value), aliases)
+    if isinstance(func, ast.Name):
+        # resolve aliases first: `from flask import Flask as F` maps F ->
+        # 'flask.Flask', so the constructor name lives in the resolved tail,
+        # not in func.id itself.
+        resolved = aliases.get(func.id, func.id).split('.')
+        if resolved[-1] in _APP_CONSTRUCTORS and resolved[0] in _HTTP_FRAMEWORK_ROOTS:
+            return True
+    return False
+
+
+def _collect_http_apps(tree: ast.Module, aliases: Dict[str, str]) -> set:
+    """Variable names bound to a Flask/FastAPI app, blueprint, or router —
+    the base of the `@app.route()` / `@app.get()` / `@router.post()` pattern."""
+    apps: set = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and _is_app_constructor(node.value, aliases):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    apps.add(target.id)
+    return apps
+
+
+def _http_route_has_provenance(deco: ast.expr, aliases: Dict[str, str], http_apps: set) -> bool:
+    """True when an http-method-shaped decorator's base actually resolves to
+    a Flask/FastAPI app, blueprint, or router — including a sub-router
+    attribute reached off one (`@app.webhooks.post(...)`, FastAPI's webhooks
+    router), not just a directly-decorated app/router variable."""
+    func = deco.func if isinstance(deco, ast.Call) else deco
+    if isinstance(func, ast.Attribute):
+        base = func.value
+        if isinstance(base, ast.Name) and base.id in http_apps:
+            return True
+        leftmost = _leftmost_name(base)
+        if leftmost and leftmost in http_apps:
+            return True
+        return _resolves_to_http_framework(leftmost, aliases)
     return False
 
 
