@@ -102,12 +102,29 @@ def _is_pure_virtual_field(field: Any) -> bool:
     return any(_zero_arg(c, 'kind') == 'number_literal' for c in _children(field))
 
 
+def _is_pure_virtual_destructor(item: Any) -> bool:
+    """BACK-827: `virtual ~Foo() = 0;` parses as a `function_definition` (not
+    `field_declaration`) — the destructor body is elided in favor of a
+    `pure_virtual_clause` (`= 0;`) sibling of the `function_declarator`. A
+    normal pure-virtual method's `= 0` is a `number_literal` field sibling;
+    here it's this differently-shaped clause instead."""
+    if _zero_arg(item, 'kind') != 'function_definition':
+        return False
+    has_virtual = any(_zero_arg(c, 'kind') == 'virtual' for c in _children(item))
+    if not has_virtual:
+        return False
+    return any(_zero_arg(c, 'kind') == 'pure_virtual_clause' for c in _children(item))
+
+
 def _class_is_abstract(node: Any) -> bool:
     body = next((c for c in _children(node) if _zero_arg(c, 'kind') == 'field_declaration_list'), None)
     if body is None:
         return False
     for item in _children(body):
-        if _zero_arg(item, 'kind') == 'field_declaration' and _is_pure_virtual_field(item):
+        kind = _zero_arg(item, 'kind')
+        if kind == 'field_declaration' and _is_pure_virtual_field(item):
+            return True
+        if kind == 'function_definition' and _is_pure_virtual_destructor(item):
             return True
     return False
 

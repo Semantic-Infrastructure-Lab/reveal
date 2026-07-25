@@ -797,6 +797,41 @@ public:
         finally:
             os.unlink(temp_path)
 
+    def test_pure_virtual_destructor_marks_class_abstract(self):
+        """BACK-827: `virtual ~Foo() = 0;` must mark a class abstract even
+        when it's the class's *only* pure-virtual member. Unlike a normal
+        pure-virtual method (`field_declaration` + `number_literal`), a
+        pure-virtual destructor parses as a `function_definition` with a
+        `pure_virtual_clause` sibling — a differently-shaped node the
+        contracts scanner previously didn't check."""
+        from reveal.adapters.ast.nav_contracts_cpp import scan_file_contracts_cpp
+
+        code = '''class Foo {
+public:
+    virtual ~Foo() = 0;
+};
+
+Foo::~Foo() {}
+
+class Bar {
+public:
+    void baz() {}
+};
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            result = scan_file_contracts_cpp(temp_path)
+            classes = {c['name']: c for c in result['classes']}
+
+            self.assertTrue(classes['Foo']['is_abstract'])
+            self.assertFalse(classes['Bar']['is_abstract'])
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()
