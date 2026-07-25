@@ -74,6 +74,7 @@ class _TempDirMixin:
 
     def _write(self, name: str, content: str) -> Path:
         path = self.temp_dir / name
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
         return path
 
@@ -766,8 +767,10 @@ class TestV017DeadInRealSelfCheck(_TempDirMixin, unittest.TestCase):
     in every real `reveal reveal:// --check` invocation**, identical in shape
     to the M105 bug from BACK-432 tranche 5, regardless of whether
     reveal/treesitter.py actually had a coverage gap. Fixed by adding
-    `uri_patterns = ['^reveal://.*']` and having check() load treesitter.py
-    directly via find_reveal_root() when file_path == 'reveal://'."""
+    `uri_patterns = ['^reveal://.*']` and having check() load node_taxonomy.py
+    (the FUNCTION_NODE_TYPES/CLASS_NODE_TYPES source of truth since BACK-814;
+    was treesitter.py before that refactor) directly via find_reveal_root()
+    when file_path == 'reveal://'."""
 
     def test_matches_target_reveal_uri(self):
         self.assertTrue(V017.matches_target('reveal://'))
@@ -775,8 +778,8 @@ class TestV017DeadInRealSelfCheck(_TempDirMixin, unittest.TestCase):
     def test_fires_via_real_self_check_entrypoint_when_deficient(self):
         # Simulate the exact call shape operations.check() uses:
         # RuleRegistry.check_file("reveal://", None, "", ...) with a
-        # deliberately deficient treesitter.py under a fake reveal root.
-        self._write('treesitter.py', '# minimal, no node types here\n')
+        # deliberately deficient node_taxonomy.py under a fake reveal root.
+        self._write('adapters/ast/node_taxonomy.py', '# minimal, no node types here\n')
         original_find_root = v017_module.find_reveal_root
         v017_module.find_reveal_root = lambda *a, **k: self.temp_dir
         try:
@@ -791,19 +794,21 @@ class TestV017DeadInRealSelfCheck(_TempDirMixin, unittest.TestCase):
 
     def test_silent_when_treesitter_py_is_healthy(self):
         healthy = (
-            "def _get_function_node_types(self):\n"
-            "    return ['function_definition', 'function_declaration',\n"
-            "            'function_item', 'method_declaration',\n"
-            "            'function_signature', 'func_literal',\n"
-            "            'arrow_function', 'lambda_expression',\n"
-            "            'method_definition', 'constructor_declaration']\n"
-            "def _get_class_node_types(self):\n"
-            "    return ['class_definition', 'class_declaration',\n"
-            "            'struct_item', 'interface_declaration',\n"
-            "            'trait_item']\n"
-            "simple_identifier = 'simple_identifier'\n"
+            "DEF_NODES: frozenset = frozenset({\n"
+            "    'function_definition', 'function_declaration',\n"
+            "    'function_item', 'method_declaration',\n"
+            "    'function_signature', 'func_literal',\n"
+            "    'arrow_function', 'lambda_expression',\n"
+            "    'method_definition', 'constructor_declaration',\n"
+            "})\n"
+            "CLASS_NODES: frozenset = frozenset({\n"
+            "    'class_definition', 'class_declaration',\n"
+            "    'struct_item', 'interface_declaration',\n"
+            "    'trait_item',\n"
+            "})\n"
         )
-        self._write('treesitter.py', healthy)
+        self._write('adapters/ast/node_taxonomy.py', healthy)
+        self._write('treesitter.py', "simple_identifier = 'simple_identifier'\n")
         original_find_root = v017_module.find_reveal_root
         v017_module.find_reveal_root = lambda *a, **k: self.temp_dir
         try:

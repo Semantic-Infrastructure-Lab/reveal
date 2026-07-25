@@ -71,22 +71,42 @@ class V017(BaseRule):
         # rule never matched that literal string (BaseRule.matches_target()
         # requires a '.py' suffix or an explicit URI pattern) and was 100% dead
         # in every real reveal:// self-check, identical in shape to the M105
-        # bug from BACK-432 tranche 5. Load treesitter.py directly in that case.
+        # bug from BACK-432 tranche 5. Load node_taxonomy.py directly in that
+        # case — BACK-814 moved FUNCTION_NODE_TYPES/CLASS_NODE_TYPES from
+        # literal tuples in treesitter.py to `tuple(_DEF_NODES - {...})` /
+        # `tuple(_CLASS_NODES)` derived expressions sourced from that module's
+        # DEF_NODES/CLASS_NODES frozensets; treesitter.py itself no longer
+        # contains any quoted node-type strings for this rule's regexes to
+        # find, so scanning it always returned near-empty coverage after that
+        # refactor (caught only once this rule's own test suite actually ran
+        # against a real push, since the BACK-814 commit had been local-only).
+        # Identifier-kind coverage (_NAME_KINDS, incl. 'simple_identifier' for
+        # Kotlin/Swift) still lives in treesitter.py — only the function/class
+        # node-type *counts* moved to node_taxonomy.py by BACK-814 — so this
+        # rule needs both files' content, not just one.
+        identifier_content = content
         if file_path.startswith('reveal://'):
             reveal_root = find_reveal_root()
             if not reveal_root:
                 return []
+            taxonomy_path = reveal_root / 'adapters' / 'ast' / 'node_taxonomy.py'
             treesitter_path = reveal_root / 'treesitter.py'
-            if not treesitter_path.exists():
+            if not taxonomy_path.exists():
                 return []
             try:
-                content = treesitter_path.read_text(encoding='utf-8')
+                content = taxonomy_path.read_text(encoding='utf-8')
+                identifier_content = (
+                    treesitter_path.read_text(encoding='utf-8')
+                    if treesitter_path.exists() else content
+                )
             except OSError:
                 return []
-            file_path = str(treesitter_path)
-        elif 'treesitter.py' not in file_path:
-            # Direct per-file invocation (e.g. `reveal reveal/treesitter.py --check`)
-            # still only applies to treesitter.py itself.
+            file_path = str(taxonomy_path)
+        elif 'node_taxonomy.py' not in file_path and 'treesitter.py' not in file_path:
+            # Direct per-file invocation (e.g. `reveal reveal/adapters/ast/node_taxonomy.py
+            # --check` or the pre-BACK-814 `reveal reveal/treesitter.py --check`) applies
+            # only to those two files; the extraction methods' fallback regexes still
+            # handle a treesitter.py-shaped `content` for this second case.
             return []
 
         # Check coverage for critical node categories
@@ -127,11 +147,11 @@ class V017(BaseRule):
             ))
 
         # Check identifier node types (for name extraction)
-        if 'simple_identifier' not in content and 'identifier' in content:
+        if 'simple_identifier' not in identifier_content and 'identifier' in identifier_content:
             # Check if we need simple_identifier (Kotlin, Swift use this)
             detections.append(self.create_detection(
                 file_path,
-                self._find_line_number(content, 'identifier'),
+                self._find_line_number(identifier_content, 'identifier'),
                 message="Missing 'simple_identifier' node type (needed for Kotlin/Swift)",
                 suggestion=(
                     "Add 'simple_identifier' to name extraction logic.\n"
@@ -174,7 +194,10 @@ class V017(BaseRule):
         return [t for t in raw if t not in self._TYPE_ANNOTATION_WORDS]
 
     def _extract_function_types(self, content: str) -> List[str]:
-        """Extract function node types from _get_function_node_types() or FUNCTION_NODE_TYPES.
+        """Extract function node types from node_taxonomy.py's DEF_NODES frozenset
+        (BACK-814 source of truth), falling back to the pre-BACK-814
+        _get_function_node_types()/FUNCTION_NODE_TYPES shapes for direct
+        invocation against an older/unrefactored treesitter.py.
 
         Args:
             content: File content
@@ -182,16 +205,20 @@ class V017(BaseRule):
         Returns:
             List of function node type strings
         """
-        # Match from method definition up to (and including) the first ']' after it.
-        # re.DOTALL allows matching across lines for multi-line return lists.
-        # Type annotation keywords are filtered out so 'str' in List[str] is ignored.
-        match = re.search(r"def _get_function_node_types.*?\]", content, re.DOTALL)
+        # Match from the frozenset opener up to (and including) its closing '}'.
+        # re.DOTALL allows matching across lines for the multi-line literal.
+        match = re.search(r"DEF_NODES:\s*frozenset\s*=\s*frozenset\(\{.*?\}\)", content, re.DOTALL)
         if match:
             types = self._extract_strings_filtered(match.group(0))
             if types:
                 return types
 
-        # Fallback: method delegates to a module-level constant
+        # Fallback: pre-BACK-814 treesitter.py shapes
+        match = re.search(r"def _get_function_node_types.*?\]", content, re.DOTALL)
+        if match:
+            types = self._extract_strings_filtered(match.group(0))
+            if types:
+                return types
         const_match = re.search(r"FUNCTION_NODE_TYPES\s*=\s*\(.*?\)", content, re.DOTALL)
         if const_match:
             return self._extract_strings_filtered(const_match.group(0))
@@ -199,7 +226,10 @@ class V017(BaseRule):
         return []
 
     def _extract_class_types(self, content: str) -> List[str]:
-        """Extract class node types from _get_class_node_types() or CLASS_NODE_TYPES.
+        """Extract class node types from node_taxonomy.py's CLASS_NODES frozenset
+        (BACK-814 source of truth), falling back to the pre-BACK-814
+        _get_class_node_types()/CLASS_NODE_TYPES shapes for direct invocation
+        against an older/unrefactored treesitter.py.
 
         Args:
             content: File content
@@ -207,13 +237,18 @@ class V017(BaseRule):
         Returns:
             List of class node type strings
         """
-        match = re.search(r"def _get_class_node_types.*?\]", content, re.DOTALL)
+        match = re.search(r"CLASS_NODES:\s*frozenset\s*=\s*frozenset\(\{.*?\}\)", content, re.DOTALL)
         if match:
             types = self._extract_strings_filtered(match.group(0))
             if types:
                 return types
 
-        # Fallback: method delegates to a module-level constant
+        # Fallback: pre-BACK-814 treesitter.py shapes
+        match = re.search(r"def _get_class_node_types.*?\]", content, re.DOTALL)
+        if match:
+            types = self._extract_strings_filtered(match.group(0))
+            if types:
+                return types
         const_match = re.search(r"CLASS_NODE_TYPES\s*=\s*\(.*?\)", content, re.DOTALL)
         if const_match:
             return self._extract_strings_filtered(const_match.group(0))
