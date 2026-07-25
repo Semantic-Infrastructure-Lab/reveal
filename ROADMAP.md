@@ -177,16 +177,12 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   surface/contracts recall are all measured (see Done, above). The remaining
   confidence gap in this track is the tracked import-recall residuals below:
 
-  1. **Close the tracked import-recall residuals, worst first:**
+  1. **Close the tracked import-recall residual:**
      TypeScript/nest 81.21% (both known resolution gaps now fixed —
      tsconfig-extends chains chilling-lightning-0723, package.json
      exports-map stormy-mistral-0723 — but neither yet re-measured against
      nest; still the lowest number in VALIDATION.md, on a flagship
-     language, with real headroom pending that re-measurement),
-     PHP/osCommerce 74.65% (BACK-681),
-     C#/Newtonsoft.Json 99.36% (BACK-703). The latter two are documented as
-     deliberately out of scope for a generic resolver; revisit only if a
-     corpus shows the shape is commoner than measured.
+     language, with real headroom pending that re-measurement).
 
   *Not on this list, deliberately:* `patches://`/testability language breadth
   past Python + TS is filed as an idea rather than committed work — see
@@ -194,7 +190,12 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   11-language *coverage* parity (BACK-588/630/631) — real recall validation is
   the item above, not this note. Swift's `_RopeModule` residual is closed by design (BACK-704):
   resolving it would require evaluating arbitrary `Package.swift` code, which
-  the buildless architecture will not do.
+  the buildless architecture will not do. PHP/osCommerce 74.65% (BACK-681,
+  CWD/chdir-dependent bare-literal `require`/`include`) and C#/Newtonsoft.Json
+  99.36% (BACK-703, blocked on a `#if`-branch tree-sitter grammar limitation)
+  are both documented as deliberately out of scope for a generic resolver —
+  not queued work, revisit only if a corpus shows either shape is commoner
+  than measured.
 
 ---
 
