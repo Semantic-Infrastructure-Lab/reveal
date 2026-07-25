@@ -3,6 +3,7 @@
 from typing import Any, Dict, List, Optional, Set
 
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -87,7 +88,7 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
         return list(super()._get_class_node_types()) + ['object_declaration']
 
     def _extract_class_bases(self, node) -> List[str]:
-        if node.kind() in ('class_declaration', 'object_declaration'):
+        if _zero_arg(node, 'kind') in ('class_declaration', 'object_declaration'):
             return self._extract_kotlin_delegation(node)
         return super()._extract_class_bases(node)
 
@@ -111,7 +112,7 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
                     return name
             elif child.kind() == 'user_type':
                 return self._kotlin_first_type_identifier(child)
-            elif child.kind() == 'explicit_delegation':
+            elif _zero_arg(child, 'kind') == 'explicit_delegation':
                 # BACK-805: `class Foo(...) : Bar by delegateExpr` — Kotlin's
                 # interface-delegation-by-object language feature. Confirmed
                 # via `--show-ast`: this is a THIRD delegation_specifier
@@ -133,12 +134,12 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
                 # user_type being delegated TO matters.
                 name = None
                 for sub in _children(child):
-                    if sub.kind() == 'user_type':
+                    if _zero_arg(sub, 'kind') == 'user_type':
                         name = self._kotlin_first_type_identifier(sub)
                         break
                 if name:
                     return name
-            elif child.kind() == 'function_type':
+            elif _zero_arg(child, 'kind') == 'function_type':
                 # class Foo(...) : () -> T — a bare function-type supertype has
                 # no identifiable base name (it's structural, not nominal), but
                 # dropping it silently vanishes the whole delegation clause (and

@@ -3,6 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -63,7 +64,7 @@ class SwiftAnalyzer(TreeSitterAnalyzer):
     # idiom for adding conformance separately from a type's primary
     # declaration — this made all such conformances invisible to `contracts`.
     def _get_node_name(self, node) -> Optional[str]:
-        if node.kind() == 'class_declaration' and self._is_swift_extension(node):
+        if _zero_arg(node, 'kind') == 'class_declaration' and self._is_swift_extension(node):
             name = self._swift_extension_type_name(node)
             if name:
                 return name
@@ -71,9 +72,9 @@ class SwiftAnalyzer(TreeSitterAnalyzer):
 
     def _is_swift_extension(self, node) -> bool:
         for child in _children(node):
-            if child.kind() == 'extension':
+            if _zero_arg(child, 'kind') == 'extension':
                 return True
-            if child.kind() in ('class', 'struct', 'enum', 'actor'):
+            if _zero_arg(child, 'kind') in ('class', 'struct', 'enum', 'actor'):
                 return False
         return False
 
@@ -83,12 +84,12 @@ class SwiftAnalyzer(TreeSitterAnalyzer):
         # (nested type reference; last type_identifier is the extended type's
         # own simple name, matching how its primary declaration is named).
         for child in _children(node):
-            if child.kind() == 'user_type':
+            if _zero_arg(child, 'kind') == 'user_type':
                 type_identifiers: List[str] = []
                 stack = [child]
                 while stack:
                     n = stack.pop(0)
-                    if n.kind() == 'type_identifier':
+                    if _zero_arg(n, 'kind') == 'type_identifier':
                         text = self._get_node_text(n).strip()
                         if text:
                             type_identifiers.append(text)
@@ -122,7 +123,7 @@ class SwiftAnalyzer(TreeSitterAnalyzer):
                 text = self._get_node_text(child).strip()
                 if text:
                     return text
-            elif child.kind() == 'suppressed_constraint':
+            elif _zero_arg(child, 'kind') == 'suppressed_constraint':
                 # Suppressed-conformance / noncopyable-type syntax (Swift 5.9+):
                 # `struct Foo: ~Copyable {}` parses as inheritance_specifier ->
                 # suppressed_constraint -> ('~', type_identifier). Without this
@@ -133,7 +134,7 @@ class SwiftAnalyzer(TreeSitterAnalyzer):
                 # suppression rather than a normal conformance — distinct and
                 # informative to consumers of bases.
                 for sub in _children(child):
-                    if sub.kind() == 'type_identifier':
+                    if _zero_arg(sub, 'kind') == 'type_identifier':
                         text = self._get_node_text(sub).strip()
                         if text:
                             return f'~{text}'

@@ -3,6 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -93,7 +94,7 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
             # own simple name is always the rightmost non-'.' child, which
             # may itself be a plain `identifier` or (for `Ns.Foo<T>`) a
             # `generic_name`; recurse to unwrap either.
-            children = [c for c in _children(item) if c.kind() != '.']
+            children = [c for c in _children(item) if _zero_arg(c, 'kind') != '.']
             return self._csharp_base_item_name(children[-1]) if children else None
         if kind == 'generic_name':
             # IFoo<T> — extract the base identifier, drop the type args
