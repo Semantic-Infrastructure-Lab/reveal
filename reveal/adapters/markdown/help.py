@@ -4,6 +4,8 @@ from typing import Dict, Any
 
 
 _SCHEMA_QUERY_PARAMS = {
+    'link-graph': 'Bidirectional cross-file link graph for every doc in the tree (forward links + backlinks + orphans).',
+    'backlinks=path': 'Who links to a single doc (relative path or bare filename) — cheaper than link-graph for a pre-edit staleness check on one file.',
     'aggregate=field': 'Frequency table of values for a frontmatter field. List fields (e.g. beth_topics) are expanded per item.',
     'body-contains=term': 'Case-insensitive substring search in body text (after frontmatter). Multiple body-contains= params are AND\'d.',
     'field=value': 'Exact match (or substring for list fields)',
@@ -46,6 +48,49 @@ _SCHEMA_OUTPUT_TYPES = [
                         }
                     }
                 }
+            }
+        }
+    },
+    {
+        'type': 'markdown_link_graph',
+        'description': 'Bidirectional cross-file link graph for every doc in the tree',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'markdown_link_graph'},
+                'source': {'type': 'string'},
+                'total_files': {'type': 'integer'},
+                'total_edges': {'type': 'integer'},
+                'nodes': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'file': {'type': 'string'},
+                            'links_to': {'type': 'array', 'items': {'type': 'string'}},
+                            'linked_by': {'type': 'array', 'items': {'type': 'string'}},
+                        }
+                    }
+                },
+                'isolated': {'type': 'array', 'items': {'type': 'string'}},
+            }
+        }
+    },
+    {
+        'type': 'markdown_backlinks',
+        'description': 'Who links to a single target doc, plus what that doc links to',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'markdown_backlinks'},
+                'source': {'type': 'string'},
+                'target': {'type': 'string'},
+                'found': {'type': 'boolean'},
+                'linked_by': {'type': 'array', 'items': {'type': 'string'}},
+                'links_to': {'type': 'array', 'items': {'type': 'string'}},
+                'ambiguous': {'type': 'boolean'},
+                'candidates': {'type': 'array', 'items': {'type': 'string'}},
+                'total_files': {'type': 'integer'},
             }
         }
     },
@@ -144,6 +189,18 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'description': 'Topic distribution — list fields expanded per item',
         'cli_flag': '?aggregate=beth_topics',
         'output_type': 'markdown_aggregate'
+    },
+    {
+        'uri': 'markdown://docs/?link-graph',
+        'description': 'Bidirectional link graph for every doc — forward links, backlinks, orphans',
+        'cli_flag': '?link-graph',
+        'output_type': 'markdown_link_graph'
+    },
+    {
+        'uri': 'markdown://docs/?backlinks=auth.md',
+        'description': 'Who links to auth.md — pre-edit staleness check before renaming/restructuring',
+        'cli_flag': '?backlinks=auth.md',
+        'output_type': 'markdown_backlinks'
     }
 ]
 
@@ -162,6 +219,8 @@ _HELP_EXAMPLES = [
     {'uri': 'markdown://docs/?status=active --format=json', 'description': 'JSON output for scripting'},
     {'uri': "markdown://docs/?body-contains=nginx", 'description': 'Find docs whose body mentions nginx (case-insensitive)'},
     {'uri': "markdown://docs/?type=guide&body-contains=nginx&limit=5", 'description': 'Combine body text search with frontmatter filter and limit'},
+    {'uri': 'markdown://docs/?link-graph', 'description': 'Bidirectional link graph for every doc — forward links, backlinks, orphans'},
+    {'uri': 'markdown://docs/?backlinks=auth.md', 'description': 'Who links to auth.md — pre-edit staleness check before renaming/restructuring'},
 ]
 
 _HELP_WORKFLOWS = [
@@ -179,6 +238,13 @@ _HELP_WORKFLOWS = [
         'steps': [
             "reveal markdown://sessions/?topics=reveal",
             "reveal <found-file> --related-all    # Follow links",
+        ],
+    },
+    {
+        'name': 'Pre-Edit Staleness Check',
+        'scenario': 'About to rename or restructure a doc — see who references it first',
+        'steps': [
+            "reveal 'markdown://docs/?backlinks=auth.md'   # Who links to this doc",
         ],
     },
 ]

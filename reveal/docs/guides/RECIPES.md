@@ -28,6 +28,7 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
   - [Search doc body text](#search-doc-body-text)
   - [Count values across a field](#count-values-across-a-field)
   - [Build a link graph](#build-a-link-graph)
+  - [Pre-edit staleness check for one doc](#pre-edit-staleness-check-for-one-doc)
 - [Session Analysis](#session-analysis)
   - [Browse sessions](#browse-sessions)
   - [Search across sessions](#search-across-sessions)
@@ -761,6 +762,23 @@ reveal 'markdown://docs/?link-graph' --format=grep | cut -f2 | sort | uniq -c | 
 ```
 
 **Output:** Per-file: links-to list, linked-by count. Plus isolated files (no links in or out — orphaned docs).
+
+### Pre-edit staleness check for one doc
+
+About to rename or restructure a single doc? `?link-graph` builds the whole
+tree's graph; `?backlinks=` returns just the one node you asked about.
+
+```bash
+# Who references auth.md before I rename it?
+reveal 'markdown://docs/?backlinks=auth.md'
+
+# Bare filename resolves by basename if the path is ambiguous, it says so
+reveal 'markdown://docs/?backlinks=guides/auth.md'
+```
+
+**Output:** `linked_by` (who points at this doc) and `links_to` (what this doc
+points at). "Linked by (0)" means it's safe to rename/remove without breaking
+inbound links.
 
 ### Validate links
 

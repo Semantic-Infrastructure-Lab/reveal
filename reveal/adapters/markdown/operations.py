@@ -206,6 +206,75 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
     }
 
 
+def get_backlinks(base_path: Path, target: str) -> Dict[str, Any]:
+    """Find which files link to a single target doc — a pre-edit staleness check.
+
+    Reuses ``build_link_graph`` (backlinks require scanning every file's
+    outbound links regardless of how many targets you care about) but returns
+    only the one node instead of the whole tree, so callers checking "who
+    references this doc before I rename it" don't pay for output they didn't
+    ask for.
+
+    Args:
+        base_path: Root directory to index.
+        target: Path to the doc to look up, relative to base_path (e.g.
+            'guides/auth.md'). A bare filename (e.g. 'auth.md') matches by
+            basename if no exact relative-path match is found.
+
+    Returns:
+        Dict with keys:
+            target      — the resolved relative path that was matched
+            found       — whether a matching file was located
+            linked_by   — files that link to target (empty if not found)
+            links_to    — files target links to (empty if not found)
+            ambiguous   — present + True when a bare filename matched >1 file
+            candidates  — present when ambiguous, the list of matching paths
+            total_files — number of markdown files scanned
+    """
+    graph = build_link_graph(base_path)
+    target_norm = target.strip().lstrip('./')
+
+    node = next((n for n in graph['nodes'] if n['file'] == target_norm), None)
+    if node is not None:
+        return {
+            'target': node['file'],
+            'found': True,
+            'linked_by': node['linked_by'],
+            'links_to': node['links_to'],
+            'total_files': graph['total_files'],
+        }
+
+    basename = target_norm.rsplit('/', 1)[-1]
+    candidates = [n for n in graph['nodes'] if n['file'].rsplit('/', 1)[-1] == basename]
+    if len(candidates) == 1:
+        node = candidates[0]
+        return {
+            'target': node['file'],
+            'found': True,
+            'linked_by': node['linked_by'],
+            'links_to': node['links_to'],
+            'total_files': graph['total_files'],
+        }
+    if len(candidates) > 1:
+        return {
+            'target': target_norm,
+            'found': False,
+            'ambiguous': True,
+            'candidates': sorted(n['file'] for n in candidates),
+            'linked_by': [],
+            'links_to': [],
+            'total_files': graph['total_files'],
+        }
+
+    return {
+        'target': target_norm,
+        'found': False,
+        'linked_by': [],
+        'links_to': [],
+        'total_files': graph['total_files'],
+    }
+
+
 def get_element(base_path: Path, element_name: str) -> Optional[Dict[str, Any]]:
     """Get frontmatter from a specific file.
 

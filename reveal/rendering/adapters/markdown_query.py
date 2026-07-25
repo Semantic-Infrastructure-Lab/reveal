@@ -20,6 +20,8 @@ def render_markdown_query(data: Dict[str, Any], output_format: str,
 
     if data.get('type') == 'markdown_link_graph':
         _render_link_graph(data, output_format)
+    elif data.get('type') == 'markdown_backlinks':
+        _render_backlinks(data, output_format)
     elif data.get('type') == 'markdown_aggregate':
         _render_aggregate(data, output_format)
     elif single_file:
@@ -58,6 +60,44 @@ def _render_link_graph(data: Dict[str, Any], output_format: str) -> None:
         print(f'Isolated ({len(isolated)} files with no links):')
         for f in isolated:
             print(f'  {f}')
+
+
+def _render_backlinks(data: Dict[str, Any], output_format: str) -> None:
+    """Render backlinks for a single target doc."""
+    target = data.get('target', '?')
+
+    if output_format == 'grep':
+        if not data.get('found'):
+            return
+        for src in data.get('linked_by', []):
+            print(f"{src}\t{target}")
+        return
+
+    if not data.get('found'):
+        if data.get('ambiguous'):
+            print(f"Ambiguous target '{target}' — matches multiple files:")
+            for c in data.get('candidates', []):
+                print(f'  {c}')
+            print('Use a full relative path to disambiguate.')
+        else:
+            total = data.get('total_files', 0)
+            print(f"No markdown file matching '{target}' found ({total} files scanned).")
+        return
+
+    linked_by = data.get('linked_by', [])
+    links_to = data.get('links_to', [])
+    print(f'Backlinks: {target}')
+    print()
+    print(f'Linked by ({len(linked_by)}):')
+    if linked_by:
+        for src in linked_by:
+            print(f'  ← {src}')
+    else:
+        print('  (none — safe to rename/remove without breaking inbound links)')
+    print()
+    print(f'Links to ({len(links_to)}):')
+    for tgt in links_to:
+        print(f'  → {tgt}')
 
 
 def _render_aggregate(data: Dict[str, Any], output_format: str) -> None:

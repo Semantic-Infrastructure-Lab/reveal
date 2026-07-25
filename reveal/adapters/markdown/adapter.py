@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.query import parse_query_filters, parse_result_control, ResultControl
+from ...utils.results import ResultBuilder
 from ...utils.validation import require_directory
 
 from .renderer import MarkdownRenderer
@@ -13,6 +14,25 @@ from . import query as query_module
 from . import operations
 from . import files
 from . import filtering
+
+
+def _extract_backlinks(filter_query: str) -> tuple:
+    """Extract backlinks=<path> param from filter query.
+
+    Returns:
+        (target_path_or_None, remaining_query_string)
+    """
+    target = None
+    remaining_parts = []
+    for part in filter_query.split('&'):
+        stripped = part.strip()
+        if stripped.startswith('backlinks='):
+            value = stripped[len('backlinks='):]
+            if value:
+                target = value
+        else:
+            remaining_parts.append(part)
+    return target, '&'.join(remaining_parts)
 
 
 def _extract_aggregate(filter_query: str) -> tuple:
@@ -150,6 +170,11 @@ class MarkdownQueryAdapter(ResourceAdapter):
         if filter_query:
             self.link_graph, filter_query = _extract_link_graph(filter_query)
 
+        # Extract backlinks= param before passing to filter parsers
+        self.backlinks_target = None
+        if filter_query:
+            self.backlinks_target, filter_query = _extract_backlinks(filter_query)
+
         # Extract aggregate= param before passing to filter parsers
         self.aggregate_field = None
         if filter_query:
@@ -200,6 +225,14 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 'source_type': 'directory',
                 **result,
             }
+
+        if self.backlinks_target:
+            result = operations.get_backlinks(self.base_path, self.backlinks_target)
+            return ResultBuilder.create(
+                result_type='markdown_backlinks',
+                source=self.base_path,
+                data=result,
+            )
 
         if self.aggregate_field:
             result = operations.aggregate_field_values(

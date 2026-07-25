@@ -963,6 +963,29 @@ reveal 'markdown://primitives/?type=framework&fields=book,cohort'
 - List-valued fields are rendered as `field=v1,v2`
 - Combines with all filters and result control
 
+### Cross-File Link Graph (`?link-graph`, `?backlinks=`)
+
+Two related but distinct queries over the tree's `[text](path)` link structure:
+
+```bash
+# Whole-tree bidirectional graph: forward links, backlinks, orphans
+reveal 'markdown://docs/?link-graph'
+
+# Single doc: who links to it, before you rename/restructure it
+reveal 'markdown://docs/?backlinks=auth.md'
+```
+
+- `?link-graph` builds and returns the full graph for every markdown file
+  under the queried directory — use it to survey overall doc connectivity or
+  find orphaned files (`isolated` in the output).
+- `?backlinks=path` returns just the one node you asked about — cheaper when
+  you only need "who references this doc" as a pre-edit staleness check.
+  Accepts either a path relative to the queried directory or a bare filename
+  (resolved by basename if unambiguous; flagged as `ambiguous` with
+  `candidates` listed otherwise).
+- Both are a live regex parse of `[text](path)` link syntax — no persisted
+  index, so results always reflect the current filesystem state.
+
 ## Notes
 
 - **Accurate Parsing**: Tree-sitter ensures `#` in code fences aren't treated as headings
