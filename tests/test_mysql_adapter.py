@@ -76,6 +76,27 @@ class TestMySQLAdapterInit(unittest.TestCase):
         self.assertEqual(adapter.user, "root")
         self.assertEqual(adapter.password, "secret")
 
+    def test_init_with_scheme_stripped_host(self):
+        """CLI routing (_try_resource_arg_init) commonly hands the adapter the
+        resource with the 'mysql://' scheme already stripped (e.g. bare
+        'localhost' for `reveal mysql://localhost`). Without normalization,
+        urlparse has no netloc to parse and silently reads the bare host as
+        the *element* instead, leaving host=None and falling back to
+        ~/.my.cnf undetected — a real bug (BACK-859 dogfood sweep)."""
+        adapter = MySQLAdapter("localhost")
+        self.assertEqual(adapter.host, "localhost")
+        self.assertIsNone(adapter.element)
+
+    def test_init_with_scheme_stripped_full_uri(self):
+        """Scheme-stripped form with credentials/port/element must parse
+        identically to the full 'mysql://...' form."""
+        adapter = MySQLAdapter("user:pass@host:3307/element")
+        self.assertEqual(adapter.host, "host")
+        self.assertEqual(adapter.port, 3307)
+        self.assertEqual(adapter.element, "element")
+        self.assertEqual(adapter.user, "user")
+        self.assertEqual(adapter.password, "pass")
+
 
 class TestCredentialResolution(unittest.TestCase):
     """Test 3-tier credential resolution system."""

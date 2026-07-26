@@ -52,7 +52,12 @@ class MySQLConnection:
         """Parse mysql:// URI into components.
 
         Args:
-            uri: Connection URI (mysql://[user:pass@]host[:port][/element])
+            uri: Connection URI (mysql://[user:pass@]host[:port][/element]).
+                 The CLI's adapter factory commonly strips the 'mysql://'
+                 scheme before reaching here (e.g. passes just
+                 'user:pass@host:port/db' or bare 'host') — normalize below
+                 so that form parses identically to the full URI instead of
+                 being silently misread.
 
         Uses urlparse so passwords containing '@' or ':' are handled correctly
         when percent-encoded (e.g. mysql://user:p%40ssword@host/db).
@@ -62,7 +67,12 @@ class MySQLConnection:
             # This allows MYSQL_HOST env var and ~/.my.cnf to take effect
             return
 
-        parsed = urlparse(uri)
+        # Without a scheme, urlparse has no netloc to work with and silently
+        # reads the whole string as a path (or, worse, misreads a bare
+        # 'user:pass@...' as `scheme='user'`) — dropping host/user/password
+        # without any error, which then falls back to ~/.my.cnf undetected.
+        parse_target = uri if '://' in uri else f'mysql://{uri}'
+        parsed = urlparse(parse_target)
 
         if parsed.username:
             self.user = unquote(parsed.username)
