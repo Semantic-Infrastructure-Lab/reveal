@@ -1178,6 +1178,14 @@ class HelpAdapter(ResourceAdapter):
             'file': 'AGENT_HELP.md',
             'content': '\n'.join(section_lines),
             'note': 'Extracted from AGENT_HELP.md — use help://agent for the complete guide.',
+            # BACK-841: short enough never to truncate, so it never got the
+            # '/full' footer that longer guides use as their onward pointer —
+            # leaving it a measured dead end.
+            'next': [
+                'reveal help://agent',
+                'reveal help://tricks',
+                'reveal help://quick',
+            ],
         }
 
     # Internal/scaffold adapters excluded from public listings
@@ -1205,6 +1213,14 @@ class HelpAdapter(ResourceAdapter):
                     'example': example
                 }
 
+        # BACK-841: this page was one of four measured dead ends — 6.4KB of
+        # adapter names with no onward pointer. The obvious next questions are
+        # "what can I query on one of these?" and "how do they combine?".
+        all_help['next'] = [
+            'reveal help://<adapter>',
+            'reveal help://schemas/index',
+            'reveal help://relationships',
+        ]
         return all_help
 
     _PROGRESSIVE_DISCLOSURE_THRESHOLD = 200
@@ -1623,12 +1639,24 @@ class HelpAdapter(ResourceAdapter):
         if task_name not in _EXAMPLE_RECIPES:
             available = ', '.join(sorted(_EXAMPLE_RECIPES.keys()))
             error_msg = f"Specify a task. Available: {available}" if not task_name else f"Unknown task '{task_name}'. Available: {available}"
+            # BACK-841: on the bare catalog listing, pointing at
+            # 'reveal help://examples' is a self-loop — it was this page's only
+            # pointer, which is why the page measured as a dead end. Send the
+            # reader into actual recipes instead; a mistyped task still routes
+            # back to the catalog, where that pointer is the correct one.
+            if task_name:
+                next_steps = ['reveal help://examples']
+            else:
+                next_steps = [
+                    f'reveal help://examples/{task}'
+                    for task in sorted(_EXAMPLE_RECIPES)[:3]
+                ] + ['reveal help://quick']
             return {
                 'type': 'query_recipes',
                 'task': task_name,
                 'error': 'Unknown task' if task_name else 'No task specified',
                 'message': error_msg,
                 'available_tasks': list(_EXAMPLE_RECIPES.keys()),
-                'next': ['reveal help://examples'],
+                'next': next_steps,
             }
         return _EXAMPLE_RECIPES[task_name]

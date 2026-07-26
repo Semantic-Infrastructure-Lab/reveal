@@ -346,6 +346,11 @@ def _render_help_static_guide(data: Dict[str, Any]) -> None:
     print()
 
     print(data['content'])
+    # Long guides carry their onward pointer in the truncation footer; short
+    # ones never truncate, so render an explicit 'next' when present (BACK-841).
+    if data.get('next'):
+        print()
+        _render_schema_next(data)
 
 
 def _render_help_adapter_summary(data: Dict[str, Any]) -> None:
@@ -359,6 +364,7 @@ def _render_help_adapter_summary(data: Dict[str, Any]) -> None:
         if info.get('example'):
             print(f"Example: {info['example']}")
         print()
+    _render_schema_next(data)
 
 
 def _render_workflows(content: list) -> None:
@@ -605,6 +611,7 @@ def _render_query_recipes(data: Dict[str, Any]) -> None:
             print("  reveal help://examples/security")
             print("  reveal help://examples/codebase")
             print()
+            _render_schema_next(data)
         else:
             print(f"Error: {data['message']}", file=sys.stderr)
             sys.exit(1)

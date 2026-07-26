@@ -478,6 +478,23 @@ class TestFlagOnlySurfacesReachableByUri(unittest.TestCase):
             len(result['explicit']) + len(result['fallback']),
         )
 
+    def test_no_uri_discovery_page_is_a_dead_end(self):
+        """BACK-841: the URI tier measured as four pointer-free dead ends
+        (help://adapters, examples, anti-patterns, schemas). Every discovery
+        page must offer at least one onward pointer, and never only a self-loop."""
+        adapter = HelpAdapter()
+        pages = ['adapters', 'examples', 'anti-patterns', 'schemas',
+                 'rules', 'languages', 'schemas/index', 'schemas/all']
+        for page in pages:
+            result = adapter.get_element(page)
+            self.assertIsNotNone(result, f'help://{page} must resolve')
+            pointers = result.get('next') or []
+            self.assertTrue(pointers, f'help://{page} is a dead end (no next pointers)')
+            self.assertNotEqual(
+                pointers, [f'reveal help://{page}'],
+                f'help://{page} only points at itself',
+            )
+
     def test_rules_and_languages_are_discovery_topics(self):
         """A route nobody can find repeats the defect this thread is about —
         both must be suggestible when mistyped."""
