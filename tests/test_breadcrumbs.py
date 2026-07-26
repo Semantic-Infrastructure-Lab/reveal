@@ -1046,37 +1046,3 @@ class TestPrintBreadcrumbsDirectoryCheck:
         )
         assert output == ''
 
-
-# ==============================================================================
-# print_breadcrumbs Tests - Code Review Context (Phase 3)
-# ==============================================================================
-
-class TestPrintBreadcrumbsCodeReview:
-    """Tests for code-review context breadcrumbs."""
-
-    def test_code_review_shows_workflow(self):
-        """Code review context shows workflow steps."""
-        mock_config = Mock()
-        mock_config.is_breadcrumbs_enabled.return_value = True
-
-        output = capture_breadcrumbs(
-            'code-review', 'src/app.py',
-            config=mock_config,
-            left_ref='main',
-            right_ref='feature'
-        )
-        assert 'Code Review Workflow:' in output
-        assert 'stats://src/app.py' in output
-        assert 'imports://. --circular' in output
-        assert '--check' in output
-
-    def test_code_review_respects_config(self):
-        """Code review context respects breadcrumbs config."""
-        mock_config = Mock()
-        mock_config.is_breadcrumbs_enabled.return_value = False
-
-        output = capture_breadcrumbs(
-            'code-review', 'src/app.py',
-            config=mock_config
-        )
-        assert output == ''

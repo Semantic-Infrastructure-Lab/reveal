@@ -368,20 +368,24 @@ def _render_diff_breadcrumbs(left: Dict[str, Any], right: Dict[str, Any],
 
     # Get changed functions to suggest deep dive
     functions = details.get('functions', [])
-    modified_funcs = [f for f in functions if f.get('change') == 'modified']
+    modified_funcs = [f for f in functions if f.get('type') == 'modified']
 
+    step = 1
     if modified_funcs:
         # Suggest viewing a modified function
         func_name = modified_funcs[0].get('name', '')
         if func_name:
-            print(f"  1. reveal 'diff://{left_uri}:{right_uri}/{func_name}'")
+            print(f"  {step}. reveal 'diff://{left_uri}:{right_uri}/{func_name}'")
             print(f"     └─ Deep dive into {func_name} changes")
             print()
+            step += 1
 
     if is_code_review:
-        print(f"  2. reveal stats://{path}            # Check complexity trends")
-        print("  3. reveal imports://. --circular    # Check for new cycles")
-        print(f"  4. reveal {path} --check            # Quality check")
+        print(f"  {step}. reveal stats://{path}            # Check complexity trends")
+        step += 1
+        print(f"  {step}. reveal imports://. --circular    # Check for new cycles")
+        step += 1
+        print(f"  {step}. reveal {path} --check            # Quality check")
     else:
         print(f"Next: reveal stats://{path}      # Analyze complexity trends")
         print(f"      reveal {path} --check      # Check quality after changes")

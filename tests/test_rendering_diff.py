@@ -14,6 +14,7 @@ from reveal.rendering.diff import (
     _has_changes,
     _render_category_summary,
     _render_diff_summary,
+    _render_diff_breadcrumbs,
 )
 
 
@@ -210,6 +211,41 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertGreater(len(output), 0)
         except Exception as e:
             self.fail(f"_render_diff_header raised {type(e).__name__} unexpectedly")
+
+
+class TestRenderDiffBreadcrumbs(unittest.TestCase):
+    """Tests for _render_diff_breadcrumbs (BACK-862)."""
+
+    def test_code_review_with_modified_function_suggests_deep_dive(self):
+        """A modified function (keyed 'type', not 'change') must produce the
+        '1. deep dive' suggestion, numbered ahead of the standard workflow steps."""
+        left = {'uri': 'git://HEAD/app.py'}
+        right = {'uri': 'git://.//app.py', 'file': 'app.py'}
+        details = {'functions': [
+            {'type': 'modified', 'name': 'handle_request', 'changes': {}},
+        ]}
+
+        output = capture_stdout(_render_diff_breadcrumbs, left, right, details)
+
+        self.assertIn("1. reveal 'diff://git://HEAD/app.py:git://.//app.py/handle_request'", output)
+        self.assertIn("2. reveal stats://app.py", output)
+        self.assertIn("3. reveal imports://. --circular", output)
+        self.assertIn("4. reveal app.py --check", output)
+
+    def test_code_review_without_modified_function_renumbers_from_one(self):
+        """With no modified function, the workflow list must start at 1, not 2."""
+        left = {'uri': 'git://HEAD/app.py'}
+        right = {'uri': 'git://.//app.py', 'file': 'app.py'}
+        details = {'functions': [
+            {'type': 'added', 'name': 'new_fn'},
+        ]}
+
+        output = capture_stdout(_render_diff_breadcrumbs, left, right, details)
+
+        self.assertNotIn('deep dive', output.lower())
+        self.assertIn("1. reveal stats://app.py", output)
+        self.assertIn("2. reveal imports://. --circular", output)
+        self.assertIn("3. reveal app.py --check", output)
 
     def test_render_category_summary_with_changes(self):
         """Test _render_category_summary when there are changes."""

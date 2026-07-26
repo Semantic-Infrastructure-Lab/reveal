@@ -437,15 +437,6 @@ def _handle_directory_check(path, file_type, **kwargs):
         print("  2. git commit                       # Ready to commit")
 
 
-def _handle_code_review(path, file_type, **kwargs):
-    """Handle 'code-review' context breadcrumbs."""
-    print()
-    print("Code Review Workflow:")
-    print(f"  1. reveal stats://{path}            # Check complexity trends")
-    print("  2. reveal imports://. --circular    # Check for new cycles")
-    print(f"  3. reveal {path} --check            # Quality check changed files")
-
-
 # Dispatch table for context handlers
 _CONTEXT_HANDLERS = {
     'metadata': _handle_metadata,
@@ -454,7 +445,6 @@ _CONTEXT_HANDLERS = {
     'element': _handle_element,
     'quality-check': _handle_quality_check,
     'directory-check': _handle_directory_check,
-    'code-review': _handle_code_review,
 }
 
 
@@ -463,7 +453,7 @@ def print_breadcrumbs(context, path, file_type=None, config=None, **kwargs):
 
     Args:
         context: 'structure', 'element', 'metadata', 'typed', 'quality-check',
-                 'directory-check', or 'code-review'
+                 or 'directory-check'
         path: File or directory path
         file_type: Optional file type for context-specific suggestions
         config: Optional RevealConfig instance (if None, loads default)
