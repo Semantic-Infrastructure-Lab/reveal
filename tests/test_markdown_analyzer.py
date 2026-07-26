@@ -393,6 +393,35 @@ Content here.
         finally:
             self.teardown_file(path)
 
+    def test_cross_file_anchor_link_not_broken(self):
+        """BACK-843: file.md#section must split off the fragment before
+        checking file existence — the '#section' suffix was previously
+        treated as part of the filename, so every anchored link to another
+        file was reported broken regardless of validity."""
+        temp_dir = tempfile.mkdtemp()
+        target_path = os.path.join(temp_dir, "target.md")
+        source_path = os.path.join(temp_dir, "source.md")
+        with open(target_path, 'w', encoding='utf-8') as f:
+            f.write("# Target Doc\n\n## Living Status Matrix\n")
+        with open(source_path, 'w', encoding='utf-8') as f:
+            f.write(
+                "[valid anchor](target.md#living-status-matrix)\n"
+                "[bad anchor](target.md#does-not-exist)\n"
+                "[missing file](nope.md#whatever)\n"
+            )
+        try:
+            analyzer = MarkdownAnalyzer(source_path)
+            structure = analyzer.get_structure(extract_links=True)
+            links = structure['links']
+
+            self.assertFalse(links[0]['broken'], "valid cross-file anchor incorrectly marked broken")
+            self.assertTrue(links[1]['broken'], "anchor missing from target should be broken")
+            self.assertTrue(links[2]['broken'], "missing target file should be broken")
+        finally:
+            os.unlink(source_path)
+            os.unlink(target_path)
+            os.rmdir(temp_dir)
+
     def test_code_block_no_language(self):
         """Test code block without language specifier."""
         content = """```

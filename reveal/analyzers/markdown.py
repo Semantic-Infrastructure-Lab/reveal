@@ -531,19 +531,37 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                     return False
             return True
 
+        # Split off an anchor fragment (file.md#section) before resolving the
+        # file path — otherwise the '#section' suffix is treated as part of
+        # the filename and every anchored link is reported broken.
+        file_part, _, anchor = url.partition('#')
+
         # Handle file links - resolve relative to markdown file's directory
         base_dir = self.path.parent
-        target = base_dir / url
+        target = base_dir / file_part
 
         # Try both as-is and with common extensions
-        if target.exists():
+        if not target.exists():
+            # Try with .md extension if not already present
+            if target.suffix or not (target.parent / f"{target.name}.md").exists():
+                return True
+            target = target.parent / f"{target.name}.md"
+
+        if not anchor:
             return False
 
-        # Try with .md extension if not already present
-        if not target.suffix:
-            if (target.parent / f"{target.name}.md").exists():
-                return False
+        if target.is_dir() or target.suffix.lower() not in ('.md', '.markdown'):
+            return False
 
+        try:
+            target_analyzer = MarkdownAnalyzer(str(target))
+            target_headings = target_analyzer._extract_headings()
+        except Exception:
+            return False
+
+        for heading in target_headings:
+            if self._heading_to_slug(heading['name']) == anchor:
+                return False
         return True
 
     def _extract_fence_language(self, node) -> str:
