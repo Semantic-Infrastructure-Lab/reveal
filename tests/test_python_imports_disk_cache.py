@@ -106,7 +106,7 @@ def test_kill_switch_writes_nothing(tmp_path, monkeypatch):
     assert disk_cache.get(py_imports_mod._IMPORTS_CACHE_NAMESPACE, fp) is None
 
 
-def test_cache_hit_restamps_to_query_path(tmp_path):
+def test_cache_hit_restamps_to_query_path(tmp_path, monkeypatch):
     """A cache hit must carry the *querying* call's Path, not whichever Path
     the entry was first populated under.
 
@@ -121,7 +121,10 @@ def test_cache_hit_restamps_to_query_path(tmp_path):
     src = _write_module(tmp_path / "mod.py")
     extractor = py_imports_mod.PythonExtractor()
 
-    relative = Path(os.path.relpath(src))
+    # chdir into tmp_path so a relative Path is guaranteed same-drive as
+    # tmp_path on Windows (os.path.relpath raises across drive letters).
+    monkeypatch.chdir(tmp_path)
+    relative = src.relative_to(tmp_path)
     first = extractor.extract_imports(relative)
     assert all(imp.file_path == relative for imp in first)
 

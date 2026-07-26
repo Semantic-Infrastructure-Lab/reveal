@@ -149,7 +149,7 @@ def test_kill_switch_writes_nothing(tmp_path, monkeypatch, mod, extractor_cls, s
 
 
 @pytest.mark.parametrize("mod,extractor_cls,suffix,src,expect,src2,expect2", CASES)
-def test_cache_hit_restamps_to_query_path(tmp_path, mod, extractor_cls, suffix, src, expect, src2, expect2):
+def test_cache_hit_restamps_to_query_path(tmp_path, monkeypatch, mod, extractor_cls, suffix, src, expect, src2, expect2):
     """A cache hit must carry the *querying* call's Path, not whichever Path
     the entry was first populated under -- see the Python-extractor sibling
     test in test_python_imports_disk_cache.py for the full false-positive
@@ -159,7 +159,10 @@ def test_cache_hit_restamps_to_query_path(tmp_path, mod, extractor_cls, suffix, 
     path.write_text(src)
     extractor = extractor_cls()
 
-    relative = Path(os.path.relpath(path))
+    # chdir into tmp_path so a relative Path is guaranteed same-drive as
+    # tmp_path on Windows (os.path.relpath raises across drive letters).
+    monkeypatch.chdir(tmp_path)
+    relative = path.relative_to(tmp_path)
     first = extractor.extract_imports(relative)
     assert all(imp.file_path == relative for imp in first)
 
