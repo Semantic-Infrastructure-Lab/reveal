@@ -345,7 +345,9 @@ def handle_explain_rule(rule_code: str):
 
     print(f"Rule: {rule.code}")
     print(f"Message: {rule.message}")
-    print(f"Category: {rule.category.value if rule.category else 'unknown'}")
+    category = rule.category
+    category_value = category if isinstance(category, str) else (category.value if category else 'unknown')
+    print(f"Category: {category_value}")
     print(f"Severity: {rule.severity.value}")
     print(f"File Patterns: {', '.join(rule.file_patterns)}")
     if rule.uri_patterns:

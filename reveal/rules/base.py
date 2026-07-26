@@ -174,7 +174,7 @@ class Detection:
         if self.severity:
             data['severity'] = self.severity.value
         if self.category:
-            data['category'] = self.category.value
+            data['category'] = self.category if isinstance(self.category, str) else self.category.value
         return data
 
     def __str__(self) -> str:

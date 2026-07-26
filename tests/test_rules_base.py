@@ -119,6 +119,21 @@ class TestDetection:
         assert result['suggestion'] is None
         assert result['context'] is None
 
+    def test_detection_to_dict_with_string_category(self):
+        """Rules scaffolded with a prefix outside the known RulePrefix set
+        (cli/scaffold/rule.py:_get_category_value) store a plain string in
+        `category` instead of a RulePrefix member — to_dict() must not
+        assume `.value` exists (BACK-855)."""
+        detection = Detection(
+            file_path="test.py",
+            line=10,
+            rule_code="Z999",
+            message="Test",
+            category="Z",
+        )
+        result = detection.to_dict()
+        assert result['category'] == "Z"
+
     def test_detection_to_dict_without_enums(self):
         """Detection to_dict handles None enums."""
         detection = Detection(

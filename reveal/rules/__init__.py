@@ -415,11 +415,16 @@ class RuleRegistry:
         Returns:
             Dictionary with rule metadata
         """
-        category_value = (
-            rule_class.category.value
-            if rule_class.category
-            else 'unknown'
-        )
+        category = rule_class.category
+        if not category:
+            category_value = 'unknown'
+        elif isinstance(category, str):
+            # Rules scaffolded with a prefix outside the known RulePrefix set
+            # (see cli/scaffold/rule.py:_get_category_value) store a plain
+            # string here instead of a RulePrefix member.
+            category_value = category
+        else:
+            category_value = category.value
         from .coverage import derive_verified_languages
         return {
             'code': rule_class.code,
