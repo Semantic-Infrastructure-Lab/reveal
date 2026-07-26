@@ -45,6 +45,25 @@ class TestAdapterScaffold:
             doc_file = Path(result['doc_file'])
             assert doc_file.exists()
 
+    def test_scaffold_adapter_next_steps_mention_registration(self):
+        """next_steps must tell the user to register the adapter in
+        reveal/adapters/__init__.py — it's an explicit import list, not
+        auto-discovered, so skipping this step makes `reveal <scheme>://`
+        fail with 'Unsupported URI scheme' (confirmed by running it)."""
+        from reveal.cli.scaffold.adapter import scaffold_adapter
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            (output_dir / 'reveal' / 'adapters').mkdir(parents=True)
+            (output_dir / 'tests').mkdir(parents=True)
+            (output_dir / 'reveal' / 'docs').mkdir(parents=True)
+
+            result = scaffold_adapter('github', 'github://', output_dir=output_dir)
+
+            steps = ' '.join(result['next_steps'])
+            assert '__init__.py' in steps
+            assert 'GithubAdapter' in steps
+
     def test_scaffold_adapter_name_normalization(self):
         """Test adapter name normalization (hyphens to underscores)."""
         from reveal.cli.scaffold.adapter import scaffold_adapter
@@ -218,6 +237,22 @@ class TestAnalyzerScaffold:
             analyzer_file = Path(result['analyzer_file'])
             assert analyzer_file.exists()
             assert analyzer_file.name == 'xyz.py'
+
+    def test_scaffold_analyzer_next_steps_mention_registration(self):
+        """next_steps must tell the user to register the analyzer in
+        reveal/analyzers/__init__.py — it's an explicit import list, not
+        auto-discovered, so skipping this step makes `reveal <file.ext>`
+        fail with 'No analyzer found' (confirmed by running it)."""
+        from reveal.cli.scaffold.analyzer import scaffold_analyzer
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+
+            result = scaffold_analyzer('xyz', '.xyz', output_dir=output_dir)
+
+            steps = ' '.join(result['next_steps'])
+            assert '__init__.py' in steps
+            assert 'XyzAnalyzer' in steps
 
     def test_scaffold_analyzer_extension_normalization(self):
         """Test extension normalization (adds dot if missing)."""

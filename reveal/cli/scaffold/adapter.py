@@ -89,9 +89,12 @@ def scaffold_adapter(
         'doc_file': str(doc_file),
         'next_steps': [
             f"1. Implement TODOs in {adapter_file.name}",
-            f"2. Run tests: pytest {test_file.name}",
-            f"3. Test manually: reveal {uri_scheme}",
-            f"4. Document usage in {doc_file.name}"
+            f"2. Register it: add `from .{adapter_name} import {class_name}Adapter` to "
+            f"reveal/adapters/__init__.py — reveal {uri_scheme} raises "
+            f"'Unsupported URI scheme' until this import runs",
+            f"3. Run tests: pytest {test_file.name}",
+            f"4. Test manually: reveal {uri_scheme}",
+            f"5. Document usage in {doc_file.name}"
         ]
     }
 

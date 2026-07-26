@@ -269,18 +269,24 @@ pytest tests/
 
 ### Manual Testing
 
+Rules are auto-discovered (`RuleRegistry` scans `reveal/rules/`), so a scaffolded
+rule works immediately. Adapters and analyzers are **not** auto-discovered —
+`reveal/adapters/__init__.py` and `reveal/analyzers/__init__.py` are explicit
+import lists, so you must add the import (the scaffold's `next_steps` spells
+out the exact line) before the commands below will find the new adapter/analyzer:
+
 ```bash
-# Test adapter
+# Test adapter (after adding the import to reveal/adapters/__init__.py)
 reveal <scheme>://resource
 reveal <scheme>://resource --format=json
 reveal <scheme>://resource element_id
 
-# Test analyzer
+# Test analyzer (after adding the import to reveal/analyzers/__init__.py)
 reveal file<extension>
 reveal file<extension> --outline
 reveal file<extension> function_name
 
-# Test rule
+# Test rule (works immediately, no registration step)
 reveal file --check
 reveal file --check --select=<PREFIX>
 ```
@@ -375,14 +381,19 @@ reveal scaffold adapter myapp myapp://
 
 # Test it
 pytest tests/test_myapp_adapter.py  # 17/17 pass
-reveal myapp://                      # Works immediately
+
+# Register it — required before `reveal myapp://` works (see next_steps in
+# the scaffold output): add `from .myapp import MyappAdapter` to
+# reveal/adapters/__init__.py, then:
+reveal myapp://
 
 # Read the generated code
 reveal reveal/adapters/myapp.py
 ```
 
-> **Note:** `demo://` ships as an unregistered scaffolding template in `reveal/adapters/demo.py`.
-> It is not available via `reveal demo://` — scaffold a new adapter name instead.
+> **Note:** `demo://` ships as an unregistered scaffolding template in `reveal/adapters/demo.py`,
+> deliberately left out of `reveal/adapters/__init__.py` to demonstrate this same registration
+> step. It is not available via `reveal demo://` — scaffold a new adapter name instead.
 
 All scaffolded components follow the same high-quality pattern.
 

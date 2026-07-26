@@ -91,9 +91,12 @@ def scaffold_analyzer(
         'doc_file': str(doc_file),
         'next_steps': [
             f'1. Install tree-sitter-{language}: pip install tree-sitter-{language}',
-            f'2. Add sample {display_name} code to {test_file}',
-            f'3. Run tests: pytest {test_file}',
-            f'4. Test manually: reveal <file{extension}>',
-            f'5. Document usage in {doc_file}'
+            f'2. Register it: add `from .{module_name} import {class_name}Analyzer` to '
+            f'reveal/analyzers/__init__.py — reveal <file{extension}> raises '
+            f"'No analyzer found' until this import runs",
+            f'3. Add sample {display_name} code to {test_file}',
+            f'4. Run tests: pytest {test_file}',
+            f'5. Test manually: reveal <file{extension}>',
+            f'6. Document usage in {doc_file}'
         ]
     }
