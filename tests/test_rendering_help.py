@@ -736,6 +736,47 @@ class TestRenderHelp(unittest.TestCase):
         output = capture_stdout(render_help, data, 'text', False)
         self.assertIn('Available Adapters', output)
 
+    def test_text_schema_renders_next_pointers(self):
+        """BACK-845: JSON carries schema_data['next'] but text discarded it.
+
+        _summarize_schema builds a 'next' pointer list to guide an agent
+        deeper (e.g. into the /full drill-down); the text renderer must
+        show it, not just JSON.
+        """
+        data = {
+            'type': 'adapter_schema',
+            'adapter': 'ast',
+            'description': 'Test adapter',
+            'next': ['reveal help://schemas/ast/ast_query', 'reveal help://schemas/ast/full'],
+        }
+        output = capture_stdout(render_help, data, 'text', False)
+        self.assertIn('## Next', output)
+        self.assertIn('reveal help://schemas/ast/ast_query', output)
+        self.assertIn('reveal help://schemas/ast/full', output)
+
+    def test_text_schema_no_next_key_omits_section(self):
+        """No 'next' pointers computed (e.g. no example overflow) -> no '## Next' section."""
+        data = {
+            'type': 'adapter_schema',
+            'adapter': 'claude',
+            'description': 'Test adapter',
+        }
+        output = capture_stdout(render_help, data, 'text', False)
+        self.assertNotIn('## Next', output)
+
+    def test_text_output_type_schema_renders_next_pointer(self):
+        """BACK-845: the /<output_type> drill-down also carries a 'next' pointer back up."""
+        data = {
+            'type': 'adapter_schema',
+            'adapter': 'ast',
+            'output_type': 'ast_query',
+            'detail': {'description': 'one output type'},
+            'next': ['reveal help://schemas/ast'],
+        }
+        output = capture_stdout(render_help, data, 'text', False)
+        self.assertIn('## Next', output)
+        self.assertIn('reveal help://schemas/ast', output)
+
     def test_help_error_exit_code_real_error(self):
         data = {'type': 'help_section', 'error': 'Unknown adapter', 'message': 'x'}
         self.assertEqual(help_error_exit_code(data), 1)

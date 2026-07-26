@@ -773,6 +773,22 @@ def _render_schema_notes(notes: list) -> None:
     print()
 
 
+def _render_schema_next(data: Dict[str, Any]) -> None:
+    """Render the 'next' pointer ladder computed by _summarize_schema/_get_output_type_schema.
+
+    JSON output already carries this list (schema_data['next']); this is the
+    text-format counterpart so the progressive-disclosure ladder is visible
+    in the default output format too (BACK-845).
+    """
+    pointers = data.get('next')
+    if not pointers:
+        return
+    print("## Next")
+    for p in pointers:
+        print(f"  -> {p}")
+    print()
+
+
 def _render_schema_footer(adapter: str) -> None:
     print("---")
     print()
@@ -804,6 +820,7 @@ def _render_output_type_schema(data: Dict[str, Any]) -> None:
                 line += f" — {prop['description']}"
             print(line)
         print()
+    _render_schema_next(data)
     print("---")
     print()
     print("## See Also")
@@ -830,6 +847,7 @@ def _render_adapter_schema(data: Dict[str, Any]) -> None:
     _render_schema_example_queries(data.get('example_queries', []))
     _render_schema_cli_flags(data.get('cli_flags', []))
     _render_schema_notes(data.get('notes', []))
+    _render_schema_next(data)
     _render_schema_footer(adapter)
 
 
