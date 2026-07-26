@@ -158,6 +158,15 @@ class TestCheckCode(unittest.TestCase):
         self.assertEqual(code, 1)
 
     @patch('subprocess.run')
+    def test_empty_stdout_with_nonzero_returncode_returns_1(self, mock_run):
+        """A crashed `reveal check` subprocess (traceback on stderr, empty stdout)
+        must not be reported as healthy (BACK-853)."""
+        mock_run.return_value = MagicMock(returncode=1, stdout='')
+        code, summary = _check_code(Path('/tmp'), Namespace(select=None))
+        self.assertEqual(code, 1)
+        self.assertIn('failed', summary)
+
+    @patch('subprocess.run')
     def test_subprocess_called_with_timeout(self, mock_run):
         """subprocess.run must include timeout= to prevent indefinite hangs (BACK-094)."""
         mock_run.return_value = MagicMock(returncode=0, stdout='')
@@ -398,6 +407,26 @@ class TestRunHealth(unittest.TestCase):
             with self.assertRaises(SystemExit) as ctx:
                 run_health(args)
         self.assertEqual(ctx.exception.code, 2)
+
+    @patch(
+        'reveal.cli.commands.health._check_target',
+        side_effect=[PermissionError("Permission denied: '/x/.gitignore'"), (0, 'code: healthy')],
+    )
+    def test_one_target_raising_does_not_crash_others(self, mock_check):
+        """A single target raising (e.g. permission-denied file scan) must not
+        take down the whole `reveal health` run — other targets still get
+        reported (BACK-853)."""
+        args = self._args(['./bad', './good'], fmt='json')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            with self.assertRaises(SystemExit) as ctx:
+                run_health(args)
+        self.assertEqual(ctx.exception.code, 2)
+        data = json.loads(buf.getvalue())
+        self.assertEqual(len(data['results']), 2)
+        self.assertEqual(data['results'][0]['exit_code'], 2)
+        self.assertIn('Permission denied', data['results'][0]['summary'])
+        self.assertEqual(data['results'][1]['exit_code'], 0)
 
 
 if __name__ == '__main__':

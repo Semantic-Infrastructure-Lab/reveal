@@ -98,7 +98,10 @@ def run_health(args: Namespace) -> None:
     results = []
 
     for target in targets:
-        exit_code, summary = _check_target(target, args)
+        try:
+            exit_code, summary = _check_target(target, args)
+        except Exception as exc:
+            exit_code, summary = 2, f"error: {exc}"
         results.append({'target': target, 'exit_code': exit_code, 'summary': summary})
         if exit_code > overall_exit:
             overall_exit = exit_code
@@ -159,7 +162,9 @@ def _check_code(path: Path, args: Namespace):
 
     try:
         import json
-        data = json.loads(output) if output else {}
+        if not output:
+            raise ValueError("empty output from `reveal check` subprocess")
+        data = json.loads(output)
         violations = data.get('total_violations', 0)
         critical = sum(1 for v in data.get('violations', []) if v.get('severity') == 'error')
         if critical > 0:
