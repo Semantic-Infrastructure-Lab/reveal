@@ -761,13 +761,22 @@ class RevealConfig:
 
     @property
     def user_data_dir(self) -> Path:
-        """Get user data directory (backwards compatibility for rule discovery)."""
-        return get_data_path('').parent
+        """Get user data directory (backwards compatibility for rule discovery).
+
+        This is ~/.local/share/reveal/ — get_data_path('') already resolves to
+        it, so do NOT take .parent here: that yields ~/.local/share/ and sends
+        user rule discovery to ~/.local/share/rules/, a path nothing writes.
+        """
+        return get_data_path('')
 
     @property
     def project_config_dir(self) -> Path:
-        """Get project config directory (backwards compatibility for rule discovery)."""
-        return Path.cwd() / '.reveal'
+        """Get project config directory (backwards compatibility for rule discovery).
+
+        Anchored to the project root rather than the cwd so that project-local
+        rules resolve identically no matter which subdirectory reveal runs from.
+        """
+        return self._project_root / '.reveal'
 
     def get_legacy_paths(self) -> Dict[str, Path]:
         """Get legacy config paths for migration (backwards compatibility).

@@ -4,8 +4,10 @@ Industry-aligned pattern detection following Ruff, ESLint, and Semgrep patterns.
 """
 
 import importlib
+import importlib.util
 import logging
 import re
+import sys
 import time
 from pathlib import Path
 from typing import List, Type, Optional, Dict, Any
@@ -104,6 +106,88 @@ class RuleRegistry:
 
         return rule_class
 
+    # Namespace for rule modules loaded from outside the reveal package. Their
+    # synthetic dotted names ("user.rules.…", "project.rules.…") are not real
+    # importable packages, so they are loaded by file path and parked here in
+    # sys.modules under a reveal-owned prefix that cannot shadow a real package.
+    _EXTERNAL_MODULE_NAMESPACE = 'reveal._external_rules'
+
+    @staticmethod
+    def _load_module_from_path(module_file: Path, module_name: str):
+        """
+        Load a rule module from an arbitrary filesystem path.
+
+        User- and project-local rule directories live outside the reveal
+        package, so importlib.import_module() cannot find them — there is no
+        `user`/`project` package on sys.path. Load them by location instead.
+
+        Args:
+            module_file: Path to the .py file to load
+            module_name: Name to register the module under in sys.modules
+
+        Returns:
+            The loaded module
+
+        Raises:
+            ImportError: If a loader cannot be built for the file
+        """
+        spec = importlib.util.spec_from_file_location(module_name, module_file)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot build a module loader for {module_file}")
+
+        module = importlib.util.module_from_spec(spec)
+        # Register before exec so the module can reference itself (dataclasses,
+        # pickling, and typing.get_type_hints all look it up in sys.modules).
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            sys.modules.pop(module_name, None)
+            raise
+        return module
+
+    @classmethod
+    def _normalize_rule_class(cls, rule_class: Type[BaseRule]) -> None:
+        """
+        Coerce loosely-typed class attributes to their enum types.
+
+        Rule classes are hand-authored — by reveal's own scaffold and by users
+        in ~/.local/share/reveal/rules/ — so `severity = "high"` is a natural
+        way to write what the type system wants to be `Severity.HIGH`.
+        Normalize once here, where a rule enters the registry, instead of
+        defending against it at each of the ~10 sites that read
+        `.severity.value` / `.category.value`.
+
+        An unrecognized severity degrades to MEDIUM with a warning rather than
+        raising: one mistyped user rule must not take down `reveal --rules`
+        for every other rule (BACK-856).
+
+        Args:
+            rule_class: The rule class to normalize in place
+        """
+        severity = rule_class.severity
+        if isinstance(severity, str):
+            try:
+                rule_class.severity = Severity(severity.lower())
+            except ValueError:
+                logger.warning(
+                    f"Rule {rule_class.code}: unknown severity {severity!r} "
+                    f"(expected one of {[s.value for s in Severity]}); "
+                    f"treating it as {Severity.MEDIUM.value}"
+                )
+                rule_class.severity = Severity.MEDIUM
+
+        category = rule_class.category
+        if isinstance(category, str):
+            try:
+                rule_class.category = RulePrefix(category.upper())
+            except ValueError:
+                # A prefix outside the known set is legitimate: the rule
+                # scaffold emits a plain string for these by design (see
+                # cli/scaffold/rule.py:_get_category_value), and consumers
+                # tolerate a str category. Leave it as authored.
+                pass
+
     @classmethod
     def _register_rule_in_registry(cls, rule_class: Type[BaseRule]) -> None:
         """
@@ -114,6 +198,7 @@ class RuleRegistry:
         Args:
             rule_class: The rule class to register
         """
+        cls._normalize_rule_class(rule_class)
         cls._rules.append(rule_class)
         cls._rules_by_code[rule_class.code] = rule_class
         logger.debug(f"Discovered rule: {rule_class.code} - {rule_class.message}")
@@ -130,7 +215,7 @@ class RuleRegistry:
         user_rules_dir = config.user_data_dir / 'rules'
 
         if user_rules_dir.exists():
-            cls._discover_dir(user_rules_dir, "user.rules")
+            cls._discover_dir(user_rules_dir, "user.rules", external=True)
             return
 
         # Legacy location: ~/.reveal/rules/ (backward compatibility)
@@ -149,14 +234,14 @@ class RuleRegistry:
             f"Please migrate to XDG-compliant location: {user_rules_dir}\n"
             f"Run: {migrate_cmd}"
         )
-        cls._discover_dir(legacy_user_dir, "user.rules")
+        cls._discover_dir(legacy_user_dir, "user.rules", external=True)
 
     @classmethod
     def _discover_project_rules(cls, config):
-        """Discover project-local rules from ./.reveal/rules/."""
+        """Discover project-local rules from <project root>/.reveal/rules/."""
         project_rules_dir = config.project_config_dir / 'rules'
         if project_rules_dir.exists():
-            cls._discover_dir(project_rules_dir, "project.rules")
+            cls._discover_dir(project_rules_dir, "project.rules", external=True)
 
     @classmethod
     def _log_discovery_summary(cls):
@@ -188,7 +273,7 @@ class RuleRegistry:
         cls._log_discovery_summary()
 
     @classmethod
-    def _discover_dir(cls, rules_dir: Path, module_prefix: str):
+    def _discover_dir(cls, rules_dir: Path, module_prefix: str, external: bool = False):
         """
         Discover rules in a directory.
 
@@ -198,19 +283,22 @@ class RuleRegistry:
         Args:
             rules_dir: Directory to search
             module_prefix: Module prefix for imports (e.g., "reveal.rules")
+            external: True when rules_dir is outside the reveal package, so
+                modules must be loaded by file path rather than imported
         """
         for subdir in rules_dir.iterdir():
             # Skip non-directories and private directories
             if not subdir.is_dir() or subdir.name.startswith('_'):
                 continue
 
-            cls._discover_rules_in_category_dir(subdir, module_prefix)
+            cls._discover_rules_in_category_dir(subdir, module_prefix, external)
 
     @classmethod
     def _discover_rules_in_category_dir(
         cls,
         category_dir: Path,
-        module_prefix: str
+        module_prefix: str,
+        external: bool = False
     ) -> None:
         """
         Discover all rules in a category directory.
@@ -218,20 +306,24 @@ class RuleRegistry:
         Args:
             category_dir: Category directory (e.g., rules/bugs/)
             module_prefix: Module prefix for imports (e.g., "reveal.rules")
+            external: True when the directory is outside the reveal package
         """
         for module_file in category_dir.glob('*.py'):
             # Skip if not a rule module file (filters out utils.py, etc.)
             if not cls._is_rule_module_file(module_file):
                 continue
 
-            cls._try_load_and_register_rule(module_file, category_dir, module_prefix)
+            cls._try_load_and_register_rule(
+                module_file, category_dir, module_prefix, external
+            )
 
     @classmethod
     def _try_load_and_register_rule(
         cls,
         module_file: Path,
         category_dir: Path,
-        module_prefix: str
+        module_prefix: str,
+        external: bool = False
     ) -> None:
         """
         Attempt to load and register a single rule module.
@@ -240,10 +332,16 @@ class RuleRegistry:
             module_file: Path to the rule module file
             category_dir: Category directory containing the file
             module_prefix: Module prefix for imports
+            external: True when the module lives outside the reveal package
         """
         try:
             module_name = f"{module_prefix}.{category_dir.name}.{module_file.stem}"
-            module = importlib.import_module(module_name)
+            if external:
+                module = cls._load_module_from_path(
+                    module_file, f"{cls._EXTERNAL_MODULE_NAMESPACE}.{module_name}"
+                )
+            else:
+                module = importlib.import_module(module_name)
 
             expected_class_name = module_file.stem
             rule_class = cls._extract_rule_class_from_module(
