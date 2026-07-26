@@ -346,6 +346,10 @@ def _render_help_static_guide(data: Dict[str, Any]) -> None:
     print()
 
     print(data['content'])
+    # BACK-847: cross-signpost note, e.g. help://schema vs help://schemas.
+    if data.get('note'):
+        print()
+        print(f"Note: {data['note']}")
     # Long guides carry their onward pointer in the truncation footer; short
     # ones never truncate, so render an explicit 'next' when present (BACK-841).
     if data.get('next'):
@@ -667,6 +671,9 @@ def _render_schema_error(data: Dict[str, Any]) -> None:
         print("  reveal help://schemas/ssl")
         print("  reveal help://schemas/git")
         print()
+        if data.get('note'):
+            print(f"Note: {data['note']}")
+            print()
         _render_schema_next(data)
     else:
         print(f"Error: {data['message']}", file=sys.stderr)
@@ -933,6 +940,9 @@ def _render_adapter_schema_all(data: Dict[str, Any]) -> None:
             if entry.get('example_queries'):
                 print(f"  Examples: {', '.join(entry['example_queries'][:3])}")
             print()
+    if data.get('note'):
+        print(f"Note: {data['note']}")
+        print()
     _render_schema_next(data)
     print("---")
     print()

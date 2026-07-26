@@ -575,6 +575,15 @@ class HelpAdapter(ResourceAdapter):
                     'reveal help://schemas/ssl',
                     'reveal help://schemas/git',
                 ],
+                # BACK-847: help://schema (singular) is a different page — the
+                # markdown front-matter validation guide — not an alias/typo of
+                # this one. Cross-signpost so landing here doesn't silently
+                # misinform an agent looking for that guide instead.
+                'note': (
+                    'Looking for markdown front-matter validation instead? '
+                    'That is help://schema (singular) — this page is adapter '
+                    'query schemas (plural).'
+                ),
                 'next': [
                     'reveal help://schemas/index',
                     'reveal help://schemas/all',
@@ -1276,12 +1285,24 @@ class HelpAdapter(ResourceAdapter):
                     and len(lines) > self._PROGRESSIVE_DISCLOSURE_THRESHOLD):
                 content = self._truncate_to_first_section(topic, lines)
 
-            return {
+            result = {
                 'type': 'static_guide',
                 'topic': topic,
                 'file': filename,
                 'content': content
             }
+            if topic == 'schema':
+                # BACK-847: 'schema' (singular, this guide) and 'schemas'
+                # (plural, adapter query schemas) are unrelated pages that
+                # happen to be one letter apart — cross-signpost so an agent
+                # that meant the other one is redirected, not misinformed.
+                result['note'] = (
+                    'Looking for machine-readable adapter query schemas '
+                    'instead? That is help://schemas/all (plural) — this '
+                    'page is markdown front-matter validation.'
+                )
+                result['next'] = ['reveal help://schemas/all']
+            return result
         except FileNotFoundError:
             return {
                 'type': 'static_guide',
@@ -1462,6 +1483,13 @@ class HelpAdapter(ResourceAdapter):
             'reveal_version': payload.get('reveal_version'),
             'adapter_count': payload.get('adapter_count', len(adapters)),
             'adapters': adapters,
+            # BACK-847: cross-signpost — help://schema (singular) is the
+            # unrelated front-matter validation guide, not an alias of this.
+            'note': (
+                'Looking for markdown front-matter validation instead? '
+                'That is help://schema (singular) — this page is adapter '
+                'query schemas (plural).'
+            ),
             'next': (
                 ['reveal help://schemas/all'] if thin
                 else [f'reveal help://schemas/{s}' for s in sorted(adapters)[:3]]

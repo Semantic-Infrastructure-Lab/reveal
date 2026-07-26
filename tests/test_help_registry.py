@@ -620,6 +620,16 @@ class TestStripFrontmatter(unittest.TestCase):
         for key in ('help_topic:', 'help_category:', 'help_token_estimate:', 'help_description:'):
             self.assertNotIn(key, content, f"{key} leaked into rendered guide")
 
+    def test_schema_topic_cross_signposts_schemas(self):
+        """BACK-847: help://schema (singular, front-matter guide) must carry a
+        'note'+'next' pointer at help://schemas/all (plural, adapter schemas)
+        so an agent that meant the other page is redirected, not misinformed."""
+        adapter = HelpAdapter('schema')
+        result = adapter._load_static_help('schema')
+        self.assertIsNotNone(result)
+        self.assertIn('schemas/all', result.get('note', ''))
+        self.assertEqual(result.get('next'), ['reveal help://schemas/all'])
+
 
 if __name__ == '__main__':
     unittest.main()

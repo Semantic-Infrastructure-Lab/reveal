@@ -267,6 +267,31 @@ class TestRenderHelpStaticGuide(unittest.TestCase):
         with self.assertRaises(SystemExit):
             _render_help_static_guide(data)
 
+    def test_renders_note_cross_signpost(self):
+        """BACK-847: help://schema (singular) must cross-signpost help://schemas
+        (plural, unrelated) in text output, not just JSON."""
+        data = {
+            'topic': 'schema',
+            'file': 'guides/SCHEMA_VALIDATION_HELP.md',
+            'content': '# Schema Validation',
+            'note': 'Looking for machine-readable adapter query schemas '
+                     'instead? That is help://schemas/all (plural).',
+            'next': ['reveal help://schemas/all'],
+        }
+        output = capture_stdout(_render_help_static_guide, data)
+        self.assertIn('help://schemas/all (plural)', output)
+        self.assertIn('## Next', output)
+
+    def test_no_note_key_omits_note_line(self):
+        """No 'note' key -> no 'Note:' line (most static guides have none)."""
+        data = {
+            'topic': 'agent',
+            'file': 'agent.md',
+            'content': '# Agent Guide',
+        }
+        output = capture_stdout(_render_help_static_guide, data)
+        self.assertNotIn('Note:', output)
+
 
 class TestRenderHelpAdapterSummary(unittest.TestCase):
     """Test adapter summary rendering."""
@@ -735,6 +760,36 @@ class TestRenderHelp(unittest.TestCase):
         }
         output = capture_stdout(render_help, data, 'text', False)
         self.assertIn('Available Adapters', output)
+
+    def test_text_schema_catalog_listing_renders_singular_cross_signpost(self):
+        """BACK-847: bare help://schemas must point an agent at help://schema
+        (singular, the unrelated front-matter guide) rather than leaving the
+        namespace collision to silently misinform."""
+        data = {
+            'type': 'adapter_schema',
+            'adapter': '',
+            'error': 'No adapter specified',
+            'available_adapters': ['ast', 'git'],
+            'usage': 'reveal help://schemas/<adapter>',
+            'examples': ['reveal help://schemas/ast'],
+            'note': 'Looking for markdown front-matter validation instead? '
+                     'That is help://schema (singular).',
+        }
+        output = capture_stdout(render_help, data, 'text', False)
+        self.assertIn('help://schema (singular)', output)
+
+    def test_text_schemas_all_renders_singular_cross_signpost(self):
+        """BACK-847: help://schemas/all must also cross-signpost help://schema."""
+        data = {
+            'type': 'adapter_schema_all',
+            'thin': False,
+            'adapter_count': 1,
+            'adapters': {'ast': {'scheme': 'ast', 'uri_syntax': 'ast://<path>', 'description': 'AST'}},
+            'note': 'Looking for markdown front-matter validation instead? '
+                     'That is help://schema (singular).',
+        }
+        output = capture_stdout(render_help, data, 'text', False)
+        self.assertIn('help://schema (singular)', output)
 
     def test_text_schema_renders_next_pointers(self):
         """BACK-845: JSON carries schema_data['next'] but text discarded it.
