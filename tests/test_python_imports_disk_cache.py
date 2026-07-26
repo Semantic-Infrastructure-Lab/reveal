@@ -11,6 +11,7 @@ change to the source file must invalidate its entry.
 """
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -103,6 +104,31 @@ def test_kill_switch_writes_nothing(tmp_path, monkeypatch):
     mtime_ns = os.stat(path_str).st_mtime_ns
     fp = py_imports_mod._imports_fingerprint(path_str, mtime_ns)
     assert disk_cache.get(py_imports_mod._IMPORTS_CACHE_NAMESPACE, fp) is None
+
+
+def test_cache_hit_restamps_to_query_path(tmp_path):
+    """A cache hit must carry the *querying* call's Path, not whichever Path
+    the entry was first populated under.
+
+    The cache key is (abspath, mtime) so a hit is valid across differently
+    formatted Paths for the same file -- but each cached ImportStatement's
+    .file_path was stamped at first-call time. Real callers key dicts by
+    file_path (ImportGraph.find_unused_imports's symbols_by_file lookup): a
+    stale .file_path there makes the lookup silently miss and every import in
+    the file gets flagged as unused. Reproduces the false-positive found by
+    dogfooding `imports://?unused` on reveal's own cli/parser.py.
+    """
+    src = _write_module(tmp_path / "mod.py")
+    extractor = py_imports_mod.PythonExtractor()
+
+    relative = Path(os.path.relpath(src))
+    first = extractor.extract_imports(relative)
+    assert all(imp.file_path == relative for imp in first)
+
+    absolute = src.resolve()
+    second = extractor.extract_imports(absolute)
+    assert second, "cache should have hit, not returned empty"
+    assert all(imp.file_path == absolute for imp in second)
 
 
 def test_max_files_env_override(monkeypatch):

@@ -21,7 +21,7 @@ from ...core import disk_cache, node_children as _children, node_prev_sibling as
 
 logger = logging.getLogger(__name__)
 
-from .types import ImportStatement
+from .types import ImportStatement, restamp_file_path
 from .base import LanguageExtractor, register_extractor
 from .resolver import resolve_python_import, resolve_python_from_import_submodules
 from ...registry import get_analyzer
@@ -111,14 +111,14 @@ class PythonExtractor(LanguageExtractor):
             mtime_ns = 0
         cache_key = (path_str, mtime_ns)
         if cache_key in _extract_imports_cache:
-            return _extract_imports_cache[cache_key]
+            return restamp_file_path(_extract_imports_cache[cache_key], file_path)
 
         fingerprint = _imports_fingerprint(path_str, mtime_ns)
         if fingerprint is not None:
             cached = disk_cache.get(_IMPORTS_CACHE_NAMESPACE, fingerprint)
             if cached is not None:
                 _extract_imports_cache[cache_key] = cached
-                return cached
+                return restamp_file_path(cached, file_path)
 
         analyzer = self._get_tree_analyzer(path_str)
         if not analyzer:

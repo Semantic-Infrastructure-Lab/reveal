@@ -750,6 +750,31 @@ class TestImportsAdapter:
         assert result['type'] == 'unused_imports'
         assert isinstance(result.get('unused'), list)
 
+    def test_unused_no_false_positive_after_relative_path_cache_seed(self, tmp_path, monkeypatch):
+        """A prior extract_imports() call keyed by a relative Path (e.g. from
+        `reveal file.py --check`, which does not resolve to absolute) must not
+        poison a later ImportsAdapter scan of the same file -- ImportsAdapter
+        always resolves its target to an absolute Path, so a stale relative
+        .file_path on a cache hit made symbols_by_file's lookup miss and
+        flagged every real import as unused. Reproduces the false positive
+        dogfooding found on reveal's own cli/parser.py (imports:// scanning
+        the whole tree hit it via I002/I001's earlier relative-path calls)."""
+        monkeypatch.setenv("REVEAL_CACHE_DIR", str(tmp_path / "cache"))
+        src = tmp_path / "mod.py"
+        src.write_text("import os\n\ndef alpha():\n    return os.getcwd()\n")
+
+        from reveal.analyzers.imports import python as py_imports_mod
+        monkeypatch.chdir(tmp_path)
+        # Simulate an earlier, relative-path call (I001/I002's usual style)
+        # seeding the shared (abspath, mtime) cache entry.
+        py_imports_mod.PythonExtractor().extract_imports(Path("mod.py"))
+
+        result = ImportsAdapter(str(tmp_path), 'unused').get_structure()
+        assert result['unused'] == [], (
+            f"false positive: {result['unused']} (stale cached file_path "
+            "leaked past the adapter's absolute-path scan)"
+        )
+
     def test_violations_query_param(self, tmp_path):
         """Test ?violations query parameter returns not-configured when no .reveal.yaml."""
         (tmp_path / "test.py").write_text("import os\n\nprint('hello')\n")

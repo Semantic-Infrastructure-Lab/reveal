@@ -4,7 +4,7 @@ Shared types used by both the import analysis framework and language extractors.
 Extracted to a separate module to avoid circular imports.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 from collections import defaultdict, deque
@@ -29,6 +29,22 @@ class ImportStatement:
     level: int = 0  # Relative import level: 0=absolute, 1='.', 2='..', etc.
     skip_unused: bool = False  # True when unused-detection is unreliable for this
                                # import (e.g. C/C++ #include, namespace/require imports)
+
+
+def restamp_file_path(imports: List['ImportStatement'], file_path: Path) -> List['ImportStatement']:
+    """Ensure cached ImportStatements carry the caller's requested Path.
+
+    extract_imports() caches are keyed by (absolute path, mtime), so a cache
+    hit is valid even when the caller passed a differently-formatted (e.g.
+    relative-vs-relative-to-a-different-cwd) Path than whichever call first
+    populated the cache. But each ImportStatement.file_path was stamped at
+    that first-call's Path — if it doesn't match, callers that key a dict by
+    file_path (e.g. ImportGraph.find_unused_imports's symbols_by_file lookup)
+    silently miss and treat every import in the file as unused.
+    """
+    if imports and imports[0].file_path != file_path:
+        return [replace(stmt, file_path=file_path) for stmt in imports]
+    return imports
 
 
 @dataclass

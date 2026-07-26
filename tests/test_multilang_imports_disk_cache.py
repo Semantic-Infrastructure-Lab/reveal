@@ -12,6 +12,7 @@ fresh parse, and any change to the source file must invalidate its entry.
 """
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -145,6 +146,27 @@ def test_kill_switch_writes_nothing(tmp_path, monkeypatch, mod, extractor_cls, s
     mtime_ns = os.stat(path_str).st_mtime_ns
     fp = mod._IMPORTS_CACHE.fingerprint(path_str, mtime_ns)
     assert disk_cache.get(mod._IMPORTS_CACHE.namespace, fp) is None
+
+
+@pytest.mark.parametrize("mod,extractor_cls,suffix,src,expect,src2,expect2", CASES)
+def test_cache_hit_restamps_to_query_path(tmp_path, mod, extractor_cls, suffix, src, expect, src2, expect2):
+    """A cache hit must carry the *querying* call's Path, not whichever Path
+    the entry was first populated under -- see the Python-extractor sibling
+    test in test_python_imports_disk_cache.py for the full false-positive
+    story this guards against (ImportGraph.find_unused_imports's
+    symbols_by_file lookup silently misses on a stale .file_path)."""
+    path = tmp_path / f"mod{suffix}"
+    path.write_text(src)
+    extractor = extractor_cls()
+
+    relative = Path(os.path.relpath(path))
+    first = extractor.extract_imports(relative)
+    assert all(imp.file_path == relative for imp in first)
+
+    absolute = path.resolve()
+    second = extractor.extract_imports(absolute)
+    assert second, "cache should have hit, not returned empty"
+    assert all(imp.file_path == absolute for imp in second)
 
 
 def test_max_files_env_override(monkeypatch):

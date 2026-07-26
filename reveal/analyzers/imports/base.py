@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Callable, List, Set, ClassVar, Optional, Tuple, Type, Dict
 
-from .types import ImportStatement
+from .types import ImportStatement, restamp_file_path
 from ...core import disk_cache
 
 logger = logging.getLogger(__name__)
@@ -87,14 +87,14 @@ class ImportsDiskCache:
             mtime_ns = 0
         cache_key = (path_str, mtime_ns)
         if cache_key in self._mem_cache:
-            return self._mem_cache[cache_key]
+            return restamp_file_path(self._mem_cache[cache_key], file_path)
 
         fingerprint = self.fingerprint(path_str, mtime_ns)
         if fingerprint is not None:
             cached = disk_cache.get(self.namespace, fingerprint)
             if cached is not None:
                 self._mem_cache[cache_key] = cached
-                return cached
+                return restamp_file_path(cached, file_path)
 
         imports = compute()
         self._mem_cache[cache_key] = imports
