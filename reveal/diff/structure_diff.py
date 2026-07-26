@@ -127,8 +127,11 @@ def diff_functions(left_funcs: List[Dict],
     Returns:
         Tuple of (summary_dict, details_list)
     """
-    left_names = {f['name']: f for f in left_funcs}
-    right_names = {f['name']: f for f in right_funcs}
+    # Key by (file, name), not name alone — otherwise unrelated functions that
+    # happen to share a name in different files (common across a directory
+    # diff) get matched as "modified" instead of removed+added.
+    left_names = {(f.get('file'), f['name']): f for f in left_funcs}
+    right_names = {(f.get('file'), f['name']): f for f in right_funcs}
 
     added_names = right_names.keys() - left_names.keys()
     removed_names = left_names.keys() - right_names.keys()
@@ -138,8 +141,9 @@ def diff_functions(left_funcs: List[Dict],
     details = []
 
     # Added functions
-    for name in sorted(added_names):
-        func = right_names[name]
+    for key in sorted(added_names, key=lambda k: (k[1], k[0] or '')):
+        name = key[1]
+        func = right_names[key]
         cx_after = func.get('complexity')
         details.append({
             'type': 'added',
@@ -154,8 +158,9 @@ def diff_functions(left_funcs: List[Dict],
         })
 
     # Removed functions
-    for name in sorted(removed_names):
-        func = left_names[name]
+    for key in sorted(removed_names, key=lambda k: (k[1], k[0] or '')):
+        name = key[1]
+        func = left_names[key]
         cx_before = func.get('complexity')
         details.append({
             'type': 'removed',
@@ -171,9 +176,10 @@ def diff_functions(left_funcs: List[Dict],
 
     # Modified functions
     modified_count = 0
-    for name in sorted(common_names):
-        left_func = left_names[name]
-        right_func = right_names[name]
+    for key in sorted(common_names, key=lambda k: (k[1], k[0] or '')):
+        name = key[1]
+        left_func = left_names[key]
+        right_func = right_names[key]
 
         if function_changed(left_func, right_func):
             modified_count += 1
@@ -291,8 +297,9 @@ def diff_classes(left_classes: List[Dict],
     Returns:
         Tuple of (summary_dict, details_list)
     """
-    left_names = {c['name']: c for c in left_classes}
-    right_names = {c['name']: c for c in right_classes}
+    # Key by (file, name), not name alone — see diff_functions for why.
+    left_names = {(c.get('file'), c['name']): c for c in left_classes}
+    right_names = {(c.get('file'), c['name']): c for c in right_classes}
 
     added_names = right_names.keys() - left_names.keys()
     removed_names = left_names.keys() - right_names.keys()
@@ -301,8 +308,9 @@ def diff_classes(left_classes: List[Dict],
     details = []
 
     # Added classes
-    for name in sorted(added_names):
-        cls = right_names[name]
+    for key in sorted(added_names, key=lambda k: (k[1], k[0] or '')):
+        name = key[1]
+        cls = right_names[key]
         details.append({
             'type': 'added',
             'name': name,
@@ -312,8 +320,9 @@ def diff_classes(left_classes: List[Dict],
         })
 
     # Removed classes
-    for name in sorted(removed_names):
-        cls = left_names[name]
+    for key in sorted(removed_names, key=lambda k: (k[1], k[0] or '')):
+        name = key[1]
+        cls = left_names[key]
         details.append({
             'type': 'removed',
             'name': name,
@@ -324,9 +333,10 @@ def diff_classes(left_classes: List[Dict],
 
     # Modified classes
     modified_count = 0
-    for name in sorted(common_names):
-        left_cls = left_names[name]
-        right_cls = right_names[name]
+    for key in sorted(common_names, key=lambda k: (k[1], k[0] or '')):
+        name = key[1]
+        left_cls = left_names[key]
+        right_cls = right_names[key]
 
         if class_changed(left_cls, right_cls):
             modified_count += 1

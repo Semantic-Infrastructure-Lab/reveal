@@ -569,6 +569,46 @@ class TestDirectoryDiff(unittest.TestCase):
             if 'left' in import_elem and import_elem['left']:
                 self.assertEqual(import_elem['left']['file'], 'module.py')
 
+    def test_directory_diff_same_name_different_files_not_matched(self):
+        """BACK-861: unrelated functions sharing a name across different files
+        must be reported as removed+added, not merged into one 'modified'."""
+        left_dir = Path(self.temp_dir) / "left"
+        right_dir = Path(self.temp_dir) / "right"
+        left_dir.mkdir()
+        right_dir.mkdir()
+
+        # Same function name, different files, on each side.
+        (left_dir / "a.py").write_text("def foo(x): pass\n")
+        (right_dir / "b.py").write_text("def foo(x, y, z): return x + y + z\n")
+
+        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        result = adapter.get_structure()
+
+        self.assertEqual(result['summary']['functions'],
+                          {'added': 1, 'removed': 1, 'modified': 0})
+        types = sorted(f['type'] for f in result['diff']['functions'])
+        self.assertEqual(types, ['added', 'removed'])
+
+    def test_directory_diff_same_name_different_files_classes_not_matched(self):
+        """BACK-861: same bug for classes."""
+        left_dir = Path(self.temp_dir) / "left"
+        right_dir = Path(self.temp_dir) / "right"
+        left_dir.mkdir()
+        right_dir.mkdir()
+
+        (left_dir / "a.py").write_text("class Foo:\n    pass\n")
+        (right_dir / "b.py").write_text(
+            "class Foo(Base):\n    def bar(self): pass\n"
+        )
+
+        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        result = adapter.get_structure()
+
+        self.assertEqual(result['summary']['classes'],
+                          {'added': 1, 'removed': 1, 'modified': 0})
+        types = sorted(c['type'] for c in result['diff']['classes'])
+        self.assertEqual(types, ['added', 'removed'])
+
     def test_directory_not_found_error(self):
         """Test error when directory doesn't exist."""
         adapter = DiffAdapter("/nonexistent/path", str(self.temp_dir))
