@@ -27,6 +27,9 @@ _PARALLEL_THRESHOLD = 4
 
 # Import shared threshold and generated-file detector from checks module.
 from reveal.checks import _GROUP_THRESHOLD, _is_generated_file  # noqa: E402
+# Single source of truth for severity icons, shared with Detection.__str__ so
+# the single-file and directory renderers cannot drift apart (BACK-857).
+from reveal.rules.base import SEVERITY_MARKERS  # noqa: E402
 
 
 def _parallel_worker(packed_args: tuple) -> tuple:
@@ -176,11 +179,11 @@ def _print_grouped_detections(detections: list, relative: Path, no_group: bool =
         relative: CWD-relative path used as the source label
         no_group: When True, skip collapsing entirely
     """
-    severity_icons = {"HIGH": "❌", "MEDIUM": "⚠️ ", "LOW": "ℹ️ "}
+    severity_icons = SEVERITY_MARKERS
 
     if no_group or len(detections) < _GROUP_THRESHOLD:
         for d in detections:
-            icon = severity_icons.get(d.severity.value, "ℹ️ ")
+            icon = severity_icons.get(d.severity, "ℹ️ ")
             print(f"{relative}:{d.line}:{d.column} {icon} {d.rule_code} {d.message}")
             if d.suggestion:
                 print(f"  💡 {d.suggestion}")
@@ -196,7 +199,7 @@ def _print_grouped_detections(detections: list, relative: Path, no_group: bool =
     shown_collapsed: set = set()
 
     for d in detections:
-        icon = severity_icons.get(d.severity.value, "ℹ️ ")
+        icon = severity_icons.get(d.severity, "ℹ️ ")
         if d.rule_code not in collapsed:
             print(f"{relative}:{d.line}:{d.column} {icon} {d.rule_code} {d.message}")
             if d.suggestion:

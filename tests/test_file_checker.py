@@ -574,6 +574,61 @@ class TestGroupedOutput:
         assert out.count("N004") == 3
         assert "more N004" not in out
 
+    # NOTE: the helper above mocks `d.severity.value`, so no test here ever
+    # exercised the icon lookup against a real Severity member — which is how
+    # BACK-857 survived. The two tests below use real Detection objects.
+
+    def test_each_severity_renders_its_own_marker(self, capsys):
+        """Every severity must render its own marker.
+
+        The renderer previously keyed its icon map by uppercase name
+        ("HIGH") against lowercase Severity.value ("high"), so the lookup
+        never matched and every finding — including CRITICAL security
+        issues — displayed the LOW 'info' icon (BACK-857).
+        """
+        from reveal.cli.file_checker import _print_grouped_detections
+        from reveal.rules.base import Detection, Severity
+
+        # Expected markers are spelled out literally rather than imported from
+        # the implementation, so this test fails on wrong *behaviour* rather
+        # than passing vacuously against whatever the map happens to contain.
+        expected = {
+            Severity.LOW: "ℹ️",
+            Severity.MEDIUM: "⚠️",
+            Severity.HIGH: "❌",
+            Severity.CRITICAL: "🚨",
+        }
+        assert set(expected) == set(Severity), "a Severity member has no expected marker"
+
+        rendered = {}
+        for sev, marker in expected.items():
+            _print_grouped_detections(
+                [Detection(file_path="f.py", line=1, rule_code="X001",
+                           message="m", severity=sev)],
+                "f.py",
+            )
+            out = capsys.readouterr().out
+            assert marker in out, (
+                f"{sev} rendered as {out.split()[1]!r}, expected {marker!r}"
+            )
+            rendered[sev] = out.split()[1]
+
+        # ...and the markers must be mutually distinguishable, or "renders its
+        # own marker" is satisfied trivially.
+        assert len(set(rendered.values())) == len(Severity)
+
+    def test_grouped_renderer_agrees_with_detection_str(self, capsys):
+        """Single-file check output goes through Detection.__str__ while the
+        directory path uses this renderer; the two must not drift (BACK-857)."""
+        from reveal.cli.file_checker import _print_grouped_detections
+        from reveal.rules.base import Detection, Severity
+
+        d = Detection(file_path="f.py", line=1, rule_code="S001",
+                      message="secret", severity=Severity.HIGH)
+        _print_grouped_detections([d], "f.py")
+        grouped_marker = capsys.readouterr().out.split()[1]
+        assert grouped_marker == str(d).split()[1]
+
     def test_mixed_rules_collapses_only_large_group(self, capsys):
         from reveal.cli.file_checker import _print_grouped_detections
         detections = (

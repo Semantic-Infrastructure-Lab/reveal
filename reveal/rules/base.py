@@ -22,6 +22,20 @@ class Severity(Enum):
     CRITICAL = "critical"
 
 
+# Canonical terminal marker per severity, keyed by the enum member itself.
+# Shared by Detection.__str__ (single-file check output) and the grouped
+# renderer in cli/file_checker.py (directory/recursive check output) so the
+# two cannot drift apart — they previously did, and the grouped renderer's
+# private copy was keyed by uppercase name against lowercase Severity.value,
+# so it never matched and rendered every finding with the LOW icon (BACK-857).
+SEVERITY_MARKERS = {
+    Severity.LOW: "ℹ️ ",
+    Severity.MEDIUM: "⚠️ ",
+    Severity.HIGH: "❌",
+    Severity.CRITICAL: "🚨",
+}
+
+
 class RulePrefix(Enum):
     """
     Industry-standard rule prefixes (Ruff-compatible).
@@ -180,12 +194,7 @@ class Detection:
     def __str__(self) -> str:
         """Format for terminal output (Ruff-style)."""
         loc = f"{self.file_path}:{self.line}:{self.column}"
-        severity_marker = {
-            Severity.LOW: "ℹ️ ",
-            Severity.MEDIUM: "⚠️ ",
-            Severity.HIGH: "❌",
-            Severity.CRITICAL: "🚨"
-        }.get(self.severity, "")
+        severity_marker = SEVERITY_MARKERS.get(self.severity, "")
 
         result = f"{loc} {severity_marker} {self.rule_code} {self.message}"
         if self.suggestion:
