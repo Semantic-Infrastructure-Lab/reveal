@@ -9,11 +9,15 @@ fallback analyzers (basic structure extraction).
 from typing import Dict, List, Tuple
 
 
-def list_supported_languages() -> str:
-    """Generate formatted list of all supported languages.
+def _collect_language_support():
+    """Collect the explicit-analyzer / tree-sitter-fallback split.
+
+    The data half of `list_supported_languages()`, factored out so the
+    `--languages` flag and `help://languages` (BACK-846) render from one
+    source instead of two drifting copies.
 
     Returns:
-        Formatted string showing explicit and fallback language support
+        (explicit_extensions, fallback_languages, AMBIGUOUS_EXTENSIONS)
     """
     from ..registry import get_analyzer_mapping, AMBIGUOUS_EXTENSIONS
 
@@ -43,6 +47,54 @@ def list_supported_languages() -> str:
         if not any(ext in explicit_exts for ext in exts)
     ]
     fallback_languages = fallback_filtered
+
+    return explicit_extensions, fallback_languages, AMBIGUOUS_EXTENSIONS
+
+
+def build_languages_payload() -> dict:
+    """Structured language-support catalog, for help://languages (BACK-846).
+
+    Same data `--languages` formats as text; carries the capability
+    conformance level per explicit analyzer (BACK-444) rather than the
+    ``[tag]`` shorthand the text view uses.
+    """
+    from ..capabilities import get_capability
+
+    explicit_extensions, fallback_languages, ambiguous = _collect_language_support()
+
+    explicit = []
+    for ext, info in sorted(explicit_extensions.items(), key=lambda x: str(x[1]['name']).lower()):
+        cap = get_capability(info['class'])
+        explicit.append({
+            'name': info['name'],
+            'extension': ext,
+            'conformance_level': cap.conformance_level if cap else None,
+            'content_dependent': ext in ambiguous,
+        })
+
+    fallback = [
+        {'name': lang, 'extensions': list(exts)}
+        for lang, exts in sorted(fallback_languages)
+    ]
+
+    return {
+        'explicit': explicit,
+        'fallback': fallback,
+        'total': len(explicit) + len(fallback),
+        'ambiguous': {
+            ext: note for ext, note in ambiguous.items()
+            if ext in explicit_extensions
+        },
+    }
+
+
+def list_supported_languages() -> str:
+    """Generate formatted list of all supported languages.
+
+    Returns:
+        Formatted string showing explicit and fallback language support
+    """
+    explicit_extensions, fallback_languages, AMBIGUOUS_EXTENSIONS = _collect_language_support()
 
     # Format output
     lines = []

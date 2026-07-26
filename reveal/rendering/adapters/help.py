@@ -265,7 +265,13 @@ def _render_navigation_section() -> None:
     print("  reveal help://adapters       # Summary of all URI adapters")
     print("  reveal help://relationships  # Adapter ecosystem map: clusters and power pairs")
     print("  reveal help://schemas        # Machine-readable schemas (AI agents)")
+    print("  reveal help://schemas/index  # Thin index of every adapter schema")
+    print("  reveal help://schemas/all    # Full schema for every adapter, in one payload")
     print("  reveal help://examples       # Canonical query recipes by task")
+    print()
+    print("**What can reveal check / parse:**")
+    print("  reveal help://rules          # Pattern-detection rule catalog")
+    print("  reveal help://languages      # Supported languages and analyzer depth")
     print()
     print("**Learn specific feature:**")
     print("  reveal help://ast           # ast:// quick start (first section)")
@@ -829,6 +835,67 @@ def _render_output_type_schema(data: Dict[str, Any]) -> None:
     print()
 
 
+_SEVERITY_ICONS = {'low': 'ℹ️', 'medium': '⚠️', 'high': '❌', 'critical': '🚨'}
+
+
+def _render_help_rules(data: Dict[str, Any]) -> None:
+    """Render help://rules — the pattern-detection rule catalog (BACK-846)."""
+    categories = data.get('categories', {})
+    print(f"# {data.get('title', 'Pattern Detection Rules')}")
+    print()
+    for category, rules in categories.items():
+        print(f"## {category.upper()} ({len(rules)})")
+        for rule in rules:
+            status = "✓" if rule.get('enabled') else "○"
+            icon = _SEVERITY_ICONS.get(rule.get('severity', ''), '')
+            opt_in = " [opt-in]" if not rule.get('enabled') else ""
+            print(f"  {status} {rule.get('code', ''):8s} {icon} {rule.get('message', '')}{opt_in}")
+        print()
+    enabled = data.get('enabled_count', 0)
+    total = data.get('rule_count', 0)
+    # Spelled out rather than the flag's "Total: N rules (M opt-in)", where N is
+    # the *enabled* count and N + M is the real total — ambiguous enough that
+    # restating it here unchanged would propagate the confusion.
+    print(
+        f"Total: {total} rules ({enabled} enabled, {total - enabled} opt-in — "
+        f"enable via --select <code>)"
+    )
+    print()
+    _render_schema_next(data)
+
+
+def _render_help_languages(data: Dict[str, Any]) -> None:
+    """Render help://languages — the supported-language catalog (BACK-846)."""
+    explicit = data.get('explicit', [])
+    fallback = data.get('fallback', [])
+    print(f"# {data.get('title', 'Supported Languages')}")
+    print()
+    print(f"## Explicit Analyzers ({len(explicit)})")
+    print("Full analysis with language-specific features")
+    print()
+    for entry in explicit:
+        level = entry.get('conformance_level')
+        tag = f" [{level}]" if level else ""
+        marker = " *" if entry.get('content_dependent') else ""
+        print(f"  {entry.get('name', ''):20} ({entry.get('extension', '')}){tag}{marker}")
+    print()
+    print(f"## Tree-sitter Fallback ({len(fallback)})")
+    print("Basic analysis (functions, classes, imports)")
+    print()
+    for entry in fallback:
+        print(f"  {entry.get('name', ''):20} ({', '.join(entry.get('extensions', []))})")
+    print()
+    print(f"Total: {data.get('language_count', 0)} languages supported")
+    ambiguous = data.get('ambiguous_extensions', {})
+    if ambiguous:
+        print()
+        print("* Content-dependent — analyzer chosen per-file, not by extension alone:")
+        for ext, note in sorted(ambiguous.items()):
+            print(f"  {ext}: {note}")
+    print()
+    _render_schema_next(data)
+
+
 def _render_adapter_schema_all(data: Dict[str, Any]) -> None:
     """Render help://schemas/all (full) and help://schemas/index (thin) — BACK-840.
 
@@ -1020,6 +1087,8 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
         'query_recipes': _render_query_recipes,
         'adapter_schema': _render_adapter_schema,
         'adapter_schema_all': _render_adapter_schema_all,
+        'help_rules': _render_help_rules,
+        'help_languages': _render_help_languages,
         'help_quick': _render_help_quick,
         'help_relationships': _render_help_relationships,
     }

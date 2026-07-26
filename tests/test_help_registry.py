@@ -437,6 +437,55 @@ class TestSchemasAggregateView(unittest.TestCase):
         self.assertIn('reveal help://schemas/all', result['next'])
 
 
+class TestFlagOnlySurfacesReachableByUri(unittest.TestCase):
+    """BACK-846: MCP clients can only call reveal_query(uri), so any surface
+    implemented solely as a global CLI flag is unreachable for them. --rules
+    and --languages had no URI equivalent."""
+
+    def test_help_rules_resolves_and_matches_registry(self):
+        from reveal.rules import RuleRegistry
+
+        adapter = HelpAdapter()
+        result = adapter.get_element('rules')
+        self.assertIsNotNone(result, 'help://rules must resolve')
+        self.assertEqual(result['type'], 'help_rules')
+        expected = RuleRegistry.list_rules(include_internal=False)
+        self.assertEqual(result['rule_count'], len(expected))
+        # Every rule lands in exactly one category bucket.
+        flattened = [r for rules in result['categories'].values() for r in rules]
+        self.assertEqual(len(flattened), len(expected))
+
+    def test_help_rules_carries_machine_readable_fields(self):
+        """The point of the URI tier is machine consumption — JSON must keep
+        file_patterns/verified_languages, which the text view summarizes away."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('rules')
+        sample = next(iter(result['categories'].values()))[0]
+        for field in ('code', 'severity', 'enabled', 'file_patterns', 'verified_languages'):
+            self.assertIn(field, sample)
+
+    def test_help_languages_resolves_and_counts_match_builder(self):
+        from reveal.cli.languages import build_languages_payload
+
+        adapter = HelpAdapter()
+        result = adapter.get_element('languages')
+        self.assertIsNotNone(result, 'help://languages must resolve')
+        self.assertEqual(result['type'], 'help_languages')
+        expected = build_languages_payload()
+        self.assertEqual(result['language_count'], expected['total'])
+        self.assertEqual(
+            result['language_count'],
+            len(result['explicit']) + len(result['fallback']),
+        )
+
+    def test_rules_and_languages_are_discovery_topics(self):
+        """A route nobody can find repeats the defect this thread is about —
+        both must be suggestible when mistyped."""
+        adapter = HelpAdapter()
+        self.assertIn('rules', adapter.suggest_topics('rulez'))
+        self.assertIn('languages', adapter.suggest_topics('langauges'))
+
+
 class TestHelpContentCurrency(unittest.TestCase):
     """Spot-check that help:// content reflects current flag names."""
 

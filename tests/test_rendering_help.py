@@ -809,6 +809,46 @@ class TestRenderHelp(unittest.TestCase):
         self.assertIn('ast', output)
         self.assertNotIn('Output types:', output)
 
+    def test_text_help_rules_renders_categories_and_unambiguous_total(self):
+        """BACK-846: help://rules text view. The total is spelled out because the
+        --rules flag's 'Total: N rules (M opt-in)' uses N = enabled, not the total."""
+        data = {
+            'type': 'help_rules',
+            'title': 'Rules',
+            'rule_count': 3,
+            'enabled_count': 2,
+            'categories': {
+                'b': [
+                    {'code': 'B001', 'severity': 'high', 'enabled': True, 'message': 'bare except'},
+                    {'code': 'B002', 'severity': 'low', 'enabled': False, 'message': 'opt in rule'},
+                ],
+            },
+        }
+        output = capture_stdout(render_help, data, 'text', False)
+        self.assertIn('## B (2)', output)
+        self.assertIn('B001', output)
+        self.assertIn('[opt-in]', output)
+        self.assertIn('3 rules (2 enabled, 1 opt-in', output)
+
+    def test_text_help_languages_renders_both_tiers(self):
+        """BACK-846: help://languages text view separates explicit vs fallback."""
+        data = {
+            'type': 'help_languages',
+            'title': 'Languages',
+            'language_count': 2,
+            'explicit': [
+                {'name': 'Python', 'extension': '.py',
+                 'conformance_level': 'tier1-verified', 'content_dependent': False},
+            ],
+            'fallback': [{'name': 'Zig', 'extensions': ['.zig']}],
+            'ambiguous_extensions': {},
+        }
+        output = capture_stdout(render_help, data, 'text', False)
+        self.assertIn('Explicit Analyzers (1)', output)
+        self.assertIn('tier1-verified', output)
+        self.assertIn('Tree-sitter Fallback (1)', output)
+        self.assertIn('Zig', output)
+
     def test_help_error_exit_code_real_error(self):
         data = {'type': 'help_section', 'error': 'Unknown adapter', 'message': 'x'}
         self.assertEqual(help_error_exit_code(data), 1)

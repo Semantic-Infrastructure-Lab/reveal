@@ -580,6 +580,14 @@ class HelpAdapter(ResourceAdapter):
                     'reveal help://schemas/all',
                 ],
             }
+        if topic in ('rules', 'rules/'):
+            # BACK-846: --rules was flag-only, so MCP clients (whose only
+            # introspection channel is reveal_query(uri)) could not reach the
+            # rule catalog at all.
+            return self._get_rules_catalog()
+        if topic in ('languages', 'languages/'):
+            # BACK-846: same hole for --languages.
+            return self._get_languages_catalog()
         if topic in ('schemas/all', 'schemas/index'):
             # BACK-840: the aggregate view agents kept asking for already
             # exists as `reveal --discover` (flag-only, invisible from the
@@ -782,7 +790,10 @@ class HelpAdapter(ResourceAdapter):
 
     # Discovery entry points that aren't adapter schemes or static guides but are
     # valid help:// topics — included when suggesting fixes for a mistyped topic.
-    _DISCOVERY_TOPICS = ('quick', 'relationships', 'anti-patterns', 'schemas', 'examples')
+    _DISCOVERY_TOPICS = (
+        'quick', 'relationships', 'anti-patterns', 'schemas', 'examples',
+        'rules', 'languages',
+    )
 
     def suggest_topics(self, query: str, n: int = 3) -> List[str]:
         """Closest known help topics to a mistyped `query`, best first.
@@ -1033,6 +1044,8 @@ class HelpAdapter(ResourceAdapter):
                 'reveal help://agent             # AI agent usage guide',
                 'reveal help://schemas/index     # thin index of every adapter schema (~1K tokens)',
                 'reveal help://schemas/all       # full machine-readable schema for every adapter (~10K tokens)',
+                'reveal help://rules             # pattern-detection rule catalog',
+                'reveal help://languages         # supported languages + analyzer depth',
             ],
         }
 
@@ -1354,6 +1367,57 @@ class HelpAdapter(ResourceAdapter):
                 # A schema that errors on generation isn't a usable menu entry.
                 continue
         return sorted(schemes)
+
+    def _get_rules_catalog(self) -> Dict[str, Any]:
+        """help://rules — the pattern-detection rule catalog (BACK-846).
+
+        Renders from RuleRegistry.list_rules(), the same source --rules uses,
+        grouped by category. Internal self-check rules are excluded to match
+        the flag's default (they can never fire on a user's codebase).
+        """
+        from ..rules import RuleRegistry
+
+        rules = RuleRegistry.list_rules(include_internal=False)
+        by_category: Dict[str, List[Dict[str, Any]]] = {}
+        for rule in rules:
+            by_category.setdefault(rule['category'], []).append(rule)
+
+        return {
+            'type': 'help_rules',
+            'title': 'Reveal — Pattern Detection Rules',
+            'rule_count': len(rules),
+            'enabled_count': sum(1 for r in rules if r.get('enabled')),
+            'categories': {
+                cat: sorted(entries, key=lambda r: r['code'])
+                for cat, entries in sorted(by_category.items())
+            },
+            'next': [
+                'reveal help://schemas/index',
+                'reveal help://quick',
+            ],
+        }
+
+    def _get_languages_catalog(self) -> Dict[str, Any]:
+        """help://languages — supported-language catalog (BACK-846).
+
+        Renders from build_languages_payload(), the same structured source
+        --languages formats its text from, so the two cannot drift.
+        """
+        from ..cli.languages import build_languages_payload
+
+        payload = build_languages_payload()
+        return {
+            'type': 'help_languages',
+            'title': 'Reveal — Supported Languages',
+            'explicit': payload['explicit'],
+            'fallback': payload['fallback'],
+            'language_count': payload['total'],
+            'ambiguous_extensions': payload['ambiguous'],
+            'next': [
+                'reveal help://quick',
+                'reveal help://rules',
+            ],
+        }
 
     def _get_schema_all(self, thin: bool = False) -> Dict[str, Any]:
         """help://schemas/all (and .../index) — the aggregate schema view.
