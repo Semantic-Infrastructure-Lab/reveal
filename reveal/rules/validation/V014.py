@@ -156,6 +156,10 @@ class V014(BaseRule):
             stripped = line.strip()
             if stripped.startswith('#'):
                 continue  # narrative comments, not a current claim
+            if 'agent' not in stripped.lower():
+                continue  # a `~NK tokens` claim about some other page (e.g.
+                          # help://schemas/index) isn't a claim about
+                          # AGENT_HELP.md's size
             match = self._HELP_PY_LITERAL_PATTERN.search(line)
             if not match:
                 continue
