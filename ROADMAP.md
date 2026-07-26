@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-07-23 (desert-tempest-0723 — v0.110.0 release: calls:// call-graph recall complete across all 19 languages, side-effects taxonomy sweep, TS import resolution deepened)
+> **Last updated**: 2026-07-26 (rainy-iceberg-0726 — v0.111.0 release: contracts/cli/http recall-oracle program complete across all 9 remaining languages, mysql:// CLI connection-string bug fixed, diff:// phantom cross-file matches fixed)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,12 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.111.0 — contracts/cli/http recall-oracle program complete across all 9 remaining languages + mysql:// CLI bug + diff:// phantom-match bug
+- ✅ `contracts`/`cli`/`http` recall-oracle program (BACK-791) complete — Go, Rust, C++, C#, PHP, Swift, Kotlin, Ruby, Java each measured against an independently-derived ground-truth oracle on a large real corpus. 15 real scanner defects found and fixed; all 9 languages now 100%/100% recall+precision on every measured category. Biggest single find: Java heritage clauses with type arguments or package qualification (`extends Bar<Baz>`, `extends pkg.Bar`) were silently dropped entirely — 20.5% of real implementer relationships missing on a real corpus before the fix (BACK-812).
+- ✅ `reveal mysql://localhost` — reveal's own primary documented example — never actually used the host you typed: the CLI factory strips the `mysql://` scheme before construction, breaking `urlparse()`'s netloc parsing, and silently falling back to `~/.my.cnf` with no warning. Found dogfooding the mysql connection-error hint (BACK-863).
+- ✅ `diff://` directory/git comparisons matched functions/classes by name alone, merging unrelated same-named functions in different files into phantom "modified" entries — `reveal diff://git://HEAD/.:.`, reveal's own suggested pre-commit command, showed 2000+ lines of noise on a clean tree (BACK-861).
+- ✅ help:// navigation hygiene fully closed out, `pack --focus` gained import-graph relevance ranking, `markdown://` gained targeted `?backlinks=` queries, and reveal-mcp was audited against MCP best practices (tool trimming, annotations, 2 new tools). Full detail in CHANGELOG.md.
 
 ### v0.110.0 — calls:// call-graph recall complete across all 19 languages + side-effects taxonomy sweep + TS import resolution deepened
 - ✅ `calls://` recall-oracle program (BACK-730) complete — all 19 supported languages now measured against independent-oracle ground truth at 89–100% recall. Biggest find: Dart had no dedicated call-expression node kind at all, so every call site was invisible to `calls://` (BACK-760/761/763-767/769).
