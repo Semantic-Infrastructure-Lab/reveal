@@ -575,7 +575,18 @@ class HelpAdapter(ResourceAdapter):
                     'reveal help://schemas/ssl',
                     'reveal help://schemas/git',
                 ],
+                'next': [
+                    'reveal help://schemas/index',
+                    'reveal help://schemas/all',
+                ],
             }
+        if topic in ('schemas/all', 'schemas/index'):
+            # BACK-840: the aggregate view agents kept asking for already
+            # exists as `reveal --discover` (flag-only, invisible from the
+            # URI tier); route it here instead of building a second one.
+            # 'index' is the ~1K thin rung (scheme/uri_syntax/description
+            # only) between the bare menu and the full 'all' payload.
+            return self._get_schema_all(thin=(topic == 'schemas/index'))
         if topic.startswith('schemas/'):
             remainder = topic.split('/', 1)[1]
             # help://schemas/<adapter>/<output_type> drills into one output type;
@@ -1020,6 +1031,8 @@ class HelpAdapter(ResourceAdapter):
                 'reveal help://examples          # browse all task-based query recipes',
                 'reveal help://examples/security # security query recipes',
                 'reveal help://agent             # AI agent usage guide',
+                'reveal help://schemas/index     # thin index of every adapter schema (~1K tokens)',
+                'reveal help://schemas/all       # full machine-readable schema for every adapter (~10K tokens)',
             ],
         }
 
@@ -1341,6 +1354,39 @@ class HelpAdapter(ResourceAdapter):
                 # A schema that errors on generation isn't a usable menu entry.
                 continue
         return sorted(schemes)
+
+    def _get_schema_all(self, thin: bool = False) -> Dict[str, Any]:
+        """help://schemas/all (and .../index) — the aggregate schema view.
+
+        Reuses build_discover_payload() (the same builder --discover uses) so
+        the two surfaces can never drift apart. `thin=True` reduces each
+        adapter entry to scheme/uri_syntax/description only — the ~1K index
+        rung between the bare `help://schemas` menu and this full payload.
+        """
+        from ..cli.handlers.introspection import build_discover_payload
+
+        payload = build_discover_payload(show_all=False)
+        adapters = payload.get('adapters', {})
+        if thin:
+            adapters = {
+                scheme: {
+                    'scheme': entry.get('scheme', scheme),
+                    'uri_syntax': entry.get('uri_syntax', ''),
+                    'description': entry.get('description', ''),
+                }
+                for scheme, entry in adapters.items()
+            }
+        return {
+            'type': 'adapter_schema_all',
+            'thin': thin,
+            'reveal_version': payload.get('reveal_version'),
+            'adapter_count': payload.get('adapter_count', len(adapters)),
+            'adapters': adapters,
+            'next': (
+                ['reveal help://schemas/all'] if thin
+                else [f'reveal help://schemas/{s}' for s in sorted(adapters)[:3]]
+            ),
+        }
 
     # Only adapters far above the typical example count are trimmed; at 15 this
     # bites claude:// (43) alone and leaves every other adapter's list intact.

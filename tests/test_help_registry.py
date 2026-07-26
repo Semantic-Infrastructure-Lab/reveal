@@ -399,6 +399,44 @@ class TestHelpEnvelopeConsistency(unittest.TestCase):
         self.assertEqual(result['next'], ['reveal help://examples'])
 
 
+class TestSchemasAggregateView(unittest.TestCase):
+    """BACK-840: help://schemas/all and .../index — the aggregate schema view
+    routed onto the same builder --discover uses, so it can't drift from it."""
+
+    def test_schemas_all_matches_discover_payload(self):
+        from reveal.cli.handlers.introspection import build_discover_payload
+
+        adapter = HelpAdapter()
+        result = adapter.get_element('schemas/all')
+        expected = build_discover_payload(show_all=False)
+        self.assertEqual(result['adapters'], expected['adapters'])
+        self.assertEqual(result['adapter_count'], expected['adapter_count'])
+
+    def test_schemas_all_is_not_thin(self):
+        adapter = HelpAdapter()
+        result = adapter.get_element('schemas/all')
+        self.assertFalse(result['thin'])
+        # Full entries carry output_types/query_params, not just the index fields.
+        ast_entry = result['adapters']['ast']
+        self.assertIn('output_types', ast_entry)
+        self.assertIn('query_params', ast_entry)
+
+    def test_schemas_index_is_thin(self):
+        adapter = HelpAdapter()
+        result = adapter.get_element('schemas/index')
+        self.assertTrue(result['thin'])
+        ast_entry = result['adapters']['ast']
+        self.assertEqual(
+            set(ast_entry.keys()), {'scheme', 'uri_syntax', 'description'}
+        )
+
+    def test_schemas_bare_menu_points_at_index_and_all(self):
+        adapter = HelpAdapter()
+        result = adapter.get_element('schemas')
+        self.assertIn('reveal help://schemas/index', result['next'])
+        self.assertIn('reveal help://schemas/all', result['next'])
+
+
 class TestHelpContentCurrency(unittest.TestCase):
     """Spot-check that help:// content reflects current flag names."""
 

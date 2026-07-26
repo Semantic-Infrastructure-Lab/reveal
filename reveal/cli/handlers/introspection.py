@@ -384,12 +384,13 @@ def handle_explain_rule(rule_code: str):
     sys.exit(0)
 
 
-def handle_discover(show_all: bool = False):
-    """Handle --discover flag.
+def build_discover_payload(show_all: bool = False) -> dict:
+    """Build the full adapter registry as a single JSON-serializable dict.
 
-    Dumps the full adapter registry as a single JSON document.
     Each adapter entry includes its schema (output_types, query_params,
     example_queries, notes) for programmatic discovery by agents and scripts.
+    Shared by --discover (CLI) and help://schemas/all (BACK-840) so both
+    surfaces stay byte-identical rather than drifting into two builders.
 
     Args:
         show_all: When True (--all), also include adapters that only inspect
@@ -397,7 +398,6 @@ def handle_discover(show_all: bool = False):
             by default so external users/agents see only adapters that apply
             to their own resources.
     """
-    import json
     from ...adapters.base import _ADAPTER_REGISTRY
 
     schemes = [
@@ -472,7 +472,18 @@ def handle_discover(show_all: bool = False):
     except ImportError:
         pass
 
-    print(json.dumps(result, indent=2))
+    return result
+
+
+def handle_discover(show_all: bool = False):
+    """Handle --discover flag.
+
+    Dumps the full adapter registry as a single JSON document (see
+    build_discover_payload for what it contains).
+    """
+    import json
+
+    print(json.dumps(build_discover_payload(show_all), indent=2))
     sys.exit(0)
 
 

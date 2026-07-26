@@ -654,6 +654,7 @@ def _render_schema_error(data: Dict[str, Any]) -> None:
         print("  reveal help://schemas/ssl")
         print("  reveal help://schemas/git")
         print()
+        _render_schema_next(data)
     else:
         print(f"Error: {data['message']}", file=sys.stderr)
         sys.exit(1)
@@ -828,6 +829,44 @@ def _render_output_type_schema(data: Dict[str, Any]) -> None:
     print()
 
 
+def _render_adapter_schema_all(data: Dict[str, Any]) -> None:
+    """Render help://schemas/all (full) and help://schemas/index (thin) — BACK-840.
+
+    Same payload build_discover_payload()/--discover already produces; this is
+    its text-format rendering so the aggregate view is reachable from the URI
+    tier (and therefore from MCP's reveal_query), not just the --discover flag.
+    """
+    adapters = data.get('adapters', {})
+    thin = data.get('thin', False)
+    label = 'Index' if thin else 'All'
+    print(f"# Adapter Schemas — {label} ({data.get('adapter_count', len(adapters))} adapters)")
+    print()
+    if thin:
+        for scheme, entry in adapters.items():
+            desc = entry.get('description', '')
+            print(f"  {scheme:<12} {entry.get('uri_syntax', ''):<30} {desc}")
+        print()
+    else:
+        for scheme, entry in adapters.items():
+            print(f"## {scheme}://")
+            if entry.get('description'):
+                print(f"  {entry['description']}")
+            print(f"  Syntax: {entry.get('uri_syntax', '')}")
+            if entry.get('output_types'):
+                print(f"  Output types: {', '.join(entry['output_types'])}")
+            if entry.get('query_params'):
+                print(f"  Query params: {', '.join(entry['query_params'])}")
+            if entry.get('example_queries'):
+                print(f"  Examples: {', '.join(entry['example_queries'][:3])}")
+            print()
+    _render_schema_next(data)
+    print("---")
+    print()
+    print("## See Also")
+    print("  reveal help://schemas/<adapter>     # full per-adapter schema")
+    print()
+
+
 def _render_adapter_schema(data: Dict[str, Any]) -> None:
     """Render help://schemas/<adapter> — machine-readable adapter schema."""
     if 'error' in data or (not data.get('adapter') and data.get('available_adapters')):
@@ -980,6 +1019,7 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
         'help_section': _render_help_section,
         'query_recipes': _render_query_recipes,
         'adapter_schema': _render_adapter_schema,
+        'adapter_schema_all': _render_adapter_schema_all,
         'help_quick': _render_help_quick,
         'help_relationships': _render_help_relationships,
     }

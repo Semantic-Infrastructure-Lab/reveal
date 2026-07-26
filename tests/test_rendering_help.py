@@ -777,6 +777,38 @@ class TestRenderHelp(unittest.TestCase):
         self.assertIn('## Next', output)
         self.assertIn('reveal help://schemas/ast', output)
 
+    def test_text_schemas_all_renders_every_adapter(self):
+        """BACK-840: help://schemas/all in text format lists every adapter block."""
+        data = {
+            'type': 'adapter_schema_all',
+            'thin': False,
+            'adapter_count': 2,
+            'adapters': {
+                'ast': {'scheme': 'ast', 'uri_syntax': 'ast://<path>', 'description': 'AST queries',
+                        'output_types': ['element'], 'query_params': ['type']},
+                'git': {'scheme': 'git', 'uri_syntax': 'git://<path>', 'description': 'Git history'},
+            },
+        }
+        output = capture_stdout(render_help, data, 'text', False)
+        self.assertIn('## ast://', output)
+        self.assertIn('## git://', output)
+        self.assertIn('Output types: element', output)
+
+    def test_text_schemas_index_is_compact_one_line_per_adapter(self):
+        """BACK-840: help://schemas/index is the thin rung — no per-adapter detail."""
+        data = {
+            'type': 'adapter_schema_all',
+            'thin': True,
+            'adapter_count': 1,
+            'adapters': {
+                'ast': {'scheme': 'ast', 'uri_syntax': 'ast://<path>', 'description': 'AST queries'},
+            },
+        }
+        output = capture_stdout(render_help, data, 'text', False)
+        self.assertIn('Index', output)
+        self.assertIn('ast', output)
+        self.assertNotIn('Output types:', output)
+
     def test_help_error_exit_code_real_error(self):
         data = {'type': 'help_section', 'error': 'Unknown adapter', 'message': 'x'}
         self.assertEqual(help_error_exit_code(data), 1)
