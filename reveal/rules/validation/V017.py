@@ -16,6 +16,7 @@ Examples:
 """
 
 import re
+from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
@@ -102,7 +103,14 @@ class V017(BaseRule):
             except OSError:
                 return []
             file_path = str(taxonomy_path)
-        elif 'node_taxonomy.py' not in file_path and 'treesitter.py' not in file_path:
+        elif Path(file_path).name not in ('node_taxonomy.py', 'treesitter.py'):
+            # BACK-852 (dogfooding find, same class as V016/V023): the old
+            # substring check ('node_taxonomy.py' not in file_path) matched
+            # tests/adapters/test_node_taxonomy.py too — 'test_node_taxonomy.py'
+            # contains 'node_taxonomy.py' as a literal substring of its own
+            # filename — wrongly scanning the test file's content as if it
+            # were the real taxonomy module and reporting bogus "insufficient
+            # node type coverage". Compare the exact basename instead.
             # Direct per-file invocation (e.g. `reveal reveal/adapters/ast/node_taxonomy.py
             # --check` or the pre-BACK-814 `reveal reveal/treesitter.py --check`) applies
             # only to those two files; the extraction methods' fallback regexes still

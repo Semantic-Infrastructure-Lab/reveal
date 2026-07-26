@@ -93,11 +93,16 @@ class V023(BaseRule):
         if not file_path.endswith('.py'):
             return []
 
-        if '/adapters/' not in file_path and '/analyzers/' not in file_path:
+        # BACK-852 (dogfooding find, same class of bug as V016): 'tests/
+        # adapters/' and 'tests/analyzers/' also contain these substrings,
+        # wrongly pulling test files into this check. Require an actual
+        # 'adapters'/'analyzers' path *component*, and exclude anything
+        # under a 'tests' component.
+        path = Path(file_path)
+        if ('adapters' not in path.parts and 'analyzers' not in path.parts) or 'tests' in path.parts:
             return []
 
         # Skip __init__.py, base.py, utils files
-        path = Path(file_path)
         if path.name in ['__init__.py', 'base.py', 'utils.py', 'adapter_utils.py']:
             return []
 

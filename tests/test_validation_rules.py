@@ -1659,6 +1659,27 @@ class TestAdapter(ResourceAdapter):
         # Should return a list (may be empty if all adapters have get_help)
         self.assertIsInstance(detections, list)
 
+    def test_tests_adapters_dir_not_flagged(self):
+        """BACK-852: 'tests/adapters/' contains the '/adapters/' substring
+        the old gate matched — a test file with an unrelated real class
+        (e.g. a TestCase) plus a string-literal fixture mentioning
+        'ResourceAdapter' (common for plugin-discovery tests that write a
+        temp adapter file) must not be flagged as a real adapter missing
+        get_help().
+        """
+        content = (
+            "class TestDiscoverAdapterPlugins(unittest.TestCase):\n"
+            "    def test_x(self):\n"
+            "        src = 'class TestAdapter(ResourceAdapter):\\n'\n"
+        )
+        structure = {'classes': [{'name': 'TestDiscoverAdapterPlugins'}]}
+        detections = self.rule.check(
+            file_path="tests/adapters/test_adapter_plugins.py",
+            structure=structure,
+            content=content
+        )
+        self.assertEqual(detections, [])
+
     def test_reveal_uri_self_scan_no_missing_adapters(self):
         """All reveal adapters should have get_help() — self-scan returns no detections."""
         from reveal.rules.validation.utils import find_reveal_root
@@ -1853,6 +1874,28 @@ class TestV023OutputContractCompliance(unittest.TestCase):
         )
         # Should return detections list
         self.assertIsInstance(detections, list)
+
+    def test_tests_analyzers_dir_not_flagged(self):
+        """BACK-852: same 'tests/adapters/'-substring collision as V016, on
+        the 'analyzers/' side — 'tests/analyzers/' contains the '/analyzers/'
+        substring the old gate matched, and this content shape (a class
+        with 'Analyzer' in its name plus a get_structure() with a direct
+        dict return missing contract fields) is exactly what
+        _check_output_code_patterns flags for a *real* analyzer file, so it
+        must not fire here just because of the path.
+        """
+        content = (
+            "class FakeAnalyzer:\n"
+            "    def get_structure(self):\n"
+            "        return {'foo': 1}\n"
+        )
+        structure = {'classes': [{'name': 'FakeAnalyzer'}]}
+        detections = self.rule.check(
+            file_path="tests/analyzers/test_fake_analyzer.py",
+            structure=structure,
+            content=content
+        )
+        self.assertEqual(detections, [])
 
     def test_valid_source_types_defined(self):
         """Test that valid source types are defined."""
@@ -2136,6 +2179,20 @@ class TestV017TreeSitterNodeTypes(unittest.TestCase):
             content=""
         )
         self.assertIsInstance(detections, list)
+
+    def test_test_node_taxonomy_file_not_flagged(self):
+        """BACK-852: 'test_node_taxonomy.py' contains 'node_taxonomy.py' as a
+        literal substring of its own filename, so the old substring gate
+        wrongly scanned tests/adapters/test_node_taxonomy.py's own (unrelated,
+        near-empty) content as if it were the real taxonomy module and
+        reported bogus 'insufficient node type coverage'.
+        """
+        detections = self.rule.check(
+            file_path="tests/adapters/test_node_taxonomy.py",
+            structure=None,
+            content="import unittest\n\nclass TestNodeTaxonomy(unittest.TestCase):\n    pass\n"
+        )
+        self.assertEqual(detections, [])
 
     def test_sufficient_function_types(self):
         """Test that sufficient function node types pass validation."""

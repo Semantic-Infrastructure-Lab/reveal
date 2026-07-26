@@ -68,11 +68,20 @@ class V016(BaseRule):
         if not file_path.endswith('.py'):
             return []
 
-        if '/adapters/' not in file_path:
+        # BACK-852 (dogfooding find): 'tests/adapters/' also contains the
+        # '/adapters/' substring, wrongly pulling test files into this
+        # adapters-only check. Real miss: tests/adapters/test_adapter_plugins.py
+        # writes a `"class TestAdapter(ResourceAdapter):\n"` string fixture to
+        # a temp file for plugin-discovery testing — that literal text survives
+        # into the test file's own content, and _is_adapter_file's content
+        # fallback then flagged the whole test file as a real adapter missing
+        # get_help(). Require an actual 'adapters' path *component*, and
+        # exclude anything under a 'tests' component.
+        path = Path(file_path)
+        if 'adapters' not in path.parts or 'tests' in path.parts:
             return []
 
         # Skip __init__.py and base.py
-        path = Path(file_path)
         if path.name in ['__init__.py', 'base.py']:
             return []
 
