@@ -99,13 +99,16 @@ def _render_help_breadcrumbs(scheme: str, data: Dict[str, Any]) -> None:
         'diff': ['stats', 'ast'],
         'stats': ['ast', 'diff'],
         'imports': ['ast', 'stats'],
+        'depends': ['imports', 'ast'],
         'git': ['diff', 'claude'],
+        'patches': ['ast', 'git'],
         # Infrastructure cluster
         'nginx': ['ssl', 'domain'],
         'ssl': ['domain', 'nginx'],
         'domain': ['ssl', 'nginx'],
         'cpanel': ['ssl', 'autossl'],
         'autossl': ['ssl', 'cpanel'],
+        'letsencrypt': ['ssl', 'nginx'],
         # Data & config cluster
         'sqlite': ['mysql', 'json'],
         'mysql': ['sqlite'],
@@ -115,6 +118,7 @@ def _render_help_breadcrumbs(scheme: str, data: Dict[str, Any]) -> None:
         # Sessions & docs cluster
         'claude': ['git', 'markdown'],
         'markdown': ['claude', 'git'],
+        'codex': ['claude', 'git'],
         # Self-describing cluster
         'python': ['ast', 'env'],
         'reveal': ['help', 'ast'],

@@ -1188,6 +1188,25 @@ class TestRenderHelpRelationships(unittest.TestCase):
         output = capture_stdout(_render_help_breadcrumbs, 'claude', {})
         self.assertIn('help://git', output)
 
+    def test_every_public_adapter_has_breadcrumb_related_entry(self):
+        """BACK-585: the breadcrumbs' `related` dict is a hardcoded, hand-mirrored
+        map that has already silently drifted once — 4 of 25 adapters (codex,
+        depends, letsencrypt, patches) landed with no entry, so those adapters
+        rendered zero '## Next Steps' guidance with no test catching it. Guard
+        against the next adapter landing the same way.
+        """
+        from reveal.rendering.adapters.help import _render_help_breadcrumbs
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+        from reveal.adapters.help import HelpAdapter
+        public_schemes = set(_ADAPTER_REGISTRY.keys()) - HelpAdapter._INTERNAL_ADAPTERS
+        for scheme in sorted(public_schemes):
+            output = capture_stdout(_render_help_breadcrumbs, scheme, {})
+            self.assertIn(
+                'Next Steps', output,
+                f"help://{scheme} has no entry in breadcrumbs' related dict "
+                "-> renders zero onward guidance",
+            )
+
 
 class TestAntiPatternsRendering(unittest.TestCase):
     """S1.3: help://anti-patterns text rendering must produce non-empty non-adapter output."""
