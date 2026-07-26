@@ -502,6 +502,18 @@ class TestFlagOnlySurfacesReachableByUri(unittest.TestCase):
         self.assertIn('rules', adapter.suggest_topics('rulez'))
         self.assertIn('languages', adapter.suggest_topics('langauges'))
 
+    def test_list_topics_has_no_duplicates(self):
+        """BACK-847 item (3): adapter scheme names (e.g. 'ast') and STATIC_HELP
+        friendly aliases pointing at the same guide file legitimately share a
+        string — but _list_topics() must dedupe the combined list rather than
+        surface each shared name twice. Regression: was 119 entries / 95 unique
+        (24 dupes: every adapter with a STATIC_HELP alias, plus 'help')."""
+        adapter = HelpAdapter()
+        topics = adapter._list_topics()
+        self.assertEqual(len(topics), len(set(topics)))
+        self.assertIn('ast', topics)
+        self.assertIn('help', topics)
+
 
 class TestHelpContentCurrency(unittest.TestCase):
     """Spot-check that help:// content reflects current flag names."""

@@ -795,7 +795,10 @@ class HelpAdapter(ResourceAdapter):
         # Add static guides (auto-discovered + manual)
         topics.extend(self.help_topics.keys())
 
-        return sorted(topics)
+        # Adapter schemes and STATIC_HELP aliases legitimately overlap by
+        # design (e.g. 'ast' names both the adapter and its friendly guide
+        # alias) — dedupe the combined list rather than the source dicts.
+        return sorted(set(topics))
 
     # Discovery entry points that aren't adapter schemes or static guides but are
     # valid help:// topics — included when suggesting fixes for a mistyped topic.
