@@ -205,7 +205,7 @@ reveal pack PATH [--budget N] [--focus TOPIC] [--since REF] [--content] [--verbo
 | `--budget N` | Token budget (e.g., `--budget 4000`). Default: 2000 |
 | `--budget N-lines` | Line budget instead of tokens (e.g., `--budget 500-lines`) |
 | `--since REF` | Boost files changed since `REF` (branch, commit, or `HEAD~N`) to top priority |
-| `--focus TOPIC` | Emphasize files matching this name pattern (e.g., `--focus auth`) |
+| `--focus TOPIC` | Emphasize files matching this name pattern (e.g., `--focus auth`), plus files structurally related to a match via the import/dependency graph (BACK-833: a personalized-PageRank relevance score, so a helper a matching file imports ranks above an unrelated file even without a name match) |
 | `--content` | Emit reveal structure output for each selected file (agent-ready context) |
 | `--architecture` | Boost high fan-in (core abstraction) files; prepend architecture brief |
 | `--verbose` | Show per-file token/line counts |

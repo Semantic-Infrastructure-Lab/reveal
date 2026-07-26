@@ -127,8 +127,15 @@ def run_pack(args: Namespace) -> None:
     # Build fan-in index when --architecture is requested
     fan_in_scores = _fetch_fan_in(path) if architecture else None
 
+    # Graph-relevance ranking (BACK-833): only worth the graph build when a
+    # focus query was actually given.
+    graph_relevance_scores = _compute_graph_relevance(path, focus) if focus else {}
+
     # Collect candidate files
-    candidates = _collect_candidates(path, focus, changed_files, fan_in_scores=fan_in_scores)
+    candidates = _collect_candidates(
+        path, focus, changed_files, fan_in_scores=fan_in_scores,
+        graph_relevance_scores=graph_relevance_scores,
+    )
 
     # Apply budget
     selected, meta = _apply_budget(candidates, budget_tokens, budget_lines, path)
@@ -197,18 +204,94 @@ def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[s
     return changed, None
 
 
+def _build_pack_import_graph(path: Path) -> Tuple[Optional[Any], Set[Path]]:
+    """Build reveal's multi-language import/dependency graph for *path*.
+
+    Returns ``(graph, scanned_files)``, or ``(None, set())`` on any failure.
+    Shared by ``_fetch_fan_in`` (--architecture) and ``_compute_graph_relevance``
+    (--focus, BACK-833) so there is exactly one lazy-import/build site for
+    ``ImportsAdapter`` in this module.
+    """
+    try:
+        from reveal.adapters.imports import ImportsAdapter  # noqa: I006
+        adapter = ImportsAdapter(path=str(path))
+        adapter._build_graph(adapter._target_path)
+        return adapter._graph, adapter._scanned_files
+    except Exception:
+        return None, set()
+
+
 def _fetch_fan_in(path: Path) -> Dict[str, int]:
     """Return {abs_path: fan_in} for all files under *path* via ImportsAdapter.
 
     Returns empty dict on any failure — callers treat missing entries as fan_in=0.
     """
-    try:
-        from reveal.adapters.imports import ImportsAdapter  # noqa: I006
-        adapter = ImportsAdapter(path=str(path), query='rank=fan-in')
-        result = adapter.get_structure()
-        return {e['file']: e['fan_in'] for e in result.get('entries', [])}
-    except Exception:
+    graph, scanned_files = _build_pack_import_graph(path)
+    if graph is None:
         return {}
+    all_files = scanned_files | set(graph.files.keys()) | set(graph.reverse_deps.keys())
+    return {str(f): len(graph.reverse_deps.get(f, set())) for f in all_files}
+
+
+def _compute_graph_relevance(path: Path, focus: Optional[str]) -> Dict[str, float]:
+    """Personalized-PageRank relevance score per file, seeded from --focus (BACK-833).
+
+    Builds reveal's own multi-language import/dependency graph (the same one
+    ``--architecture``'s fan-in reads from, via ImportsAdapter) and runs a
+    random-walk-with-restart from the files whose path matches *focus* (same
+    substring match ``_compute_priority`` already uses). Relevance propagates
+    along both edge directions — a file a focus file imports, or a file that
+    imports a focus file, is relevant to it — so a file conceptually tied to
+    the focus area but not literally named after it still gets ranked above
+    an unrelated file. Closes the gap the plain focus-substring match leaves:
+    that match only ever rewards a literal name hit.
+
+    Returns {abs_path: score in [0, 1]}; empty on no focus, no matching seed
+    files, or any graph-construction failure — callers treat missing entries
+    as 0 (pure relevance signal, additive on top of the existing heuristic).
+    """
+    if not focus:
+        return {}
+    graph, scanned_files = _build_pack_import_graph(path)
+    if graph is None:
+        return {}
+
+    all_files = scanned_files | set(graph.files.keys()) | set(graph.reverse_deps.keys())
+    if not all_files:
+        return {}
+
+    focus_lower = focus.lower()
+    seeds = [f for f in all_files if focus_lower in str(f).lower()]
+    if not seeds:
+        return {}
+
+    # Undirected adjacency: an import edge signals relevance in either
+    # direction, not just "depends on."
+    adjacency = {
+        f: set(graph.dependencies.get(f, set())) | set(graph.reverse_deps.get(f, set()))
+        for f in all_files
+    }
+
+    seed_weight = 1.0 / len(seeds)
+    personalization = {f: (seed_weight if f in seeds else 0.0) for f in all_files}
+    scores = dict(personalization)
+
+    damping = 0.85
+    for _ in range(30):
+        new_scores = {f: (1 - damping) * personalization[f] for f in all_files}
+        for f in all_files:
+            neighbors = adjacency[f]
+            if not neighbors:
+                continue
+            share = damping * scores[f] / len(neighbors)
+            for nb in neighbors:
+                new_scores[nb] += share
+        scores = new_scores
+
+    max_score = max(scores.values()) if scores else 0.0
+    if max_score <= 0:
+        return {}
+    return {str(f): v / max_score for f, v in scores.items()}
 
 
 def _get_file_raw_content(file_path: str, max_lines: int = 500) -> str:
@@ -357,6 +440,7 @@ def _collect_candidates(
     focus: Optional[str],
     changed_files: Optional[Set[str]] = None,
     fan_in_scores: Optional[Dict[str, int]] = None,
+    graph_relevance_scores: Optional[Dict[str, float]] = None,
 ) -> List[Dict[str, Any]]:
     """Collect and score candidate files for the pack."""
     candidates: List[Dict[str, Any]] = []
@@ -375,7 +459,11 @@ def _collect_candidates(
 
         is_changed = bool(changed_files and str(f.resolve()) in changed_files)
         fan_in = (fan_in_scores or {}).get(str(f.resolve()), 0)
-        priority = _compute_priority(f, rel, focus, is_changed=is_changed, fan_in=fan_in)
+        graph_relevance = (graph_relevance_scores or {}).get(str(f.resolve()), 0.0)
+        priority = _compute_priority(
+            f, rel, focus, is_changed=is_changed, fan_in=fan_in,
+            graph_relevance=graph_relevance,
+        )
 
         candidates.append({
             'path': str(f),
@@ -387,6 +475,7 @@ def _collect_candidates(
             'size': stat.st_size,
             'changed': is_changed,
             'fan_in': fan_in,
+            'graph_relevance': graph_relevance,
         })
 
     # Sort: priority descending, then mtime descending
@@ -400,6 +489,7 @@ def _compute_priority(
     focus: Optional[str],
     is_changed: bool = False,
     fan_in: int = 0,
+    graph_relevance: float = 0.0,
 ) -> float:
     """Score a file's priority for inclusion in the pack."""
     name = path.name.lower()
@@ -427,6 +517,13 @@ def _compute_priority(
     # Focus pattern match: high bonus
     if focus and focus.lower() in rel_str:
         score += 8.0
+
+    # Graph relevance (BACK-833): personalized-PageRank score seeded from
+    # --focus, propagated along the import/dependency graph. Additive on top
+    # of the literal substring match above — it rewards files structurally
+    # tied to the focus area even when their name doesn't mention it.
+    if graph_relevance > 0:
+        score += graph_relevance * 6.0
 
     # Key directories — match whole path components only to avoid substring false
     # positives (e.g. 'main' inside 'maintainability', 'core' inside 'decorator')

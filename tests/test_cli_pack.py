@@ -125,6 +125,20 @@ class TestComputePriority(unittest.TestCase):
             score_unfocused = _compute_priority(path, rel, focus=None)
             self.assertAlmostEqual(score_focused - score_unfocused, 8.0)
 
+    def test_graph_relevance_boosts_score(self):
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "utils/helpers.py")
+            score_relevant = _compute_priority(path, rel, focus=None, graph_relevance=0.5)
+            score_none = _compute_priority(path, rel, focus=None, graph_relevance=0.0)
+            self.assertAlmostEqual(score_relevant - score_none, 3.0)
+
+    def test_graph_relevance_is_additive_with_focus_match(self):
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "auth/middleware.py")
+            score_both = _compute_priority(path, rel, focus="auth", graph_relevance=1.0)
+            score_focus_only = _compute_priority(path, rel, focus="auth", graph_relevance=0.0)
+            self.assertAlmostEqual(score_both - score_focus_only, 6.0)
+
     def test_key_dir_segment_boosts_score(self):
         with tempfile.TemporaryDirectory() as d:
             path, rel = self._make_file(Path(d), "core/engine.py")
@@ -363,6 +377,91 @@ class TestCollectCandidates(unittest.TestCase):
         auth_file = next(c for c in candidates if "auth" in c['relative'])
         other_file = next(c for c in candidates if "utils" in c['relative'])
         self.assertGreater(auth_file['priority'], other_file['priority'])
+
+    def test_graph_relevance_scores_flow_into_candidates(self):
+        self._make("auth/login.py", "# login\n")
+        self._make("utils/helpers.py", "# helper\n")
+        auth_abs = str((self.base / "auth/login.py").resolve())
+        candidates = _collect_candidates(
+            self.base, focus=None,
+            graph_relevance_scores={auth_abs: 0.75},
+        )
+        auth_file = next(c for c in candidates if "auth" in c['relative'])
+        other_file = next(c for c in candidates if "utils" in c['relative'])
+        self.assertAlmostEqual(auth_file['graph_relevance'], 0.75)
+        self.assertEqual(other_file['graph_relevance'], 0.0)
+        self.assertGreater(auth_file['priority'], other_file['priority'])
+
+
+# ---------------------------------------------------------------------------
+# _compute_graph_relevance (BACK-833)
+# ---------------------------------------------------------------------------
+
+class TestComputeGraphRelevance(unittest.TestCase):
+
+    def test_no_focus_returns_empty(self):
+        from reveal.cli.commands.pack import _compute_graph_relevance
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "a.py").write_text("import b\n")
+            result = _compute_graph_relevance(Path(d), None)
+        self.assertEqual(result, {})
+
+    def test_no_matching_seed_returns_empty(self):
+        from reveal.cli.commands.pack import _compute_graph_relevance
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "a.py").write_text("import b\n")
+            (Path(d) / "b.py").write_text("X = 1\n")
+            result = _compute_graph_relevance(Path(d), "nonexistent_topic")
+        self.assertEqual(result, {})
+
+    def test_nonexistent_path_returns_empty(self):
+        from reveal.cli.commands.pack import _compute_graph_relevance
+        result = _compute_graph_relevance(Path("/nonexistent/path/that/cannot/exist"), "auth")
+        self.assertEqual(result, {})
+
+    def test_seed_file_scores_highest(self):
+        from reveal.cli.commands.pack import _compute_graph_relevance
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "auth.py").write_text("import utils\n")
+            (Path(d) / "utils.py").write_text("X = 1\n")
+            (Path(d) / "unrelated.py").write_text("Y = 2\n")
+            result = _compute_graph_relevance(Path(d), "auth")
+
+        auth_score = result[str((Path(d) / "auth.py").resolve())]
+        utils_score = result.get(str((Path(d) / "utils.py").resolve()), 0.0)
+        unrelated_score = result.get(str((Path(d) / "unrelated.py").resolve()), 0.0)
+
+        self.assertAlmostEqual(auth_score, 1.0)
+        self.assertGreater(utils_score, unrelated_score)
+
+    def test_neighbor_outranks_disconnected_file(self):
+        """A file imported by the focus file, but not name-matching it, should
+        still rank above a file with no graph relationship to the focus area —
+        the exact gap BACK-833 was filed to close."""
+        from reveal.cli.commands.pack import _compute_graph_relevance
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "auth.py").write_text("import helpers\n")
+            (Path(d) / "helpers.py").write_text("X = 1\n")
+            (Path(d) / "main.py").write_text("import auth\nimport isolated\n")
+            (Path(d) / "isolated.py").write_text("Y = 2\n")
+            result = _compute_graph_relevance(Path(d), "auth")
+
+        helpers_score = result.get(str((Path(d) / "helpers.py").resolve()), 0.0)
+        isolated_score = result.get(str((Path(d) / "isolated.py").resolve()), 0.0)
+        self.assertGreater(helpers_score, isolated_score)
+
+    def test_all_scores_in_unit_range(self):
+        from reveal.cli.commands.pack import _compute_graph_relevance
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "auth.py").write_text("import a, b, c\n")
+            (Path(d) / "a.py").write_text("X = 1\n")
+            (Path(d) / "b.py").write_text("X = 1\n")
+            (Path(d) / "c.py").write_text("X = 1\n")
+            result = _compute_graph_relevance(Path(d), "auth")
+
+        for score in result.values():
+            self.assertGreaterEqual(score, 0.0)
+            self.assertLessEqual(score, 1.0)
 
 
 # ---------------------------------------------------------------------------
