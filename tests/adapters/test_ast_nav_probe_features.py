@@ -1056,6 +1056,19 @@ class TestClassifyCall(unittest.TestCase):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertEqual(classify_call('file_put_contents'), 'file')
 
+    def test_python_os_fdopen(self):
+        # BACK-851: os.fdopen is the write leg of the atomic-write idiom
+        # (`with os.fdopen(fd, 'wb') as fh: ...`) — was unclassified even
+        # though os.rename/os.unlink/os.mkdir already cover the same shape.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('os.fdopen', 'python'), 'file')
+
+    def test_python_os_replace(self):
+        # BACK-851: os.replace is the atomic-rename-into-place leg of the
+        # same idiom, unclassified for the same reason.
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('os.replace', 'python'), 'file')
+
     def test_sleep(self):
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertEqual(classify_call('sleep'), 'sleep')

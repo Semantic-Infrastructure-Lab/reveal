@@ -228,6 +228,18 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             # (helpers/storage.py:_write_prepared_data, knx/telegrams.py).
             # Dotted `os.` prefix => zero collision risk.
             'os.remove', 'os.makedirs',
+            # BACK-851 (dogfooding find, reveal's own core/disk_cache.py):
+            # os.fdopen / os.replace are the atomic-write idiom's other two
+            # legs — `with os.fdopen(fd, 'wb') as fh: pickle.dump(...)` (the
+            # actual write) and `os.replace(tmp, target)` (the atomic
+            # rename-into-place) — and were both silently unclassified even
+            # though `os.rename`/`os.unlink`/`os.mkdir` right above already
+            # cover the exact same "dotted os.* verb" shape. Real miss:
+            # `--sideeffects` on disk_cache.py's own `put()` reported the
+            # read-only `open()` and `mkdir()` calls but neither of the two
+            # calls that actually persist data to disk. Dotted `os.` prefix
+            # => zero collision risk, same reasoning as os.remove/os.makedirs.
+            'os.fdopen', 'os.replace',
             # 'pathlib' (module) stays; the bare 'Path(' constructor pattern
             # was removed (BACK-416) — it tokenizes to just ['path'] and so
             # matched any segment named `path` (e.g. a local var in
