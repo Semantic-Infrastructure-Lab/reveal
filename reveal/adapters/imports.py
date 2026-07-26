@@ -12,19 +12,61 @@ Usage:
     reveal 'imports://src?circular'          # Find cycles
 """
 
+import hashlib
 import os
+import stat as stat_module
 import sys
 from pathlib import Path
 from typing import Callable, Dict, Any, List, Optional, Tuple
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
+from ..core import disk_cache
 from ..utils import safe_json_dumps
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..registry import get_code_extensions
 from ..utils.path_utils import is_skippable_dir, to_posix
+
+# Disk-cache namespace for this adapter's resolved import graph (BACK-834).
+# Mirrors rules/imports/I002.py's own import-graph disk cache (_tree_fingerprint
+# / _IMPORT_GRAPH_NAMESPACE) — same fingerprint recipe (path + mtime_ns + size
+# per candidate file), but this adapter builds a graph rooted at whatever
+# `path` argument the caller gave it (imports://<path>, pack --architecture,
+# pack --focus), not I002's resolved *project* root, so it gets its own
+# namespace rather than sharing I002's cache entries.
+_ADAPTER_IMPORT_GRAPH_NAMESPACE = "adapter_import_graph"
+
+def _candidate_set_fingerprint(candidates: List[Path]) -> Optional[str]:
+    """Hash (path, mtime_ns, size) for every candidate file — the disk-cache key.
+
+    Same recipe as I002's `_tree_fingerprint` (BACK-536 opt 2), but reuses the
+    candidate list `_build_graph` already computed via `_discover_candidate_files`
+    instead of a second directory walk — the fingerprint costs one extra
+    `stat()` per already-discovered file, nothing more. A content edit bumps
+    mtime_ns; an add/delete/rename changes the candidate list itself — either
+    way the digest changes and the cache misses. Returns None (→ caller skips
+    the cache and builds directly) on any stat error, so a vanished/unreadable
+    file fails open to the correct, uncached path rather than raising or
+    silently keying on a partial view.
+    """
+    try:
+        entries = []
+        for fp in candidates:
+            st = fp.stat()
+            if not stat_module.S_ISREG(st.st_mode):
+                continue
+            entries.append((str(fp), st.st_mtime_ns, st.st_size))
+    except OSError:
+        return None
+    entries.sort()
+    hasher = hashlib.sha256()
+    for path_str, mtime_ns, size in entries:
+        hasher.update(path_str.encode('utf-8', 'replace'))
+        hasher.update(f"\x02{mtime_ns}\x03{size}\x04".encode('ascii'))
+    return hasher.hexdigest()
+
 
 def _module_label(path: str) -> str:
     p = Path(path)
@@ -1101,6 +1143,16 @@ class ImportsAdapter(ResourceAdapter):
                 `reveal architecture` get per-file complexity structures without
                 a second full-repo walk/parse. When False (default), no
                 structure analysis is done.
+
+        Disk cache (BACK-834): when `collect_structures` is False and no
+        `on_file_processed` callback was given — the common case for
+        `imports://`, `pack --architecture`'s fan-in, and `pack --focus`'s
+        graph-relevance ranking — the resolved graph is cached on disk keyed by
+        a fingerprint of the candidate file set, so a 2nd+ call on an unchanged
+        tree skips the tree-sitter extraction and dependency-resolution walk
+        entirely. Skipped (never read or written) when either is set, since
+        `self._structures` and per-file progress callbacks aren't part of the
+        cached payload and would silently go missing on a cache hit.
         """
         supported_exts = frozenset(get_all_extensions())
         # Recognized-code extensions that lack an import extractor — used to warn
@@ -1108,11 +1160,28 @@ class ImportsAdapter(ResourceAdapter):
         code_exts = get_code_extensions()
 
         candidates, file_index = self._discover_candidate_files(target_path, supported_exts, code_exts)
+
+        cacheable = not collect_structures and on_file_processed is None
+        fingerprint = _candidate_set_fingerprint(candidates) if cacheable else None
+        if fingerprint is not None:
+            cached = disk_cache.get(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint)
+            if cached is not None:
+                (self._graph, self._symbols_by_file,
+                 self._scanned_files, self._unsupported_extensions) = cached
+                return
+
         all_imports = self._process_extracted_files(
             candidates, collect_structures, on_file_processed, supported_exts, code_exts)
 
         self._graph = ImportGraph.from_imports(all_imports)
         self._resolve_dependencies(target_path, file_index)
+
+        if fingerprint is not None:
+            disk_cache.put(
+                _ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint,
+                (self._graph, self._symbols_by_file,
+                 self._scanned_files, self._unsupported_extensions),
+            )
 
     def _build_response(self, response_type: str, **data_fields) -> Dict[str, Any]:
         """Build standardized adapter response with common structure.
