@@ -22,6 +22,54 @@ def matches_body_contains(path: Path, terms: List[str]) -> bool:
     return all(term.lower() in body for term in terms)
 
 
+# Heading-line hits count more than a plain body hit — a term appearing in a
+# heading is a much stronger relevance signal than one buried in prose.
+HEADING_HIT_WEIGHT = 3
+
+
+def score_body_match(path: Path, terms: List[str]) -> Dict[str, Any]:
+    """Score how strongly a file's body matches ``body-contains`` terms.
+
+    A simple relevance score (term frequency + a heading-proximity boost) —
+    not Beth's full phrase/authority model, just enough to sort multi-doc
+    ``body-contains`` matches best-first instead of leaving them in
+    filesystem order (BACK-869).
+
+    Args:
+        path: Path to markdown file
+        terms: Terms that must all appear in the body (case-insensitive)
+
+    Returns:
+        Dict with:
+            score        — total_hits + heading_hits * HEADING_HIT_WEIGHT
+            term_counts  — {term: total occurrences in body}
+            heading_hits — {term: occurrences on a heading (#) line}
+    """
+    from . import files
+    body = files.read_body_text(path)
+    lines = body.split('\n')
+
+    term_counts: Dict[str, int] = {}
+    heading_hits: Dict[str, int] = {}
+    for term in terms:
+        needle = term.lower()
+        total = 0
+        on_heading = 0
+        for line in lines:
+            line_lower = line.lower()
+            occurrences = line_lower.count(needle)
+            if not occurrences:
+                continue
+            total += occurrences
+            if line.lstrip().startswith('#'):
+                on_heading += occurrences
+        term_counts[term] = total
+        heading_hits[term] = on_heading
+
+    score = sum(term_counts.values()) + sum(heading_hits.values()) * HEADING_HIT_WEIGHT
+    return {'score': score, 'term_counts': term_counts, 'heading_hits': heading_hits}
+
+
 def matches_filter(frontmatter: Optional[Dict[str, Any]],
                    field: str, operator: str, value: str) -> bool:
     """Check if frontmatter matches a single filter.

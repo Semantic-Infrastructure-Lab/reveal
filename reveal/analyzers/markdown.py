@@ -963,6 +963,48 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         return related_paths
 
+    def _derive_related_paths_from_links(self, current_path: Path) -> List[str]:
+        """Fall back to the link graph when frontmatter has no related fields.
+
+        Reuses the same forward+backward edge computation that
+        ``markdown://?backlinks=`` already ships (BACK-813) instead of writing
+        a second graph implementation, so a doc with no hand-authored
+        ``related:``/``see_also:``/etc. still gets a related-docs view derived
+        from who it links to and who links back to it. No persistent cache
+        yet (BACK-866) — this does a full-tree scan per call, same cost the
+        shipped ``?backlinks=`` query already pays.
+
+        Args:
+            current_path: Resolved absolute path of the file being analyzed.
+
+        Returns:
+            Absolute path strings (forward links first, then backlinks,
+            deduplicated) or [] if no project root/graph edges were found.
+        """
+        from ..utils.path_utils import resolve_project_root
+        from ..adapters.markdown import operations as markdown_link_ops
+
+        root = resolve_project_root(current_path.parent)
+        if root is None:
+            return []
+
+        try:
+            rel_target = str(current_path.relative_to(root.resolve())).replace('\\', '/')
+        except ValueError:
+            return []
+
+        backlinks = markdown_link_ops.get_backlinks(root, rel_target)
+        if not backlinks.get('found'):
+            return []
+
+        seen: Set[str] = set()
+        derived_paths: List[str] = []
+        for rel in backlinks['links_to'] + backlinks['linked_by']:
+            if rel not in seen:
+                seen.add(rel)
+                derived_paths.append(str((root / rel).resolve()))
+        return derived_paths
+
     def _extract_related(
         self, depth: int = 1, _visited: Optional[set] = None,
         _file_count: Optional[Dict[str, Any]] = None, limit: int = 100,
@@ -1002,11 +1044,15 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         # Get front matter
         fm = self._extract_frontmatter()
-        if not fm or not fm.get('data'):
-            return []
 
-        # Find related paths from frontmatter
-        related_paths = self._find_related_paths(fm['data'])
+        # Find related paths from frontmatter; fall back to the link graph
+        # (forward + backward) when nothing was hand-authored, so docs nobody
+        # curated still get a related-docs view (BACK-870).
+        related_paths = self._find_related_paths(fm['data']) if fm and fm.get('data') else []
+        derived = False
+        if not related_paths:
+            related_paths = self._derive_related_paths_from_links(current_path)
+            derived = bool(related_paths)
         if not related_paths:
             return []
 
@@ -1019,6 +1065,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 break
             result = self._process_related_path(rel_path, base_dir, tracker)
             if result is not None:
+                if derived:
+                    result['source'] = 'derived-from-links'
                 results.append(result)
 
         # Update legacy _file_count dict if provided (backward compatibility)

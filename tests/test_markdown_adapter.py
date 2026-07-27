@@ -497,6 +497,74 @@ No frontmatter here but mentions nginx configuration.
         assert len(result['results']) == 1
 
 
+class TestBodyContainsRanking:
+    """BACK-869: ranked multi-doc body-contains search + --explain."""
+
+    @pytest.fixture
+    def ranked_docs(self, tmp_path):
+        """Docs with deliberately different match strength for the same term."""
+        (tmp_path / "light.md").write_text("""---
+title: Light Mention
+---
+
+# Overview
+
+This document briefly touches on authentication once.
+""")
+        (tmp_path / "heavy.md").write_text("""---
+title: Heavy Mention
+---
+
+# Authentication
+
+Authentication authentication authentication is the focus here, with authentication examples.
+""")
+        (tmp_path / "none.md").write_text("""---
+title: No Match
+---
+
+# Unrelated
+
+Nothing about the topic here.
+""")
+        return tmp_path
+
+    def test_results_ranked_best_first_by_default(self, ranked_docs):
+        """No explicit sort= -> results are ordered by relevance_score descending."""
+        adapter = MarkdownQueryAdapter(str(ranked_docs), query='body-contains=authentication')
+        result = adapter.get_structure()
+        titles = [r['title'] for r in result['results']]
+        assert titles == ['Heavy Mention', 'Light Mention']
+
+    def test_relevance_score_present_without_explain(self, ranked_docs):
+        """relevance_score is always attached when body-contains is used."""
+        adapter = MarkdownQueryAdapter(str(ranked_docs), query='body-contains=authentication')
+        result = adapter.get_structure()
+        assert all('relevance_score' in r for r in result['results'])
+        assert all('relevance_explain' not in r for r in result['results'])
+
+    def test_explain_adds_score_breakdown(self, ranked_docs):
+        """?explain adds a per-term score breakdown alongside relevance_score."""
+        adapter = MarkdownQueryAdapter(str(ranked_docs), query='body-contains=authentication&explain')
+        result = adapter.get_structure()
+        heavy = next(r for r in result['results'] if r['title'] == 'Heavy Mention')
+        assert heavy['relevance_explain']['term_counts']['authentication'] == 5
+        assert heavy['relevance_explain']['heading_hits']['authentication'] == 1
+
+    def test_explicit_sort_overrides_relevance_ranking(self, ranked_docs):
+        """An explicit sort= still wins over the default relevance ordering."""
+        adapter = MarkdownQueryAdapter(str(ranked_docs), query='body-contains=authentication&sort=title')
+        result = adapter.get_structure()
+        titles = [r['title'] for r in result['results']]
+        assert titles == sorted(titles)
+
+    def test_explain_without_body_contains_is_a_noop(self, ranked_docs):
+        """?explain has no effect when there's no body-contains search to score."""
+        adapter = MarkdownQueryAdapter(str(ranked_docs), query='explain')
+        result = adapter.get_structure()
+        assert all('relevance_score' not in r for r in result['results'])
+
+
 @pytest.fixture
 def fields_docs(tmp_path):
     """Markdown files with various frontmatter fields for ?fields= tests."""

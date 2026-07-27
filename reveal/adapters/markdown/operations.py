@@ -16,6 +16,7 @@ def get_structure(
     result_control: Any,
     body_contains: Optional[list] = None,
     extra_fields: Optional[list] = None,
+    explain: bool = False,
 ) -> Dict[str, Any]:
     """Query markdown files and return matching results.
 
@@ -27,9 +28,14 @@ def get_structure(
         result_control: ResultControl object with sort/limit/offset
         body_contains: Optional list of terms that must appear in body text
         extra_fields: Optional list of additional frontmatter fields to include in results
+        explain: When body_contains is set, include a per-hit score breakdown
+            (term_counts, heading_hits) alongside relevance_score
 
     Returns:
-        Dict containing matched files with frontmatter summary
+        Dict containing matched files with frontmatter summary. When
+        body_contains is set, each result also carries relevance_score and
+        results are ranked best-first unless the caller specified an explicit
+        sort field (BACK-869).
     """
     all_files = files.find_markdown_files(base_path)
 
@@ -49,14 +55,29 @@ def get_structure(
         if body_contains and not filtering.matches_body_contains(path, body_contains):
             continue
         result = results.build_result_item(path, frontmatter, extra_fields)
+        if body_contains:
+            score_info = filtering.score_body_match(path, body_contains)
+            result['relevance_score'] = score_info['score']
+            if explain:
+                result['relevance_explain'] = {
+                    'term_counts': score_info['term_counts'],
+                    'heading_hits': score_info['heading_hits'],
+                }
         matched_results.append(result)
 
-    # Apply result control (sort, limit, offset)
+    # Apply result control (sort, limit, offset). A multi-doc body-contains
+    # search with no explicit sort= ranks best-first by relevance_score
+    # instead of falling back to filesystem order.
     total_matches = len(matched_results)
+    sort_field = result_control.sort_field
+    sort_descending = result_control.sort_descending
+    if body_contains and not sort_field:
+        sort_field = 'relevance_score'
+        sort_descending = True
     sorted_results = results.apply_sorting(
         matched_results,
-        result_control.sort_field,
-        result_control.sort_descending
+        sort_field,
+        sort_descending
     )
     controlled_results = results.apply_pagination(
         sorted_results,

@@ -1091,6 +1091,38 @@ related:
         self.assertFalse(related[0]['exists'])
         self.assertEqual(related[0]['headings'], [])
 
+    def test_related_derived_from_links_when_frontmatter_absent(self):
+        """BACK-870: no related/see_also/etc. frontmatter -> fall back to the
+        link graph (forward links + backlinks) so the doc still gets a
+        related-docs view."""
+        os.makedirs(os.path.join(self.temp_dir, '.git'))  # fake VCS root marker
+
+        b_path = self.create_temp_markdown('b.md', '---\ntitle: B\n---\n\n# Doc B\n')
+        a_path = self.create_temp_markdown(
+            'a.md', '# Doc A\n\nLinks to [Doc B](./b.md).\n'
+        )
+
+        a_related = MarkdownAnalyzer(a_path).get_structure(extract_related=True)['related']
+        self.assertEqual(len(a_related), 1)
+        self.assertEqual(a_related[0]['path'], b_path)
+        self.assertEqual(a_related[0]['source'], 'derived-from-links')
+
+        # b.md has no frontmatter related field and no outbound links, but
+        # a.md links to it -> should surface as a derived backlink.
+        b_related = MarkdownAnalyzer(b_path).get_structure(extract_related=True)['related']
+        self.assertEqual(len(b_related), 1)
+        self.assertEqual(b_related[0]['path'], a_path)
+        self.assertEqual(b_related[0]['source'], 'derived-from-links')
+
+    def test_related_not_derived_outside_project_root(self):
+        """No VCS/package marker anywhere in the climb -> resolve_project_root
+        returns None, so the fallback safely no-ops instead of guessing a root."""
+        a_path = self.create_temp_markdown('a.md', '# Doc A\n\nLinks to [Doc B](./b.md).\n')
+        self.create_temp_markdown('b.md', '# Doc B\n')
+
+        structure = MarkdownAnalyzer(a_path).get_structure(extract_related=True)
+        self.assertEqual(structure['related'], [])
+
     def test_related_depth_2(self):
         """Test recursive related document extraction with depth=2."""
         # Create chain: main -> doc1 -> doc2

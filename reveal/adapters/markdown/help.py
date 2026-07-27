@@ -7,7 +7,8 @@ _SCHEMA_QUERY_PARAMS = {
     'link-graph': 'Bidirectional cross-file link graph for every doc in the tree (forward links + backlinks + orphans).',
     'backlinks=path': 'Who links to a single doc (relative path or bare filename) — cheaper than link-graph for a pre-edit staleness check on one file.',
     'aggregate=field': 'Frequency table of values for a frontmatter field. List fields (e.g. beth_topics) are expanded per item.',
-    'body-contains=term': 'Case-insensitive substring search in body text (after frontmatter). Multiple body-contains= params are AND\'d.',
+    'body-contains=term': 'Case-insensitive substring search in body text (after frontmatter). Multiple body-contains= params are AND\'d. Results rank best-first by relevance_score unless sort= is given.',
+    'explain': 'With body-contains=, add a per-term score breakdown (term_counts, heading_hits) to each result alongside relevance_score.',
     'field=value': 'Exact match (or substring for list fields)',
     'field=*pattern*': 'Glob-style wildcard matching',
     '!field': 'Find files missing this field',
@@ -120,7 +121,16 @@ _SCHEMA_OUTPUT_TYPES = [
                             'type': {'type': 'string'},
                             'status': {'type': 'string'},
                             'tags': {'type': 'array'},
-                            'topics': {'type': 'array'}
+                            'topics': {'type': 'array'},
+                            'relevance_score': {'type': 'integer', 'description': 'Present when body-contains= is used; higher = stronger match'},
+                            'relevance_explain': {
+                                'type': 'object',
+                                'description': 'Present only with ?explain — per-term score breakdown',
+                                'properties': {
+                                    'term_counts': {'type': 'object'},
+                                    'heading_hits': {'type': 'object'},
+                                }
+                            }
                         }
                     }
                 }
@@ -179,6 +189,12 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'output_type': 'markdown_query'
     },
     {
+        'uri': "markdown://docs/?body-contains=authentication&explain",
+        'description': 'Ranked body text search — best match first, with a per-term score breakdown',
+        'cli_flag': '?body-contains=authentication&explain',
+        'output_type': 'markdown_query'
+    },
+    {
         'uri': 'markdown://docs/?aggregate=type',
         'description': 'Frequency table of "type" field values across all docs',
         'cli_flag': '?aggregate=type',
@@ -219,6 +235,7 @@ _HELP_EXAMPLES = [
     {'uri': 'markdown://docs/?status=active --format=json', 'description': 'JSON output for scripting'},
     {'uri': "markdown://docs/?body-contains=nginx", 'description': 'Find docs whose body mentions nginx (case-insensitive)'},
     {'uri': "markdown://docs/?type=guide&body-contains=nginx&limit=5", 'description': 'Combine body text search with frontmatter filter and limit'},
+    {'uri': "markdown://docs/?body-contains=authentication&explain", 'description': 'Ranked multi-doc search — best match first, plus a score breakdown per hit'},
     {'uri': 'markdown://docs/?link-graph', 'description': 'Bidirectional link graph for every doc — forward links, backlinks, orphans'},
     {'uri': 'markdown://docs/?backlinks=auth.md', 'description': 'Who links to auth.md — pre-edit staleness check before renaming/restructuring'},
 ]
@@ -286,6 +303,7 @@ def get_help() -> Dict[str, Any]:
         'features': [
             'Recursive directory traversal',
             'Body text search: body-contains=term (case-insensitive substring, AND across multiple)',
+            'Ranked search: multi-doc body-contains results sort best-first by relevance_score; add ?explain for a score breakdown',
             'Exact match: field=value',
             'Wildcard match: field=*pattern* (glob-style)',
             'Missing field: !field',
@@ -321,6 +339,7 @@ def get_help() -> Dict[str, Any]:
             'body-contains= searches text after frontmatter (body), not frontmatter fields',
             'body-contains= is case-insensitive; multiple values are AND\'d',
             'body-contains= matches files without frontmatter too',
+            'body-contains= results are ranked by relevance_score (term frequency + heading boost) unless sort= overrides it; add ?explain for the term_counts/heading_hits breakdown',
             'Only frontmatter fields require valid YAML frontmatter to filter',
             'Field values in lists are matched if any item matches',
             'Numeric comparisons work on numeric frontmatter fields',

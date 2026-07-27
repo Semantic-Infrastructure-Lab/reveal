@@ -54,6 +54,23 @@ def _extract_aggregate(filter_query: str) -> tuple:
     return aggregate_field, '&'.join(remaining_parts)
 
 
+def _extract_explain(filter_query: str) -> tuple:
+    """Extract bare ``explain`` flag from filter query.
+
+    Returns:
+        (explain_requested: bool, remaining_query_string)
+    """
+    explain = False
+    remaining_parts = []
+    for part in filter_query.split('&'):
+        stripped = part.strip()
+        if stripped == 'explain':
+            explain = True
+        else:
+            remaining_parts.append(part)
+    return explain, '&'.join(remaining_parts)
+
+
 def _extract_link_graph(filter_query: str) -> tuple:
     """Extract bare ``link-graph`` flag from filter query.
 
@@ -185,6 +202,11 @@ class MarkdownQueryAdapter(ResourceAdapter):
         if filter_query:
             self.body_contains, filter_query = _extract_body_contains(filter_query)
 
+        # Extract bare explain flag (score breakdown for body-contains ranking)
+        self.explain = False
+        if filter_query:
+            self.explain, filter_query = _extract_explain(filter_query)
+
         # Extract fields= param (extra frontmatter columns to show in listing)
         self.extra_fields = None
         if filter_query:
@@ -257,6 +279,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             self.result_control,
             self.body_contains or None,
             self.extra_fields,
+            self.explain,
         )
         return {
             'contract_version': '1.0',
