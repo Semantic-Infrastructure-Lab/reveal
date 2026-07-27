@@ -4,6 +4,7 @@ import unittest
 import tempfile
 import os
 import datetime
+from pathlib import Path
 from reveal.analyzers.markdown import MarkdownAnalyzer
 
 
@@ -1102,16 +1103,21 @@ related:
             'a.md', '# Doc A\n\nLinks to [Doc B](./b.md).\n'
         )
 
+        # The implementation resolves symlinks for its canonical absolute
+        # paths (current_path = Path(self.path).resolve()); compare against
+        # equally-resolved expectations so this doesn't flake on platforms
+        # where the temp dir itself sits behind a symlink (e.g. macOS's
+        # /var -> /private/var) or gets a short-name alias (Windows).
         a_related = MarkdownAnalyzer(a_path).get_structure(extract_related=True)['related']
         self.assertEqual(len(a_related), 1)
-        self.assertEqual(a_related[0]['path'], b_path)
+        self.assertEqual(a_related[0]['path'], str(Path(b_path).resolve()))
         self.assertEqual(a_related[0]['source'], 'derived-from-links')
 
         # b.md has no frontmatter related field and no outbound links, but
         # a.md links to it -> should surface as a derived backlink.
         b_related = MarkdownAnalyzer(b_path).get_structure(extract_related=True)['related']
         self.assertEqual(len(b_related), 1)
-        self.assertEqual(b_related[0]['path'], a_path)
+        self.assertEqual(b_related[0]['path'], str(Path(a_path).resolve()))
         self.assertEqual(b_related[0]['source'], 'derived-from-links')
 
     def test_related_not_derived_outside_project_root(self):

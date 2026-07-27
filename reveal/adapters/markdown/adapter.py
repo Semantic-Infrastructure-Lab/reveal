@@ -296,13 +296,12 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
         if self.lint:
             result = operations.lint_frontmatter(self.base_path, self.lint_fields)
-            return {
-                'contract_version': '1.0',
-                'type': 'markdown_frontmatter_lint',
-                'source': str(self.base_path),
-                'source_type': 'directory',
-                **result,
-            }
+            return ResultBuilder.create(
+                result_type='markdown_frontmatter_lint',
+                source=self.base_path,
+                source_type='directory',
+                data=result,
+            )
 
         if self.backlinks_target:
             result = operations.get_backlinks(self.base_path, self.backlinks_target)
