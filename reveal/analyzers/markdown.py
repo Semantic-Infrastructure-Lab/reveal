@@ -981,7 +981,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             Absolute path strings (forward links first, then backlinks,
             deduplicated) or [] if no project root/graph edges were found.
         """
-        from ..utils.path_utils import resolve_project_root
+        from ..utils.path_utils import resolve_project_root, to_posix
         from ..adapters.markdown import operations as markdown_link_ops
 
         root = resolve_project_root(current_path.parent)
@@ -989,7 +989,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             return []
 
         try:
-            rel_target = str(current_path.relative_to(root.resolve())).replace('\\', '/')
+            rel_target = to_posix(current_path.relative_to(root.resolve()))
         except ValueError:
             return []
 
