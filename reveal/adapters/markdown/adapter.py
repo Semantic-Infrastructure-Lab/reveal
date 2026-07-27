@@ -88,6 +88,42 @@ def _extract_link_graph(filter_query: str) -> tuple:
     return link_graph, '&'.join(remaining_parts)
 
 
+def _extract_lint(filter_query: str) -> tuple:
+    """Extract bare ``lint`` flag from filter query.
+
+    Returns:
+        (lint_requested: bool, remaining_query_string)
+    """
+    lint = False
+    remaining_parts = []
+    for part in filter_query.split('&'):
+        stripped = part.strip()
+        if stripped == 'lint':
+            lint = True
+        else:
+            remaining_parts.append(part)
+    return lint, '&'.join(remaining_parts)
+
+
+def _extract_lint_fields(filter_query: str) -> tuple:
+    """Extract lint-fields=<f1,f2,...> param from filter query.
+
+    Returns:
+        (required_fields_list_or_None, remaining_query_string)
+    """
+    lint_fields = None
+    remaining_parts = []
+    for part in filter_query.split('&'):
+        stripped = part.strip()
+        if stripped.startswith('lint-fields='):
+            value = stripped[len('lint-fields='):]
+            if value:
+                lint_fields = [f.strip() for f in value.split(',') if f.strip()]
+        else:
+            remaining_parts.append(part)
+    return lint_fields, '&'.join(remaining_parts)
+
+
 def _extract_fields(filter_query: str) -> tuple:
     """Extract fields=<f1,f2,...> param from filter query.
 
@@ -187,6 +223,15 @@ class MarkdownQueryAdapter(ResourceAdapter):
         if filter_query:
             self.link_graph, filter_query = _extract_link_graph(filter_query)
 
+        # Extract lint flag + optional required-fields list before filter parsers
+        self.lint = False
+        if filter_query:
+            self.lint, filter_query = _extract_lint(filter_query)
+
+        self.lint_fields = None
+        if filter_query:
+            self.lint_fields, filter_query = _extract_lint_fields(filter_query)
+
         # Extract backlinks= param before passing to filter parsers
         self.backlinks_target = None
         if filter_query:
@@ -236,13 +281,24 @@ class MarkdownQueryAdapter(ResourceAdapter):
         Returns:
             Dict containing matched files with frontmatter summary, or
             a frequency table when ?aggregate=<field> is specified, or
-            a link graph when ?link-graph is specified.
+            a link graph when ?link-graph is specified, or a maintenance
+            queue of frontmatter problems when ?lint is specified.
         """
         if self.link_graph:
             result = operations.build_link_graph(self.base_path)
             return {
                 'contract_version': '1.0',
                 'type': 'markdown_link_graph',
+                'source': str(self.base_path),
+                'source_type': 'directory',
+                **result,
+            }
+
+        if self.lint:
+            result = operations.lint_frontmatter(self.base_path, self.lint_fields)
+            return {
+                'contract_version': '1.0',
+                'type': 'markdown_frontmatter_lint',
                 'source': str(self.base_path),
                 'source_type': 'directory',
                 **result,

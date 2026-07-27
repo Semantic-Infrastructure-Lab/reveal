@@ -24,6 +24,8 @@ _SCHEMA_QUERY_PARAMS = {
     'limit=N': 'Limit results to N',
     'offset=M': 'Skip first M results',
     'fields=f1,f2': 'Append additional frontmatter fields as columns in listing output (e.g. fields=book,cohort)',
+    'lint': 'Frontmatter maintenance queue: malformed YAML, missing frontmatter, and (with lint-fields=) missing required fields — one list, not one-file-at-a-time.',
+    'lint-fields=f1,f2': 'With ?lint, also flag files whose frontmatter is missing any of these field names.',
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -92,6 +94,30 @@ _SCHEMA_OUTPUT_TYPES = [
                 'ambiguous': {'type': 'boolean'},
                 'candidates': {'type': 'array', 'items': {'type': 'string'}},
                 'total_files': {'type': 'integer'},
+            }
+        }
+    },
+    {
+        'type': 'markdown_frontmatter_lint',
+        'description': 'Frontmatter maintenance queue: malformed YAML, no frontmatter, missing required fields',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'markdown_frontmatter_lint'},
+                'source': {'type': 'string'},
+                'total_files': {'type': 'integer'},
+                'issues_found': {'type': 'integer'},
+                'issues': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'file': {'type': 'string'},
+                            'issue': {'type': 'string', 'enum': ['no_frontmatter', 'malformed_yaml', 'missing_fields']},
+                            'detail': {'description': 'YAML parse error string (malformed_yaml), list of field names (missing_fields), or null (no_frontmatter)'},
+                        }
+                    }
+                }
             }
         }
     },
@@ -217,6 +243,18 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'description': 'Who links to auth.md — pre-edit staleness check before renaming/restructuring',
         'cli_flag': '?backlinks=auth.md',
         'output_type': 'markdown_backlinks'
+    },
+    {
+        'uri': 'markdown://docs/?lint',
+        'description': 'Maintenance queue: malformed YAML frontmatter and files with no frontmatter at all',
+        'cli_flag': '?lint',
+        'output_type': 'markdown_frontmatter_lint'
+    },
+    {
+        'uri': 'markdown://docs/?lint&lint-fields=title,type',
+        'description': 'Same lint queue, also flagging files missing required frontmatter fields',
+        'cli_flag': '?lint&lint-fields=title,type',
+        'output_type': 'markdown_frontmatter_lint'
     }
 ]
 
@@ -238,6 +276,8 @@ _HELP_EXAMPLES = [
     {'uri': "markdown://docs/?body-contains=authentication&explain", 'description': 'Ranked multi-doc search — best match first, plus a score breakdown per hit'},
     {'uri': 'markdown://docs/?link-graph', 'description': 'Bidirectional link graph for every doc — forward links, backlinks, orphans'},
     {'uri': 'markdown://docs/?backlinks=auth.md', 'description': 'Who links to auth.md — pre-edit staleness check before renaming/restructuring'},
+    {'uri': 'markdown://docs/?lint', 'description': 'Frontmatter maintenance queue — malformed YAML and files with no frontmatter, as one list'},
+    {'uri': 'markdown://docs/?lint&lint-fields=title,type', 'description': 'Lint queue, also flagging files missing required frontmatter fields'},
 ]
 
 _HELP_WORKFLOWS = [
@@ -304,6 +344,7 @@ def get_help() -> Dict[str, Any]:
             'Recursive directory traversal',
             'Body text search: body-contains=term (case-insensitive substring, AND across multiple)',
             'Ranked search: multi-doc body-contains results sort best-first by relevance_score; add ?explain for a score breakdown',
+            'Frontmatter lint: ?lint surfaces malformed YAML and missing frontmatter as one list; add &lint-fields=f1,f2 to also flag missing required fields',
             'Exact match: field=value',
             'Wildcard match: field=*pattern* (glob-style)',
             'Missing field: !field',
@@ -340,6 +381,7 @@ def get_help() -> Dict[str, Any]:
             'body-contains= is case-insensitive; multiple values are AND\'d',
             'body-contains= matches files without frontmatter too',
             'body-contains= results are ranked by relevance_score (term frequency + heading boost) unless sort= overrides it; add ?explain for the term_counts/heading_hits breakdown',
+            '?lint distinguishes malformed YAML from "no frontmatter at all" — extract_frontmatter() collapses both to None, lint tells you which',
             'Only frontmatter fields require valid YAML frontmatter to filter',
             'Field values in lists are matched if any item matches',
             'Numeric comparisons work on numeric frontmatter fields',

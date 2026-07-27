@@ -24,6 +24,8 @@ def render_markdown_query(data: Dict[str, Any], output_format: str,
         _render_backlinks(data, output_format)
     elif data.get('type') == 'markdown_aggregate':
         _render_aggregate(data, output_format)
+    elif data.get('type') == 'markdown_frontmatter_lint':
+        _render_lint(data, output_format)
     elif single_file:
         _render_single_file(data, output_format)
     else:
@@ -133,6 +135,43 @@ def _render_aggregate(data: Dict[str, Any], output_format: str) -> None:
         filled = int(bar_width * cnt / max_count) if max_count else 0
         bar = '█' * filled
         print(f"  {val:<24} {cnt:>5}  {bar}")
+
+
+def _render_lint(data: Dict[str, Any], output_format: str) -> None:
+    """Render frontmatter lint maintenance queue."""
+    issues = data.get('issues', [])
+
+    if output_format == 'grep':
+        for issue in issues:
+            print(f"{issue['file']}\t{issue['issue']}")
+        return
+
+    total = data.get('total_files', 0)
+    found = data.get('issues_found', 0)
+    source = data.get('source', '.')
+
+    print(f"Frontmatter lint: {source}")
+    print(f"{total} files scanned  |  {found} issue(s) found")
+
+    if not issues:
+        print()
+        print("No frontmatter issues found.")
+        return
+
+    print()
+    for issue in issues:
+        kind = issue['issue']
+        detail = issue.get('detail')
+        if kind == 'no_frontmatter':
+            print(f"  {issue['file']}  [no frontmatter]")
+        elif kind == 'malformed_yaml':
+            first_line = (detail or '').splitlines()[0] if detail else ''
+            print(f"  {issue['file']}  [malformed YAML] {first_line}")
+        elif kind == 'missing_fields':
+            fields = ', '.join(detail or [])
+            print(f"  {issue['file']}  [missing fields] {fields}")
+        else:
+            print(f"  {issue['file']}  [{kind}] {detail}")
 
 
 def _print_frontmatter_item(key: str, value: Any) -> None:

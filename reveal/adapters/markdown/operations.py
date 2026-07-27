@@ -296,6 +296,63 @@ def get_backlinks(base_path: Path, target: str) -> Dict[str, Any]:
     }
 
 
+def lint_frontmatter(base_path: Path, required_fields: Optional[list] = None) -> Dict[str, Any]:
+    """Scan a directory tree for frontmatter problems (BACK-871).
+
+    Mirrors beth quality's ``frontmatter-lint`` maintenance-queue view: a
+    single pass over every markdown file that surfaces malformed YAML
+    (``extract_frontmatter`` today silently collapses this to ``None``,
+    indistinguishable from "no frontmatter"), files missing configurable
+    required fields, and files with no frontmatter block at all — as one
+    list, not a file-at-a-time crawl.
+
+    Args:
+        base_path: Root directory to scan.
+        required_fields: Optional list of frontmatter field names that must
+            be present (and non-null) on every file that has a frontmatter
+            block. Files with no block are reported as 'no_frontmatter'
+            regardless of this list — they can't be missing fields they
+            never had a chance to declare.
+
+    Returns:
+        Dict with keys:
+            total_files  — number of markdown files scanned
+            issues_found — len(issues)
+            issues       — list of {file, issue, detail}, where issue is one
+                            of 'no_frontmatter', 'malformed_yaml',
+                            'missing_fields' and detail carries the parse
+                            error string or the list of missing field names
+    """
+    all_files = files.find_markdown_files(base_path)
+    base_resolved = base_path.resolve()
+    issues = []
+
+    for path in all_files:
+        try:
+            rel = str(path.resolve().relative_to(base_resolved)).replace('\\', '/')
+        except ValueError:
+            rel = str(path)
+
+        diagnosis = files.extract_frontmatter_diagnostic(path)
+        status = diagnosis['status']
+
+        if status == 'missing':
+            issues.append({'file': rel, 'issue': 'no_frontmatter', 'detail': None})
+        elif status == 'malformed':
+            issues.append({'file': rel, 'issue': 'malformed_yaml', 'detail': diagnosis['error']})
+        elif required_fields:
+            frontmatter = diagnosis['frontmatter'] or {}
+            missing = [f for f in required_fields if frontmatter.get(f) is None]
+            if missing:
+                issues.append({'file': rel, 'issue': 'missing_fields', 'detail': missing})
+
+    return {
+        'total_files': len(all_files),
+        'issues_found': len(issues),
+        'issues': issues,
+    }
+
+
 def get_element(base_path: Path, element_name: str) -> Optional[Dict[str, Any]]:
     """Get frontmatter from a specific file.
 
