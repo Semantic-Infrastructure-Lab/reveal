@@ -231,11 +231,14 @@ echo
 # VERSION BUMP (before self-check and tests so version-match assertions pass)
 # ============================================================================
 
+AGENT_HELP_FILE="reveal/docs/AGENT_HELP.md"
+
 CURRENT_VERSION_IN_FILE=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
 if [ "$CURRENT_VERSION_IN_FILE" = "$NEW_VERSION" ]; then
     info "Version already at $NEW_VERSION in pyproject.toml (pre-bumped)"
 elif $DRY_RUN; then
     info "${DRY_RUN_PREFIX}Would bump pyproject.toml: $CURRENT_VERSION_IN_FILE → $NEW_VERSION"
+    info "${DRY_RUN_PREFIX}Would bump $AGENT_HELP_FILE version marker to $NEW_VERSION"
 else
     info "Bumping pyproject.toml: $CURRENT_VERSION_IN_FILE → $NEW_VERSION..."
     sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" pyproject.toml
@@ -246,11 +249,18 @@ else
         error "Failed to update version in pyproject.toml"
     fi
 
-    # If tests fail or the script exits early, roll back pyproject.toml so the
-    # repo stays clean. The trap is cleared after tests pass (see below).
-    trap 'warn "Rolling back pyproject.toml to $CURRENT_VERSION"; sed -i "s/^version = \".*\"/version = \"$CURRENT_VERSION\"/" pyproject.toml' EXIT
+    # test_agent_help_is_current_version requires AGENT_HELP.md to mention
+    # the pyproject.toml version verbatim — bump it in lockstep.
+    if [ -f "$AGENT_HELP_FILE" ]; then
+        sed -i "s/^\*\*Version:\*\* .*/\*\*Version:\*\* $NEW_VERSION/" "$AGENT_HELP_FILE"
+    fi
 
-    success "Version bumped to $NEW_VERSION"
+    # If tests fail or the script exits early, roll back pyproject.toml (and
+    # AGENT_HELP.md) so the repo stays clean. The trap is cleared after tests
+    # pass (see below).
+    trap 'warn "Rolling back pyproject.toml to $CURRENT_VERSION"; sed -i "s/^version = \".*\"/version = \"$CURRENT_VERSION\"/" pyproject.toml; [ -f "$AGENT_HELP_FILE" ] && sed -i "s/^\*\*Version:\*\* .*/\*\*Version:\*\* $CURRENT_VERSION/" "$AGENT_HELP_FILE"' EXIT
+
+    success "Version bumped to $NEW_VERSION (pyproject.toml + $AGENT_HELP_FILE)"
 fi
 echo
 
@@ -322,7 +332,7 @@ fi
 info "Creating git commit and tag..."
 
 # Stage changes
-git add pyproject.toml CHANGELOG.md
+git add pyproject.toml CHANGELOG.md "$AGENT_HELP_FILE"
 
 # Commit only if there are staged changes (version may have been pre-bumped)
 if git diff --staged --quiet; then
