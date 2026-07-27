@@ -51,6 +51,10 @@ reveal README.md --links --format json
 | **Front Matter Extraction** | `reveal doc.md --frontmatter --format json` | **Extract YAML metadata (requires JSON)** |
 | Broken Link Detection | `reveal doc.md --links` | **Find broken internal links** |
 | Progressive Disclosure | `reveal doc.md --head 5` | First 5 headings |
+| Cross-File Link Graph | `reveal 'markdown://docs/?link-graph'` | Whole-tree forward links, backlinks, orphans |
+| Single-Doc Backlinks | `reveal 'markdown://docs/?backlinks=file.md'` | Who links to this doc, before you rename it |
+| Ranked Body Search | `reveal 'markdown://docs/?body-contains=x&explain'` | Multi-doc search, best match first, with a score breakdown |
+| Frontmatter Lint Queue | `reveal 'markdown://docs/?lint'` | Malformed YAML / missing frontmatter across a tree |
 
 ## The Problem This Solves
 
@@ -985,6 +989,47 @@ reveal 'markdown://docs/?backlinks=auth.md'
   `candidates` listed otherwise).
 - Both are a live regex parse of `[text](path)` link syntax — no persisted
   index, so results always reflect the current filesystem state.
+
+### Ranked Body Search (`?body-contains=`, `?explain`)
+
+`?body-contains=` results sort best-first by relevance, not file order:
+
+```bash
+# Multi-term AND search, ranked best-first
+reveal 'markdown://docs/?body-contains=auth&body-contains=token'
+
+# Same, with a per-term score breakdown
+reveal 'markdown://docs/?body-contains=auth&body-contains=token&explain'
+```
+
+- `relevance_score` combines term frequency with a heading-proximity boost
+  (a term appearing in a heading counts extra) — simpler than Beth's full
+  phrase/authority ranking model, but enough to stop common terms from
+  flooding results in file-listing order.
+- `?explain` adds `relevance_explain` (`term_counts`, `heading_hits`) to each
+  result so you can see why one doc outranked another.
+- An explicit `sort=` still overrides ranking when you want plain
+  alphabetical/recency order instead.
+
+### Frontmatter Maintenance Queue (`?lint`, `?lint-fields=`)
+
+A corpus-wide frontmatter health check, one list instead of one-file-at-a-time:
+
+```bash
+# Malformed YAML and files with no frontmatter at all
+reveal 'markdown://docs/?lint'
+
+# Same, also flagging files missing required fields
+reveal 'markdown://docs/?lint&lint-fields=title,type'
+```
+
+- Three issue types: `no_frontmatter` (file has none), `malformed_yaml`
+  (a `---` block that fails to parse), and — only when `lint-fields=` is
+  given — `missing_fields` (frontmatter parses fine but lacks a named field).
+- A clean corpus reports zero issues rather than an empty ambiguous list.
+- Mirrors the maintenance-queue shape of Beth's `quality frontmatter-lint`,
+  scoped to what a live per-call scan can check (no fake-metric or
+  oversized-frontmatter heuristics — those stay Beth-side).
 
 ## Notes
 

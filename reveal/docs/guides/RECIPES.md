@@ -29,6 +29,8 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
   - [Count values across a field](#count-values-across-a-field)
   - [Build a link graph](#build-a-link-graph)
   - [Pre-edit staleness check for one doc](#pre-edit-staleness-check-for-one-doc)
+  - [Rank multi-doc body search](#rank-multi-doc-body-search)
+  - [Frontmatter maintenance queue](#frontmatter-maintenance-queue)
 - [Session Analysis](#session-analysis)
   - [Browse sessions](#browse-sessions)
   - [Search across sessions](#search-across-sessions)
@@ -779,6 +781,36 @@ reveal 'markdown://docs/?backlinks=guides/auth.md'
 **Output:** `linked_by` (who points at this doc) and `links_to` (what this doc
 points at). "Linked by (0)" means it's safe to rename/remove without breaking
 inbound links.
+
+### Rank multi-doc body search
+
+`?body-contains=` results sort best-first by relevance instead of file order:
+
+```bash
+# Multi-term AND search, ranked best-first
+reveal 'markdown://docs/?body-contains=auth&body-contains=token'
+
+# Same, with a per-term score breakdown (term_counts, heading_hits)
+reveal 'markdown://docs/?body-contains=auth&body-contains=token&explain'
+```
+
+**Output:** `relevance_score` (term frequency + heading-proximity boost) on
+every result, best match first. An explicit `sort=` still overrides ranking
+when you want plain alphabetical/recency order.
+
+### Frontmatter maintenance queue
+
+```bash
+# Malformed YAML and files with no frontmatter at all
+reveal 'markdown://docs/?lint'
+
+# Same, also flagging files missing required fields
+reveal 'markdown://docs/?lint&lint-fields=title,type'
+```
+
+**Output:** One list of `no_frontmatter`/`malformed_yaml`/`missing_fields`
+issues across the tree, not one file at a time. A clean corpus reports zero
+issues.
 
 ### Validate links
 

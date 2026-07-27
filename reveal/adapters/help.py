@@ -165,8 +165,13 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Find docs by topic in body', 'query': "reveal 'markdown://docs/?body-contains=nginx'", 'description': 'Search doc body text (after frontmatter)', 'output_type': 'markdown_query'},
             {'goal': 'Find all guides', 'query': "reveal 'markdown://docs/?type=guide'", 'description': 'Filter by frontmatter field value', 'output_type': 'markdown_query'},
             {'goal': 'Find recent docs about deployment', 'query': "reveal 'markdown://docs/?body-contains=deploy&sort=-modified&limit=10'", 'description': 'Body search with recency sort', 'output_type': 'markdown_query'},
+            {'goal': 'Rank multi-word body search, best match first', 'query': "reveal 'markdown://docs/?body-contains=auth&body-contains=token&explain'", 'description': 'Results sort by relevance_score (term frequency + heading proximity); the explain param adds a per-term score breakdown', 'output_type': 'markdown_query'},
             {'goal': 'Validate internal links', 'query': 'reveal docs/README.md --links --link-type internal', 'description': 'Find broken internal links in a doc', 'output_type': 'markdown_query'},
             {'goal': 'Get document outline', 'query': 'reveal docs/README.md --outline', 'description': 'Hierarchical heading tree', 'output_type': 'markdown_query'},
+            {'goal': 'Who links to this doc before I rename/move it', 'query': "reveal 'markdown://docs/?backlinks=auth.md'", 'description': 'Cheap single-doc pre-edit staleness check', 'output_type': 'markdown_backlinks'},
+            {'goal': 'Whole-tree link graph (forward + backlinks + orphans)', 'query': "reveal 'markdown://docs/?link-graph'", 'description': 'Every doc\'s inbound/outbound edges in one call', 'output_type': 'markdown_link_graph'},
+            {'goal': 'Frontmatter maintenance queue', 'query': "reveal 'markdown://docs/?lint'", 'description': 'Malformed YAML and no-frontmatter files, one list not one-file-at-a-time', 'output_type': 'markdown_frontmatter_lint'},
+            {'goal': 'Frontmatter queue including missing required fields', 'query': "reveal 'markdown://docs/?lint&lint-fields=title,type'", 'description': 'Same queue, also flags files missing title/type', 'output_type': 'markdown_frontmatter_lint'},
         ]
     },
     'sessions': {
