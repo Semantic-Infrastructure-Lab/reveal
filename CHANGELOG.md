@@ -12,6 +12,20 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.112.0] - 2026-07-27 (sessions freezing-dewpoint-0726, icy-mistral-0727)
+
+### Added
+- **`markdown://` ranked `?body-contains=` search + `?explain` (BACK-869)** — results now rank best-first by `relevance_score` (term frequency + heading-proximity boost) instead of directory order; `?explain` adds a per-term `term_counts`/`heading_hits` breakdown for each match.
+- **`markdown://` `--related` link-graph fallback (BACK-870)** — when a doc has no `related`/`related_docs`/`see_also`/`references` frontmatter, `--related` now falls back to the computed link graph (`build_link_graph`/`get_backlinks`, BACK-813) so undocumented docs still get a related-docs view.
+- **`markdown://` `?lint`/`?lint-fields=` frontmatter maintenance queue (BACK-871)** — surfaces malformed YAML and files with no frontmatter block as a single issue list across a directory; `&lint-fields=f1,f2` additionally flags files missing configurable required fields. Mirrors Beth's `quality` frontmatter-lint view, closing one of the three Beth-parity gaps tracked under BACK-865.
+- **Persistent disk cache for `build_link_graph` (BACK-866)** — mirrors BACK-536's import-graph cache pattern: fingerprints every markdown file's `(relpath, mtime_ns, size)`, caches the built graph on disk, invalidates on any edit/add/delete. `?link-graph`, `?backlinks=`, and `--related`'s link-derived fallback all benefit transparently — a warm cache hit replaces a full tree walk with a stat-only pass.
+
+### Fixed
+- **Windows path separators in `markdown://`'s related-links fallback (BACK-876)** — `_derive_related_paths_from_links` built relative paths with `str(path.relative_to(root))` plus a manual backslash replace; swapped to the canonical `to_posix()` helper.
+- **CI regressions surfaced on first run against BACK-865/866/869-871 (BACK-877)** — those commits landed after v0.111.0's last CI run and sat local/unpushed for ~22h. Fixed two real, pre-existing bugs once CI actually ran: `?lint`'s result was hand-built as a raw dict instead of via `ResultBuilder.create()` (broke the hand-built-contract-literal ratchet test), and a related-links test compared against an unresolved `tempfile.mkdtemp()` path while the implementation correctly resolves symlinks — harmless on Linux, a real mismatch on macOS (`/var`→`/private/var`) and Windows (8.3 short-name aliasing).
+
+Full markdown-adapter test surface: 333/333 passing. `reveal reveal:// --check`: 0 issues.
+
 ## [0.111.0] - 2026-07-26 (sessions epic-seraph-0724, unearthly-scout-0724, hidden-golem-0724, drizzling-humidity-0724, lingering-sleet-0724, steel-sheen-0724, emerald-rainbow-0724, elliptical-sun-0725, khaki-glaze-0725, crystalline-mosaic-0725, microgravity-portal-0725, arcane-cyclops-0725, coral-aurora-0725, nosecoru-0725, invisible-thruster-0725, rainy-dusk-0725, drizzling-gust-0725, rainy-iceberg-0726)
 
 ### Added
