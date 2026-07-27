@@ -1,11 +1,16 @@
 """High-level operations for markdown adapter."""
 
+import hashlib
+import stat as stat_module
 from collections import Counter
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 from . import files, filtering, results
+from ...core import disk_cache
 from ...utils.parallel import grep_files
+
+_LINK_GRAPH_CACHE_NAMESPACE = "markdown_link_graph"
 
 
 def get_structure(
@@ -164,12 +169,54 @@ def aggregate_field_values(
     }
 
 
+def _link_graph_fingerprint(base_path: Path, all_files: List[Path]) -> Optional[str]:
+    """Disk-cache key for a markdown tree's link graph, or None to skip caching.
+
+    Mirrors I002's ``_tree_fingerprint`` (BACK-536 pattern): digest each
+    file's ``(relpath, mtime_ns, size)`` rather than content, so the key is a
+    cheap stat walk instead of a re-read. A content edit bumps mtime_ns; an
+    add/delete/rename changes the file set — either changes the digest, so a
+    stale graph is never served.
+
+    Returns None (caller skips the cache) on any stat/walk error, so a
+    transient filesystem hiccup falls open to the uncached (correct) path.
+    """
+    try:
+        base_resolved = base_path.resolve()
+        hasher = hashlib.sha256()
+        entries = []
+        for file_path in all_files:
+            try:
+                st = file_path.stat()
+            except OSError:
+                return None
+            if not stat_module.S_ISREG(st.st_mode):
+                continue
+            try:
+                rel = str(file_path.resolve().relative_to(base_resolved))
+            except ValueError:
+                rel = str(file_path)
+            entries.append((rel, st.st_mtime_ns, st.st_size))
+        entries.sort()
+        for rel, mtime_ns, size in entries:
+            hasher.update(rel.encode("utf-8", "replace"))
+            hasher.update(f"\x00{mtime_ns}\x01{size}\x02".encode("ascii"))
+        return hasher.hexdigest()
+    except Exception:
+        return None
+
+
 def build_link_graph(base_path: Path) -> Dict[str, Any]:
     """Build a cross-file link graph for all markdown files under base_path.
 
     For each file, discovers which other files it links to (forward edges) and
     which files link back to it (back-edges / backlinks).  Files with neither
     forward nor backward links are reported as ``isolated``.
+
+    Results are cached on disk keyed by a fingerprint of every markdown
+    file's (relpath, mtime_ns, size) (BACK-866) — every Beth-parity feature
+    built on this (?link-graph, ?backlinks=, ?lint's future needs, --related's
+    link-derived fallback) re-walks the same tree per call otherwise.
 
     Args:
         base_path: Root directory to index.
@@ -183,6 +230,13 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
             isolated      — list of filenames with zero edges (in or out)
     """
     all_files = files.find_markdown_files(base_path)
+
+    fingerprint = _link_graph_fingerprint(base_path, all_files)
+    if fingerprint is not None:
+        cached = disk_cache.get(_LINK_GRAPH_CACHE_NAMESPACE, fingerprint)
+        if cached is not None:
+            return cached
+
     base_resolved = base_path.resolve()
 
     # Map relative-path-string → list of relative-path-string targets
@@ -219,12 +273,15 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
         if not n['links_to'] and not n['linked_by']
     ]
 
-    return {
+    graph = {
         'total_files': len(all_files),
         'total_edges': total_edges,
         'nodes': nodes,
         'isolated': isolated,
     }
+    if fingerprint is not None:
+        disk_cache.put(_LINK_GRAPH_CACHE_NAMESPACE, fingerprint, graph)
+    return graph
 
 
 def get_backlinks(base_path: Path, target: str) -> Dict[str, Any]:
