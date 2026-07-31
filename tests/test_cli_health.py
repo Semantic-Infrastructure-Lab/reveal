@@ -10,6 +10,7 @@ from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from reveal.cli.file_checker import FileCollectionResult
 from reveal.cli.commands.health import (
     _detect_targets,
     _check_target,
@@ -103,7 +104,7 @@ class TestCheckCode(unittest.TestCase):
         # Prevent _check_code from walking real directories during these unit tests.
         # Tests that specifically exercise the file-count guard patch this themselves.
         self._collect_patcher = patch(
-            'reveal.cli.file_checker.collect_files_to_check', return_value=[]
+            'reveal.cli.file_checker.collect_files_to_check', return_value=FileCollectionResult(files=[])
         )
         self._gitignore_patcher = patch(
             'reveal.cli.file_checker.load_gitignore_patterns', return_value=[]
@@ -182,7 +183,7 @@ class TestCheckCode(unittest.TestCase):
             fake_files = [Path(d) / f'f{i}.py' for i in range(_HEALTH_MAX_FILES + 1)]
             with patch(
                 'reveal.cli.file_checker.collect_files_to_check',
-                return_value=fake_files,
+                return_value=FileCollectionResult(files=fake_files),
             ), patch(
                 'reveal.cli.file_checker.load_gitignore_patterns',
                 return_value=[],
@@ -201,7 +202,7 @@ class TestCheckCode(unittest.TestCase):
             fake_files = [Path(d) / f'f{i}.py' for i in range(10)]
             with patch(
                 'reveal.cli.file_checker.collect_files_to_check',
-                return_value=fake_files,
+                return_value=FileCollectionResult(files=fake_files),
             ), patch(
                 'reveal.cli.file_checker.load_gitignore_patterns',
                 return_value=[],

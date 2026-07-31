@@ -359,7 +359,7 @@ def reveal_check(path: str, severity: str = '') -> str:
     if p.is_dir():
         directory = p.resolve()
         gitignore_patterns = load_gitignore_patterns(directory)
-        files = collect_files_to_check(directory, gitignore_patterns)
+        files = collect_files_to_check(directory, gitignore_patterns).files
         if not files:
             return f"No files found to check in {path}"
     else:

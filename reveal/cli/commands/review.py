@@ -146,7 +146,7 @@ def _run_check(path: Optional[Path], select: str,
         elif path is not None and path.is_dir():
             directory = path.resolve()
             gitignore_patterns = load_gitignore_patterns(directory)
-            check_files = collect_files_to_check(directory, gitignore_patterns)
+            check_files = collect_files_to_check(directory, gitignore_patterns).files
         elif path is not None:
             directory = path.parent.resolve()
             check_files = [path.resolve()]

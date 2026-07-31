@@ -12,6 +12,7 @@ import logging
 import time
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List, Dict, TYPE_CHECKING
 
@@ -271,7 +272,22 @@ def should_skip_file(relative_path: Path, gitignore_patterns: List[str]) -> bool
     return False
 
 
-def collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> List[Path]:
+@dataclass
+class FileCollectionResult:
+    """Result of collect_files_to_check(): survivors plus *why* everything
+    else was excluded, so `check --format json` can eventually disclose scope
+    (files discovered/skipped, by reason) instead of silently discarding this
+    information at the point it's known (BACK-889 / design doc
+    BACK884_COVERAGE_CENSUS_UNIFICATION finding #4).
+    """
+
+    files: List[Path] = field(default_factory=list)
+    skipped_gitignore: int = 0
+    skipped_no_analyzer: int = 0
+    skipped_dirs: int = 0
+
+
+def collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> FileCollectionResult:
     """Collect all supported files in directory tree.
 
     Args:
@@ -279,33 +295,47 @@ def collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> Li
         gitignore_patterns: Patterns to skip
 
     Returns:
-        List of file paths to check
+        FileCollectionResult: survivors (`.files`) plus skip-reason counts.
     """
     from ..registry import get_analyzer
 
-    files_to_check = []
+    files_to_check: List[Path] = []
+    skipped_gitignore = 0
+    skipped_no_analyzer = 0
+    skipped_dirs = 0
 
     for root, dirs, files in os.walk(directory):
         # Filter out excluded directories and *.egg-info build artifacts
-        dirs[:] = [
-            d for d in dirs
-            if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
-        ]
-
         root_path = Path(root)
+        kept_dirs = []
+        for d in dirs:
+            if is_skippable_dir(root_path, d) or d.endswith('.egg-info'):
+                skipped_dirs += 1
+            else:
+                kept_dirs.append(d)
+        dirs[:] = kept_dirs
+
         for filename in files:
             file_path = root_path / filename
             relative_path = file_path.relative_to(directory)
 
             # Skip gitignored files
             if should_skip_file(relative_path, gitignore_patterns):
+                skipped_gitignore += 1
                 continue
 
             # Check if file has a supported analyzer
             if get_analyzer(str(file_path), allow_fallback=False):
                 files_to_check.append(file_path)
+            else:
+                skipped_no_analyzer += 1
 
-    return files_to_check
+    return FileCollectionResult(
+        files=files_to_check,
+        skipped_gitignore=skipped_gitignore,
+        skipped_no_analyzer=skipped_no_analyzer,
+        skipped_dirs=skipped_dirs,
+    )
 
 
 def check_and_report_file(
@@ -686,7 +716,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
 
     # Collect files to check
     gitignore_patterns = load_gitignore_patterns(directory)
-    files_to_check = collect_files_to_check(directory, gitignore_patterns)
+    files_to_check = collect_files_to_check(directory, gitignore_patterns).files
 
     # Handle no files found
     output_format = getattr(args, 'format', 'text')
@@ -741,7 +771,7 @@ def handle_profile_rules(directory: Path, args: 'Namespace') -> None:
     directory = directory.resolve()
 
     gitignore_patterns = load_gitignore_patterns(directory)
-    files_to_check = collect_files_to_check(directory, gitignore_patterns)
+    files_to_check = collect_files_to_check(directory, gitignore_patterns).files
     if not files_to_check:
         _handle_no_files_found(directory, 'text')
         return

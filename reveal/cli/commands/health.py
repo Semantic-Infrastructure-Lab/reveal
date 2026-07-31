@@ -149,7 +149,7 @@ def _check_code(path: Path, args: Namespace):
         from reveal.cli.file_checker import collect_files_to_check, load_gitignore_patterns
         resolved = path.resolve()
         gitignore_patterns = load_gitignore_patterns(resolved)
-        files = collect_files_to_check(resolved, gitignore_patterns)
+        files = collect_files_to_check(resolved, gitignore_patterns).files
         if len(files) > _HEALTH_MAX_FILES:
             return 1, (
                 f"code: skipped — {len(files)} files exceeds health check limit "

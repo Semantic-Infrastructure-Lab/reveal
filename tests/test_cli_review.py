@@ -10,6 +10,7 @@ from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from reveal.cli.file_checker import FileCollectionResult
 from reveal.cli.commands.review import (
     _render_diff_section,
     _render_violations_section,
@@ -282,7 +283,7 @@ class TestRunDiff(unittest.TestCase):
 class TestRunCheck(unittest.TestCase):
 
     @patch('reveal.cli.file_checker._check_files_json')
-    @patch('reveal.cli.file_checker.collect_files_to_check', return_value=[Path('/tmp/f.py')])
+    @patch('reveal.cli.file_checker.collect_files_to_check', return_value=FileCollectionResult(files=[Path('/tmp/f.py')]))
     @patch('reveal.cli.file_checker.load_gitignore_patterns', return_value=[])
     def test_returns_violations(self, _pats, _files, mock_check):
         mock_check.return_value = (1, 1, [{
@@ -295,7 +296,7 @@ class TestRunCheck(unittest.TestCase):
         self.assertEqual(result[0]['rule'], 'B001')
 
     @patch('reveal.cli.file_checker._check_files_json')
-    @patch('reveal.cli.file_checker.collect_files_to_check', return_value=[])
+    @patch('reveal.cli.file_checker.collect_files_to_check', return_value=FileCollectionResult(files=[]))
     @patch('reveal.cli.file_checker.load_gitignore_patterns', return_value=[])
     def test_no_files_returns_empty_list(self, _pats, _files, mock_check):
         mock_check.return_value = (0, 0, [])
