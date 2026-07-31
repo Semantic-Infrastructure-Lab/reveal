@@ -256,7 +256,11 @@ def assess_language_coverage(path: Path, supported_languages: Set[str]) -> Langu
         _tally(path)
     else:
         for root, dirs, filenames in os.walk(str(path)):
-            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
+            root_path = Path(root)
+            dirs[:] = [
+                d for d in dirs
+                if not is_skippable_dir(root_path, d) and not d.startswith('.')
+            ]
             for fname in filenames:
                 _tally(Path(os.path.join(root, fname)))
 

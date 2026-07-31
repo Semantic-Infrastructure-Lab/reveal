@@ -122,3 +122,23 @@ class TestSkipDirs:
         # Only src/main.lua counts; the .py files under skipped dirs are ignored.
         assert cov.total_code_files == 1
         assert cov.analyzed_files == 0
+
+    def test_ambiguous_named_source_dir_not_undercounted(self, tmp_path):
+        # BACK-552: a real source package literally named 'env' (like
+        # org.elasticsearch.env) must be walked, not bare-name-skipped as if
+        # it were a virtualenv. Regression for the census walk's own copy of
+        # this bug (design doc BACK884_COVERAGE_CENSUS_UNIFICATION finding #2).
+        _write(tmp_path, 'env/Real.java')
+        _write(tmp_path, 'env/Other.java')
+        cov = assess_language_coverage(tmp_path, SUPPORTED)
+        assert cov.total_code_files == 2
+        assert cov.dominant_language == 'Java'
+
+    def test_ambiguous_named_build_output_dir_still_skipped(self, tmp_path):
+        # A real build-output dir named 'build' (no source at its own top
+        # level) is still excluded — the fix must stay context-sensitive,
+        # not just stop skipping ambiguous names outright.
+        _write(tmp_path, 'src/main.py')
+        _write(tmp_path, 'build/lib/compiled.py')
+        cov = assess_language_coverage(tmp_path, SUPPORTED)
+        assert cov.total_code_files == 1
