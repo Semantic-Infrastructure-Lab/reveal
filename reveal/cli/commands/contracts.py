@@ -269,14 +269,7 @@ def _scan_contracts(
         path,
         {'python', 'typescript', 'tsx', 'javascript', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go', 'rust', 'cpp'},
     )
-    coverage_dict = {
-        'total_code_files': coverage.total_code_files,
-        'analyzed_files': coverage.analyzed_files,
-        'dominant_language': coverage.dominant_language,
-        'dominant_count': coverage.dominant_count,
-        'dominant_supported': coverage.dominant_supported,
-        'warning': coverage.warning_line('contracts'),
-    }
+    coverage_dict = coverage.to_scope_dict('contracts')
 
     if not active:
         return {

@@ -94,6 +94,33 @@ class TestShouldWarn:
         assert cov.should_warn is False
 
 
+class TestToScopeDict:
+    """BACK-890: to_scope_dict() replaces surface.py/contracts.py each
+    hand-building the same dict from a LanguageCoverage instance."""
+
+    def test_shape_matches_previous_hand_built_dict(self, tmp_path):
+        for i in range(20):
+            _write(tmp_path, f'src/mod{i}.lua')
+        _write(tmp_path, 'scripts/build.py')
+        cov = assess_language_coverage(tmp_path, SUPPORTED)
+        d = cov.to_scope_dict('surface')
+        assert d == {
+            'total_code_files': cov.total_code_files,
+            'analyzed_files': cov.analyzed_files,
+            'dominant_language': cov.dominant_language,
+            'dominant_count': cov.dominant_count,
+            'dominant_supported': cov.dominant_supported,
+            'warning': cov.warning_line('surface'),
+        }
+
+    def test_warning_reflects_the_passed_command_name(self, tmp_path):
+        for i in range(10):
+            _write(tmp_path, f'app/M{i}.scala')
+        cov = assess_language_coverage(tmp_path, SUPPORTED)
+        assert '`contracts`' in cov.to_scope_dict('contracts')['warning']
+        assert '`surface`' in cov.to_scope_dict('surface')['warning']
+
+
 class TestSingleFile:
     def test_single_supported_file_no_warn(self, tmp_path):
         f = tmp_path / 'a.py'

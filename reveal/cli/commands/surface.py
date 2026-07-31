@@ -156,14 +156,7 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
         'total': total,
         'surfaces': surfaces,
         'unsupported_language': unsupported_language,
-        'coverage': {
-            'total_code_files': coverage.total_code_files,
-            'analyzed_files': coverage.analyzed_files,
-            'dominant_language': coverage.dominant_language,
-            'dominant_count': coverage.dominant_count,
-            'dominant_supported': coverage.dominant_supported,
-            'warning': coverage.warning_line('surface'),
-        },
+        'coverage': coverage.to_scope_dict('surface'),
         '_meta': {
             'analysis_kind': 'surface-scan',
             'confidence': 'medium',

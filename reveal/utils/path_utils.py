@@ -8,7 +8,7 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePath
-from typing import Callable, Dict, Optional, List, Set, Union
+from typing import Any, Callable, Dict, Optional, List, Set, Union
 
 from ..defaults import SKIP_DIRECTORIES, AMBIGUOUS_SKIP_DIRECTORIES
 from ..registry import _is_cpp_header_content, language_for_extension, LANGUAGE_DISPLAY_NAMES
@@ -229,6 +229,22 @@ class LanguageCoverage:
             f"({self.dominant_count:,} files) is not supported by `{command}` "
             f"— the rest of the tree was not analyzed."
         )
+
+    def to_scope_dict(self, command: str) -> Dict[str, Any]:
+        """The `coverage` block surface/contracts embed in their JSON output.
+
+        Single source of truth for that shape — surface.py and contracts.py
+        used to each hand-build a byte-identical dict from this same data
+        (BACK-890 / design doc BACK884_COVERAGE_CENSUS_UNIFICATION finding #1).
+        """
+        return {
+            'total_code_files': self.total_code_files,
+            'analyzed_files': self.analyzed_files,
+            'dominant_language': self.dominant_language,
+            'dominant_count': self.dominant_count,
+            'dominant_supported': self.dominant_supported,
+            'warning': self.warning_line(command),
+        }
 
 
 def assess_language_coverage(path: Path, supported_languages: Set[str]) -> LanguageCoverage:
