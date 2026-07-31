@@ -18,11 +18,14 @@ from reveal.adapters.ast.nav_surface import (
     _is_mock_patch_decorator,
 )
 from reveal.cli.commands.surface import (
+    _EXT_BUCKETS,
     _render_report,
     _scan_surface,
+    _supported_coverage_languages,
     create_surface_parser,
     run_surface,
 )
+from reveal.registry import language_for_extension
 
 
 def _write(directory: str, filename: str, content: str) -> str:
@@ -31,6 +34,33 @@ def _write(directory: str, filename: str, content: str) -> str:
     with open(path, 'w') as f:
         f.write(textwrap.dedent(content))
     return path
+
+
+class TestSupportedCoverageLanguages(unittest.TestCase):
+    """BACK-888: the coverage census's supported-language set must derive from
+    _EXT_BUCKETS, not a hand-maintained literal that can silently drift from
+    it (design doc BACK884_COVERAGE_CENSUS_UNIFICATION finding #3)."""
+
+    def test_covers_every_bucket_extension(self):
+        got = _supported_coverage_languages()
+        for exts, _ in _EXT_BUCKETS:
+            for ext in exts:
+                lang = language_for_extension(ext)
+                if lang:
+                    self.assertIn(lang, got, f'{ext} -> {lang} missing from coverage set')
+
+    def test_no_extra_languages_beyond_buckets(self):
+        # Every returned language key must be reachable from some bucket
+        # extension — guards against a stale entry left in after a bucket
+        # is removed.
+        got = _supported_coverage_languages()
+        reachable = {
+            language_for_extension(ext)
+            for exts, _ in _EXT_BUCKETS
+            for ext in exts
+        }
+        reachable.discard(None)
+        self.assertEqual(got, reachable)
 
 
 class TestCreateSurfaceParser(unittest.TestCase):

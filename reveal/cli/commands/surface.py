@@ -127,8 +127,7 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
     # scripts in a 1,300-file Lua repo) used to be silently presented as the
     # whole project's surface. Assess how much of the tree is actually in a
     # language `surface` analyzes so _render_report can warn on the substitution.
-    coverage = assess_language_coverage(
-        path, {'python', 'typescript', 'tsx', 'javascript', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go', 'rust', 'cpp'})
+    coverage = assess_language_coverage(path, _supported_coverage_languages())
 
     scanners = (
         (py_files, scan_file_surface),
@@ -204,22 +203,39 @@ def _is_test_file(fpath: Path) -> bool:
 
 _CPP_BUCKET_IDX = 10
 
+# Single source of truth for "what languages does surface scan" — both the
+# file-collection buckets and assess_language_coverage()'s supported set are
+# derived from this so they can't silently diverge (BACK-888 / design doc
+# BACK884_COVERAGE_CENSUS_UNIFICATION finding #3).
+_EXT_BUCKETS = (
+    (frozenset({'.py'}), 0),
+    (frozenset({'.ts', '.tsx', '.js', '.jsx'}), 1),
+    (frozenset({'.java'}), 2),
+    (frozenset({'.cs'}), 3),
+    (frozenset({'.php'}), 4),
+    (frozenset({'.swift'}), 5),
+    (frozenset({'.kt', '.kts'}), 6),
+    (frozenset({'.rb'}), 7),
+    (frozenset({'.go'}), 8),
+    (frozenset({'.rs'}), 9),
+    (frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'}), _CPP_BUCKET_IDX),
+)
+
+
+def _supported_coverage_languages() -> frozenset:
+    """Registry language keys surface can scan, derived from _EXT_BUCKETS."""
+    from ...registry import language_for_extension
+    langs = set()
+    for exts, _ in _EXT_BUCKETS:
+        for ext in exts:
+            lang = language_for_extension(ext)
+            if lang:
+                langs.add(lang)
+    return frozenset(langs)
+
 
 def _collect_source_files(path: Path, source_only: bool = False):
     """Return (py, ts, java, cs, php, swift, kotlin, ruby, go, rust, cpp) file lists for the given path."""
-    _EXT_BUCKETS = (
-        (frozenset({'.py'}), 0),
-        (frozenset({'.ts', '.tsx', '.js', '.jsx'}), 1),
-        (frozenset({'.java'}), 2),
-        (frozenset({'.cs'}), 3),
-        (frozenset({'.php'}), 4),
-        (frozenset({'.swift'}), 5),
-        (frozenset({'.kt', '.kts'}), 6),
-        (frozenset({'.rb'}), 7),
-        (frozenset({'.go'}), 8),
-        (frozenset({'.rs'}), 9),
-        (frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'}), _CPP_BUCKET_IDX),
-    )
 
     def _bucket_for(fpath: Path):
         suffix = fpath.suffix
