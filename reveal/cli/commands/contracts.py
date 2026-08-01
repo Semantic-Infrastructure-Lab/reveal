@@ -14,6 +14,7 @@ from ...utils.path_utils import (
     detect_non_python_language,
     is_skippable_dir,
 )
+from .surface import _supported_coverage_languages
 
 _CONTRACT_PATH_HINTS: frozenset = frozenset({
     'base', 'schema', 'contract', 'protocol', 'interface',
@@ -265,9 +266,11 @@ def _scan_contracts(
 
     # BACK-518: guard against a few stray supported-language files standing in
     # for a mostly-unsupported tree (see surface.py / assess_language_coverage).
+    # BACK-DD-1: reuse surface.py's single source of truth rather than a
+    # second hardcoded literal that can silently drift from it.
     coverage = assess_language_coverage(
         path,
-        {'python', 'typescript', 'tsx', 'javascript', 'java', 'csharp', 'php', 'swift', 'kotlin', 'ruby', 'go', 'rust', 'cpp'},
+        _supported_coverage_languages(),
     )
     coverage_dict = coverage.to_scope_dict('contracts')
 

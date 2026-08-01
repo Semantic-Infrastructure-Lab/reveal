@@ -241,7 +241,7 @@ class ResultBuilder:
         else:
             meta['errors'] = []
 
-        return meta if meta else {}
+        return meta
 
     # BACK-447: back-compat alias — `create_meta` is the public name now;
     # older internal call sites and tests may still reference `_create_meta`.
