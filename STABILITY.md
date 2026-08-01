@@ -2,12 +2,15 @@
 title: Reveal Stability Policy
 type: documentation
 category: policy
-date: 2026-04-26
+date: 2026-08-01
 ---
 
 # Stability Policy
 
-**Last updated:** 2026-04-26
+**Last updated:** 2026-08-01 (see `reveal --version` for the current release; this
+policy doc is checked for adapter/language count drift by V012/V013, but its
+prose — version numbers, dates, blocker status — is not machine-verified and
+can still go stale between refreshes)
 
 ---
 
@@ -32,8 +35,8 @@ This document defines what users and AI agents can safely depend on in reveal. I
   - `env://` - Environment variable inspection
   - `ast://` - Code queries and structure analysis
   - `python://` - Python runtime inspection
-- **Quality rules (core):** B001-B005 (bugs), S701 (security), C901 (complexity), E501 (line length)
-- **Languages (full support):** Python, JavaScript, TypeScript, Rust, Go, Java, C, C++
+- **Quality rules (core):** B001-B005 (bugs), S701 (security), C901 (complexity), E501 (line length) — run `reveal --rules` for the full current set (55 rules as of v0.112.0, growing)
+- **Languages (full support):** Python, JavaScript, TypeScript, Rust, Go, Java, C, C++ — see [Language Support Stability](#language-support-stability) below; conformance is now tracked per-language via `reveal --language-info <lang>` (BACK-444), not a hand-maintained tier list
 
 **Backward compatibility:** Guaranteed within major versions (v0.x → v0.y is safe for stable features).
 
@@ -44,17 +47,23 @@ This document defines what users and AI agents can safely depend on in reveal. I
 **Guarantee:** Feature-complete but API may evolve. Changes announced in CHANGELOG with migration guidance.
 
 **What's Beta:**
-- **Adapters:**
+- **Code/data-navigation adapters:**
   - `diff://` - Semantic structural comparison
   - `imports://` - Import graph analysis
+  - `calls://` - Cross-file call graph queries
+  - `depends://` - Inverse module dependency graph
   - `sqlite://` - SQLite database inspection
   - `mysql://` - MySQL database inspection
   - `stats://` - Code quality metrics
   - `json://` - JSON navigation
   - `markdown://` - Frontmatter queries
   - `git://` - Git repository inspection
-- **Quality rules (extended):** B001-B006 (bugs), D001-D002 (duplicates), I001-I004 (imports), L001-L005 (links), M101-M103 (maintainability), N001-N003 (nginx), R913 (refactoring), U501-U502 (URLs), F001-F005 (frontmatter), V001-V022 (validation)
-- **Languages (full support):** C#, Scala, PHP, Ruby, Lua, Kotlin, Swift, Dart, HCL/Terraform, GraphQL, Protobuf, Zig, GDScript, Bash, SQL
+  - `xlsx://` - Excel spreadsheet inspection
+- **Infra/ops adapters** (production-quality, domain-scoped — cPanel/hosting stack): `nginx://`, `ssl://`, `letsencrypt://`, `autossl://`, `cpanel://`, `domain://`
+- **Session-analysis adapters:** `claude://` (Claude Code sessions), `codex://` (OpenAI Codex CLI sessions)
+- **Test-hygiene adapters:** `patches://` (mock/patch pressure scanning)
+- **Quality rules (extended):** the majority of the current 55-rule set (D, I, L, M, N, R, T, U, F, V series) — run `reveal --rules` for the live list; only the core set above is Stable
+- **Languages (full support):** C#, Scala, PHP, Ruby, Lua, Kotlin, Swift, Dart, HCL/Terraform, GraphQL, Protobuf, Zig, GDScript, Bash, SQL — see `reveal --languages` for the current full roster (87 languages total across explicit analyzers + tree-sitter fallback, growing)
 - **Features:**
   - Schema validation (`--validate-schema`)
   - Configuration system (`.reveal.yaml`)
@@ -71,10 +80,10 @@ This document defines what users and AI agents can safely depend on in reveal. I
 
 **What's Experimental:**
 - Features not yet documented in README.md
-- Internal V-series rules (V016-V022) used for reveal's self-validation
+- Internal V-series rules (self-validation only, hidden by default — pass `--all` to `reveal --rules` to see them; the set has grown well past the original V016-V022 range, now up to V030+)
 - Undocumented query parameters on adapters
 - Features marked "experimental" in help text
-- Languages with only tree-sitter extraction (16 languages, basic structure only — run `reveal --languages` for the live list)
+- Languages with only tree-sitter extraction (basic structure only, no dedicated analyzer — run `reveal --languages` for the live "Tree-sitter Fallback" list)
 
 **Expectations:** Use at your own risk. Test thoroughly before depending on experimental features.
 
@@ -94,13 +103,13 @@ This document defines what users and AI agents can safely depend on in reveal. I
 **Blockers for v1.0:**
 1. ✅ Output contract specification (structured return values) - **COMPLETE** (2026-01-17)
 2. ✅ JSON schema versioning - **COMPLETE** (2026-01-17, via Output Contract v1.0)
-3. 🟡 Comprehensive integration test suite - **IN PROGRESS** (2,500+ tests passing, expanding coverage)
-4. 🟡 Documentation completeness (all adapters have help:// guides) - **IN PROGRESS** (most adapters documented)
-5. ⏳ 6 months without breaking changes to Stable features - **STARTED** (2026-01-17, target: 2026-07-17)
+3. 🟡 Comprehensive integration test suite - **IN PROGRESS** (11,600+ tests passing as of v0.112.0, expanding coverage; Output Contract v1.1 rollout to remaining analyzers still open, see ROADMAP.md)
+4. 🟡 Documentation completeness (all adapters have help:// guides) - **IN PROGRESS** (V024 now lints this — `reveal reveal:// --check --select V024` is clean as of this writing, i.e. every registered adapter has a guide)
+5. ❌ 6 months without breaking changes to Stable features - **NOT MET, window reset**: the original 2026-01-17 start was invalidated by a Stable-tier breaking change on 2026-05-22 (v0.95.0, tree-sitter-language-pack 1.x migration — dropped Alpine/musl and Ubuntu 20.04/Debian 11 support for all Tier-1 languages). No further breaking changes to Stable features have landed since; the clean window is running from 2026-05-22, not from January. Verify via `grep -A2 "^### Breaking Changes" CHANGELOG.md` before trusting this without a re-check.
 
-**Current progress:** 4/5 complete (Output Contract ✅, JSON versioning ✅, integration tests 🟡, docs 🟡, 6-month stability ⏳)
+**Current progress:** 2/5 complete outright (Output Contract, JSON versioning), 2/5 in progress (tests, docs), 1/5 blocked on a clean 6-month window that has not yet elapsed.
 
-**Estimated timeline:** Q2-Q3 2026 (July 2026 earliest, after 6-month stability period)
+**Estimated timeline:** not before 2026-11-22 (earliest the reset 6-month window closes), and only if no further Stable-tier breaking change lands before then. Treat any specific quarter estimate in older docs/sessions as stale.
 
 ---
 
@@ -165,29 +174,43 @@ v0.37.0: Feature X removed (documented in CHANGELOG)
 
 ### Beta Adapters (Development & Domain Tools)
 
-| Adapter | Stability | Maturity | Notes |
-|---------|-----------|----------|-------|
-| `diff://` | 🟡 Beta | High | Output format may change, git:// integration stable |
-| `imports://` | 🟡 Beta | High | Query syntax stable, multi-language support growing |
-| `stats://` | 🟡 Beta | Medium | Metrics may be added/renamed |
-| `git://` | 🟡 Beta | High | Core features stable (blame, history, diff), new query params may be added |
-| `sqlite://` | 🟡 Beta | Medium | Recently added (v0.35.0), format stabilizing |
-| `mysql://` | 🟡 Beta | Medium | Requires `[database]` extra, tuning ratios may change |
-| `json://` | 🟡 Beta | High | Path syntax stable, query features may expand |
-| `markdown://` | 🟡 Beta | Medium | Frontmatter queries stable, may add new filters |
+| Adapter | Stability | Notes |
+|---------|-----------|-------|
+| `diff://` | 🟡 Beta | Output format may change, git:// integration stable |
+| `imports://` | 🟡 Beta | Query syntax stable, multi-language support growing |
+| `calls://` | 🟡 Beta | Query syntax stable; multi-language coverage still expanding |
+| `depends://` | 🟡 Beta | Inverse of imports:// — same maturity profile |
+| `stats://` | 🟡 Beta | Metrics may be added/renamed |
+| `git://` | 🟡 Beta | Core features stable (blame, history, diff), new query params may be added |
+| `sqlite://` | 🟡 Beta | Format stabilizing |
+| `mysql://` | 🟡 Beta | Requires `[database]` extra, tuning ratios may change |
+| `json://` | 🟡 Beta | Path syntax stable, query features may expand |
+| `markdown://` | 🟡 Beta | Frontmatter queries stable, may add new filters |
+| `xlsx://` | 🟡 Beta | Spreadsheet/PowerPivot/PowerQuery support, format-dependent edge cases |
 
-### Project Adapters (Extensibility Examples)
+Run `reveal --adapters` for the authoritative, current list — this table is
+illustrative, not exhaustive.
 
-**What these are:** Production-quality adapters built for specific projects/tools. They demonstrate how to extend reveal to inspect YOUR project's unique resources.
+### Infra & Project Adapters (Extensibility Examples)
+
+**What these are:** Production-quality adapters built for specific projects/tools/domains. They demonstrate how to extend reveal to inspect YOUR project's unique resources, and several (the cPanel/hosting-stack group) are genuinely domain-specific rather than universal.
 
 | Adapter | Purpose | Domain | Status |
 |---------|---------|--------|--------|
 | `reveal://` | Self-inspection (dogfooding) | Reveal codebase validation | ✅ Production-ready |
 | `claude://` | AI conversation analysis | Claude Code session logs | ✅ Production-ready |
+| `codex://` | AI conversation analysis | OpenAI Codex CLI session logs | ✅ Production-ready |
+| `nginx://` | Vhost config inspection | nginx | ✅ Production-ready |
+| `ssl://` | Certificate health/chain | TLS certs | ✅ Production-ready |
+| `letsencrypt://` | Cert inventory, orphan/duplicate SAN detection | Let's Encrypt | ✅ Production-ready |
+| `autossl://` | AutoSSL run log inspection | cPanel | ✅ Production-ready |
+| `cpanel://` | User environment inspection | cPanel | ✅ Production-ready |
+| `domain://` | DNS/registration/health | Domain names | ✅ Production-ready |
+| `patches://` | Mock/patch pressure scanning | Test hygiene (Python/JS/TS) | ✅ Production-ready |
 
 **Stability commitment:**
-- ✅ Production-ready code (tested, documented, works for intended use case)
-- ✅ Stable within their domain (reveal devs rely on `reveal://`, Claude users rely on `claude://`)
+- ✅ Production-ready code (tested, documented, works for intended use case) — enforced by `V024` (every registered adapter needs a guide) and `V025` (must appear in `help://relationships`)
+- ✅ Stable within their domain (reveal devs rely on `reveal://`, Claude users rely on `claude://`, ops workflows rely on the cPanel-stack adapters)
 - ⚠️ No cross-project API guarantees (these are examples - adapt patterns to your needs)
 - 💡 Study these to build adapters for YOUR project (k8s://, logs://, config://, etc.)
 
@@ -207,7 +230,7 @@ These adapters are **teaching implementations** that solve real problems for spe
 
 ### Beta Rules (May Evolve)
 
-All other rules (D, I, L, M, N, R, U, F, V series) are Beta. Thresholds may be adjusted, detection may improve, new rules may be added.
+All other rules (B006+, C902/C905, D, I, L, M, N, R, T, U, F, V series) are Beta. Thresholds may be adjusted, detection may improve, new rules may be added. Run `reveal --rules` for the current full set (55 rules as of v0.112.0, 2 opt-in) with per-rule language verification status (BACK-432); pass `--all` to also see the internal V-series self-check rules, which are Experimental (below), not Beta.
 
 ### Configuration Stability
 
@@ -218,6 +241,14 @@ All other rules (D, I, L, M, N, R, U, F, V series) are Beta. Thresholds may be a
 
 ## Language Support Stability
 
+The three broad bands below (Tier 1/2/3) still describe the *policy* — how much
+you can rely on each group — but the authoritative per-language conformance
+data now comes from `reveal --language-info <lang>` (BACK-444), which reports
+one of four verified levels: `tier1-verified` > `smoke-tested` >
+`structure-only` > `untested`. Treat any language list below as illustrative;
+the live command is the source of truth and can only grow more precise over
+time, not this doc.
+
 ### Tier 1 (Stable)
 
 Full support, tested on production codebases, extraction quality guaranteed:
@@ -225,13 +256,17 @@ Full support, tested on production codebases, extraction quality guaranteed:
 
 ### Tier 2 (Beta)
 
-Full support, extraction quality improving, may have edge cases:
+Full support, extraction quality improving, may have edge cases (several have
+known tree-sitter grammar bugs tracked as open `tt` tickets, e.g. Kotlin
+`BACK-738`, C# `BACK-703`, Swift `BACK-742` — these are honest-declined
+grammar limitations, not reveal bugs):
 - C#, Scala, PHP, Ruby, Lua, Kotlin, Swift, Dart, HCL/Terraform, GraphQL, Protobuf, Zig, GDScript, Bash, SQL
 
 ### Tier 3 (Experimental)
 
-Tree-sitter extraction only, basic structure, no custom analyzers:
-- 16 languages via tree-sitter-language-pack fallback (run `reveal --languages` for the live list)
+Tree-sitter extraction only, basic structure, no custom analyzers — run
+`reveal --languages` for the live "Tree-sitter Fallback" list (count varies as
+languages get promoted to Tier 2 with a dedicated analyzer).
 
 ---
 
@@ -251,6 +286,14 @@ Tree-sitter extraction only, basic structure, no custom analyzers:
 - All adapters return consistent error formats
 - Breaking changes require major version bump
 
+**Known gap (in progress, not yet uniform):** Output Contract v1.1
+(`meta.parse_mode`/`meta.confidence`) is rolling out per-analyzer via
+`ResultBuilder.create(..., contract_version='1.1')`, but a majority of
+analyzers are still hardcoded at `contract_version: '1.0'` with no `meta`
+block — tracked as `BACK-885` (large effort, open). Don't assume every
+adapter carries v1.1 fields yet; check the specific adapter's output or
+`grep contract_version` in its source.
+
 ---
 
 ## CLI Stability
@@ -268,6 +311,12 @@ Tree-sitter extraction only, basic structure, no custom analyzers:
 - `--agent-help` (AI agent guide)
 - `--validate-schema` (schema validation)
 - `--rules`, `--explain`, `--select` (quality rules)
+- `--provenance` (attach execution metadata to JSON output — added v0.111.0)
+- `--capabilities`, `--show-ast`, `--language-info`, `--discover` (agent-facing introspection)
+- `--format typed` (typed JSON with types/relationships — newer than plain `json`, may still evolve)
+
+Run `reveal --help-all` for the complete current flag surface — this list
+covers the ones worth calling out, not every flag.
 
 **Experimental flags:**
 - Flags not documented in README or help text
@@ -300,7 +349,7 @@ Tree-sitter extraction only, basic structure, no custom analyzers:
 **Beta:**
 - Specific rule IDs (may be renamed/renumbered)
 
-**Recommendation:** Pin reveal version in CI (`pip install reveal-cli==0.40.0`) and upgrade explicitly after testing.
+**Recommendation:** Pin reveal version in CI (`pip install reveal-cli==<current version>` — see `reveal --version` or [PyPI](https://pypi.org/project/reveal-cli/)) and upgrade explicitly after testing.
 
 ### For Human Users
 
@@ -321,17 +370,22 @@ Tree-sitter extraction only, basic structure, no custom analyzers:
 ## How to Check Stability
 
 ```bash
-# Check what's stable in current version
-reveal help://stability
+# This policy doc is not (yet) exposed through help:// — read it directly,
+# or from an agent session: reveal STABILITY.md
 
-# Check adapter stability
-reveal help://<adapter>  # Look for "Stability: Stable/Beta/Experimental"
+# Check what's currently registered/live (adapter help pages do not carry
+# a "Stability:" field today — use the live registry commands instead)
+reveal --adapters              # registered adapters
+reveal --rules                 # registered quality rules, with per-language verification tags
+reveal --languages             # language support, explicit analyzers vs tree-sitter fallback
+reveal --language-info <lang>  # per-language conformance tier (tier1-verified/smoke-tested/structure-only/untested)
 
-# Check CLI flag stability
-reveal --help  # Flags marked with stability levels
+# Check CLI flag surface
+reveal --help-all
 
-# Verify output contract
-reveal reveal://schema  # (Coming in Output Contract Specification)
+# Output contract details
+reveal help://output            # OUTPUT_CONTRACT.md
+reveal help://contract-versions # CONTRACT_VERSIONS.md
 ```
 
 ---
@@ -344,5 +398,5 @@ reveal reveal://schema  # (Coming in Output Contract Specification)
 
 ---
 
-**Next review:** Q2 2026 (before v1.0 release)
+**Next review:** opportunistically, or whenever a v1.0 blocker status changes (see Path to v1.0 above) — this doc drifted ~4 months and ~70 releases undetected last time (`BACK-886`); don't let it go that long again
 **Owner:** Semantic Infrastructure Lab
