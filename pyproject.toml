@@ -54,7 +54,7 @@ dev = [
     "ruff>=0.1.0",
     "pymysql>=1.0.0",  # Required for MySQL adapter tests
     "dnspython>=2.0.0",  # Required for DNS adapter tests
-    "mcp>=1.0.0,<2.0.0",  # Required for MCP server tests. Capped: mcp 2.0.0 (2026-08-01) removed mcp.server.fastmcp.FastMCP entirely (replaced by mcp.server.mcpserver.MCPServer) — see BACK-895 for the migration.
+    "mcp>=2.0.0",  # Required for MCP server tests. Migrated off FastMCP to mcp.server.MCPServer (BACK-895).
     "pygit2>=1.14.0",  # Required for git:// adapter tests
 ]
 # DEPRECATED in v0.8.0: tree-sitter is now included by default
@@ -79,7 +79,7 @@ whois = [
 ]
 # MCP server integration (reveal-mcp command)
 mcp = [
-    "mcp>=1.0.0,<2.0.0",  # Model Context Protocol SDK — required for reveal-mcp server. Capped: mcp 2.0.0 (2026-08-01) removed mcp.server.fastmcp.FastMCP entirely — see BACK-895.
+    "mcp>=2.0.0",  # Model Context Protocol SDK — required for reveal-mcp server. Migrated off FastMCP to mcp.server.MCPServer (BACK-895).
 ]
 # Excel/xlsx test fixture creation (openpyxl used in tests only; production adapter is pure stdlib)
 xlsx = [

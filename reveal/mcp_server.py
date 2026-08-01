@@ -21,7 +21,7 @@ import io
 import os
 import sys
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
 from .cli.defaults import _default_args
@@ -37,7 +37,7 @@ _OPEN_WORLD_READONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, o
 # Suppress update-check prints that would corrupt MCP tool responses.
 os.environ.setdefault('REVEAL_NO_UPDATE_CHECK', '1')
 
-mcp = FastMCP(
+mcp = MCPServer(
     "reveal",
     instructions=(
         "Reveal is a progressive disclosure tool for exploring codebases, "
@@ -471,13 +471,9 @@ def main() -> None:
     if args.transport == 'stdio':
         mcp.run(transport='stdio')
     elif args.transport == 'sse':
-        mcp.host = args.host
-        mcp.port = args.port
-        mcp.run(transport='sse')
+        mcp.run(transport='sse', host=args.host, port=args.port)
     else:
-        mcp.host = args.host
-        mcp.port = args.port
-        mcp.run(transport='streamable-http')
+        mcp.run(transport='streamable-http', host=args.host, port=args.port)
 
 
 if __name__ == '__main__':

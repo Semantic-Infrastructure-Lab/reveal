@@ -28,7 +28,7 @@ The `reveal-mcp` command is included as an entry point in `reveal-cli` — no se
 
 Or if reveal is already installed and `mcp` isn't:
 ```bash
-pip install "mcp>=1.0.0"
+pip install "mcp>=2.0.0"
 ```
 
 ## Configuration
