@@ -8,6 +8,7 @@ import logging
 from typing import Dict, Any, Optional
 from ..base import FileAnalyzer
 from ..registry import register
+from ..utils.results import ResultBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -147,13 +148,13 @@ class JsonlAnalyzer(FileAnalyzer):
                                 sorted(record_types.items(), key=lambda x: -x[1])),
         }
 
-        return {
-            'contract_version': '1.0',
-            'type': 'jsonl_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-            'records': [summary] + selected_records,
-        }
+        return ResultBuilder.create(
+            result_type='jsonl_structure',
+            source=self.path,
+            data={'records': [summary] + selected_records},
+            contract_version='1.1',
+            confidence=1.0,
+        )
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a specific JSONL record.

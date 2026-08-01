@@ -9,6 +9,7 @@ import logging
 from typing import Dict, Any, List, Optional, Tuple
 from ..base import FileAnalyzer
 from ..registry import register
+from ..utils.results import ResultBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -232,20 +233,22 @@ class XmlAnalyzer(FileAnalyzer):
             if root.attrib:
                 root_data['attributes'] = dict(root.attrib)
 
-            result = {
-                'contract_version': '1.0',
-                'type': 'xml_structure',
-                'source': str(self.path),
-                'source_type': 'file',
-                'root': root_data,
-                'statistics': {
-                    'total_elements': total_elements,
-                    'max_depth': max_depth,
-                    'child_count': child_count,
-                    'namespace_count': len(namespaces)
+            result = ResultBuilder.create(
+                result_type='xml_structure',
+                source=self.path,
+                data={
+                    'root': root_data,
+                    'statistics': {
+                        'total_elements': total_elements,
+                        'max_depth': max_depth,
+                        'child_count': child_count,
+                        'namespace_count': len(namespaces)
+                    },
+                    'children': [self._element_to_dict(child) for child in filtered_children]
                 },
-                'children': [self._element_to_dict(child) for child in filtered_children]
-            }
+                contract_version='1.1',
+                confidence=1.0,
+            )
 
             # Add namespace info if present
             if namespaces:
@@ -265,16 +268,22 @@ class XmlAnalyzer(FileAnalyzer):
 
         except ET.ParseError as e:
             logger.debug(f"Error parsing XML {self.path}: {e}")
-            return {
-                'error': f'XML parse error: {e}',
-                'message': 'Failed to parse XML file'
-            }
+            return ResultBuilder.create_error(
+                result_type='xml_structure',
+                source=self.path,
+                error=f'XML parse error: {e}',
+                contract_version='1.1',
+                message='Failed to parse XML file',
+            )
         except Exception as e:
             logger.debug(f"Error analyzing XML {self.path}: {e}")
-            return {
-                'error': str(e),
-                'message': 'Failed to analyze XML file'
-            }
+            return ResultBuilder.create_error(
+                result_type='xml_structure',
+                source=self.path,
+                error=str(e),
+                contract_version='1.1',
+                message='Failed to analyze XML file',
+            )
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get specific element(s) by tag name.

@@ -4,6 +4,7 @@ import json
 from typing import Dict, Any, List, Tuple, Optional
 from ..base import FileAnalyzer
 from ..registry import register
+from ..utils.results import ResultBuilder
 
 
 @register('.ipynb', name='Jupyter', icon='')
@@ -94,30 +95,34 @@ class JupyterAnalyzer(FileAnalyzer):
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Analyze Jupyter notebook structure."""
         if self.parse_error:
-            return {
-                'error': self.parse_error,
-                'cells': [],
-                'cell_counts': {},
-                'kernel': 'unknown',
-                'language': 'unknown',
-                'total_cells': 0
-            }
+            return ResultBuilder.create_error(
+                result_type='jupyter_structure',
+                source=self.path,
+                error=self.parse_error,
+                contract_version='1.1',
+                cells=[],
+                cell_counts={},
+                kernel='unknown',
+                language='unknown',
+                total_cells=0,
+            )
 
         # Get cell summaries
         cell_summaries = [self._create_cell_summary(cell, idx)
                          for idx, cell in enumerate(self.cells)]
 
         # Return only the cells list for display
-        result: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'jupyter_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-        }
+        data: Dict[str, Any] = {}
         if cell_summaries:
-            result['cells'] = cell_summaries
+            data['cells'] = cell_summaries
 
-        return result
+        return ResultBuilder.create(
+            result_type='jupyter_structure',
+            source=self.path,
+            data=data,
+            contract_version='1.1',
+            confidence=1.0,
+        )
 
     def _find_cell_line(self, cell_index: int) -> int:
         """Find approximate line number where a cell starts in the JSON."""

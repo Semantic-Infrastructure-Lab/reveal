@@ -9,6 +9,7 @@ import logging
 from typing import Dict, List, Any, Optional, Tuple
 from ..base import FileAnalyzer
 from ..registry import register
+from ..utils.results import ResultBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -182,19 +183,31 @@ class CsvAnalyzer(FileAnalyzer):
 
             # Handle parsing failures
             if columns is None:
-                return {
-                    'row_count': 0,
-                    'message': 'CSV file appears to be empty or malformed'
-                }
+                return ResultBuilder.create(
+                    result_type='csv_structure',
+                    source=self.path,
+                    data={
+                        'row_count': 0,
+                        'message': 'CSV file appears to be empty or malformed'
+                    },
+                    contract_version='1.1',
+                    confidence=1.0,
+                )
 
             # Handle empty CSV
             if not rows:
-                return {
-                    'columns': columns,
-                    'row_count': 0,
-                    'schema': [],
-                    'message': 'Empty CSV file (header only)'
-                }
+                return ResultBuilder.create(
+                    result_type='csv_structure',
+                    source=self.path,
+                    data={
+                        'columns': columns,
+                        'row_count': 0,
+                        'schema': [],
+                        'message': 'Empty CSV file (header only)'
+                    },
+                    contract_version='1.1',
+                    confidence=1.0,
+                )
 
             # Build schema for all columns
             schema = [
@@ -205,18 +218,20 @@ class CsvAnalyzer(FileAnalyzer):
             # Filter rows for sample
             sample_rows = self._filter_sample_rows(rows, head, tail, range)
 
-            return {
-                'contract_version': '1.0',
-                'type': 'csv_structure',
-                'source': str(self.path),
-                'source_type': 'file',
-                'columns': columns,
-                'column_count': len(columns),
-                'row_count': len(rows),
-                'schema': schema,
-                'sample_rows': [dict(zip(columns, row)) for row in sample_rows],
-                'delimiter': 'comma' if delimiter == ',' else 'tab'
-            }
+            return ResultBuilder.create(
+                result_type='csv_structure',
+                source=self.path,
+                data={
+                    'columns': columns,
+                    'column_count': len(columns),
+                    'row_count': len(rows),
+                    'schema': schema,
+                    'sample_rows': [dict(zip(columns, row)) for row in sample_rows],
+                    'delimiter': 'comma' if delimiter == ',' else 'tab'
+                },
+                contract_version='1.1',
+                confidence=1.0,
+            )
 
         except Exception as e:
             logger.debug(f"Error parsing CSV {self.path}: {e}")
