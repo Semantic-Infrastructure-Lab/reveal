@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from reveal.utils import safe_json_dumps
+from reveal.utils import print_json_result
 
 
 class PatchesRenderer:
@@ -13,7 +13,7 @@ class PatchesRenderer:
     @staticmethod
     def render_structure(result: Dict[str, Any], format: str = 'text') -> None:
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
 
         source = result.get('source', '')

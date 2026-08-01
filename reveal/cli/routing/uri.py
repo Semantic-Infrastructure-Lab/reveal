@@ -10,6 +10,8 @@ import re
 import sys
 from typing import Any, List, Optional, TYPE_CHECKING
 
+from ...utils import print_json_result
+
 if TYPE_CHECKING:
     from argparse import Namespace
 
@@ -263,8 +265,6 @@ def _handle_check_mode(adapter, renderer_class: type[Any], args: 'Namespace') ->
         renderer_class: Renderer for check results
         args: CLI arguments with check flags
     """
-    import json
-
     # Build check kwargs and execute
     check_kwargs = _build_check_kwargs(adapter, args)
     result = adapter.check(**check_kwargs)
@@ -277,7 +277,7 @@ def _handle_check_mode(adapter, renderer_class: type[Any], args: 'Namespace') ->
     else:
         # Fallback to generic JSON rendering
         if args.format == 'json':
-            print(json.dumps(result, indent=2))
+            print_json_result(result)
         else:
             print(result)
 

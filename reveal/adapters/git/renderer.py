@@ -1,7 +1,8 @@
 """Git repository rendering for text and JSON output."""
 
-import json
 import sys
+
+from ...utils import print_json_result
 
 
 class GitRenderer:
@@ -16,7 +17,7 @@ class GitRenderer:
             format: Output format (text, json)
         """
         if format == 'json':
-            print(json.dumps(result, indent=2))
+            print_json_result(result)
             return
 
         # Text rendering based on result type
@@ -39,7 +40,7 @@ class GitRenderer:
         elif result_type == 'git_ownership':
             GitRenderer._render_ownership(result)
         else:
-            print(json.dumps(result, indent=2))
+            print_json_result(result)
 
     @staticmethod
     def _render_repository_overview(result: dict) -> None:

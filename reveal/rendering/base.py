@@ -3,10 +3,11 @@
 Provides common functionality for adapter renderers to reduce duplication.
 """
 
-import json
 import sys
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
+
+from reveal.utils.json_utils import print_json_result
 
 
 class RendererMixin:
@@ -41,10 +42,12 @@ class RendererMixin:
 
         Args:
             result: Dictionary to render
-            indent: JSON indentation (default: 2)
+            indent: JSON indentation — unused, kept for signature back-compat
+                (delegates to the single JSON-result funnel, print_json_result,
+                which always uses indent=2)
             file: Output file (default: stdout)
         """
-        print(json.dumps(result, indent=indent, default=str), file=file or sys.stdout)
+        print_json_result(result, file=file)
 
     @staticmethod
     def print_header(title: str, subtitle: Optional[str] = None) -> None:

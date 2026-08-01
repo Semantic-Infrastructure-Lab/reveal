@@ -1,8 +1,9 @@
 """Renderer for reveal:// internal structure adapter."""
 
-import json
 from collections import defaultdict
 from typing import Any, Dict, List, Union
+
+from reveal.utils import print_json_result
 
 
 def _render_optional_section(title: str, items: Union[str, List, Dict, None], indent: int = 1) -> None:
@@ -204,7 +205,7 @@ def render_reveal_structure(data: Dict[str, Any], output_format: str) -> None:
         output_format: Output format (text, json)
     """
     if output_format == 'json':
-        print(json.dumps(data, indent=2))
+        print_json_result(data)
         return
 
     # Check if this is a config structure

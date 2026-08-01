@@ -2,7 +2,7 @@
 
 from .clipboard import copy_to_clipboard
 from .formatting import format_size
-from .json_utils import DateTimeEncoder, safe_json_dumps
+from .json_utils import DateTimeEncoder, safe_json_dumps, print_json_result
 from .breadcrumbs import (
     get_element_placeholder,
     get_file_type_from_analyzer,
@@ -39,6 +39,7 @@ __all__ = [
     'format_size',
     'DateTimeEncoder',
     'safe_json_dumps',
+    'print_json_result',
     'get_element_placeholder',
     'get_file_type_from_analyzer',
     'print_breadcrumbs',

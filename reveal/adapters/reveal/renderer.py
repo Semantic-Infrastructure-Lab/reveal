@@ -26,7 +26,7 @@ class RevealRenderer:
             format: Output format ('text', 'json', 'grep')
             **kwargs: Ignored (for compatibility with other adapters' filter flags)
         """
-        from ...utils import safe_json_dumps
+        from ...utils import print_json_result
 
         detections = result.get('detections', [])
         uri = result.get('file', 'reveal://')
@@ -37,7 +37,7 @@ class RevealRenderer:
                 **result,
                 'detections': [d.to_dict() if hasattr(d, 'to_dict') else d for d in detections]
             }
-            print(safe_json_dumps(serialized_result))
+            print_json_result(serialized_result)
             return
 
         if format == 'grep':

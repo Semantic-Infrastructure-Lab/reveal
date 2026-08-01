@@ -2,7 +2,7 @@
 
 from typing import Any, Dict
 
-from reveal.utils import safe_json_dumps
+from reveal.utils import print_json_result
 
 
 def render_env_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -13,7 +13,7 @@ def render_env_structure(data: Dict[str, Any], output_format: str) -> None:
         output_format: Output format (text, json, grep)
     """
     if output_format == 'json':
-        print(safe_json_dumps(data))
+        print_json_result(data)
         return
 
     # Text format
@@ -44,7 +44,7 @@ def render_env_variable(data: Dict[str, Any], output_format: str) -> None:
         output_format: Output format (text, json, grep)
     """
     if output_format == 'json':
-        print(safe_json_dumps(data))
+        print_json_result(data)
         return
 
     if output_format == 'grep':

@@ -3,7 +3,7 @@
 import sys
 from typing import Dict, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer
-from ..utils import safe_json_dumps
+from ..utils import print_json_result
 from ..utils.results import ResultBuilder
 
 
@@ -21,7 +21,7 @@ class DemoRenderer:
         # TODO: Implement custom rendering or use generic renderer
 
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
         else:
             # TODO: Implement text rendering
             print("Demo Structure:")
@@ -38,7 +38,7 @@ class DemoRenderer:
         """
 
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
         else:
             # TODO: Implement element rendering
             print(f"Element: {result.get('name', 'unknown')}")

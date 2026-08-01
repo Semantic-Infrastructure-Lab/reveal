@@ -2,7 +2,7 @@
 
 from typing import Any, Dict
 
-from reveal.utils import safe_json_dumps
+from reveal.utils import print_json_result
 
 
 def render_markdown_query(data: Dict[str, Any], output_format: str,
@@ -15,7 +15,7 @@ def render_markdown_query(data: Dict[str, Any], output_format: str,
         single_file: True if rendering a single file's details
     """
     if output_format == 'json':
-        print(safe_json_dumps(data))
+        print_json_result(data)
         return
 
     if data.get('type') == 'markdown_link_graph':

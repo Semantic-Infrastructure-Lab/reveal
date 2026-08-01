@@ -3,7 +3,7 @@
 import sys
 from typing import Any, Dict
 
-from reveal.utils import safe_json_dumps
+from reveal.utils import print_json_result
 
 
 def render_python_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -14,7 +14,7 @@ def render_python_structure(data: Dict[str, Any], output_format: str) -> None:
         output_format: Output format (text, json, grep)
     """
     if output_format == 'json':
-        print(safe_json_dumps(data))
+        print_json_result(data)
         return
 
     # Text format
@@ -257,7 +257,7 @@ def render_python_element(data: Dict[str, Any], output_format: str) -> None:
         output_format: Output format (text, json, grep)
     """
     if output_format == 'json':
-        print(safe_json_dumps(data))
+        print_json_result(data)
         return
 
     if 'error' in data:
@@ -270,4 +270,4 @@ def render_python_element(data: Dict[str, Any], output_format: str) -> None:
     if renderer:
         renderer(data)
     else:
-        print(safe_json_dumps(data))
+        print_json_result(data)

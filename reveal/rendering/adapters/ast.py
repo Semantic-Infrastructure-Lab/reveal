@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
-from reveal.utils import safe_json_dumps
+from reveal.utils import print_json_result
 
 # Maps bare shorthand names users commonly try to the correct filter syntax
 _FILTER_SHORTHANDS = {
@@ -30,7 +30,7 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
         output_format: Output format (text, json, grep)
     """
     if output_format == 'json':
-        print(safe_json_dumps(data))
+        print_json_result(data)
         return
 
     # reveal_type mode: variable type-evidence view
@@ -184,7 +184,7 @@ def _render_dict_heatmap(data: Dict[str, Any], output_format: str) -> None:
     unsupported_language = data.get('unsupported_language', '')
 
     if output_format == 'json':
-        print(safe_json_dumps(data))
+        print_json_result(data)
         return
 
     if output_format == 'grep':

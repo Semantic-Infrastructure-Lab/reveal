@@ -4,6 +4,8 @@ import json
 import sys
 from typing import Any, Dict
 
+from reveal.utils import print_json_result
+
 
 def _print_header(file_path: str, json_path: str) -> None:
     print(f"File: {file_path}")
@@ -97,7 +99,7 @@ def render_json_result(data: Dict[str, Any], output_format: str) -> None:
         return
 
     if output_format == 'json':
-        print(json.dumps(data, indent=2))
+        print_json_result(data)
         return
 
     if result_type == 'json-error':
@@ -110,4 +112,4 @@ def render_json_result(data: Dict[str, Any], output_format: str) -> None:
     if renderer:
         renderer(data, file_path, json_path)
     else:
-        print(json.dumps(data, indent=2))
+        print_json_result(data)

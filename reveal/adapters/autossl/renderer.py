@@ -1,9 +1,9 @@
 """Renderer for AutoSSL adapter output (autossl://)."""
 
-import json
 import sys
 from typing import Any, Dict, List
 
+from ...utils import print_json_result
 from .parser import IMPEDIMENT_SHORT
 
 _STATUS_ICON = {
@@ -73,7 +73,7 @@ class AutosslRenderer:
     @staticmethod
     def render_structure(result: Dict[str, Any], format: str = 'text') -> None:
         if format == 'json':
-            print(json.dumps(result, indent=2, default=str))
+            print_json_result(result)
             return
 
         result_type = result.get('type', '')
@@ -89,7 +89,7 @@ class AutosslRenderer:
         elif result_type == 'autossl_domain_history':
             AutosslRenderer._render_domain_history(result)
         else:
-            print(json.dumps(result, indent=2, default=str))
+            print_json_result(result)
 
     @staticmethod
     def render_element(result: Dict[str, Any], format: str = 'text') -> None:

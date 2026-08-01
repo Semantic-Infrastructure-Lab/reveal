@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Dict, Any, List, NamedTuple, Optional, Set, Tuple
 
 from .base import ResourceAdapter, register_adapter, register_renderer
-from ..utils import safe_json_dumps
+from ..utils import print_json_result
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
 from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor
@@ -216,7 +216,7 @@ class DependsRenderer:
     @staticmethod
     def render_structure(result: dict, format: str = 'text', verbose: bool = False, resource: str = '.') -> None:
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
 
         result_type = result.get('type')
@@ -229,7 +229,7 @@ class DependsRenderer:
             else:
                 DependsRenderer._render_summary(result, verbose, resource)
         else:
-            print(safe_json_dumps(result))
+            print_json_result(result)
 
     @staticmethod
     def _render_dependents(result: dict, verbose: bool) -> None:
@@ -349,7 +349,7 @@ class DependsRenderer:
     @staticmethod
     def render_element(result: dict, format: str = 'text') -> None:
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
         DependsRenderer._render_dependents(result, verbose=True)
 

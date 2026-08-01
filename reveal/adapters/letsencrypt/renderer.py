@@ -1,7 +1,8 @@
 """Renderer for letsencrypt:// adapter."""
 
-import json
 from typing import Any, Dict
+
+from ...utils import print_json_result
 
 
 class LetsEncryptRenderer:
@@ -10,7 +11,7 @@ class LetsEncryptRenderer:
     @staticmethod
     def render_structure(result: Dict[str, Any], format: str = 'text') -> None:
         if format == 'json':
-            print(json.dumps(result, default=str))
+            print_json_result(result)
             return
         LetsEncryptRenderer._render_text(result)
 

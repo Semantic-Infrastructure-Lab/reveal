@@ -2,7 +2,7 @@
 
 from typing import Any, Dict
 
-from reveal.utils import safe_json_dumps
+from reveal.utils import print_json_result
 
 
 def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -13,7 +13,7 @@ def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
         output_format: 'text', 'json', or 'dot'
     """
     if output_format == 'json':
-        print(safe_json_dumps(data))
+        print_json_result(data)
         return
 
     if data.get('query') == 'callees_recursive':

@@ -2,7 +2,7 @@
 
 import sys
 
-from ...utils import safe_json_dumps
+from ...utils import print_json_result
 
 
 class StatsRenderer:
@@ -17,7 +17,7 @@ class StatsRenderer:
             format: Output format ('text', 'json')
         """
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
 
         # Text format - single file stats
@@ -76,7 +76,7 @@ class StatsRenderer:
             format: Output format ('text', 'json')
         """
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
 
         # Text format - file stats

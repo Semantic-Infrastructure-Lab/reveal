@@ -1,8 +1,9 @@
 """Renderer for cPanel adapter output (cpanel://)."""
 
-import json
 import sys
 from typing import Dict, Any
+
+from ...utils import print_json_result
 
 
 def _icon_for_ssl_status(status: str) -> str:
@@ -30,7 +31,7 @@ class CpanelRenderer:
     @staticmethod
     def render_structure(result: Dict[str, Any], format: str = 'text') -> None:
         if format == 'json':
-            print(json.dumps(result, indent=2, default=str))
+            print_json_result(result)
         else:
             result_type = result.get('type', '')
             if result_type == 'cpanel_user':
@@ -47,7 +48,7 @@ class CpanelRenderer:
                 CpanelRenderer._render_api_reference(result)
             else:
                 # Fallback: dump as JSON
-                print(json.dumps(result, indent=2, default=str))
+                print_json_result(result)
 
         if result.get('type') == 'cpanel_full_audit' and result.get('has_failures'):
             sys.exit(2)

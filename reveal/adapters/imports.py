@@ -22,7 +22,7 @@ from typing import Callable, Dict, Any, List, Optional, Tuple
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
 from ..core import disk_cache
-from ..utils import safe_json_dumps
+from ..utils import print_json_result
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
@@ -632,7 +632,7 @@ class ImportsRenderer:
             resource: Resource path for display
         """
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
 
         # verbose from query (?verbose) takes precedence over caller arg
@@ -656,7 +656,7 @@ class ImportsRenderer:
             else:
                 ImportsRenderer._render_import_summary(result, resource)
         else:
-            print(safe_json_dumps(result))
+            print_json_result(result)
 
     @staticmethod
     def render_element(result: dict, format: str = 'text') -> None:
@@ -667,7 +667,7 @@ class ImportsRenderer:
             format: Output format ('text', 'json')
         """
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
 
         # Text format - file imports

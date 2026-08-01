@@ -3,7 +3,7 @@
 import sys
 from typing import Any, Dict
 
-from reveal.utils import safe_json_dumps
+from reveal.utils import print_json_result
 from reveal.adapters.base import Stability, _ADAPTER_REGISTRY
 
 
@@ -1087,7 +1087,7 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
         list_mode: True if listing all topics, False for specific topic
     """
     if output_format == 'json':
-        print(safe_json_dumps(data))
+        print_json_result(data)
         exit_code = help_error_exit_code(data)
         if exit_code:
             sys.exit(exit_code)

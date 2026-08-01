@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Set
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.office.openxml import XlsxAnalyzer
-from ..utils import safe_json_dumps
+from ..utils import print_json_result
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
@@ -35,7 +35,7 @@ class XlsxRenderer:
         preferred_format = result.get('preferred_format', format)
 
         if preferred_format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
 
         # Dispatch by result type
@@ -146,7 +146,7 @@ class XlsxRenderer:
     def _render_search_results(result: dict, format: str) -> None:
         """Render cross-sheet search results."""
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
 
         pattern = result.get('pattern', '')
@@ -265,7 +265,7 @@ class XlsxRenderer:
         """Render Power Pivot model output — dispatches to per-mode helpers."""
 
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
 
         file_path = result.get('file', result.get('source', 'Unknown'))
@@ -309,7 +309,7 @@ class XlsxRenderer:
     def _render_powerquery(result: dict, format: str) -> None:
         """Render Power Query M code output."""
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
 
         file_path = result.get('file', result.get('source', 'Unknown'))
@@ -354,7 +354,7 @@ class XlsxRenderer:
     def _render_named_ranges(result: dict, format: str) -> None:
         """Render named ranges (defined names) output."""
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
 
         file_path = result.get('file', result.get('source', 'Unknown'))
@@ -378,7 +378,7 @@ class XlsxRenderer:
     def _render_connections(result: dict, format: str) -> None:
         """Render external data connections output."""
         if format == 'json':
-            print(safe_json_dumps(result))
+            print_json_result(result)
             return
 
         file_path = result.get('file', result.get('source', 'Unknown'))
