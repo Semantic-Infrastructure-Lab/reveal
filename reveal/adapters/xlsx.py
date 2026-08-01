@@ -799,6 +799,7 @@ class XlsxAdapter(ResourceAdapter):
             result_data['powerpivot_banner'] = banner
 
         return ResultBuilder.create(
+            contract_version='1.1',
             result_type='xlsx_workbook',
             source=self.file_path or Path('unknown'),
             data=result_data
@@ -862,6 +863,7 @@ class XlsxAdapter(ResourceAdapter):
             result_data['preferred_format'] = format_param
 
         return ResultBuilder.create(
+            contract_version='1.1',
             result_type='xlsx_sheet',
             source=self.file_path or Path('unknown'),
             data=result_data
@@ -1045,6 +1047,7 @@ class XlsxAdapter(ResourceAdapter):
         }
 
         return ResultBuilder.create(
+            contract_version='1.1',
             result_type='xlsx_search',
             source=self.file_path or Path('unknown'),
             data=result_data
@@ -1538,6 +1541,7 @@ class XlsxAdapter(ResourceAdapter):
                 pq_item = self._find_datamashup_item(zf)
                 if not pq_item:
                     return ResultBuilder.create(
+                        contract_version='1.1',
                         result_type='xlsx_powerquery',
                         source=self.file_path,
                         data={
@@ -1551,6 +1555,7 @@ class XlsxAdapter(ResourceAdapter):
                 data['file'] = str(self.file_path)
                 data['mode'] = mode
                 return ResultBuilder.create(
+                    contract_version='1.1',
                     result_type='xlsx_powerquery',
                     source=self.file_path,
                     data=data,
@@ -1578,6 +1583,7 @@ class XlsxAdapter(ResourceAdapter):
             with zipfile.ZipFile(self.file_path) as zf:
                 if 'xl/workbook.xml' not in zf.namelist():
                     return ResultBuilder.create(
+                        contract_version='1.1',
                         result_type='xlsx_names',
                         source=self.file_path,
                         data={'file': str(self.file_path), 'ranges': []},
@@ -1601,6 +1607,7 @@ class XlsxAdapter(ResourceAdapter):
                         'hidden': hidden,
                     })
                 return ResultBuilder.create(
+                    contract_version='1.1',
                     result_type='xlsx_names',
                     source=self.file_path,
                     data={'file': str(self.file_path), 'ranges': ranges},
@@ -1637,6 +1644,7 @@ class XlsxAdapter(ResourceAdapter):
             with zipfile.ZipFile(self.file_path) as zf:
                 if 'xl/connections.xml' not in zf.namelist():
                     return ResultBuilder.create(
+                        contract_version='1.1',
                         result_type='xlsx_connections',
                         source=self.file_path,
                         data={'file': str(self.file_path), 'mode': mode, 'connections': []},
@@ -1658,6 +1666,7 @@ class XlsxAdapter(ResourceAdapter):
                         'refresh_on_load': el.get('refreshOnLoad', '0') == '1',
                     })
                 return ResultBuilder.create(
+                    contract_version='1.1',
                     result_type='xlsx_connections',
                     source=self.file_path,
                     data={'file': str(self.file_path), 'mode': mode, 'connections': connections},
@@ -1687,6 +1696,7 @@ class XlsxAdapter(ResourceAdapter):
                 model_path = self._detect_powerpivot(zf)
                 if model_path is None:
                     return ResultBuilder.create(
+                        contract_version='1.1',
                         result_type='xlsx_powerpivot',
                         source=self.file_path,
                         data={'file': str(self.file_path), 'has_model': False, 'mode': mode},
@@ -1713,6 +1723,7 @@ class XlsxAdapter(ResourceAdapter):
                 data['mode'] = mode
 
                 return ResultBuilder.create(
+                    contract_version='1.1',
                     result_type='xlsx_powerpivot',
                     source=self.file_path,
                     data=data,
