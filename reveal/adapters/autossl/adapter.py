@@ -22,6 +22,7 @@ from ..help_data import load_help_data
 from ...utils.query import parse_query_params
 from .parser import AUTOSSL_LOG_DIR, list_runs, parse_run
 from .renderer import AutosslRenderer
+from ...utils.results import ResultBuilder
 
 _FAILURE_STATUSES = {'incomplete', 'defective', 'dcv_failed', 'unknown'}
 
@@ -29,7 +30,10 @@ _FAILURE_STATUSES = {'incomplete', 'defective', 'dcv_failed', 'unknown'}
 def _get_error_code_taxonomy() -> dict:
     """Return the AutoSSL error code reference (autossl://error-codes)."""
     return {
+        'contract_version': '1.1',
         'type': 'autossl_error_codes',
+        'source': 'autossl://error-codes',
+        'source_type': 'runtime',
         'title': 'cPanel AutoSSL Error Code Reference',
         'openssl_defect_codes': [
             {
@@ -390,14 +394,18 @@ class AutosslAdapter(ResourceAdapter):
             next_steps.append(
                 f'reveal autossl://{runs[0]}    # Parse this specific run'
             )
-        return {
-            'contract_version': '1.0',
-            'type': 'autossl_runs',
-            'log_dir': AUTOSSL_LOG_DIR,
-            'run_count': len(runs),
-            'runs': runs,
-            'next_steps': next_steps,
-        }
+        return ResultBuilder.create(
+            result_type='autossl_runs',
+            source=AUTOSSL_LOG_DIR,
+            source_type='autossl_log_directory',
+            contract_version='1.1',
+            data={
+                'log_dir': AUTOSSL_LOG_DIR,
+                'run_count': len(runs),
+                'runs': runs,
+                'next_steps': next_steps,
+            }
+        )
 
     def _parse_run_structure(self, timestamp: str) -> Dict[str, Any]:
         if timestamp == 'latest':
@@ -443,25 +451,29 @@ class AutosslAdapter(ResourceAdapter):
         truncated = (not show_all) and (total_run_count > _ROW_LIMIT)
         if truncated:
             history = history[:_ROW_LIMIT]
-        return {
-            'contract_version': '1.0',
-            'type': 'autossl_domain_history',
-            'domain': domain,
-            'run_count': total_run_count,
-            'truncated': truncated,
-            'oldest_run_timestamp': oldest_run_timestamp,
-            'summary': {
-                'ok': ok_count,
-                'defective': defective_count,
-                'incomplete': incomplete_count,
-                'dcv_failed': dcv_failed_count,
-            },
-            'history': history,
-            'next_steps': [
-                'reveal autossl://latest    # Latest full run',
-                'reveal autossl://          # List all runs',
-            ],
-        }
+        return ResultBuilder.create(
+            result_type='autossl_domain_history',
+            source=AUTOSSL_LOG_DIR,
+            source_type='autossl_log_directory',
+            contract_version='1.1',
+            data={
+                'domain': domain,
+                'run_count': total_run_count,
+                'truncated': truncated,
+                'oldest_run_timestamp': oldest_run_timestamp,
+                'summary': {
+                    'ok': ok_count,
+                    'defective': defective_count,
+                    'incomplete': incomplete_count,
+                    'dcv_failed': dcv_failed_count,
+                },
+                'history': history,
+                'next_steps': [
+                    'reveal autossl://latest    # Latest full run',
+                    'reveal autossl://          # List all runs',
+                ],
+            }
+        )
 
     def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         return None

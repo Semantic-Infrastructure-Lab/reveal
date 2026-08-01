@@ -35,6 +35,8 @@ import os
 import re
 from typing import Any, Dict, List
 
+from ...utils.results import ResultBuilder
+
 AUTOSSL_LOG_DIR = "/var/cpanel/logs/autossl"
 
 # cPanel uses Unicode curly quotes: \u201c (") and \u201d ("), \u2019 (')
@@ -301,28 +303,35 @@ def parse_run(timestamp: str, log_dir: str = AUTOSSL_LOG_DIR) -> Dict[str, Any]:
     try:
         users, run_start, run_end = _parse_log_lines(json_path)
     except OSError as exc:
-        return {
-            'contract_version': '1.0',
-            'type': 'autossl_run',
-            'error': str(exc),
-            'run_timestamp': timestamp,
-            'log_dir': run_dir,
-        }
+        error_result = ResultBuilder.create_error(
+            result_type='autossl_run',
+            source=run_dir,
+            error=str(exc),
+            contract_version='1.1',
+            run_timestamp=timestamp,
+            log_dir=run_dir,
+        )
+        error_result['source_type'] = 'autossl_run_directory'
+        return error_result
 
     user_list, overall = _build_user_list(users)
 
-    return {
-        'contract_version': '1.0',
-        'type': 'autossl_run',
-        'run_timestamp': timestamp,
-        'run_start': run_start,
-        'run_end': run_end,
-        'provider': meta.get('provider', 'unknown'),
-        'upid': meta.get('upid', 'unknown'),
-        'global_run': meta.get('username', '*') == '*',
-        'log_dir': run_dir,
-        'user_count': len(user_list),
-        'domain_count': sum(u['domain_count'] for u in user_list),
-        'summary': overall,
-        'users': user_list,
-    }
+    return ResultBuilder.create(
+        result_type='autossl_run',
+        source=run_dir,
+        source_type='autossl_run_directory',
+        contract_version='1.1',
+        data={
+            'run_timestamp': timestamp,
+            'run_start': run_start,
+            'run_end': run_end,
+            'provider': meta.get('provider', 'unknown'),
+            'upid': meta.get('upid', 'unknown'),
+            'global_run': meta.get('username', '*') == '*',
+            'log_dir': run_dir,
+            'user_count': len(user_list),
+            'domain_count': sum(u['domain_count'] for u in user_list),
+            'summary': overall,
+            'users': user_list,
+        }
+    )
