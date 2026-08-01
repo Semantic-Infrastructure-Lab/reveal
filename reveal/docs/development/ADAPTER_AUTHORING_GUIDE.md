@@ -16,6 +16,8 @@ help_token_estimate: "~2,500"
 
 Domain-specific adapters (e.g., `trades://` for a trading system, `signals://` for signal configurations) often belong in *the project they serve*, not in reveal core. This section describes how that works and what's currently supported.
 
+**Runnable example**: [`examples/plugin-adapters/tasks-adapter/`](../../../examples/plugin-adapters/tasks-adapter/README.md) is a complete, working `tasks://` plugin adapter (reads a plain markdown+YAML task file) laid out exactly as described below — a real package to read alongside this section rather than inferring the shape from prose alone.
+
 ### Plugin Discovery for Adapters (BACK-256 — shipped)
 
 Reveal auto-discovers adapter packages from project-local and user-global directories. Domain-specific adapters can live in the project they serve rather than in reveal core.
