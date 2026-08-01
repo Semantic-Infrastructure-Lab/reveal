@@ -163,6 +163,36 @@ class TestClassifiers(unittest.TestCase):
         self.assertFalse(_is_env_access("get"))
 
 
+class TestScopeKey(unittest.TestCase):
+    """BACK-884: _scan_surface's 'scope' key (broader per-language census,
+    not gated to surface's supported set like 'coverage') is additive and
+    doesn't disturb the existing coverage block."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def test_scope_present_alongside_coverage(self):
+        _write(self.tmp, 'app.py', 'x = 1\n')
+        _write(self.tmp, 'mod.lua', 'x = 1\n')
+        report = _scan_surface(Path(self.tmp))
+        self.assertIn('coverage', report)
+        self.assertIn('scope', report)
+        langs = {e['language']: e['files'] for e in report['scope']['languages']}
+        self.assertEqual(langs, {'Python': 1, 'Lua': 1})
+        self.assertEqual(report['scope']['total_code_files'], 2)
+
+    def test_scope_includes_capability_tier(self):
+        _write(self.tmp, 'app.py', 'x = 1\n')
+        report = _scan_surface(Path(self.tmp))
+        entry = report['scope']['languages'][0]
+        self.assertEqual(entry['language'], 'Python')
+        self.assertIn('capability_tier', entry)
+
+
 class TestScanSurface(unittest.TestCase):
 
     def setUp(self):

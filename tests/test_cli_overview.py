@@ -581,6 +581,20 @@ class TestRunOverview(unittest.TestCase):
                 self.assertIn('git_log', data)
                 self.assertIn('complex_functions', data)
                 self.assertIn('architecture', data)
+                self.assertIn('scope', data)
+
+    def test_scope_key_is_a_census_of_the_real_tree(self):
+        import tempfile
+        p_stats, p_git, p_ast, p_arch = self._patch_runners()
+        with p_stats, p_git, p_ast, p_arch:
+            with tempfile.TemporaryDirectory() as tmp:
+                Path(tmp, 'a.py').write_text('x = 1\n')
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_overview(_args(path=tmp, format='json'))
+                data = json.loads(buf.getvalue())
+                self.assertEqual(data['scope']['total_code_files'], 1)
+                self.assertEqual(data['scope']['languages'][0]['language'], 'Python')
 
     def test_text_output_contains_overview_header(self):
         import tempfile

@@ -288,14 +288,9 @@ def tally_files_by_language(files: Iterable[Path]) -> Dict[str, Dict[str, Any]]:
     return counts
 
 
-def assess_language_coverage(path: Path, supported_languages: Set[str]) -> LanguageCoverage:
-    """Census *path*'s code files by language and compare against a command's
-    supported set (registry language keys, e.g. ``{'python', 'typescript', 'tsx'}``).
-
-    See :class:`LanguageCoverage` for how the result is used.
-    """
-    counts = tally_files_by_language(_walk_code_files(path))
-
+def _coverage_from_counts(
+    counts: Dict[str, Dict[str, Any]], supported_languages: Set[str]
+) -> LanguageCoverage:
     total = sum(v['count'] for v in counts.values())
     analyzed = sum(v['count'] for lang, v in counts.items() if lang in supported_languages)
 
@@ -315,6 +310,25 @@ def assess_language_coverage(path: Path, supported_languages: Set[str]) -> Langu
         dominant_count=dominant_count,
         dominant_supported=dominant_supported,
     )
+
+
+def _census_from_counts(counts: Dict[str, Dict[str, Any]]) -> 'ScopeCensus':
+    return ScopeCensus(
+        per_language={lang: v['count'] for lang, v in counts.items()},
+        language_extensions={lang: v['ext'] for lang, v in counts.items()},
+    )
+
+
+def assess_language_coverage(path: Path, supported_languages: Set[str]) -> LanguageCoverage:
+    """Census *path*'s code files by language and compare against a command's
+    supported set (registry language keys, e.g. ``{'python', 'typescript', 'tsx'}``).
+
+    See :class:`LanguageCoverage` for how the result is used. Callers that
+    also need the full BACK-884 scope census for the same tree should use
+    :func:`census_and_coverage_for_path` instead, to avoid walking twice.
+    """
+    counts = tally_files_by_language(_walk_code_files(path))
+    return _coverage_from_counts(counts, supported_languages)
 
 
 @dataclass
@@ -377,20 +391,31 @@ class ScopeCensus:
 def census_for_path(path: Path) -> ScopeCensus:
     """Build the unified BACK-884 scope census for *path* by walking it
     directly (skip-dir-correct per BACK-887) — the right choice for
-    ``overview``/``architecture``/``surface``, which have no pre-collected
-    file list of their own.
+    ``overview``/``architecture``, which have no pre-collected file list or
+    supported-language restriction of their own.
 
     This walk doesn't know about gitignore or per-file analyzer availability,
     so ``skipped_gitignore``/``skipped_no_analyzer`` are left at 0. ``check``
     has that data already (``FileCollectionResult``, BACK-889) and should
     build its census via :func:`tally_files_by_language` on its own
-    already-collected file list instead of calling this function.
+    already-collected file list instead of calling this function. ``surface``
+    also needs a :class:`LanguageCoverage` for the same tree — it should use
+    :func:`census_and_coverage_for_path` instead, to avoid walking twice.
     """
     counts = tally_files_by_language(_walk_code_files(path))
-    return ScopeCensus(
-        per_language={lang: v['count'] for lang, v in counts.items()},
-        language_extensions={lang: v['ext'] for lang, v in counts.items()},
-    )
+    return _census_from_counts(counts)
+
+
+def census_and_coverage_for_path(
+    path: Path, supported_languages: Set[str]
+) -> 'tuple[ScopeCensus, LanguageCoverage]':
+    """Walk *path* once, returning both the BACK-884 scope census and the
+    supported-language-gated :class:`LanguageCoverage` (BACK-518) — the
+    combination ``surface``/``contracts`` need, without a second walk.
+    """
+    counts = tally_files_by_language(_walk_code_files(path))
+    return _census_from_counts(counts), _coverage_from_counts(counts, supported_languages)
+
 
 def find_file_in_parents(
     start: Path,

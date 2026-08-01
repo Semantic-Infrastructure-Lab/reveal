@@ -15,6 +15,8 @@ from reveal.adapters.git import GitAdapter
 from reveal.adapters.ast import AstAdapter
 from reveal.adapters.imports import ImportsAdapter
 from reveal.registry import display_name_for_extension
+from reveal.capabilities import capability_tiers_for
+from reveal.utils.path_utils import census_for_path
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +105,7 @@ def run_overview(args: Namespace) -> None:
         'git_foreign_root': str(git_foreign_root) if git_foreign_root else None,
         'complex_functions': complex_fns,
         'architecture': architecture,
+        'scope': _run_scope(path),
     }
 
     if args.format == 'json':
@@ -120,6 +123,18 @@ def _run_stats(path: Path) -> Dict[str, Any]:
         return StatsAdapter(str(path), 'hotspots=true').get_structure()
     except Exception as exc:
         logger.warning("stats collection failed for %s: %s", path, exc)
+        return {}
+
+
+def _run_scope(path: Path) -> Dict[str, Any]:
+    """BACK-884: files discovered/analyzed/skipped by language, with
+    per-language capability tier — additive 'scope' key in JSON output."""
+    try:
+        census = census_for_path(path)
+        tiers = capability_tiers_for(census.language_extensions)
+        return census.to_scope_dict(capability_tiers=tiers)
+    except Exception as exc:
+        logger.warning("scope census failed for %s: %s", path, exc)
         return {}
 
 

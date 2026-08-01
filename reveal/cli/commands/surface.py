@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from ...registry import _is_cpp_header_content
+from ...capabilities import capability_tiers_for
 from ...utils.path_utils import (
-    assess_language_coverage,
+    census_and_coverage_for_path,
     detect_non_python_language,
     is_skippable_dir,
 )
@@ -127,7 +128,11 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
     # scripts in a 1,300-file Lua repo) used to be silently presented as the
     # whole project's surface. Assess how much of the tree is actually in a
     # language `surface` analyzes so _render_report can warn on the substitution.
-    coverage = assess_language_coverage(path, _supported_coverage_languages())
+    # BACK-884: one walk produces both `coverage` (gated to surface's
+    # supported-language set, BACK-518) and the broader per-language `scope`
+    # census below.
+    census, coverage = census_and_coverage_for_path(path, _supported_coverage_languages())
+    scope = census.to_scope_dict(capability_tiers=capability_tiers_for(census.language_extensions))
 
     scanners = (
         (py_files, scan_file_surface),
@@ -157,6 +162,7 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
         'surfaces': surfaces,
         'unsupported_language': unsupported_language,
         'coverage': coverage.to_scope_dict('surface'),
+        'scope': scope,
         '_meta': {
             'analysis_kind': 'surface-scan',
             'confidence': 'medium',

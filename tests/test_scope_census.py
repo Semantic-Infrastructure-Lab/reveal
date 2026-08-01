@@ -12,10 +12,13 @@ from pathlib import Path
 
 from reveal.utils.path_utils import (
     ScopeCensus,
+    census_and_coverage_for_path,
     census_for_path,
     tally_files_by_language,
 )
 from reveal.capabilities import capability_tiers_for
+
+SUPPORTED = {'python', 'typescript', 'tsx'}
 
 
 def _write(root: Path, rel: str, text: str = 'x\n') -> None:
@@ -68,6 +71,29 @@ class TestCensusForPath:
         assert census.skipped_gitignore == 0
         assert census.skipped_no_analyzer == 0
         assert census.skipped_dirs == 0
+
+
+class TestCensusAndCoverageForPath:
+    """BACK-884: surface/contracts need both a ScopeCensus and a
+    LanguageCoverage for the same tree — this walks once instead of twice."""
+
+    def test_agrees_with_separate_calls(self, tmp_path):
+        for i in range(20):
+            _write(tmp_path, f'src/mod{i}.lua')
+        _write(tmp_path, 'scripts/build.py')
+
+        census, coverage = census_and_coverage_for_path(tmp_path, SUPPORTED)
+        standalone_census = census_for_path(tmp_path)
+        from reveal.utils.path_utils import assess_language_coverage
+        standalone_coverage = assess_language_coverage(tmp_path, SUPPORTED)
+
+        assert census.per_language == standalone_census.per_language
+        assert coverage.to_scope_dict('surface') == standalone_coverage.to_scope_dict('surface')
+
+    def test_empty_tree(self, tmp_path):
+        census, coverage = census_and_coverage_for_path(tmp_path, SUPPORTED)
+        assert census.per_language == {}
+        assert coverage.total_code_files == 0
 
 
 class TestTallyFilesByLanguage:

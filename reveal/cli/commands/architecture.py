@@ -11,6 +11,9 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
+from reveal.capabilities import capability_tiers_for
+from reveal.utils.path_utils import census_for_path
+
 logger = logging.getLogger(__name__)
 
 _COMPLEXITY_ENTRY_THRESHOLD = 20  # entry point complexity that warrants a warning
@@ -101,6 +104,7 @@ def run_architecture(args: Namespace) -> None:
         'risks': risks,
         'next_commands': next_commands,
         'unsupported_extensions': imports_data.get('unsupported_extensions', {}),
+        'scope': _run_scope(path),
     }
 
     if args.format == 'json':
@@ -139,6 +143,18 @@ def _run_complex_functions(path: Path, limit: int) -> List[Dict[str, Any]]:
     except Exception as exc:
         logger.warning("AST analysis failed for %s: %s", path, exc)
         return []
+
+
+def _run_scope(path: Path) -> Dict[str, Any]:
+    """BACK-884: files discovered/analyzed/skipped by language, with
+    per-language capability tier — additive 'scope' key in JSON output."""
+    try:
+        census = census_for_path(path)
+        tiers = capability_tiers_for(census.language_extensions)
+        return census.to_scope_dict(capability_tiers=tiers)
+    except Exception as exc:
+        logger.warning("scope census failed for %s: %s", path, exc)
+        return {}
 
 
 def _run_imports_analysis(path: Path) -> Dict[str, Any]:

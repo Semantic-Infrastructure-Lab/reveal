@@ -462,6 +462,18 @@ class TestRunArchitecture(unittest.TestCase):
         self.assertIn('facts', data)
         self.assertIn('risks', data)
         self.assertIn('next_commands', data)
+        self.assertIn('scope', data)
+
+    def test_scope_key_is_a_census_of_the_real_tree(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, 'a.py').write_text('x = 1\n')
+            args = _args(path=tmp, format='json')
+            with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=([], _IMPORTS_DATA)):
+                out = _capture(run_architecture, args)
+            data = json.loads(out)
+        self.assertEqual(data['scope']['total_code_files'], 1)
+        self.assertEqual(data['scope']['languages'][0]['language'], 'Python')
 
     def test_json_facts_structure(self):
         args = _args(path='.', format='json')
