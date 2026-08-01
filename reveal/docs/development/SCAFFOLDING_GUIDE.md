@@ -411,3 +411,4 @@ All scaffolded components follow the same high-quality pattern.
 
 - [CLI_INTEGRATION_GUIDE.md](CLI_INTEGRATION_GUIDE.md) - Wiring commands into the CLI
 - [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Comprehensive adapter creation guide
+- [RULE_AUTHORING_GUIDE.md](RULE_AUTHORING_GUIDE.md) - User-global and project-local custom rules: directory layout, naming convention, severity/category typing
