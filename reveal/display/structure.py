@@ -669,6 +669,18 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
     structure = analyzer.get_structure(**kwargs)
     path = analyzer.path
 
+    # --frontmatter is a silent no-op in text mode (data is extracted but not
+    # rendered) — hint instead of leaving the user to discover this by reading
+    # docs. See BACK-894.
+    if (args and getattr(args, 'frontmatter', False) and output_format == 'text'
+            and not getattr(args, 'outline', False) and not getattr(args, 'typed', False)):
+        print(
+            "Note: --frontmatter needs --format json to show parsed YAML data "
+            "(text mode shows structure only). Querying across files? Use "
+            "markdown://<dir>/?fields=... or ?aggregate=... instead.",
+            file=sys.stderr,
+        )
+
     # Emit --domain not-found message (BACK-130)
     if isinstance(structure, dict) and structure.get('_domain_not_found'):
         domain = structure.get('_domain_filter', '?')

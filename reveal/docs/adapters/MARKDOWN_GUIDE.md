@@ -443,6 +443,21 @@ reveal README.md --frontmatter
 #   ...
 ```
 
+**Querying frontmatter across many files?** Stop here and use `markdown://` instead of
+`--frontmatter --format json` in a loop — it's the native, purpose-built adapter for exactly
+this, not a fallback:
+
+```bash
+reveal 'markdown://docs/?aggregate=tags'          # frequency table of tag values across all docs
+reveal 'markdown://docs/?tags=tutorial'           # find docs by tag/category/any field
+reveal 'markdown://docs/?fields=author,date'      # extra columns per matched file
+```
+
+See the "CLI Flags" section below (`?body-contains=`, `?fields=`) or
+`reveal help://schemas/markdown` for the full query syntax. The "Advanced Examples" below cover
+the rare case where you need per-file JSON (e.g. `.raw` frontmatter text) that `markdown://`
+doesn't expose.
+
 ### JSON Output (Required for Frontmatter Data)
 
 **Note**: JSON format is required to access parsed frontmatter data programmatically.
@@ -475,60 +490,50 @@ reveal README.md --frontmatter --format json
 
 #### Aggregate Metadata Across Documents
 
-Extract and analyze tags from all documentation:
+Use `markdown://` — a single query, no shell loop, no `jq`:
 
 ```bash
 # Count tag frequency across all docs
-find docs/ -name "*.md" | while read f; do
-  reveal "$f" --frontmatter --format=json 2>/dev/null | \
-    jq -r '.structure.frontmatter.data.tags[]?' 2>/dev/null
-done | sort | uniq -c | sort -rn
+reveal 'markdown://docs/?aggregate=tags'
 
 # Find all unique authors
-find docs/ -name "*.md" | while read f; do
-  reveal "$f" --frontmatter --format=json 2>/dev/null | \
-    jq -r '.structure.frontmatter.data.author?' 2>/dev/null
-done | sort -u
+reveal 'markdown://docs/?aggregate=author'
 
-# Validate required fields are present
-reveal README.md --frontmatter --format=json | \
-  jq '.structure.frontmatter.data | keys'
+# Validate required fields are present (per file, via missing-field filter)
+reveal 'markdown://docs/?!title'    # docs missing a title field
 ```
 
 #### Find Documents by Metadata
 
-Search for documents matching specific criteria:
-
 ```bash
 # Find all tutorial documents
-find docs/ -name "*.md" | while read f; do
-  if reveal "$f" --frontmatter --format=json | \
-     jq -e '.structure.frontmatter.data.tags[]? | select(. == "tutorial")' >/dev/null 2>&1; then
-    echo "$f"
-  fi
-done
+reveal 'markdown://docs/?tags=tutorial'
 
 # Find documents by category
-find docs/ -name "*.md" | while read f; do
-  if reveal "$f" --frontmatter --format=json | \
-     jq -e '.structure.frontmatter.data.category == "api"' >/dev/null 2>&1; then
-    echo "$f"
-  fi
-done
+reveal 'markdown://docs/?category=api'
 ```
 
 #### Real-World Integration Example
 
-Use reveal for metadata extraction in documentation pipelines:
-
 ```bash
-# Extract tags/topics for indexing
-reveal docs/**/*.md --frontmatter --format=json | \
-  jq -r '.structure.frontmatter.data.tags[]?' | \
-  sort | uniq -c | sort -rn
+# Extract tags/topics for indexing — topic index in one call
+reveal 'markdown://docs/?aggregate=tags'
 ```
 
 This pattern works well for building topic indexes, documentation search, and content categorization.
+
+#### Per-File JSON Fallback (rare)
+
+`markdown://` covers frontmatter *field* queries. If you need something it doesn't expose —
+the raw frontmatter text (`.raw`), line offsets, or programmatic access to a single file's
+parsed YAML — fall back to per-file JSON:
+
+```bash
+find docs/ -name "*.md" | while read f; do
+  reveal "$f" --frontmatter --format=json 2>/dev/null | \
+    jq -r '.structure.frontmatter.data.tags[]?' 2>/dev/null
+done | sort | uniq -c | sort -rn
+```
 
 ### Combined with Other Features
 
