@@ -286,13 +286,13 @@ class MarkdownQueryAdapter(ResourceAdapter):
         """
         if self.link_graph:
             result = operations.build_link_graph(self.base_path)
-            return {
-                'contract_version': '1.0',
-                'type': 'markdown_link_graph',
-                'source': str(self.base_path),
-                'source_type': 'directory',
-                **result,
-            }
+            return ResultBuilder.create(
+                result_type='markdown_link_graph',
+                source=str(self.base_path),
+                source_type='directory',
+                contract_version='1.1',
+                data=result,
+            )
 
         if self.lint:
             result = operations.lint_frontmatter(self.base_path, self.lint_fields)
@@ -300,6 +300,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 result_type='markdown_frontmatter_lint',
                 source=self.base_path,
                 source_type='directory',
+                contract_version='1.1',
                 data=result,
             )
 
@@ -308,6 +309,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             return ResultBuilder.create(
                 result_type='markdown_backlinks',
                 source=self.base_path,
+                contract_version='1.1',
                 data=result,
             )
 
@@ -319,12 +321,12 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 self.query_filters,
                 self.body_contains or None,
             )
-            return {
-                'contract_version': '1.0',
-                'type': 'markdown_aggregate',
-                'source': str(self.base_path),
-                **result,
-            }
+            return ResultBuilder.create(
+                result_type='markdown_aggregate',
+                source=str(self.base_path),
+                contract_version='1.1',
+                data=result,
+            )
 
         result = operations.get_structure(
             self.base_path,
@@ -336,13 +338,8 @@ class MarkdownQueryAdapter(ResourceAdapter):
             self.extra_fields,
             self.explain,
         )
-        return {
-            'contract_version': '1.0',
-            'type': 'markdown_query',
-            'source': str(self.base_path),
-            'source_type': 'directory',
-            **result,
-        }
+        result.update(contract_version='1.1', source_type='directory')
+        return result
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get frontmatter from a specific file.

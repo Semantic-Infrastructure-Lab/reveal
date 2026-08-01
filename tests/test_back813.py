@@ -116,7 +116,7 @@ class TestBacklinksRouting:
         _write(tmp_path / 'a.md', 'x')
         adapter = MarkdownQueryAdapter(str(tmp_path), query='backlinks=a.md')
         result = adapter.get_structure()
-        assert result['contract_version'] == '1.0'
+        assert result['contract_version'] == '1.1'
 
     def test_backlinks_and_other_params_coexist(self, tmp_path):
         _write(tmp_path / 'a.md', 'x')

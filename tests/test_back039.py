@@ -215,7 +215,7 @@ class TestLinkGraphRouting:
     def test_result_has_contract_version(self, tmp_path):
         adapter = MarkdownQueryAdapter(str(tmp_path), query='link-graph')
         result = adapter.get_structure()
-        assert result['contract_version'] == '1.0'
+        assert result['contract_version'] == '1.1'
 
     def test_result_source_is_base_path(self, tmp_path):
         adapter = MarkdownQueryAdapter(str(tmp_path), query='link-graph')

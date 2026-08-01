@@ -5,6 +5,7 @@ import sqlite3
 from typing import Dict, Any, List, Optional
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
+from ...utils.results import ResultBuilder
 from .renderer import SqliteRenderer
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -26,7 +27,7 @@ _SCHEMA_OUTPUT_TYPES = [
             }
         },
         'example': {
-            'contract_version': '1.0',
+            'contract_version': '1.1',
             'type': 'sqlite_database',
             'source': '/path/to/app.db',
             'source_type': 'database',
@@ -434,34 +435,36 @@ class SQLiteAdapter(ResourceAdapter):
         # Count foreign keys
         fk_count = self._count_foreign_keys(tables)
 
-        return {
-            'contract_version': '1.0',
-            'type': 'sqlite_database',
-            'source': self.db_path,
-            'source_type': 'database',
-            'path': self.db_path,
-            'size': f"{db_size_mb:.2f} MB" if db_size_mb >= 1 else f"{db_size / 1024:.2f} KB",
-            'sqlite_version': version_info['version'],
-            'configuration': {
-                'page_size': f"{pragma_info['page_size']} bytes",
-                'page_count': pragma_info['page_count'],
-                'total_pages': f"{pragma_info['page_count']} pages × {pragma_info['page_size']} bytes = {pragma_info['page_count'] * pragma_info['page_size'] / 1024 / 1024:.2f} MB",
-                'journal_mode': pragma_info['journal_mode'],
-                'encoding': pragma_info['encoding'],
-                'foreign_keys_enabled': bool(pragma_info['foreign_keys'])
-            },
-            'statistics': {
-                'tables': sum(1 for t in table_stats if t['type'] == 'table'),
-                'views': sum(1 for t in table_stats if t['type'] == 'view'),
-                'total_rows': sum(t.get('rows', 0) for t in table_stats),
-                'foreign_keys': fk_count
-            },
-            'tables': table_stats,
-            'next_steps': [
-                f"reveal sqlite://{self.db_path}/<table>     # Inspect specific table",
-                f"reveal sqlite://{self.db_path} --check     # Run integrity check",
-            ]
-        }
+        return ResultBuilder.create(
+            result_type='sqlite_database',
+            source=self.db_path,
+            source_type='database',
+            contract_version='1.1',
+            data={
+                'path': self.db_path,
+                'size': f"{db_size_mb:.2f} MB" if db_size_mb >= 1 else f"{db_size / 1024:.2f} KB",
+                'sqlite_version': version_info['version'],
+                'configuration': {
+                    'page_size': f"{pragma_info['page_size']} bytes",
+                    'page_count': pragma_info['page_count'],
+                    'total_pages': f"{pragma_info['page_count']} pages × {pragma_info['page_size']} bytes = {pragma_info['page_count'] * pragma_info['page_size'] / 1024 / 1024:.2f} MB",
+                    'journal_mode': pragma_info['journal_mode'],
+                    'encoding': pragma_info['encoding'],
+                    'foreign_keys_enabled': bool(pragma_info['foreign_keys'])
+                },
+                'statistics': {
+                    'tables': sum(1 for t in table_stats if t['type'] == 'table'),
+                    'views': sum(1 for t in table_stats if t['type'] == 'view'),
+                    'total_rows': sum(t.get('rows', 0) for t in table_stats),
+                    'foreign_keys': fk_count
+                },
+                'tables': table_stats,
+                'next_steps': [
+                    f"reveal sqlite://{self.db_path}/<table>     # Inspect specific table",
+                    f"reveal sqlite://{self.db_path} --check     # Run integrity check",
+                ]
+            }
+        )
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get details about a specific table.
@@ -537,19 +540,21 @@ class SQLiteAdapter(ResourceAdapter):
             f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{element_name}'"
         )
 
-        return {
-            'contract_version': '1.0',
-            'type': 'sqlite_table',
-            'source': self.db_path,
-            'source_type': 'table',
-            'database': self.db_path,
-            'table': element_name,
-            'row_count': row_count,
-            'columns': columns,
-            'indexes': indexes,
-            'foreign_keys': foreign_keys,
-            'create_statement': create_sql['sql'] if create_sql else None,
-            'next_steps': [
-                f"reveal sqlite://{self.db_path}              # Back to database overview",
-            ]
-        }
+        return ResultBuilder.create(
+            result_type='sqlite_table',
+            source=self.db_path,
+            source_type='table',
+            contract_version='1.1',
+            data={
+                'database': self.db_path,
+                'table': element_name,
+                'row_count': row_count,
+                'columns': columns,
+                'indexes': indexes,
+                'foreign_keys': foreign_keys,
+                'create_statement': create_sql['sql'] if create_sql else None,
+                'next_steps': [
+                    f"reveal sqlite://{self.db_path}              # Back to database overview",
+                ]
+            }
+        )

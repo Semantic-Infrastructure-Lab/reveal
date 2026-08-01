@@ -173,7 +173,7 @@ class TestLintRouting:
         _write(tmp_path / 'a.md', 'No frontmatter.\n')
         adapter = MarkdownQueryAdapter(str(tmp_path), 'lint')
         result = adapter.get_structure()
-        assert result['contract_version'] == '1.0'
+        assert result['contract_version'] == '1.1'
 
     def test_link_graph_takes_precedence_over_lint(self, tmp_path):
         _write(tmp_path / 'a.md', 'No frontmatter.\n')

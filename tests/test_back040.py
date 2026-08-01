@@ -97,7 +97,7 @@ class TestFileSessionsContract:
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
             adapter = ClaudeAdapter('files/adapter.py')
             result = adapter.get_structure()
-        assert result['contract_version'] == '1.0'
+        assert result['contract_version'] == '1.1'
         assert result['type'] == 'claude_file_sessions'
         assert 'file_path' in result
         assert 'sessions_scanned' in result

@@ -250,7 +250,7 @@ class TestCrossSessionSearchRouting:
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
             adapter = ClaudeAdapter('', query='search=anything')
             result = adapter.get_structure()
-        assert result.get('contract_version') == '1.0'
+        assert result.get('contract_version') == '1.1'
         assert 'sessions_scanned' in result
         assert 'match_count' in result
         assert 'matches' in result

@@ -5,6 +5,7 @@ import re
 import sys
 from typing import Dict, Any, Optional
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer
+from ..utils.results import ResultBuilder
 
 _SCHEMA_OUTPUT_TYPES = [
     {
@@ -31,7 +32,7 @@ _SCHEMA_OUTPUT_TYPES = [
             }
         },
         'example': {
-            'contract_version': '1.0',
+            'contract_version': '1.1',
             'type': 'environment',
             'source': 'system',
             'source_type': 'runtime',
@@ -319,14 +320,16 @@ class EnvAdapter(ResourceAdapter):
         # Remove empty categories
         categorized = {k: v for k, v in categorized.items() if v}
 
-        return {
-            'contract_version': '1.0',
-            'type': 'environment',
-            'source': 'system',
-            'source_type': 'runtime',
-            'total_count': len(self.variables),
-            'categories': categorized
-        }
+        return ResultBuilder.create(
+            result_type='environment',
+            source='system',
+            source_type='runtime',
+            contract_version='1.1',
+            data={
+                'total_count': len(self.variables),
+                'categories': categorized,
+            }
+        )
 
     def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Get details about a specific environment variable.
