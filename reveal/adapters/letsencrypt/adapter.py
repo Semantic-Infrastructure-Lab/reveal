@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from ...utils.query import parse_query_params
+from ...utils.results import ResultBuilder
 from .renderer import LetsEncryptRenderer
 
 _LIVE_DIR = '/etc/letsencrypt/live'
@@ -222,17 +223,19 @@ class LetsEncryptAdapter(ResourceAdapter):
         certs.sort(key=lambda c: c.get('days_until_expiry', 99999))
         live_dir_exists = Path(self.live_dir).exists()
 
-        result: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'letsencrypt_inventory',
-            'source': self.live_dir,
-            'source_type': 'letsencrypt_directory',
-            'live_dir': self.live_dir,
-            'live_dir_exists': live_dir_exists,
-            'cert_count': len(certs),
-            'certs': certs,
-            'renewal_timer': _check_renewal_timer(),
-        }
+        result: Dict[str, Any] = ResultBuilder.create(
+            result_type='letsencrypt_inventory',
+            source=self.live_dir,
+            source_type='letsencrypt_directory',
+            contract_version='1.1',
+            data={
+                'live_dir': self.live_dir,
+                'live_dir_exists': live_dir_exists,
+                'cert_count': len(certs),
+                'certs': certs,
+                'renewal_timer': _check_renewal_timer(),
+            }
+        )
 
         if check_orphans:
             nginx_paths = _collect_nginx_cert_paths(self.nginx_dirs)

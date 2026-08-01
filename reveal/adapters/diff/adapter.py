@@ -7,6 +7,7 @@ from .resolution import resolve_uri, extract_metadata, find_element
 from .help import get_schema as _get_schema, get_help as _get_help
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import DiffRenderer
+from ...utils.results import ResultBuilder
 
 
 @register_adapter('diff')
@@ -138,16 +139,18 @@ class DiffAdapter(ResourceAdapter):
         # Compute semantic diff
         diff_result = compute_structure_diff(left_struct, right_struct)
 
-        return {
-            'contract_version': '1.0',
-            'type': 'diff_comparison',
-            'source': f"{self.left_uri} vs {self.right_uri}",
-            'source_type': 'runtime',
-            'left': extract_metadata(left_struct, self.left_uri),
-            'right': extract_metadata(right_struct, self.right_uri),
-            'summary': diff_result['summary'],
-            'diff': diff_result['details']
-        }
+        return ResultBuilder.create(
+            result_type='diff_comparison',
+            source=f"{self.left_uri} vs {self.right_uri}",
+            source_type='runtime',
+            contract_version='1.1',
+            data={
+                'left': extract_metadata(left_struct, self.left_uri),
+                'right': extract_metadata(right_struct, self.right_uri),
+                'summary': diff_result['summary'],
+                'diff': diff_result['details'],
+            }
+        )
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get diff for a specific element (function, class, etc.).

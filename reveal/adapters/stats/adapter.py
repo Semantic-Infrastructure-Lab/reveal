@@ -408,7 +408,13 @@ class StatsAdapter(ResourceAdapter):
                     lambda p: get_file_display_path(p, self.path)
                 )
             )
-            return aggregate_stats([file_stats] if file_stats else [], self.path)
+            result = aggregate_stats([file_stats] if file_stats else [], self.path)
+            result.update(
+                contract_version='1.1',
+                source=str(self.path),
+                source_type='file',
+            )
+            return result
 
         # Collect filtered directory statistics
         dir_file_stats = self._collect_filtered_stats(
@@ -431,13 +437,12 @@ class StatsAdapter(ResourceAdapter):
                 churn_counts = self._compute_churn_counts(controlled_stats)
             result['hotspots'] = identify_hotspots(controlled_stats, churn_counts=churn_counts)
 
-        return {
-            'contract_version': '1.0',
-            'type': 'stats_structure',
-            'source': str(self.path),
-            'source_type': 'directory' if self.path.is_dir() else 'file',
-            **result,
-        }
+        result.update(
+            contract_version='1.1',
+            source=str(self.path),
+            source_type='directory' if self.path.is_dir() else 'file',
+        )
+        return result
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get statistics for a specific file.

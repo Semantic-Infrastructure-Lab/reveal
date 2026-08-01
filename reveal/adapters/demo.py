@@ -4,6 +4,7 @@ import sys
 from typing import Dict, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import safe_json_dumps
+from ..utils.results import ResultBuilder
 
 
 class DemoRenderer:
@@ -173,20 +174,22 @@ class DemoAdapter(ResourceAdapter):
             Dict containing structure information
         """
         # TODO: Implement structure retrieval
-        return {
-            'contract_version': '1.0',
-            'type': 'demo_structure',
-            'source': 'demo://',
-            'source_type': 'runtime',
-            'items': [
-                # TODO: Populate with actual items
-                {'name': 'example_item', 'type': 'item'},
-            ],
-            'metadata': {
-                'total_count': 1,
-                # TODO: Add metadata
+        return ResultBuilder.create(
+            result_type='demo_structure',
+            source='demo://',
+            source_type='runtime',
+            contract_version='1.1',
+            data={
+                'items': [
+                    # TODO: Populate with actual items
+                    {'name': 'example_item', 'type': 'item'},
+                ],
+                'metadata': {
+                    'total_count': 1,
+                    # TODO: Add metadata
+                }
             }
-        }
+        )
 
     def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Get details about a specific resource.

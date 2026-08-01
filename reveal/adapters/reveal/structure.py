@@ -26,10 +26,6 @@ def get_structure(reveal_root: Path, component: Optional[str] = None, **kwargs: 
         if component == 'analyzers':
             analyzers = get_analyzers(reveal_root)
             return {
-                'contract_version': '1.0',
-                'type': 'reveal_structure',
-                'source': str(reveal_root),
-                'source_type': 'directory',
                 'analyzers': analyzers,
                 'metadata': {
                     'root': str(reveal_root),
@@ -39,10 +35,6 @@ def get_structure(reveal_root: Path, component: Optional[str] = None, **kwargs: 
         elif component == 'adapters':
             adapters = get_adapters()
             return {
-                'contract_version': '1.0',
-                'type': 'reveal_structure',
-                'source': str(reveal_root),
-                'source_type': 'directory',
                 'adapters': adapters,
                 'metadata': {
                     'root': str(reveal_root),
@@ -52,10 +44,6 @@ def get_structure(reveal_root: Path, component: Optional[str] = None, **kwargs: 
         elif component == 'rules':
             rules = get_rules(reveal_root)
             return {
-                'contract_version': '1.0',
-                'type': 'reveal_structure',
-                'source': str(reveal_root),
-                'source_type': 'directory',
                 'rules': rules,
                 'metadata': {
                     'root': str(reveal_root),
@@ -64,25 +52,14 @@ def get_structure(reveal_root: Path, component: Optional[str] = None, **kwargs: 
             }
         elif component == 'config':
             from .config import get_config
-            config_data = get_config(reveal_root)
-            return {
-                'contract_version': '1.0',
-                'type': 'reveal_structure',
-                'source': str(reveal_root),
-                'source_type': 'directory',
-                **config_data
-            }
+            return get_config(reveal_root)
 
     # Default: show everything
     analyzers = get_analyzers(reveal_root)
     adapters = get_adapters()
     rules = get_rules(reveal_root)
 
-    structure = {
-        'contract_version': '1.0',
-        'type': 'reveal_structure',
-        'source': str(reveal_root),
-        'source_type': 'directory',
+    return {
         'analyzers': analyzers,
         'adapters': adapters,
         'rules': rules,
@@ -94,8 +71,6 @@ def get_structure(reveal_root: Path, component: Optional[str] = None, **kwargs: 
             'rules_count': len(rules),
         }
     }
-
-    return structure
 
 
 def get_analyzers(reveal_root: Path) -> List[Dict[str, Any]]:

@@ -12,6 +12,7 @@ from .modules import get_module_analysis, get_syspath_analysis
 from .doctor import run_doctor
 from .help import get_help
 from .renderer import PythonRenderer
+from ...utils.results import ResultBuilder
 
 _SCHEMA_ELEMENTS = {
     'version': 'Python version and build details',
@@ -45,7 +46,7 @@ _SCHEMA_OUTPUT_TYPES = [
             'architecture': {'type': 'string'}
         }},
         'example': {
-            'contract_version': '1.0', 'type': 'python_runtime',
+            'contract_version': '1.1', 'type': 'python_runtime',
             'source': '/usr/bin/python3', 'source_type': 'runtime',
             'version': '3.11.5', 'implementation': 'CPython',
             'executable': '/usr/bin/python3',
@@ -141,20 +142,22 @@ class PythonAdapter(ResourceAdapter):
             Dict containing Python environment overview
         """
         venv_info = self._detect_venv()
-        return {
-            "contract_version": "1.0",
-            "type": "python_runtime",
-            "source": sys.executable,
-            "source_type": "runtime",
-            "version": platform.python_version(),
-            "implementation": platform.python_implementation(),
-            "executable": sys.executable,
-            "virtual_env": venv_info,
-            "packages_count": len(list(get_packages())),
-            "modules_loaded": len(sys.modules),
-            "platform": sys.platform,
-            "architecture": platform.machine(),
-        }
+        return ResultBuilder.create(
+            result_type='python_runtime',
+            source=sys.executable,
+            source_type='runtime',
+            contract_version='1.1',
+            data={
+                'version': platform.python_version(),
+                'implementation': platform.python_implementation(),
+                'executable': sys.executable,
+                'virtual_env': venv_info,
+                'packages_count': len(list(get_packages())),
+                'modules_loaded': len(sys.modules),
+                'platform': sys.platform,
+                'architecture': platform.machine(),
+            }
+        )
 
     def _handle_packages_route(self, parts: List[str]) -> Dict[str, Any]:
         """Handle packages/* route."""

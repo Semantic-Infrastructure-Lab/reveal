@@ -37,7 +37,7 @@ _SCHEMA_OUTPUT_TYPES = [
             }
         },
         'example': {
-            'contract_version': '1.0',
+            'contract_version': '1.1',
             'type': 'diff_comparison',
             'source': 'diff://app.py:backup/app.py',
             'source_type': 'runtime',

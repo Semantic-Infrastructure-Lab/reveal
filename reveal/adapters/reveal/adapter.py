@@ -5,6 +5,7 @@ from typing import Dict, List, Any, Optional
 
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from ...rules.validation.utils import find_reveal_root
+from ...utils.results import ResultBuilder
 
 from .renderer import RevealRenderer
 from .help import get_schema, get_help
@@ -77,13 +78,13 @@ class RevealAdapter(ResourceAdapter):
             Filtered by self.component if specified.
         """
         result = structure.get_structure(self.reveal_root, self.component, **kwargs)
-        return {
-            'contract_version': '1.0',
-            'type': 'reveal_structure',
-            'source': f'reveal://{self.component or "."}',
-            'source_type': 'runtime',
-            **result,
-        }
+        return ResultBuilder.create(
+            result_type='reveal_structure',
+            source=f'reveal://{self.component or "."}',
+            source_type='runtime',
+            contract_version='1.1',
+            data=result,
+        )
 
     def check(self, select: Optional[List[str]] = None, ignore: Optional[List[str]] = None) -> Dict[str, Any]:
         """Run validation rules on reveal itself.

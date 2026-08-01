@@ -305,7 +305,7 @@ _SCHEMA_OUTPUT_TYPES = [
             }
         },
         'example': {
-            'contract_version': '1.0',
+            'contract_version': '1.1',
             'type': 'ast_query',
             'source': './src',
             'source_type': 'directory',
