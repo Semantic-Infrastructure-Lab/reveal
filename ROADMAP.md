@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-07-26 (rainy-iceberg-0726 — v0.111.0 release: contracts/cli/http recall-oracle program complete across all 9 remaining languages, mysql:// CLI connection-string bug fixed, diff:// phantom cross-file matches fixed)
+> **Last updated**: 2026-07-27 (icy-mistral-0727 — v0.112.0 release: markdown:// ranked search/lint/link-graph caching)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,13 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.112.0 — markdown:// ranked search + lint queue + persistent link-graph cache
+- ✅ `markdown://` `?body-contains=` search now ranks best-first by `relevance_score` (term frequency + heading-proximity boost), and `?explain` adds a per-term `term_counts`/`heading_hits` breakdown (BACK-869).
+- ✅ `markdown://` `--related` falls back to the computed link graph when a doc has no `related`/`see_also`/`references` frontmatter, closing one of the three Beth-parity gaps (BACK-813/870).
+- ✅ `markdown://` `?lint`/`?lint-fields=` surfaces malformed YAML and missing-frontmatter files as a single maintenance queue, mirroring Beth's frontmatter-lint view (BACK-871).
+- ✅ Persistent disk cache for `build_link_graph` (BACK-866) — fingerprints and caches the link graph, invalidating on edit/add/delete; `?link-graph`, `?backlinks=`, and `--related`'s fallback all benefit from warm-cache stat-only passes.
+- ✅ Windows path-separator bug in the related-links fallback fixed (BACK-876); two pre-existing bugs surfaced and fixed once CI actually ran against BACK-865/866/869-871 after a 22h local-only gap (BACK-877).
 
 ### v0.111.0 — contracts/cli/http recall-oracle program complete across all 9 remaining languages + mysql:// CLI bug + diff:// phantom-match bug
 - ✅ `contracts`/`cli`/`http` recall-oracle program (BACK-791) complete — Go, Rust, C++, C#, PHP, Swift, Kotlin, Ruby, Java each measured against an independently-derived ground-truth oracle on a large real corpus. 15 real scanner defects found and fixed; all 9 languages now 100%/100% recall+precision on every measured category. Biggest single find: Java heritage clauses with type arguments or package qualification (`extends Bar<Baz>`, `extends pkg.Bar`) were silently dropped entirely — 20.5% of real implementer relationships missing on a real corpus before the fix (BACK-812).
