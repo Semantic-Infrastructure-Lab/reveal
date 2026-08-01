@@ -254,6 +254,39 @@ class TestFileCollectionResultCounts:
         assert result.skipped_dirs == 0
 
 
+class TestFileCollectionResultToScopeCensus:
+    """BACK-884: FileCollectionResult.to_scope_census() builds the unified
+    scope block from the survivors + skip-reason counts already tracked
+    here, so `check --format json` can disclose it without a second walk."""
+
+    def test_per_language_breakdown_of_survivors(self, tmp_path):
+        (tmp_path / 'a.py').write_text('# a')
+        (tmp_path / 'b.py').write_text('# b')
+        (tmp_path / 'c.rs').write_text('// c')
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+            result = collect_files_to_check(tmp_path, [])
+        census = result.to_scope_census()
+        assert census.per_language == {'python': 2, 'rust': 1}
+        assert census.total_code_files == 3
+
+    def test_skip_counts_carried_through(self, tmp_path):
+        (tmp_path / 'keep.py').write_text('# keep')
+        (tmp_path / 'ignore.py').write_text('# ignore')
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+            result = collect_files_to_check(tmp_path, ['ignore.py'])
+        census = result.to_scope_census()
+        assert census.skipped_gitignore == 1
+        assert census.skipped_no_analyzer == 0
+
+    def test_empty_collection_empty_census(self, tmp_path):
+        result = collect_files_to_check(tmp_path, [])
+        census = result.to_scope_census()
+        assert census.per_language == {}
+        assert census.total_code_files == 0
+
+
 class TestAmbiguousSkipDirectories:
     """BACK-552: env/venv/build/dist are ambiguous names, not unconditional
     skips — a real venv/build dir is excluded, but a same-named real source

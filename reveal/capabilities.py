@@ -833,3 +833,21 @@ def get_capability_for_extension(ext: str) -> Optional[LanguageCapability]:
 def get_all_capabilities() -> Dict[str, LanguageCapability]:
     """Return the full capability registry, keyed by analyzer class name."""
     return dict(CAPABILITIES)
+
+
+def capability_tiers_for(language_extensions: Dict[str, str]) -> Dict[str, str]:
+    """Map ``{language_key: representative_extension}`` (as produced by
+    ``path_utils.ScopeCensus.language_extensions``) to
+    ``{language_key: conformance_level}``.
+
+    Command-layer join point for BACK-884's scope census: keeps
+    ``path_utils.py``/``results.py`` ignorant of this module (design doc
+    BACK884_COVERAGE_CENSUS_UNIFICATION finding #6) while still letting
+    ``overview``/``architecture``/``surface``/``check`` attach a
+    per-language capability tier to their ``scope`` block.
+    """
+    tiers = {}
+    for lang, ext in language_extensions.items():
+        cap = get_capability_for_extension(ext)
+        tiers[lang] = cap.conformance_level if cap else 'unknown'
+    return tiers

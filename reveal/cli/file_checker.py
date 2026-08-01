@@ -16,7 +16,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List, Dict, TYPE_CHECKING
 
-from ..utils.path_utils import is_skippable_dir, to_posix
+from ..utils.path_utils import (
+    ScopeCensus,
+    is_skippable_dir,
+    tally_files_by_language,
+    to_posix,
+)
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -285,6 +290,23 @@ class FileCollectionResult:
     skipped_gitignore: int = 0
     skipped_no_analyzer: int = 0
     skipped_dirs: int = 0
+
+    def to_scope_census(self) -> ScopeCensus:
+        """Build the BACK-884 scope census for this collection: per-language
+        breakdown of `.files` (the survivors) plus the skip-reason counts
+        already tracked here. `check` is the one BACK-884 target command
+        that builds its census from an already-collected file list rather
+        than calling `census_for_path` — it has skip-reason data that a
+        fresh walk wouldn't.
+        """
+        counts = tally_files_by_language(self.files)
+        return ScopeCensus(
+            per_language={lang: v['count'] for lang, v in counts.items()},
+            language_extensions={lang: v['ext'] for lang, v in counts.items()},
+            skipped_gitignore=self.skipped_gitignore,
+            skipped_no_analyzer=self.skipped_no_analyzer,
+            skipped_dirs=self.skipped_dirs,
+        )
 
 
 def collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> FileCollectionResult:
@@ -643,7 +665,11 @@ def _check_files_text(
 
 
 def _print_json_output(
-    file_results: List[dict], files_checked: int, files_with_issues: int, total_issues: int
+    file_results: List[dict],
+    files_checked: int,
+    files_with_issues: int,
+    total_issues: int,
+    scope: Optional[ScopeCensus] = None,
 ) -> None:
     """Print JSON output with results and summary.
 
@@ -652,6 +678,9 @@ def _print_json_output(
         files_checked: Total files checked
         files_with_issues: Files with issues count
         total_issues: Total issues count
+        scope: BACK-884 census (files discovered/analyzed/skipped by reason,
+            per-language capability tier) — additive top-level key, omitted
+            when not supplied.
     """
     import json
 
@@ -664,6 +693,11 @@ def _print_json_output(
             "exit_code": 1 if total_issues > 0 else 0
         }
     }
+    if scope is not None:
+        from ..capabilities import capability_tiers_for
+        result["scope"] = scope.to_scope_dict(
+            capability_tiers=capability_tiers_for(scope.language_extensions)
+        )
     print(json.dumps(result, indent=2))
 
 
@@ -716,7 +750,8 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
 
     # Collect files to check
     gitignore_patterns = load_gitignore_patterns(directory)
-    files_to_check = collect_files_to_check(directory, gitignore_patterns).files
+    collection = collect_files_to_check(directory, gitignore_patterns)
+    files_to_check = collection.files
 
     # Handle no files found
     output_format = getattr(args, 'format', 'text')
@@ -736,7 +771,10 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         total_issues, files_with_issues, file_results = _check_files_json(
             files_to_check, directory, select, ignore, severity=severity
         )
-        _print_json_output(file_results, len(files_to_check), files_with_issues, total_issues)
+        _print_json_output(
+            file_results, len(files_to_check), files_with_issues, total_issues,
+            scope=collection.to_scope_census(),
+        )
     else:
         total_issues, files_with_issues = _check_files_text(
             files_to_check, directory, select, ignore, no_group=no_group, severity=severity, limit=limit

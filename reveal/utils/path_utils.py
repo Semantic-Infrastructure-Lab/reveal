@@ -8,7 +8,7 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePath
-from typing import Any, Callable, Dict, Optional, List, Set, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, Optional, List, Set, Union
 
 from ..defaults import SKIP_DIRECTORIES, AMBIGUOUS_SKIP_DIRECTORIES
 from ..registry import _is_cpp_header_content, language_for_extension, LANGUAGE_DISPLAY_NAMES
@@ -247,45 +247,61 @@ class LanguageCoverage:
         }
 
 
-def assess_language_coverage(path: Path, supported_languages: Set[str]) -> LanguageCoverage:
-    """Census *path*'s code files by language and compare against a command's
-    supported set (registry language keys, e.g. ``{'python', 'typescript', 'tsx'}``).
+def _walk_code_files(path: Path) -> Iterator[Path]:
+    """Yield every file under *path*, skip-dir-correct (BACK-887's
+    ``is_skippable_dir`` fix — shared so every census walk agrees)."""
+    if path.is_file():
+        yield path
+        return
+    for root, dirs, filenames in os.walk(str(path)):
+        root_path = Path(root)
+        dirs[:] = [
+            d for d in dirs
+            if not is_skippable_dir(root_path, d) and not d.startswith('.')
+        ]
+        for fname in filenames:
+            yield root_path / fname
 
-    Counts only extensions in the registry's ``get_code_extensions()`` so
-    markdown/JSON/YAML/config never dilute the denominator. See
-    :class:`LanguageCoverage` for how the result is used.
+
+def tally_files_by_language(files: Iterable[Path]) -> Dict[str, Dict[str, Any]]:
+    """Bucket *files* by registry language key, counting only extensions in
+    ``get_code_extensions()`` so markdown/JSON/YAML/config never dilute a
+    census denominator.
+
+    Returns ``{language_key: {'count': int, 'ext': str}}`` — ``ext`` is one
+    representative extension seen for that language, for a capability-tier
+    lookup at the command layer (``capabilities.capability_tiers_for``).
     """
     from ..registry import get_code_extensions
 
     code_exts = get_code_extensions()
-    counts: Dict[str, int] = {}  # registry language key -> file count
-
-    def _tally(fpath: Path) -> None:
+    counts: Dict[str, Dict[str, Any]] = {}
+    for fpath in files:
         ext = fpath.suffix.lower()
         if ext not in code_exts:
-            return
+            continue
         lang = _language_for_path(fpath)
-        if lang:
-            counts[lang] = counts.get(lang, 0) + 1
+        if not lang:
+            continue
+        entry = counts.setdefault(lang, {'count': 0, 'ext': ext})
+        entry['count'] += 1
+    return counts
 
-    if path.is_file():
-        _tally(path)
-    else:
-        for root, dirs, filenames in os.walk(str(path)):
-            root_path = Path(root)
-            dirs[:] = [
-                d for d in dirs
-                if not is_skippable_dir(root_path, d) and not d.startswith('.')
-            ]
-            for fname in filenames:
-                _tally(Path(os.path.join(root, fname)))
 
-    total = sum(counts.values())
-    analyzed = sum(c for lang, c in counts.items() if lang in supported_languages)
+def assess_language_coverage(path: Path, supported_languages: Set[str]) -> LanguageCoverage:
+    """Census *path*'s code files by language and compare against a command's
+    supported set (registry language keys, e.g. ``{'python', 'typescript', 'tsx'}``).
+
+    See :class:`LanguageCoverage` for how the result is used.
+    """
+    counts = tally_files_by_language(_walk_code_files(path))
+
+    total = sum(v['count'] for v in counts.values())
+    analyzed = sum(v['count'] for lang, v in counts.items() if lang in supported_languages)
 
     if counts:
-        dominant_key = max(counts, key=counts.__getitem__)
-        dominant_count = counts[dominant_key]
+        dominant_key = max(counts, key=lambda lang: counts[lang]['count'])
+        dominant_count = counts[dominant_key]['count']
         dominant_supported = dominant_key in supported_languages
         dominant_display = LANGUAGE_DISPLAY_NAMES.get(
             dominant_key, dominant_key.capitalize())
@@ -298,6 +314,82 @@ def assess_language_coverage(path: Path, supported_languages: Set[str]) -> Langu
         dominant_language=dominant_display,
         dominant_count=dominant_count,
         dominant_supported=dominant_supported,
+    )
+
+
+@dataclass
+class ScopeCensus:
+    """Unified BACK-884 scope block: what a command's file walk actually
+    covered, broken down per-language, plus (where known) counts of files
+    excluded *before* analysis began.
+
+    Unlike :class:`LanguageCoverage` (which only asks "is the dominant
+    language one we support"), this discloses the full per-language file
+    counts — for commands with no restricted supported-language set
+    (``overview``, ``architecture``, ``check``), not just the two
+    (``surface``, ``contracts``) that warn when the dominant language isn't
+    theirs.
+
+    Deliberately capability-tier-ignorant: joining per-language capability
+    tier is the command layer's job (``capabilities.capability_tiers_for``),
+    not this dataclass's — see design doc
+    BACK884_COVERAGE_CENSUS_UNIFICATION finding #6 (this module must not
+    import ``capabilities.py``).
+    """
+
+    per_language: Dict[str, int]
+    language_extensions: Dict[str, str] = None  # type: ignore[assignment]
+    skipped_gitignore: int = 0
+    skipped_no_analyzer: int = 0
+    skipped_dirs: int = 0
+
+    def __post_init__(self) -> None:
+        if self.language_extensions is None:
+            self.language_extensions = {}
+
+    @property
+    def total_code_files(self) -> int:
+        return sum(self.per_language.values())
+
+    def to_scope_dict(self, capability_tiers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+        """The additive ``scope`` key BACK-884's four target commands embed
+        in their JSON output — opt-in, following the v1.1 ``meta`` block
+        precedent rather than a ``ResultBuilder`` migration.
+        """
+        languages = []
+        for lang, count in sorted(self.per_language.items(), key=lambda kv: (-kv[1], kv[0])):
+            entry: Dict[str, Any] = {
+                'language': LANGUAGE_DISPLAY_NAMES.get(lang, lang.capitalize()),
+                'files': count,
+            }
+            if capability_tiers is not None:
+                entry['capability_tier'] = capability_tiers.get(lang, 'unknown')
+            languages.append(entry)
+        return {
+            'total_code_files': self.total_code_files,
+            'languages': languages,
+            'skipped_gitignore': self.skipped_gitignore,
+            'skipped_no_analyzer': self.skipped_no_analyzer,
+            'skipped_dirs': self.skipped_dirs,
+        }
+
+
+def census_for_path(path: Path) -> ScopeCensus:
+    """Build the unified BACK-884 scope census for *path* by walking it
+    directly (skip-dir-correct per BACK-887) — the right choice for
+    ``overview``/``architecture``/``surface``, which have no pre-collected
+    file list of their own.
+
+    This walk doesn't know about gitignore or per-file analyzer availability,
+    so ``skipped_gitignore``/``skipped_no_analyzer`` are left at 0. ``check``
+    has that data already (``FileCollectionResult``, BACK-889) and should
+    build its census via :func:`tally_files_by_language` on its own
+    already-collected file list instead of calling this function.
+    """
+    counts = tally_files_by_language(_walk_code_files(path))
+    return ScopeCensus(
+        per_language={lang: v['count'] for lang, v in counts.items()},
+        language_extensions={lang: v['ext'] for lang, v in counts.items()},
     )
 
 def find_file_in_parents(
