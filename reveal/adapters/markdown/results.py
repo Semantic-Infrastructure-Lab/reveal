@@ -141,6 +141,7 @@ def build_response_dict(
     return ResultBuilder.create(
         result_type='markdown_query',
         source=base_path,
+        contract_version='1.1',
         data={
             'base_path': str(base_path),
             'query': query,
