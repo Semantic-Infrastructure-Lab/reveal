@@ -11,8 +11,7 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
-from reveal.capabilities import capability_tiers_for
-from reveal.utils.path_utils import census_for_path
+from reveal.capabilities import scope_dict_for_path
 
 logger = logging.getLogger(__name__)
 
@@ -147,11 +146,10 @@ def _run_complex_functions(path: Path, limit: int) -> List[Dict[str, Any]]:
 
 def _run_scope(path: Path) -> Dict[str, Any]:
     """BACK-884: files discovered/analyzed/skipped by language, with
-    per-language capability tier — additive 'scope' key in JSON output."""
+    per-language capability tier — additive 'scope' key in JSON output.
+    Shared with overview.py via capabilities.scope_dict_for_path()."""
     try:
-        census = census_for_path(path)
-        tiers = capability_tiers_for(census.language_extensions)
-        return census.to_scope_dict(capability_tiers=tiers)
+        return scope_dict_for_path(path)
     except Exception as exc:
         logger.warning("scope census failed for %s: %s", path, exc)
         return {}

@@ -6,7 +6,7 @@ Consolidates common patterns for searching up directory trees.
 import json
 import os
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePath
 from typing import Any, Callable, Dict, Iterable, Iterator, Optional, List, Set, Union
 
@@ -247,6 +247,12 @@ class LanguageCoverage:
         }
 
 
+def _display_name_for_language(lang: str) -> str:
+    """Human-readable label for a registry language key, falling back to a
+    capitalized form for keys with no entry in ``LANGUAGE_DISPLAY_NAMES``."""
+    return LANGUAGE_DISPLAY_NAMES.get(lang, lang.capitalize())
+
+
 def _walk_code_files(path: Path) -> Iterator[Path]:
     """Yield every file under *path*, skip-dir-correct (BACK-887's
     ``is_skippable_dir`` fix — shared so every census walk agrees)."""
@@ -298,8 +304,7 @@ def _coverage_from_counts(
         dominant_key = max(counts, key=lambda lang: counts[lang]['count'])
         dominant_count = counts[dominant_key]['count']
         dominant_supported = dominant_key in supported_languages
-        dominant_display = LANGUAGE_DISPLAY_NAMES.get(
-            dominant_key, dominant_key.capitalize())
+        dominant_display = _display_name_for_language(dominant_key)
     else:
         dominant_count, dominant_supported, dominant_display = 0, True, ''
 
@@ -352,14 +357,10 @@ class ScopeCensus:
     """
 
     per_language: Dict[str, int]
-    language_extensions: Dict[str, str] = None  # type: ignore[assignment]
+    language_extensions: Dict[str, str] = field(default_factory=dict)
     skipped_gitignore: int = 0
     skipped_no_analyzer: int = 0
     skipped_dirs: int = 0
-
-    def __post_init__(self) -> None:
-        if self.language_extensions is None:
-            self.language_extensions = {}
 
     @property
     def total_code_files(self) -> int:
@@ -373,7 +374,7 @@ class ScopeCensus:
         languages = []
         for lang, count in sorted(self.per_language.items(), key=lambda kv: (-kv[1], kv[0])):
             entry: Dict[str, Any] = {
-                'language': LANGUAGE_DISPLAY_NAMES.get(lang, lang.capitalize()),
+                'language': _display_name_for_language(lang),
                 'files': count,
             }
             if capability_tiers is not None:

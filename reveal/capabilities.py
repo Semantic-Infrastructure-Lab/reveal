@@ -50,6 +50,7 @@ registered for the language at all).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .registry import get_analyzer_for_extension
@@ -851,3 +852,20 @@ def capability_tiers_for(language_extensions: Dict[str, str]) -> Dict[str, str]:
         cap = get_capability_for_extension(ext)
         tiers[lang] = cap.conformance_level if cap else 'unknown'
     return tiers
+
+
+def scope_dict_for_path(path: Path) -> Dict[str, Any]:
+    """The BACK-884 ``scope`` block for *path*: a fresh census
+    (``path_utils.census_for_path``) with per-language capability tier
+    joined in.
+
+    Single shared implementation for commands with no pre-collected file
+    list of their own (``overview``, ``architecture``) — importing
+    ``path_utils`` here rather than the reverse keeps ``path_utils.py``
+    ignorant of this module (finding #6) while still giving both callers
+    one function instead of a copy-pasted ``_run_scope`` each.
+    """
+    from .utils.path_utils import census_for_path
+
+    census = census_for_path(path)
+    return census.to_scope_dict(capability_tiers=capability_tiers_for(census.language_extensions))

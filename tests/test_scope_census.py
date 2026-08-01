@@ -16,7 +16,7 @@ from reveal.utils.path_utils import (
     census_for_path,
     tally_files_by_language,
 )
-from reveal.capabilities import capability_tiers_for
+from reveal.capabilities import capability_tiers_for, scope_dict_for_path
 
 SUPPORTED = {'python', 'typescript', 'tsx'}
 
@@ -173,3 +173,24 @@ class TestCapabilityTiersFor:
 
     def test_empty_input_returns_empty(self):
         assert capability_tiers_for({}) == {}
+
+
+class TestScopeDictForPath:
+    """BACK-884: shared implementation for overview.py/architecture.py's
+    scope collector, so census_for_path + capability_tiers_for + to_scope_dict
+    isn't copy-pasted into both command modules."""
+
+    def test_matches_manual_composition(self, tmp_path):
+        _write(tmp_path, 'a.py')
+        _write(tmp_path, 'b.rs')
+        got = scope_dict_for_path(tmp_path)
+        census = census_for_path(tmp_path)
+        expected = census.to_scope_dict(
+            capability_tiers=capability_tiers_for(census.language_extensions)
+        )
+        assert got == expected
+
+    def test_empty_tree(self, tmp_path):
+        d = scope_dict_for_path(tmp_path)
+        assert d['total_code_files'] == 0
+        assert d['languages'] == []
