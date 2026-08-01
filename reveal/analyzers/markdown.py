@@ -12,6 +12,7 @@ from ..treesitter import TreeSitterAnalyzer
 from ..structure_options import StructureOptions
 from ..core import node_children as _children
 from ..core import tree_root, ts_parse
+from ..utils.results import ResultBuilder
 
 # Cache for markdown_inline parse results, keyed by (path, mtime_ns).
 # Avoids re-parsing the same file's inline content when multiple rules or
@@ -191,25 +192,20 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         """
         options = self._build_md_options(options, head, tail, range, kwargs)
 
-        result: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'markdown_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-        }
+        data: Dict[str, Any] = {}
 
         # Extract front matter if requested (always first, not affected by slicing)
         if options.extract_frontmatter:
-            result['frontmatter'] = self._extract_frontmatter()
+            data['frontmatter'] = self._extract_frontmatter()
 
         # Include headings based on mode
         outline_mode = options.extra.get('outline', False) or options.outline
         if self._should_include_headings(options, outline_mode):
-            result['headings'] = self._extract_headings()
+            data['headings'] = self._extract_headings()
 
         # Extract links if requested
         if options.extract_links:
-            result['links'] = self._extract_links(
+            data['links'] = self._extract_links(
                 link_type=options.link_type,
                 domain=options.domain,
                 broken_only=options.broken_only,
@@ -217,23 +213,31 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         # Extract code blocks if requested
         if options.extract_code:
-            result['code_blocks'] = self._extract_code_blocks(
+            data['code_blocks'] = self._extract_code_blocks(
                 language=options.language,
                 include_inline=options.inline_code
             )
 
         # Extract related documents if requested
         if options.extract_related:
-            result['related'] = self._extract_related(
+            data['related'] = self._extract_related(
                 depth=options.related_depth,
                 limit=options.related_limit
             )
 
         # Apply semantic slicing to each category (but not frontmatter - it's unique)
         if options.head or options.tail or options.range:
-            self._apply_slicing_to_results(result, options.head, options.tail, options.range)
+            self._apply_slicing_to_results(data, options.head, options.tail, options.range)
 
-        return result
+        parse_mode = 'tree_sitter_full' if self.tree else 'regex'
+        return ResultBuilder.create(
+            result_type='markdown_structure',
+            source=self.path,
+            data=data,
+            contract_version='1.1',
+            parse_mode=parse_mode,
+            confidence=1.0,
+        )
 
     def _extract_headings(self) -> List[Dict[str, Any]]:
         """Extract markdown headings using tree-sitter.

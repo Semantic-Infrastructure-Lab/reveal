@@ -414,7 +414,7 @@ x = 1
         try:
             analyzer = MarkdownAnalyzer(path)
 
-            _contract_keys = {'contract_version', 'type', 'source', 'source_type'}
+            _contract_keys = {'contract_version', 'type', 'source', 'source_type', 'meta'}
 
             # Default: only headings (plus contract envelope)
             struct1 = analyzer.get_structure()

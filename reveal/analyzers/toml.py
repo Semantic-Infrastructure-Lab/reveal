@@ -14,6 +14,7 @@ from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 from ..core import tree_root
+from ..utils.results import ResultBuilder
 
 
 @register('.toml', name='TOML', icon='', category='config')
@@ -68,13 +69,14 @@ class TomlAnalyzer(TreeSitterAnalyzer):
 
         if not result:
             return {}
-        return {
-            'contract_version': '1.0',
-            'type': 'toml_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-            **result,
-        }
+        return ResultBuilder.create(
+            result_type='toml_structure',
+            source=self.path,
+            data=result,
+            contract_version='1.1',
+            parse_mode='tree_sitter_full',
+            confidence=1.0,
+        )
 
     def _extract_table_name(self, node) -> str:
         """Extract section name from table node."""
