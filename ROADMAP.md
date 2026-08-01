@@ -125,7 +125,9 @@ Earlier releases (v0.33–v0.91) and full per-item notes: [CHANGELOG.md](CHANGEL
 - UX query/navigation surface: complete (query operators, field selection, element discovery, `--outline`/`--scope`/`--varflow`/`--calls` range)
 
 ### Stability & Polish (open)
-- Output contract v1.1 enforcement across the remaining adapters
+- Output contract v1.1 enforcement across the remaining adapters — `analyzers/`
+  side complete (BACK-885, all 19 files); `adapters/` side (31 files) tracked
+  as BACK-891, not yet started
 - Performance on very large codebases (multi-process `check`/`hotspots` landed; profiling continues)
 - Windows signed-binary distribution (see Technical Debt below)
 - TypeScript/React depth — JSX component tree (`react://`) held pending demand (BACK-337)
