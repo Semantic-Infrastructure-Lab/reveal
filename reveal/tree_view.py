@@ -187,9 +187,10 @@ def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **
     lines = [f"{root_path.name or root_path}/\n"]
 
     # Warn if directory is large and user hasn't disabled limits
-    if total_entries > 500 and options.max_entries > 0:
+    if total_entries > 500 and (options.max_entries > 0 or options.dir_limit > 0):
         lines.append(f"⚠️  Large directory detected ({total_entries} entries)")
-        lines.append(f"   Showing first {options.max_entries} entries (use --max-entries 0 for unlimited)")
+        lines.append(f"   Showing first {options.max_entries} entries, {options.dir_limit} per directory "
+                      f"(use --max-entries 0 --dir-limit 0 for unlimited)")
         if not options.fast:
             lines.append("   Consider using --fast to skip line counting for better performance\n")
 
@@ -198,13 +199,20 @@ def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **
         'count': 0, 'max_entries': options.max_entries, 'truncated': 0,
         'dir_limit': options.dir_limit, 'sort_by': options.sort_by,
         'sort_desc': options.sort_desc, 'include_extensions': options.include_extensions,
+        'max_entries_hit': False, 'dir_limit_hit': False,
     }
     _walk_directory(root_path, lines, depth=options.depth, show_hidden=options.show_hidden,
                    fast=options.fast, context=context, path_filter=path_filter)
 
-    # Show truncation message if we hit the limit
+    # Show truncation message if we hit the limit — name whichever flag(s) actually fired,
+    # since --max-entries 0 alone won't expand a directory still capped by --dir-limit (BACK-864).
     if context['truncated'] > 0:
-        lines.append(f"\n... {context['truncated']} more entries (use --max-entries 0 to show all)")
+        hints = []
+        if context['max_entries_hit']:
+            hints.append('--max-entries 0')
+        if context['dir_limit_hit']:
+            hints.append('--dir-limit 0')
+        lines.append(f"\n... {context['truncated']} more entries (use {' '.join(hints)} to show all)")
 
     # Add navigation hint
     lines.append(f"\nUsage: reveal {path}/<file>")
@@ -239,7 +247,8 @@ def _count_entries(path: Path, depth: int, show_hidden: bool, path_filter: PathF
 
 def _initialize_context() -> dict:
     """Initialize empty context dictionary."""
-    return {'count': 0, 'max_entries': 0, 'truncated': 0, 'dir_limit': 0}
+    return {'count': 0, 'max_entries': 0, 'truncated': 0, 'dir_limit': 0,
+             'max_entries_hit': False, 'dir_limit_hit': False}
 
 
 def _get_sorted_entries(path: Path, sort_by: Optional[str] = None,
@@ -284,6 +293,7 @@ def _check_global_limit(context: dict, entries: List[Path], i: int) -> bool:
     """
     if context['max_entries'] > 0 and context['count'] >= context['max_entries']:
         context['truncated'] += len(entries) - i
+        context['max_entries_hit'] = True
         return True
     return False
 
@@ -299,6 +309,7 @@ def _check_dir_limit(dir_limit: int, dir_entry_count: int, entries: List[Path], 
         snipped_count = len(entries) - i
         lines.append(f"{prefix}└── [snipped {snipped_count} more entries] (--dir-limit 0 to show all)")
         context['truncated'] += snipped_count
+        context['dir_limit_hit'] = True
         return True
     return False
 

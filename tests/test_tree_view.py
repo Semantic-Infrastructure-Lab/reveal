@@ -178,6 +178,36 @@ class TestTreeView(unittest.TestCase):
         self.assertIn('other1.txt', result)
         self.assertIn('other2.txt', result)
 
+    def test_dir_limit_truncation_hints_dir_limit_flag(self):
+        """BACK-864: when dir_limit (not max_entries) causes truncation, the
+        final hint must mention --dir-limit 0 — --max-entries 0 alone won't
+        expand a directory still capped by dir_limit."""
+        many_dir = os.path.join(self.temp_dir, 'many')
+        os.makedirs(many_dir)
+        for i in range(80):
+            with open(os.path.join(many_dir, f'file{i:03d}.txt'), 'w') as f:
+                f.write('x')
+
+        # max_entries left high so dir_limit (default 50) is the only thing that fires
+        result = show_directory_tree(many_dir, fast=True, dir_limit=50, max_entries=1000)
+
+        self.assertIn('--dir-limit 0', result)
+        self.assertNotIn('--max-entries 0', result)
+
+    def test_max_entries_truncation_hints_max_entries_flag(self):
+        """When only max_entries causes truncation, the hint should mention
+        --max-entries 0 and not a spurious --dir-limit 0."""
+        many_dir = os.path.join(self.temp_dir, 'many')
+        os.makedirs(many_dir)
+        for i in range(80):
+            with open(os.path.join(many_dir, f'file{i:03d}.txt'), 'w') as f:
+                f.write('x')
+
+        result = show_directory_tree(many_dir, fast=True, dir_limit=0, max_entries=10)
+
+        self.assertIn('--max-entries 0', result)
+        self.assertNotIn('--dir-limit 0', result)
+
 
 class TestCountEntries(unittest.TestCase):
     """Test entry counting helper."""
