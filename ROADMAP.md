@@ -125,9 +125,11 @@ Earlier releases (v0.33–v0.91) and full per-item notes: [CHANGELOG.md](CHANGEL
 - UX query/navigation surface: complete (query operators, field selection, element discovery, `--outline`/`--scope`/`--varflow`/`--calls` range)
 
 ### Stability & Polish (open)
-- Output contract v1.1 enforcement across the remaining adapters — `analyzers/`
-  side complete (BACK-885, all 19 files); `adapters/` side (31 files) tracked
-  as BACK-891, not yet started
+- Output contract v1.1 enforcement across `analyzers/` (BACK-885, 19 files)
+  and `adapters/` (BACK-891, 31 files) both complete. `xlsx.py`'s 20
+  ResultBuilder call sites that never pass `contract_version` (a distinct
+  gap — silently defaulting to 1.0 despite using ResultBuilder) tracked
+  separately as BACK-892.
 - Performance on very large codebases (multi-process `check`/`hotspots` landed; profiling continues)
 - Windows signed-binary distribution (see Technical Debt below)
 - TypeScript/React depth — JSX component tree (`react://`) held pending demand (BACK-337)
