@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ....utils.results import ResultBuilder
+
 _USER_FILTER = "(thread_source IS NULL OR thread_source = 'user') AND archived = 0"
 
 
@@ -33,12 +35,12 @@ def list_sessions(db_path: Path) -> Dict[str, Any]:
 
     Returns codex_session_list result.
     """
-    base: Dict[str, Any] = {
-        'contract_version': '1.0',
-        'type': 'codex_session_list',
-        'source': str(db_path),
-        'source_type': 'sqlite',
-    }
+    base: Dict[str, Any] = ResultBuilder.create(
+        result_type='codex_session_list',
+        source=str(db_path),
+        source_type='sqlite',
+        contract_version='1.1',
+    )
 
     if not db_path.exists():
         return {**base, 'sessions': [], 'total': 0,
@@ -108,13 +110,13 @@ def content_search_sessions(db_path: Path, query: str, max_matches_per_session: 
     Scans agent_message and user_message payloads in each session's rollout file.
     Returns matched sessions with up to max_matches_per_session snippets each.
     """
-    base: Dict[str, Any] = {
-        'contract_version': '1.0',
-        'type': 'codex_content_search',
-        'source': str(db_path),
-        'source_type': 'sqlite',
-        'query': query,
-    }
+    base: Dict[str, Any] = ResultBuilder.create(
+        result_type='codex_content_search',
+        source=str(db_path),
+        source_type='sqlite',
+        contract_version='1.1',
+        data={'query': query},
+    )
 
     if not db_path.exists():
         return {**base, 'sessions': [], 'total': 0,

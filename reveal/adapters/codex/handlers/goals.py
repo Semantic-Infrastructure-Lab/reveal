@@ -4,17 +4,19 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict
 
+from ....utils.results import ResultBuilder
+
 
 def get_goal(codex_home: Path, thread_id: str) -> Dict[str, Any]:
     """Return thread goal from goals_1.sqlite for the given thread_id."""
     goals_db = codex_home / 'goals_1.sqlite'
-    base: Dict[str, Any] = {
-        'contract_version': '1.0',
-        'type': 'codex_goal',
-        'source': str(goals_db),
-        'source_type': 'sqlite',
-        'thread_id': thread_id,
-    }
+    base: Dict[str, Any] = ResultBuilder.create(
+        result_type='codex_goal',
+        source=str(goals_db),
+        source_type='sqlite',
+        contract_version='1.1',
+        data={'thread_id': thread_id},
+    )
 
     if not goals_db.exists():
         return {**base, 'goal': None}

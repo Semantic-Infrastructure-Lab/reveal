@@ -82,7 +82,7 @@ class CodexAdapter(ResourceAdapter):
 
     def _get_contract_base(self) -> Dict[str, Any]:
         return {
-            'contract_version': '1.0',
+            'contract_version': '1.1',
             'type': '',
             'source': str(self.CODEX_DB),
             'source_type': 'sqlite',
