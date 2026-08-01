@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from ..base import FileAnalyzer
 from ..registry import register
+from ..utils.results import ResultBuilder
 
 
 # Pattern matching ACME challenge location paths
@@ -492,13 +493,14 @@ class NginxAnalyzer(FileAnalyzer):
         http_directives = self._parse_block_directives('http')
         events_directives = self._parse_block_directives('events')
 
-        result: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'nginx_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-            'comments': comments,
-        }
+        result: Dict[str, Any] = ResultBuilder.create(
+            result_type='nginx_structure',
+            source=self.path,
+            data={'comments': comments},
+            contract_version='1.1',
+            parse_mode='regex',
+            confidence=1.0,
+        )
         if main_directives:
             result['main_directives'] = main_directives
         result['servers'] = servers

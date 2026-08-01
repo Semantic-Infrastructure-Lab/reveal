@@ -8,6 +8,7 @@ import logging
 from typing import Dict, List, Any, Optional
 from ..base import FileAnalyzer
 from ..registry import register
+from ..utils.results import ResultBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -74,17 +75,20 @@ class BatchAnalyzer(FileAnalyzer):
         # Calculate statistics
         stats = self._calculate_stats()
 
-        return {
-            'contract_version': '1.0',
-            'type': 'batch_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-            'functions': labels,  # Labels are the "functions" in batch
-            'variables': variables,
-            'internal_calls': internal_calls,
-            'external_calls': external_calls,
-            'stats': stats,  # Named 'stats' to be skipped by _render_text_categories
-        }
+        return ResultBuilder.create(
+            result_type='batch_structure',
+            source=self.path,
+            data={
+                'functions': labels,  # Labels are the "functions" in batch
+                'variables': variables,
+                'internal_calls': internal_calls,
+                'external_calls': external_calls,
+                'stats': stats,  # Named 'stats' to be skipped by _render_text_categories
+            },
+            contract_version='1.1',
+            parse_mode='regex',
+            confidence=1.0,
+        )
 
     def _find_label_end(self, lines: List[str], label_idx: int) -> int:
         """Return the 1-based line number where the label block ends."""

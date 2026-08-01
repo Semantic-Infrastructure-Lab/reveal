@@ -8,6 +8,7 @@ import logging
 from typing import Dict, Any, Optional
 from ..base import FileAnalyzer
 from ..registry import register
+from ..utils.results import ResultBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -129,15 +130,17 @@ class IniAnalyzer(FileAnalyzer):
                 })
                 total_keys += len(items)
 
-            return {
-                'contract_version': '1.0',
-                'type': 'ini_structure',
-                'source': str(self.path),
-                'source_type': 'file',
-                'section_count': len(config.sections()) + (1 if config.defaults() else 0),
-                'total_keys': total_keys,
-                'sections': sections_data
-            }
+            return ResultBuilder.create(
+                result_type='ini_structure',
+                source=self.path,
+                data={
+                    'section_count': len(config.sections()) + (1 if config.defaults() else 0),
+                    'total_keys': total_keys,
+                    'sections': sections_data
+                },
+                contract_version='1.1',
+                confidence=1.0,
+            )
 
         except configparser.Error as e:
             logger.debug(f"Error parsing INI {self.path}: {e}")
@@ -177,11 +180,18 @@ class IniAnalyzer(FileAnalyzer):
                 properties[key.strip()] = value.strip()
 
         if not properties:
-            return {
-                'message': 'Empty or invalid configuration file',
-                'section_count': 0,
-                'total_keys': 0
-            }
+            return ResultBuilder.create(
+                result_type='ini_structure',
+                source=self.path,
+                data={
+                    'message': 'Empty or invalid configuration file',
+                    'section_count': 0,
+                    'total_keys': 0
+                },
+                contract_version='1.1',
+                parse_mode='heuristic',
+                confidence=1.0,
+            )
 
         keys_data = [
             {
@@ -192,16 +202,23 @@ class IniAnalyzer(FileAnalyzer):
             for key, value in properties.items()
         ]
 
-        return {
-            'section_count': 0,
-            'total_keys': len(properties),
-            'sections': [{
-                'name': '(no section)',
-                'key_count': len(properties),
-                'keys': keys_data
-            }],
-            'format': 'properties'
-        }
+        return ResultBuilder.create(
+            result_type='ini_structure',
+            source=self.path,
+            data={
+                'section_count': 0,
+                'total_keys': len(properties),
+                'sections': [{
+                    'name': '(no section)',
+                    'key_count': len(properties),
+                    'keys': keys_data
+                }],
+                'format': 'properties'
+            },
+            contract_version='1.1',
+            parse_mode='heuristic',
+            confidence=1.0,
+        )
 
     def _get_ini_key_value(self, config, section: str, key: str):
         """Get a value from a section, handling DEFAULT specially. Returns value or None."""

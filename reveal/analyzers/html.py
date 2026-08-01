@@ -6,6 +6,7 @@ from typing import Dict, List, Any, Optional, cast
 from ..base import FileAnalyzer
 from ..registry import register
 from ..structure_options import StructureOptions
+from ..utils.results import ResultBuilder
 
 # Try to import BeautifulSoup4 - required for HTML parsing
 try:
@@ -95,26 +96,29 @@ class HTMLAnalyzer(FileAnalyzer):
             return self._extract_lines(options.head, options.tail, options.range)
 
         # Specialized extractions (filtering mode)
-        _contract = {
-            'contract_version': '1.0',
-            'type': 'html',
-            'source': str(self.path),
-            'source_type': 'file',
-        }
+        def _build(data: Dict[str, Any]) -> Dict[str, Any]:
+            return ResultBuilder.create(
+                result_type='html',
+                source=self.path,
+                data=data,
+                contract_version='1.1',
+                confidence=1.0,
+            )
+
         if options.metadata:
-            return {**_contract, 'metadata': self._extract_metadata()}
+            return _build({'metadata': self._extract_metadata()})
 
         if options.extract_links:
-            return {**_contract, 'links': self._extract_links(options.link_type, options.domain, options.broken)}
+            return _build({'links': self._extract_links(options.link_type, options.domain, options.broken)})
 
         if options.semantic:
-            return {**_contract, 'semantic': self._extract_semantic_elements(options.semantic)}
+            return _build({'semantic': self._extract_semantic_elements(options.semantic)})
 
         if options.scripts:
-            return {**_contract, 'scripts': self._extract_scripts(options.scripts)}
+            return _build({'scripts': self._extract_scripts(options.scripts)})
 
         if options.styles:
-            return {**_contract, 'styles': self._extract_styles(options.styles)}
+            return _build({'styles': self._extract_styles(options.styles)})
 
         # Default: Full structure overview (progressive disclosure)
         return self._get_default_structure()
@@ -125,11 +129,7 @@ class HTMLAnalyzer(FileAnalyzer):
         Returns:
             Dict with structured HTML information
         """
-        structure = {
-            'contract_version': '1.0',
-            'type': 'html',
-            'source': str(self.path),
-            'source_type': 'file',
+        data = {
             'document': self._build_document_info(),
             'head': self._build_head_info(),
             'body': self._build_body_info(),
@@ -138,9 +138,15 @@ class HTMLAnalyzer(FileAnalyzer):
 
         # Template information
         if template_info := self._build_template_info():
-            structure['template'] = template_info
+            data['template'] = template_info
 
-        return structure
+        return ResultBuilder.create(
+            result_type='html',
+            source=self.path,
+            data=data,
+            contract_version='1.1',
+            confidence=1.0,
+        )
 
     def _build_document_info(self) -> Dict[str, Any]:
         """Extract document-level information."""
