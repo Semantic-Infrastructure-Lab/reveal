@@ -125,11 +125,14 @@ Earlier releases (v0.33–v0.91) and full per-item notes: [CHANGELOG.md](CHANGEL
 - UX query/navigation surface: complete (query operators, field selection, element discovery, `--outline`/`--scope`/`--varflow`/`--calls` range)
 
 ### Stability & Polish (open)
-- Output contract v1.1 enforcement across `analyzers/` (BACK-885, 19 files)
-  and `adapters/` (BACK-891, 31 files) both complete. `xlsx.py`'s 20
-  ResultBuilder call sites that never pass `contract_version` (a distinct
-  gap — silently defaulting to 1.0 despite using ResultBuilder) tracked
-  separately as BACK-892.
+- Output contract v1.1 enforcement complete: `analyzers/` (BACK-885, 19
+  files), `adapters/` (BACK-891, 31 files), and `xlsx.py`'s 11
+  ResultBuilder call sites that never passed `contract_version` (BACK-892)
+  all closed. Zero hardcoded `contract_version: '1.0'` literals or
+  parameter-less `ResultBuilder.create()` calls remain.
+- JSON result emission consolidated behind one funnel, `print_json_result()`
+  (BACK-893), enabling an opt-in `--provenance` flag (BACK-881) that attaches
+  reveal_version/repo-state/config-digest metadata to JSON adapter output.
 - Performance on very large codebases (multi-process `check`/`hotspots` landed; profiling continues)
 - Windows signed-binary distribution (see Technical Debt below)
 - TypeScript/React depth — JSX component tree (`react://`) held pending demand (BACK-337)
