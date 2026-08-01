@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Optional
 from ...registry import register
 from ...utils import format_size
+from ...utils.results import ResultBuilder
 from .base import ZipXMLAnalyzer
 
 
@@ -56,10 +57,10 @@ class DocxAnalyzer(ZipXMLAnalyzer):
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract document structure: headings, paragraphs, tables."""
         if self.parse_error:
-            return {'error': [{'message': self.parse_error}]}
+            return self._error_result('docx_structure', self.parse_error)
 
         if self.content_tree is None:
-            return {'error': [{'message': 'No content found'}]}
+            return self._error_result('docx_structure', 'No content found')
 
         ns = self.NAMESPACES
         w = ns['w']
@@ -67,27 +68,22 @@ class DocxAnalyzer(ZipXMLAnalyzer):
         # Find body
         body = self.content_tree.find(f'.//{{{w}}}body')
         if body is None:
-            return {'error': [{'message': 'No document body found'}]}
+            return self._error_result('docx_structure', 'No document body found')
 
         sections, tables, para_count, word_count = self._collect_body_stats(body)
 
         # Build result
-        result: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'docx_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-        }
+        data: Dict[str, Any] = {}
 
         if sections:
             sections = self._apply_semantic_slice(sections, head, tail, range)
-            result['sections'] = sections
+            data['sections'] = sections
 
         if tables:
-            result['tables'] = tables
+            data['tables'] = tables
 
         # Add overview as first item (formatted for standard renderer)
-        result['overview'] = [{
+        data['overview'] = [{
             'name': f'{para_count} paragraphs, {word_count} words',
             'line_start': 1,
         }]
@@ -95,12 +91,18 @@ class DocxAnalyzer(ZipXMLAnalyzer):
         # Add embedded media
         media = self._get_embedded_media()
         if media:
-            result['media'] = [{
+            data['media'] = [{
                 'name': f"{m['name']} ({m['type']}, {format_size(m['size'])})",
                 'line_start': idx + 1,
             } for idx, m in enumerate(media)]
 
-        return result
+        return ResultBuilder.create(
+            result_type='docx_structure',
+            source=self.path,
+            data=data,
+            contract_version='1.1',
+            confidence=1.0,
+        )
 
     def _collect_body_stats(self, body):
         """Extract sections, tables, paragraph count, and word count from document body."""
@@ -253,17 +255,17 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract spreadsheet structure: sheets, dimensions, formulas."""
         if self.parse_error:
-            return {'error': [{'message': self.parse_error}]}
+            return self._error_result('xlsx_structure', self.parse_error)
 
         if self.content_tree is None:
-            return {'error': [{'message': 'No workbook found'}]}
+            return self._error_result('xlsx_structure', 'No workbook found')
 
         xl = self.NAMESPACES['xl']
 
         # Get sheet names from workbook
         sheets_elem = self.content_tree.find(f'{{{xl}}}sheets')
         if sheets_elem is None:
-            return {'error': [{'message': 'No sheets found'}]}
+            return self._error_result('xlsx_structure', 'No sheets found')
 
         sheets: List[Dict[str, Any]] = []
 
@@ -277,12 +279,7 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             sheet_info['line_start'] = idx + 1
             sheets.append(sheet_info)
 
-        result: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'xlsx_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-        }
+        data: Dict[str, Any] = {}
 
         if sheets:
             # Format sheets with details in name
@@ -299,9 +296,15 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
                     'line_start': s['line_start'],
                 })
             formatted_sheets = self._apply_semantic_slice(formatted_sheets, head, tail, range)
-            result['sheets'] = formatted_sheets
+            data['sheets'] = formatted_sheets
 
-        return result
+        return ResultBuilder.create(
+            result_type='xlsx_structure',
+            source=self.path,
+            data=data,
+            contract_version='1.1',
+            confidence=1.0,
+        )
 
     @staticmethod
     def _col_letter_to_index(col: str) -> int:
@@ -513,7 +516,7 @@ class PptxAnalyzer(ZipXMLAnalyzer):
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract presentation structure: slides with titles."""
         if self.parse_error:
-            return {'error': [{'message': self.parse_error}]}
+            return self._error_result('pptx_structure', self.parse_error)
 
         # Find all slide files
         slide_paths = sorted([p for p in self.parts if p.startswith('ppt/slides/slide') and p.endswith('.xml')])
@@ -524,12 +527,7 @@ class PptxAnalyzer(ZipXMLAnalyzer):
             slide_info = self._analyze_slide(slide_path, idx + 1)
             slides.append(slide_info)
 
-        result: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'pptx_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-        }
+        data: Dict[str, Any] = {}
 
         if slides:
             # Format slides with details
@@ -541,17 +539,23 @@ class PptxAnalyzer(ZipXMLAnalyzer):
                     'line_start': s['line_start'],
                 })
             formatted_slides = self._apply_semantic_slice(formatted_slides, head, tail, range)
-            result['slides'] = formatted_slides
+            data['slides'] = formatted_slides
 
         # Media
         media = self._get_embedded_media()
         if media:
-            result['media'] = [{
+            data['media'] = [{
                 'name': f"{m['name']} ({m['type']}, {format_size(m['size'])})",
                 'line_start': idx + 1,
             } for idx, m in enumerate(media)]
 
-        return result
+        return ResultBuilder.create(
+            result_type='pptx_structure',
+            source=self.path,
+            data=data,
+            contract_version='1.1',
+            confidence=1.0,
+        )
 
     def _extract_shape_title(self, shape, ns_a: str, ns_p: str) -> Optional[str]:
         """Return the title text from a title/ctrTitle placeholder shape, or None."""

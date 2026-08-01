@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Optional
 from ...registry import register
 from ...utils import format_size
+from ...utils.results import ResultBuilder
 from .base import ZipXMLAnalyzer
 
 
@@ -176,10 +177,10 @@ class OdtAnalyzer(OdfAnalyzer):
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract document structure: headings, paragraphs, tables."""
         if self.parse_error:
-            return {'error': [{'message': self.parse_error}]}
+            return self._error_result('odt_structure', self.parse_error)
 
         if self.content_tree is None:
-            return {'error': [{'message': 'No content found'}]}
+            return self._error_result('odt_structure', 'No content found')
 
         ns = self.NAMESPACES
         office_ns = ns['office']
@@ -187,7 +188,7 @@ class OdtAnalyzer(OdfAnalyzer):
         # Find body/text
         body = self.content_tree.find(f'.//{{{office_ns}}}body')
         if body is None:
-            return {'error': [{'message': 'No document body found'}]}
+            return self._error_result('odt_structure', 'No document body found')
 
         text_body = body.find(f'{{{office_ns}}}text')
         if text_body is None:
@@ -206,13 +207,13 @@ class OdtAnalyzer(OdfAnalyzer):
             word_count += word_inc
 
         result = self._build_odf_result(sections, tables, para_count, word_count, head, tail, range)
-        return {
-            'contract_version': '1.0',
-            'type': 'odt_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-            **result,
-        }
+        return ResultBuilder.create(
+            result_type='odt_structure',
+            source=self.path,
+            data=result,
+            contract_version='1.1',
+            confidence=1.0,
+        )
 
     def _get_table_dimensions(self, table: ET.Element) -> tuple:
         """Get table row and column counts."""
@@ -298,10 +299,10 @@ class OdsAnalyzer(OdfAnalyzer):
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract spreadsheet structure: sheets, dimensions."""
         if self.parse_error:
-            return {'error': [{'message': self.parse_error}]}
+            return self._error_result('ods_structure', self.parse_error)
 
         if self.content_tree is None:
-            return {'error': [{'message': 'No content found'}]}
+            return self._error_result('ods_structure', 'No content found')
 
         ns = self.NAMESPACES
         office_ns = ns['office']
@@ -310,11 +311,11 @@ class OdsAnalyzer(OdfAnalyzer):
         # Find spreadsheet body
         body = self.content_tree.find(f'.//{{{office_ns}}}body')
         if body is None:
-            return {'error': [{'message': 'No document body found'}]}
+            return self._error_result('ods_structure', 'No document body found')
 
         spreadsheet = body.find(f'{{{office_ns}}}spreadsheet')
         if spreadsheet is None:
-            return {'error': [{'message': 'No spreadsheet found'}]}
+            return self._error_result('ods_structure', 'No spreadsheet found')
 
         sheets: List[Dict[str, Any]] = []
 
@@ -324,12 +325,7 @@ class OdsAnalyzer(OdfAnalyzer):
             sheet_info['line'] = idx + 1
             sheets.append(sheet_info)
 
-        result: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'ods_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-        }
+        data: Dict[str, Any] = {}
 
         if sheets:
             # Format sheets with details in name
@@ -340,9 +336,15 @@ class OdsAnalyzer(OdfAnalyzer):
                     'line': s['line'],
                 })
             formatted_sheets = self._apply_semantic_slice(formatted_sheets, head, tail, range)
-            result['sheets'] = formatted_sheets
+            data['sheets'] = formatted_sheets
 
-        return result
+        return ResultBuilder.create(
+            result_type='ods_structure',
+            source=self.path,
+            data=data,
+            contract_version='1.1',
+            confidence=1.0,
+        )
 
     def _analyze_sheet(self, table: ET.Element, sheet_name: str) -> Dict[str, Any]:
         """Analyze a single sheet."""
@@ -447,10 +449,10 @@ class OdpAnalyzer(OdfAnalyzer):
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract presentation structure: slides with titles."""
         if self.parse_error:
-            return {'error': [{'message': self.parse_error}]}
+            return self._error_result('odp_structure', self.parse_error)
 
         if self.content_tree is None:
-            return {'error': [{'message': 'No content found'}]}
+            return self._error_result('odp_structure', 'No content found')
 
         ns = self.NAMESPACES
         office_ns = ns['office']
@@ -459,11 +461,11 @@ class OdpAnalyzer(OdfAnalyzer):
         # Find presentation body
         body = self.content_tree.find(f'.//{{{office_ns}}}body')
         if body is None:
-            return {'error': [{'message': 'No document body found'}]}
+            return self._error_result('odp_structure', 'No document body found')
 
         presentation = body.find(f'{{{office_ns}}}presentation')
         if presentation is None:
-            return {'error': [{'message': 'No presentation found'}]}
+            return self._error_result('odp_structure', 'No presentation found')
 
         slides: List[Dict[str, Any]] = []
 
@@ -471,12 +473,7 @@ class OdpAnalyzer(OdfAnalyzer):
             slide_info = self._analyze_slide(page, idx + 1)
             slides.append(slide_info)
 
-        result: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'odp_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-        }
+        data: Dict[str, Any] = {}
 
         if slides:
             # Format slides with details
@@ -488,17 +485,23 @@ class OdpAnalyzer(OdfAnalyzer):
                     'line': s['line'],
                 })
             formatted_slides = self._apply_semantic_slice(formatted_slides, head, tail, range)
-            result['slides'] = formatted_slides
+            data['slides'] = formatted_slides
 
         # Media
         media = self._get_embedded_media()
         if media:
-            result['media'] = [{
+            data['media'] = [{
                 'name': f"{m['name']} ({m['type']}, {format_size(m['size'])})",
                 'line': idx + 1,
             } for idx, m in enumerate(media)]
 
-        return result
+        return ResultBuilder.create(
+            result_type='odp_structure',
+            source=self.path,
+            data=data,
+            contract_version='1.1',
+            confidence=1.0,
+        )
 
     def _analyze_slide(self, page: ET.Element, slide_num: int) -> Dict[str, Any]:
         """Analyze a single slide."""

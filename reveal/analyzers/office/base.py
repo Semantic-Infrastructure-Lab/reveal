@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from ...base import FileAnalyzer
 from ...utils import format_size
+from ...utils.results import ResultBuilder
 
 
 MAX_XML_PART_SIZE = 50 * 1024 * 1024  # 50 MB per XML part
@@ -33,6 +34,15 @@ class ZipXMLAnalyzer(FileAnalyzer):
 
     CONTENT_PATH: str = ''  # Override in subclass
     NAMESPACES: Dict[str, str] = {}  # Override in subclass
+
+    def _error_result(self, result_type: str, message: str) -> Dict[str, Any]:
+        """Build a get_structure() error result with output contract fields."""
+        return ResultBuilder.create(
+            result_type=result_type,
+            source=self.path,
+            data={'error': [{'message': message}]},
+            contract_version='1.1',
+        )
 
     def __init__(self, path: str):
         # Don't call super().__init__ - we handle file reading differently
