@@ -294,7 +294,17 @@ class SSLAdapter(ResourceAdapter):
         files_processed: List[str] = []
 
         if not self._nginx_path:
-            return {'domains': list(all_domains), 'files_processed': files_processed, 'count': 0}
+            return ResultBuilder.create(
+                result_type='ssl_nginx_domains',
+                source=self._nginx_path or 'ssl://nginx',
+                source_type='nginx_config',
+                contract_version='1.1',
+                data={
+                    'domains': list(all_domains),
+                    'files_processed': files_processed,
+                    'count': 0,
+                }
+            )
 
         # Handle glob patterns
         paths = glob.glob(self._nginx_path) if '*' in self._nginx_path else [self._nginx_path]
@@ -309,13 +319,17 @@ class SSLAdapter(ResourceAdapter):
                 # Skip files that can't be parsed
                 pass
 
-        return {
-            'type': 'ssl_nginx_domains',
-            'source': self._nginx_path,
-            'files_processed': len(files_processed),
-            'domains': sorted(all_domains),
-            'domain_count': len(all_domains),
-        }
+        return ResultBuilder.create(
+            result_type='ssl_nginx_domains',
+            source=self._nginx_path,
+            source_type='nginx_config',
+            contract_version='1.1',
+            data={
+                'files_processed': len(files_processed),
+                'domains': sorted(all_domains),
+                'domain_count': len(all_domains),
+            }
+        )
 
     @staticmethod
     def _health_status(days: int) -> tuple[str, str]:

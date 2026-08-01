@@ -786,14 +786,12 @@ class ImportsAdapter(ResourceAdapter):
         """
         target_path = self._target_path or Path('.').resolve()
         query_params = self._query_params
+        self._target_path = target_path
 
         if not target_path.exists():
-            return {
-                'error': f"Path not found: {target_path}",
-            }
+            return self._build_response('imports_error', error=f"Path not found: {target_path}")
 
         # Extract imports and build graph
-        self._target_path = target_path
         self._build_graph(target_path)
 
         # Handle query parameters

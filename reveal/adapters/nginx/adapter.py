@@ -1008,25 +1008,35 @@ class NginxUriAdapter(ResourceAdapter):
         config_path, content, server_block = self._load_vhost()
 
         if config_path is None:
-            return {
-                'type': 'nginx_vhost_not_found',
-                'domain': self.domain,
-                'searched': _NGINX_SEARCH_DIRS,
-                'next_steps': [
-                    f"Check if nginx is installed: which nginx",
-                    f"Manually find config: grep -r 'server_name {self.domain}' /etc/nginx/",
-                    f"Inspect a specific file: reveal /etc/nginx/conf.d/yourfile.conf",
-                ],
-            }
+            return ResultBuilder.create(
+                result_type='nginx_vhost_not_found',
+                source=f'nginx://{self.domain}',
+                source_type='nginx_vhost',
+                contract_version='1.1',
+                data={
+                    'domain': self.domain,
+                    'searched': _NGINX_SEARCH_DIRS,
+                    'next_steps': [
+                        f"Check if nginx is installed: which nginx",
+                        f"Manually find config: grep -r 'server_name {self.domain}' /etc/nginx/",
+                        f"Inspect a specific file: reveal /etc/nginx/conf.d/yourfile.conf",
+                    ],
+                }
+            )
 
         if server_block is None:
-            return {
-                'type': 'nginx_vhost_not_found',
-                'domain': self.domain,
-                'config_file': config_path,
-                'note': 'Config file found but no server block matched this domain',
-                'next_steps': [f"Inspect the file: reveal {config_path}"],
-            }
+            return ResultBuilder.create(
+                result_type='nginx_vhost_not_found',
+                source=f'nginx://{self.domain}',
+                source_type='nginx_vhost',
+                contract_version='1.1',
+                data={
+                    'domain': self.domain,
+                    'config_file': config_path,
+                    'note': 'Config file found but no server block matched this domain',
+                    'next_steps': [f"Inspect the file: reveal {config_path}"],
+                }
+            )
 
         symlink_info = _resolve_symlink_info(config_path)
         ports = _extract_ports(server_block)
@@ -1049,28 +1059,33 @@ class NginxUriAdapter(ResourceAdapter):
         # BACK-259: surface other server names co-hosted in the same config file
         also_serves = _extract_cohosted_names(content, self.domain)
 
-        result = {
-            'type': 'nginx_vhost_summary',
-            'domain': self.domain,
-            'config_file': config_path,
-            'symlink': symlink_info,
-            'ports': ports,
-            'upstreams': {
-                name: {
-                    'definition': defn,
-                    'reachability': reachability.get(name, []),
-                }
-                for name, defn in upstream_defs.items()
-            },
-            'auth': auth,
-            'locations': locations,
-            'warnings': warnings,
-            'next_steps': [
-                f"reveal nginx://{self.domain}/upstream  # upstream health detail",
-                f"reveal nginx://{self.domain}/config    # full compiled config",
-                f"reveal check ssl://{self.domain}       # cert detail",
-            ],
-        }
+        result = ResultBuilder.create(
+            result_type='nginx_vhost_summary',
+            source=f'nginx://{self.domain}',
+            source_type='nginx_vhost',
+            contract_version='1.1',
+            data={
+                'domain': self.domain,
+                'config_file': config_path,
+                'symlink': symlink_info,
+                'ports': ports,
+                'upstreams': {
+                    name: {
+                        'definition': defn,
+                        'reachability': reachability.get(name, []),
+                    }
+                    for name, defn in upstream_defs.items()
+                },
+                'auth': auth,
+                'locations': locations,
+                'warnings': warnings,
+                'next_steps': [
+                    f"reveal nginx://{self.domain}/upstream  # upstream health detail",
+                    f"reveal nginx://{self.domain}/config    # full compiled config",
+                    f"reveal check ssl://{self.domain}       # cert detail",
+                ],
+            }
+        )
         if also_serves:
             result['also_serves'] = also_serves
         return result
