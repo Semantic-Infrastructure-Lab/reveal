@@ -235,10 +235,13 @@ class CsvAnalyzer(FileAnalyzer):
 
         except Exception as e:
             logger.debug(f"Error parsing CSV {self.path}: {e}")
-            return {
-                'error': str(e),
-                'message': 'Failed to parse CSV file'
-            }
+            return ResultBuilder.create_error(
+                result_type='csv_structure',
+                source=self.path,
+                error=str(e),
+                contract_version='1.1',
+                message='Failed to parse CSV file',
+            )
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get a specific row by number.

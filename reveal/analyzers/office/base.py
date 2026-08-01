@@ -221,7 +221,7 @@ class ZipXMLAnalyzer(FileAnalyzer):
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Return document structure. Override in subclass."""
         if self.parse_error:
-            return {'error': [{'message': self.parse_error}]}
+            return self._error_result('zip_xml_structure', self.parse_error)
         return {}
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:

@@ -729,10 +729,13 @@ class HTMLAnalyzer(FileAnalyzer):
         else:
             content = self.content
 
-        return {
-            'type': 'html',
-            'content': content,
-        }
+        return ResultBuilder.create(
+            result_type='html',
+            source=self.path,
+            data={'content': content},
+            contract_version='1.1',
+            confidence=1.0,
+        )
 
     def extract_by_selector(self, selector: str) -> Optional[Dict[str, Any]]:
         """Extract a single element by CSS selector, id, or tag name.
