@@ -101,7 +101,7 @@ class TestContractCompliance:
         base = adapter._get_contract_base()
 
         assert 'contract_version' in base
-        assert base['contract_version'] == '1.0'
+        assert base['contract_version'] == '1.1'
         assert 'type' in base
         assert 'source' in base
         assert 'source_type' in base
@@ -116,7 +116,7 @@ class TestContractCompliance:
         overview = adapter.get_structure()
 
         # Required fields
-        assert overview['contract_version'] == '1.0'
+        assert overview['contract_version'] == '1.1'
         assert overview['type'] == 'claude_session_overview'
         assert overview['source'] == str(TEST_CONVERSATION)
         assert overview['source_type'] == 'file'
@@ -1611,7 +1611,7 @@ class TestClaudeInfo:
         adapter = ClaudeAdapter('info')
         result = adapter.get_structure()
         assert result['type'] == 'claude_info'
-        assert result['contract_version'] == '1.0'
+        assert result['contract_version'] == '1.1'
 
     def test_get_info_has_all_path_keys(self):
         adapter = ClaudeAdapter('info')
@@ -1643,7 +1643,7 @@ class TestClaudeSettings:
         adapter = ClaudeAdapter('settings')
         result = adapter.get_structure()
         assert result['type'] == 'claude_settings'
-        assert result['contract_version'] == '1.0'
+        assert result['contract_version'] == '1.1'
 
     def test_settings_is_dict(self):
         adapter = ClaudeAdapter('settings')

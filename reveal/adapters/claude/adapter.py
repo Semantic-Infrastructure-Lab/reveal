@@ -481,7 +481,7 @@ class ClaudeAdapter(ResourceAdapter):
             - source_type: 'file'
         """
         return {
-            'contract_version': '1.0',
+            'contract_version': '1.1',
             'type': '',  # Set by caller
             'source': str(self.conversation_path) if self.conversation_path else '',
             'source_type': 'file'  # JSONL file

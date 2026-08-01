@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from datetime import date as _date
 
+from ....utils.results import ResultBuilder
+
 
 def _path_info(p: Path) -> Dict[str, Any]:
     if not p.exists():
@@ -44,15 +46,17 @@ def get_history(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, An
     if since == 'today':
         since = _date.today().isoformat()
 
-    base: Dict[str, Any] = {
-        'contract_version': '1.0',
-        'type': 'claude_history',
-        'source': str(history_path),
-        'source_type': 'file',
-        'search': search or None,
-        'project': project_filter or None,
-        'since': since or None,
-    }
+    base: Dict[str, Any] = ResultBuilder.create(
+        result_type='claude_history',
+        source=str(history_path),
+        source_type='file',
+        contract_version='1.1',
+        data={
+            'search': search or None,
+            'project': project_filter or None,
+            'since': since or None,
+        }
+    )
 
     if not history_path.exists():
         return {**base, 'total_entries': 0, 'match_count': 0, 'entries': [],
@@ -113,12 +117,12 @@ def get_history(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, An
 def get_settings(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """Read and return ~/.claude/settings.json, with optional ?key= extraction."""
     settings_path = claude_home / 'settings.json'
-    base: Dict[str, Any] = {
-        'contract_version': '1.0',
-        'type': 'claude_settings',
-        'source': str(settings_path),
-        'source_type': 'file',
-    }
+    base: Dict[str, Any] = ResultBuilder.create(
+        result_type='claude_settings',
+        source=str(settings_path),
+        source_type='file',
+        contract_version='1.1',
+    )
     if not settings_path.exists():
         return {**base, 'error': f'Not found: {settings_path}', 'settings': {}}
     try:
@@ -149,39 +153,41 @@ def get_info(
     sessions_dir: Optional[Path],
 ) -> Dict[str, Any]:
     """Diagnostic dump of all resolved Claude Code data paths and env overrides."""
-    return {
-        'contract_version': '1.0',
-        'type': 'claude_info',
-        'source': str(claude_home),
-        'source_type': 'directory',
-        'paths': {
-            'claude_home': _path_info(claude_home),
-            'projects': _path_info(conversation_base),
-            'history': _path_info(claude_home / 'history.jsonl'),
-            'plans': _path_info(plans_dir),
-            'settings': _path_info(claude_home / 'settings.json'),
-            'config': _path_info(claude_json),
-            'agents': _path_info(claude_home / 'agents'),
-            'hooks': _path_info(claude_home / 'hooks'),
-        },
-        'env': {
-            'REVEAL_CLAUDE_HOME': os.environ.get('REVEAL_CLAUDE_HOME', ''),
-            'REVEAL_CLAUDE_JSON': os.environ.get('REVEAL_CLAUDE_JSON', ''),
-            'REVEAL_CLAUDE_DIR': os.environ.get('REVEAL_CLAUDE_DIR', ''),
-            'REVEAL_SESSIONS_DIR': os.environ.get('REVEAL_SESSIONS_DIR', ''),
-        },
-        'sessions_dir': str(sessions_dir) if sessions_dir else None,
-    }
+    return ResultBuilder.create(
+        result_type='claude_info',
+        source=str(claude_home),
+        source_type='directory',
+        contract_version='1.1',
+        data={
+            'paths': {
+                'claude_home': _path_info(claude_home),
+                'projects': _path_info(conversation_base),
+                'history': _path_info(claude_home / 'history.jsonl'),
+                'plans': _path_info(plans_dir),
+                'settings': _path_info(claude_home / 'settings.json'),
+                'config': _path_info(claude_json),
+                'agents': _path_info(claude_home / 'agents'),
+                'hooks': _path_info(claude_home / 'hooks'),
+            },
+            'env': {
+                'REVEAL_CLAUDE_HOME': os.environ.get('REVEAL_CLAUDE_HOME', ''),
+                'REVEAL_CLAUDE_JSON': os.environ.get('REVEAL_CLAUDE_JSON', ''),
+                'REVEAL_CLAUDE_DIR': os.environ.get('REVEAL_CLAUDE_DIR', ''),
+                'REVEAL_SESSIONS_DIR': os.environ.get('REVEAL_SESSIONS_DIR', ''),
+            },
+            'sessions_dir': str(sessions_dir) if sessions_dir else None,
+        }
+    )
 
 
 def get_config(claude_json: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """Read ~/.claude.json — per-install config (projects, MCP servers, feature flags)."""
-    base: Dict[str, Any] = {
-        'contract_version': '1.0',
-        'type': 'claude_config',
-        'source': str(claude_json),
-        'source_type': 'file',
-    }
+    base: Dict[str, Any] = ResultBuilder.create(
+        result_type='claude_config',
+        source=str(claude_json),
+        source_type='file',
+        contract_version='1.1',
+    )
 
     if not claude_json.exists():
         return {**base, 'error': f'Config not found: {claude_json}', 'projects': [], 'flags': {}}

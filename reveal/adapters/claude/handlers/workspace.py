@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Union
 from datetime import datetime
 
+from ....utils.results import ResultBuilder
+
 
 def _resolve_md_resource(directory: Path, name: str) -> Union[Path, List[str], None]:
     """Resolve a claude://<X>/<name> single-item lookup to its .md file.
@@ -46,12 +48,12 @@ def _parse_agent_frontmatter(content: str) -> Dict[str, Any]:
 
 def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """List or read plans from ~/.claude/plans/."""
-    base: Dict[str, Any] = {
-        'contract_version': '1.0',
-        'type': 'claude_plans',
-        'source': str(plans_dir),
-        'source_type': 'directory',
-    }
+    base: Dict[str, Any] = ResultBuilder.create(
+        result_type='claude_plans',
+        source=str(plans_dir),
+        source_type='directory',
+        contract_version='1.1',
+    )
 
     # claude://plans/<name> — read specific plan
     parts = resource.split('/', 1)
@@ -122,12 +124,12 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
 
 def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """Walk ~/.claude/projects/ for memory/ subdirs and list memory files."""
-    base: Dict[str, Any] = {
-        'contract_version': '1.0',
-        'type': 'claude_memory',
-        'source': str(conversation_base),
-        'source_type': 'directory',
-    }
+    base: Dict[str, Any] = ResultBuilder.create(
+        result_type='claude_memory',
+        source=str(conversation_base),
+        source_type='directory',
+        contract_version='1.1',
+    )
 
     # claude://memory/<project-fragment> — filter to matching projects
     parts = resource.split('/', 1)
@@ -179,12 +181,12 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
 
 def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) -> Dict[str, Any]:
     """List or read agent definitions from ~/.claude/agents/."""
-    base: Dict[str, Any] = {
-        'contract_version': '1.0',
-        'type': 'claude_agents',
-        'source': str(agents_dir),
-        'source_type': 'directory',
-    }
+    base: Dict[str, Any] = ResultBuilder.create(
+        result_type='claude_agents',
+        source=str(agents_dir),
+        source_type='directory',
+        contract_version='1.1',
+    )
 
     # claude://agents/<name> — read specific agent
     parts = resource.split('/', 1)
@@ -253,12 +255,12 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
 
 def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
     """List or read hook scripts from ~/.claude/hooks/."""
-    base: Dict[str, Any] = {
-        'contract_version': '1.0',
-        'type': 'claude_hooks',
-        'source': str(hooks_dir),
-        'source_type': 'directory',
-    }
+    base: Dict[str, Any] = ResultBuilder.create(
+        result_type='claude_hooks',
+        source=str(hooks_dir),
+        source_type='directory',
+        contract_version='1.1',
+    )
 
     if not hooks_dir.exists():
         return {**base, 'hooks': [], 'total': 0,
