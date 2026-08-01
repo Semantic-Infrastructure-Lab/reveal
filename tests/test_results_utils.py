@@ -133,6 +133,20 @@ class TestResultBuilderCreate:
         assert result['custom_field'] == 'custom_value'
         assert result['another_field'] == 42
 
+    def test_scope_is_a_reserved_contract_field(self, tmp_path):
+        """BACK-884 design doc finding #5: 'scope' is reserved so a future
+        ResultBuilder-based adapter migration can't have **extra_fields
+        silently clobber the BACK-884 scope census."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("# test")
+
+        with pytest.raises(ValueError, match="scope"):
+            ResultBuilder.create(
+                result_type='custom',
+                source=test_file,
+                scope='not the real census',
+            )
+
     def test_v11_no_meta_if_no_metadata(self, tmp_path):
         """Don't add meta dict in v1.1 if no metadata provided."""
         test_file = tmp_path / "test.py"

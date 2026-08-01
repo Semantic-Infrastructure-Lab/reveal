@@ -43,7 +43,9 @@ from typing import Dict, Any, Optional, List, Union
 from reveal.types import RevealMeta, RevealResult, WarningEntry
 
 
-_CONTRACT_FIELDS: frozenset = frozenset({'contract_version', 'type', 'source', 'source_type', 'meta'})
+_CONTRACT_FIELDS: frozenset = frozenset(
+    {'contract_version', 'type', 'source', 'source_type', 'meta', 'scope'}
+)
 
 
 class ResultBuilder:
