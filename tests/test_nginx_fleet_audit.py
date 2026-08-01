@@ -385,7 +385,7 @@ class TestRunFleetAudit(unittest.TestCase):
     def test_result_type(self):
         result = _run_fleet_audit([self.tmpdir], [])
         self.assertEqual(result['type'], 'nginx_fleet_audit')
-        self.assertEqual(result['contract_version'], '1.0')
+        self.assertEqual(result['contract_version'], '1.1')
 
     def test_nonexistent_search_dir_skipped(self):
         result = _run_fleet_audit(['/nonexistent/path'], [])

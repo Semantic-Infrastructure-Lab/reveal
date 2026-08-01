@@ -10,6 +10,7 @@ from .probe import probe_http_redirect
 from .renderer import SSLRenderer
 from reveal.analyzers.nginx import NginxAnalyzer
 from ...utils.query import parse_query_params
+from ...utils.results import ResultBuilder
 
 _SCHEMA_ELEMENTS = {
     'san': 'Subject Alternative Names (all domain names)',
@@ -381,10 +382,13 @@ class SSLAdapter(ResourceAdapter):
                       else f'ssl://{self.host}')
 
         if not cert:
-            result = {'contract_version': '1.0', 'type': 'ssl_certificate',
-                      'source': source_uri,
-                      'source_type': 'file' if is_file_mode else 'network',
-                      'error': 'Failed to fetch certificate'}
+            result = ResultBuilder.create_error(
+                result_type='ssl_certificate',
+                source=source_uri,
+                error='Failed to fetch certificate',
+                contract_version='1.1',
+            )
+            result['source_type'] = 'file' if is_file_mode else 'network'
             if probe_http and self.host and not is_file_mode:
                 result['http_probe'] = probe_http_redirect(self.host)
             return result
@@ -392,21 +396,23 @@ class SSLAdapter(ResourceAdapter):
         days = cert.days_until_expiry
         health_status, health_icon = self._health_status(days)
 
-        result = {
-            'contract_version': '1.0',
-            'type': 'ssl_certificate',
-            'source': source_uri,
-            'source_type': 'file' if is_file_mode else 'network',
-            'common_name': cert.common_name,
-            'issuer': cert.issuer_name,
-            'valid_from': cert.not_before.strftime('%Y-%m-%d'),
-            'valid_until': cert.not_after.strftime('%Y-%m-%d'),
-            'days_until_expiry': days,
-            'health_status': health_status,
-            'health_icon': health_icon,
-            'san_count': len(cert.san),
-            'next_steps': self._build_next_steps(cert, is_file_mode),
-        }
+        result = ResultBuilder.create(
+            result_type='ssl_certificate',
+            source=source_uri,
+            source_type='file' if is_file_mode else 'network',
+            contract_version='1.1',
+            data={
+                'common_name': cert.common_name,
+                'issuer': cert.issuer_name,
+                'valid_from': cert.not_before.strftime('%Y-%m-%d'),
+                'valid_until': cert.not_after.strftime('%Y-%m-%d'),
+                'days_until_expiry': days,
+                'health_status': health_status,
+                'health_icon': health_icon,
+                'san_count': len(cert.san),
+                'next_steps': self._build_next_steps(cert, is_file_mode),
+            }
+        )
         if is_file_mode:
             result['file_path'] = self._cert_file_path
             chain_count = len(self._chain)

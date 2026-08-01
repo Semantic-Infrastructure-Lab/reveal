@@ -22,6 +22,7 @@ from typing import Dict, Any, Optional, List, Tuple
 
 from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
 from ..ssl.probe import probe_http_redirect
+from ...utils.results import ResultBuilder
 from .renderer import NginxUriRenderer
 
 
@@ -790,17 +791,20 @@ def _run_fleet_audit(
 
     matrix = _build_fleet_matrix(site_records, site_count, global_checks)
 
-    return {
-        'contract_version': '1.0',
-        'type': 'nginx_fleet_audit',
-        'source': 'nginx://',
-        'nginx_conf': nginx_conf_path,
-        'site_count': site_count,
-        'date': _date.today().isoformat(),
-        'matrix': matrix,
-        'snippet_consistency': _build_snippet_consistency(site_records, site_count),
-        'has_gaps': _fleet_has_gaps(matrix),
-    }
+    return ResultBuilder.create(
+        result_type='nginx_fleet_audit',
+        source='nginx://',
+        source_type='runtime',
+        contract_version='1.1',
+        data={
+            'nginx_conf': nginx_conf_path,
+            'site_count': site_count,
+            'date': _date.today().isoformat(),
+            'matrix': matrix,
+            'snippet_consistency': _build_snippet_consistency(site_records, site_count),
+            'has_gaps': _fleet_has_gaps(matrix),
+        }
+    )
 
 
 @register_adapter('nginx')
@@ -986,15 +990,17 @@ class NginxUriAdapter(ResourceAdapter):
                 f"Housekeeping: {len(artifact_files)} backup/temp file(s) found — review and remove"
             )
 
-        return {
-            'contract_version': '1.0',
-            'type': 'nginx_sites_overview',
-            'source': 'nginx://',
-            'source_type': 'runtime',
-            'sites': sites,
-            'artifact_files': artifact_files,
-            'next_steps': next_steps,
-        }
+        return ResultBuilder.create(
+            result_type='nginx_sites_overview',
+            source='nginx://',
+            source_type='runtime',
+            contract_version='1.1',
+            data={
+                'sites': sites,
+                'artifact_files': artifact_files,
+                'next_steps': next_steps,
+            }
+        )
 
     def _get_vhost_summary(self) -> Dict[str, Any]:
         """Build the main vhost summary."""

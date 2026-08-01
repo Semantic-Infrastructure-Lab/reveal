@@ -35,6 +35,7 @@ if sys.platform != 'win32':
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.query import parse_query_params
+from ...utils.results import ResultBuilder
 from .renderer import CpanelRenderer
 
 
@@ -50,7 +51,10 @@ _USERDATA_ARTIFACT_EXTENSIONS = ('.cache', '.yaml', '.json', '.lock', '.tmp', '.
 def _get_api_reference() -> Dict[str, Any]:
     """Return WHM/cPanel API quick-reference (cpanel://help/api)."""
     return {
+        'contract_version': '1.1',
         'type': 'cpanel_api_reference',
+        'source': 'cpanel://help/api',
+        'source_type': 'runtime',
         'title': 'WHM & cPanel API Quick Reference',
         'sections': [
             {
@@ -622,28 +626,36 @@ class CpanelAdapter(ResourceAdapter):
                 f"  # nginx ACME audit only"
             )
 
-        return {
-            'contract_version': '1.0',
-            'type': 'cpanel_user',
-            'username': self.username,
-            'userdata_dir': userdata_dir,
-            'userdata_accessible': userdata_ok,
-            'domain_count': len(domains),
-            'nginx_config': nginx_conf if nginx_present else None,
-            'ssl_summary': ssl_summary,
-            'next_steps': next_steps,
-        }
+        return ResultBuilder.create(
+            result_type='cpanel_user',
+            source=f'cpanel://{self.username}',
+            source_type='cpanel_account',
+            contract_version='1.1',
+            data={
+                'username': self.username,
+                'userdata_dir': userdata_dir,
+                'userdata_accessible': userdata_ok,
+                'domain_count': len(domains),
+                'nginx_config': nginx_conf if nginx_present else None,
+                'ssl_summary': ssl_summary,
+                'next_steps': next_steps,
+            }
+        )
 
     def _get_domains_structure(self) -> Dict[str, Any]:
         """List all domains with docroots and type."""
         domains = self._get_domains()
-        return {
-            'contract_version': '1.0',
-            'type': 'cpanel_domains',
-            'username': self.username,
-            'domain_count': len(domains),
-            'domains': domains,
-        }
+        return ResultBuilder.create(
+            result_type='cpanel_domains',
+            source=f'cpanel://{self.username}',
+            source_type='cpanel_account',
+            contract_version='1.1',
+            data={
+                'username': self.username,
+                'domain_count': len(domains),
+                'domains': domains,
+            }
+        )
 
     def _get_ssl_structure(self, dns_verified: bool = False,
                            only_failures: bool = False,
@@ -707,22 +719,26 @@ class CpanelAdapter(ResourceAdapter):
                 f" --cpanel-certs  # Compare disk vs live via nginx config"
             )
 
-        return {
-            'contract_version': '1.0',
-            'type': 'cpanel_ssl',
-            'username': self.username,
-            'cpanel_ssl_dir': CPANEL_SSL_DIR,
-            'cert_count': len(certs),
-            'dns_verified': dns_verified,
-            'only_failures': only_failures,
-            'check_live': check_live,
-            'domain_type_filter': domain_type_filter,
-            'summary': summary,
-            'dns_excluded': dns_excluded,
-            'dns_elsewhere': dns_elsewhere,
-            'certs': certs,
-            'next_steps': next_steps,
-        }
+        return ResultBuilder.create(
+            result_type='cpanel_ssl',
+            source=f'cpanel://{self.username}',
+            source_type='cpanel_account',
+            contract_version='1.1',
+            data={
+                'username': self.username,
+                'cpanel_ssl_dir': CPANEL_SSL_DIR,
+                'cert_count': len(certs),
+                'dns_verified': dns_verified,
+                'only_failures': only_failures,
+                'check_live': check_live,
+                'domain_type_filter': domain_type_filter,
+                'summary': summary,
+                'dns_excluded': dns_excluded,
+                'dns_elsewhere': dns_elsewhere,
+                'certs': certs,
+                'next_steps': next_steps,
+            }
+        )
 
     def _get_acl_structure(self, only_failures: bool = False) -> Dict[str, Any]:
         """nobody ACL health per domain docroot."""
@@ -753,21 +769,25 @@ class CpanelAdapter(ResourceAdapter):
 
         has_failures = any(r['acl_status'] == 'denied' for r in acl_results)
 
-        return {
-            'contract_version': '1.0',
-            'type': 'cpanel_acl',
-            'username': self.username,
-            'domain_count': len(acl_results),
-            'only_failures': only_failures,
-            'summary': summary,
-            'has_failures': has_failures,
-            'domains': acl_results,
-            'next_steps': [
-                f"reveal cpanel://{self.username}/ssl  # Check cert status",
-                f"reveal {os.path.join(NGINX_USER_CONF_DIR, self.username + '.conf')}"
-                f" --check-acl  # Full nginx ACL check",
-            ],
-        }
+        return ResultBuilder.create(
+            result_type='cpanel_acl',
+            source=f'cpanel://{self.username}',
+            source_type='cpanel_account',
+            contract_version='1.1',
+            data={
+                'username': self.username,
+                'domain_count': len(acl_results),
+                'only_failures': only_failures,
+                'summary': summary,
+                'has_failures': has_failures,
+                'domains': acl_results,
+                'next_steps': [
+                    f"reveal cpanel://{self.username}/ssl  # Check cert status",
+                    f"reveal {os.path.join(NGINX_USER_CONF_DIR, self.username + '.conf')}"
+                    f" --check-acl  # Full nginx ACL check",
+                ],
+            }
+        )
 
     def _get_full_audit_structure(self, dns_verified: bool = False,
                                   only_failures: bool = False) -> Dict[str, Any]:
@@ -819,15 +839,19 @@ class CpanelAdapter(ResourceAdapter):
         nginx_has_failures = nginx_audit.get('has_failures', False) if nginx_audit else False
         has_failures = ssl_has_failures or acl_has_failures or nginx_has_failures
 
-        return {
-            'contract_version': '1.0',
-            'type': 'cpanel_full_audit',
-            'username': self.username,
-            'has_failures': has_failures,
-            'ssl': ssl_data,
-            'acl': acl_data,
-            'nginx': nginx_audit,
-        }
+        return ResultBuilder.create(
+            result_type='cpanel_full_audit',
+            source=f'cpanel://{self.username}',
+            source_type='cpanel_account',
+            contract_version='1.1',
+            data={
+                'username': self.username,
+                'has_failures': has_failures,
+                'ssl': ssl_data,
+                'acl': acl_data,
+                'nginx': nginx_audit,
+            }
+        )
 
     def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Not used — element routing handled in get_structure."""
