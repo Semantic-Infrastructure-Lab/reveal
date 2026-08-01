@@ -28,6 +28,7 @@ def aggregate_stats(file_stats: List[Dict[str, Any]], source_path: Path) -> Dict
         return ResultBuilder.create(
             result_type='stats_summary',
             source=source_path,
+            contract_version='1.1',
             data={
                 'summary': {
                     'total_files': 0,
@@ -56,6 +57,7 @@ def aggregate_stats(file_stats: List[Dict[str, Any]], source_path: Path) -> Dict
     return ResultBuilder.create(
         result_type='stats_summary',
         source=source_path,
+        contract_version='1.1',
         data={
             'summary': {
                 'total_files': len(file_stats),

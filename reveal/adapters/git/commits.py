@@ -27,6 +27,7 @@ def get_repository_overview(
         result_type='git_repository',
         source=repo.workdir or repo.path,
         source_type='directory',
+        contract_version='1.1',
         path=repo.workdir or repo.path,
         head=head_info,
         branches={

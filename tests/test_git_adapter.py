@@ -219,7 +219,7 @@ class TestRepositoryOverview:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_repository'
-        assert structure['contract_version'] == '1.0'
+        assert structure['contract_version'] == '1.1'
         assert structure['source_type'] == 'directory'
         assert 'source' in structure
         assert 'head' in structure
@@ -302,7 +302,7 @@ class TestRefExploration:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_ref'
-        assert structure['contract_version'] == '1.0'
+        assert structure['contract_version'] == '1.1'
         assert structure['source_type'] == 'directory'
         assert structure['ref'] == commit_hash
         assert 'commit' in structure
@@ -315,7 +315,7 @@ class TestRefExploration:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_ref'
-        assert structure['contract_version'] == '1.0'
+        assert structure['contract_version'] == '1.1'
         assert structure['source_type'] == 'directory'
         assert structure['ref'] == 'feature'
         assert 'commit' in structure
@@ -328,7 +328,7 @@ class TestRefExploration:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_ref'
-        assert structure['contract_version'] == '1.0'
+        assert structure['contract_version'] == '1.1'
         assert structure['source_type'] == 'directory'
         assert structure['ref'] == 'v1.0.0'
         assert 'commit' in structure
@@ -353,7 +353,7 @@ class TestFileInspection:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_file_structure'
-        assert structure['contract_version'] == '1.0'
+        assert structure['contract_version'] == '1.1'
         assert structure['source_type'] == 'file'
         assert structure['path'] == 'README.md'
         assert 'structure' in structure
@@ -368,7 +368,7 @@ class TestFileInspection:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_file'
-        assert structure['contract_version'] == '1.0'
+        assert structure['contract_version'] == '1.1'
         assert 'content' in structure
         assert 'Updated content' in structure['content']
 
@@ -379,7 +379,7 @@ class TestFileInspection:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_file_structure'
-        assert structure['contract_version'] == '1.0'
+        assert structure['contract_version'] == '1.1'
         assert structure['source_type'] == 'file'
         assert structure['path'] == 'README.md'
         assert 'structure' in structure
@@ -410,7 +410,7 @@ class TestFileInspection:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_file_diff'
-        assert structure['contract_version'] == '1.0'
+        assert structure['contract_version'] == '1.1'
         assert structure['path'] == 'README.md'
         assert 'diff_text' in structure
         assert 'commit_info' in structure
@@ -441,7 +441,7 @@ class TestFileHistory:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_file_history'
-        assert structure['contract_version'] == '1.0'
+        assert structure['contract_version'] == '1.1'
         assert structure['source_type'] == 'file'
         assert structure['path'] == 'README.md'
         assert 'commits' in structure
@@ -474,7 +474,7 @@ class TestFileBlame:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_file_blame'
-        assert structure['contract_version'] == '1.0'
+        assert structure['contract_version'] == '1.1'
         assert structure['source_type'] == 'file'
         assert structure['path'] == 'README.md'
         assert 'hunks' in structure
@@ -546,7 +546,7 @@ class TestEdgeCases:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_repository'
-        assert structure['contract_version'] == '1.0'
+        assert structure['contract_version'] == '1.1'
         assert structure['stats']['is_empty']
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
@@ -560,7 +560,7 @@ class TestEdgeCases:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_repository'
-        assert structure['contract_version'] == '1.0'
+        assert structure['contract_version'] == '1.1'
         assert structure['stats']['is_bare']
 
 
@@ -2520,7 +2520,7 @@ class TestOwnership:
                              query={'type': 'ownership'})
         r = adapter.get_structure()
         assert r['type'] == 'git_ownership'
-        assert r['contract_version'] == '1.0'
+        assert r['contract_version'] == '1.1'
         assert r['source_type'] == 'file'
         assert r['path'] == 'src/app.py'
         assert r['total_commits'] == 3
@@ -2702,7 +2702,7 @@ class TestTimeline:
                               query={'type': 'history', 'bucket': 'month'})
         r = adapter.get_structure()
         assert r['type'] == 'git_timeline'
-        assert r['contract_version'] == '1.0'
+        assert r['contract_version'] == '1.1'
         assert r['source_type'] == 'file'
         assert r['path'] == 'src/app.py'
         assert r['bucket'] == 'month'
