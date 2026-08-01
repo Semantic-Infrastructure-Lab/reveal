@@ -609,14 +609,21 @@ def test_check_and_hotspots_complete_quickly(lang):
     """`check`/`hotspots` must never hang regardless of language (BACK-418/424
     class: an unbounded scan that only shows up on a real-sized tree). Fixture
     directories are tiny, so this is a smoke bound, not a scale repro — the
-    scale repro itself lives in test_rules.py's I002 ceiling tests."""
+    scale repro itself lives in test_rules.py's I002 ceiling tests.
+
+    timeout=30, not a tight bound: under `-n auto` parallel test execution
+    this subprocess competes with every other worker for CPU, so a real
+    (sub-second) run can occasionally exceed a tight timeout under load —
+    observed flaking at timeout=10 with no code change involved. 30s still
+    catches a genuine infinite-loop regression; it would not finish in that
+    window either."""
     env = os.environ.copy()
     env["PYTHONPATH"] = str(Path(__file__).parents[1])
     env["REVEAL_I002_MAX_FILES"] = "3"
     for flag in ("--check", "--hotspots"):
         result = subprocess.run(
             [sys.executable, "-m", "reveal.main", str(_lang_dir(lang)), flag],
-            capture_output=True, text=True, timeout=10, env=env,
+            capture_output=True, text=True, timeout=30, env=env,
         )
         assert result.returncode in (0, 1), (
             f"{lang} {flag}: unexpected crash (rc={result.returncode}): {result.stderr}"
