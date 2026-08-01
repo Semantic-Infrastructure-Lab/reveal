@@ -14,6 +14,7 @@ from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 from ..core import tree_root
+from ..utils.results import ResultBuilder
 
 
 @register('Dockerfile', name='Dockerfile', icon='')
@@ -80,13 +81,14 @@ class DockerfileAnalyzer(TreeSitterAnalyzer):
 
         if not structure:
             return {}
-        return {
-            'contract_version': '1.0',
-            'type': 'dockerfile_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-            **structure,
-        }
+        return ResultBuilder.create(
+            result_type='dockerfile_structure',
+            source=self.path,
+            data=structure,
+            contract_version='1.1',
+            parse_mode='tree_sitter_full',
+            confidence=1.0,
+        )
 
     def _get_instruction_content(self, node) -> str:
         """Extract content from instruction node, handling various formats."""

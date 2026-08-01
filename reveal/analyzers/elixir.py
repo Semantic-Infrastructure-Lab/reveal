@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from ..core import node_children as _children
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
+from ..utils.results import ResultBuilder
 
 # Macro calls that define a callable. Module-shaped macros are handled
 # separately (they map to a "class", not a function).
@@ -47,13 +48,14 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
     def get_structure(self, head=None, tail=None, range=None, **kwargs) -> Dict[str, Any]:
         """Extract Elixir code structure with output contract fields."""
         structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
-        return {
-            'contract_version': '1.0',
-            'type': 'elixir_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-            **structure,
-        }
+        return ResultBuilder.create(
+            result_type='elixir_structure',
+            source=self.path,
+            data=structure,
+            contract_version='1.1',
+            parse_mode='tree_sitter_full',
+            confidence=1.0,
+        )
 
     # --- Elixir-specific call-shaped definition extraction ---------------
 

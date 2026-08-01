@@ -14,6 +14,7 @@ from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 from ..core import tree_root
+from ..utils.results import ResultBuilder
 
 
 @register('.yaml', '.yml', name='YAML', icon='', category='data')
@@ -92,13 +93,14 @@ class YamlAnalyzer(TreeSitterAnalyzer):
 
         if not keys:
             return {}
-        return {
-            'contract_version': '1.0',
-            'type': 'yaml_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-            'keys': keys,
-        }
+        return ResultBuilder.create(
+            result_type='yaml_structure',
+            source=self.path,
+            data={'keys': keys},
+            contract_version='1.1',
+            parse_mode='tree_sitter_full',
+            confidence=1.0,
+        )
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a YAML key and its value using tree-sitter.
@@ -191,13 +193,14 @@ class JsonAnalyzer(TreeSitterAnalyzer):
 
         if not keys:
             return {}
-        return {
-            'contract_version': '1.0',
-            'type': 'json_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-            'keys': keys,
-        }
+        return ResultBuilder.create(
+            result_type='json_structure',
+            source=self.path,
+            data={'keys': keys},
+            contract_version='1.1',
+            parse_mode='tree_sitter_full',
+            confidence=1.0,
+        )
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a JSON key and its value using tree-sitter.

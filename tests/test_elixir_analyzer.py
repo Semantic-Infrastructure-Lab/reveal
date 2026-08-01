@@ -113,7 +113,7 @@ end
 
     def test_contract_fields_present(self, tmp_path):
         structure = self._structure(tmp_path)
-        assert structure["contract_version"] == "1.0"
+        assert structure["contract_version"] == "1.1"
         assert structure["type"] == "elixir_structure"
 
     def test_nested_modules_and_protocol(self, tmp_path):

@@ -3,6 +3,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
+from ..utils.results import ResultBuilder
 
 
 @register('.tf', '.tfvars', '.hcl', name='HCL', icon='🏗️', category='config')
@@ -39,13 +40,14 @@ class HCLAnalyzer(TreeSitterAnalyzer):
                 )
 
         # Remove empty categories and add output contract fields
-        return {
-            'contract_version': '1.0',
-            'type': 'hcl_structure',
-            'source': str(self.path),
-            'source_type': 'file',
-            **{k: v for k, v in structure.items() if v},
-        }
+        return ResultBuilder.create(
+            result_type='hcl_structure',
+            source=self.path,
+            data={k: v for k, v in structure.items() if v},
+            contract_version='1.1',
+            parse_mode='tree_sitter_full',
+            confidence=1.0,
+        )
 
     def _extract_blocks(self, block_type: str) -> List[Dict[str, Any]]:
         """Extract blocks of a specific type (resource, variable, output, etc.)."""
