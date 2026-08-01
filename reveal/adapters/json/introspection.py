@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
+from ...utils.results import ResultBuilder
+
 
 def get_type_str(value: Any) -> str:
     """Get human-readable type string for a value.
@@ -134,15 +136,17 @@ def get_schema_result(value: Any, file_path: Path, json_path: List[str | int], m
         Schema result dict
     """
     schema = infer_schema(value, max_depth)
-    return {
-        'contract_version': '1.0',
-        'type': 'json_schema',
-        'source': str(file_path),
-        'source_type': 'file',
-        'file': str(file_path),
-        'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
-        'schema': schema
-    }
+    return ResultBuilder.create(
+        result_type='json_schema',
+        source=str(file_path),
+        source_type='file',
+        contract_version='1.1',
+        data={
+            'file': str(file_path),
+            'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
+            'schema': schema,
+        }
+    )
 
 
 def get_flatten_result(
@@ -161,16 +165,18 @@ def get_flatten_result(
         Flatten result dict
     """
     lines = flatten_value(value, 'json')
-    result = {
-        'contract_version': '1.0',
-        'type': 'json_flatten',
-        'source': str(file_path),
-        'source_type': 'file',
-        'file': str(file_path),
-        'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
-        'lines': lines,
-        'line_count': len(lines)
-    }
+    result = ResultBuilder.create(
+        result_type='json_flatten',
+        source=str(file_path),
+        source_type='file',
+        contract_version='1.1',
+        data={
+            'file': str(file_path),
+            'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
+            'lines': lines,
+            'line_count': len(lines),
+        }
+    )
     if data_only:
         result['data_only'] = True
     return result
@@ -187,17 +193,19 @@ def get_type_info_result(value: Any, file_path: Path, json_path: List[str | int]
     Returns:
         Type info result dict
     """
-    return {
-        'contract_version': '1.0',
-        'type': 'json_type',
-        'source': str(file_path),
-        'source_type': 'file',
-        'file': str(file_path),
-        'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
-        'value_type': get_type_str(value),
-        'is_container': isinstance(value, (dict, list)),
-        'length': len(value) if isinstance(value, (dict, list, str)) else None
-    }
+    return ResultBuilder.create(
+        result_type='json_type',
+        source=str(file_path),
+        source_type='file',
+        contract_version='1.1',
+        data={
+            'file': str(file_path),
+            'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
+            'value_type': get_type_str(value),
+            'is_container': isinstance(value, (dict, list)),
+            'length': len(value) if isinstance(value, (dict, list, str)) else None,
+        }
+    )
 
 
 def get_keys_result(value: Any, file_path: Path, json_path: List[str | int]) -> Dict[str, Any]:
@@ -212,35 +220,38 @@ def get_keys_result(value: Any, file_path: Path, json_path: List[str | int]) -> 
         Keys result dict
     """
     if isinstance(value, dict):
-        return {
-            'contract_version': '1.0',
-            'type': 'json_keys',
-            'source': str(file_path),
-            'source_type': 'file',
-            'file': str(file_path),
-            'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
-            'keys': list(value.keys()),
-            'count': len(value)
-        }
+        return ResultBuilder.create(
+            result_type='json_keys',
+            source=str(file_path),
+            source_type='file',
+            contract_version='1.1',
+            data={
+                'file': str(file_path),
+                'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
+                'keys': list(value.keys()),
+                'count': len(value),
+            }
+        )
     elif isinstance(value, list):
-        return {
-            'contract_version': '1.0',
-            'type': 'json_keys',
-            'source': str(file_path),
-            'source_type': 'file',
-            'file': str(file_path),
-            'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
-            'indices': list(range(len(value))),
-            'count': len(value)
-        }
+        return ResultBuilder.create(
+            result_type='json_keys',
+            source=str(file_path),
+            source_type='file',
+            contract_version='1.1',
+            data={
+                'file': str(file_path),
+                'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
+                'indices': list(range(len(value))),
+                'count': len(value),
+            }
+        )
     else:
-        return {
-            'contract_version': '1.0',
-            'type': 'json_error',
-            'source': str(file_path),
-            'source_type': 'file',
-            'error': f'Cannot get keys from {type(value).__name__}'
-        }
+        return ResultBuilder.create_error(
+            result_type='json_error',
+            source=str(file_path),
+            error=f'Cannot get keys from {type(value).__name__}',
+            contract_version='1.1',
+        )
 
 
 def get_length_result(value: Any, file_path: Path, json_path: List[str | int]) -> Dict[str, Any]:
@@ -255,21 +266,22 @@ def get_length_result(value: Any, file_path: Path, json_path: List[str | int]) -
         Length result dict
     """
     if isinstance(value, (dict, list, str)):
-        return {
-            'contract_version': '1.0',
-            'type': 'json_length',
-            'source': str(file_path),
-            'source_type': 'file',
-            'file': str(file_path),
-            'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
-            'length': len(value),
-            'value_type': get_type_str(value)
-        }
+        return ResultBuilder.create(
+            result_type='json_length',
+            source=str(file_path),
+            source_type='file',
+            contract_version='1.1',
+            data={
+                'file': str(file_path),
+                'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
+                'length': len(value),
+                'value_type': get_type_str(value),
+            }
+        )
     else:
-        return {
-            'contract_version': '1.0',
-            'type': 'json_error',
-            'source': str(file_path),
-            'source_type': 'file',
-            'error': f'Cannot get length of {type(value).__name__}'
-        }
+        return ResultBuilder.create_error(
+            result_type='json_error',
+            source=str(file_path),
+            error=f'Cannot get length of {type(value).__name__}',
+            contract_version='1.1',
+        )

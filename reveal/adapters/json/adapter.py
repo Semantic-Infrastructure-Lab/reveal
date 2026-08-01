@@ -3,6 +3,7 @@
 from typing import Dict, Any, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
+from ...utils.results import ResultBuilder
 from ...utils.query import (
     parse_query_filters,
     parse_result_control,
@@ -155,15 +156,14 @@ class JsonAdapter(ResourceAdapter):
         Returns:
             Error result dict
         """
-        return {
-            'contract_version': '1.0',
-            'type': 'json_error',
-            'source': str(self.file_path),
-            'source_type': 'file',
-            'file': str(self.file_path),
-            'path': '/'.join(str(p) for p in self.json_path),
-            'error': error_msg
-        }
+        return ResultBuilder.create_error(
+            result_type='json_error',
+            source=str(self.file_path),
+            error=error_msg,
+            contract_version='1.1',
+            file=str(self.file_path),
+            path='/'.join(str(p) for p in self.json_path),
+        )
 
     def _build_success_result(self, value: Any, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Build success result dict.
@@ -175,16 +175,18 @@ class JsonAdapter(ResourceAdapter):
         Returns:
             Success result dict
         """
-        result = {
-            'contract_version': '1.0',
-            'type': 'json_value',
-            'source': str(self.file_path),
-            'source_type': 'file',
-            'file': str(self.file_path),
-            'path': '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)',
-            'value_type': get_type_str(value),
-            'value': value
-        }
+        result = ResultBuilder.create(
+            result_type='json_value',
+            source=str(self.file_path),
+            source_type='file',
+            contract_version='1.1',
+            data={
+                'file': str(self.file_path),
+                'path': '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)',
+                'value_type': get_type_str(value),
+                'value': value,
+            }
+        )
 
         # Add metadata if present
         if metadata:
@@ -226,15 +228,14 @@ class JsonAdapter(ResourceAdapter):
 
         if has_only_existence_checks or (not self.query_filters and has_no_result_control):
             legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
-            return {
-                'contract_version': '1.0',
-                'type': 'json_error',
-                'source': str(self.file_path),
-                'source_type': 'file',
-                'file': str(self.file_path),
-                'error': f"Unknown query: {self.query_string}",
-                'valid_queries': list(legacy_modes) + ['field=value', 'field>value', 'sort=field', 'limit=N']
-            }
+            return ResultBuilder.create_error(
+                result_type='json_error',
+                source=str(self.file_path),
+                error=f"Unknown query: {self.query_string}",
+                contract_version='1.1',
+                file=str(self.file_path),
+                valid_queries=list(legacy_modes) + ['field=value', 'field>value', 'sort=field', 'limit=N'],
+            )
 
         return None
 
