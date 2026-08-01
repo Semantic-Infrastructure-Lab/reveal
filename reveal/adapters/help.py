@@ -378,6 +378,7 @@ class HelpAdapter(ResourceAdapter):
         'elixir': 'development/ELIXIR_ANALYZER_GUIDE.md',
         'help': 'development/HELP_SYSTEM_GUIDE.md',
         'output': 'development/OUTPUT_CONTRACT.md',
+        'rule-authoring': 'development/RULE_AUTHORING_GUIDE.md',
         'scaffolding': 'development/SCAFFOLDING_GUIDE.md',
     }
 
