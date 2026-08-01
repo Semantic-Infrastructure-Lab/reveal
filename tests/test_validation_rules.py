@@ -35,6 +35,7 @@ from reveal.rules.validation.V023 import V023
 from reveal.rules.validation.V027 import V027
 from reveal.rules.validation.V028 import V028
 from reveal.rules.validation.V029 import V029
+from reveal.rules.validation.V031 import V031
 from reveal.rules.validation.utils import find_reveal_root
 
 
@@ -2849,6 +2850,114 @@ Also ships 81+ quality rules in the next release.
             )
             with patch('reveal.rules.validation.V029.find_reveal_root',
                        return_value=root / 'reveal'):
+                detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(detections, [])
+
+
+class TestV031ValidationTraceability(unittest.TestCase):
+    """Test V031: capabilities.py measured-recall data traceable to VALIDATION.md (BACK-880)."""
+
+    def setUp(self):
+        self.rule = V031()
+
+    def test_metadata(self):
+        self.assertEqual(self.rule.code, "V031")
+        self.assertEqual(self.rule.severity.name, "MEDIUM")
+        self.assertIn("validation", self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        detections = self.rule.check(
+            file_path="/some/file.py", structure=None, content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        detections = self.rule.check(file_path="reveal://", structure=None, content="")
+        self.assertIsInstance(detections, list)
+
+    def test_live_registry_is_clean(self):
+        """The real capabilities.py/VALIDATION.md pair must be in sync right now —
+        this is the regression guard: if a future edit to either drifts, this
+        test (and `reveal reveal:// --check`) both catch it."""
+        detections = self.rule.check(file_path="reveal://", structure=None, content="")
+        self.assertEqual(
+            detections, [],
+            f"capabilities.py validation= data has drifted from VALIDATION.md: "
+            f"{[d.message for d in detections]}",
+        )
+
+    def test_parse_table_extracts_known_language(self):
+        lines = [
+            "| Language | Import recall | Side-effect recall | Call-graph recall | Status |",
+            "|---|---|---|---|---|",
+            "| Python | ✅ 100% (Home Assistant) | ✅ 83.5% (Home Assistant) | "
+            "✅ 99.96%→100% (Home Assistant) | **Measured** |",
+        ]
+        parsed = self.rule._parse_table(lines)
+        self.assertIn('python', parsed)
+        self.assertIn('100%', parsed['python']['import_recall'])
+        self.assertIn('83.5%', parsed['python']['side_effect_recall'])
+        self.assertIn('99.96%', parsed['python']['call_graph_recall'])
+
+    def test_missing_number_is_flagged(self):
+        """A capabilities.py claim not present in the doc cell is drift."""
+        from reveal.capabilities import LanguageCapability, MeasuredRecall, RECALL_SIGNAL_IMPORT
+
+        fake_cap = LanguageCapability(
+            language="python",
+            function_body_shape="n/a",
+            varflow="verified",
+            imports_unused=True,
+            import_resolution="n/a",
+            conformance_level="tier1-verified",
+            validation=[MeasuredRecall(RECALL_SIGNAL_IMPORT, 55.5, "Fake Corpus")],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'reveal').mkdir(parents=True)
+            (root / 'VALIDATION.md').write_text(
+                "| Language | Import recall | Side-effect recall | Call-graph recall | Status |\n"
+                "|---|---|---|---|---|\n"
+                "| Python | ✅ 100% (Home Assistant) | ✅ 83.5% (Home Assistant) | "
+                "✅ 100% (Home Assistant) | **Measured** |\n",
+                encoding='utf-8',
+            )
+            with patch('reveal.rules.validation.V031.find_reveal_root',
+                       return_value=root / 'reveal'), \
+                 patch('reveal.capabilities.get_all_capabilities',
+                       return_value={'FakeAnalyzer': fake_cap}):
+                detections = self.rule.check('reveal://', None, '')
+        self.assertTrue(
+            any('55.5' in d.message for d in detections),
+            f"V031 did not flag the untraceable 55.5% claim: {[d.message for d in detections]}",
+        )
+
+    def test_matching_number_not_flagged(self):
+        from reveal.capabilities import LanguageCapability, MeasuredRecall, RECALL_SIGNAL_IMPORT
+
+        fake_cap = LanguageCapability(
+            language="python",
+            function_body_shape="n/a",
+            varflow="verified",
+            imports_unused=True,
+            import_resolution="n/a",
+            conformance_level="tier1-verified",
+            validation=[MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Home Assistant")],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'reveal').mkdir(parents=True)
+            (root / 'VALIDATION.md').write_text(
+                "| Language | Import recall | Side-effect recall | Call-graph recall | Status |\n"
+                "|---|---|---|---|---|\n"
+                "| Python | ✅ 100% (Home Assistant) | ✅ 83.5% (Home Assistant) | "
+                "✅ 100% (Home Assistant) | **Measured** |\n",
+                encoding='utf-8',
+            )
+            with patch('reveal.rules.validation.V031.find_reveal_root',
+                       return_value=root / 'reveal'), \
+                 patch('reveal.capabilities.get_all_capabilities',
+                       return_value={'FakeAnalyzer': fake_cap}):
                 detections = self.rule.check('reveal://', None, '')
         self.assertEqual(detections, [])
 

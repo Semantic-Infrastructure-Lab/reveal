@@ -45,6 +45,16 @@ implemented and evidence shows results are relied upon; ``False`` where an
 extractor exists but is known-unreliable and always suppresses "unused"
 findings via ``skip_unused``; ``None`` where no import extractor is
 registered for the language at all).
+
+``validation`` (BACK-880) is a further refinement: ``conformance_level``
+answers "has this language been through independent-oracle validation at
+all?"; ``validation`` answers "what exactly was measured, on what corpus, at
+what recall, with what caveats?" — the actual numbers from ``VALIDATION.md``'s
+"Validation status at a glance" table, transcribed once here so they're
+queryable via ``--capabilities``/``--language-info`` instead of stuck in
+prose. See ``MeasuredRecall`` below for the field shape and ``V031``
+(``reveal/rules/validation/V031.py``) for the drift check that keeps this
+data traceable back to VALIDATION.md's table.
 """
 
 from __future__ import annotations
@@ -78,6 +88,59 @@ _CONFORMANCE_LEVELS = frozenset({
     CONFORMANCE_STRUCTURE_ONLY, CONFORMANCE_UNTESTED,
 })
 
+# --- measured recall signals (BACK-880) -------------------------------------
+#
+# ``conformance_level`` above answers "has this language been through the
+# independent-oracle validation program at all, and how far?" These constants
+# name the three signals VALIDATION.md actually measures recall for, once a
+# language has.
+
+RECALL_SIGNAL_IMPORT = "import_recall"
+RECALL_SIGNAL_SIDE_EFFECT = "side_effect_recall"
+RECALL_SIGNAL_CALL_GRAPH = "call_graph_recall"
+
+_RECALL_SIGNALS = frozenset({
+    RECALL_SIGNAL_IMPORT, RECALL_SIGNAL_SIDE_EFFECT, RECALL_SIGNAL_CALL_GRAPH,
+})
+
+
+@dataclass(frozen=True)
+class MeasuredRecall:
+    """One independently-measured recall data point for a (language, signal)
+    pair, transcribed from VALIDATION.md's "Validation status at a glance"
+    table (BACK-880). ``conformance_level`` says a language has *some*
+    evidence; this says exactly what was measured, against what corpus, and
+    with what caveats — the difference VALIDATION.md itself insists matters
+    (its own words: "a sample is not a census").
+
+    A signal can have more than one ``MeasuredRecall`` entry (e.g. TypeScript
+    import recall was measured on both VS Code and nest, at different
+    percentages) — ``LanguageCapability.validation`` is a flat list, not a
+    dict keyed by signal, so this is representable without contortion.
+
+    ``sample_note`` is populated only where VALIDATION.md's own "how to read
+    this table" caveats explicitly flag a stratified (non-census) sample —
+    e.g. Rust/Meilisearch at 295 of 1,491 edges (20%). Its absence means
+    "not called out as partial in the summary," not "verified full
+    population" — read VALIDATION.md's per-language Results section directly
+    for full stratification detail; this registry deliberately does not
+    duplicate that level of detail (see module docstring, BACK-880 scoping).
+    """
+
+    signal: str  # one of the RECALL_SIGNAL_* constants above
+    recall_pct: float  # headline recall — post-fix, if VALIDATION.md shows a before/after arrow
+    corpus: str  # e.g. "Home Assistant"; may name more than one corpus
+    pre_fix_pct: Optional[float] = None  # set when the table showed "before%→after%"
+    sample_note: Optional[str] = None  # explicit stratified-sample caveat, verbatim gist
+    fixed_tickets: List[str] = field(default_factory=list)
+    open_tickets: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.signal not in _RECALL_SIGNALS:
+            raise ValueError(
+                f"signal={self.signal!r} not one of {sorted(_RECALL_SIGNALS)}"
+            )
+
 
 @dataclass(frozen=True)
 class LanguageCapability:
@@ -94,6 +157,7 @@ class LanguageCapability:
     import_resolution: str
     conformance_level: str  # one of the CONFORMANCE_* levels above
     known_limitations: List[str] = field(default_factory=list)
+    validation: List[MeasuredRecall] = field(default_factory=list)  # BACK-880
 
     def __post_init__(self) -> None:
         if self.varflow not in _VARFLOW_LEVELS:
@@ -152,6 +216,12 @@ _TIER1: Dict[str, LanguageCapability] = {
             "unused-import detection."
         ),
         known_limitations=[],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Home Assistant, celery"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 83.5, "Home Assistant"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "Home Assistant",
+                            pre_fix_pct=99.96, sample_note="3 query directions"),
+        ],
     ),
     "RustAnalyzer": _tier1(
         language="rust",
@@ -181,6 +251,13 @@ _TIER1: Dict[str, LanguageCapability] = {
             "blanket-excluding token_tree would also hide genuine variable "
             "references inside common macros like println!.",
         ],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Meilisearch, ripgrep"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 97.4, "Meilisearch"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "Meilisearch",
+                            pre_fix_pct=95.27, sample_note="295 of 1,491 edges (20%), stratified by fan-in",
+                            fixed_tickets=["BACK-733"]),
+        ],
     ),
     "GoAnalyzer": _tier1(
         language="go",
@@ -199,6 +276,11 @@ _TIER1: Dict[str, LanguageCapability] = {
             "not nested under a type body, so literal Class.method syntax "
             "may never apply; `:LINE-RANGE` is the working workaround.",
         ],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Kubernetes, client_golang"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 96.3, "client-go"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "Go compiler internals"),
+        ],
     ),
     "CAnalyzer": _tier1(
         language="c",
@@ -214,6 +296,13 @@ _TIER1: Dict[str, LanguageCapability] = {
             "symbol-usage semantics."
         ),
         known_limitations=[],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Redis, curl"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 92.0, "Redis",
+                            sample_note="`http` category declined"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "Redis",
+                            pre_fix_pct=89.52, open_tickets=["BACK-756"]),
+        ],
     ),
     "CppAnalyzer": _tier1(
         language="cpp",
@@ -245,6 +334,12 @@ _TIER1: Dict[str, LanguageCapability] = {
             "returns (e.g. CHECK_OR_RETURN(...)) since tree-sitter sees only "
             "the unexpanded macro call.",
         ],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Godot, assimp"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 83.3, "Godot"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 95.73, "assimp",
+                            sample_note="Godot sample 450 of 7,230 oracle edges (6.2%)"),
+        ],
     ),
     "JavaAnalyzer": _tier1(
         language="java",
@@ -264,6 +359,12 @@ _TIER1: Dict[str, LanguageCapability] = {
             "not claimed."
         ),
         known_limitations=[],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Elasticsearch, guava"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 97.5, "Elasticsearch"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "Elasticsearch",
+                            pre_fix_pct=9.99, fixed_tickets=["BACK-734"]),
+        ],
     ),
     "CSharpAnalyzer": _tier1(
         language="csharp",
@@ -283,6 +384,14 @@ _TIER1: Dict[str, LanguageCapability] = {
             "names namespaces, not files, so most imports honestly skip rather "
             "than fabricate an edge. Needs a namespace→declaring-files index.",
         ],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Jellyfin"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 99.36, "Newtonsoft.Json",
+                            fixed_tickets=["BACK-702"]),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 98.3, "Jellyfin"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "Jellyfin",
+                            pre_fix_pct=69.74, fixed_tickets=["BACK-737"]),
+        ],
     ),
     "JavaScriptAnalyzer": _tier1(
         language="javascript",
@@ -299,6 +408,18 @@ _TIER1: Dict[str, LanguageCapability] = {
             "TypeScript/TSX for .js/.jsx/.ts/.tsx/.mjs/.cjs."
         ),
         known_limitations=[],
+        validation=[
+            # VALIDATION.md's summary table reports "TSX, plain JS" as one
+            # combined row (three.js is plain JS, Excalidraw/react-router are
+            # TSX) — duplicated onto both JavaScriptAnalyzer and TSXAnalyzer
+            # since the table doesn't split them, corpus names preserved so
+            # the actual per-corpus language is honest.
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Excalidraw, three.js"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "react-router"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 98.4, "Excalidraw"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "three.js, Excalidraw",
+                            fixed_tickets=["BACK-751", "BACK-752"]),
+        ],
     ),
     "TypeScriptAnalyzer": _tier1(
         language="typescript",
@@ -311,6 +432,15 @@ _TIER1: Dict[str, LanguageCapability] = {
         imports_unused=True,
         import_resolution="Same bespoke extractor as JavaScript.",
         known_limitations=[],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "VS Code"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 99.93, "nest",
+                            pre_fix_pct=68.48,
+                            sample_note="2-edge unexplored residual",
+                            fixed_tickets=["BACK-694", "BACK-698", "BACK-705", "BACK-772", "BACK-773"]),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 91.3, "VS Code"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "VS Code"),
+        ],
     ),
     "KotlinAnalyzer": _tier1(
         language="kotlin",
@@ -332,6 +462,18 @@ _TIER1: Dict[str, LanguageCapability] = {
             "import→file resolution assumes filename==classname; an import of "
             "a class living in a differently-named .kt file honestly skips "
             "rather than fabricate an edge.",
+        ],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 99.1, "tivi"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "kotlinx.coroutines"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 92.9, "tivi",
+                            pre_fix_pct=82.5, sample_note="six-category sweep",
+                            fixed_tickets=["BACK-727"]),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 99.69, "tivi",
+                            sample_note="8/bucket sampling"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 99.79, "tivi",
+                            sample_note="20/bucket sampling",
+                            open_tickets=["BACK-738 (tree-sitter grammar bug, not fixable in reveal)"]),
         ],
     ),
     "SwiftAnalyzer": _tier1(
@@ -355,6 +497,20 @@ _TIER1: Dict[str, LanguageCapability] = {
             "single in-tree file, so most imports honestly skip rather than "
             "fabricate an edge.",
         ],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Kickstarter iOS",
+                            sample_note="module-index target-resolution coverage, not an edge-recall ratio"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 98.42, "swift-collections",
+                            sample_note="14,824 edges", fixed_tickets=["BACK-704"]),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 100.0, "Kickstarter iOS",
+                            pre_fix_pct=43.3, sample_note="six-category sweep",
+                            fixed_tickets=["BACK-728"]),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 97.62, "Signal-iOS",
+                            sample_note="8/bucket sampling"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 99.79, "Signal-iOS",
+                            sample_note="20/bucket sampling",
+                            open_tickets=["BACK-742 (two tree-sitter grammar bugs, not fixable in reveal)"]),
+        ],
     ),
     "RubyAnalyzer": _tier1(
         language="ruby",
@@ -374,6 +530,13 @@ _TIER1: Dict[str, LanguageCapability] = {
             "(skip_unused always set)."
         ),
         known_limitations=[],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "solidus",
+                            sample_note="Zeitwerk-inferred", fixed_tickets=["BACK-700", "BACK-701"]),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 98.8, "Discourse"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "Discourse",
+                            pre_fix_pct=22.05, fixed_tickets=["BACK-735"]),
+        ],
     ),
     "PhpAnalyzer": _tier1(
         language="php",
@@ -395,6 +558,13 @@ _TIER1: Dict[str, LanguageCapability] = {
             "relative to the file. Unused-detection not claimed."
         ),
         known_limitations=[],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "WordPress"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 74.65, "osCommerce"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 97.5, "WordPress"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "WordPress",
+                            pre_fix_pct=98.87, fixed_tickets=["BACK-736"]),
+        ],
     ),
 }
 
@@ -424,6 +594,16 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "assignment_expression, structurally identical to a real "
             "reassignment — fixed with an arguments-node-aware branch.",
         ],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "GitBucket",
+                            sample_note="n=1 qualifying edge"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "cats-effect",
+                            sample_note="24 edges"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 66.3, "GitBucket",
+                            sample_note="`db`/Slick categories declined"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "GitBucket",
+                            pre_fix_pct=96.64, fixed_tickets=["BACK-746", "BACK-747"]),
+        ],
     ),
     "DartAnalyzer": _smoke(
         language="dart",
@@ -450,6 +630,19 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "entirely until function_signature was added to "
             "CHILD_NODE_TYPES.",
         ],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 99.76, "AppFlowy",
+                            sample_note="residual is oracle false positives, 100% of real edges"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 96.63, "drift",
+                            sample_note="residual is oracle false positives, 100% of real edges"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 84.9, "AppFlowy",
+                            sample_note="bare File/Directory declined"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 97.55, "AppFlowy",
+                            pre_fix_pct=100.0,
+                            fixed_tickets=["BACK-760", "BACK-761", "BACK-763", "BACK-764",
+                                           "BACK-765", "BACK-766", "BACK-767", "BACK-769"],
+                            open_tickets=["BACK-768 (tree-sitter grammar bug, not fixable in reveal)"]),
+        ],
     ),
     "LuaAnalyzer": _smoke(
         language="lua",
@@ -471,6 +664,14 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "function table.name(...) had no name at all before the "
             "dotted-segment fallback fix (a common Kong-style public-API "
             "pattern).",
+        ],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 99.87, "Kong"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 99.33, "AwesomeWM"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 98.0, "Kong",
+                            sample_note="`truncate`/`connect` categories declined"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "Kong",
+                            fixed_tickets=["BACK-757", "BACK-758"]),
         ],
     ),
     "ZigAnalyzer": _smoke(
@@ -494,6 +695,15 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "to Zig's all-caps IDENTIFIER kind and SuffixExpr call chains "
             "until BACK-431 Issue G's feature-breadth pass fixed both.",
         ],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "ghostty"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "TigerBeetle"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 98.4, "TigerBeetle"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 99.98, "ghostty",
+                            pre_fix_pct=92.28,
+                            sample_note="426 of 2,334 edges (18%), stratified by fan-in",
+                            fixed_tickets=["BACK-753", "BACK-754", "BACK-755"]),
+        ],
     ),
     "GDScriptAnalyzer": _smoke(
         language="gdscript",
@@ -513,6 +723,14 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "--calls was partially blind to attribute_call dotted calls "
             "until fixed via godot-demo-projects real-corpus dogfooding; "
             "--deps was already clean.",
+        ],
+        validation=[
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "godot-demo-projects"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Pixelorama"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 69.3, "Pixelorama",
+                            sample_note="bare `print`/`request` categories declined"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "Pixelorama",
+                            fixed_tickets=["BACK-759"]),
         ],
     ),
     "TSXAnalyzer": _smoke(
@@ -534,6 +752,15 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "reads in both the deps-candidate walker and VarFlowWalker "
             "until fixed via excalidraw real-corpus dogfooding (mirrors "
             "Lua's dual-walker fix pattern).",
+        ],
+        validation=[
+            # Same combined "TSX, plain JS" row as JavaScriptAnalyzer above —
+            # see the note there.
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Excalidraw, three.js"),
+            MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "react-router"),
+            MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 98.4, "Excalidraw"),
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 100.0, "three.js, Excalidraw",
+                            fixed_tickets=["BACK-751", "BACK-752"]),
         ],
     ),
 }

@@ -362,6 +362,22 @@ def _build_full_support_info(info: Dict[str, Any]) -> List[str]:
             lines.append("   Known limitations:")
             for item in profile.known_limitations:
                 lines.append(f"     - {item}")
+        # BACK-880: measured recall from VALIDATION.md's independent-oracle
+        # program, when this language has been through it.
+        if profile.validation:
+            lines.append("")
+            lines.append("   Measured recall (VALIDATION.md):")
+            for m in profile.validation:
+                pct = f"{m.pre_fix_pct}%→{m.recall_pct}%" if m.pre_fix_pct is not None else f"{m.recall_pct}%"
+                note_bits = []
+                if m.sample_note:
+                    note_bits.append(m.sample_note)
+                if m.fixed_tickets:
+                    note_bits.append(f"fixed: {', '.join(m.fixed_tickets)}")
+                if m.open_tickets:
+                    note_bits.append(f"open: {', '.join(m.open_tickets)}")
+                note = f" ({'; '.join(note_bits)})" if note_bits else ""
+                lines.append(f"     - {m.signal}: {pct} on {m.corpus}{note}")
 
     return lines
 
@@ -492,6 +508,22 @@ def get_capabilities(path: str) -> Dict[str, Any]:
             "import_resolution": cap.import_resolution,
             "known_limitations": cap.known_limitations,
         }
+        # BACK-880: measured recall/precision per signal, from VALIDATION.md's
+        # independent-oracle validation program — narrower and more specific
+        # than conformance_level ("has evidence at all") when present.
+        if cap.validation:
+            result["capability"]["validation"] = [
+                {
+                    "signal": m.signal,
+                    "recall_pct": m.recall_pct,
+                    "corpus": m.corpus,
+                    "pre_fix_pct": m.pre_fix_pct,
+                    "sample_note": m.sample_note,
+                    "fixed_tickets": m.fixed_tickets,
+                    "open_tickets": m.open_tickets,
+                }
+                for m in cap.validation
+            ]
 
     # Determine extractable element types based on file extension
     ext = file_path.suffix.lower()
