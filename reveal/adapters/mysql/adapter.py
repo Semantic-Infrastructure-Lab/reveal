@@ -10,6 +10,7 @@ from .performance import PerformanceAnalyzer
 from .replication import ReplicationMonitor
 from .storage import StorageAnalyzer
 from .renderer import MySQLRenderer
+from ...utils.results import ResultBuilder
 
 
 @dataclass
@@ -364,47 +365,49 @@ class MySQLAdapter(ResourceAdapter):
         # Extract just hostname for next_steps (without port for cleaner URIs)
         host_display = server_display.split(':')[0]
 
-        return {
-            'contract_version': '1.0',
-            'type': 'mysql_server',
-            'source': server_display,
-            'source_type': 'database',
-            'snapshot_time': timing['snapshot_time'],
-            'server': server_display,
-            'version': version_info['version'],
-            'uptime': f"{uptime_days}d {uptime_hours}h {uptime_mins}m",
-            'server_start_time': server_start_time.isoformat(),
-            'connection_health': {
-                **conn_health,
-                'percentage': f"{conn_health['percentage']:.1f}%",
-                'max_used_pct': f"{conn_health['max_used_pct']:.1f}%",
-                'note': 'If max_used_pct was 100%, connections were rejected (since server start)'
-            },
-            'performance': performance_metrics,
-            'innodb_health': {
-                'buffer_pool_hit_rate': f"{innodb_health['buffer_hit_rate']:.2f}% (since server start)",
-                'status': innodb_health['status'],
-                'row_lock_waits': f"{innodb_health['row_lock_waits']} (since server start)",
-                'deadlocks': f"{innodb_health['deadlocks']} (since server start)",
-            },
-            'replication': replication_info,
-            'storage': storage_info,
-            'resource_limits': {
-                'open_files': {
-                    **resource_limits['open_files'],
-                    'percentage': f"{resource_limits['open_files']['percentage']:.1f}%",
-                    'note': 'Approaching limit (>75%) can cause "too many open files" errors'
-                }
-            },
-            'health_status': health_status,
-            'health_issues': health_issues,
-            'next_steps': [
-                f"reveal mysql://{host_display}/connections       # Connection details",
-                f"reveal mysql://{host_display}/performance       # Query performance",
-                f"reveal mysql://{host_display}/innodb            # InnoDB details",
-                f"reveal mysql://{host_display} --check           # Run health checks",
-            ]
-        }
+        return ResultBuilder.create(
+            result_type='mysql_server',
+            source=server_display,
+            source_type='database',
+            contract_version='1.1',
+            data={
+                'snapshot_time': timing['snapshot_time'],
+                'server': server_display,
+                'version': version_info['version'],
+                'uptime': f"{uptime_days}d {uptime_hours}h {uptime_mins}m",
+                'server_start_time': server_start_time.isoformat(),
+                'connection_health': {
+                    **conn_health,
+                    'percentage': f"{conn_health['percentage']:.1f}%",
+                    'max_used_pct': f"{conn_health['max_used_pct']:.1f}%",
+                    'note': 'If max_used_pct was 100%, connections were rejected (since server start)'
+                },
+                'performance': performance_metrics,
+                'innodb_health': {
+                    'buffer_pool_hit_rate': f"{innodb_health['buffer_hit_rate']:.2f}% (since server start)",
+                    'status': innodb_health['status'],
+                    'row_lock_waits': f"{innodb_health['row_lock_waits']} (since server start)",
+                    'deadlocks': f"{innodb_health['deadlocks']} (since server start)",
+                },
+                'replication': replication_info,
+                'storage': storage_info,
+                'resource_limits': {
+                    'open_files': {
+                        **resource_limits['open_files'],
+                        'percentage': f"{resource_limits['open_files']['percentage']:.1f}%",
+                        'note': 'Approaching limit (>75%) can cause "too many open files" errors'
+                    }
+                },
+                'health_status': health_status,
+                'health_issues': health_issues,
+                'next_steps': [
+                    f"reveal mysql://{host_display}/connections       # Connection details",
+                    f"reveal mysql://{host_display}/performance       # Query performance",
+                    f"reveal mysql://{host_display}/innodb            # InnoDB details",
+                    f"reveal mysql://{host_display} --check           # Run health checks",
+                ]
+            }
+        )
 
     def _build_performance_metrics(self, status_vars: Dict[str, str],
                                    uptime_seconds: int) -> Dict[str, Any]:

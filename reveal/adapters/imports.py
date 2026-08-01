@@ -28,6 +28,7 @@ from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..registry import get_code_extensions
 from ..utils.path_utils import is_skippable_dir, to_posix
+from ..utils.results import ResultBuilder
 
 # Disk-cache namespace for this adapter's resolved import graph (BACK-834).
 # Mirrors rules/imports/I002.py's own import-graph disk cache (_tree_fingerprint
@@ -1193,13 +1194,13 @@ class ImportsAdapter(ResourceAdapter):
         Returns:
             Standardized response dict with contract_version, type, source, etc.
         """
-        response: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': response_type,
-            'source': str(self._target_path),
-            'source_type': 'directory' if self._target_path and self._target_path.is_dir() else 'file',
-        }
-        response.update(data_fields)
+        response = ResultBuilder.create(
+            result_type=response_type,
+            source=str(self._target_path),
+            source_type='directory' if self._target_path and self._target_path.is_dir() else 'file',
+            contract_version='1.1',
+            data=data_fields,
+        )
         response['metadata'] = self.get_metadata()
         return response
 

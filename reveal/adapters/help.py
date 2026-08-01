@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY
 from ..rendering import render_help
+from ..utils.results import ResultBuilder
 
 # Valid help_category values for the help:// index listing.
 # Guides without help_category (or with an unknown value) are accessible by
@@ -527,18 +528,20 @@ class HelpAdapter(ResourceAdapter):
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get help structure (list of available topics)."""
-        return {
-            'contract_version': '1.0',
-            'type': 'help',
-            'source': 'help://',
-            'source_type': 'runtime',
-            'available_topics': self._list_topics(),
-            'adapters': self._list_adapters(),
-            # Each entry: {topic, file, description, category, token_estimate}.
-            # The renderer reads category/description/token_estimate from here;
-            # there is no parallel dict in the renderer module.
-            'static_guides': [entry.to_dict() for entry in self.help_topics.values()],
-        }
+        return ResultBuilder.create(
+            result_type='help',
+            source='help://',
+            source_type='runtime',
+            contract_version='1.1',
+            data={
+                'available_topics': self._list_topics(),
+                'adapters': self._list_adapters(),
+                # Each entry: {topic, file, description, category, token_estimate}.
+                # The renderer reads category/description/token_estimate from here;
+                # there is no parallel dict in the renderer module.
+                'static_guides': [entry.to_dict() for entry in self.help_topics.values()],
+            }
+        )
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get help for a specific topic.
@@ -557,7 +560,7 @@ class HelpAdapter(ResourceAdapter):
         # one that stamps contract_version on its own (BACK-696). Stamp it here,
         # once, rather than touching every builder above.
         if isinstance(result, dict):
-            result.setdefault('contract_version', '1.0')
+            result.setdefault('contract_version', '1.1')
         return result
 
     def _get_element_impl(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:

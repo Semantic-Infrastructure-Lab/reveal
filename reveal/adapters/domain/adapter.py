@@ -10,6 +10,7 @@ from .dns import (
 )
 from .renderer import DomainRenderer
 from ..ssl.certificate import check_ssl_health
+from ...utils.results import ResultBuilder
 
 
 # Helper functions for domain health checks
@@ -621,22 +622,24 @@ class DomainAdapter(ResourceAdapter):
             f"Health check: reveal domain://{self.domain} --check",
         ]
 
-        return {
-            'contract_version': '1.0',
-            'type': 'domain_overview',
-            'source': f'domain://{self.domain}',
-            'source_type': 'network',
-            'domain': self.domain,
-            'dns': {
-                'nameservers': dns_summary.get('nameservers', []),
-                'a_records': dns_summary.get('a_records', []),
-                'has_mx': dns_summary.get('has_mx', False),
-                'error': dns_summary.get('error'),
-            },
-            'ssl': ssl_summary,
-            'whois': whois_summary,
-            'next_steps': next_steps,
-        }
+        return ResultBuilder.create(
+            result_type='domain_overview',
+            source=f'domain://{self.domain}',
+            source_type='network',
+            contract_version='1.1',
+            data={
+                'domain': self.domain,
+                'dns': {
+                    'nameservers': dns_summary.get('nameservers', []),
+                    'a_records': dns_summary.get('a_records', []),
+                    'has_mx': dns_summary.get('has_mx', False),
+                    'error': dns_summary.get('error'),
+                },
+                'ssl': ssl_summary,
+                'whois': whois_summary,
+                'next_steps': next_steps,
+            }
+        )
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get specific domain element.
