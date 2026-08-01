@@ -18,7 +18,7 @@ from collections.abc import Callable
 
 from .registry import get_all_analyzers, TREESITTER_EXTENSION_MAP
 from . import __version__
-from .utils import copy_to_clipboard, check_for_updates
+from .utils import copy_to_clipboard, check_for_updates, set_provenance_enabled
 from .config import disable_breadcrumbs_permanently
 
 
@@ -410,6 +410,7 @@ def _main_impl() -> None:
     parser = create_argument_parser(__version__)
     args = parser.parse_args()
     validate_navigation_args(args)
+    set_provenance_enabled(getattr(args, 'provenance', False))
 
     # Check for updates (once per day, non-blocking, opt-out available)
     check_for_updates()

@@ -209,6 +209,9 @@ def _add_global_options(target) -> None:
                         help='Disable breadcrumb navigation hints (scripting mode)')
     target.add_argument('--disable-breadcrumbs', action='store_true',
                         help='Permanently disable breadcrumbs in user config')
+    target.add_argument('--provenance', action='store_true',
+                        help='Attach an "execution" block (reveal_version, repo commit/dirty '
+                             'state, config digest, platform) to JSON adapter results')
 
 
 def _build_global_options_parser() -> argparse.ArgumentParser:

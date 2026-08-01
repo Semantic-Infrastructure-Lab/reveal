@@ -3,7 +3,12 @@
 import pytest
 import json
 from datetime import datetime, date
-from reveal.utils.json_utils import DateTimeEncoder, safe_json_dumps
+from reveal.utils.json_utils import (
+    DateTimeEncoder,
+    safe_json_dumps,
+    print_json_result,
+    set_provenance_enabled,
+)
 
 
 class TestDateTimeEncoder:
@@ -175,3 +180,54 @@ class TestSafeJsonDumps:
         decoded = json.loads(result)
 
         assert decoded == ["2024-01-01", "2024-01-02"]
+
+
+class TestPrintJsonResult:
+    """Test print_json_result() — the single JSON-result emission funnel (BACK-893)."""
+
+    def teardown_method(self):
+        # Provenance is a module-level toggle (BACK-881) — always reset it so
+        # one test can't leak state into the next.
+        set_provenance_enabled(False)
+
+    def test_prints_valid_json(self, capsys):
+        print_json_result({'type': 'demo', 'value': 1})
+
+        captured = capsys.readouterr()
+        decoded = json.loads(captured.out)
+        assert decoded == {'type': 'demo', 'value': 1}
+
+    def test_no_provenance_by_default(self, capsys):
+        print_json_result({'type': 'demo'})
+
+        decoded = json.loads(capsys.readouterr().out)
+        assert 'execution' not in decoded
+
+    def test_provenance_attached_when_enabled(self, capsys):
+        set_provenance_enabled(True)
+
+        print_json_result({'type': 'demo'})
+
+        decoded = json.loads(capsys.readouterr().out)
+        assert 'execution' in decoded
+        assert 'reveal_version' in decoded['execution']
+
+    def test_provenance_does_not_overwrite_existing_key(self, capsys):
+        """A result that already has its own 'execution' field (unlikely, but
+        guard against a real adapter defining the same key) is left alone."""
+        set_provenance_enabled(True)
+
+        print_json_result({'type': 'demo', 'execution': 'custom'})
+
+        decoded = json.loads(capsys.readouterr().out)
+        assert decoded['execution'] == 'custom'
+
+    def test_provenance_skipped_for_non_dict_results(self, capsys):
+        """json:// adapter value-dumps (lists, scalars) must never get an
+        'execution' key injected — they're the queried file's own content."""
+        set_provenance_enabled(True)
+
+        print_json_result([1, 2, 3])
+
+        decoded = json.loads(capsys.readouterr().out)
+        assert decoded == [1, 2, 3]

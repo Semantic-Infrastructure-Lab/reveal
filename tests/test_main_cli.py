@@ -165,6 +165,24 @@ class TestOutputFormats(unittest.TestCase):
         self.assertIn("Python", result.stdout)
         self.assertIn("Rust", result.stdout)
 
+    def test_provenance_flag_attaches_execution_block(self):
+        """--provenance (BACK-881) adds an 'execution' block to JSON adapter output."""
+        result = self.run_reveal("env://", "--format", "json", "--provenance")
+
+        self.assertEqual(result.returncode, 0)
+        data = json.loads(result.stdout)
+        self.assertIn("execution", data)
+        self.assertIn("reveal_version", data["execution"])
+        self.assertIn("platform", data["execution"])
+
+    def test_no_provenance_flag_omits_execution_block(self):
+        """Without --provenance, JSON output stays exactly as it was pre-BACK-881."""
+        result = self.run_reveal("env://", "--format", "json")
+
+        self.assertEqual(result.returncode, 0)
+        data = json.loads(result.stdout)
+        self.assertNotIn("execution", data)
+
 
 class TestPerfLogging(unittest.TestCase):
     """Test --perf invocation logging (reveal/main.py PERF_LOG_PATH)."""
