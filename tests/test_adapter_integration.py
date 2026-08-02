@@ -289,19 +289,38 @@ class TestGitAdapterIntegration(unittest.TestCase):
             f"Expected git information in output: {result.stdout}"
         )
 
-    def test_git_adapter_shows_branch_info(self):
-        """Test git:// adapter shows branch information."""
-        repo_dir = Path(__file__).parent.parent
+    def resolve_current_ref(self, repo_dir):
+        """Resolve a ref name valid for the current HEAD.
 
-        # Get current branch name first
-        import subprocess
+        Under a pull_request-triggered GitHub Actions checkout, HEAD is
+        detached (refs/pull/N/merge) and no local branch is created — so
+        `git branch --show-current` is empty and any hardcoded branch
+        name (e.g. "master") is invalid. Fall back to the commit SHA,
+        which is always resolvable regardless of checkout mode.
+        """
         branch_result = subprocess.run(
-            ["git", "branch", "--show-current"],
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=repo_dir,
             capture_output=True,
             text=True
         )
-        current_branch = branch_result.stdout.strip() or "master"
+        ref = branch_result.stdout.strip()
+        if ref and ref != "HEAD":
+            return ref
+
+        sha_result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True
+        )
+        return sha_result.stdout.strip()
+
+    def test_git_adapter_shows_branch_info(self):
+        """Test git:// adapter shows branch information."""
+        repo_dir = Path(__file__).parent.parent
+
+        current_branch = self.resolve_current_ref(repo_dir)
 
         result = self.run_reveal_command(f"git://.@{current_branch}", cwd=repo_dir)
 
@@ -321,15 +340,7 @@ class TestGitAdapterIntegration(unittest.TestCase):
         """Test git:// adapter shows commit history."""
         repo_dir = Path(__file__).parent.parent
 
-        # Get current branch name first
-        import subprocess
-        branch_result = subprocess.run(
-            ["git", "branch", "--show-current"],
-            cwd=repo_dir,
-            capture_output=True,
-            text=True
-        )
-        current_branch = branch_result.stdout.strip() or "master"
+        current_branch = self.resolve_current_ref(repo_dir)
 
         result = self.run_reveal_command(f"git://.@{current_branch}", cwd=repo_dir)
 
