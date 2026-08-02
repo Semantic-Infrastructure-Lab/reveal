@@ -165,7 +165,7 @@ def resolve_git_adapter(resource: str) -> Dict[str, Any]:
         return git_result
 
     except Exception as e:
-        raise ValueError(f"Failed to resolve git:// adapter URI: {e}")
+        raise ValueError(f"Failed to resolve git:// adapter URI: {e}") from e
 
 
 def resolve_git_file(git_ref: str, path: str) -> Dict[str, Any]:

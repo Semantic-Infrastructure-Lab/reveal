@@ -426,6 +426,23 @@ class TestFileInspection:
 
         assert "File not found" in str(exc_info.value) or "not found" in str(exc_info.value).lower()
 
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_ref_not_found_distinct_from_file_not_found(self, git_repo):
+        """Ref-resolution failures must not be misreported as file-not-found
+
+        (BACK-619 follow-up): get_file_at_ref previously caught ref-resolution
+        and path-lookup errors in one except block, so a bad ref surfaced as
+        the same generic "File not found" message as a bad path — masking the
+        real failure during the original no-repro investigation.
+        """
+        adapter = GitAdapter(path=str(git_repo), ref='nonexistent-ref', subpath='README.md')
+        with pytest.raises(ValueError) as exc_info:
+            adapter.get_structure()
+
+        message = str(exc_info.value)
+        assert "Cannot resolve ref" in message
+        assert "File not found" not in message
+
 
 class TestFileHistory:
     """Test file history functionality."""

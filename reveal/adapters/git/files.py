@@ -46,7 +46,10 @@ def get_file_at_ref(
             raise ValueError(f"Cannot resolve ref to commit: {ref}")
 
         commit = cast('pygit2.Commit', obj)
+    except (KeyError, pygit2.GitError) as e:
+        raise ValueError(f"Cannot resolve ref: {ref}") from e
 
+    try:
         # Navigate to the file in the tree
         tree = commit.tree
         entry = tree[subpath]
