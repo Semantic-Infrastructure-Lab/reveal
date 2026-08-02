@@ -49,7 +49,7 @@ import pytest
 import tree_sitter_language_pack as ts
 
 REVEAL_DIR = Path(__file__).resolve().parent.parent / "reveal"
-NAV_CALLS = REVEAL_DIR / "adapters" / "ast" / "nav_calls.py"
+NAV_CALLS = REVEAL_DIR / "core" / "nav_calls.py"
 TREESITTER = REVEAL_DIR / "treesitter.py"
 
 # Node kinds that MUST be specially dispatched in both files' callee-name

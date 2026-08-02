@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children, node_next_sibling as _next_sibling, node_prev_sibling as _prev_sibling
-from ..adapters.ast.nav_calls import range_calls
+from ..core.nav_calls import range_calls
 from ..utils.results import ResultBuilder
 
 
