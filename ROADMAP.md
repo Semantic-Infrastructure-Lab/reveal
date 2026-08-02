@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-07-27 (icy-mistral-0727 — v0.112.0 release: markdown:// ranked search/lint/link-graph caching)
+> **Last updated**: 2026-08-02 (nexobite-0801 — v0.113.0 release: Output Contract v1.1 complete, --provenance, scope census, mcp 2.0 migration)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,14 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.113.0 — Output Contract v1.1 complete, --provenance, scope census, capability validation data, mcp 2.0 migration
+- ✅ Output Contract v1.1 migration complete — all `analyzers/` (BACK-885) and `adapters/` (BACK-891) files, plus `xlsx.py`'s separate gap (BACK-892), migrated onto `ResultBuilder`.
+- ✅ `--provenance` flag attaches an execution-metadata block to JSON output (BACK-881), built on a JSON-emission consolidation prerequisite (BACK-893).
+- ✅ Scope/completeness census block on `overview`/`architecture`/`surface`/`check` (BACK-884), plus a real dir-skip correctness fix found along the way (BACK-887).
+- ✅ Capability validation-status data — measured recall/precision now queryable via `--capabilities`/`--language-info` (BACK-880).
+- ✅ `reveal-mcp` migrated off `FastMCP` to mcp 2.0's `MCPServer` API (BACK-895).
+- ✅ Custom-rule authoring guide (BACK-858); `tasks://` plugin-adapter worked example (BACK-878); `STABILITY.md` refresh (BACK-886); assorted UX/error-message fixes (BACK-864, BACK-894, BACK-619 follow-up, CLI not-found hint). Full detail in CHANGELOG.md.
 
 ### v0.112.0 — markdown:// ranked search + lint queue + persistent link-graph cache
 - ✅ `markdown://` `?body-contains=` search now ranks best-first by `relevance_score` (term frequency + heading-proximity boost), and `?explain` adds a per-term `term_counts`/`heading_hits` breakdown (BACK-869).
