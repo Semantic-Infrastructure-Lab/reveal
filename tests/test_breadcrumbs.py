@@ -10,7 +10,15 @@ from reveal.utils.breadcrumbs import (
     get_file_type_from_analyzer,
     print_breadcrumbs,
     _show_breadcrumb_hint_once,
+    _show_hint_once,
 )
+# Bound at import time, before the autouse _isolated_hint_store fixture below
+# ever runs — these names keep pointing at the real disk-backed
+# implementations even after the fixture monkeypatches the module
+# attributes of the same names, so TestSeenHintsPersistence can exercise
+# the actual read/write logic.
+from reveal.utils.breadcrumbs import _load_seen_hints as _real_load_seen_hints
+from reveal.utils.breadcrumbs import _save_seen_hints as _real_save_seen_hints
 
 
 # ==============================================================================
@@ -260,6 +268,25 @@ def capture_breadcrumbs(context, path, file_type=None, config=None, **kwargs):
         sys.stdout = old_stdout
 
 
+@pytest.fixture(autouse=True)
+def _isolated_hint_store(monkeypatch):
+    """Give every test its own in-memory `_show_hint_once` store.
+
+    Without this, tests hit the real ~/.local/share/reveal/seen_hints.json
+    (never mocked) and leak state between tests running in the same
+    pytest-xdist worker — a hint shown by one test would come back
+    suppressed in the next. Fresh set() per test means every test sees
+    each hint_id for "the first time", matching what a single-call test
+    expects; tests that specifically want to exercise the once-only
+    suppression call capture_breadcrumbs twice within the same test, where
+    this store persists across both calls.
+    """
+    store = set()
+    monkeypatch.setattr('reveal.utils.breadcrumbs._load_seen_hints', lambda: set(store))
+    monkeypatch.setattr('reveal.utils.breadcrumbs._save_seen_hints', lambda seen: store.update(seen))
+    yield store
+
+
 # ==============================================================================
 # _show_breadcrumb_hint_once Tests
 # ==============================================================================
@@ -301,6 +328,106 @@ class TestShowBreadcrumbHintOnce:
 
         assert output == ''
         mock_hint_file.touch.assert_not_called()
+
+
+# ==============================================================================
+# _show_hint_once Tests — the generalized, keyed version of the mechanism
+# above (BACK-926 companion / BREADCRUMB_HINT_THROTTLING_2026-08-02.md)
+# ==============================================================================
+
+class TestShowHintOnce:
+    """Tests for the generalized keyed show-once mechanism.
+
+    Uses the autouse _isolated_hint_store fixture (in-memory), not real
+    disk — that's covered separately by TestSeenHintsPersistence.
+    """
+
+    def test_first_call_prints_and_returns_true(self):
+        output = StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = output
+        try:
+            shown = _show_hint_once('demo_hint', ['line one', 'line two'])
+        finally:
+            sys.stdout = old_stdout
+
+        assert shown is True
+        assert output.getvalue() == 'line one\nline two\n'
+
+    def test_second_call_same_id_is_silent_and_returns_false(self):
+        old_stdout = sys.stdout
+        sys.stdout = StringIO()
+        try:
+            _show_hint_once('demo_hint', ['line one'])
+            sys.stdout = StringIO()
+            shown = _show_hint_once('demo_hint', ['line one'])
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+
+        assert shown is False
+        assert output == ''
+
+    def test_different_hint_ids_are_independent(self):
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = StringIO()
+            _show_hint_once('hint_a', ['a'])
+            sys.stdout = StringIO()
+            shown_b = _show_hint_once('hint_b', ['b'])
+            output_b = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+
+        assert shown_b is True
+        assert output_b == 'b\n'
+
+
+# ==============================================================================
+# _load_seen_hints / _save_seen_hints Tests — the real disk-backed store
+# (bypasses the autouse in-memory fixture; see the import comment at the
+# top of this file for how)
+# ==============================================================================
+
+class TestSeenHintsPersistence:
+    """Round-trip tests for the JSON set file backing _show_hint_once."""
+
+    def test_load_missing_file_returns_empty_set(self, monkeypatch):
+        mock_file = Mock()
+        mock_file.exists.return_value = False
+        monkeypatch.setattr('reveal.config.get_data_path', lambda name: mock_file)
+
+        assert _real_load_seen_hints() == set()
+
+    def test_save_then_load_round_trips(self, monkeypatch, tmp_path):
+        real_file = tmp_path / 'seen_hints.json'
+        monkeypatch.setattr('reveal.config.get_data_path', lambda name: real_file)
+
+        _real_save_seen_hints({'alpha', 'beta'})
+
+        assert _real_load_seen_hints() == {'alpha', 'beta'}
+
+    def test_load_corrupt_file_returns_empty_set(self, monkeypatch, tmp_path):
+        real_file = tmp_path / 'seen_hints.json'
+        real_file.write_text('not valid json', encoding='utf-8')
+        monkeypatch.setattr('reveal.config.get_data_path', lambda name: real_file)
+
+        assert _real_load_seen_hints() == set()
+
+    def test_save_uses_seen_hints_json_filename(self, monkeypatch, tmp_path):
+        """Confirms the data-path key, so it's visibly distinct from the
+        legacy seen_breadcrumb_hint marker file the two mechanisms coexist
+        with."""
+        captured = {}
+
+        def fake_get_data_path(name):
+            captured['name'] = name
+            return tmp_path / name
+
+        monkeypatch.setattr('reveal.config.get_data_path', fake_get_data_path)
+        _real_save_seen_hints({'x'})
+
+        assert captured['name'] == 'seen_hints.json'
 
 
 # ==============================================================================
@@ -380,6 +507,16 @@ class TestPrintBreadcrumbsMetadata:
         output = capture_breadcrumbs('metadata', 'test.py', config=mock_config)
         assert '--check' in output
         assert '# Quality check' in output
+
+    def test_metadata_second_call_is_silent(self):
+        """Metadata's boilerplate hint is shown once per install, not every call."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        capture_breadcrumbs('metadata', 'test.py', config=mock_config)
+        second = capture_breadcrumbs('metadata', 'other.py', config=mock_config)
+
+        assert second.strip() == ''
 
 
 # ==============================================================================
@@ -479,6 +616,38 @@ class TestPrintBreadcrumbsStructure:
         assert '--check' in output
         assert '# Validate configuration' in output
 
+    def test_structure_graphql_shows_outline(self):
+        """GraphQL structure suggests --outline (Type hierarchy)."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs('structure', 'schema.graphql', 'graphql', config=mock_config)
+        assert '--outline' in output
+        assert '# Type hierarchy' in output
+
+    def test_structure_second_call_same_type_is_silent(self):
+        """The '<function> # Extract by name' line and the --check/--outline
+        pair are both boilerplate — shown once per install, not per file."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        capture_breadcrumbs('structure', 'first.py', 'python', config=mock_config)
+        second = capture_breadcrumbs('structure', 'second.py', 'python', config=mock_config)
+
+        assert second.strip() == ''
+
+    def test_structure_second_call_different_type_still_shown(self):
+        """A boilerplate hint_id is per file_type — seeing Python's doesn't
+        suppress YAML's, since it's a different lesson."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        capture_breadcrumbs('structure', 'first.py', 'python', config=mock_config)
+        second = capture_breadcrumbs('structure', 'config.yaml', 'yaml', config=mock_config)
+
+        assert '--check' in second
+        assert '# Validate syntax' in second
+
 
 # ==============================================================================
 # print_breadcrumbs Tests - Large File Detection
@@ -566,6 +735,18 @@ class TestPrintBreadcrumbsLargeFile:
         )
         assert "ast://" not in output
         assert '--links' in output  # Standard markdown suggestion
+
+    def test_large_file_ast_queries_second_call_is_silent(self):
+        """The 3-line AST-query suggestion is identical for every large file
+        of a matching type — shown once, not per file."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+        structure = {'functions': [{'name': f'func_{i}'} for i in range(25)]}
+
+        capture_breadcrumbs('structure', 'first.py', 'python', config=mock_config, structure=structure)
+        second = capture_breadcrumbs('structure', 'second.py', 'python', config=mock_config, structure=structure)
+
+        assert second.strip() == ''
 
 
 # ==============================================================================
@@ -684,6 +865,37 @@ class TestPrintBreadcrumbsHierarchical:
             config=mock_config, structure=structure
         )
         assert "@3" not in output
+
+    def test_ordinal_extraction_second_call_is_silent(self):
+        """'@3 # Extract 3rd element' is boilerplate (always literally '3rd'
+        regardless of actual count) — shown once, not per file."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+        structure = {'functions': [{'name': f'func_{i}'} for i in range(8)]}
+
+        capture_breadcrumbs('structure', 'first.py', 'python', config=mock_config, structure=structure)
+        second = capture_breadcrumbs('structure', 'second.py', 'python', config=mock_config, structure=structure)
+
+        assert "@3" not in second
+
+    def test_hierarchical_extraction_stays_dynamic_across_calls(self):
+        """Unlike the boilerplate lines, the real class name is genuinely
+        file-specific — it must show every time, with the right file's data,
+        even after other boilerplate in the same context has been throttled."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        capture_breadcrumbs(
+            'structure', 'first.py', 'python', config=mock_config,
+            structure={'classes': [{'name': 'FirstClass'}]},
+        )
+        second = capture_breadcrumbs(
+            'structure', 'second.py', 'python', config=mock_config,
+            structure={'classes': [{'name': 'SecondClass'}]},
+        )
+
+        assert 'SecondClass.method' in second
+        assert 'FirstClass.method' not in second
 
 
 # ==============================================================================
@@ -869,6 +1081,32 @@ class TestPrintBreadcrumbsTyped:
         assert '--check' in output
         assert '# Validate configuration' in output
 
+    def test_typed_graphql_shows_check(self):
+        """BACK-923: typed GraphQL context used to get zero type-specific hint
+        (the _API_TYPES branch existed only in the structure-context function,
+        not the typed one). Now shares one table with structure context and
+        gets --check (not --outline, which typed context IS already)."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs('typed', 'schema.graphql', 'graphql', config=mock_config)
+        assert '--check' in output
+        assert '# Check code quality' in output
+        # The structure-context line ("Type hierarchy") would be a no-op here
+        # since typed context already IS the outline/type-hierarchy view.
+        assert 'Type hierarchy' not in output
+
+    def test_typed_second_call_same_type_is_silent(self):
+        """Both typed-context lines (extract-element + --check) are
+        boilerplate per file_type — shown once, not per file."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        capture_breadcrumbs('typed', 'first.py', 'python', config=mock_config)
+        second = capture_breadcrumbs('typed', 'second.py', 'python', config=mock_config)
+
+        assert second.strip() == ''
+
 
 # ==============================================================================
 # print_breadcrumbs Tests - Element Context
@@ -922,6 +1160,37 @@ class TestPrintBreadcrumbsElement:
         )
         assert 'Check:' in output
         assert '--check' in output
+
+    def test_element_back_hint_second_call_is_silent(self):
+        """'-> Back: reveal {path} # See full structure' fires on every
+        named/line/ordinal extraction — the highest-frequency boilerplate
+        line in this module — so it's shown once, not per extraction."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        capture_breadcrumbs('element', 'test.py', 'python', config=mock_config, element_name='first_func')
+        second = capture_breadcrumbs('element', 'test.py', 'python', config=mock_config, element_name='second_func')
+
+        assert 'Back:' not in second
+        # The extraction confirmation itself is a result, not a hint — never throttled.
+        assert 'Extracted second_func' in second
+
+    def test_element_nearby_hint_stays_dynamic_across_calls(self):
+        """Unlike 'Back:', the 'Nearby' line's target line number is computed
+        from this specific extraction — must show every time with fresh data."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        capture_breadcrumbs(
+            'element', 'test.py', 'python', config=mock_config,
+            element_name='first_func', line_count=10, line_start=5,
+        )
+        second = capture_breadcrumbs(
+            'element', 'test.py', 'python', config=mock_config,
+            element_name='second_func', line_count=20, line_start=100,
+        )
+
+        assert 'Nearby: reveal test.py :125' in second
 
 
 # ==============================================================================
@@ -1029,6 +1298,33 @@ class TestPrintBreadcrumbsQualityCheck:
         assert 'reveal test.py' in output
         assert '# See structure' in output
 
+    def test_quality_check_trailer_second_call_is_silent_but_complex_function_stays_dynamic(self):
+        """The stats://+help://rules trailer is identical every call —
+        boilerplate, shown once. The named complex function is real,
+        file-specific data from this call's own detections — never throttled."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        first_detection = Mock()
+        first_detection.rule_code = 'C901'
+        first_detection.context = 'Function: first_complex'
+        capture_breadcrumbs(
+            'quality-check', 'test.py', 'python',
+            config=mock_config, detections=[first_detection],
+        )
+
+        second_detection = Mock()
+        second_detection.rule_code = 'C901'
+        second_detection.context = 'Function: second_complex'
+        second = capture_breadcrumbs(
+            'quality-check', 'test.py', 'python',
+            config=mock_config, detections=[second_detection],
+        )
+
+        assert 'stats://' not in second
+        assert 'help://rules' not in second
+        assert 'reveal test.py second_complex' in second
+
 
 # ==============================================================================
 # print_breadcrumbs Tests - Directory Check Context (Phase 3)
@@ -1083,4 +1379,39 @@ class TestPrintBreadcrumbsDirectoryCheck:
             files_checked=10
         )
         assert output == ''
+
+    def test_issues_workflow_second_call_is_silent(self):
+        """The pre-commit workflow text is a fixed template (only the issue
+        count/path vary) — the lesson is shown once, not on every --check."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        capture_breadcrumbs(
+            'directory-check', 'src/', config=mock_config,
+            total_issues=5, files_with_issues=2, files_checked=10,
+        )
+        second = capture_breadcrumbs(
+            'directory-check', 'other/', config=mock_config,
+            total_issues=9, files_with_issues=3, files_checked=20,
+        )
+
+        # print_breadcrumbs always emits its own leading blank line first.
+        assert second.strip() == ''
+
+    def test_clean_and_issues_workflows_are_independent_hints(self):
+        """Seeing the 'issues found' workflow doesn't suppress the 'all
+        clean' workflow — they're different lessons for different outcomes."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        capture_breadcrumbs(
+            'directory-check', 'src/', config=mock_config,
+            total_issues=5, files_with_issues=2, files_checked=10,
+        )
+        second = capture_breadcrumbs(
+            'directory-check', 'other/', config=mock_config,
+            total_issues=0, files_with_issues=0, files_checked=20,
+        )
+
+        assert '✅ All 20 files clean' in second
 
