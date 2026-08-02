@@ -5,7 +5,7 @@ import re
 _CODE_TYPES = frozenset([
     'python', 'javascript', 'typescript', 'rust', 'go', 'bash', 'gdscript',
     'java', 'kotlin', 'swift', 'dart', 'scala', 'csharp', 'cpp', 'c',
-    'ruby', 'php', 'lua', 'zig', 'powershell', 'batch',
+    'ruby', 'php', 'lua', 'zig', 'powershell', 'batch', 'sql', 'elixir',
 ])
 _CONFIG_TYPES = frozenset(['yaml', 'json', 'toml', 'jsonl', 'ini', 'properties'])
 _INFRA_TYPES = frozenset(['dockerfile', 'nginx', 'terraform', 'hcl'])
@@ -45,6 +45,8 @@ def get_element_placeholder(file_type):
         'zig': '<function>',
         'powershell': '<function>',
         'batch': '<label>',
+        'sql': '<function>',
+        'elixir': '<function>',
         # Config types
         'yaml': '<key>',
         'json': '<key>',
@@ -105,6 +107,9 @@ def get_file_type_from_analyzer(analyzer):
         'ZigAnalyzer': 'zig',
         'PowerShellAnalyzer': 'powershell',
         'BatchAnalyzer': 'batch',
+        'SQLAnalyzer': 'sql',
+        'TSXAnalyzer': 'typescript',
+        'ElixirAnalyzer': 'elixir',
         # Config analyzers
         'YamlAnalyzer': 'yaml',
         'JsonAnalyzer': 'json',
@@ -116,14 +121,14 @@ def get_file_type_from_analyzer(analyzer):
         'XmlAnalyzer': 'xml',
         # Document analyzers
         'MarkdownAnalyzer': 'markdown',
-        'HtmlAnalyzer': 'html',
+        'HTMLAnalyzer': 'html',
         'JupyterAnalyzer': 'jupyter',
         # Infrastructure analyzers
         'DockerfileAnalyzer': 'dockerfile',
         'NginxAnalyzer': 'nginx',
-        'HclAnalyzer': 'terraform',
+        'HCLAnalyzer': 'terraform',
         # API analyzers
-        'GraphqlAnalyzer': 'graphql',
+        'GraphQLAnalyzer': 'graphql',
         'ProtobufAnalyzer': 'protobuf',
         # Fallback
         'TreeSitterAnalyzer': None,

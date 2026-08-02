@@ -84,6 +84,14 @@ class TestGetElementPlaceholder:
         """Jupyter notebooks use <cell> placeholder."""
         assert get_element_placeholder('jupyter') == '<cell>'
 
+    def test_sql_placeholder(self):
+        """SQL files use <function> placeholder."""
+        assert get_element_placeholder('sql') == '<function>'
+
+    def test_elixir_placeholder(self):
+        """Elixir files use <function> placeholder."""
+        assert get_element_placeholder('elixir') == '<function>'
+
     def test_unknown_type_placeholder(self):
         """Unknown file types get default <element> placeholder."""
         assert get_element_placeholder('unknown') == '<element>'
@@ -189,10 +197,40 @@ class TestGetFileTypeFromAnalyzer:
         assert get_file_type_from_analyzer(mock) == 'jupyter'
 
     def test_html_analyzer(self):
-        """HtmlAnalyzer maps to 'html'."""
+        """HTMLAnalyzer maps to 'html'."""
         mock = Mock()
-        mock.__class__.__name__ = 'HtmlAnalyzer'
+        mock.__class__.__name__ = 'HTMLAnalyzer'
         assert get_file_type_from_analyzer(mock) == 'html'
+
+    def test_hcl_analyzer(self):
+        """HCLAnalyzer maps to 'terraform'."""
+        mock = Mock()
+        mock.__class__.__name__ = 'HCLAnalyzer'
+        assert get_file_type_from_analyzer(mock) == 'terraform'
+
+    def test_graphql_analyzer(self):
+        """GraphQLAnalyzer maps to 'graphql'."""
+        mock = Mock()
+        mock.__class__.__name__ = 'GraphQLAnalyzer'
+        assert get_file_type_from_analyzer(mock) == 'graphql'
+
+    def test_sql_analyzer(self):
+        """SQLAnalyzer maps to 'sql'."""
+        mock = Mock()
+        mock.__class__.__name__ = 'SQLAnalyzer'
+        assert get_file_type_from_analyzer(mock) == 'sql'
+
+    def test_tsx_analyzer(self):
+        """TSXAnalyzer maps to 'typescript' (shares TS structure/hints)."""
+        mock = Mock()
+        mock.__class__.__name__ = 'TSXAnalyzer'
+        assert get_file_type_from_analyzer(mock) == 'typescript'
+
+    def test_elixir_analyzer(self):
+        """ElixirAnalyzer maps to 'elixir'."""
+        mock = Mock()
+        mock.__class__.__name__ = 'ElixirAnalyzer'
+        assert get_file_type_from_analyzer(mock) == 'elixir'
 
     def test_treesitter_analyzer(self):
         """TreeSitterAnalyzer maps to None (generic fallback)."""
