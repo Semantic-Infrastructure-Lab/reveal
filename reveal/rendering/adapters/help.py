@@ -78,82 +78,6 @@ _TOPIC_ANNOTATIONS = {
 }
 
 
-def _render_help_breadcrumbs(scheme: str, data: Dict[str, Any]) -> None:
-    """Render breadcrumbs after help output.
-
-    Args:
-        scheme: Adapter scheme name (e.g., 'ast', 'python')
-        data: Help data dict
-    """
-    if not scheme:
-        return
-
-    print("---")
-    print()
-
-    # Related adapters - suggest complementary tools
-    related = {
-        # Code analysis cluster
-        'ast': ['calls', 'diff', 'stats'],
-        'calls': ['ast', 'diff'],
-        'diff': ['stats', 'ast'],
-        'stats': ['ast', 'diff'],
-        'imports': ['ast', 'stats'],
-        'depends': ['imports', 'ast'],
-        'git': ['diff', 'claude'],
-        'patches': ['ast', 'git'],
-        # Infrastructure cluster
-        'nginx': ['ssl', 'domain'],
-        'ssl': ['domain', 'nginx'],
-        'domain': ['ssl', 'nginx'],
-        'cpanel': ['ssl', 'autossl'],
-        'autossl': ['ssl', 'cpanel'],
-        'letsencrypt': ['ssl', 'nginx'],
-        # Data & config cluster
-        'sqlite': ['mysql', 'json'],
-        'mysql': ['sqlite'],
-        'json': ['sqlite', 'ast'],
-        'env': ['python', 'ast'],
-        'xlsx': ['sqlite', 'json'],
-        # Sessions & docs cluster
-        'claude': ['git', 'markdown'],
-        'markdown': ['claude', 'git'],
-        'codex': ['claude', 'git'],
-        # Self-describing cluster
-        'python': ['ast', 'env'],
-        'reveal': ['help', 'ast'],
-        'help': ['ast', 'python'],
-    }
-
-    # Special workflow hints for diff adapter
-    if scheme == 'diff':
-        print("## Try It Now")
-        print("  # Compare uncommitted changes:")
-        print("  reveal 'diff://git://HEAD/.:.'")
-        print()
-        print("  # Compare specific files:")
-        print("  reveal 'diff://old.py:new.py'")
-        print()
-        print("  # Compare a specific function:")
-        print("  reveal 'diff://old.py:new.py/function_name'")
-        print()
-
-    related_adapters = related.get(scheme, [])
-    if related_adapters:
-        print("## Next Steps")
-        print(f"  -> reveal help://{related_adapters[0]}  # Related adapter")
-        if len(related_adapters) > 1:
-            print(f"  -> reveal help://{related_adapters[1]}  # Another option")
-        print("  -> reveal .                   # Start exploring your code")
-        print()
-
-    # Point to deeper content
-    print("## Go Deeper")
-    print("  -> reveal help://tricks         # Power user workflows")
-    print("  -> reveal help://anti-patterns  # Common mistakes to avoid")
-    print()
-
-
 def _get_stability_badge(scheme: str) -> str:
     """Get stability badge emoji for an adapter, derived from its STABILITY attr."""
     return _STABILITY_BADGES[_adapter_stability(scheme)]
@@ -1005,7 +929,7 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
     _render_help_output_formats(data)
     _render_help_cli_flags(data)
     _render_help_see_also(data)
-    _render_help_breadcrumbs(scheme, data)
+    _render_schema_next(data)
 
 
 def _render_help_quick(data: Dict[str, Any]) -> None:

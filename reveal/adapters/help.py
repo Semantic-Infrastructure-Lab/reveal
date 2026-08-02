@@ -939,6 +939,7 @@ class HelpAdapter(ResourceAdapter):
             help_data = adapter_class.get_help()
             if help_data:
                 help_data['scheme'] = scheme  # Ensure scheme is included
+                self._add_related_next(help_data, scheme)
             return help_data  # type: ignore[no-any-return]
         except Exception as e:
             return {
@@ -947,6 +948,34 @@ class HelpAdapter(ResourceAdapter):
                 'message': str(e),
                 'next': ['reveal help://adapters'],
             }
+
+    def _related_adapters(self, scheme: str) -> List[str]:
+        """Derive related-adapter pointers for `scheme` from `_get_adapter_relationships()`.
+
+        BACK-926: replaces the old hand-maintained `related` dict in
+        `_render_help_breadcrumbs`, which drifted from this data (the only
+        mechanism with a registry-completeness test) and reached 1 of 25
+        adapters in practice. Treats each curated pair as undirected so both
+        adapters in a pair point at each other.
+        """
+        neighbors: Dict[str, List[str]] = {}
+        for cluster in self._get_adapter_relationships()['clusters']:
+            for a, b, _rationale in cluster['pairs']:
+                for x, y in ((a, b), (b, a)):
+                    bucket = neighbors.setdefault(x, [])
+                    if y not in bucket:
+                        bucket.append(y)
+        return [f'reveal help://{s}' for s in neighbors.get(scheme, [])[:2]]
+
+    def _add_related_next(self, data: Dict[str, Any], scheme: str) -> None:
+        """Append `_related_adapters(scheme)` pointers onto `data['next']` in place."""
+        related = self._related_adapters(scheme)
+        if not related:
+            return
+        existing = data.setdefault('next', [])
+        for pointer in related:
+            if pointer not in existing:
+                existing.append(pointer)
 
     # Rank hints for help://quick's top command block. Lower sorts first;
     # unranked adapters (including project-local plugins) default to 100 and
@@ -1303,6 +1332,11 @@ class HelpAdapter(ResourceAdapter):
                 'file': filename,
                 'content': content
             }
+            # BACK-926: guide topics that share a name with an adapter scheme
+            # (ast, python, ssl, ...) get the same relationship-derived 'next'
+            # pointers adapter-scheme help does; meta guides (tricks, schema,
+            # ...) aren't scheme names so this is a no-op for them.
+            self._add_related_next(result, topic)
             if topic == 'schema':
                 # BACK-847: 'schema' (singular, this guide) and 'schemas'
                 # (plural, adapter query schemas) are unrelated pages that

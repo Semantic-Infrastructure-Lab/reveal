@@ -10,7 +10,6 @@ from contextlib import redirect_stdout
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from reveal.rendering.adapters.help import (
-    _render_help_breadcrumbs,
     _render_help_list_mode,
     _render_help_static_guide,
     _render_help_adapter_summary,
@@ -29,65 +28,6 @@ def capture_stdout(func, *args, **kwargs):
     with redirect_stdout(output):
         func(*args, **kwargs)
     return output.getvalue()
-
-
-class TestRenderHelpBreadcrumbs(unittest.TestCase):
-    """Test breadcrumb rendering."""
-
-    def test_no_scheme_empty(self):
-        """Empty scheme should render nothing."""
-        output = capture_stdout(_render_help_breadcrumbs, '', {})
-        self.assertEqual(output, '')
-
-    def test_none_scheme_empty(self):
-        """None scheme should render nothing."""
-        output = capture_stdout(_render_help_breadcrumbs, None, {})
-        self.assertEqual(output, '')
-
-    def test_ast_scheme_breadcrumbs(self):
-        """AST scheme should show related adapters (calls + diff — core code analysis pair)."""
-        output = capture_stdout(_render_help_breadcrumbs, 'ast', {})
-        self.assertIn('---', output)
-        self.assertIn('Next Steps', output)
-        self.assertIn('help://calls', output)
-        self.assertIn('help://diff', output)
-        self.assertIn('Go Deeper', output)
-        self.assertIn('help://tricks', output)
-        self.assertIn('help://anti-patterns', output)
-
-    def test_python_scheme_breadcrumbs(self):
-        """Python scheme should show related adapters."""
-        output = capture_stdout(_render_help_breadcrumbs, 'python', {})
-        self.assertIn('Next Steps', output)
-        self.assertIn('help://ast', output)
-        self.assertIn('help://env', output)
-
-    def test_env_scheme_breadcrumbs(self):
-        """Env scheme should show related adapters."""
-        output = capture_stdout(_render_help_breadcrumbs, 'env', {})
-        self.assertIn('Next Steps', output)
-        self.assertIn('help://python', output)
-
-    def test_json_scheme_breadcrumbs(self):
-        """JSON scheme should show related adapters."""
-        output = capture_stdout(_render_help_breadcrumbs, 'json', {})
-        self.assertIn('Next Steps', output)
-        self.assertIn('help://ast', output)
-
-    def test_help_scheme_breadcrumbs(self):
-        """Help scheme should show related adapters."""
-        output = capture_stdout(_render_help_breadcrumbs, 'help', {})
-        self.assertIn('Next Steps', output)
-        self.assertIn('help://ast', output)
-        self.assertIn('help://python', output)
-
-    def test_unknown_scheme_no_related(self):
-        """Unknown scheme should still show Go Deeper section."""
-        output = capture_stdout(_render_help_breadcrumbs, 'unknown', {})
-        self.assertIn('---', output)
-        self.assertIn('Go Deeper', output)
-        # Should NOT have Next Steps since no related adapters
-        self.assertNotIn('Next Steps', output)
 
 
 class TestSelectIndexEntries(unittest.TestCase):
@@ -611,16 +551,26 @@ class TestRenderHelpAdapterSpecific(unittest.TestCase):
         self.assertIn('* python://', output)
         self.assertIn('* help://tricks', output)
 
-    def test_includes_breadcrumbs(self):
-        """Should include breadcrumbs at end."""
+    def test_renders_next_pointers(self):
+        """BACK-926: 'next' pointers (now sourced from _related_adapters) render via _render_schema_next."""
         data = {
             'scheme': 'ast',
-            'description': 'AST queries'
+            'description': 'AST queries',
+            'next': ['reveal help://calls', 'reveal help://diff'],
         }
         output = capture_stdout(_render_help_adapter_specific, data)
-        self.assertIn('---', output)
-        self.assertIn('Go Deeper', output)
-        self.assertIn('help://tricks', output)
+        self.assertIn('## Next', output)
+        self.assertIn('reveal help://calls', output)
+        self.assertIn('reveal help://diff', output)
+
+    def test_no_next_renders_nothing_extra(self):
+        """No 'next' key means _render_schema_next is a silent no-op."""
+        data = {
+            'scheme': 'ast',
+            'description': 'AST queries',
+        }
+        output = capture_stdout(_render_help_adapter_specific, data)
+        self.assertNotIn('## Next', output)
 
     def test_error_handling(self):
         """Should handle error data and exit."""
@@ -1174,38 +1124,42 @@ class TestRenderHelpRelationships(unittest.TestCase):
         missing = all_registered - adapters_in_clusters
         self.assertEqual(missing, set(), f"Registered adapters missing from relationship clusters: {missing}")
 
-    def test_related_adapters_expanded(self):
-        """Breadcrumbs should now cover all major adapters."""
-        from reveal.rendering.adapters.help import _render_help_breadcrumbs
-        # ssl should point to domain and nginx (infrastructure cluster)
-        output = capture_stdout(_render_help_breadcrumbs, 'ssl', {})
-        self.assertIn('help://domain', output)
-        self.assertIn('help://nginx', output)
-        # sqlite should point to mysql
-        output = capture_stdout(_render_help_breadcrumbs, 'sqlite', {})
-        self.assertIn('help://mysql', output)
-        # claude should point to git
-        output = capture_stdout(_render_help_breadcrumbs, 'claude', {})
-        self.assertIn('help://git', output)
-
-    def test_every_public_adapter_has_breadcrumb_related_entry(self):
-        """BACK-585: the breadcrumbs' `related` dict is a hardcoded, hand-mirrored
-        map that has already silently drifted once — 4 of 25 adapters (codex,
-        depends, letsencrypt, patches) landed with no entry, so those adapters
-        rendered zero '## Next Steps' guidance with no test catching it. Guard
-        against the next adapter landing the same way.
+    def test_related_adapters_derived_from_relationship_pairs(self):
+        """BACK-926: _related_adapters(scheme) is now derived straight from
+        _get_adapter_relationships()'s pairs, so it can no longer disagree
+        with that data the way the old hand-maintained `related` dict did
+        (BACK-585 found it said stats -> [ast, diff] while relationships had
+        no stats-diff pair at all).
         """
-        from reveal.rendering.adapters.help import _render_help_breadcrumbs
-        from reveal.adapters.base import _ADAPTER_REGISTRY
         from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter()
+        # ssl should point to domain and nginx (infrastructure cluster)
+        self.assertEqual(
+            set(adapter._related_adapters('ssl')),
+            {'reveal help://domain', 'reveal help://nginx'},
+        )
+        self.assertIn('reveal help://mysql', adapter._related_adapters('sqlite'))
+        self.assertIn('reveal help://git', adapter._related_adapters('claude'))
+
+    def test_every_public_adapter_has_resolvable_related_next_pointer(self):
+        """BACK-585/BACK-926: every public adapter must get at least one
+        'next' pointer from _related_adapters, and every such pointer must
+        resolve to a real help:// topic — the correctness check the old
+        presence-only breadcrumb test never made (it only checked *some*
+        text was printed, not that the printed topic actually existed).
+        """
+        from reveal.adapters.help import HelpAdapter
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+        adapter = HelpAdapter()
+        topics = set(adapter._list_topics())
         public_schemes = set(_ADAPTER_REGISTRY.keys()) - HelpAdapter._INTERNAL_ADAPTERS
         for scheme in sorted(public_schemes):
-            output = capture_stdout(_render_help_breadcrumbs, scheme, {})
-            self.assertIn(
-                'Next Steps', output,
-                f"help://{scheme} has no entry in breadcrumbs' related dict "
-                "-> renders zero onward guidance",
-            )
+            related = adapter._related_adapters(scheme)
+            self.assertTrue(related, f"help://{scheme} has no related-adapter 'next' pointer")
+            for pointer in related:
+                self.assertTrue(pointer.startswith('reveal help://'), pointer)
+                target = pointer.removeprefix('reveal help://')
+                self.assertIn(target, topics, f"{pointer} does not resolve to a real help:// topic")
 
 
 class TestAntiPatternsRendering(unittest.TestCase):
