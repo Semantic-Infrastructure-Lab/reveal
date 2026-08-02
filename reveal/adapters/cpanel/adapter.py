@@ -966,7 +966,6 @@ class CpanelAdapter(ResourceAdapter):
                 'cpanel ACL check is filesystem-based (authoritative); nginx ACME audit also verifies config routing — use both',
             ],
             'see_also': [
-                'reveal help://ssl - SSL certificate inspection',
                 'reveal /etc/nginx/conf.d/users/USERNAME.conf --check-acl - N1 ACL check',
                 'reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme - Full ACME+ACL+SSL audit',
                 'reveal /etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs - Disk vs live cert compare',

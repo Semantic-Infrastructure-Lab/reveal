@@ -1557,6 +1557,9 @@ class DependsAdapter(ResourceAdapter):
             'examples': _SCHEMA_EXAMPLE_QUERIES,
             'notes': _SCHEMA_NOTES,
             'supported_languages': get_supported_languages(),
+            'see_also': [
+                'reveal help://calls - Function-level call graph (depends:// is module-level)',
+            ],
         }
 
 

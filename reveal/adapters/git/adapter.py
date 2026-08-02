@@ -668,9 +668,7 @@ class GitAdapter(ResourceAdapter):
                 'For file-scoped history, use: reveal \'git://path/to/file.py?type=history\' (not --log flag)',
             ],
             'see_also': [
-                'reveal help://diff - Compare two files or directories',
                 'reveal help://ast - Query code structure by complexity/size',
-                'reveal help://stats - Analyze codebase metrics and hotspots',
             ]
         }
 

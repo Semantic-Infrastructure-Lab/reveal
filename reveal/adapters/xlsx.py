@@ -634,7 +634,7 @@ class XlsxAdapter(ResourceAdapter):
             'try_now': _HELP_TRY_NOW,
             'workflows': _HELP_WORKFLOWS,
             'output_formats': ['text', 'json', 'csv'],
-            'see_also': ['stats://', 'json://']
+            'see_also': ['stats://']
         }
 
     def __init__(self, connection_string: str):

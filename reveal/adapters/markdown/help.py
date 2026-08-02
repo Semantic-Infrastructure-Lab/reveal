@@ -397,6 +397,6 @@ def get_help() -> Dict[str, Any]:
         'see_also': [
             'reveal file.md --related - Follow related documents',
             'reveal file.md --frontmatter - Show frontmatter',
-            'reveal help://knowledge-graph - Knowledge graph guide',
+            'reveal help://markdown - Markdown feature guide (comprehensive)',
         ]
     }

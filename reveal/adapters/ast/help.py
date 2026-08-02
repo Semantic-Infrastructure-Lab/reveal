@@ -443,10 +443,8 @@ def get_help() -> Dict[str, Any]:
         ],
         'output_formats': ['text', 'json', 'grep'],
         'see_also': [
-            'reveal help://python - Runtime environment inspection',
             'reveal help://tricks - Power user workflows',
             'reveal file.py --check - Code quality checks',
-            'reveal help://calls - Cross-file call graph queries (calls:// adapter)',
         ]
     }
 

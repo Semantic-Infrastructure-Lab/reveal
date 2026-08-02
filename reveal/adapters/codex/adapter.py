@@ -509,7 +509,6 @@ class CodexAdapter(ResourceAdapter):
             ],
             'output_formats': ['text', 'json'],
             'see_also': [
-                'reveal claude:// - Claude Code session analysis (sister adapter)',
                 'reveal help://adapters - All available adapters',
             ],
         }

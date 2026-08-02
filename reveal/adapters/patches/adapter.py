@@ -53,7 +53,6 @@ class PatchesAdapter(ResourceAdapter):
             'see_also': [
                 'reveal help://testability - Testability workflow guide',
                 'reveal testability src --tests tests - Combined report',
-                'reveal help://ast - Production code structure queries',
             ],
             'output_formats': ['text', 'json'],
         }

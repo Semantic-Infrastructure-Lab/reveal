@@ -78,6 +78,6 @@ try_now:
   - "reveal diff://v1.py:v2.py"
 
 see_also:
-  - 'reveal help://file - File structure analysis'
+  - 'reveal help://git - Git integration (git:// URIs used in diff:// comparisons)'
   - 'reveal help://env - Environment variable inspection'
   - 'reveal help://mysql - Database schema exploration'

@@ -173,6 +173,5 @@ def get_help() -> Dict[str, Any]:
         "see_also": [
             "reveal help://python-guide - Comprehensive guide with multi-shot examples",
             "reveal help://tricks - Power user workflows",
-            "reveal ast:// - Static code analysis",
         ],
     }

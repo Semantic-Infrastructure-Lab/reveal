@@ -92,6 +92,10 @@ _HELP: Dict[str, Any] = {
         'depth=N expands callers transitively up to N levels (capped at 5).',
         '?callees=X finds every definition of X and shows what it calls — useful for multi-file functions.',
     ],
+    'see_also': [
+        'reveal help://patches - Test churn + call-graph together identifies blast radius',
+        'dot -Tsvg - Render ?format=dot output with Graphviz (external tool)',
+    ],
 }
 
 _SCHEMA: Dict[str, Any] = {

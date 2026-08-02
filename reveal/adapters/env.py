@@ -255,7 +255,6 @@ class EnvAdapter(ResourceAdapter):
             ],
             'output_formats': ['text', 'json', 'grep'],
             'see_also': [
-                'reveal help://python - Python runtime inspection',
                 'reveal help://tricks - Power user workflows',
                 'reveal ast:// - Code structure analysis'
             ]
