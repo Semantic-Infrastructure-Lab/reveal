@@ -90,7 +90,13 @@ class V017(BaseRule):
             reveal_root = find_reveal_root()
             if not reveal_root:
                 return []
-            taxonomy_path = reveal_root / 'adapters' / 'ast' / 'node_taxonomy.py'
+            # BACK-911 moved DEF_NODES/CLASS_NODES to core/node_taxonomy.py,
+            # leaving a back-compat shim (no frozenset literals) at the old
+            # adapters/ast/ path — read from the new location first, same
+            # shape of break as the BACK-814 comment above describes.
+            taxonomy_path = reveal_root / 'core' / 'node_taxonomy.py'
+            if not taxonomy_path.exists():
+                taxonomy_path = reveal_root / 'adapters' / 'ast' / 'node_taxonomy.py'
             treesitter_path = reveal_root / 'treesitter.py'
             if not taxonomy_path.exists():
                 return []
