@@ -177,11 +177,14 @@ class MySQLConnection:
             return [self.convert_decimals(item) for item in obj]
         return obj
 
-    def execute_query(self, query: str) -> list[Any]:
+    def execute_query(self, query: str, params: Optional[tuple] = None) -> list[Any]:
         """Execute a SQL query and return results.
 
         Args:
-            query: SQL query to execute
+            query: SQL query to execute, with %s placeholders for any
+                caller-supplied value (never interpolate values into the
+                query string directly — see BACK-896)
+            params: Values to bind to the query's %s placeholders
 
         Returns:
             List of result rows (as dicts)
@@ -189,20 +192,21 @@ class MySQLConnection:
         conn = self.get_connection()
         cursor_class = pymysql.cursors.DictCursor if PYMYSQL_AVAILABLE else None
         with conn.cursor(cursor_class) as cursor:
-            cursor.execute(query)
+            cursor.execute(query, params)
             results = cursor.fetchall()
             return cast(list[Any], self.convert_decimals(results))
 
-    def execute_single(self, query: str) -> Optional[Dict[str, Any]]:
+    def execute_single(self, query: str, params: Optional[tuple] = None) -> Optional[Dict[str, Any]]:
         """Execute query and return first row.
 
         Args:
             query: SQL query
+            params: Values to bind to the query's %s placeholders
 
         Returns:
             First row as dict, or None
         """
-        results = self.execute_query(query)
+        results = self.execute_query(query, params)
         return results[0] if results else None
 
     def get_snapshot_context(self) -> Dict[str, Any]:

@@ -1390,5 +1390,42 @@ class TestGetTables(unittest.TestCase):
         self.adapter._execute_query = Mock(return_value=mock_tables)
 
 
+class TestGetDatabaseStorageSQLInjection(unittest.TestCase):
+    """BACK-896: db_name must be bound as a query parameter, never
+    interpolated into the SQL text."""
+
+    def setUp(self):
+        from reveal.adapters.mysql.storage import StorageAnalyzer
+        self.mock_conn = MagicMock()
+        self.mock_conn.get_snapshot_context = Mock(return_value={})
+        self.mock_conn.execute_query = Mock(return_value=[])
+        self.analyzer = StorageAnalyzer(self.mock_conn)
+
+    def test_db_name_passed_as_bind_parameter_not_interpolated(self):
+        """A malicious db_name must never appear inside the query string."""
+        malicious = "x' UNION SELECT user,authentication_string,3,4 FROM mysql.user-- "
+
+        self.analyzer.get_database_storage(malicious)
+
+        self.mock_conn.execute_query.assert_called_once()
+        query_arg, params_arg = self.mock_conn.execute_query.call_args[0]
+        self.assertNotIn(malicious, query_arg)
+        self.assertIn('%s', query_arg)
+        self.assertEqual(params_arg, (malicious,))
+
+    def test_normal_db_name_returns_expected_shape(self):
+        self.mock_conn.execute_query = Mock(return_value=[
+            {'table_name': 'users', 'engine': 'InnoDB', 'table_rows': 10, 'size_mb': 1.2},
+        ])
+
+        result = self.analyzer.get_database_storage('app_prod')
+
+        self.assertEqual(result['type'], 'database_storage')
+        self.assertEqual(result['database'], 'app_prod')
+        self.assertEqual(result['tables'][0]['table_name'], 'users')
+        _, params_arg = self.mock_conn.execute_query.call_args[0]
+        self.assertEqual(params_arg, ('app_prod',))
+
+
 if __name__ == '__main__':
     unittest.main()
