@@ -23,6 +23,20 @@ _BINARY_EXTENSIONS = frozenset({
 _BINARY_SNIFF_SIZE = 8192
 
 
+_BRE_ALTERNATION_RE = re.compile(r'\\\|')
+
+
+def _looks_like_bre_alternation_mistake(pattern: str) -> bool:
+    """Detect the common '\\|' (BRE-style alternation) mistake.
+
+    Python re treats '\\|' as a literal escaped pipe, not alternation —
+    unlike POSIX BRE grep, where '\\|' means "or". A pattern containing
+    '\\|' almost always means the author wanted alternation and got a
+    silently-never-matching literal instead.
+    """
+    return bool(_BRE_ALTERNATION_RE.search(pattern))
+
+
 def _looks_binary(fpath: Path) -> bool:
     """Heuristic binary detection: a NUL byte in the leading chunk (the same
     signal git/grep use). Catches compiled binaries with no distinguishing
@@ -187,7 +201,11 @@ def _render_text(
 
     if not hit_lines:
         print("No matches found.")
-        if not re.search(r'[|+*?\\[\]{}()]', pattern):
+        if _looks_like_bre_alternation_mistake(pattern):
+            print(f"  Tip: --grep uses Python regex, where '\\|' is a literal "
+                  f"pipe, not alternation. Did you mean: "
+                  f"'{pattern.replace(chr(92) + '|', '|')}' (no backslash)?")
+        elif not re.search(r'[|+*?\\[\]{}()]', pattern):
             print(f"  Tip: --grep searches literal/regex text. "
                   f"For named elements use: reveal {path} --name '{pattern}'")
         return
@@ -320,6 +338,10 @@ def _render_dir_text(
     print(f"Text search: {path}  —  pattern: {pattern}")
     if not file_results:
         print("No matches found.")
+        if _looks_like_bre_alternation_mistake(pattern):
+            print(f"  Tip: --grep uses Python regex, where '\\|' is a literal "
+                  f"pipe, not alternation. Did you mean: "
+                  f"'{pattern.replace(chr(92) + '|', '|')}' (no backslash)?")
         return
     print(f"{total_hits} {hit_word} across {len(file_results)} {file_word}")
     print()

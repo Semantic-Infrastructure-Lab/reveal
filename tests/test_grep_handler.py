@@ -216,3 +216,42 @@ class TestGrepSearchHintHyphen(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertNotIn('No matches found', r.stdout)
         self.assertIn('Backlog', r.stdout)
+
+
+class TestGrepBreAlternationMistake(unittest.TestCase):
+    """Python re treats '\\|' as a literal pipe, not alternation like BRE grep.
+    A pattern using '\\|' silently matches nothing; --grep should hint at the
+    unescaped form rather than fail silently or fall back to the --name tip."""
+
+    def setUp(self):
+        self.f = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+        self.f.write('line with SOC-SEC-33 policy\nanother line with SOC-101 policy\n')
+        self.f.close()
+        self.d = tempfile.mkdtemp()
+        with open(os.path.join(self.d, 'f.txt'), 'w') as fh:
+            fh.write('line with SOC-SEC-33 policy\nanother line with SOC-101 policy\n')
+
+    def tearDown(self):
+        os.unlink(self.f.name)
+        import shutil
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def test_real_alternation_matches_both(self):
+        r = run_reveal(self.f.name, '--grep', r'SOC-SEC-33|SOC-101')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('2 hits', r.stdout)
+
+    def test_escaped_pipe_finds_nothing_but_hints(self):
+        r = run_reveal(self.f.name, '--grep', r'SOC-SEC-33\|SOC-101')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('No matches found', r.stdout)
+        self.assertIn("uses Python regex", r.stdout)
+        self.assertIn("SOC-SEC-33|SOC-101", r.stdout)
+        self.assertNotIn('--name', r.stdout)
+
+    def test_escaped_pipe_directory_mode_hints(self):
+        r = run_reveal(self.d, '--grep', r'SOC-SEC-33\|SOC-101')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('No matches found', r.stdout)
+        self.assertIn("uses Python regex", r.stdout)
+        self.assertIn("SOC-SEC-33|SOC-101", r.stdout)
