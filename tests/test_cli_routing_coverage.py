@@ -354,6 +354,16 @@ class TestValidatePathExists:
         captured = capsys.readouterr()
         assert 'Error' in captured.err
 
+    def test_try_hint_omitted_when_cwd_suggestion_also_missing(self, capsys):
+        """A relative path that doesn't exist under cwd either must not suggest
+        a "Try:" path that's just as wrong -- that false-confidence hint is
+        what sent a BACK-619 investigation chasing a nonexistent path."""
+        with pytest.raises(SystemExit):
+            _validate_path_exists(Path('nonexistent/file.py'), 'nonexistent/file.py')
+        captured = capsys.readouterr()
+        assert 'Try:' not in captured.err
+        assert 'Running from' in captured.err
+
 
 # ─── _stat_one_file ───────────────────────────────────────────────────────────
 

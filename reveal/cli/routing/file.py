@@ -60,7 +60,8 @@ def _validate_path_exists(path: Path, path_str: str) -> None:
             abs_suggestion = os.path.join(cwd, path_str)
             print(f"Error: {path_str} not found", file=sys.stderr)
             print(f"Hint: Running from {cwd}", file=sys.stderr)
-            print(f"      Try: reveal {abs_suggestion}", file=sys.stderr)
+            if abs_suggestion != path_str and os.path.exists(abs_suggestion):
+                print(f"      Try: reveal {abs_suggestion}", file=sys.stderr)
         sys.exit(1)
 
 
