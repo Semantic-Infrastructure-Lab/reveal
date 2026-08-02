@@ -379,6 +379,45 @@ class TestSQLiteAdapterElement(unittest.TestCase):
         self.assertEqual(structure['type'], 'sqlite_table')
         self.assertEqual(structure['table'], 'users')
 
+    def test_get_element_sql_injection_union_returns_none(self):
+        """BACK-897: a UNION-injection payload as the table name must not
+        return injected data — it should behave exactly like any other
+        nonexistent table name."""
+        adapter = SQLiteAdapter(f"sqlite://{self.db_path}")
+        payload = "x' UNION SELECT sql FROM sqlite_master WHERE type='table'--"
+
+        element = adapter.get_element(payload)
+
+        self.assertIsNone(element)
+
+    def test_get_element_sql_injection_does_not_leak_other_tables(self):
+        """A crafted name attempting to UNION-select from sqlite_master
+        must not surface real schema/data instead of a clean 'not found'."""
+        adapter = SQLiteAdapter(f"sqlite://{self.db_path}")
+        payload = "nonexistent\" UNION SELECT name FROM sqlite_master WHERE type='table' --"
+
+        element = adapter.get_element(payload)
+
+        self.assertIsNone(element)
+
+    def test_get_element_table_name_with_double_quote_is_escaped(self):
+        """A legitimate-but-unusual table name containing a double-quote
+        must be handled safely by the identifier-quoting helper rather than
+        breaking out of the PRAGMA/FROM identifier quoting."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('CREATE TABLE "weird""name" (id INTEGER PRIMARY KEY)')
+        cursor.execute('INSERT INTO "weird""name" (id) VALUES (1)')
+        conn.commit()
+        conn.close()
+
+        adapter = SQLiteAdapter(f"sqlite://{self.db_path}")
+        element = adapter.get_element('weird"name')
+
+        self.assertIsNotNone(element)
+        self.assertEqual(element['table'], 'weird"name')
+        self.assertEqual(element['row_count'], 1)
+
 
 class TestSQLiteAdapterErrors(unittest.TestCase):
     """Test error handling."""

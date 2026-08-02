@@ -255,11 +255,14 @@ class SQLiteAdapter(ResourceAdapter):
 
         return self._connection
 
-    def _execute_query(self, query: str) -> List[Dict[str, Any]]:
+    def _execute_query(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
         Args:
-            query: SQL query to execute
+            query: SQL query to execute, with ? placeholders for any
+                caller-supplied value (never interpolate values into the
+                query string directly — see BACK-897)
+            params: Values to bind to the query's ? placeholders
 
         Returns:
             List of result rows as dictionaries
@@ -270,7 +273,7 @@ class SQLiteAdapter(ResourceAdapter):
         """
         conn = self._get_connection()
         try:
-            cursor = conn.execute(query)
+            cursor = conn.execute(query, params)
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
         except sqlite3.DatabaseError as e:
@@ -278,17 +281,32 @@ class SQLiteAdapter(ResourceAdapter):
         except sqlite3.OperationalError as e:
             raise RuntimeError(f"Query failed: {e}") from e
 
-    def _execute_single(self, query: str) -> Optional[Dict[str, Any]]:
+    def _execute_single(self, query: str, params: tuple = ()) -> Optional[Dict[str, Any]]:
         """Execute a query and return single result as dict.
 
         Args:
             query: SQL query to execute
+            params: Values to bind to the query's ? placeholders
 
         Returns:
             Single result row as dictionary, or None if no results
         """
-        results = self._execute_query(query)
+        results = self._execute_query(query, params)
         return results[0] if results else None
+
+    @staticmethod
+    def _quote_identifier(name: str) -> str:
+        """Quote a SQL identifier (table/index name) for safe interpolation.
+
+        SQL has no parameter-binding syntax for identifiers (only values),
+        so table/index names can't use `?` placeholders the way WHERE-clause
+        values can. Doubling embedded double-quotes is the standard SQL
+        identifier-escaping rule (mirrors how a literal `"` inside a quoted
+        identifier is written `""`) — defense in depth on top of the
+        exact-match existence check every caller already performs before
+        reaching an identifier-interpolation site (BACK-897).
+        """
+        return name.replace('"', '""')
 
     def __del__(self):
         """Close SQLite connection."""
@@ -336,22 +354,24 @@ class SQLiteAdapter(ResourceAdapter):
         """
         table_stats = []
         for table in tables:
+            quoted_name = self._quote_identifier(table['name'])
             if table['type'] == 'table':
                 # Get row count
                 count_result = self._execute_single(
-                    f"SELECT COUNT(*) as count FROM \"{table['name']}\""
+                    f'SELECT COUNT(*) as count FROM "{quoted_name}"'
                 )
                 row_count = count_result['count'] if count_result else 0
 
                 # Get column count
-                columns = self._execute_query(f"PRAGMA table_info(\"{table['name']}\")")
+                columns = self._execute_query(f'PRAGMA table_info("{quoted_name}")')
                 col_count = len(columns)
 
                 # Get index count
                 indexes = self._execute_query(
-                    f"SELECT COUNT(*) as count FROM sqlite_master "
-                    f"WHERE type='index' AND tbl_name='{table['name']}' "
-                    f"AND name NOT LIKE 'sqlite_autoindex_%'"
+                    "SELECT COUNT(*) as count FROM sqlite_master "
+                    "WHERE type='index' AND tbl_name=? "
+                    "AND name NOT LIKE 'sqlite_autoindex_%'",
+                    (table['name'],)
                 )
                 idx_count = indexes[0]['count'] if indexes else 0
 
@@ -363,7 +383,7 @@ class SQLiteAdapter(ResourceAdapter):
                     'indexes': idx_count
                 })
             else:  # view
-                columns = self._execute_query(f"PRAGMA table_info(\"{table['name']}\")")
+                columns = self._execute_query(f'PRAGMA table_info("{quoted_name}")')
                 table_stats.append({
                     'name': table['name'],
                     'type': 'view',
@@ -383,7 +403,8 @@ class SQLiteAdapter(ResourceAdapter):
         fk_count = 0
         for table in tables:
             if table['type'] == 'table':
-                fks = self._execute_query(f"PRAGMA foreign_key_list(\"{table['name']}\")")
+                quoted_name = self._quote_identifier(table['name'])
+                fks = self._execute_query(f'PRAGMA foreign_key_list("{quoted_name}")')
                 fk_count += len(fks)
         return fk_count
 
@@ -475,15 +496,18 @@ class SQLiteAdapter(ResourceAdapter):
         Returns:
             Dict containing table structure details
         """
-        # Verify table exists
+        # Verify table exists (bound parameter — BACK-897, see _quote_identifier)
         table_check = self._execute_query(
-            f"SELECT name FROM sqlite_master WHERE type='table' AND name='{element_name}'"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (element_name,)
         )
         if not table_check:
             return None
 
+        quoted_name = self._quote_identifier(element_name)
+
         # Get columns
-        columns_raw = self._execute_query(f"PRAGMA table_info(\"{element_name}\")")
+        columns_raw = self._execute_query(f'PRAGMA table_info("{quoted_name}")')
         columns = []
         for col in columns_raw:
             is_pk = bool(col['pk'])
@@ -500,14 +524,16 @@ class SQLiteAdapter(ResourceAdapter):
 
         # Get indexes
         indexes_raw = self._execute_query(
-            f"SELECT name, sql FROM sqlite_master "
-            f"WHERE type='index' AND tbl_name='{element_name}' "
-            f"AND name NOT LIKE 'sqlite_autoindex_%'"
+            "SELECT name, sql FROM sqlite_master "
+            "WHERE type='index' AND tbl_name=? "
+            "AND name NOT LIKE 'sqlite_autoindex_%'",
+            (element_name,)
         )
         indexes = []
         for idx in indexes_raw:
-            # Get index columns
-            idx_info = self._execute_query(f"PRAGMA index_info(\"{idx['name']}\")")
+            # Get index columns (server-sourced name, still quoted as an identifier)
+            quoted_idx_name = self._quote_identifier(idx['name'])
+            idx_info = self._execute_query(f'PRAGMA index_info("{quoted_idx_name}")')
             idx_columns = [info['name'] for info in idx_info]
 
             # Determine if unique
@@ -520,7 +546,7 @@ class SQLiteAdapter(ResourceAdapter):
             })
 
         # Get foreign keys
-        fks_raw = self._execute_query(f"PRAGMA foreign_key_list(\"{element_name}\")")
+        fks_raw = self._execute_query(f'PRAGMA foreign_key_list("{quoted_name}")')
         foreign_keys = []
         for fk in fks_raw:
             foreign_keys.append({
@@ -532,12 +558,13 @@ class SQLiteAdapter(ResourceAdapter):
             })
 
         # Get row count
-        count_result = self._execute_single(f"SELECT COUNT(*) as count FROM \"{element_name}\"")
+        count_result = self._execute_single(f'SELECT COUNT(*) as count FROM "{quoted_name}"')
         row_count = count_result['count'] if count_result else 0
 
         # Get CREATE TABLE statement
         create_sql = self._execute_single(
-            f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{element_name}'"
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+            (element_name,)
         )
 
         return ResultBuilder.create(
