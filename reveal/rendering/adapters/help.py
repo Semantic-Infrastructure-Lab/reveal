@@ -278,6 +278,10 @@ def _render_help_static_guide(data: Dict[str, Any]) -> None:
     if data.get('note'):
         print()
         print(f"Note: {data['note']}")
+    # BACK-936: the same-named adapter's get_help() see_also pointers, when present.
+    if data.get('see_also'):
+        print()
+        _render_help_see_also(data)
     # Long guides carry their onward pointer in the truncation footer; short
     # ones never truncate, so render an explicit 'next' when present (BACK-841).
     if data.get('next'):

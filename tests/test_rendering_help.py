@@ -1162,6 +1162,59 @@ class TestRenderHelpRelationships(unittest.TestCase):
                 self.assertIn(target, topics, f"{pointer} does not resolve to a real help:// topic")
 
 
+class TestSeeAlsoReachableThroughGuideShadow(unittest.TestCase):
+    """BACK-936: help://<scheme> resolves to a same-named static guide for 23
+    of 24 adapters, which used to mean get_help()'s 'see_also' was dead data
+    with no reachable route at all (same class of bug BACK-926 fixed for
+    'next' — a presence-only check would not have caught this, since
+    get_help() itself worked fine when called directly; it just never ran
+    through the live help:// dispatch path).
+    """
+
+    def test_shadowed_adapter_see_also_surfaces_on_its_guide(self):
+        from reveal.adapters.help import HelpAdapter
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+        adapter = HelpAdapter()
+        checked_at_least_one = False
+        for scheme, adapter_class in _ADAPTER_REGISTRY.items():
+            if scheme not in adapter.help_topics:
+                continue  # not shadowed by a guide -- not this bug's scenario
+            if not hasattr(adapter_class, 'get_help'):
+                continue
+            expected = (adapter_class.get_help() or {}).get('see_also')
+            if not expected:
+                continue
+            checked_at_least_one = True
+            result = adapter._load_static_help(scheme)
+            self.assertEqual(
+                result.get('see_also'), expected,
+                f"help://{scheme} (guide-shadowed) does not surface its "
+                f"adapter's get_help()['see_also']",
+            )
+        self.assertTrue(checked_at_least_one, "no shadowed adapter with a see_also was found to test")
+
+    def test_see_also_renders_as_text_for_a_shadowed_adapter(self):
+        """Reachability, not just presence: the text renderer must actually
+        print the section for a real help://<scheme> call, not just carry it
+        in the data dict."""
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter()
+        result = adapter._load_static_help('ast')
+        self.assertIn('see_also', result)
+        output = capture_stdout(render_help, result, 'text', False)
+        self.assertIn('## See Also', output)
+
+    def test_meta_guide_without_matching_scheme_gets_no_see_also(self):
+        """No-op check: guides that aren't adapter scheme names (tricks,
+        schema, ...) must not gain a spurious 'see_also' key."""
+        from reveal.adapters.help import HelpAdapter
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+        adapter = HelpAdapter()
+        result = adapter._load_static_help('tricks')
+        self.assertNotIn('tricks', _ADAPTER_REGISTRY)
+        self.assertNotIn('see_also', result)
+
+
 class TestAntiPatternsRendering(unittest.TestCase):
     """S1.3: help://anti-patterns text rendering must produce non-empty non-adapter output."""
 

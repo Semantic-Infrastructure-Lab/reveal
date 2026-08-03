@@ -977,6 +977,26 @@ class HelpAdapter(ResourceAdapter):
             if pointer not in existing:
                 existing.append(pointer)
 
+    def _add_related_see_also(self, data: Dict[str, Any], topic: str) -> None:
+        """BACK-936: surface the adapter's `get_help()['see_also']` on a guide.
+
+        `help://<scheme>` resolves to the static guide (this branch) before
+        the adapter-scheme branch ever runs, so for the 23 of 24 schemes with
+        a same-named guide, `get_help()`'s `see_also` was otherwise dead data
+        with no reachable route at all. No-op for meta guides (tricks,
+        schema, ...) that aren't adapter scheme names.
+        """
+        adapter_class = _ADAPTER_REGISTRY.get(topic)
+        if not adapter_class or not hasattr(adapter_class, 'get_help'):
+            return
+        try:
+            adapter_help = adapter_class.get_help()
+        except Exception:
+            return
+        see_also = adapter_help.get('see_also') if adapter_help else None
+        if see_also:
+            data['see_also'] = see_also
+
     # Rank hints for help://quick's top command block. Lower sorts first;
     # unranked adapters (including project-local plugins) default to 100 and
     # sort alphabetically after every ranked one. This is the "intent contract"
@@ -1337,6 +1357,8 @@ class HelpAdapter(ResourceAdapter):
             # pointers adapter-scheme help does; meta guides (tricks, schema,
             # ...) aren't scheme names so this is a no-op for them.
             self._add_related_next(result, topic)
+            # BACK-936: same idea for the adapter's own see_also pointers.
+            self._add_related_see_also(result, topic)
             if topic == 'schema':
                 # BACK-847: 'schema' (singular, this guide) and 'schemas'
                 # (plural, adapter query schemas) are unrelated pages that
