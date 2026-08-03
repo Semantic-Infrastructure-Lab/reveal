@@ -119,6 +119,9 @@ class SQLiteAdapter(ResourceAdapter):
         reveal sqlite:///path/to/db.db --check   # Database health
     """
 
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    CANONICAL_EMPTY_RESOURCE = ''  # bare sqlite:// must stay empty, not '.'
+
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         """Get machine-readable schema for sqlite:// adapter.
@@ -151,16 +154,22 @@ class SQLiteAdapter(ResourceAdapter):
         """
         return load_help_data('sqlite') or {}
 
-    def __init__(self, connection_string: str):
+    def __init__(self, resource: str, query: Optional[str] = None):
         """Initialize SQLite adapter with database path.
 
         Args:
-            connection_string: sqlite:///path/to/db.db[/table]
+            resource: sqlite:///path/to/db.db[/table] — accepted with or
+                without the sqlite:// prefix; _parse_connection_string
+                strips it if present, so both direct construction
+                (SQLiteAdapter("sqlite:///x.db")) and router construction
+                (bare "/x.db") work unchanged.
+            query: Unused — sqlite:// supports no query parameters
 
         Raises:
-            TypeError: When no connection string provided (Python default)
-            ValueError: When connection string format is invalid
+            ValueError: When no path is given or the format is invalid
         """
+        connection_string = resource
+
         # Validate connection string is not empty (after required check)
         if not connection_string:
             raise ValueError(

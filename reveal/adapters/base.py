@@ -125,6 +125,16 @@ class ResourceAdapter(ABC):
     # the canonical contract test in test_adapter_contracts.py enforces this.
     LEGACY_INIT: bool = True
 
+    # What an empty resource string means for this adapter's canonical
+    # __init__ (LEGACY_INIT = False only — ignored otherwise). Default '.'
+    # matches path-based adapters, where bare scheme:// means "current
+    # directory" (ast, calls, json, patches, stats, depends, imports).
+    # Connection-string adapters (sqlite, mysql, cpanel, ...) must override
+    # to '' — they have their own empty-resource validation/fallback
+    # (e.g. bare mysql:// deliberately means "read ~/.my.cnf"), and silently
+    # substituting '.' would misread it as a literal host/path instead.
+    CANONICAL_EMPTY_RESOURCE: str = '.'
+
     @classmethod
     def from_uri(cls, scheme: str, resource: str,
                  element: Optional[str]) -> 'ResourceAdapter':

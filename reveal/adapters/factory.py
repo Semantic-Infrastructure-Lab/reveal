@@ -105,12 +105,19 @@ def _canonical_init(adapter_class: type, resource: str) -> Any:
     Splits resource on '?' the same way _try_query_parsing_init does, then
     calls the constructor once — no try-chain, no guessing, and any error
     raised inside __init__ propagates to the caller unmodified.
+
+    An empty resource defaults to adapter_class.CANONICAL_EMPTY_RESOURCE
+    (see adapters/base.py) — '.' for path-based adapters (bare ast:// means
+    "current directory"), '' for connection-string adapters (bare sqlite://
+    must stay empty so the adapter's own validation/fallback fires instead
+    of misreading '.' as a literal path/host).
     """
+    empty_default = getattr(adapter_class, 'CANONICAL_EMPTY_RESOURCE', '.')
     if resource and '?' in resource:
         path, query = resource.split('?', 1)
-        path = path or '.'
+        path = path or empty_default
     else:
-        path = resource or '.'
+        path = resource or empty_default
         query = None
     return adapter_class(path, query)
 

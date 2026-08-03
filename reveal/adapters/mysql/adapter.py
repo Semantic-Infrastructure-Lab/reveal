@@ -159,6 +159,8 @@ class MySQLAdapter(ResourceAdapter):
     """
 
     BUDGET_LIST_FIELD = 'checks'
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    CANONICAL_EMPTY_RESOURCE = ''  # bare mysql:// deliberately means "use ~/.my.cnf"
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -206,17 +208,19 @@ class MySQLAdapter(ResourceAdapter):
         """
         return load_help_data('mysql') or {}
 
-    def __init__(self, connection_string: str):
+    def __init__(self, resource: str, query: Optional[str] = None):
         """Initialize MySQL adapter with connection details.
 
         Args:
-            connection_string: mysql://[user:pass@]host[:port][/element]
-                              Required - routing layer passes full URI
+            resource: [user:pass@]host[:port][/element], with or without
+                the mysql:// prefix — MySQLConnection._parse_connection_string
+                normalizes both forms (see its docstring)
+            query: Unused — mysql:// supports no query parameters
 
         Raises:
             ImportError: If pymysql is not installed
-            TypeError: If connection_string not provided (enforces URI-based init)
         """
+        connection_string = resource
         # Create connection manager
         self.conn = MySQLConnection(connection_string)
         self.element = self.conn.element

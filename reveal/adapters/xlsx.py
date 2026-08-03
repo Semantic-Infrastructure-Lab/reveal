@@ -605,6 +605,8 @@ class XlsxAdapter(ResourceAdapter):
         xlsx:///path/to/file.xlsx?sheet=Sales&limit=50    # Limit rows
     """
 
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         """Get machine-readable schema for xlsx:// adapter."""
@@ -637,12 +639,18 @@ class XlsxAdapter(ResourceAdapter):
             'see_also': ['stats://']
         }
 
-    def __init__(self, connection_string: str):
+    def __init__(self, resource: str, query: Optional[str] = None):
         """Initialize xlsx adapter.
 
         Args:
-            connection_string: xlsx:///path/to/file.xlsx?query_params
+            resource: /path/to/file.xlsx, with or without the xlsx:// prefix
+                and with or without an embedded ?query_params — _parse_uri
+                strips/splits both, so direct construction
+                (XlsxAdapter("xlsx://x.xlsx?sheet=0")) and router
+                construction (bare path + separate query) both work.
+            query: Query params when passed separately (router construction)
         """
+        connection_string = resource + (f'?{query}' if query else '')
         self.connection_string = connection_string
         self.file_path: Optional[Path] = None
         self.query_params: Dict[str, str] = {}
