@@ -100,3 +100,60 @@ def get_last_agent_message(records: List[Dict[str, Any]]) -> Optional[Dict[str, 
         if rec.get('type') == 'event_msg' and _payload_type(rec) == 'agent_message':
             last = rec
     return last
+
+
+def get_exchanges(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Pair each user prompt with the agent's final reply to it (BACK-943).
+
+    Unlike claude:// (role=user records mixed with tool-result wrapper turns,
+    requiring a parentUuid-chain walk to find the "real" answer), codex's
+    event_msg/user_message and event_msg/agent_message are already narrative-
+    only and strictly chronological — so pairing is a straight linear walk:
+    each user turn pairs with the LAST agent turn before the following user
+    turn (matching claude://'s "final answer, not first" semantics — an agent
+    often narrates an initial "I'll start by..." before its real conclusion),
+    or None if the session ends without any agent reply.
+    """
+    turns = extract_messages(records)
+    exchanges: List[Dict[str, Any]] = []
+    pending: Optional[Dict[str, Any]] = None
+    for turn in turns:
+        if turn['role'] == 'user':
+            if pending is not None:
+                exchanges.append(pending)
+            pending = {
+                'prompt': turn['message'],
+                'prompt_timestamp': turn['timestamp'],
+                'answer': None,
+                'answer_timestamp': None,
+            }
+        elif turn['role'] == 'agent' and pending is not None:
+            pending['answer'] = turn['message']
+            pending['answer_timestamp'] = turn['timestamp']
+    if pending is not None:
+        exchanges.append(pending)
+    return exchanges
+
+
+def get_message_by_index(records: List[Dict[str, Any]], index: int) -> Optional[Dict[str, Any]]:
+    """Return the raw JSONL record at `index` (0-based, Python-style negative
+
+    indexing supported — e.g. -1 = last record). Indexes the full raw record
+    stream, not just user/agent turns, matching claude://'s /message/<n>
+    convention (bulk/forensic access, not narrative reading).
+    """
+    if not records:
+        return None
+    try:
+        rec = records[index]
+    except IndexError:
+        return None
+    resolved_index = index if index >= 0 else len(records) + index
+    payload = rec.get('payload', {})
+    return {
+        'record_index': resolved_index,
+        'record_type': rec.get('type', ''),
+        'payload_type': payload.get('type', ''),
+        'timestamp': rec.get('timestamp'),
+        'record': rec,
+    }

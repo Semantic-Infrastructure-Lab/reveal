@@ -13,8 +13,8 @@ from .renderer import CodexRenderer
 from ...utils.query import parse_query_params
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
+    filter_sessions as _h_filter_sessions,
     search_sessions as _h_search_sessions,
-    content_search_sessions as _h_content_search,
 )
 from .handlers.system import (
     get_info as _h_get_info,
@@ -25,7 +25,11 @@ from .handlers.system import (
     get_memories_pipeline as _h_get_memories_pipeline,
 )
 from .handlers.goals import get_goal as _h_get_goal
-from .analysis.messages import extract_messages, get_last_agent_message, get_token_turns, get_grand_total_tokens
+from .handlers.workspace import get_skills as _h_get_skills, get_plugins as _h_get_plugins
+from .analysis.messages import (
+    extract_messages, get_last_agent_message, get_token_turns, get_grand_total_tokens,
+    get_exchanges as _analysis_get_exchanges, get_message_by_index as _analysis_get_message_by_index,
+)
 from .analysis.tools import get_tool_pairs, get_shell_commands
 from .analysis.errors import get_errors as _analysis_get_errors
 from .analysis.overview import get_overview as _analysis_get_overview
@@ -197,6 +201,8 @@ class CodexAdapter(ResourceAdapter):
         'config': '_get_config',
         'memories': '_get_memories',
         'rules': '_get_rules',
+        'skills': '_get_skills',
+        'plugins': '_get_plugins',
     }
 
     # memories/pipeline is a sub-path of memories — routed before generic memories
@@ -206,12 +212,14 @@ class CodexAdapter(ResourceAdapter):
         """Route codex:// resource to the appropriate handler."""
         # Bare or sessions/ → list, search, or content search
         if self._is_session_list_resource():
-            content = self.query_params.get('content')
-            if content:
-                return _h_content_search(self.CODEX_DB, content)
+            since = self.query_params.get('since', '')
+            until = self.query_params.get('until', '')
             search = self.query_params.get('search')
             if search:
-                return _h_search_sessions(self.CODEX_DB, search)
+                return _h_search_sessions(self.CODEX_DB, search, since=since, until=until)
+            filter_term = self.query_params.get('filter')
+            if filter_term:
+                return _h_filter_sessions(self.CODEX_DB, filter_term, since=since, until=until)
             return _h_list_sessions(self.CODEX_DB)
 
         # memories/pipeline — check before generic memories
@@ -277,6 +285,12 @@ class CodexAdapter(ResourceAdapter):
             return self._result_workflow(records, session_row)
         if sub == 'timeline':
             return self._result_timeline(records, session_row)
+        if sub == 'digest':
+            return self._result_digest(records, session_row)
+        if sub == 'exchanges':
+            return self._result_exchanges(records, session_row)
+        if sub.startswith('message/'):
+            return self._result_message(records, session_row, sub[len('message/'):])
 
         # Default: overview
         return self._result_overview(records, session_row)
@@ -363,6 +377,49 @@ class CodexAdapter(ResourceAdapter):
         b['total'] = len(events)
         return b
 
+    def _result_digest(self, records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> Dict[str, Any]:
+        """Composed readable view: overview + prompts + agent narrative in one call (BACK-943)."""
+        b = self._base('codex_digest', session_row)
+        overview = _analysis_get_overview(records, session_row)
+        turns = extract_messages(records)
+        prompts = [t for t in turns if t['role'] == 'user']
+        narrative = [t for t in turns if t['role'] == 'agent']
+        b.update({
+            'title': overview.get('title'),
+            'model': overview.get('model'),
+            'duration_ms': overview.get('duration_ms'),
+            'user_turns': overview.get('user_turns'),
+            'agent_turns': overview.get('agent_turns'),
+            'prompt_count': len(prompts),
+            'prompts': prompts,
+            'narrative_turn_count': len(narrative),
+            'assistant_narrative': narrative,
+        })
+        return b
+
+    def _result_exchanges(self, records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> Dict[str, Any]:
+        """Each user prompt paired with the agent's next reply (BACK-943)."""
+        b = self._base('codex_exchanges', session_row)
+        exchanges = _analysis_get_exchanges(records)
+        b['exchange_count'] = len(exchanges)
+        b['exchanges'] = exchanges
+        return b
+
+    def _result_message(self, records: List[Dict[str, Any]], session_row: Dict[str, Any], index_str: str) -> Dict[str, Any]:
+        """Single raw JSONL record by 0-based index, negative indexing supported (BACK-943)."""
+        b = self._base('codex_message', session_row)
+        try:
+            index = int(index_str)
+        except ValueError:
+            b['error'] = f"Invalid message index: {index_str!r}"
+            return b
+        entry = _analysis_get_message_by_index(records, index)
+        if entry is None:
+            b['error'] = f'No record at index {index} (session has {len(records)} records)'
+            return b
+        b.update(entry)
+        return b
+
     def _result_goal(self, session_row: Dict[str, Any]) -> Dict[str, Any]:
         thread_id = session_row.get('id', '')
         result = _h_get_goal(self.CODEX_HOME, thread_id)
@@ -381,13 +438,19 @@ class CodexAdapter(ResourceAdapter):
         return _h_get_history(self.CODEX_HOME, self.query_params)
 
     def _get_config(self) -> Dict[str, Any]:
-        return _h_get_config(self.CODEX_HOME)
+        return _h_get_config(self.CODEX_HOME, self.query_params)
 
     def _get_memories(self) -> Dict[str, Any]:
         return _h_get_memories(self.CODEX_HOME)
 
     def _get_rules(self) -> Dict[str, Any]:
         return _h_get_rules(self.CODEX_HOME)
+
+    def _get_skills(self) -> Dict[str, Any]:
+        return _h_get_skills(self.CODEX_HOME, self.resource)
+
+    def _get_plugins(self) -> Dict[str, Any]:
+        return _h_get_plugins(self.CODEX_HOME, self.resource)
 
     def _get_memories_pipeline(self) -> Dict[str, Any]:
         return _h_get_memories_pipeline(self.CODEX_DB)
@@ -397,7 +460,7 @@ class CodexAdapter(ResourceAdapter):
         return {
             'adapter': 'codex',
             'description': 'OpenAI Codex CLI session analysis',
-            'uri_syntax': 'codex://[sessions[/?search=term|?content=term] | <UUID>[/messages|tools|errors|shell|workflow|timeline][?last|?tokens|?goal] | info | history | config | memories[/pipeline] | rules]',
+            'uri_syntax': 'codex://[sessions[/?filter=term|?search=term] | <UUID>[/messages|tools|errors|shell|workflow|timeline|digest|exchanges|message/<n>][?last|?tokens|?goal] | info | history | config[?key=] | memories[/pipeline] | rules | skills[/<name>] | plugins[/<name>]]',
             'output_types': [
                 {'type': 'codex_session_list', 'description': 'All sessions, newest first'},
                 {'type': 'codex_session_overview', 'description': 'Per-session summary: turns, tool calls, tokens, duration'},
@@ -416,26 +479,46 @@ class CodexAdapter(ResourceAdapter):
                 {'type': 'codex_workflow', 'description': 'Tools + shell interleaved chronologically'},
                 {'type': 'codex_timeline', 'description': 'Full chronological event stream'},
                 {'type': 'codex_goal', 'description': 'Thread goal objective + token budget'},
+                {'type': 'codex_digest', 'description': 'Composed readable view: overview + prompts + agent narrative in one call'},
+                {'type': 'codex_exchanges', 'description': "Each user prompt paired with the agent's next reply"},
+                {'type': 'codex_message', 'description': 'Single raw JSONL record by 0-based index (negative indexing supported)'},
+                {'type': 'codex_skills', 'description': '~/.codex/skills/**/SKILL.md — list of installed skill definitions'},
+                {'type': 'codex_skill', 'description': 'Single skill definition (frontmatter + full content)'},
+                {'type': 'codex_plugins', 'description': '~/.codex/plugins/cache/**/.codex-plugin/plugin.json — list of installed plugins'},
+                {'type': 'codex_plugin', 'description': 'Single plugin manifest'},
             ],
             'query_params': {
-                'search': 'Metadata search across sessions (SQLite index) — codex://sessions/?search=<term>',
-                'content': 'Full-text search across all session JSONL files — codex://sessions/?content=<term>',
+                'filter': 'Metadata filter across sessions by title/first-message substring (SQLite index, no JSONL scan) — codex://sessions/?filter=<term>. Renamed from ?search= (BACK-947) to match claude://\'s filter/search split.',
+                'search': 'Full-text search across all session JSONL files — codex://sessions/?search=<term>. Renamed from ?content= (BACK-947) to match claude://\'s ?search= meaning content search.',
+                'since': 'Lower-bound date filter (ISO 8601 or "today") on session updated_at — codex://sessions/?filter=<term>&since=<date> or ?search=<term>&since=<date>',
+                'until': 'Upper-bound date filter (ISO 8601) on session updated_at, pairs with ?since= — codex://sessions/?filter=<term>&since=<date>&until=<date>',
                 'last': 'Last agent message only, for fast session recovery — codex://<UUID>?last',
                 'tokens': 'Per-turn token breakdown (input/output/cached/reasoning) — codex://<UUID>?tokens',
                 'goal': 'Thread goal objective + token budget from goals_1.sqlite — codex://<UUID>?goal',
+                'key': 'Dot-path key lookup for codex://config — applied after secret masking — codex://config?key=<dotpath>',
             },
             'example_queries': [
                 {'uri': 'codex://', 'description': 'List all sessions (newest first)', 'output_type': 'codex_session_list'},
-                {'uri': 'codex://sessions/?content=authentication', 'description': 'Full-text search across all session JSONL files', 'output_type': 'codex_content_search'},
+                {'uri': 'codex://sessions/?filter=auth-refactor', 'description': 'Find sessions by title/first-message substring (SQLite metadata, fast)', 'output_type': 'codex_session_list'},
+                {'uri': 'codex://sessions/?search=authentication', 'description': 'Full-text search across all session JSONL files', 'output_type': 'codex_content_search'},
+                {'uri': 'codex://sessions/?search=authentication&since=2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date', 'output_type': 'codex_content_search'},
                 {'uri': 'codex://019e5cc5', 'description': 'Session overview: turns, tool calls, tokens, duration', 'output_type': 'codex_session_overview'},
                 {'uri': 'codex://019e5cc5?last', 'description': 'Last agent message only — fast recovery pattern', 'output_type': 'codex_session_overview'},
                 {'uri': 'codex://019e5cc5/tools', 'description': 'Paired function_call + output events with success rates', 'output_type': 'codex_tools'},
+                {'uri': 'codex://019e5cc5/digest', 'description': 'Composed readable view: overview + prompts + agent narrative — start here for "what happened in this session"', 'output_type': 'codex_digest'},
+                {'uri': 'codex://019e5cc5/exchanges', 'description': "Each user prompt paired with the agent's next reply", 'output_type': 'codex_exchanges'},
+                {'uri': 'codex://019e5cc5/message/-1', 'description': 'Last raw JSONL record (negative index)', 'output_type': 'codex_message'},
                 {'uri': 'codex://info', 'description': 'Install paths and DB stats', 'output_type': 'codex_info'},
+                {'uri': "codex://config?key=model", 'description': 'Extract a specific config value (dot-notation, applied after secret masking)', 'output_type': 'codex_config'},
+                {'uri': 'codex://skills', 'description': 'List all installed skill definitions', 'output_type': 'codex_skills'},
+                {'uri': 'codex://skills/openai-docs', 'description': 'Read a specific skill definition', 'output_type': 'codex_skill'},
+                {'uri': 'codex://plugins', 'description': 'List all installed plugins', 'output_type': 'codex_plugins'},
             ],
             'notes': [
                 'Reads OpenAI Codex CLI sessions from ~/.codex/ (SQLite session index + per-session JSONL).',
-                'Session UUIDs may be given by prefix; codex://sessions/ supports both metadata (?search) and content (?content) search.',
+                'Session UUIDs may be given by prefix; codex://sessions/ supports both metadata (?filter) and content (?search) filtering/search, scoped further by ?since/?until.',
                 'codex://config masks secrets before display.',
+                'BACK-947: ?search= and ?content= were renamed to ?filter= and ?search= respectively to align with claude://\'s established meaning (search = content, filter = name/metadata match). The old names are not aliased — a query using them now surfaces via the unknown-query-param warning.',
             ],
         }
 
@@ -446,8 +529,10 @@ class CodexAdapter(ResourceAdapter):
             'description': 'Navigate and analyze OpenAI Codex CLI sessions — SQLite-backed session index + per-session JSONL analysis',
             'syntax': (
                 'codex://                                           # list all sessions\n'
-                'codex://sessions/?search=<term>                   # metadata search (SQLite)\n'
-                'codex://sessions/?content=<term>                  # JSONL content search\n'
+                'codex://sessions/?filter=<term>                   # metadata filter (SQLite, fast)\n'
+                'codex://sessions/?filter=<term>&since=<date>      # metadata filter scoped by date\n'
+                'codex://sessions/?search=<term>                   # JSONL content search\n'
+                'codex://sessions/?search=<term>&since=<date>      # content search scoped by date\n'
                 'codex://<UUID>                                     # session overview\n'
                 'codex://<UUID>?last                                # last agent message\n'
                 'codex://<UUID>?tokens                              # per-turn token breakdown\n'
@@ -458,17 +543,26 @@ class CodexAdapter(ResourceAdapter):
                 'codex://<UUID>/errors                              # error/warning events\n'
                 'codex://<UUID>/workflow                            # tools + shell interleaved chronologically\n'
                 'codex://<UUID>/timeline                            # all events in order\n'
+                'codex://<UUID>/digest                              # composed: overview + prompts + agent narrative\n'
+                'codex://<UUID>/exchanges                           # each prompt paired with the agent\'s next reply\n'
+                'codex://<UUID>/message/<n>                         # raw JSONL record by index (0-based, negative OK)\n'
                 'codex://info                                       # install paths + DB stats\n'
                 'codex://history                                    # ~/.codex/history.jsonl\n'
                 'codex://config                                     # ~/.codex/config.toml (secrets masked)\n'
                 'codex://memories                                   # ~/.codex/memories/\n'
                 'codex://memories/pipeline                          # Stage1/Stage2 memory pipeline status\n'
-                'codex://rules                                      # ~/.codex/rules/*.rules'
+                'codex://rules                                      # ~/.codex/rules/*.rules\n'
+                'codex://skills                                     # ~/.codex/skills/**/SKILL.md\n'
+                'codex://skills/<name>                              # single skill definition\n'
+                'codex://plugins                                    # installed plugin manifests\n'
+                'codex://plugins/<name>                             # single plugin manifest'
             ),
             'examples': [
                 {'uri': 'codex://', 'description': 'List all sessions (newest first)'},
-                {'uri': 'codex://sessions/?search=auth-refactor', 'description': 'Find sessions mentioning auth-refactor (SQLite metadata)'},
-                {'uri': 'codex://sessions/?content=authentication', 'description': 'Full-text search across all session JSONL files'},
+                {'uri': 'codex://sessions/?filter=auth-refactor', 'description': 'Find sessions by title/first-message substring (SQLite metadata, fast)'},
+                {'uri': 'codex://sessions/?filter=auth-refactor&since=2026-07-01', 'description': 'Metadata filter scoped to sessions updated since a date'},
+                {'uri': 'codex://sessions/?search=authentication', 'description': 'Full-text search across all session JSONL files'},
+                {'uri': 'codex://sessions/?search=authentication&since=2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date'},
                 {'uri': 'codex://019e5cc5', 'description': 'Session overview: turns, tool calls, tokens, duration'},
                 {'uri': 'codex://019e5cc5?last', 'description': 'Last agent message only — fast recovery pattern'},
                 {'uri': 'codex://019e5cc5?tokens', 'description': 'Per-turn token breakdown (input/output/cached/reasoning)'},
@@ -479,12 +573,24 @@ class CodexAdapter(ResourceAdapter):
                 {'uri': 'codex://019e5cc5/errors', 'description': 'Errors and warnings from the session'},
                 {'uri': 'codex://019e5cc5/workflow', 'description': 'Tools + shell interleaved chronologically'},
                 {'uri': 'codex://019e5cc5/timeline', 'description': 'Full chronological event stream'},
+                {'uri': 'codex://019e5cc5/digest', 'description': 'Composed readable view: overview + prompts + agent narrative in one call'},
+                {'uri': 'codex://019e5cc5/exchanges', 'description': "Each user prompt paired with the agent's next reply"},
+                {'uri': 'codex://019e5cc5/message/-1', 'description': 'Last raw JSONL record (negative index)'},
                 {'uri': 'codex://info', 'description': 'Install paths and DB stats'},
                 {'uri': 'codex://history', 'description': 'Prompt history from ~/.codex/history.jsonl'},
                 {'uri': 'codex://config', 'description': 'Config TOML (secrets masked)'},
+                {'uri': "codex://config?key=model", 'description': 'Extract a specific config value (dot-notation, applied after masking)'},
                 {'uri': 'codex://memories/pipeline', 'description': 'Stage1/Stage2 memory pipeline status'},
+                {'uri': 'codex://skills', 'description': 'List all installed skill definitions (~/.codex/skills/**/SKILL.md)'},
+                {'uri': 'codex://skills/openai-docs', 'description': 'Read a specific skill definition'},
+                {'uri': 'codex://plugins', 'description': 'List all installed plugins'},
+                {'uri': 'codex://plugins/openai-templates', 'description': 'Read a specific plugin manifest'},
             ],
             'features': [
+                'Skills and plugins browsing — parity with claude://agents, claude://hooks (BACK-946)',
+                'Digest view — composed overview + prompts + agent narrative in one call (BACK-943)',
+                'Exchanges view — each user prompt paired with the agent\'s next reply (BACK-943)',
+                'Single-record access by raw JSONL index, negative indexing supported (BACK-943)',
                 'SQLite-backed session listing (fast, no JSONL scan needed for list/search)',
                 'UUID prefix lookup — type first 7+ hex chars instead of full UUID',
                 'Per-turn token breakdown with input/output/reasoning/cached split',

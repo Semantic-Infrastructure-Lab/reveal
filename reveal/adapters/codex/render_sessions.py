@@ -4,10 +4,10 @@
 def _render_codex_session_list(result: dict) -> None:
     total = result.get('total', 0)
     sessions = result.get('sessions', [])
-    search = result.get('search')
+    filter_term = result.get('filter')
     header = f"Codex Sessions: {total} total"
-    if search:
-        header += f" | search: {search!r}"
+    if filter_term:
+        header += f" | filter: {filter_term!r}"
     print(header)
     print()
     if not sessions:

@@ -13,8 +13,10 @@ category: guide
 The **codex://** adapter navigates and analyzes [OpenAI Codex CLI](https://github.com/openai/codex) sessions. Codex stores sessions in a SQLite index (`~/.codex/state_5.sqlite`) with per-session JSONL event files — a different storage model from Claude Code, so this is a dedicated adapter rather than a fork of `claude://`.
 
 **Key capabilities:**
-- Session listing and metadata search via SQLite (fast — no JSONL scanning)
-- Full-text content search across all session JSONL files
+- Session listing and metadata filtering via SQLite (fast — no JSONL scanning)
+- Full-text content search across all session JSONL files, scoped by `?since`/`?until`
+- Composed digest view (overview + prompts + agent narrative) and prompt/reply exchange pairs
+- Single raw-record access by index (`/message/<n>`, negative indexing supported)
 - Chronological workflow view — tool calls + shell commands interleaved by timestamp
 - Full event timeline — every JSONL event type in session order
 - Per-turn token breakdown (input/output/cached/reasoning split)
@@ -22,7 +24,7 @@ The **codex://** adapter navigates and analyzes [OpenAI Codex CLI](https://githu
 - Tool call pairing (`function_call` + `function_call_output`)
 - Thread goal tracking (`goals_1.sqlite`) — objective, status, token budget
 - Memory pipeline status — Stage1/Stage2 consolidation from `stage1_outputs`
-- Install introspection (config, history, memories, rules)
+- Install introspection (config with `?key=` drill-down, history, memories, rules, skills, plugins)
 
 ---
 
@@ -32,17 +34,29 @@ The **codex://** adapter navigates and analyzes [OpenAI Codex CLI](https://githu
 # List recent sessions
 reveal 'codex://'
 
-# Find sessions by title/first-message
-reveal 'codex://sessions/?search=auth-refactor'
+# Find sessions by title/first-message (SQLite metadata, fast)
+reveal 'codex://sessions/?filter=auth-refactor'
 
 # Full-text search across all session content
-reveal 'codex://sessions/?content=authentication'
+reveal 'codex://sessions/?search=authentication'
+
+# Full-text search scoped to a date range
+reveal 'codex://sessions/?search=authentication&since=2026-07-01'
 
 # Session overview (turns, tools, tokens, duration)
 reveal 'codex://019e5cc5'
 
+# Composed readable view: overview + prompts + agent narrative in one call
+reveal 'codex://019e5cc5/digest'
+
+# Each user prompt paired with the agent's next reply
+reveal 'codex://019e5cc5/exchanges'
+
 # Last agent message — fastest session recovery
 reveal 'codex://019e5cc5?last'
+
+# Single raw JSONL record by index (negative indexing supported)
+reveal 'codex://019e5cc5/message/-1'
 
 # Per-turn token breakdown
 reveal 'codex://019e5cc5?tokens'
@@ -71,6 +85,13 @@ reveal 'codex://019e5cc5/timeline'
 # Install info and DB stats
 reveal 'codex://info'
 
+# Config value by dot-path (applied after secret masking)
+reveal 'codex://config?key=model'
+
+# Installed skills and plugins
+reveal 'codex://skills'
+reveal 'codex://plugins'
+
 # Memory pipeline status
 reveal 'codex://memories/pipeline'
 ```
@@ -85,8 +106,13 @@ reveal 'codex://memories/pipeline'
 |-----|----------------|
 | `codex://` | All user sessions from SQLite, newest first |
 | `codex://sessions/` | Same as bare `codex://` |
-| `codex://sessions/?search=<term>` | Filter by title or first message (SQLite) |
-| `codex://sessions/?content=<term>` | Full-text JSONL search across all sessions |
+| `codex://sessions/?filter=<term>` | Filter by title or first message (SQLite metadata, fast, no JSONL scan) |
+| `codex://sessions/?search=<term>` | Full-text JSONL search across all sessions |
+| `codex://sessions/?search=<term>&since=<date>` | Full-text search scoped to sessions updated on/after `<date>` (ISO 8601 or `today`) |
+| `codex://sessions/?search=<term>&since=<date>&until=<date>` | Full-text search scoped to a date range |
+| `codex://sessions/?filter=<term>&since=<date>&until=<date>` | Metadata filter, same date scoping |
+
+> **Renamed (BACK-947)**: `?search=` used to mean the SQLite metadata match and `?content=` the full-text scan. They're now `?filter=` (metadata) and `?search=` (content) — matching `claude://`'s established meaning, where `?search=` always means "search the content." The old names are not aliased; using them surfaces via reveal's unknown-query-param warning.
 
 ### Session Analysis
 
@@ -97,6 +123,9 @@ reveal 'codex://memories/pipeline'
 | `codex://<UUID>?tokens` | Per-turn token breakdown (input/output/cached/reasoning) |
 | `codex://<UUID>?goal` | Thread goal from `goals_1.sqlite` (objective, status, token budget) |
 | `codex://<UUID>/messages` | All user and agent turns in order |
+| `codex://<UUID>/digest` | Composed readable view: overview + prompts + agent narrative in one call |
+| `codex://<UUID>/exchanges` | Each user prompt paired with the agent's final reply before the next prompt |
+| `codex://<UUID>/message/<n>` | Single raw JSONL record by 0-based index (negative indexing supported, e.g. `-1` = last) |
 | `codex://<UUID>/tools` | Paired `function_call` + `function_call_output` events |
 | `codex://<UUID>/shell` | `exec_command_end` events: command, exit code, output |
 | `codex://<UUID>/errors` | Error, warning, and guardian_warning events |
@@ -105,6 +134,8 @@ reveal 'codex://memories/pipeline'
 
 **UUID prefix**: You can use the first 7+ hex characters instead of the full UUID. `reveal 'codex://019e5cc5'` resolves to the matching session.
 
+**`/digest` vs `/exchanges` vs `/messages`**: `/digest` composes a whole-session readable summary in one call (start here for "what happened in this session"); `/exchanges` pairs each prompt with its final answer (for "what did I ask, what did it finally say," one pair at a time); `/messages` is the flat chronological list of every user/agent turn with no pairing or composition.
+
 ### Install Introspection
 
 | URI | What it returns |
@@ -112,9 +143,14 @@ reveal 'codex://memories/pipeline'
 | `codex://info` | Resolved paths, DB exists/size, session count |
 | `codex://history` | `~/.codex/history.jsonl` prompt history |
 | `codex://config` | `~/.codex/config.toml` with secrets masked |
+| `codex://config?key=<dotpath>` | A single config value by dot-path, e.g. `?key=model` — applied *after* secret masking, so a masked value can never be un-redacted this way |
 | `codex://memories` | `~/.codex/memories/` MEMORY.md and summaries |
 | `codex://memories/pipeline` | Stage1/Stage2 memory consolidation pipeline status |
 | `codex://rules` | `~/.codex/rules/*.rules` Starlark permission rules |
+| `codex://skills` | `~/.codex/skills/**/SKILL.md` — list of installed skill definitions |
+| `codex://skills/<name>` | A single skill's frontmatter + full content |
+| `codex://plugins` | Installed plugin manifests under `~/.codex/plugins/cache/**/.codex-plugin/plugin.json` |
+| `codex://plugins/<name>` | A single plugin's manifest |
 
 ---
 
@@ -262,10 +298,10 @@ reveal 'codex://memories/pipeline'
 
 ## Content Search
 
-`?content=<term>` scans all session JSONL files for a term in `user_message` and `agent_message` payloads:
+`?search=<term>` scans all session JSONL files for a term in `user_message` and `agent_message` payloads:
 
 ```bash
-reveal 'codex://sessions/?content=authentication'
+reveal 'codex://sessions/?search=authentication'
 # Codex Content Search: 3 session(s) matching 'authentication'
 #
 #   019e5cc5  2026-05-25  [gpt-5.5]  lets find all past sessions...
@@ -273,7 +309,11 @@ reveal 'codex://sessions/?content=authentication'
 #     [AGENT] 2026-05-25 01:36:01  I'll look at the auth middleware first...
 ```
 
-This is a full-file scan — use `?search=` first for fast SQLite metadata filtering.
+This is a full-file scan — use `?filter=` first for fast SQLite metadata filtering, or add `&since=<date>` (optionally `&until=<date>`) to narrow the corpus before scanning:
+
+```bash
+reveal 'codex://sessions/?search=authentication&since=2026-07-01'
+```
 
 ---
 
@@ -289,7 +329,9 @@ This is a full-file scan — use `?search=` first for fast SQLite metadata filte
 ├── history.jsonl         ← prompt history
 ├── config.toml           ← user config (secrets masked by reveal)
 ├── memories/             ← MEMORY.md + session summaries (Stage 2 output)
-└── rules/                ← Starlark permission rules
+├── rules/                ← Starlark permission rules
+├── skills/               ← SKILL.md per skill, recursive (e.g. skills/.system/<name>/SKILL.md)
+└── plugins/cache/        ← installed plugin manifests (**/.codex-plugin/plugin.json)
 ```
 
 ---

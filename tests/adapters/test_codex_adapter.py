@@ -256,19 +256,55 @@ class TestSessionList:
 # 4. Session search
 # ---------------------------------------------------------------------------
 
-class TestSessionSearch:
-    def test_search_finds_match(self, tmp_path):
+class TestSessionFilter:
+    def test_filter_finds_match(self, tmp_path):
         jsonl_path = _write_fixture_jsonl(tmp_path)
-        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='search=refactor')
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='filter=refactor')
         result = adapter.get_structure()
         assert result['type'] == 'codex_session_list'
         assert result['total'] == 1
 
-    def test_search_no_match(self, tmp_path):
+    def test_filter_no_match(self, tmp_path):
         jsonl_path = _write_fixture_jsonl(tmp_path)
-        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='search=zzznonexistent')
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='filter=zzznonexistent')
         result = adapter.get_structure()
         assert result['total'] == 0
+
+    # -- since/until date scoping (BACK-945) --------------------------------
+    # Fixture session's updated_at (1716544900) formats to 2024-05-24T10:01:40Z.
+
+    def test_filter_since_includes_match_on_or_after(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='filter=refactor&since=2024-05-24')
+        result = adapter.get_structure()
+        assert result['total'] == 1
+        assert result['since'] == '2024-05-24'
+
+    def test_filter_since_excludes_match_before(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='filter=refactor&since=2024-05-25')
+        result = adapter.get_structure()
+        assert result['total'] == 0
+
+    def test_filter_until_excludes_match_after(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='filter=refactor&until=2024-05-23')
+        result = adapter.get_structure()
+        assert result['total'] == 0
+
+    def test_filter_until_includes_match_on_same_day(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='filter=refactor&until=2024-05-24')
+        result = adapter.get_structure()
+        assert result['total'] == 1
+
+    def test_filter_since_today_resolves(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='filter=refactor&since=today')
+        result = adapter.get_structure()
+        # Fixture is from 2024 — "today" always excludes it.
+        assert result['total'] == 0
+        assert result['since'] != 'today'
 
 
 # ---------------------------------------------------------------------------
@@ -482,31 +518,31 @@ class TestTokensQuery:
 
 
 # ---------------------------------------------------------------------------
-# 11. ?content= — JSONL content search across sessions
+# 11. ?search= — JSONL content search across sessions (renamed from ?content=, BACK-947)
 # ---------------------------------------------------------------------------
 
 class TestContentSearch:
     def test_content_search_type(self, tmp_path):
         jsonl_path = _write_fixture_jsonl(tmp_path)
-        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='content=refactor')
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='search=refactor')
         result = adapter.get_structure()
         assert result['type'] == 'codex_content_search'
 
     def test_content_search_finds_match(self, tmp_path):
         jsonl_path = _write_fixture_jsonl(tmp_path)
-        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='content=refactor')
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='search=refactor')
         result = adapter.get_structure()
         assert result['total'] == 1
 
     def test_content_search_no_match(self, tmp_path):
         jsonl_path = _write_fixture_jsonl(tmp_path)
-        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='content=xyzzy_no_match_xyz')
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='search=xyzzy_no_match_xyz')
         result = adapter.get_structure()
         assert result['total'] == 0
 
     def test_content_search_has_snippets(self, tmp_path):
         jsonl_path = _write_fixture_jsonl(tmp_path)
-        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='content=refactor')
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='search=refactor')
         result = adapter.get_structure()
         session = result['sessions'][0]
         assert session['match_count'] >= 1
@@ -514,16 +550,37 @@ class TestContentSearch:
 
     def test_content_search_query_field(self, tmp_path):
         jsonl_path = _write_fixture_jsonl(tmp_path)
-        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='content=refactor')
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='search=refactor')
         result = adapter.get_structure()
         assert result['query'] == 'refactor'
 
     def test_content_search_contract_fields(self, tmp_path):
         jsonl_path = _write_fixture_jsonl(tmp_path)
-        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='content=refactor')
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='search=refactor')
         result = adapter.get_structure()
         for field in ('contract_version', 'type', 'source', 'source_type'):
             assert field in result
+
+    # -- since/until date scoping (BACK-945) --------------------------------
+    # Fixture session's updated_at (1716544900) formats to 2024-05-24T10:01:40Z.
+
+    def test_content_search_since_includes_match_on_or_after(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='search=refactor&since=2024-05-24')
+        result = adapter.get_structure()
+        assert result['total'] == 1
+
+    def test_content_search_since_excludes_match_before(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='search=refactor&since=2024-05-25')
+        result = adapter.get_structure()
+        assert result['total'] == 0
+
+    def test_content_search_until_excludes_match_after(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='search=refactor&until=2024-05-23')
+        result = adapter.get_structure()
+        assert result['total'] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -558,6 +615,168 @@ class TestInfoResource:
         adapter.CODEX_HOME = tmp_path
         adapter.CODEX_DB = tmp_path / 'state_5.sqlite'
         result = adapter.get_structure()
+        for field in ('contract_version', 'type', 'source', 'source_type'):
+            assert field in result
+
+
+# ---------------------------------------------------------------------------
+# 12b. codex://config?key= — dot-path drill-down (BACK-944)
+# ---------------------------------------------------------------------------
+
+class TestConfigKeyLookup:
+    _TOML = (
+        'model = "gpt-5.6-terra"\n'
+        'model_reasoning_effort = "medium"\n'
+        '\n'
+        '[projects."/home/user/proj"]\n'
+        'trust_level = "trusted"\n'
+        '\n'
+        '[secrets]\n'
+        'api_key = "sk-verysecretvalue1234567890"\n'
+    )
+
+    def _adapter(self, tmp_path, resource='config', query=None):
+        (tmp_path / 'config.toml').write_text(self._TOML, encoding='utf-8')
+        adapter = CodexAdapter(resource, query=query)
+        adapter.CODEX_HOME = tmp_path
+        adapter.CODEX_DB = tmp_path / 'state_5.sqlite'
+        return adapter
+
+    def test_no_key_returns_full_config(self, tmp_path):
+        result = self._adapter(tmp_path).get_structure()
+        assert result['type'] == 'codex_config'
+        assert result['config']['model'] == 'gpt-5.6-terra'
+
+    def test_top_level_key(self, tmp_path):
+        result = self._adapter(tmp_path, query='key=model').get_structure()
+        assert result['key'] == 'model'
+        assert result['value'] == 'gpt-5.6-terra'
+
+    def test_nested_key(self, tmp_path):
+        result = self._adapter(tmp_path, query='key=projects./home/user/proj.trust_level').get_structure()
+        assert result['value'] == 'trusted'
+
+    def test_missing_key_returns_none(self, tmp_path):
+        result = self._adapter(tmp_path, query='key=does.not.exist').get_structure()
+        assert result['value'] is None
+
+    def test_key_lookup_does_not_unmask_secret(self, tmp_path):
+        """?key= must read the masked dict, not raw parsed TOML — a secret must
+        stay masked even when looked up directly by its dot-path (BACK-944)."""
+        result = self._adapter(tmp_path, query='key=secrets.api_key').get_structure()
+        assert result['value'] != 'sk-verysecretvalue1234567890'
+        assert result['value'].endswith('***')
+
+    def test_key_contract_fields(self, tmp_path):
+        result = self._adapter(tmp_path, query='key=model').get_structure()
+        for field in ('contract_version', 'type', 'source', 'source_type'):
+            assert field in result
+
+
+# ---------------------------------------------------------------------------
+# 12c. codex://skills, codex://plugins (BACK-946)
+# ---------------------------------------------------------------------------
+
+_SKILL_MD = (
+    '---\n'
+    'name: "test-skill"\n'
+    'description: "A test skill for verifying discovery."\n'
+    '---\n'
+    '\n'
+    '# Test Skill\n'
+    '\n'
+    'Body content here.\n'
+)
+
+_PLUGIN_JSON = (
+    '{"name": "test-plugin", "version": "0.2.0", '
+    '"description": "A test plugin for verifying discovery."}'
+)
+
+
+class TestSkillsResource:
+    def _adapter(self, tmp_path, resource='skills'):
+        skill_dir = tmp_path / 'skills' / 'vendor' / 'test-skill'
+        skill_dir.mkdir(parents=True)
+        (skill_dir / 'SKILL.md').write_text(_SKILL_MD, encoding='utf-8')
+        adapter = CodexAdapter(resource)
+        adapter.CODEX_HOME = tmp_path
+        adapter.CODEX_DB = tmp_path / 'state_5.sqlite'
+        return adapter
+
+    def test_list_type(self, tmp_path):
+        result = self._adapter(tmp_path).get_structure()
+        assert result['type'] == 'codex_skills'
+
+    def test_list_finds_nested_skill(self, tmp_path):
+        result = self._adapter(tmp_path).get_structure()
+        assert result['total'] == 1
+        assert result['skills'][0]['name'] == 'test-skill'
+        assert 'verifying discovery' in result['skills'][0]['description']
+
+    def test_missing_dir_errors_not_crashes(self, tmp_path):
+        adapter = CodexAdapter('skills')
+        adapter.CODEX_HOME = tmp_path
+        adapter.CODEX_DB = tmp_path / 'state_5.sqlite'
+        result = adapter.get_structure()
+        assert result['total'] == 0
+        assert 'error' in result
+
+    def test_single_skill_read(self, tmp_path):
+        result = self._adapter(tmp_path, resource='skills/test-skill').get_structure()
+        assert result['type'] == 'codex_skill'
+        assert result['name'] == 'test-skill'
+        assert 'Body content here.' in result['content']
+
+    def test_single_skill_not_found(self, tmp_path):
+        result = self._adapter(tmp_path, resource='skills/nonexistent').get_structure()
+        assert 'error' in result
+
+    def test_list_contract_fields(self, tmp_path):
+        result = self._adapter(tmp_path).get_structure()
+        for field in ('contract_version', 'type', 'source', 'source_type'):
+            assert field in result
+
+
+class TestPluginsResource:
+    def _adapter(self, tmp_path, resource='plugins'):
+        plugin_dir = tmp_path / 'plugins' / 'cache' / 'marketplace' / 'test-plugin' / '0.2.0' / '.codex-plugin'
+        plugin_dir.mkdir(parents=True)
+        (plugin_dir / 'plugin.json').write_text(_PLUGIN_JSON, encoding='utf-8')
+        adapter = CodexAdapter(resource)
+        adapter.CODEX_HOME = tmp_path
+        adapter.CODEX_DB = tmp_path / 'state_5.sqlite'
+        return adapter
+
+    def test_list_type(self, tmp_path):
+        result = self._adapter(tmp_path).get_structure()
+        assert result['type'] == 'codex_plugins'
+
+    def test_list_finds_cached_plugin(self, tmp_path):
+        result = self._adapter(tmp_path).get_structure()
+        assert result['total'] == 1
+        assert result['plugins'][0]['name'] == 'test-plugin'
+        assert result['plugins'][0]['version'] == '0.2.0'
+
+    def test_missing_dir_errors_not_crashes(self, tmp_path):
+        adapter = CodexAdapter('plugins')
+        adapter.CODEX_HOME = tmp_path
+        adapter.CODEX_DB = tmp_path / 'state_5.sqlite'
+        result = adapter.get_structure()
+        assert result['total'] == 0
+        assert 'error' in result
+
+    def test_single_plugin_read(self, tmp_path):
+        result = self._adapter(tmp_path, resource='plugins/test-plugin').get_structure()
+        assert result['type'] == 'codex_plugin'
+        assert result['manifest']['description'] == 'A test plugin for verifying discovery.'
+
+    def test_single_plugin_not_found(self, tmp_path):
+        result = self._adapter(tmp_path, resource='plugins/nonexistent').get_structure()
+        assert 'error' in result
+
+    def test_list_contract_fields(self, tmp_path):
+        result = self._adapter(tmp_path).get_structure()
         for field in ('contract_version', 'type', 'source', 'source_type'):
             assert field in result
 
@@ -615,7 +834,7 @@ class TestOutputContract:
 
     def test_content_search_contract(self, tmp_path):
         jsonl_path = _write_fixture_jsonl(tmp_path)
-        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='content=refactor')
+        adapter = _make_adapter('sessions', tmp_path, jsonl_path, query='search=refactor')
         self._check(adapter.get_structure())
 
     def test_info_contract(self, tmp_path):
@@ -829,6 +1048,129 @@ class TestGoal:
             assert field in result
 
 
+# ---------------------------------------------------------------------------
+# 14. digest / exchanges / message/<n> (BACK-943)
+# Fixture has 1 user turn ("Help me refactor this module.") and 2 agent turns:
+# "Sure, I'll start by reading the file." (idx 3) then "Refactoring complete!" (idx 10, last record).
+# ---------------------------------------------------------------------------
+
+class TestDigest:
+    def test_digest_type(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/digest', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert result['type'] == 'codex_digest'
+
+    def test_digest_prompts(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/digest', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert result['prompt_count'] == 1
+        assert result['prompts'][0]['message'] == 'Help me refactor this module.'
+
+    def test_digest_narrative(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/digest', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert result['narrative_turn_count'] == 2
+        assert result['assistant_narrative'][-1]['message'] == 'Refactoring complete!'
+
+    def test_digest_has_overview_fields(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/digest', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert result['title'] == 'Help me refactor this module.'
+        assert result['user_turns'] == 1
+        assert result['agent_turns'] == 2
+
+    def test_digest_contract_fields(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/digest', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        for field in ('contract_version', 'type', 'source', 'source_type'):
+            assert field in result
+
+
+class TestExchanges:
+    def test_exchanges_type(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/exchanges', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert result['type'] == 'codex_exchanges'
+
+    def test_exchanges_count(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/exchanges', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert result['exchange_count'] == 1
+
+    def test_exchanges_pairs_prompt_with_final_reply(self, tmp_path):
+        """Answer must be the LAST agent turn before the next prompt, not the first —
+        an agent often narrates an initial 'I'll start by...' before its real conclusion."""
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/exchanges', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        exchange = result['exchanges'][0]
+        assert exchange['prompt'] == 'Help me refactor this module.'
+        assert exchange['answer'] == 'Refactoring complete!'
+
+    def test_exchanges_no_answer_is_none(self, tmp_path):
+        # A session with a prompt but no agent reply at all.
+        lines = [
+            {'timestamp': '2026-05-24T10:00:00Z', 'type': 'event_msg',
+             'payload': {'type': 'user_message', 'message': 'Hello?'}},
+        ]
+        jsonl_text = '\n'.join(json.dumps(line) for line in lines) + '\n'
+        jsonl_path = tmp_path / 'rollout-no-answer.jsonl'
+        jsonl_path.write_text(jsonl_text, encoding='utf-8')
+        adapter = _make_adapter(f'{_SESSION_UUID}/exchanges', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert result['exchanges'][0]['answer'] is None
+
+    def test_exchanges_contract_fields(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/exchanges', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        for field in ('contract_version', 'type', 'source', 'source_type'):
+            assert field in result
+
+
+class TestMessageByIndex:
+    def test_message_zero_is_first_record(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/message/0', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert result['type'] == 'codex_message'
+        assert result['record_index'] == 0
+        assert result['record_type'] == 'session_meta'
+
+    def test_message_negative_one_is_last_record(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/message/-1', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert result['payload_type'] == 'agent_message'
+        assert result['record']['payload']['message'] == 'Refactoring complete!'
+
+    def test_message_out_of_range_errors(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/message/999', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert 'error' in result
+
+    def test_message_non_integer_errors(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/message/notanumber', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        assert 'error' in result
+
+    def test_message_contract_fields(self, tmp_path):
+        jsonl_path = _write_fixture_jsonl(tmp_path)
+        adapter = _make_adapter(f'{_SESSION_UUID}/message/0', tmp_path, jsonl_path)
+        result = adapter.get_structure()
+        for field in ('contract_version', 'type', 'source', 'source_type'):
+            assert field in result
+
+
 class TestMemoriesPipeline:
     def _make_pipeline_db(self, tmp_path: Path) -> Path:
         db_path = tmp_path / 'state_pipeline.sqlite'
@@ -973,29 +1315,29 @@ def _make_nullable_rollout_db(tmp_path: Path, jsonl_path: Path) -> Path:
 
 
 class TestRegressionNullRolloutPath:
-    """Regression: content_search_sessions must not crash on NULL rollout_path."""
+    """Regression: search_sessions must not crash on NULL rollout_path."""
 
     def test_null_rollout_path_does_not_crash(self, tmp_path):
         jsonl_path = _write_fixture_jsonl(tmp_path)
         db_path = _make_nullable_rollout_db(tmp_path, jsonl_path)
-        from reveal.adapters.codex.handlers.sessions import content_search_sessions
-        result = content_search_sessions(db_path, 'refactor')
+        from reveal.adapters.codex.handlers.sessions import search_sessions
+        result = search_sessions(db_path, 'refactor')
         assert result['type'] == 'codex_content_search'
         assert result['total'] >= 0
 
     def test_null_rollout_session_excluded_from_results(self, tmp_path):
         jsonl_path = _write_fixture_jsonl(tmp_path)
         db_path = _make_nullable_rollout_db(tmp_path, jsonl_path)
-        from reveal.adapters.codex.handlers.sessions import content_search_sessions
-        result = content_search_sessions(db_path, 'refactor')
+        from reveal.adapters.codex.handlers.sessions import search_sessions
+        result = search_sessions(db_path, 'refactor')
         ids = [s['id'] for s in result['sessions']]
         assert 'null-session' not in ids
 
     def test_valid_session_still_found(self, tmp_path):
         jsonl_path = _write_fixture_jsonl(tmp_path)
         db_path = _make_nullable_rollout_db(tmp_path, jsonl_path)
-        from reveal.adapters.codex.handlers.sessions import content_search_sessions
-        result = content_search_sessions(db_path, 'refactor')
+        from reveal.adapters.codex.handlers.sessions import search_sessions
+        result = search_sessions(db_path, 'refactor')
         ids = [s['id'] for s in result['sessions']]
         assert 'valid-session' in ids
 
@@ -1034,8 +1376,8 @@ class TestRegressionContentSearchFalsePositive:
         conn.commit()
         conn.close()
 
-        from reveal.adapters.codex.handlers.sessions import content_search_sessions
-        result = content_search_sessions(db_path, 'unique_term_xyz')
+        from reveal.adapters.codex.handlers.sessions import search_sessions
+        result = search_sessions(db_path, 'unique_term_xyz')
         assert result['total'] == 0, "Session with term only in tool output must not appear in results"
 
 

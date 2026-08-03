@@ -42,9 +42,20 @@ def _render_codex_history(result: dict) -> None:
 
 
 def _render_codex_config(result: dict) -> None:
-    config = result.get('config', {})
     print("Codex Config")
     print()
+    if 'key' in result:
+        key = result.get('key', '')
+        val = result.get('value')
+        if val is None:
+            print(f"Key '{key}' not found in config")
+        else:
+            print(json.dumps(val, indent=2, ensure_ascii=False, default=str) if isinstance(val, (dict, list)) else str(val))
+        print()
+        if 'error' in result:
+            print(f"Error: {result['error']}")
+        return
+    config = result.get('config', {})
     if config:
         print(json.dumps(config, indent=2, ensure_ascii=False, default=str))
     else:
@@ -80,3 +91,57 @@ def _render_codex_rules(result: dict) -> None:
             preview = content[:200].replace('\n', ' ')
             print(f"    {preview}")
     print()
+
+
+def _render_codex_skills(result: dict) -> None:
+    if 'error' in result:
+        print(f"Error: {result['error']}")
+        return
+    skills = result.get('skills', [])
+    total = result.get('total', len(skills))
+    print(f"Codex Skills: {total} skill(s)")
+    print()
+    for skill in skills:
+        print(f"  {skill.get('name', '?')}")
+        desc = (skill.get('description') or '')[:200]
+        if desc:
+            print(f"    {desc}")
+    print()
+
+
+def _render_codex_skill(result: dict) -> None:
+    if 'error' in result:
+        print(f"Error: {result['error']}")
+        return
+    print(f"Codex Skill: {result.get('name', '?')}")
+    desc = result.get('description')
+    if desc:
+        print(f"Description: {desc}")
+    print()
+    print(result.get('content', ''))
+
+
+def _render_codex_plugins(result: dict) -> None:
+    if 'error' in result:
+        print(f"Error: {result['error']}")
+        return
+    plugins = result.get('plugins', [])
+    total = result.get('total', len(plugins))
+    print(f"Codex Plugins: {total} installed")
+    print()
+    for plugin in plugins:
+        version = plugin.get('version', '')
+        print(f"  {plugin.get('name', '?')}" + (f" ({version})" if version else ''))
+        desc = (plugin.get('description') or '')[:200]
+        if desc:
+            print(f"    {desc}")
+    print()
+
+
+def _render_codex_plugin(result: dict) -> None:
+    if 'error' in result:
+        print(f"Error: {result['error']}")
+        return
+    print(f"Codex Plugin: {result.get('name', '?')}")
+    print()
+    print(json.dumps(result.get('manifest', {}), indent=2, ensure_ascii=False, default=str))

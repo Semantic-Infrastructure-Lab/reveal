@@ -2,13 +2,27 @@
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import date as _date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ....utils.results import ResultBuilder
 
 _USER_FILTER = "(thread_source IS NULL OR thread_source = 'user') AND archived = 0"
+
+
+def _resolve_date_bound(value: str) -> str:
+    """Resolve 'today' to an ISO date; pass through anything else unchanged."""
+    return _date.today().isoformat() if value == 'today' else value
+
+
+def _apply_date_range(sessions: List[Dict[str, Any]], since: str, until: str) -> List[Dict[str, Any]]:
+    """Filter a list of session dicts (with formatted ISO 'updated_at') by [since, until]."""
+    if since:
+        sessions = [s for s in sessions if (s.get('updated_at') or '') >= since]
+    if until:
+        sessions = [s for s in sessions if (s.get('updated_at') or '') <= until + 'T23:59:59Z']
+    return sessions
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
@@ -83,39 +97,56 @@ def list_sessions(db_path: Path) -> Dict[str, Any]:
     return {**base, 'sessions': sessions, 'total': len(sessions)}
 
 
-def search_sessions(db_path: Path, search: str) -> Dict[str, Any]:
-    """Search sessions by title / first_user_message substring.
+def filter_sessions(db_path: Path, filter_term: str, since: str = '', until: str = '') -> Dict[str, Any]:
+    """Filter sessions by title / first_user_message substring (SQLite metadata, no JSONL scan).
 
-    Returns codex_session_list result filtered to matches.
+    Returns codex_session_list result filtered to matches. Query param: ?filter=<term>
+    (renamed from ?search= — BACK-947 — to match claude://'s filter/search split).
+    Optional ?since=/?until= (ISO date or "today") scope by updated_at — BACK-945.
     """
     base_result = list_sessions(db_path)
     if 'error' in base_result:
         return base_result
 
-    term = search.lower()
+    since = _resolve_date_bound(since)
+    until = _resolve_date_bound(until)
+
+    term = filter_term.lower()
     filtered = [
         s for s in base_result.get('sessions', [])
         if term in (s.get('title') or '').lower()
         or term in (s.get('first_user_message') or '').lower()
     ]
+    filtered = _apply_date_range(filtered, since, until)
     base_result['sessions'] = filtered
     base_result['total'] = len(filtered)
-    base_result['search'] = search
+    base_result['filter'] = filter_term
+    base_result['since'] = since or None
+    base_result['until'] = until or None
     return base_result
 
 
-def content_search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3) -> Dict[str, Any]:
-    """Search session JSONL files for a text query.
+def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
+                     since: str = '', until: str = '') -> Dict[str, Any]:
+    """Full-text search across session JSONL content.
+
+    Query param: ?search=<term> (renamed from ?content= — BACK-947 — to match
+    claude://'s ?search= meaning full-text content search, not metadata filtering).
+    Optional ?since=/?until= (ISO date or "today") scope the corpus by updated_at
+    before scanning JSONL — BACK-945.
 
     Scans agent_message and user_message payloads in each session's rollout file.
     Returns matched sessions with up to max_matches_per_session snippets each.
     """
+    since = _resolve_date_bound(since)
+    until = _resolve_date_bound(until)
+
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_content_search',
         source=str(db_path),
         source_type='sqlite',
         contract_version='1.1',
-        data={'query': query},
+        data={'query': query, 'since': since or None, 'until': until or None},
     )
 
     if not db_path.exists():
@@ -133,6 +164,12 @@ def content_search_sessions(db_path: Path, query: str, max_matches_per_session: 
             conn.close()
     except sqlite3.Error as exc:
         return {**base, 'sessions': [], 'total': 0, 'error': str(exc)}
+
+    if since or until:
+        rows = [
+            row for row in rows
+            if _apply_date_range([{'updated_at': _format_ts(row['updated_at'])}], since, until)
+        ]
 
     term = query.lower()
     matched: List[Dict[str, Any]] = []

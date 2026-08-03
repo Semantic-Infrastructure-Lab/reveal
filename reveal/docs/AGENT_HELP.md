@@ -51,7 +51,7 @@ Start with `reveal help://quick` (~750 tokens) — it routes you to the right ad
 | Call relationships | `calls://` | `reveal 'calls://src/?target=my_fn'` |
 | Git history / diffs | `git://` `diff://` | `reveal 'git://.?message~=fix'` |
 | Claude sessions / prompts | `claude://` | `reveal 'claude://sessions/?search=auth-refactor'` |
-| Codex CLI sessions | `codex://` | `reveal 'codex://sessions/?search=auth-refactor'` |
+| Codex CLI sessions | `codex://` | `reveal 'codex://sessions/?filter=auth-refactor'` |
 | Markdown / docs | `markdown://` | `reveal docs/ --grep 'decision'` |
 | Databases / workbooks | `sqlite://` `mysql://` `xlsx://` | `reveal sqlite:///app.db` |
 | Environment / runtime | `env://` `python://` | `reveal env://` |
@@ -2581,11 +2581,14 @@ The `codex://` adapter navigates and analyzes [OpenAI Codex CLI](https://github.
 # List all sessions (newest first, SQLite — fast)
 reveal 'codex://'
 
-# Filter by title or first message
-reveal 'codex://sessions/?search=auth-refactor'
+# Filter by title or first message (SQLite metadata, fast)
+reveal 'codex://sessions/?filter=auth-refactor'
 
 # Full-text search across all session JSONL content
-reveal 'codex://sessions/?content=authentication'
+reveal 'codex://sessions/?search=authentication'
+
+# Full-text search scoped to a date range
+reveal 'codex://sessions/?search=authentication&since=2026-07-01'
 ```
 
 **Session analysis:**
@@ -2604,6 +2607,15 @@ reveal 'codex://019e5cc5?goal'
 
 # User + agent conversation turns
 reveal 'codex://019e5cc5/messages'
+
+# Composed readable view: overview + prompts + agent narrative in one call
+reveal 'codex://019e5cc5/digest'
+
+# Each user prompt paired with the agent's final reply before the next prompt
+reveal 'codex://019e5cc5/exchanges'
+
+# Single raw JSONL record by index (negative indexing supported)
+reveal 'codex://019e5cc5/message/-1'
 
 # Paired function_call + function_call_output events
 reveal 'codex://019e5cc5/tools'
@@ -2632,6 +2644,9 @@ reveal 'codex://history'
 # ~/.codex/config.toml (secrets masked)
 reveal 'codex://config'
 
+# A single config value by dot-path (applied AFTER secret masking)
+reveal 'codex://config?key=model'
+
 # ~/.codex/memories/ (MEMORY.md + session summaries)
 reveal 'codex://memories'
 
@@ -2640,6 +2655,13 @@ reveal 'codex://memories/pipeline'
 
 # ~/.codex/rules/*.rules (Starlark permission rules)
 reveal 'codex://rules'
+
+# ~/.codex/skills/**/SKILL.md (installed skill definitions)
+reveal 'codex://skills'
+reveal 'codex://skills/openai-docs'
+
+# Installed plugin manifests
+reveal 'codex://plugins'
 ```
 
 **UUID prefix**: Use the first 7+ hex chars of a UUID — `reveal 'codex://019e5cc5'` resolves to the matching session. No need to type the full UUID.
@@ -2651,6 +2673,9 @@ reveal 'codex://rules'
 - `codex://<UUID>?tokens` — per-turn table: INPUT / CACHED / OUTPUT / REASON / TOTAL
 - `codex://<UUID>?goal` — thread goal from `goals_1.sqlite` (objective, status, token budget)
 - `codex://<UUID>/messages` — user + agent conversation turns with memory citations
+- `codex://<UUID>/digest` — composed readable view: overview + prompts + agent narrative in one call
+- `codex://<UUID>/exchanges` — each user prompt paired with the agent's final reply before the next prompt
+- `codex://<UUID>/message/<n>` — single raw JSONL record by 0-based index (negative indexing, e.g. `-1` = last)
 - `codex://<UUID>/tools` — function_call/output pairs with success rates
 - `codex://<UUID>/shell` — exec_command_end events: command, exit code, output
 - `codex://<UUID>/errors` — error/warning/guardian_warning events
@@ -2660,16 +2685,19 @@ reveal 'codex://rules'
 **codex:// install views:**
 - `codex://info` — diagnostic path dump (resolved dirs, DB stats)
 - `codex://history` — prompt history from `~/.codex/history.jsonl`
-- `codex://config` — `~/.codex/config.toml` with secrets masked
+- `codex://config` — `~/.codex/config.toml` with secrets masked (`?key=<dotpath>` for a single value, applied after masking)
 - `codex://memories` — `~/.codex/memories/` tree with file content
 - `codex://memories/pipeline` — Stage1/Stage2 consolidation status from `stage1_outputs`
 - `codex://rules` — Starlark permission rules from `~/.codex/rules/*.rules`
+- `codex://skills` — installed skill definitions from `~/.codex/skills/**/SKILL.md` (`/skills/<name>` for one)
+- `codex://plugins` — installed plugin manifests (`/plugins/<name>` for one)
 
 **When to use which view:**
 
 | Scenario | Command |
 |----------|---------|
-| "What did this session do?" | `reveal 'codex://<UUID>'` |
+| "What did this session do?" | `reveal 'codex://<UUID>'` (or `.../digest` for a composed narrative) |
+| "What did I ask, what did it finally say?" | `.../exchanges` |
 | "What order did things happen?" | `.../workflow` |
 | "What was every event?" | `.../timeline` |
 | "How many tokens did it use?" | `...?tokens` |
@@ -2678,10 +2706,11 @@ reveal 'codex://rules'
 | "Why did something fail?" | `.../errors` |
 | "Where did the session stop?" | `...?last` |
 | "What was the goal?" | `...?goal` |
-| "Find sessions about X" | `codex://sessions/?search=X` |
-| "Has X been discussed?" | `codex://sessions/?content=X` |
+| "Find sessions titled/about X" | `codex://sessions/?filter=X` |
+| "Has X been discussed?" | `codex://sessions/?search=X` |
 | "What's in memory?" | `codex://memories` |
 | "Is memory pipeline running?" | `codex://memories/pipeline` |
+| "What skills/plugins are installed?" | `codex://skills` / `codex://plugins` |
 
 **Progressive analysis workflow:**
 ```bash

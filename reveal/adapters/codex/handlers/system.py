@@ -119,8 +119,14 @@ def get_history(codex_home: Path, query_params: Dict[str, Any]) -> Dict[str, Any
     return {**base, 'entries': entries, 'total_entries': len(entries)}
 
 
-def get_config(codex_home: Path) -> Dict[str, Any]:
-    """Read ~/.codex/config.toml, mask secrets, return parsed dict."""
+def get_config(codex_home: Path, query_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Read ~/.codex/config.toml, mask secrets, return parsed dict.
+
+    Supports ?key=dotpath (BACK-944, parity with claude://config, claude://settings)
+    to drill into a single value — applied AFTER secret masking, so a masked value
+    can never be un-redacted by requesting it directly via ?key=.
+    """
+    query_params = query_params or {}
     config_path = codex_home / 'config.toml'
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_config',
@@ -143,9 +149,18 @@ def get_config(codex_home: Path) -> Dict[str, Any]:
     try:
         with open(config_path, 'rb') as fh:
             parsed = tomllib.load(fh)
-        return {**base, 'config': _mask_secrets(parsed)}
+        masked = _mask_secrets(parsed)
     except Exception as exc:
         return {**base, 'config': {}, 'error': str(exc)}
+
+    key = (query_params.get('key') or '').strip()
+    if key:
+        val: Any = masked
+        for part in key.split('.'):
+            val = val.get(part) if isinstance(val, dict) else None
+        return {**base, 'key': key, 'value': val}
+
+    return {**base, 'config': masked}
 
 
 def get_memories(codex_home: Path) -> Dict[str, Any]:

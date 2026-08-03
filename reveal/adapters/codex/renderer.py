@@ -9,13 +9,22 @@ from .render_sessions import (
     _render_codex_session_overview,
     _render_codex_content_search,
 )
-from .render_messages import _render_codex_messages
+from .render_messages import (
+    _render_codex_messages,
+    _render_codex_digest,
+    _render_codex_exchanges,
+    _render_codex_message,
+)
 from .render_system import (
     _render_codex_info,
     _render_codex_history,
     _render_codex_config,
     _render_codex_memories,
     _render_codex_rules,
+    _render_codex_skills,
+    _render_codex_skill,
+    _render_codex_plugins,
+    _render_codex_plugin,
 )
 from .render_analytics import (
     _render_codex_tools,
@@ -41,6 +50,9 @@ class CodexRenderer(TypeDispatchRenderer):
 
     # Message renderer (also used for ?last)
     _render_codex_messages = staticmethod(_render_codex_messages)
+    _render_codex_digest = staticmethod(_render_codex_digest)
+    _render_codex_exchanges = staticmethod(_render_codex_exchanges)
+    _render_codex_message = staticmethod(_render_codex_message)
 
     # System renderers
     _render_codex_info = staticmethod(_render_codex_info)
@@ -48,6 +60,10 @@ class CodexRenderer(TypeDispatchRenderer):
     _render_codex_config = staticmethod(_render_codex_config)
     _render_codex_memories = staticmethod(_render_codex_memories)
     _render_codex_rules = staticmethod(_render_codex_rules)
+    _render_codex_skills = staticmethod(_render_codex_skills)
+    _render_codex_skill = staticmethod(_render_codex_skill)
+    _render_codex_plugins = staticmethod(_render_codex_plugins)
+    _render_codex_plugin = staticmethod(_render_codex_plugin)
 
     # Analytics renderers
     _render_codex_tools = staticmethod(_render_codex_tools)

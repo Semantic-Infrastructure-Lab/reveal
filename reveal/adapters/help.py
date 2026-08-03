@@ -194,8 +194,8 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Session errors', 'query': 'reveal claude://session/my-session?errors', 'description': 'All errors with context', 'output_type': 'claude_errors'},
             {'goal': 'Prompt/answer pairs for a session', 'query': 'reveal claude://session/my-session/exchanges', 'description': 'Each human prompt paired with the assistant\'s final answer, skipping thinking-only and tool-only turns in between', 'output_type': 'claude_exchanges'},
             {'goal': 'Codex session overview', 'query': 'reveal codex://SESSION-ID', 'description': 'Turns, tools, tokens, duration for a Codex CLI session', 'output_type': 'codex_overview'},
-            {'goal': 'Search Codex sessions', 'query': "reveal 'codex://sessions/?search=validate_token'", 'description': 'Search by title or first message', 'output_type': 'codex_session_list'},
-            {'goal': 'Full-text search across Codex content', 'query': "reveal 'codex://sessions/?content=authentication'", 'description': 'Scan JSONL event files for a term', 'output_type': 'codex_search'},
+            {'goal': 'Filter Codex sessions by title', 'query': "reveal 'codex://sessions/?filter=validate_token'", 'description': 'Metadata filter by title or first message (SQLite index, no JSONL scan)', 'output_type': 'codex_session_list'},
+            {'goal': 'Full-text search across Codex content', 'query': "reveal 'codex://sessions/?search=authentication'", 'description': 'Scan JSONL event files for a term', 'output_type': 'codex_search'},
         ]
     },
     'history': {
@@ -1127,7 +1127,7 @@ class HelpAdapter(ResourceAdapter):
                  'use': 'claude://', 'example': "reveal 'claude://sessions/?search=auth-refactor' --format=json"},
                 {'want': 'review a session as prompt/answer pairs, not raw messages',
                  'use': 'claude://.../exchanges', 'example': "reveal claude://session/my-session/exchanges"},
-                {'want': 'search OpenAI Codex CLI sessions by title or content',
+                {'want': 'search OpenAI Codex CLI sessions by content (or ?filter= by title)',
                  'use': 'codex://', 'example': "reveal 'codex://sessions/?search=auth-refactor'"},
                 {'want': 'discover live project-specific adapters',
                  'use': 'help://adapters', 'example': "reveal help://adapters"},
