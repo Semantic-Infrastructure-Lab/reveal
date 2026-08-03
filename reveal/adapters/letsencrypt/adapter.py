@@ -191,8 +191,29 @@ class LetsEncryptAdapter(ResourceAdapter):
 
     ELEMENT_NAMESPACE_ADAPTER: bool = False
 
-    def __init__(self, connection_string: str = ''):
-        if connection_string and not connection_string.startswith('letsencrypt://'):
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    CANONICAL_EMPTY_RESOURCE = ''  # bare letsencrypt:// is valid (BUG-136)
+
+    def __init__(self, resource: str = '', query: Optional[str] = None):
+        """Initialize Let's Encrypt adapter (no path/domain, just query flags).
+
+        Args:
+            resource: letsencrypt://[?query] — accepted with or without the
+                letsencrypt:// prefix. May carry an embedded '?query' when
+                called directly with a full connection string (query=None in
+                that case); router/canonical construction passes resource and
+                query pre-split, so they're recombined here before parsing.
+            query: Query string when resource and query arrive pre-split
+                (e.g. check-orphans, check-duplicates).
+        """
+        connection_string = f"{resource}?{query}" if query else resource
+        # The scheme-prefix check only applies to the path portion — under
+        # router/canonical construction resource never carries a scheme
+        # prefix, so a query-only resource (e.g. '?check-orphans') must not
+        # be rejected here. Direct construction with a real wrong-scheme
+        # path (e.g. 'ssl://example.com') still gets caught.
+        path_part = connection_string.split('?', 1)[0]
+        if path_part and not path_part.startswith('letsencrypt://'):
             raise ValueError(f"Invalid letsencrypt:// URI: {connection_string}")
         self.live_dir = _LIVE_DIR
         self.nginx_dirs = list(_NGINX_CONFIG_DIRS)

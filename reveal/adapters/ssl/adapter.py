@@ -125,6 +125,9 @@ class SSLAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'results'
 
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    CANONICAL_EMPTY_RESOURCE = ''  # bare ssl:// must stay empty so the explicit TypeError fires
+
     # ssl:// has no plain-file form, so these flags are never valid on a file
     # path — GUARDED_FLAG_EXTENSIONS stays empty and the guard always fires.
     # Example text is per-flag: --summary and --validate-nginx intentionally
@@ -190,16 +193,24 @@ class SSLAdapter(ResourceAdapter):
             'notes': _SCHEMA_NOTES,
         }
 
-    def __init__(self, connection_string: str = ""):
+    def __init__(self, resource: str = "", query: Optional[str] = None):
         """Initialize SSL adapter with host details.
 
         Args:
-            connection_string: ssl://host[:port][/element]
+            resource: ssl://host[:port][/element] — accepted with or without
+                the ssl:// prefix (_parse_connection_string strips it if
+                present). May carry an embedded '?query' when called directly
+                with a full connection string (query=None in that case);
+                router/canonical construction passes resource and query
+                pre-split, so they're recombined here before parsing.
+            query: Query string when resource and query arrive pre-split
+                (e.g. ?expiring-within=30).
 
         Raises:
             TypeError: If no connection string provided (allows generic handler to try next pattern)
             ValueError: If connection string is invalid
         """
+        connection_string = f"{resource}?{query}" if query else resource
         # No-arg initialization should raise TypeError, not ValueError
         # This lets the generic handler try the next pattern
         if not connection_string:

@@ -510,6 +510,9 @@ class DomainAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'checks'
 
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    CANONICAL_EMPTY_RESOURCE = ''  # bare domain:// must raise TypeError, not silently become "."
+
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         """Get machine-readable schema for domain:// adapter."""
@@ -541,16 +544,25 @@ class DomainAdapter(ResourceAdapter):
         """
         return load_help_data('domain') or {}
 
-    def __init__(self, connection_string: str = "", **kwargs):
+    def __init__(self, resource: str = "", query: Optional[str] = None, **kwargs):
         """Initialize Domain adapter with domain name.
 
         Args:
-            connection_string: domain://example.com[/element]
+            resource: domain://example.com[/element] — accepted with or
+                without the domain:// prefix (_parse_connection_string strips
+                it if present). May carry an embedded '?query' when called
+                directly with a full connection string (query=None in that
+                case); router/canonical construction passes resource and
+                query pre-split, so they're recombined here before parsing.
+            query: Query string when resource and query arrive pre-split.
+                domain:// does not support query parameters — recombined only
+                so the existing unsupported-query warning still fires.
 
         Raises:
             TypeError: If no connection string provided (allows generic handler to try next pattern)
             ValueError: If connection string is invalid
         """
+        connection_string = f"{resource}?{query}" if query else resource
         # No-arg initialization should raise TypeError, not ValueError
         # This lets the generic handler try the next pattern
         if not connection_string:
