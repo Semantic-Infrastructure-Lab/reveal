@@ -594,8 +594,20 @@ def _derive_step_outcome(tool_name: str, tur: Optional[Dict], result_content: Op
                 outcome = 'success' if rci == 'success' else 'error'
         elif tool_name == 'Agent':
             status = tur.get('status')
-            if status:
-                outcome = 'success' if status == 'completed' else 'error'
+            if status == 'completed':
+                outcome = 'success'
+            elif status == 'async_launched':
+                # A background Agent launch that hasn't reported back yet — the
+                # only two toolUseResult.status values observed in real sessions
+                # are 'completed' and 'async_launched'. Previously any non-
+                # 'completed' status (including this legitimate in-flight state)
+                # was misclassified as 'error', permanently marking every
+                # successfully-launched background agent's step ✗ in /workflow,
+                # since the completion notification arrives as a later message,
+                # not a re-derivation of this same tool_use step.
+                outcome = 'pending'
+            elif status:
+                outcome = 'error'
     if outcome is None and result_content is not None:
         outcome = 'error' if is_tool_error(result_content, tur) else 'success'
     return outcome
@@ -654,7 +666,10 @@ def get_workflow(messages: List[Dict], session_name: str,
         if tool_name == 'Agent' and tur and isinstance(tur, dict):
             _enrich_agent_step(step, tur)
 
-        if tur and isinstance(tur, dict) and tur.get('backgroundTaskId'):
+        # backgroundTaskId marks a backgrounded Bash run; isAsync marks a
+        # backgrounded Agent launch — same 'backgrounded' signal, different
+        # field name per tool (confirmed via real toolUseResult inspection).
+        if tur and isinstance(tur, dict) and (tur.get('backgroundTaskId') or tur.get('isAsync')):
             step['backgrounded'] = True
         workflow.append(step)
 

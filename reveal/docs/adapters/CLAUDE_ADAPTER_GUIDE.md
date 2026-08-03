@@ -172,17 +172,17 @@ See only the prompts the human typed — tool-result turns excluded:
 reveal claude://session/infernal-earth-0118/prompts
 ```
 
-**Returns**: Each human prompt in full, no tool-result noise. (Use `/user` instead if you need to see tool-result turn boundaries too.)
+**Returns**: Each human prompt in full, no tool-result noise. (Add `?raw` instead if you need to see tool-result turn boundaries too.)
 
 ### 10. Read Assistant Responses (the Findings)
 
-See what the assistant said — text blocks only, thinking and tool calls stripped:
+See what the assistant said — narrative text turns only, tool-call-only turns skipped:
 
 ```bash
-reveal claude://session/infernal-earth-0118/assistant
+reveal claude://session/infernal-earth-0118/messages
 ```
 
-**Returns**: Assistant text per message with metadata header (thinking/tools used)
+**Returns**: Assistant narrative text per turn (add `?raw` for every raw record unfiltered — text, thinking, tool_use, tool_result all included)
 
 ### 11. Search Session Content
 
@@ -526,8 +526,8 @@ Combine filters for precise analysis:
 # Bash tool usage + errors only
 reveal claude://session/my-session?tools=Bash&errors
 
-# User messages containing specific text
-reveal claude://session/my-session?role=user&contains=reveal
+# Assistant narrative turns containing specific text
+reveal claude://session/my-session/messages?contains=reveal
 
 # Summary with error focus
 reveal claude://session/my-session?summary&errors
@@ -535,7 +535,7 @@ reveal claude://session/my-session?summary&errors
 
 **Supported combinations**:
 - `?tools=<tool>&errors` - Specific tool failures
-- `?role=<role>&contains=<text>` - Role-filtered text search
+- `/messages?contains=<text>` - Narrative-turn text search (see `?search=<term>` below for a whole-session, all-roles equivalent)
 - `?summary&errors` - Summary with error emphasis
 - `?tools=<tool>&contains=<text>` - Tool usage with text filter
 
@@ -543,7 +543,7 @@ reveal claude://session/my-session?summary&errors
 
 ## Elements Reference
 
-The claude:// adapter supports thirteen elements for progressive disclosure:
+The claude:// adapter supports fifteen elements for progressive disclosure:
 
 ### 1. workflow
 
@@ -559,9 +559,9 @@ reveal claude://session/<session-name>/workflow
 reveal claude://session/infernal-earth-0118/workflow
 ```
 
-**Output**: Time-ordered tool calls with parameters, results, and execution flow
+**Output**: Time-ordered tool calls with parameters, results, and execution flow. Each step's `outcome` is `success`, `error`, or `pending` — `pending` marks a background launch (e.g. an async `Agent` call, `toolUseResult.status: 'async_launched'`) that hasn't reported back yet; its `backgrounded` flag is also set. Renders as `⏳` (pending) or `✗` (error) in text output, `[bg]` appended when backgrounded. Before this was fixed, every successfully-launched background agent showed a permanent `✗` — the completion arrives later as a separate message, never as a re-derivation of this step.
 
-**Use when**: Need to understand sequence of operations, debug workflow issues
+**Use when**: Need to understand sequence of operations, debug workflow issues, check on in-flight background agents
 
 ---
 
@@ -699,61 +699,43 @@ reveal claude://session/<session-name>/prompts
 reveal claude://session/infernal-earth-0118/prompts
 ```
 
-**Output**: Each human prompt with timestamp and full text (first prompt up to 1200 chars, rest up to 300). No `[N tool result(s)]` noise.
+**Output**: Each human prompt with timestamp and full text (first prompt up to 1200 chars, rest up to 300). No `[N tool result(s)]` noise, and no harness-injected text — synthetic system content (async Agent-tool `<task-notification>` completions, bash-mode `!command` wrappers like `<local-command-caveat>`/`<command-name>`/`<local-command-stdout>`) is excluded, not just tool-result turns.
 
-**Use when**: You want to read *what the human asked* without wading through tool-result turns. This is the resource to reach for when reviewing intent. The Claude API encodes tool-result turns as `role: user`, so `/user` mixes them in with real prompts — a session with ~15 prompts can show ~170 "user" messages. `/prompts` filters those out.
+**Use when**: You want to read *what the human asked* without wading through tool-result turns or harness noise. This is the resource to reach for when reviewing intent. The Claude API encodes tool-result turns as `role: user`, so a naive raw dump mixes them in with real prompts — a session with ~15 prompts can show ~170 raw "user" records. `/prompts` filters those out (see `?raw` below if you need the raw dump anyway).
 
-**vs `/user`**: `/user` shows *all* user-role turns (prompts + tool-result summaries); `/prompts` shows *only* the text the human typed. Prefer `/prompts` for reading intent; use `/user` only when you specifically need to see the tool-result turn boundaries.
+**`?raw`**: add `?raw` to get every raw role=user record unfiltered instead — prompts, tool-result turns, and harness-injected text all included, normalized to a block list. This is a bulk forensic scan (e.g. skimming every tool-result payload in a session at once), not narrative reading; prefer plain `/prompts` unless you specifically need that. Response includes a `hint` field when tool-result-only turns are present, pointing back at plain `/prompts`.
+
+```bash
+reveal claude://session/<session-name>/prompts?raw
+```
 
 ---
 
-### 9. user
+### 9. messages
 
-**Description**: User messages with normalized content — initial prompt as full text, subsequent tool-result turns summarized
+**Description**: Assistant narrative text turns only — what the assistant *said* (explanations, summaries, decisions), not tool-call records. Skips turns that produced only `tool_use`/`tool_result`/`thinking` blocks with no text.
 
 **Syntax**:
 ```bash
-reveal claude://session/<session-name>/user
+reveal claude://session/<session-name>/messages
+reveal claude://session/<session-name>/messages?raw     # raw, unfiltered role=assistant dump
+reveal claude://session/<session-name>/messages?raw&full   # + disable 600-char truncation
 ```
 
 **Example**:
 ```bash
-reveal claude://session/infernal-earth-0118/user
+reveal claude://session/infernal-earth-0118/messages
 ```
 
-**Output**: Each user turn with timestamp; first message shown in full (the prompt), tool-result turns shown as `[N tool result(s)]`
+**Output**: Each narrative turn's full text, with `turn`/`message_index`/`timestamp`/`char_count`. This is the best resource for reading what the assistant concluded — lighter and cleaner than a raw dump because tool-call-only turns are skipped entirely rather than shown as one-line summaries.
 
-**Use when**: You need to see tool-result turn boundaries alongside prompts. **For reading just what the human asked, prefer [`/prompts`](#8-prompts)** — it strips the tool-result noise.
+**`?raw`**: add `?raw` to get every raw role=assistant record unfiltered instead — text, thinking, tool_use, and tool_result blocks all present for every turn, none skipped. This is a bulk forensic scan (e.g. reading every tool_use's exact arguments across a session at once, or every tool_result's exact output), not narrative reading; prefer plain `/messages` unless you specifically need that. Add `&full` to also disable the 600-char per-message truncation.
 
-**Note**: User message content in Claude Code JSONL can be a bare string (initial prompt) or a list of tool_result blocks. This view normalizes both.
-
-**Note**: If any tool-result-only turns are present, the response includes a `hint` field pointing at `/prompts` — this surfaces at call time, not just here in the guide.
+**Use when**: Read the actual findings or report, compare outputs between sessions, understand what the agent concluded (plain); inspect exact tool call arguments or tool output in bulk (`?raw`).
 
 ---
 
-### 10. assistant
-
-**Description**: Assistant text responses only — thinking blocks and tool calls stripped, with metadata header per message
-
-**Syntax**:
-```bash
-reveal claude://session/<session-name>/assistant
-reveal claude://session/<session-name>/assistant?full   # disable per-message truncation
-```
-
-**Example**:
-```bash
-reveal claude://session/infernal-earth-0118/assistant
-reveal claude://session/infernal-earth-0118/assistant?full
-```
-
-**Output**: Each assistant turn's text content (first 600 chars by default), with `[thinking]` / `[tools: Bash, Read]` metadata. Tool-only turns show one-line summaries (`Agent → research strategies`, `Write → STRATEGIES.md`). Add `?full` to remove the 600-char truncation.
-
-**Use when**: Read the actual findings or report, compare outputs between sessions, understand what the agent concluded
-
----
-
-### 11. message/\<n\>
+### 10. message/\<n\>
 
 **Description**: Read a single message by index with full content — text, tool_use params, and tool_result output all shown
 
@@ -772,14 +754,14 @@ reveal claude://session/infernal-earth-0118/message/-1
 **Output**: Full message content. For `tool_use` blocks: shows name + key params (`file_path`, `command`, `content` size). For `tool_result` blocks: shows content preview (first 500 chars).
 
 **Notes**:
-- Index is 0-indexed over raw JSONL records (see [`/message` (range)](#12-message-range) below for the *other* indexing scheme this resource family uses)
+- Index is 0-indexed over raw JSONL records (see [`/message` (range)](#11-message-range) below for the *other* indexing scheme this resource family uses)
 - For `user`/`assistant` messages, the response includes a `turn` field — the 1-indexed conversation-turn number that `/message --range` uses, so you can go from a raw index straight to the range number without a second call
 
 **Use when**: Read a long assistant response in full, inspect what a Write/Edit tool call actually wrote, read agent tool_result output, or find the `turn` number to jump into `/message --range`
 
 ---
 
-### 12. message (range)
+### 11. message (range)
 
 **Description**: Read a range of messages (both user and assistant, interleaved) using the standard `--range` flag
 
@@ -807,7 +789,7 @@ reveal claude://session/infernal-earth-0118/message --range 5-15
 
 ---
 
-### 13. agents
+### 12. agents
 
 **Description**: Agent tool calls made during the session with per-agent telemetry
 
@@ -827,7 +809,7 @@ reveal claude://session/infernal-earth-0118/agents
 
 ---
 
-### 14. chain
+### 13. chain
 
 **Description**: Session continuation chain traversal — follows `continuing_from:` links in README frontmatter back through the session history
 
@@ -853,7 +835,7 @@ reveal claude://session/revealed-sphinx-0407/chain --base-path ~/projects/my-ses
 
 ---
 
-### 15. digest
+### 14. digest
 
 **Description**: Composed readable view — session overview + human prompts + assistant narrative in one call. Exists so getting a clean picture of what happened doesn't take 3 separate calls (`?summary`, `/prompts`, `/messages`).
 
@@ -874,7 +856,7 @@ reveal claude://session/infernal-earth-0118/digest
 
 ---
 
-### 16. exchanges
+### 15. exchanges
 
 **Description**: Each real human prompt paired with the assistant's final text answer to it — skips `thinking`-only and tool-only turns in between, returning the last text block found before the next prompt. Distinct from `/digest`: `/digest` composes whole-session sections; `/exchanges` joins a specific prompt to its specific answer.
 
@@ -896,7 +878,7 @@ reveal claude://session/infernal-earth-0118/exchanges
 - A prompt is "real" if it has typed text (bare string, or a text block — e.g. a pasted screenshot with a caption) and is not a synthetic text block riding on a `tool_result` turn (matches `/prompts`' definition exactly).
 - Known limitation: a genuine multi-branch case (an edited/regenerated message producing more than one non-`progress` sibling) takes the first one in file order — this was not observed in practice and is a documented gap, not a silently wrong one.
 
-**Use when**: You need "what did I ask, what did it finally say" for a specific turn or set of turns, without eyeballing timestamps between `/prompts` and `/assistant` or binary-searching `/message/<n>` by hand.
+**Use when**: You need "what did I ask, what did it finally say" for a specific turn or set of turns, without eyeballing timestamps between `/prompts` and `/messages` or binary-searching `/message/<n>` by hand.
 
 ---
 
@@ -924,7 +906,7 @@ reveal claude://session/infernal-earth-0118?summary
 
 ### ?digest
 
-**Description**: Query-param alias for [`/digest`](#15-digest) — composed overview + prompts + assistant narrative in one call
+**Description**: Query-param alias for [`/digest`](#14-digest) — composed overview + prompts + assistant narrative in one call
 
 **Syntax**:
 ```bash
@@ -1068,24 +1050,26 @@ reveal claude://session/infernal-earth-0118?contains="import pandas"
 
 ---
 
-### ?role=<role>
+### ?raw
 
-**Description**: Filter by message role (user or assistant)
+**Description**: On `/prompts` or `/messages`, return every raw role record unfiltered (text, thinking, tool_use, tool_result blocks all included) instead of the narrative-only extract. Replaces the old standalone `/user` and `/assistant` elements and the `?role=user|assistant` query param (both removed) — `/prompts?raw` reaches full parity with `/user`'s old scope (every role=user record, tool-result wrapper turns included, not narrowed to real prompts); `/messages?raw` reaches parity with `/assistant`'s old scope.
 
 **Syntax**:
 ```bash
-reveal claude://session/<session-name>?role=<role>
+reveal claude://session/<session-name>/prompts?raw
+reveal claude://session/<session-name>/messages?raw
+reveal claude://session/<session-name>/messages?raw&full   # + disable 600-char truncation
 ```
 
 **Examples**:
 ```bash
-reveal claude://session/infernal-earth-0118?role=user
-reveal claude://session/infernal-earth-0118?role=assistant
+reveal claude://session/infernal-earth-0118/prompts?raw
+reveal claude://session/infernal-earth-0118/messages?raw
 ```
 
-**Output**: Only messages from specified role
+**Output**: Every raw record for that role, normalized to a block list — nothing skipped, nothing filtered.
 
-**Use when**: Analyze user requests, track agent responses
+**Use when**: Bulk forensic scanning — e.g. skimming every tool-result payload or every tool_use's exact arguments across a whole session at once. For reading intent or findings, prefer plain `/prompts` and `/messages` — they're lighter and skip harness/tool noise.
 
 ---
 
@@ -1129,8 +1113,8 @@ Combine multiple query parameters:
 # Bash errors
 reveal claude://session/my-session?tools=Bash&errors
 
-# User messages about reveal
-reveal claude://session/my-session?role=user&contains=reveal
+# Assistant narrative turns about reveal
+reveal claude://session/my-session/messages?contains=reveal
 
 # Summary with error emphasis
 reveal claude://session/my-session?summary&errors
@@ -2866,7 +2850,7 @@ A: `reveal claude://session/my-session/files` - Look for `access_count > 3`
 A: Yes:
 ```bash
 reveal claude://session/my-session?tools=Bash&errors
-reveal claude://session/my-session?role=user&contains=reveal
+reveal claude://session/my-session/messages?contains=reveal
 ```
 
 ---

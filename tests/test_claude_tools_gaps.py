@@ -646,6 +646,23 @@ class TestGetWorkflowAgentSteps:
         result = get_workflow(msgs, 'session-1', self._BASE.copy())
         assert result['workflow'][0]['agent_type'] == 'unknown'
 
+    def test_agent_async_launch_is_pending_and_backgrounded(self):
+        # Real-corpus regression: an async Agent launch's toolUseResult has
+        # status='async_launched' and isAsync=True, no agentType/duration/tokens
+        # yet (those only arrive once the background agent actually finishes,
+        # via a later message, not a re-derivation of this step). Before the
+        # fix this rendered as a permanent ✗ in /workflow for every successfully
+        # launched background agent.
+        tur = {'status': 'async_launched', 'isAsync': True, 'agentId': 'agent-async'}
+        msgs = [
+            _assistant_tool_use('tu_001', 'Agent', description='Code quality review'),
+            _tur_msg('tu_001', tur),
+        ]
+        result = get_workflow(msgs, 'session-1', self._BASE.copy())
+        step = result['workflow'][0]
+        assert step['outcome'] == 'pending'
+        assert step['backgrounded'] is True
+
     def test_bash_outcome_from_return_code_interpretation(self):
         tur = {'returnCodeInterpretation': 'success', 'stdout': 'ok', 'stderr': ''}
         msgs = [
@@ -807,6 +824,18 @@ class TestDeriveStepOutcome:
         from reveal.adapters.claude.analysis.tools import _derive_step_outcome
         tur = {'status': 'failed'}
         assert _derive_step_outcome('Agent', tur, None) == 'error'
+
+    def test_agent_async_launched_is_pending_not_error(self):
+        # Real-corpus finding: 'async_launched' is a legitimate in-flight status
+        # for a background Agent launch — the only two toolUseResult.status
+        # values observed in real sessions are 'completed' and 'async_launched'.
+        # Before this fix, the Agent branch's `else 'error'` catch-all
+        # misclassified every successfully-launched background agent as failed,
+        # permanently (the completion notification arrives as a later message,
+        # never re-deriving this step's outcome).
+        from reveal.adapters.claude.analysis.tools import _derive_step_outcome
+        tur = {'status': 'async_launched', 'isAsync': True}
+        assert _derive_step_outcome('Agent', tur, None) == 'pending'
 
     def test_fallback_to_is_tool_error(self):
         from reveal.adapters.claude.analysis.tools import _derive_step_outcome

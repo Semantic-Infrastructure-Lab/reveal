@@ -197,12 +197,12 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Human-typed prompts only (excludes tool-result wrapper messages)'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118/user',
-        'description': 'User messages: initial prompt + tool-result turns'
+        'uri': 'claude://session/infernal-earth-0118/prompts?raw',
+        'description': 'Raw role=user records, unfiltered: initial prompts + tool-result turns — bulk forensic scan, prefer /prompts for reading intent'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118/assistant',
-        'description': 'Assistant messages: text responses only (skip thinking/tools)'
+        'uri': 'claude://session/infernal-earth-0118/messages?raw',
+        'description': 'Raw role=assistant records, unfiltered: text, thinking, tool_use, tool_result blocks — bulk forensic scan (e.g. exact tool arguments), prefer /messages for reading intent'
     },
     {
         'uri': 'claude://session/infernal-earth-0118/message/5',
@@ -327,7 +327,7 @@ _HELP_WORKFLOWS: List[Dict[str, Any]] = [
         'scenario': 'Extract the prompt and findings from a session',
         'steps': [
             'reveal claude://session/session-name/prompts',
-            'reveal claude://session/session-name/assistant',
+            'reveal claude://session/session-name/messages',
             'reveal claude://session/session-name/thinking',
         ]
     },
@@ -335,8 +335,8 @@ _HELP_WORKFLOWS: List[Dict[str, Any]] = [
         'name': 'Prompt Comparison',
         'scenario': 'Compare what two sessions found on the same codebase',
         'steps': [
-            'reveal claude://session/session-a/user',
-            'reveal claude://session/session-b/user',
+            'reveal claude://session/session-a/prompts',
+            'reveal claude://session/session-b/prompts',
             'reveal claude://session/session-a?search=<finding>',
             'reveal claude://session/session-b?search=<finding>',
         ]
@@ -362,7 +362,7 @@ class ClaudeAdapter(ResourceAdapter):
 
     Provides progressive disclosure for Claude Code sessions:
     - Session overview with metrics
-    - Message filtering (user/assistant/thinking/tools)
+    - Message filtering (prompts/messages/thinking/tools)
     - Tool usage analytics
     - Error detection
     - Token usage estimates
@@ -599,12 +599,6 @@ class ClaudeAdapter(ResourceAdapter):
             return get_tool_calls(messages, self.query.split('=')[1], self.session_name, contract_base)
         if self.query and self.query.startswith('search='):
             return search_messages(messages, self.query.split('=', 1)[1], self.session_name, contract_base)
-        role = self.query_params.get('role')
-        if role in ('user', 'assistant'):
-            result = filter_by_role(messages, role, self.session_name, contract_base)
-            if role == 'assistant':
-                result['full'] = 'full' in self.query_params
-            return result
         # ?tail=N or ?last=N — last N turns; bare ?last — shorthand for ?tail=1
         if self.query_params.get('tail') is not None or self.query_params.get('last') is not None:
             tail = self._resolve_tail_count()
@@ -639,6 +633,12 @@ class ClaudeAdapter(ResourceAdapter):
         if '/context' in self.resource:
             return get_context_changes(messages, self.session_name, contract_base)
         if '/prompts' in self.resource:
+            # ?raw reaches parity with the old standalone /user element (removed):
+            # every role=user record unfiltered, tool-result wrapper turns included,
+            # not narrowed to real prompts. Bulk forensic scanning, not narrative
+            # reading — use plain /prompts for "what did the human ask."
+            if 'raw' in self.query_params:
+                return filter_by_role(messages, 'user', self.session_name, contract_base)
             return get_human_prompts(messages, self.session_name, contract_base)
         if '/exchanges' in self.resource:
             result = get_exchanges(messages, self.session_name, contract_base)
@@ -655,12 +655,6 @@ class ClaudeAdapter(ResourceAdapter):
             return get_timeline(messages, self.session_name, contract_base)
         if '/tokens' in self.resource:
             return get_token_breakdown(messages, self.session_name, contract_base)
-        if '/user' in self.resource:
-            return filter_by_role(messages, 'user', self.session_name, contract_base)
-        if '/assistant' in self.resource:
-            result = filter_by_role(messages, 'assistant', self.session_name, contract_base)
-            result['full'] = 'full' in self.query_params
-            return result
         if '/message/' in self.resource:
             msg_id = int(self.resource.split('/message/')[1])
             if msg_id < 0:
@@ -671,6 +665,15 @@ class ClaudeAdapter(ResourceAdapter):
             result['full'] = 'full' in self.query_params
             return result
         if '/messages' in self.resource:
+            # ?raw reaches parity with the old standalone /assistant element
+            # (removed): every role=assistant record unfiltered — text, thinking,
+            # tool_use, tool_result blocks all present. Bulk forensic scanning
+            # (e.g. exact tool_use arguments across a session), not narrative
+            # reading — use plain /messages for "what did the assistant say."
+            if 'raw' in self.query_params:
+                result = filter_by_role(messages, 'assistant', self.session_name, contract_base)
+                result['full'] = 'full' in self.query_params
+                return result
             search = self.query_params.get('search') or self.query_params.get('contains')
             return get_messages(messages, self.session_name, contract_base, search=search)
         return get_overview(messages, self.session_name, conversation_path_str, contract_base)

@@ -141,6 +141,8 @@ def _render_claude_workflow(result: dict) -> None:
         suffix = ''
         if outcome == 'error':
             suffix += ' ✗'
+        elif outcome == 'pending':
+            suffix += ' ⏳'
         if backgrounded:
             suffix += ' [bg]'
 

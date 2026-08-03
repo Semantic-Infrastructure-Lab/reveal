@@ -347,13 +347,19 @@ class TestThinkingExtraction:
 
 
 class TestMessageFiltering:
-    """Tests for message role filtering."""
+    """Tests for message role filtering.
+
+    /user and /assistant (standalone elements) and ?role=user|assistant were
+    removed in the 8->6 element consolidation — raw/unfiltered role access now
+    lives behind ?raw on /prompts and /messages, reaching full parity with the
+    old elements' scope (see TestRawQueryParam below).
+    """
 
     @patch.object(ClaudeAdapter, '_find_conversation')
-    def test_filter_user_messages(self, mock_find):
-        """Test filtering for user messages only."""
+    def test_prompts_raw_reaches_user_parity(self, mock_find):
+        """/prompts?raw returns every role=user record unfiltered (old /user scope)."""
         mock_find.return_value = TEST_CONVERSATION
-        adapter = ClaudeAdapter('session/test/user')
+        adapter = ClaudeAdapter('session/test/prompts', query='raw')
 
         result = adapter.get_structure()
 
@@ -362,16 +368,37 @@ class TestMessageFiltering:
         assert result['message_count'] == 7  # 3 actual user + 4 tool_results
 
     @patch.object(ClaudeAdapter, '_find_conversation')
-    def test_filter_assistant_messages(self, mock_find):
-        """Test filtering for assistant messages only."""
+    def test_messages_raw_reaches_assistant_parity(self, mock_find):
+        """/messages?raw returns every role=assistant record unfiltered (old /assistant scope)."""
         mock_find.return_value = TEST_CONVERSATION
-        adapter = ClaudeAdapter('session/test/assistant')
+        adapter = ClaudeAdapter('session/test/messages', query='raw')
 
         result = adapter.get_structure()
 
         assert result['type'] == 'claude_assistant_messages'
         assert result['role'] == 'assistant'
         assert result['message_count'] == 6
+
+    @patch.object(ClaudeAdapter, '_find_conversation')
+    def test_user_element_removed_falls_through_to_overview(self, mock_find):
+        """The old /user path is gone — an unrecognized resource segment falls
+        through to the default overview, same as any other unmatched path."""
+        mock_find.return_value = TEST_CONVERSATION
+        adapter = ClaudeAdapter('session/test/user')
+
+        result = adapter.get_structure()
+
+        assert result['type'] != 'claude_user_messages'
+
+    @patch.object(ClaudeAdapter, '_find_conversation')
+    def test_assistant_element_removed_falls_through_to_overview(self, mock_find):
+        """The old /assistant path is gone — falls through to the default overview."""
+        mock_find.return_value = TEST_CONVERSATION
+        adapter = ClaudeAdapter('session/test/assistant')
+
+        result = adapter.get_structure()
+
+        assert result['type'] != 'claude_assistant_messages'
 
 
 class TestSpecificMessageRetrieval:
@@ -1267,13 +1294,10 @@ class TestClaudeAdapterSchema:
         assert 'errors' in query_params
         assert 'tools' in query_params
         assert 'contains' in query_params
-        assert 'role' in query_params
-
-        # Role param should have values
-        role_param = query_params['role']
-        assert 'values' in role_param
-        assert 'user' in role_param['values']
-        assert 'assistant' in role_param['values']
+        # 'role' removed (consolidation): raw role access now lives behind
+        # ?raw on /prompts and /messages, not a standalone role= param.
+        assert 'role' not in query_params
+        assert 'raw' in query_params
 
     def test_schema_documents_full_param(self):
         """BACK-653: ?full disables per-message truncation but was missing from the
@@ -2420,24 +2444,36 @@ class TestReconfigureBasePathAutoDetect:
         assert 'REVEAL_CLAUDE_HOME' in str(exc_info.value)
 
 
-class TestRoleQueryParam:
-    """B5: ?role=user routes to filter_by_role instead of silently returning overview."""
+class TestRawQueryParam:
+    """?raw on /prompts or /messages routes to filter_by_role (replaces the
+    removed ?role=user|assistant query param and /user, /assistant elements —
+    consolidation, see TestMessageFiltering)."""
 
     @patch.object(ClaudeAdapter, '_find_conversation')
-    def test_role_user_query_param(self, mock_find):
-        """?role=user returns filtered user messages, not an overview."""
+    def test_prompts_raw_returns_user_messages(self, mock_find):
+        """/prompts?raw returns filtered user messages, not the overview."""
+        mock_find.return_value = TEST_CONVERSATION
+        adapter = ClaudeAdapter('session/test-session-123/prompts', query='raw')
+        result = adapter.get_structure()
+        assert result['type'] == 'claude_user_messages'
+
+    @patch.object(ClaudeAdapter, '_find_conversation')
+    def test_messages_raw_returns_assistant_messages(self, mock_find):
+        """/messages?raw returns filtered assistant messages."""
+        mock_find.return_value = TEST_CONVERSATION
+        adapter = ClaudeAdapter('session/test-session-123/messages', query='raw')
+        result = adapter.get_structure()
+        assert result['type'] == 'claude_assistant_messages'
+
+    @patch.object(ClaudeAdapter, '_find_conversation')
+    def test_role_query_param_removed_no_longer_routes(self, mock_find):
+        """The old ?role=user query param (session-root, no /prompts or
+        /messages path) is gone — it's not a recognized param anymore and
+        falls through to the default overview."""
         mock_find.return_value = TEST_CONVERSATION
         adapter = ClaudeAdapter('session/test-session-123', query='role=user')
         result = adapter.get_structure()
-        assert result['type'] != 'claude_overview'
-
-    @patch.object(ClaudeAdapter, '_find_conversation')
-    def test_role_assistant_query_param(self, mock_find):
-        """?role=assistant returns filtered assistant messages."""
-        mock_find.return_value = TEST_CONVERSATION
-        adapter = ClaudeAdapter('session/test-session-123', query='role=assistant')
-        result = adapter.get_structure()
-        assert result['type'] != 'claude_overview'
+        assert result['type'] != 'claude_user_messages'
 
 
 # Run tests with pytest

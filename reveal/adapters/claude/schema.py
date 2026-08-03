@@ -5,7 +5,6 @@ _SCHEMA_QUERY_PARAMS = {
     'errors': {'type': 'flag', 'description': 'Filter for messages containing errors'},
     'tools': {'type': 'string', 'description': 'Filter for specific tool usage (comma-separated for multiple)', 'examples': ['?tools=Bash', '?tools=Edit', '?tools=Bash,Read']},
     'contains': {'type': 'string', 'description': 'Filter messages containing text', 'examples': ['?contains=reveal', '?contains=error']},
-    'role': {'type': 'string', 'description': 'Filter by message role', 'values': ['user', 'assistant'], 'examples': ['?role=user']},
     'search': {
         'type': 'string',
         'description': 'Search all message content (text, thinking, tool inputs) for a term (case-insensitive). On claude://sessions/ performs cross-session search.',
@@ -73,8 +72,22 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'full': {
         'type': 'flag',
-        'description': 'Disable per-message 600-char truncation (assistant/message/exchanges views)',
+        'description': 'Disable per-message 600-char truncation (/messages?raw, /message, /exchanges views)',
         'examples': ['?full']
+    },
+    'raw': {
+        'type': 'flag',
+        'description': (
+            'On /prompts or /messages: return every raw role record unfiltered '
+            '(text, thinking, tool_use, tool_result blocks all included) instead of '
+            'the narrative-only extract — bulk forensic scanning (e.g. exact tool_use '
+            'arguments across a session), not narrative reading. Replaces the old '
+            'standalone /user and /assistant elements (removed) — /prompts?raw reaches '
+            'full parity with /user\'s scope (every role=user record, tool-result '
+            'wrapper turns included, not narrowed to real prompts); /messages?raw '
+            'reaches parity with /assistant.'
+        ),
+        'examples': ['/prompts?raw', '/messages?raw', '/messages?raw&full']
     },
 }
 
@@ -100,10 +113,8 @@ _SCHEMA_ELEMENTS = {
     'summary': 'Session summary with key events (path alias for ?summary)',
     'tokens': 'Token usage breakdown (path alias for ?tokens)',
     'context': 'Context window changes over session',
-    'messages': 'All assistant narrative turns (text only, no tool calls) — best for reading what was said',
-    'prompts': 'Human-typed prompts only — excludes tool-result wrapper turns. Prefer this over /user for reading intent.',
-    'user': 'User messages: initial prompt full text + tool-result turn summaries. WARNING: the Claude API encodes tool-result turns as role: user too, so this mixes them in — prefer /prompts unless you specifically need tool-result turn boundaries. Response includes a `hint` field when tool-result-only turns are present.',
-    'assistant': 'Assistant messages: text blocks only (skips thinking/tool_use)',
+    'messages': 'All assistant narrative turns (text only, no tool calls) — best for reading what was said. Add ?raw for every role=assistant record unfiltered (text, thinking, tool_use, tool_result all included) — bulk forensic scanning, not narrative reading.',
+    'prompts': 'Human-typed prompts only — excludes tool-result wrapper turns and harness-injected text (task-notifications, bash-mode wrappers). Add ?raw for every role=user record unfiltered, tool-result wrapper turns included — bulk forensic scanning, not narrative reading.',
     'message/<n>': 'Single message by zero-based index over raw JSONL records (or negative: message/-1 = last message). NOTE: this is a different counting scheme than /message --range, which is 1-based over conversation turns — the response includes a `turn` field to cross-reference.',
     'digest': 'Composed readable view: overview + human prompts + assistant narrative in one call (path alias for ?digest) — removes the need for 3 separate calls to get a readable picture of a session.',
     'exchanges': 'Each real human prompt paired with the assistant\'s final text answer to it (skips thinking/tool-only turns in between) — for "what did I ask, what did it finally say back," one pair at a time. Distinct from /digest, which composes whole-session sections rather than joining prompt to answer.',
@@ -136,11 +147,11 @@ _SCHEMA_OUTPUT_TYPES = [
     _make_output_type('claude_errors', 'All errors and exceptions in session', {
         'errors': {'type': 'array'}, 'count': {'type': 'integer'}
     }),
-    _make_output_type('claude_user_messages', 'User messages: initial prompt + tool-result turn summaries. May include a `hint` field pointing at /prompts when tool-result-only turns are present.', {
+    _make_output_type('claude_user_messages', 'Raw role=user records, unfiltered — reached via /prompts?raw. Initial prompt + tool-result turn summaries. May include a `hint` field pointing at plain /prompts when tool-result-only turns are present.', {
         'messages': {'type': 'array'}, 'hint': {'type': 'string'}
     }),
-    _make_output_type('claude_user_prompts', 'Human-typed prompts only — excludes tool-result wrapper messages (use /prompts)', {'messages': {'type': 'array'}}),
-    _make_output_type('claude_assistant_messages', 'Assistant messages: text responses (thinking/tool blocks excluded)', {'messages': {'type': 'array'}}),
+    _make_output_type('claude_user_prompts', 'Human-typed prompts only — excludes tool-result wrapper messages and harness-injected text (use /prompts)', {'messages': {'type': 'array'}}),
+    _make_output_type('claude_assistant_messages', 'Raw role=assistant records, unfiltered — reached via /messages?raw. All blocks present: text, thinking, tool_use, tool_result.', {'messages': {'type': 'array'}}),
     _make_output_type('claude_thinking', 'All thinking blocks with content previews and token estimates', {
         'blocks': {'type': 'array'}, 'total_tokens': {'type': 'integer'}
     }),
@@ -238,8 +249,8 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'claude://session/infernal-earth-0118/digest', 'description': 'Composed readable view: overview + human prompts + assistant narrative in one call — start here for "what happened in this session"', 'element': 'digest', 'output_type': 'claude_digest'},
     {'uri': 'claude://session/infernal-earth-0118/exchanges', 'description': 'Each human prompt paired with the assistant\'s final answer to it — use when you need "what was asked, what did it finally say" per turn, not a whole-session dump', 'element': 'exchanges', 'output_type': 'claude_exchanges'},
     {'uri': 'claude://session/infernal-earth-0118/messages', 'description': 'All assistant narrative turns (text only) — best resource for reading what was said', 'element': 'messages', 'output_type': 'claude_messages'},
-    {'uri': 'claude://session/infernal-earth-0118/user', 'description': 'User messages: initial prompt + tool-result turn summaries — prefer /prompts for reading intent, this mixes in tool-result turns', 'element': 'user', 'output_type': 'claude_user_messages'},
-    {'uri': 'claude://session/infernal-earth-0118/assistant', 'description': 'Assistant messages: text responses (thinking/tools hidden)', 'element': 'assistant', 'output_type': 'claude_assistant_messages'},
+    {'uri': 'claude://session/infernal-earth-0118/prompts?raw', 'description': 'Raw role=user records, unfiltered — bulk forensic scan (tool-result turns included), prefer plain /prompts for reading intent', 'element': 'prompts', 'output_type': 'claude_user_messages'},
+    {'uri': 'claude://session/infernal-earth-0118/messages?raw', 'description': 'Raw role=assistant records, unfiltered (text, thinking, tool_use, tool_result all included) — bulk forensic scan, prefer plain /messages for reading intent', 'element': 'messages', 'output_type': 'claude_assistant_messages'},
     {'uri': 'claude://session/infernal-earth-0118/thinking', 'description': 'All thinking blocks with content and token estimates', 'element': 'thinking', 'output_type': 'claude_thinking'},
     {'uri': 'claude://session/infernal-earth-0118/message/5', 'description': 'Read a specific message by zero-based JSONL index — response includes a `turn` field (1-based) for cross-referencing with /message --range', 'element': 'message/<n>', 'output_type': 'claude_message'},
     {'uri': 'claude://session/infernal-earth-0118/timeline', 'description': 'Chronological message timeline with timestamps and turn types', 'element': 'timeline', 'output_type': 'claude_timeline'},
@@ -285,4 +296,5 @@ _SCHEMA_NOTES = [
     'Tool success rates calculated from result vs error status',
     'Cross-session search: claude://sessions/?search=term scans all JSONL files (parallel grep + snippet extraction). Default 20 results; use --all for full scan. ?since=DATE narrows corpus.',
     'Two message-indexing schemes coexist by design: /message/<n> is 0-based over raw JSONL records (Python-style negative indexing supported, e.g. -1 = last); /message --range is 1-based over conversation turns (matches reveal\'s system-wide --range/--head/--tail convention). /message/<n> responses include a `turn` field and /message --range responses include a `message_index` field so either number can be converted to the other without a second call.',
+    'The standalone /user and /assistant elements and the ?role=user|assistant query param were removed (consolidation): 8 overlapping message-reading resources (/user, /prompts, /assistant, /messages, /digest, /exchanges, /thinking, /message/<n>) collapsed to 6 by folding raw/unfiltered access into ?raw on /prompts and /messages rather than keeping it as separate freestanding elements. No capability was removed — /prompts?raw and /messages?raw reach full parity with the old /user and /assistant scope respectively.',
 ]
