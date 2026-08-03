@@ -523,9 +523,32 @@ class CpanelAdapter(ResourceAdapter):
         reveal cpanel://USERNAME/acl-check    # nobody ACL on all docroots
     """
 
-    def __init__(self, connection_string: str = ""):
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    CANONICAL_EMPTY_RESOURCE = ''  # bare cpanel:// must raise TypeError, not silently become "."
+
+    def __init__(self, resource: str = "", query: Optional[str] = None):
+        """Initialize cPanel adapter with a username[/element][?query].
+
+        Args:
+            resource: USERNAME[/element][?query] — accepted with or without
+                the cpanel:// prefix. May carry an embedded '?query' when
+                called directly with a full connection string (query=None in
+                that case); router/canonical construction passes resource and
+                query pre-split (and without a scheme prefix at all — the
+                scheme is added back here so the existing prefix-validating
+                parse logic is unchanged).
+            query: Query string when resource and query arrive pre-split
+                (e.g. dns-verified, domain_type=main_domain).
+
+        Raises:
+            TypeError: If no connection string provided (allows generic handler to try next pattern)
+        """
+        connection_string = f"{resource}?{query}" if query else resource
         if not connection_string:
             raise TypeError("CpanelAdapter requires a connection string: cpanel://USERNAME")
+        if '://' not in connection_string:
+            # Router/canonical construction: resource has no scheme prefix.
+            connection_string = f"cpanel://{connection_string}"
 
         self.connection_string = connection_string
         self.username: str = ''

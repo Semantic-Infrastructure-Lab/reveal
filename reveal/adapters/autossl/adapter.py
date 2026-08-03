@@ -329,9 +329,29 @@ class AutosslAdapter(ResourceAdapter):
         reveal autossl://TIMESTAMP      # Parse a specific run
     """
 
-    def __init__(self, connection_string: str = ""):
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    CANONICAL_EMPTY_RESOURCE = ''  # bare autossl:// means "list runs", not "."
+
+    def __init__(self, resource: str = "", query: Optional[str] = None):
+        """Initialize AutoSSL adapter with a timestamp/domain/'latest', or empty for list-runs mode.
+
+        Args:
+            resource: [TIMESTAMP|latest|DOMAIN][?query] — accepted with or
+                without the autossl:// prefix. May carry an embedded '?query'
+                when called directly with a full connection string (query=None
+                in that case); router/canonical construction passes resource
+                and query pre-split (and without a scheme prefix at all — the
+                scheme is added back here so the existing prefix-validating
+                parse logic is unchanged).
+            query: Query string when resource and query arrive pre-split
+                (e.g. only-failures, summary, user=NAME).
+        """
+        connection_string = f"{resource}?{query}" if query else resource
         if not connection_string:
             connection_string = "autossl://"
+        elif '://' not in connection_string:
+            # Router/canonical construction: resource has no scheme prefix.
+            connection_string = f"autossl://{connection_string}"
 
         self.connection_string = connection_string
         self.timestamp: Optional[str] = None  # None → list runs
