@@ -1,7 +1,7 @@
 """Help adapter (help://) - Meta-adapter for exploring reveal's capabilities."""
 
 import sys
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY
@@ -83,6 +83,13 @@ class GuideEntry:
     description: str = ""
     category: str = ""      # one of VALID_HELP_CATEGORIES, or "" to hide from index
     token_estimate: str = ""
+    # BACK-931: True when another topic is this file's canonical name. Computed
+    # in _discover_and_merge_guides, not here — a single entry can't know about
+    # its siblings at construction time. Lets audits (e.g. topic-reachability
+    # completeness checks) filter the ~40 alias topics (ast-adapter, mcp-setup,
+    # ...) out of _list_topics() without changing what _list_topics() itself
+    # returns (aliases must stay resolvable for typo-suggestion matching).
+    is_alias: bool = False
 
     def to_dict(self) -> Dict[str, str]:
         return asdict(self)
@@ -524,6 +531,26 @@ class HelpAdapter(ResourceAdapter):
         merged = dict(discovered)
         for topic, file in self.STATIC_HELP.items():
             merged[topic] = _build(topic, file)
+
+        # Phase 4 (BACK-931): mark every topic but one canonical per file as an
+        # alias. Prefer the topic with a non-empty category — that's already
+        # the frontmatter-declared `help_topic` winner (e.g. 'tricks' over
+        # 'recipes', 'subcommands' over 'dev'/'health'/'pack'/'review').
+        # Files with no help_topic frontmatter at all (most auto-discovered
+        # *_GUIDE.md doubles, e.g. 'ast' vs 'ast-adapter') leave every topic
+        # uncategorized, so fall back to the shortest name — the same
+        # friendly-name convention Phase 3's comment already describes.
+        topics_by_file: Dict[str, List[str]] = {}
+        for topic, entry in merged.items():
+            topics_by_file.setdefault(entry.file, []).append(topic)
+        for file, topics in topics_by_file.items():
+            if len(topics) <= 1:
+                continue
+            categorized = [t for t in topics if merged[t].category]
+            canonical = categorized[0] if len(categorized) == 1 else min(topics, key=lambda t: (len(t), t))
+            for t in topics:
+                if t != canonical:
+                    merged[t] = replace(merged[t], is_alias=True)
 
         return merged
 

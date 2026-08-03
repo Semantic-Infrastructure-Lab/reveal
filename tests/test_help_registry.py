@@ -300,6 +300,40 @@ class TestHelpFrontmatterMetadata(unittest.TestCase):
                 unresolved.append(f'  {file} declares help_topic={canonical!r} but no topic resolves to it')
         self.assertFalse(unresolved, 'Unresolved help_topic declarations:\n' + '\n'.join(unresolved))
 
+    def test_exactly_one_canonical_topic_per_file(self):
+        """BACK-931: every file reachable under multiple topic names must have
+        exactly one is_alias=False entry -- the ~40 alias topics (ast-adapter,
+        mcp-setup, ...) exist so audits/typo-suggestion can still resolve them,
+        but enumerating 'real' topics must not double-count a file or lose it
+        entirely."""
+        entries = self._all_guide_entries()
+        by_file = {}
+        for entry in entries.values():
+            by_file.setdefault(entry.file, []).append(entry)
+        bad = []
+        for file, group in by_file.items():
+            canonical_count = sum(1 for e in group if not e.is_alias)
+            if canonical_count != 1:
+                topics = [e.topic for e in group]
+                bad.append(f'  {file}: {canonical_count} canonical topics among {topics}')
+        self.assertFalse(bad, 'Files without exactly one canonical topic:\n' + '\n'.join(bad))
+
+    def test_known_alias_pairs_resolve_correctly(self):
+        """BACK-931: spot-check the tricky cases where a naive 'shortest name
+        wins' heuristic would get it backwards -- these must be resolved by
+        the declared help_topic frontmatter (category-based), not length."""
+        entries = self._all_guide_entries()
+        self.assertFalse(entries['python-guide'].is_alias, "'python-guide' is the declared canonical (help_topic), despite 'python' being shorter")
+        self.assertTrue(entries['python'].is_alias)
+        self.assertFalse(entries['subcommands'].is_alias, "'subcommands' is the declared canonical, despite 'dev'/'pack' being shorter")
+        self.assertTrue(entries['dev'].is_alias)
+        self.assertFalse(entries['tricks'].is_alias)
+        self.assertTrue(entries['recipes'].is_alias)
+        # And a plain auto-discovered pair with no help_topic frontmatter at
+        # all, where the shortest-name fallback is the only signal available.
+        self.assertFalse(entries['ast'].is_alias)
+        self.assertTrue(entries['ast-adapter'].is_alias)
+
 
 class TestHelpErrorHandling(unittest.TestCase):
     """Unknown topic routing returns None cleanly, not a misleading error dict."""
