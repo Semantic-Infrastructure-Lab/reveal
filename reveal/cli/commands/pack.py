@@ -214,7 +214,7 @@ def _build_pack_import_graph(path: Path) -> Tuple[Optional[Any], Set[Path]]:
     """
     try:
         from reveal.adapters.imports import ImportsAdapter  # noqa: I006
-        adapter = ImportsAdapter(path=str(path))
+        adapter = ImportsAdapter(resource=str(path))
         adapter._build_graph(adapter._target_path)
         return adapter._graph, adapter._scanned_files
     except Exception:

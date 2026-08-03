@@ -754,13 +754,16 @@ def _extract_one_file(fp_str: str, want_structure: bool):
 class ImportsAdapter(ResourceAdapter):
     """Analyze import relationships in codebases."""
 
-    def __init__(self, path: str = '.', query: Optional[str] = None):
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+
+    def __init__(self, resource: str = '.', query: Optional[str] = None):
         """Initialize imports adapter.
 
         Args:
-            path: Directory or file path to analyze (e.g., 'src', '/abs/path')
+            resource: Directory or file path to analyze (e.g., 'src', '/abs/path')
             query: Query string portion (e.g., 'unused', 'circular=true')
         """
+        path = resource
         self._graph: Optional[ImportGraph] = None
         self._symbols_by_file: Dict[Path, set] = {}
         self._scanned_files: set = set()

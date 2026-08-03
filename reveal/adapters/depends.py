@@ -389,14 +389,16 @@ class DependsAdapter(ResourceAdapter):
     # firing on tiny toy trees where the ratio is noise.
     _AUTOLOAD_DENSITY_THRESHOLD = 0.15
     _AUTOLOAD_MIN_FILES = 20
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 
-    def __init__(self, path: str = '.', query: Optional[str] = None):
+    def __init__(self, resource: str = '', query: Optional[str] = None):
         """Initialize depends adapter.
 
         Args:
-            path: File or directory to find dependents for
+            resource: File or directory to find dependents for
             query: Query string (e.g., 'top=10', 'format=dot')
         """
+        path = resource or '.'
         self._graph: Optional[ImportGraph] = None
         self._symbols_by_file: Dict[Path, set] = {}
         # BACK-542: (importer, target) → the exact ImportStatement that produced
