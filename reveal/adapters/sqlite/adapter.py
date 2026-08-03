@@ -317,8 +317,20 @@ class SQLiteAdapter(ResourceAdapter):
         """
         return name.replace('"', '""')
 
+    def close(self) -> None:
+        """Explicitly close the SQLite connection, if open."""
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
+
+    def __enter__(self) -> "SQLiteAdapter":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
     def __del__(self):
-        """Close SQLite connection."""
+        """Safety net — prefer explicit close() or the context manager."""
         if hasattr(self, '_connection') and self._connection:
             self._connection.close()
 
