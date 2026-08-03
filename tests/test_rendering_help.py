@@ -1204,6 +1204,22 @@ class TestSeeAlsoReachableThroughGuideShadow(unittest.TestCase):
         output = capture_stdout(render_help, result, 'text', False)
         self.assertIn('## See Also', output)
 
+    def test_help_help_cross_signposts_bare_index(self):
+        """BACK-930: 'help' is both the meta-guide explaining the help system
+        and the help:// adapter's own scheme, so help://help must redirect an
+        agent who actually wanted the bare topic index (reveal help://) --
+        same collision class as BACK-847's schema/schemas pair. Also checks
+        the curated 'next' pointer (help -> reveal) survives the redirect
+        being added, since it's appended rather than overwritten."""
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter()
+        result = adapter._load_static_help('help')
+        self.assertIn('reveal help://', result.get('note', ''))
+        self.assertEqual(result['next'][0], 'reveal help://')
+        self.assertIn('reveal help://reveal', result['next'])
+        output = capture_stdout(render_help, result, 'text', False)
+        self.assertIn('Note:', output)
+
     def test_meta_guide_without_matching_scheme_gets_no_see_also(self):
         """No-op check: guides that aren't adapter scheme names (tricks,
         schema, ...) must not gain a spurious 'see_also' key."""

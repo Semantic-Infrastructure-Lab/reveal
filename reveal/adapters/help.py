@@ -1370,6 +1370,19 @@ class HelpAdapter(ResourceAdapter):
                     'page is markdown front-matter validation.'
                 )
                 result['next'] = ['reveal help://schemas/all']
+            elif topic == 'help':
+                # BACK-930: same class of collision as BACK-847's schema/schemas
+                # pair. 'help' is both this meta-guide (how the help system
+                # works) and the help:// adapter's own scheme, so someone who
+                # wants the topic index lands here instead — cross-signpost
+                # rather than change dispatch. Appends to the curated 'next'
+                # from _add_related_next above instead of overwriting it.
+                result['note'] = (
+                    'Looking for the topic index instead of an explanation '
+                    'of how the help system works? That is bare '
+                    'reveal help:// (no topic).'
+                )
+                result.setdefault('next', []).insert(0, 'reveal help://')
             return result
         except FileNotFoundError:
             return {
