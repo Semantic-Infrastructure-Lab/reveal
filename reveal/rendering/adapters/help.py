@@ -151,6 +151,9 @@ def _render_guide_category(category_label: str, entries: list) -> None:
         print(f"  {topic:16} - {description}")
         print(f"                     File: {entry['file']}")
         print(f"                     Token cost: {token_estimate} (full){annotation}")
+        # BACK-929: adapter entries above get an actionable 'Details:' pointer;
+        # guide entries previously didn't, an asymmetry with no reason behind it.
+        print(f"                     Details: reveal help://{topic}")
     print()
 
 

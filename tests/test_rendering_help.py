@@ -170,6 +170,21 @@ class TestRenderHelpListMode(unittest.TestCase):
         self.assertIn('Best Practices', output)
         self.assertIn('anti-patterns', output)
 
+    def test_static_guide_entries_have_details_line(self):
+        """BACK-929: guide entries must carry the same actionable 'Details:
+        reveal help://<topic>' pointer that adapter entries already get --
+        previously only adapters had it, an asymmetry with no reason behind
+        it."""
+        data = {
+            'static_guides': [
+                {'topic': 'python-guide', 'file': 'adapters/PYTHON_ADAPTER_GUIDE.md',
+                 'description': 'Python adapter deep dive', 'category': 'feature_guides',
+                 'token_estimate': '~2,500'},
+            ]
+        }
+        output = capture_stdout(_render_help_list_mode, data)
+        self.assertIn('Details: reveal help://python-guide', output)
+
     def test_navigation_tips(self):
         """Should include navigation tips."""
         output = capture_stdout(_render_help_list_mode, {})
