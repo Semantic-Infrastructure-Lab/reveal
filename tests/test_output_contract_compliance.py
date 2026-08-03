@@ -295,7 +295,7 @@ class TestOutputContractMarkdown(unittest.TestCase):
         cls._td = tempfile.mkdtemp()
         with open(os.path.join(cls._td, 'README.md'), 'w') as f:
             f.write('# Test\n\nHello world.\n')
-        cls.result = MarkdownQueryAdapter(base_path=cls._td, query=None).get_structure()
+        cls.result = MarkdownQueryAdapter(resource=cls._td, query=None).get_structure()
         cls.schema = MarkdownQueryAdapter.get_schema()
 
     @classmethod

@@ -172,6 +172,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
     """
 
     BUDGET_LIST_FIELD = 'results'
+    LEGACY_INIT = False
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -186,13 +187,14 @@ class MarkdownQueryAdapter(ResourceAdapter):
         """Get help documentation for markdown:// adapter."""
         return get_help()
 
-    def __init__(self, base_path: str, query: Optional[str] = None):
+    def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any):
         """Initialize the markdown query adapter.
 
         Args:
-            base_path: Directory to search for markdown files
+            resource: Directory to search for markdown files ('' = current directory)
             query: Query string (e.g., 'topics=reveal', '!status', 'lines>100')
         """
+        base_path = resource or '.'
         # Strip scheme prefix if the full URI was passed (e.g. "markdown://path/to/file")
         clean_path = base_path
         if '://' in base_path:

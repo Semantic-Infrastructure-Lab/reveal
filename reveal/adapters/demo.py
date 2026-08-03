@@ -61,6 +61,8 @@ class DemoAdapter(ResourceAdapter):
     """
 
     BUDGET_LIST_FIELD = 'items'
+    LEGACY_INIT = False
+    CANONICAL_EMPTY_RESOURCE = ''
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -156,15 +158,19 @@ class DemoAdapter(ResourceAdapter):
             ]
         }
 
-    def __init__(self, resource: Optional[str] = None, **query_params):
+    def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any):
         """Initialize demo adapter.
 
         Args:
-            resource: Optional resource identifier from URI
-            **query_params: Query parameters from URI
+            resource: Optional resource identifier from URI ('' = none)
+            query: Unused — canonical signature slot; demo:// never receives
+                a raw query string via from_uri (no adapters call it with one)
+            **kwargs: Query parameters, kept for scaffold-example purposes
+                (direct construction like DemoAdapter(resource='x', limit=10))
         """
-        self.resource = resource
-        self.query_params = query_params
+        self.resource = resource or None
+        self.query = query
+        self.query_params = kwargs
         # TODO: Initialize adapter-specific state
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
