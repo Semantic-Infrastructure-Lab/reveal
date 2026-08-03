@@ -292,6 +292,8 @@ class HelpAdapter(ResourceAdapter):
 
     STABILITY = Stability.STABLE
     ELEMENT_NAMESPACE_ADAPTER = True
+    LEGACY_INIT = False
+    CANONICAL_EMPTY_RESOURCE = ''
 
     # Valid section names for help://adapter/section queries
     VALID_SECTIONS = {'workflows', 'try-now', 'anti-patterns'}
@@ -451,13 +453,14 @@ class HelpAdapter(ResourceAdapter):
             ]
         }
 
-    def __init__(self, topic: Optional[str] = None):
+    def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any):
         """Initialize help adapter.
 
         Args:
-            topic: Specific help topic to display (None = list all)
+            resource: Specific help topic to display ('' = list all)
+            query: Unused, accepted for canonical signature conformance.
         """
-        self.topic = topic
+        self.topic = resource or None
         # Merge auto-discovered guides with manual STATIC_HELP entries
         # STATIC_HELP takes precedence (allows aliases and special mappings)
         self.help_topics = self._discover_and_merge_guides()

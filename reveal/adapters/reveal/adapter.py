@@ -28,6 +28,8 @@ class RevealAdapter(ResourceAdapter):
 
     internal = True
     STABILITY = Stability.STABLE
+    LEGACY_INIT = False
+    CANONICAL_EMPTY_RESOURCE = ''
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -42,13 +44,14 @@ class RevealAdapter(ResourceAdapter):
         """Get help documentation for reveal:// adapter."""
         return get_help()
 
-    def __init__(self, component: Optional[str] = None):
+    def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any):
         """Initialize reveal adapter.
 
         Args:
-            component: Optional component to inspect (analyzers, rules, etc.)
+            resource: Optional component to inspect (analyzers, rules, etc.)
+            query: Unused, accepted for canonical signature conformance.
         """
-        self.component = component
+        self.component = resource or None
         self.reveal_root = self._find_reveal_root()
 
     def _find_reveal_root(self) -> Path:

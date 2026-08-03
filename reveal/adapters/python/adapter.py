@@ -129,9 +129,17 @@ class PythonAdapter(ResourceAdapter):
 
     STABILITY = Stability.STABLE
     ELEMENT_NAMESPACE_ADAPTER = True
+    LEGACY_INIT = False
+    CANONICAL_EMPTY_RESOURCE = ''
 
-    def __init__(self):
-        """Initialize with runtime introspection capabilities."""
+    def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any):
+        """Initialize with runtime introspection capabilities.
+
+        Args:
+            resource: Unused — python:// resolves the element via
+                get_element(), not construction (ELEMENT_NAMESPACE_ADAPTER).
+            query: Unused, accepted for canonical signature conformance.
+        """
         self._packages_cache = None
         self._imports_cache = None
 

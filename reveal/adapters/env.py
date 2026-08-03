@@ -145,6 +145,8 @@ class EnvAdapter(ResourceAdapter):
 
     STABILITY = Stability.STABLE
     ELEMENT_NAMESPACE_ADAPTER = True
+    LEGACY_INIT = False
+    CANONICAL_EMPTY_RESOURCE = ''
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -285,8 +287,14 @@ class EnvAdapter(ResourceAdapter):
         'LOCALAPPDATA', 'APPDATA', 'PROGRAMFILES'
     }
 
-    def __init__(self):
-        """Initialize the environment adapter."""
+    def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any):
+        """Initialize the environment adapter.
+
+        Args:
+            resource: Unused — env:// resolves the variable name via
+                get_element(), not construction (ELEMENT_NAMESPACE_ADAPTER).
+            query: Unused, accepted for canonical signature conformance.
+        """
         self.variables = dict(os.environ)
 
     def get_structure(self, show_secrets: bool = False, **kwargs: Any) -> Dict[str, Any]:

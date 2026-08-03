@@ -68,7 +68,7 @@ class TestRevealAdapterInit:
 
     def test_init_with_component(self):
         """Initialize with specific component."""
-        adapter = RevealAdapter(component='analyzers')
+        adapter = RevealAdapter(resource='analyzers')
         assert adapter.component == 'analyzers'
 
     def test_finds_reveal_root(self):
@@ -366,7 +366,7 @@ class TestRevealAdapterComponentFiltering:
 
     def test_filter_analyzers_only(self):
         """Filter to show only analyzers."""
-        adapter = RevealAdapter(component='analyzers')
+        adapter = RevealAdapter(resource='analyzers')
         structure = adapter.get_structure()
 
         # Should have analyzers
@@ -379,7 +379,7 @@ class TestRevealAdapterComponentFiltering:
 
     def test_filter_adapters_only(self):
         """Filter to show only adapters."""
-        adapter = RevealAdapter(component='adapters')
+        adapter = RevealAdapter(resource='adapters')
         structure = adapter.get_structure()
 
         # Should have adapters
@@ -392,7 +392,7 @@ class TestRevealAdapterComponentFiltering:
 
     def test_filter_rules_only(self):
         """Filter to show only rules."""
-        adapter = RevealAdapter(component='rules')
+        adapter = RevealAdapter(resource='rules')
         structure = adapter.get_structure()
 
         # Should have rules
@@ -405,8 +405,8 @@ class TestRevealAdapterComponentFiltering:
 
     def test_filter_case_insensitive(self):
         """Component filtering is case-insensitive."""
-        adapter_lower = RevealAdapter(component='analyzers')
-        adapter_upper = RevealAdapter(component='ANALYZERS')
+        adapter_lower = RevealAdapter(resource='analyzers')
+        adapter_upper = RevealAdapter(resource='ANALYZERS')
 
         struct_lower = adapter_lower.get_structure()
         struct_upper = adapter_upper.get_structure()
@@ -453,14 +453,14 @@ class TestRevealAdapterConfig:
 
     def test_get_config_returns_dict(self):
         """_get_config returns a dict."""
-        adapter = RevealAdapter(component='config')
+        adapter = RevealAdapter(resource='config')
         config = adapter._get_config()
 
         assert isinstance(config, dict)
 
     def test_get_config_has_sections(self):
         """_get_config has all expected sections."""
-        adapter = RevealAdapter(component='config')
+        adapter = RevealAdapter(resource='config')
         config = adapter._get_config()
 
         assert 'active_config' in config
@@ -470,7 +470,7 @@ class TestRevealAdapterConfig:
 
     def test_get_config_active_config(self):
         """Active config section has expected fields."""
-        adapter = RevealAdapter(component='config')
+        adapter = RevealAdapter(resource='config')
         config = adapter._get_config()
         active = config['active_config']
 
@@ -481,7 +481,7 @@ class TestRevealAdapterConfig:
 
     def test_get_config_sources(self):
         """Sources section has expected fields."""
-        adapter = RevealAdapter(component='config')
+        adapter = RevealAdapter(resource='config')
         config = adapter._get_config()
         sources = config['sources']
 
@@ -493,7 +493,7 @@ class TestRevealAdapterConfig:
 
     def test_get_config_metadata(self):
         """Metadata section has expected fields."""
-        adapter = RevealAdapter(component='config')
+        adapter = RevealAdapter(resource='config')
         config = adapter._get_config()
         meta = config['metadata']
 
@@ -505,7 +505,7 @@ class TestRevealAdapterConfig:
 
     def test_get_structure_with_config_component(self):
         """get_structure returns config when component='config'."""
-        adapter = RevealAdapter(component='config')
+        adapter = RevealAdapter(resource='config')
         structure = adapter.get_structure()
 
         # Should return config structure, not default structure
@@ -515,7 +515,7 @@ class TestRevealAdapterConfig:
 
     def test_format_config_output_text(self):
         """Config output can be formatted as text."""
-        adapter = RevealAdapter(component='config')
+        adapter = RevealAdapter(resource='config')
         config = adapter._get_config()
         output = adapter.format_output(config, 'text')
 
@@ -528,7 +528,7 @@ class TestRevealAdapterConfig:
 
     def test_format_config_output_json(self):
         """Config output can be formatted as JSON."""
-        adapter = RevealAdapter(component='config')
+        adapter = RevealAdapter(resource='config')
         config = adapter._get_config()
         output = adapter.format_output(config, 'json')
 
@@ -540,7 +540,7 @@ class TestRevealAdapterConfig:
 
     def test_config_precedence_order(self):
         """Config includes precedence order."""
-        adapter = RevealAdapter(component='config')
+        adapter = RevealAdapter(resource='config')
         config = adapter._get_config()
 
         precedence = config['precedence_order']
@@ -697,7 +697,7 @@ class TestRevealAdapterRoutingRegression:
     
     def test_get_structure_filters_by_component(self):
         """Test that get_structure() respects component parameter."""
-        adapter = RevealAdapter(component='config')
+        adapter = RevealAdapter(resource='config')
         structure = adapter.get_structure()
         
         # Should ONLY have config data, not analyzers/adapters/rules
