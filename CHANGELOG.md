@@ -12,9 +12,10 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.113.0] - 2026-08-02 (sessions vigajuna-0731, airless-dwarf-0731, eclipsing-jammer-0731, orbiting-blackhole-0731, primordial-signal-0731, humid-downpour-0801, platinum-light-0801, malevolent-underworld-0801, howling-glacier-0801, approaching-matter-0801, nexobite-0801)
+## [0.113.0] - 2026-08-02 (sessions vigajuna-0731, airless-dwarf-0731, eclipsing-jammer-0731, orbiting-blackhole-0731, primordial-signal-0731, humid-downpour-0801, platinum-light-0801, malevolent-underworld-0801, howling-glacier-0801, approaching-matter-0801, nexobite-0801, whispered-demon-0802, noble-leviathan-0802)
 
 ### Added
+- **`codex://` primitive-parity pass (BACK-943, BACK-944, BACK-945, BACK-946)** — closes the gap found by a codex:// vs claude:// primitive audit (BACK-942): `/digest`, `/exchanges` (each prompt paired with the agent's *final* reply, not first), `/message/<n>` (raw JSONL record by index, negative indexing supported); `?key=` dot-path drill-down on `codex://config` applied *after* secret masking; `?since=`/`?until=` date scoping on session filter/search; `codex://skills` and `codex://plugins` (parity with `claude://agents`/`claude://hooks`). `reasoning`/`thinking` and `goal` were investigated and found genuinely not portable (codex reasoning content is encrypted ciphertext at the source; `goal` has no `claude://` equivalent) — documented, not built.
 - **Output Contract v1.1 migration complete (BACK-885, BACK-891, BACK-892)** — the last analyzers/adapters still hardcoded at `contract_version: '1.0'` are migrated onto `ResultBuilder`: all 19 `analyzers/` files, all 31 `adapters/` files, and `xlsx.py`'s separate 20-call-site gap. Along the way, a systematic AST self-audit found and fixed several pre-existing bugs where error/edge-case branches returned bare dicts with no contract fields at all (`ini`/`csv`/`jupyter`/`xml` analyzers, `html.py`, office analyzers, `git://`'s silent 1.0 default).
 - **`--provenance` flag (BACK-881)** — attaches an `execution` block (reveal_version, command, platform, python_version, analyzed-repo commit/dirty state, config digest) to JSON adapter output. Off by default. Required a prerequisite consolidation (BACK-893) of ~35 scattered JSON-emission call sites onto one funnel (`print_json_result()`), which also fixed a latent crash risk in the `git://`/`reveal://` renderers that had no JSON emission path at all.
 - **Capability validation-status data (BACK-880)** — `LanguageCapability` extended with measured recall/precision/corpus/sample-caveats per (language, signal), sourced from `VALIDATION.md` and queryable via `--capabilities`/`--language-info` (71 entries across 19 languages).
@@ -22,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Custom-rule authoring guide (BACK-858)** — documents user-global (`~/.local/share/reveal/rules/`) and project-local (`<root>/.reveal/rules/`) custom rule authoring now that discovery actually works (BACK-856): category-subdirectory requirement, filename/class-name convention, severity/category coercion. New `RULE_AUTHORING_GUIDE.md`, every claim dogfooded end-to-end.
 - **`tasks://` plugin-adapter worked example (BACK-878)** — a real, working third-party adapter under `examples/plugin-adapters/tasks-adapter/` demonstrating `.reveal/adapters/` plugin discovery (BACK-256), with a README walkthrough.
 - **`reveal-mcp` migrated to mcp 2.0's `MCPServer` API (BACK-895)** — `FastMCP` → `MCPServer` (import/instantiation), `mcp.host`/`mcp.port` attribute assignment → `host=`/`port=` kwargs on `run()` (the one real API break beyond the rename). Verified against a real mcp 2.0.0 install: all 59 `test_mcp_server.py` tests pass, and `streamable-http` transport confirmed to actually bind and serve, not just import cleanly.
+
+### Changed
+- **`codex://` query params renamed (BACK-947, breaking)** — `?search=` (SQLite metadata match) and `?content=` (full-text JSONL scan) are now `?filter=` and `?search=` respectively, aligning with `claude://`'s established meaning where `?search=` always means content search. Not aliased — old names now surface via reveal's unknown-query-param warning instead of silently matching.
 
 ### Fixed
 - **`markdown://` `--frontmatter` text-mode hint + `MARKDOWN_GUIDE.md` discoverability (BACK-894)** — text mode silently no-op'd instead of hinting that `--frontmatter` needs `--format json`; the guide taught a `find`/`jq` loop that `markdown://` already replaces.
@@ -32,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CLI not-found hint no longer suggests a nonexistent path** — `reveal <path>`'s "Try: reveal `<cwd>/<path>`" hint was constructed by string-joining without checking the result exists; a mistyped path could get a "fix" that was equally wrong. Hint is now only shown when it actually resolves.
 - Flaky test hang-guard timeout bumped 10s → 30s (check/hotspots tests under `-n auto`).
 
-Full test suite: 11,700 passing. `reveal reveal:// --check`: 0 issues. I002 budget: 0/23.
+Full test suite: 11,757 passing. `reveal reveal:// --check`: 0 issues. I002 budget: 0/23.
 
 ## [0.112.0] - 2026-07-27 (sessions freezing-dewpoint-0726, icy-mistral-0727)
 
