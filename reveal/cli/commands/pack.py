@@ -155,7 +155,11 @@ def run_pack(args: Namespace) -> None:
         }
         if emit_content:
             result['content'] = _collect_file_contents(selected)
-        print(json.dumps(result, indent=2, default=str))
+        from reveal.utils.results import add_cli_contract_fields
+        print(json.dumps(
+            add_cli_contract_fields(result, result_type='pack', source=path),
+            indent=2, default=str,
+        ))
         return
 
     _render_pack(path, selected, meta, args.verbose, budget_tokens, budget_lines,

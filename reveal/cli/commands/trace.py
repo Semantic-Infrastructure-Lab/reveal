@@ -58,7 +58,11 @@ def run_trace(args: Namespace) -> None:
         sys.exit(1)
 
     if args.format == 'json':
-        print(json.dumps(report, indent=2))
+        from reveal.utils.results import add_cli_contract_fields
+        print(json.dumps(
+            add_cli_contract_fields(report, result_type='trace', source=path),
+            indent=2,
+        ))
     else:
         _render_trace(report)
 

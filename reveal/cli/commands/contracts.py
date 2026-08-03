@@ -218,7 +218,11 @@ def run_contracts(args: Namespace) -> None:
     report = _scan_contracts(path, abstract_only=abstract_only, show_implementations=show_implementations)
 
     if args.format == 'json':
-        print(json.dumps(report, indent=2, default=str))
+        from reveal.utils.results import add_cli_contract_fields
+        print(json.dumps(
+            add_cli_contract_fields(report, result_type='contracts', source=path),
+            indent=2, default=str,
+        ))
         return
 
     _render_report(report)

@@ -108,7 +108,14 @@ def run_health(args: Namespace) -> None:
 
     if args.format == 'json':
         import json
-        print(json.dumps({'results': results, 'overall_exit': overall_exit}, indent=2))
+        from reveal.utils.results import add_cli_contract_fields
+        print(json.dumps(
+            add_cli_contract_fields(
+                {'results': results, 'overall_exit': overall_exit},
+                result_type='health', source=','.join(targets), source_type='multi',
+            ),
+            indent=2,
+        ))
     else:
         _render_results(results)
 

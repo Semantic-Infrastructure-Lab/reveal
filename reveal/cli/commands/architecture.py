@@ -107,7 +107,11 @@ def run_architecture(args: Namespace) -> None:
     }
 
     if args.format == 'json':
-        print(json.dumps(report, indent=2, default=str))
+        from reveal.utils.results import add_cli_contract_fields
+        print(json.dumps(
+            add_cli_contract_fields(report, result_type='architecture', source=path),
+            indent=2, default=str,
+        ))
         return
 
     _render_brief(report, top, path, no_imports=no_imports)
@@ -128,7 +132,11 @@ def _run_architecture_diff(path: Path, against: str, args: Namespace) -> None:
         sys.exit(1)
 
     if args.format == 'json':
-        print(json.dumps(report, indent=2, default=str))
+        from reveal.utils.results import add_cli_contract_fields
+        print(json.dumps(
+            add_cli_contract_fields(report, result_type='architecture_diff', source=path),
+            indent=2, default=str,
+        ))
         return
 
     render_diff_brief(report)

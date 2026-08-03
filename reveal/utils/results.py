@@ -361,3 +361,27 @@ def create_meta(
     See ResultBuilder.create_meta() for full documentation.
     """
     return ResultBuilder.create_meta(parse_mode, confidence, warnings, errors)
+
+
+def add_cli_contract_fields(
+    report: Dict[str, Any],
+    *,
+    result_type: str,
+    source: Union[str, Path],
+    source_type: str = 'directory',
+    contract_version: str = '1.0',
+) -> Dict[str, Any]:
+    """Prepend Output Contract envelope fields to a `cli/commands/` JSON report.
+
+    Additive only: inserts contract_version/type/source/source_type ahead of
+    the command's existing keys without renaming or nesting anything, so
+    existing consumers of a command's --format json output see new keys but
+    no moved/removed ones (BACK-906).
+    """
+    return {
+        'contract_version': contract_version,
+        'type': result_type,
+        'source': str(source),
+        'source_type': source_type,
+        **report,
+    }

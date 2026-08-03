@@ -103,7 +103,11 @@ def run_hotspots(args: Namespace) -> None:
     }
 
     if args.format == 'json':
-        print(json.dumps(report, indent=2, default=str))
+        from reveal.utils.results import add_cli_contract_fields
+        print(json.dumps(
+            add_cli_contract_fields(report, result_type='hotspots', source=path),
+            indent=2, default=str,
+        ))
         return
 
     _render_report(report, top, test_index=test_index)
