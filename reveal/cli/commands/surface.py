@@ -1,12 +1,14 @@
 """reveal surface — external boundary map for a codebase."""
 
 import argparse
+import importlib
 import json
 import os
 import sys
 from argparse import Namespace
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 from ...registry import _is_cpp_header_content
 from ...capabilities import capability_tiers_for
@@ -102,26 +104,13 @@ def run_surface(args: Namespace) -> None:
 
 
 def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) -> Dict[str, Any]:
-    from reveal.adapters.ast.nav_surface import scan_file_surface
-    from reveal.adapters.ast.nav_surface_ts import scan_file_surface_ts
-    from reveal.adapters.ast.nav_surface_java import scan_file_surface_java
-    from reveal.adapters.ast.nav_surface_csharp import scan_file_surface_csharp
-    from reveal.adapters.ast.nav_surface_php import scan_file_surface_php
-    from reveal.adapters.ast.nav_surface_swift import scan_file_surface_swift
-    from reveal.adapters.ast.nav_surface_kotlin import scan_file_surface_kotlin
-    from reveal.adapters.ast.nav_surface_ruby import scan_file_surface_ruby
-    from reveal.adapters.ast.nav_surface_go import scan_file_surface_go
-    from reveal.adapters.ast.nav_surface_rust import scan_file_surface_rust
-    from reveal.adapters.ast.nav_surface_cpp import scan_file_surface_cpp
     collected = _collect_source_files(path, source_only=source_only)
-    (py_files, ts_files, java_files, cs_files, php_files, swift_files,
-     kt_files, rb_files, go_files, rs_files, cpp_files) = collected
     surfaces: Dict[str, List[Dict[str, Any]]] = {
         k: [] for k in ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
     }
 
     unsupported_language = ''
-    if not any(collected):
+    if not any(collected.values()):
         unsupported_language = detect_non_python_language(path)
 
     # BACK-518: a handful of stray supported-language files (e.g. 15 .py tooling
@@ -134,22 +123,12 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
     census, coverage = census_and_coverage_for_path(path, _supported_coverage_languages())
     scope = census.to_scope_dict(capability_tiers=capability_tiers_for(census.language_extensions))
 
-    scanners = (
-        (py_files, scan_file_surface),
-        (ts_files, scan_file_surface_ts),
-        (java_files, scan_file_surface_java),
-        (cs_files, scan_file_surface_csharp),
-        (php_files, scan_file_surface_php),
-        (swift_files, scan_file_surface_swift),
-        (kt_files, scan_file_surface_kotlin),
-        (rb_files, scan_file_surface_ruby),
-        (go_files, scan_file_surface_go),
-        (rs_files, scan_file_surface_rust),
-        (cpp_files, scan_file_surface_cpp),
-    )
-    for file_list, scanner in scanners:
+    for spec, file_list in collected.items():
+        if not file_list:
+            continue
+        scan_fn = _load_scanner(spec)
         for file_path in file_list:
-            for cat, entries in scanner(str(file_path)).items():
+            for cat, entries in scan_fn(str(file_path)).items():
                 surfaces[cat].extend(entries)
 
     if type_filter:
@@ -200,61 +179,78 @@ def _is_test_file(fpath: Path) -> bool:
     return False
 
 
-_CPP_BUCKET_IDX = 10
+@dataclass(frozen=True)
+class _SurfaceScanner:
+    """One language's surface-scan registration: which extensions it claims
+    and where its `scan_file_surface_*(path) -> Dict[category, entries]`
+    function lives. Single source of truth for "what languages does surface
+    scan" — file-collection, dispatch, and assess_language_coverage()'s
+    supported set all derive from this one list so they can't silently
+    diverge by position (BACK-888/BACK-903; design doc
+    BACK884_COVERAGE_CENSUS_UNIFICATION finding #3)."""
+    extensions: frozenset
+    module: str
+    func: str
 
-# Single source of truth for "what languages does surface scan" — both the
-# file-collection buckets and assess_language_coverage()'s supported set are
-# derived from this so they can't silently diverge (BACK-888 / design doc
-# BACK884_COVERAGE_CENSUS_UNIFICATION finding #3).
-_EXT_BUCKETS = (
-    (frozenset({'.py'}), 0),
-    (frozenset({'.ts', '.tsx', '.js', '.jsx'}), 1),
-    (frozenset({'.java'}), 2),
-    (frozenset({'.cs'}), 3),
-    (frozenset({'.php'}), 4),
-    (frozenset({'.swift'}), 5),
-    (frozenset({'.kt', '.kts'}), 6),
-    (frozenset({'.rb'}), 7),
-    (frozenset({'.go'}), 8),
-    (frozenset({'.rs'}), 9),
-    (frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'}), _CPP_BUCKET_IDX),
+
+# Registration order does not matter — lookup is by extension, not position.
+_SURFACE_SCANNERS: tuple = (
+    _SurfaceScanner(frozenset({'.py'}), 'reveal.adapters.ast.nav_surface', 'scan_file_surface'),
+    _SurfaceScanner(frozenset({'.ts', '.tsx', '.js', '.jsx'}), 'reveal.adapters.ast.nav_surface_ts', 'scan_file_surface_ts'),
+    _SurfaceScanner(frozenset({'.java'}), 'reveal.adapters.ast.nav_surface_java', 'scan_file_surface_java'),
+    _SurfaceScanner(frozenset({'.cs'}), 'reveal.adapters.ast.nav_surface_csharp', 'scan_file_surface_csharp'),
+    _SurfaceScanner(frozenset({'.php'}), 'reveal.adapters.ast.nav_surface_php', 'scan_file_surface_php'),
+    _SurfaceScanner(frozenset({'.swift'}), 'reveal.adapters.ast.nav_surface_swift', 'scan_file_surface_swift'),
+    _SurfaceScanner(frozenset({'.kt', '.kts'}), 'reveal.adapters.ast.nav_surface_kotlin', 'scan_file_surface_kotlin'),
+    _SurfaceScanner(frozenset({'.rb'}), 'reveal.adapters.ast.nav_surface_ruby', 'scan_file_surface_ruby'),
+    _SurfaceScanner(frozenset({'.go'}), 'reveal.adapters.ast.nav_surface_go', 'scan_file_surface_go'),
+    _SurfaceScanner(frozenset({'.rs'}), 'reveal.adapters.ast.nav_surface_rust', 'scan_file_surface_rust'),
+    _SurfaceScanner(frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'}), 'reveal.adapters.ast.nav_surface_cpp', 'scan_file_surface_cpp'),
 )
+
+# `.h` defaults to C in the registry (BACK-630) — content-sniffed C++ headers
+# route here explicitly rather than through extension lookup.
+_CPP_SCANNER = next(s for s in _SURFACE_SCANNERS if '.cpp' in s.extensions)
+
+
+def _load_scanner(spec: '_SurfaceScanner') -> Callable[[str], Dict[str, List[Dict[str, Any]]]]:
+    return getattr(importlib.import_module(spec.module), spec.func)
 
 
 def _supported_coverage_languages() -> frozenset:
-    """Registry language keys surface can scan, derived from _EXT_BUCKETS."""
+    """Registry language keys surface can scan, derived from _SURFACE_SCANNERS."""
     from ...registry import language_for_extension
     langs = set()
-    for exts, _ in _EXT_BUCKETS:
-        for ext in exts:
+    for spec in _SURFACE_SCANNERS:
+        for ext in spec.extensions:
             lang = language_for_extension(ext)
             if lang:
                 langs.add(lang)
     return frozenset(langs)
 
 
-def _collect_source_files(path: Path, source_only: bool = False):
-    """Return (py, ts, java, cs, php, swift, kotlin, ruby, go, rust, cpp) file lists for the given path."""
+def _collect_source_files(path: Path, source_only: bool = False) -> Dict['_SurfaceScanner', List[Path]]:
+    """Map each registered scanner to the files under `path` it should scan."""
 
-    def _bucket_for(fpath: Path):
+    def _scanner_for(fpath: Path):
         suffix = fpath.suffix
-        for exts, idx in _EXT_BUCKETS:
-            if suffix in exts:
-                return idx
+        for spec in _SURFACE_SCANNERS:
+            if suffix in spec.extensions:
+                return spec
         # BACK-630: `.h` defaults to C in the registry — only route it into the
-        # cpp bucket when content-sniffed as C++ (header-only classes/templates),
+        # cpp scanner when content-sniffed as C++ (header-only classes/templates),
         # same marker set the registry uses for single-file analyzer selection.
         if suffix == '.h' and _is_cpp_header_content(str(fpath)):
-            return _CPP_BUCKET_IDX
+            return _CPP_SCANNER
         return None
 
-    buckets: List[List[Path]] = [[] for _ in _EXT_BUCKETS]
+    buckets: Dict[_SurfaceScanner, List[Path]] = {spec: [] for spec in _SURFACE_SCANNERS}
 
     if path.is_file():
-        idx = _bucket_for(path)
-        if idx is not None:
-            buckets[idx].append(path)
-        return tuple(buckets)
+        spec = _scanner_for(path)
+        if spec is not None:
+            buckets[spec].append(path)
+        return buckets
 
     for root, dirs, filenames in os.walk(str(path)):
         dirs[:] = [
@@ -266,10 +262,10 @@ def _collect_source_files(path: Path, source_only: bool = False):
             fpath = Path(os.path.join(root, fname))
             if source_only and _is_test_file(fpath):
                 continue
-            idx = _bucket_for(fpath)
-            if idx is not None:
-                buckets[idx].append(fpath)
-    return tuple(buckets)
+            spec = _scanner_for(fpath)
+            if spec is not None:
+                buckets[spec].append(fpath)
+    return buckets
 
 
 def _render_report(report: Dict[str, Any], top: int = None) -> None:
