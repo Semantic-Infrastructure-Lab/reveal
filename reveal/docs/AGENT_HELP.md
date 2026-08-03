@@ -2437,11 +2437,21 @@ reveal claude://session/my-session-0302/thinking
 # Filter to specific tool
 reveal 'claude://session/my-session-0302?tools=Bash'
 
-# User messages (prompts only)
-reveal claude://session/my-session-0302/user
+# Human-typed prompts only (excludes tool-result wrapper turns)
+reveal claude://session/my-session-0302/prompts
 
-# Assistant text responses (no thinking/tools)
-reveal claude://session/my-session-0302/assistant
+# Assistant narrative turns (text only, no tool calls)
+reveal claude://session/my-session-0302/messages
+
+# Bulk/forensic: every raw user or assistant record unfiltered
+reveal 'claude://session/my-session-0302/prompts?raw'
+reveal 'claude://session/my-session-0302/messages?raw'
+
+# Composed readable view: overview + prompts + narrative in one call
+reveal claude://session/my-session-0302/digest
+
+# Each prompt paired with the assistant's final text answer to it
+reveal claude://session/my-session-0302/exchanges
 
 # Fast session recovery — last assistant turn
 reveal 'claude://session/my-session-0302?last'
@@ -2495,8 +2505,12 @@ reveal claude://hooks/PostToolUse
 - `claude://session/<name>/thinking` — thinking blocks with character counts and token estimates
 - `claude://session/<name>/errors` — tool errors with full input/output context
 - `claude://session/<name>/context` — directory and branch changes during session
-- `claude://session/<name>/user` — user turns (initial prompt + tool result messages)
-- `claude://session/<name>/assistant` — assistant text responses only
+- `claude://session/<name>/prompts` — human-typed prompts only; add `?raw` for every raw user record unfiltered
+- `claude://session/<name>/messages` — assistant narrative turns (text only); add `?raw` for every raw assistant record unfiltered
+- `claude://session/<name>/message/<n>` — single message by zero-based JSONL index (negative indexes from the end)
+- `claude://session/<name>/digest` — composed view: overview + prompts + narrative in one call
+- `claude://session/<name>/exchanges` — each prompt paired with the assistant's final text answer to it
+- `claude://session/<name>/agents` — session-scoped agent definitions/launches
 - `claude://session/<name>/chain` — session continuation chain (continuing_from: links)
 
 **claude:// install views:**
