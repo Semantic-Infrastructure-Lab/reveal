@@ -18,8 +18,10 @@ class PatchesAdapter(ResourceAdapter):
     """Adapter for exploring patch pressure in Python and TypeScript tests."""
 
     BUDGET_LIST_FIELD = 'groups'
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 
-    def __init__(self, path: str, query_string: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None):
+        path, query_string = resource, query
         self.path = str(Path(path).expanduser())
         self.query_params = parse_query_params(query_string or '', coerce=True)
         self._warn_unknown_query_params(self.query_params)  # BACK-507

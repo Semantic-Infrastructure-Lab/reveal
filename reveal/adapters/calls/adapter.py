@@ -261,6 +261,7 @@ class CallsAdapter(ResourceAdapter):
     """
 
     BUDGET_LIST_FIELD = 'levels'
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -272,7 +273,8 @@ class CallsAdapter(ResourceAdapter):
         """Get machine-readable schema for calls:// adapter."""
         return _SCHEMA
 
-    def __init__(self, path: str, query_string: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None):
+        path, query_string = resource, query
         expanded = os.path.expanduser(path)  # raises TypeError for non-str path (contract)
         qs = query_string if isinstance(query_string, str) else ''
         self.query_params = parse_query_params(qs, coerce=True)

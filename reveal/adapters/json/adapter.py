@@ -46,6 +46,8 @@ from .introspection import (
 class JsonAdapter(ResourceAdapter):
     """Adapter for navigating and querying JSON files."""
 
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+
     @staticmethod
     def get_help() -> Dict[str, Any]:
         """Get help documentation for json:// adapter."""
@@ -56,13 +58,14 @@ class JsonAdapter(ResourceAdapter):
         """Get machine-readable schema for json:// adapter."""
         return get_schema()
 
-    def __init__(self, path: str, query_string: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None):
         """Initialize JSON adapter.
 
         Args:
-            path: File path, optionally with JSON path (file.json/path/to/key)
-            query_string: Query parameters (schema, gron, type, keys, length, or filters)
+            resource: File path, optionally with JSON path (file.json/path/to/key)
+            query: Query parameters (schema, gron, type, keys, length, or filters)
         """
+        path, query_string = resource, query
         self.query_string = query_string
         self.query_filters = []
         self.result_control = ResultControl()

@@ -468,6 +468,42 @@ class TestHelpSystemContracts(unittest.TestCase):
                 output = buf.getvalue()
                 self.assertIn(f'{scheme}://', output, f'schemas/{scheme} rendered output missing scheme header')
 
+    def test_canonical_init_adapters_match_signature(self):
+        """Adapters opting into LEGACY_INIT = False (BACK-907) must accept
+        (resource, query=None) positionally — factory._canonical_init calls
+        them directly with no try-chain, so a signature drift here is a hard
+        break, not a silent fallback to the next construction strategy.
+        """
+        import inspect
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+
+        for scheme, adapter_class in sorted(_ADAPTER_REGISTRY.items()):
+            if getattr(adapter_class, 'LEGACY_INIT', True):
+                continue
+            with self.subTest(scheme=scheme):
+                sig = inspect.signature(adapter_class.__init__)
+                params = list(sig.parameters.values())[1:]  # drop self
+                self.assertGreaterEqual(
+                    len(params), 1,
+                    f"{adapter_class.__name__} (LEGACY_INIT=False) must accept "
+                    f"a 'resource' parameter"
+                )
+                self.assertEqual(
+                    params[0].kind, inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    f"{adapter_class.__name__}'s first param must accept positional resource"
+                )
+                if len(params) >= 2:
+                    second = params[1]
+                    self.assertEqual(
+                        second.kind, inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                        f"{adapter_class.__name__}'s second param must accept positional query"
+                    )
+                    self.assertIs(
+                        second.default, None,
+                        f"{adapter_class.__name__}'s query param must default to None, "
+                        f"got {second.default!r}"
+                    )
+
 
 if __name__ == '__main__':
     unittest.main()

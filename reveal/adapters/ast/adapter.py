@@ -48,6 +48,7 @@ class AstAdapter(ResourceAdapter):
 
     STABILITY = Stability.STABLE
     BUDGET_LIST_FIELD = 'results'
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -62,13 +63,14 @@ class AstAdapter(ResourceAdapter):
         """
         return _get_schema()
 
-    def __init__(self, path: str, query_string: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None):
         """Initialize AST adapter.
 
         Args:
-            path: File or directory path to analyze
-            query_string: Query parameters (e.g., "lines>50&complexity>10&sort=-lines&limit=20")
+            resource: File or directory path to analyze
+            query: Query parameters (e.g., "lines>50&complexity>10&sort=-lines&limit=20")
         """
+        path, query_string = resource, query
         # Expand ~ to home directory
         self.path = os.path.expanduser(path)
 

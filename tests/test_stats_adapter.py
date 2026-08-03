@@ -666,7 +666,7 @@ class TestURIQueryParameters:
         test_file = tmp_path / "test.py"
         test_file.write_text("def hello(): pass")
 
-        adapter = StatsAdapter(str(tmp_path), query_string="hotspots=true")
+        adapter = StatsAdapter(str(tmp_path), query="hotspots=true")
 
         assert 'hotspots' in adapter.query_params
         assert adapter.query_params['hotspots'] is True
@@ -676,7 +676,7 @@ class TestURIQueryParameters:
         test_file = tmp_path / "test.py"
         test_file.write_text("def hello(): pass")
 
-        adapter = StatsAdapter(str(tmp_path), query_string="min_complexity=5")
+        adapter = StatsAdapter(str(tmp_path), query="min_complexity=5")
 
         assert 'min_complexity' in adapter.query_params
         assert adapter.query_params['min_complexity'] == 5
@@ -688,7 +688,7 @@ class TestURIQueryParameters:
 
         adapter = StatsAdapter(
             str(tmp_path),
-            query_string="hotspots=true&min_complexity=10&min_lines=50"
+            query="hotspots=true&min_complexity=10&min_lines=50"
         )
 
         assert adapter.query_params['hotspots'] is True
@@ -700,7 +700,7 @@ class TestURIQueryParameters:
         test_file = tmp_path / "test.py"
         test_file.write_text("def hello(): pass")
 
-        adapter = StatsAdapter(str(tmp_path), query_string="max_complexity=3.5")
+        adapter = StatsAdapter(str(tmp_path), query="max_complexity=3.5")
 
         assert 'max_complexity' in adapter.query_params
         assert adapter.query_params['max_complexity'] == 3.5
@@ -711,23 +711,23 @@ class TestURIQueryParameters:
         test_file.write_text("def hello(): pass")
 
         # Test 'true'
-        adapter1 = StatsAdapter(str(tmp_path), query_string="hotspots=true")
+        adapter1 = StatsAdapter(str(tmp_path), query="hotspots=true")
         assert adapter1.query_params['hotspots'] is True
 
         # Test '1'
-        adapter2 = StatsAdapter(str(tmp_path), query_string="hotspots=1")
+        adapter2 = StatsAdapter(str(tmp_path), query="hotspots=1")
         assert adapter2.query_params['hotspots'] is True
 
         # Test 'yes'
-        adapter3 = StatsAdapter(str(tmp_path), query_string="hotspots=yes")
+        adapter3 = StatsAdapter(str(tmp_path), query="hotspots=yes")
         assert adapter3.query_params['hotspots'] is True
 
         # Test 'false'
-        adapter4 = StatsAdapter(str(tmp_path), query_string="hotspots=false")
+        adapter4 = StatsAdapter(str(tmp_path), query="hotspots=false")
         assert adapter4.query_params['hotspots'] is False
 
         # Test '0'
-        adapter5 = StatsAdapter(str(tmp_path), query_string="hotspots=0")
+        adapter5 = StatsAdapter(str(tmp_path), query="hotspots=0")
         assert adapter5.query_params['hotspots'] is False
 
     def test_query_params_override_flag_params(self, tmp_path):
@@ -745,7 +745,7 @@ def complex_function(a, b, c):
 """)
 
         # Query param says hotspots=true, flag param says False
-        adapter = StatsAdapter(str(tmp_path), query_string="hotspots=true")
+        adapter = StatsAdapter(str(tmp_path), query="hotspots=true")
         result = adapter.get_structure(hotspots=False)
 
         # Query param should win
@@ -759,7 +759,7 @@ def complex_function(a, b, c):
         (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)  # ~62 lines
 
         # Filter for files with 50+ lines
-        adapter = StatsAdapter(str(tmp_path), query_string="min_lines=50")
+        adapter = StatsAdapter(str(tmp_path), query="min_lines=50")
         result = adapter.get_structure()
 
         # Should only include large.py
@@ -773,7 +773,7 @@ def complex_function(a, b, c):
         test_file = tmp_path / "test.py"
         test_file.write_text("def hello(): pass")
 
-        adapter = StatsAdapter(str(tmp_path), query_string="")
+        adapter = StatsAdapter(str(tmp_path), query="")
 
         assert adapter.query_params == {}
 
@@ -782,7 +782,7 @@ def complex_function(a, b, c):
         test_file = tmp_path / "test.py"
         test_file.write_text("def hello(): pass")
 
-        adapter = StatsAdapter(str(tmp_path), query_string=None)
+        adapter = StatsAdapter(str(tmp_path), query=None)
 
         assert adapter.query_params == {}
 
@@ -792,7 +792,7 @@ def complex_function(a, b, c):
         test_file.write_text("def hello(): pass")
 
         # Param without value should be ignored
-        adapter = StatsAdapter(str(tmp_path), query_string="hotspots&min_lines=50")
+        adapter = StatsAdapter(str(tmp_path), query="hotspots&min_lines=50")
 
         # Only properly formed params should be parsed
         assert 'min_lines' in adapter.query_params
@@ -807,7 +807,7 @@ class TestUnifiedQuerySyntax:
         (tmp_path / "small.py").write_text("def f(): pass")
         (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)
 
-        adapter = StatsAdapter(str(tmp_path), query_string="lines>50")
+        adapter = StatsAdapter(str(tmp_path), query="lines>50")
         result = adapter.get_structure()
 
         assert result['summary']['total_files'] == 1
@@ -818,7 +818,7 @@ class TestUnifiedQuerySyntax:
         (tmp_path / "simple.py").write_text("def f(): pass")
         (tmp_path / "complex.py").write_text("def g():\n    if x:\n        if y:\n            if z: pass")
 
-        adapter = StatsAdapter(str(tmp_path), query_string="complexity<5")
+        adapter = StatsAdapter(str(tmp_path), query="complexity<5")
         result = adapter.get_structure()
 
         # Should include simple.py
@@ -829,7 +829,7 @@ class TestUnifiedQuerySyntax:
         (tmp_path / "empty.py").write_text("# Just a comment")
         (tmp_path / "with_func.py").write_text("def f(): pass")
 
-        adapter = StatsAdapter(str(tmp_path), query_string="functions!=0")
+        adapter = StatsAdapter(str(tmp_path), query="functions!=0")
         result = adapter.get_structure()
 
         # Should only include with_func.py
@@ -842,7 +842,7 @@ class TestUnifiedQuerySyntax:
         (tmp_path / "medium.py").write_text("def f():\n" + "    pass\n" * 25)
         (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)
 
-        adapter = StatsAdapter(str(tmp_path), query_string="lines=10..50")
+        adapter = StatsAdapter(str(tmp_path), query="lines=10..50")
         result = adapter.get_structure()
 
         # Should only include medium.py
@@ -854,7 +854,7 @@ class TestUnifiedQuerySyntax:
         (tmp_path / "small.py").write_text("def g(): pass")
         (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)
 
-        adapter = StatsAdapter(str(tmp_path), query_string="sort=lines")
+        adapter = StatsAdapter(str(tmp_path), query="sort=lines")
         result = adapter.get_structure()
 
         # Files should be sorted by lines ascending
@@ -869,7 +869,7 @@ class TestUnifiedQuerySyntax:
         (tmp_path / "small.py").write_text("def g(): pass")
         (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)
 
-        adapter = StatsAdapter(str(tmp_path), query_string="sort=-lines")
+        adapter = StatsAdapter(str(tmp_path), query="sort=-lines")
         result = adapter.get_structure()
 
         # Files should be sorted by lines descending
@@ -883,7 +883,7 @@ class TestUnifiedQuerySyntax:
         for i in range(5):
             (tmp_path / f"file{i}.py").write_text(f"def f{i}(): pass")
 
-        adapter = StatsAdapter(str(tmp_path), query_string="limit=2")
+        adapter = StatsAdapter(str(tmp_path), query="limit=2")
         result = adapter.get_structure()
 
         # Should only show 2 files
@@ -896,7 +896,7 @@ class TestUnifiedQuerySyntax:
         for i in range(5):
             (tmp_path / f"file{i}.py").write_text(f"def f{i}(): pass")
 
-        adapter = StatsAdapter(str(tmp_path), query_string="offset=2")
+        adapter = StatsAdapter(str(tmp_path), query="offset=2")
         result = adapter.get_structure()
 
         # Should skip first 2 files, show remaining 3
@@ -909,7 +909,7 @@ class TestUnifiedQuerySyntax:
         (tmp_path / "medium.py").write_text("def g():\n" + "    pass\n" * 30)
         (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)
 
-        adapter = StatsAdapter(str(tmp_path), query_string="sort=-lines&limit=2&offset=1")
+        adapter = StatsAdapter(str(tmp_path), query="sort=-lines&limit=2&offset=1")
         result = adapter.get_structure()
 
         # Should skip largest (offset=1), show next 2 (limit=2)
@@ -926,7 +926,7 @@ class TestUnifiedQuerySyntax:
         (tmp_path / "medium.py").write_text("def g():\n" + "    pass\n" * 30)
         (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)
 
-        adapter = StatsAdapter(str(tmp_path), query_string="lines>10&sort=-lines&limit=2")
+        adapter = StatsAdapter(str(tmp_path), query="lines>10&sort=-lines&limit=2")
         result = adapter.get_structure()
 
         # Should filter (lines>10), sort descending, limit to 2
@@ -943,7 +943,7 @@ class TestUnifiedQuerySyntax:
         for i in range(5):
             (tmp_path / f"file{i}.py").write_text(f"def f{i}(): pass")
 
-        adapter = StatsAdapter(str(tmp_path), query_string="limit=2")
+        adapter = StatsAdapter(str(tmp_path), query="limit=2")
         result = adapter.get_structure()
 
         # Should have warning about truncation

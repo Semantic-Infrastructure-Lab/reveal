@@ -116,6 +116,15 @@ class ResourceAdapter(ABC):
     GUARDED_FLAG_CONTEXT: str = ''
     GUARDED_FLAG_HELP: str = ''
 
+    # False = this adapter's __init__ matches the canonical signature
+    # __init__(self, resource='', query=None, **kwargs) and from_uri() should
+    # construct it directly instead of guessing via the 5-strategy try-chain
+    # in factory.py. Default True preserves existing behavior for adapters
+    # not yet migrated (BACK-907). Set False only after verifying the
+    # adapter's __init__ actually accepts (resource, query) positionally —
+    # the canonical contract test in test_adapter_contracts.py enforces this.
+    LEGACY_INIT: bool = True
+
     @classmethod
     def from_uri(cls, scheme: str, resource: str,
                  element: Optional[str]) -> 'ResourceAdapter':

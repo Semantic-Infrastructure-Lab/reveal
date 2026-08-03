@@ -28,7 +28,7 @@ class TestStatsAdapterExceptionHandling:
                 mock_parse.side_effect = ValueError("Invalid filter syntax")
 
                 # Should not raise exception - should fall back to empty filters
-                adapter = StatsAdapter(tmpdir, query_string="lines>5")
+                adapter = StatsAdapter(tmpdir, query="lines>5")
                 assert adapter.query_filters == []
 
     def test_sorting_type_error_fallback(self):
@@ -42,7 +42,7 @@ class TestStatsAdapterExceptionHandling:
             test_file2.write_text("def bar():\n    pass\n")
 
             # Request sorting by a field that doesn't exist or causes TypeError
-            adapter = StatsAdapter(tmpdir, query_string="sort=nonexistent_field")
+            adapter = StatsAdapter(tmpdir, query="sort=nonexistent_field")
 
             # Should not raise exception
             result = adapter.get_structure()
@@ -59,7 +59,7 @@ class TestStatsAdapterExceptionHandling:
             with patch('reveal.adapters.stats.adapter.field_value') as mock_field:
                 mock_field.side_effect = KeyError("Field not found")
 
-                adapter = StatsAdapter(tmpdir, query_string="sort=lines")
+                adapter = StatsAdapter(tmpdir, query="sort=lines")
 
                 # Should not raise exception
                 result = adapter.get_structure()

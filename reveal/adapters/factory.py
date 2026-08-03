@@ -98,6 +98,23 @@ def _try_full_uri_init(adapter_class: type, scheme: str, resource: str,
         return None, e
 
 
+def _canonical_init(adapter_class: type, resource: str) -> Any:
+    """Construct a canonically-migrated adapter directly (BACK-907).
+
+    Canonical signature is __init__(self, resource='', query=None, **kwargs).
+    Splits resource on '?' the same way _try_query_parsing_init does, then
+    calls the constructor once — no try-chain, no guessing, and any error
+    raised inside __init__ propagates to the caller unmodified.
+    """
+    if resource and '?' in resource:
+        path, query = resource.split('?', 1)
+        path = path or '.'
+    else:
+        path = resource or '.'
+        query = None
+    return adapter_class(path, query)
+
+
 def _default_from_uri(adapter_class: type, scheme: str, resource: str,
                       element: Optional[str]) -> Any:
     """Default try-chain initialization used by ResourceAdapter.from_uri.
@@ -105,10 +122,16 @@ def _default_from_uri(adapter_class: type, scheme: str, resource: str,
     Available as a standalone function so the router can apply it to any
     adapter class (including test doubles that don't inherit ResourceAdapter).
 
+    Adapters that opt into the canonical signature (LEGACY_INIT = False,
+    see adapters/base.py) skip the try-chain entirely — see _canonical_init.
+
     Raises:
         ImportError: If initialization failed due to a missing optional dependency.
         RuntimeError: If all initialization attempts failed.
     """
+    if not getattr(adapter_class, 'LEGACY_INIT', True):
+        return _canonical_init(adapter_class, resource)
+
     if resource:
         init_attempts = [
             lambda: _try_query_parsing_init(adapter_class, resource),

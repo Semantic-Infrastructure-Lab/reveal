@@ -160,6 +160,7 @@ class StatsAdapter(ResourceAdapter):
     """Adapter for analyzing codebase statistics and identifying hotspots."""
 
     BUDGET_LIST_FIELD = 'files'
+    LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -188,13 +189,14 @@ class StatsAdapter(ResourceAdapter):
             'notes': _SCHEMA_NOTES,
         }
 
-    def __init__(self, path: str, query_string: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None):
         """Initialize stats adapter.
 
         Args:
-            path: File or directory path to analyze
-            query_string: Query parameters (e.g., "hotspots=true&min_lines=50" or "lines>50&complexity<10")
+            resource: File or directory path to analyze
+            query: Query parameters (e.g., "hotspots=true&min_lines=50" or "lines>50&complexity<10")
         """
+        path, query_string = resource, query
         self.path = require_path_exists(Path(path).resolve())
 
         # Parse query string with type coercion (for legacy params)
