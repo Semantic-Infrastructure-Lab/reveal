@@ -1183,10 +1183,9 @@ reveal env:// --format=json | \
 ## Related Documentation
 
 ### Reveal Adapters
-- **[Stats Adapter Guide](STATS_ADAPTER_GUIDE.md)** - Codebase metrics and quality
-- **[Git Adapter Guide](GIT_ADAPTER_GUIDE.md)** - Repository inspection
-- **[AST Adapter Guide](AST_ADAPTER_GUIDE.md)** - Code structure analysis
-- **[Imports Adapter Guide](IMPORTS_ADAPTER_GUIDE.md)** - Import graph analysis
+Related adapters are shown live via `reveal help://env` (see its `## Next`
+section) — sourced from reveal's adapter-relationship registry, so this
+list can't go stale the way a hand-maintained one did (BACK-928).
 
 ### Reveal Core
 - **[Quick Start](../QUICK_START.md)** - Getting started with reveal

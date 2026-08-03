@@ -1994,18 +1994,14 @@ docker run --rm domain-checker reveal domain://example.com --check
 ## Related Documentation
 
 ### Reveal Adapter Guides
-
-- **[SSL Adapter Guide](SSL_ADAPTER_GUIDE.md)** - SSL/TLS certificate inspection and health monitoring
-- **[MySQL Adapter Guide](MYSQL_ADAPTER_GUIDE.md)** - Database schema, queries, and health checks
-- **[Stats Adapter Guide](STATS_ADAPTER_GUIDE.md)** - Codebase metrics and quality analysis
-- **[Env Adapter Guide](ENV_ADAPTER_GUIDE.md)** - Environment variable inspection
-- **[Git Adapter Guide](GIT_ADAPTER_GUIDE.md)** - Git repository inspection
+Related adapters are shown live via `reveal help://domain` (see its `## Next`
+section) — sourced from reveal's adapter-relationship registry, so this
+list can't go stale the way a hand-maintained one did (BACK-928).
 
 ### Reveal Core Documentation
 
 - **[REVEAL_ADAPTER_GUIDE.md](REVEAL_ADAPTER_GUIDE.md)** - Reveal adapter reference
 - **[ADAPTER_AUTHORING_GUIDE.md](../development/ADAPTER_AUTHORING_GUIDE.md)** - How to create adapters
-- **[SSL_ADAPTER_GUIDE.md](SSL_ADAPTER_GUIDE.md)** - SSL adapter with health check examples
 
 ### External Tools
 

@@ -2693,11 +2693,9 @@ Hook storage can be either:
 ## Related Documentation
 
 ### Reveal Adapter Guides
-
-- **[Domain Adapter Guide](DOMAIN_ADAPTER_GUIDE.md)** - Domain DNS and SSL inspection
-- **[SSL Adapter Guide](SSL_ADAPTER_GUIDE.md)** - SSL/TLS certificate health monitoring
-- **[Stats Adapter Guide](STATS_ADAPTER_GUIDE.md)** - Codebase metrics and quality analysis
-- **[JSON Adapter Guide](JSON_ADAPTER_GUIDE.md)** - Navigate JSONL conversation files directly
+Related adapters are shown live via `reveal help://claude` (see its `## Next`
+section) — sourced from reveal's adapter-relationship registry, so this
+list can't go stale the way a hand-maintained one did (BACK-928).
 
 ### Reveal Core Documentation
 

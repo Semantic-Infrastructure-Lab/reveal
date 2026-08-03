@@ -1762,10 +1762,9 @@ echo "Release notes saved: RELEASE_NOTES_$TO_TAG.md"
 ## Related Documentation
 
 ### Reveal Adapter Guides
-
-- **[Git Adapter Guide](GIT_ADAPTER_GUIDE.md)** - Git repository inspection (complements diff:// git integration)
-- **[Domain Adapter Guide](DOMAIN_ADAPTER_GUIDE.md)** - Domain DNS/SSL inspection
-- **[MySQL Adapter Guide](MYSQL_ADAPTER_GUIDE.md)** - Database schema inspection (used in schema drift detection)
+Related adapters are shown live via `reveal help://diff` (see its `## Next`
+section) — sourced from reveal's adapter-relationship registry, so this
+list can't go stale the way a hand-maintained one did (BACK-928).
 
 ### Reveal Core Documentation
 

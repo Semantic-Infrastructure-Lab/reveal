@@ -1372,10 +1372,9 @@ fi
 ## Related Documentation
 
 ### Reveal Adapters
-- **[Stats Adapter Guide](STATS_ADAPTER_GUIDE.md)** - Codebase metrics and quality
-- **[Env Adapter Guide](ENV_ADAPTER_GUIDE.md)** - Environment variable inspection
-- **[MySQL Adapter Guide](MYSQL_ADAPTER_GUIDE.md)** - Database health monitoring
-- **[Git Adapter Guide](GIT_ADAPTER_GUIDE.md)** - Repository inspection
+Related adapters are shown live via `reveal help://ssl` (see its `## Next`
+section) — sourced from reveal's adapter-relationship registry, so this
+list can't go stale the way a hand-maintained one did (BACK-928).
 
 ### Reveal Core
 - **[Quick Start](../QUICK_START.md)** - Getting started with reveal
