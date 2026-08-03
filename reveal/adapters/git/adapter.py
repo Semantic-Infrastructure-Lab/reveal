@@ -135,6 +135,7 @@ class GitAdapter(ResourceAdapter):
     """
 
     BUDGET_LIST_FIELD = 'commits'
+    LEGACY_INIT = False
 
     def _normalize_resource_parameter(self, resource: Optional[str],
                                        path: Optional[str]) -> str:
