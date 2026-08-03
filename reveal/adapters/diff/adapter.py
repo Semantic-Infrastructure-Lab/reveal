@@ -30,6 +30,9 @@ class DiffAdapter(ResourceAdapter):
     left_structure: Optional[Dict[str, Any]]
     right_structure: Optional[Dict[str, Any]]
 
+    LEGACY_INIT = False
+    CANONICAL_EMPTY_RESOURCE = ''
+
     def __init__(self, resource: Optional[str] = None, right_uri: Optional[str] = None):
         """Initialize with either a combined resource string or two URIs.
 
