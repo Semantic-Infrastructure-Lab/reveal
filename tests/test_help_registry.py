@@ -433,6 +433,43 @@ class TestHelpEnvelopeConsistency(unittest.TestCase):
         self.assertEqual(result['next'], ['reveal help://examples'])
 
 
+class TestSchemaSummaryDoesNotCorruptFull(unittest.TestCase):
+    """BACK-932: get_schema() returns most adapters' shared module-level
+    _SCHEMA dict by reference. _summarize_schema used to mutate that shared
+    object's top-level keys ('output_types', 'next', ...) in place, so
+    requesting the summary once permanently stripped the JSON-Schema bodies
+    from every later help://schemas/<adapter>/full call in the same process
+    -- a real corruption bug for any long-lived process (reveal-mcp) calling
+    both routes, not just the "redundant pointer" the ticket title describes.
+    """
+
+    def test_full_survives_a_prior_summary_call(self):
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter()
+        full_before = adapter._get_adapter_schema('calls', section='full')
+        self.assertTrue(
+            any('schema' in e for e in full_before['output_types'] if isinstance(e, dict)),
+            "precondition: calls://'s full schema must have JSON-Schema bodies to lose",
+        )
+        summary = adapter._get_adapter_schema('calls')
+        full_after = adapter._get_adapter_schema('calls', section='full')
+        self.assertIsNot(full_after, summary, 'full and summary must not be the same object')
+        self.assertTrue(
+            any('schema' in e for e in full_after['output_types'] if isinstance(e, dict)),
+            "help://schemas/calls/full lost its JSON-Schema bodies after a summary call",
+        )
+
+    def test_repeated_summary_calls_do_not_accumulate_next_pointers(self):
+        """Same root cause, different symptom: without the copy, mutating the
+        shared dict's 'next' list via setdefault+append across repeated calls
+        would grow unboundedly instead of staying stable."""
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter()
+        first = adapter._get_adapter_schema('calls')
+        second = adapter._get_adapter_schema('calls')
+        self.assertEqual(first['next'], second['next'])
+
+
 class TestSchemasAggregateView(unittest.TestCase):
     """BACK-840: help://schemas/all and .../index — the aggregate schema view
     routed onto the same builder --discover uses, so it can't drift from it."""

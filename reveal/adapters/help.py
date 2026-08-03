@@ -1752,6 +1752,19 @@ class HelpAdapter(ResourceAdapter):
                     ),
                     'next': [f'reveal help://{adapter_name}'],
                 }
+            # BACK-932: get_schema() returns most adapters' shared module-level
+            # _SCHEMA dict by reference, not a fresh copy. Every mutation below
+            # (and inside _summarize_schema, which reassigns 'output_types',
+            # 'example_queries', 'next', etc.) was landing on that shared
+            # object -- so calling the summary once permanently stripped
+            # help://schemas/<adapter>/full's JSON-Schema bodies for the rest
+            # of the process (confirmed live: full requested after a summary
+            # call came back `is` the summary object itself). A long-lived
+            # process like reveal-mcp would silently serve corrupted "full"
+            # schemas after the first summary request. Only top-level keys
+            # are ever reassigned (never nested structures mutated in place),
+            # so a shallow copy is sufficient.
+            schema_data = dict(schema_data)
             schema_data['adapter'] = adapter_name  # Ensure adapter is included
             schema_data['type'] = 'adapter_schema'
             if section and section != 'full':
