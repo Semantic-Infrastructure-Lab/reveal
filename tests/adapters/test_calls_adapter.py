@@ -1823,6 +1823,109 @@ class TestFindUncalled(unittest.TestCase):
         self.assertNotIn('Tested', names)
         self.assertIn('NotTested', names)   # marker belongs to Tested only
 
+    def test_parameterized_decorator_bare_name_stripped(self):
+        """@pytest.fixture() (call form) must bare-name-match 'fixture' same as
+        the no-parens form — _get_decorator_names must strip call parens."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('conftest.py', '''\
+            import pytest
+
+            @pytest.fixture()
+            def db_session():
+                pass
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = {e['name'] for e in result['entries']}
+        self.assertNotIn('db_session', names)
+
+
+# ---------------------------------------------------------------------------
+# BACK-952: project-configurable entry-point decorators (.reveal.yaml)
+# ---------------------------------------------------------------------------
+
+class TestFindUncalledProjectEntryPoints(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _write(self, filename, content):
+        return _write(self.tmpdir, filename, textwrap.dedent(content))
+
+    def test_route_flagged_without_config(self):
+        """A Flask-style @app.route handler with no other caller is flagged as
+        dead code by default — no config means no behavior change."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('app.py', '''\
+            class App:
+                def route(self, path):
+                    def deco(fn):
+                        return fn
+                    return deco
+
+            app = App()
+
+            @app.route('/users')
+            def list_users():
+                return []
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = {e['name'] for e in result['entries']}
+        self.assertIn('list_users', names)
+
+    def test_route_excluded_with_configured_entry_point(self):
+        """.reveal.yaml adapters.calls.entry_points.decorators: [route] excludes
+        the same handler from the dead-code result."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('app.py', '''\
+            class App:
+                def route(self, path):
+                    def deco(fn):
+                        return fn
+                    return deco
+
+            app = App()
+
+            @app.route('/users')
+            def list_users():
+                return []
+        ''')
+        self._write('.reveal.yaml', '''\
+            root: true
+            adapters:
+              calls:
+                entry_points:
+                  decorators: [route]
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = {e['name'] for e in result['entries']}
+        self.assertNotIn('list_users', names)
+
+    def test_unconfigured_decorator_still_flagged(self):
+        """Configuring 'route' must not suppress an unrelated decorator name."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('app.py', '''\
+            def other_decorator(fn):
+                return fn
+
+            @other_decorator
+            def unrelated():
+                pass
+        ''')
+        self._write('.reveal.yaml', '''\
+            root: true
+            adapters:
+              calls:
+                entry_points:
+                  decorators: [route]
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = {e['name'] for e in result['entries']}
+        self.assertIn('unrelated', names)
+
 
 # ---------------------------------------------------------------------------
 # Integration: CallsAdapter ?uncalled query param

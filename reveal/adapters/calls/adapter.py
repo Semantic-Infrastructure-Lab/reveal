@@ -92,6 +92,10 @@ _HELP: Dict[str, Any] = {
         'Callee names are normalised: "self.foo" → "foo" for index lookup.',
         'depth=N expands callers transitively up to N levels (capped at 5).',
         '?callees=X finds every definition of X and shows what it calls — useful for multi-file functions.',
+        '?uncalled: web/CLI framework routes (Flask, FastAPI, Click, …) are dispatched by the '
+        'framework, not a static call, so they false-flag as dead code by default. Declare '
+        'project-specific entry-point decorators in .reveal.yaml to exclude them: '
+        'adapters.calls.entry_points.decorators: [route, get, post, command].',
     ],
     'see_also': [
         'reveal help://patches - Test churn + call-graph together identifies blast radius',

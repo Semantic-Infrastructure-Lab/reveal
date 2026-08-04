@@ -12,7 +12,7 @@ per directory when any file changes (simple and correct).
 import os
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from ..ast.analysis import collect_structures, is_code_file, PYTHON_BUILTINS
 from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
@@ -91,8 +91,15 @@ def _lang_family(file_path: str) -> str:
 
 
 def _get_decorator_names(elem: Dict[str, Any]) -> Set[str]:
-    """Return the bare decorator names for *elem* (strips leading '@' and module prefix)."""
-    return {d.split('.')[-1].lstrip('@') for d in elem.get('decorators', [])}
+    """Return the bare decorator names for *elem* (strips leading '@', module prefix, and
+    any call parens — a decorator *factory* like ``@app.route('/x')`` or ``@pytest.fixture()``
+    must still bare-name-match as 'route'/'fixture', the same as its bare form).
+    """
+    names = set()
+    for d in elem.get('decorators', []):
+        bare = d.lstrip('@').split('(', 1)[0]
+        names.add(bare.split('.')[-1])
+    return names
 
 
 def _is_method_elem(elem: Dict[str, Any], decorator_names: Set[str]) -> bool:
@@ -111,13 +118,22 @@ def _is_implicit_element(
     is_method: bool,
     decorator_names: Set[str],
     only_functions: bool,
+    extra_implicit_decorators: FrozenSet[str] = frozenset(),
 ) -> bool:
-    """Return True if element is implicitly invoked and should never be flagged as dead code."""
+    """Return True if element is implicitly invoked and should never be flagged as dead code.
+
+    extra_implicit_decorators (BACK-952) extends _IMPLICIT_DECORATORS with
+    project-declared entry-point decorators (.reveal.yaml adapters.calls.
+    entry_points.decorators) — web/CLI framework routes (Flask @app.route,
+    FastAPI @app.get, Click @cli.command, …) that are invoked by the
+    framework, not a static call expression, so they'd otherwise false-flag
+    as dead code on every web app codebase.
+    """
     if only_functions and is_method:
         return True
     if name.startswith('__') and name.endswith('__'):
         return True
-    return bool(decorator_names & _IMPLICIT_DECORATORS)
+    return bool(decorator_names & (_IMPLICIT_DECORATORS | extra_implicit_decorators))
 
 
 def _uncalled_entry_mtime(entry: Dict[str, Any]) -> float:
@@ -711,6 +727,30 @@ def _is_test_entry_point(
     return bool(line_no) and _has_test_annotation(file_path, line_no, cache)
 
 
+def _project_entry_point_decorators(directory: Path) -> FrozenSet[str]:
+    """Read project-declared entry-point decorator names from .reveal.yaml (BACK-952).
+
+    ``adapters.calls.entry_points.decorators`` — bare decorator names (after
+    stripping the module prefix, same convention as _get_decorator_names())
+    for web/CLI framework routes not covered by _IMPLICIT_DECORATORS, e.g.::
+
+        adapters:
+          calls:
+            entry_points:
+              decorators: [route, get, post, put, delete, command]  # Flask/FastAPI/Click
+
+    Returns an empty frozenset (no behavior change) if unset or unreadable.
+    """
+    from ...config import get_config
+    try:
+        config = get_config(start_path=directory)
+        entry_points = config.get_adapter_config('calls', 'entry_points')
+        decorators = entry_points.get('decorators', []) if isinstance(entry_points, dict) else []
+        return frozenset(str(d) for d in decorators)
+    except Exception:
+        return frozenset()
+
+
 def find_uncalled(
     path: str,
     only_functions: bool = False,
@@ -726,6 +766,10 @@ def find_uncalled(
     Automatically excluded (implicitly invoked, not statically reachable):
     - ``__dunder__`` methods (``__init__``, ``__str__``, etc.)
     - Functions decorated with ``@property``, ``@classmethod``, ``@staticmethod``
+    - Functions decorated with a project-declared entry-point decorator —
+      ``.reveal.yaml``'s ``adapters.calls.entry_points.decorators`` (BACK-952),
+      for web/CLI framework routes (Flask, FastAPI, Click, …) that are
+      dispatched by the framework, not a static call expression.
     - Test-runner entry points (pytest/unittest, xUnit ``[Fact]``/``[Theory]``,
       JUnit ``@Test``, …) — invoked by reflection, not a call (BACK-446).
       Set ``include_test_framework=True`` to keep them in the result.
@@ -758,6 +802,7 @@ def find_uncalled(
     called_names: Set[str] = set(build_callers_index(path).keys())
     file_lines: Dict[str, List[str]] = {}
     structures = collect_structures(str(directory))
+    extra_implicit_decorators = _project_entry_point_decorators(directory)
 
     total_defined = 0
     test_entrypoints_excluded = 0
@@ -788,7 +833,9 @@ def find_uncalled(
             is_method = _is_method_elem(elem, decorator_names)
 
             line_no = elem.get('line', 0)
-            if _is_implicit_element(name, is_method, decorator_names, only_functions):
+            if _is_implicit_element(
+                name, is_method, decorator_names, only_functions, extra_implicit_decorators
+            ):
                 continue
             if name in called_names:
                 continue
