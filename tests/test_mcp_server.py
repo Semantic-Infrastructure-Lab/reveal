@@ -435,6 +435,40 @@ class TestCaptureHelper(unittest.TestCase):
         self.assertIn("reveal error", result)
         self.assertIn("something broke", result)
 
+    def test_concurrent_calls_do_not_cross_attribute_output(self):
+        """BACK-898: concurrent _run_and_capture calls must not race on
+        process-global sys.stdout/sys.stderr and leak each other's output."""
+        import threading
+        import time
+
+        results = {}
+
+        def make_fn(label):
+            def fn():
+                print(f"start-{label}")
+                time.sleep(0.05)
+                print(f"end-{label}")
+            return fn
+
+        def worker(label):
+            results[label] = self._capture(make_fn(label))
+
+        labels = [f"call{i}" for i in range(8)]
+        threads = [threading.Thread(target=worker, args=(label,)) for label in labels]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        for label in labels:
+            result = results[label]
+            self.assertIn(f"start-{label}", result)
+            self.assertIn(f"end-{label}", result)
+            for other in labels:
+                if other != label:
+                    self.assertNotIn(f"start-{other}", result)
+                    self.assertNotIn(f"end-{other}", result)
+
 
 class TestUpdateCheckSuppressed(unittest.TestCase):
     """MCP server must suppress reveal's update-check stdout injection."""

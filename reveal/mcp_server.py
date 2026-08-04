@@ -20,6 +20,7 @@ Configuration example (Claude Code settings.json):
 import io
 import os
 import sys
+import threading
 
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
@@ -65,30 +66,41 @@ mcp = MCPServer(
     ),
 )
 
+# Sync MCP tools are dispatched via anyio.to_thread.run_sync under the
+# sse/streamable-http transports (concurrent clients), not just stdio
+# (serialized by construction). _run_and_capture mutates process-global
+# sys.stdout/sys.stderr, so concurrent calls must be serialized here or
+# they race and cross-attribute output between callers. BACK-898.
+_capture_lock = threading.Lock()
+
+
 def _run_and_capture(fn, *args, **kwargs) -> str:
     """Run fn with stdout+stderr captured; return captured text.
 
     Used only for tools where the underlying display layer prints rather than
-    returning strings.  No global lock — MCP tool calls are sequential.
+    returning strings. Serialized via _capture_lock since this mutates
+    process-global sys.stdout/sys.stderr and tool calls are not guaranteed
+    sequential under sse/streamable-http transports.
     Swallows SystemExit(0) (reveal uses it for clean exit on some paths).
     Stderr is appended so MCP clients see error messages instead of silence.
     """
     out_buf = io.StringIO()
     err_buf = io.StringIO()
-    old_stdout, old_stderr = sys.stdout, sys.stderr
-    sys.stdout = out_buf
-    sys.stderr = err_buf
     exit_code = None
     exc_msg = None
-    try:
-        fn(*args, **kwargs)
-    except SystemExit as e:
-        exit_code = e.code
-    except Exception as exc:  # noqa: BLE001
-        exc_msg = str(exc)
-    finally:
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
+    with _capture_lock:
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        sys.stdout = out_buf
+        sys.stderr = err_buf
+        try:
+            fn(*args, **kwargs)
+        except SystemExit as e:
+            exit_code = e.code
+        except Exception as exc:  # noqa: BLE001
+            exc_msg = str(exc)
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
 
     out = out_buf.getvalue()
     err = err_buf.getvalue().strip()
