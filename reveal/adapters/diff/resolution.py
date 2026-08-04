@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, Iterator, cast
 from .git import resolve_git_ref, resolve_git_adapter
 from ..base import get_adapter_class
 from ...registry import get_analyzer
+from ...utils.path_utils import is_skippable_dir
 
 
 def resolve_uri(uri: str, **kwargs) -> Dict[str, Any]:
@@ -195,12 +196,11 @@ def find_analyzable_files(directory: Path) -> Iterator[Path]:
         the full list into memory before processing begins).
     """
     for root, dirs, files in os.walk(directory):
-        # Skip common ignore directories
-        dirs[:] = [d for d in dirs if d not in {
-            '.git', '__pycache__', 'node_modules', '.venv', 'venv',
-            'dist', 'build', '.pytest_cache', '.mypy_cache', '.tox',
-            'htmlcov', '.coverage', 'eggs', '*.egg-info'
-        }]
+        # Skip common ignore directories (BACK-552: 'venv'/'dist'/'build' etc.
+        # are ambiguous — only skipped when they hold no source at their own
+        # top level, since a real package can legitimately use those names)
+        root_path = Path(root)
+        dirs[:] = [d for d in dirs if not is_skippable_dir(root_path, d)]
 
         for file in files:
             file_path = Path(root) / file

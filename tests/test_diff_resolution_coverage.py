@@ -138,6 +138,45 @@ class TestResolveDirectory:
         assert {'type', 'path', 'file_count', 'functions', 'classes', 'imports'} <= set(result.keys())
 
 
+class TestFindAnalyzableFiles:
+    """find_analyzable_files' ignore-dir filtering — BACK-552 parity.
+
+    Regression coverage for BACK-913: this walk used to hardcode its own
+    ignore-dir literal instead of routing through is_skippable_dir(), so a
+    real source directory bare-named 'venv'/'dist'/'build' was silently
+    excluded (the exact bug BACK-552 fixed for the general path-walking
+    code, which never propagated here).
+    """
+
+    def test_ambiguous_dir_with_source_is_not_skipped(self, tmp_path):
+        real_pkg = tmp_path / 'venv'
+        real_pkg.mkdir()
+        (real_pkg / 'main.py').write_text('x = 1\n')
+
+        found = {p.name for p in find_analyzable_files(tmp_path)}
+        assert 'main.py' in found
+
+    def test_ambiguous_dir_without_source_is_skipped(self, tmp_path):
+        fake_venv = tmp_path / 'venv'
+        fake_venv.mkdir()
+        (fake_venv / 'pyvenv.cfg').write_text('home = /usr\n')
+        nested = fake_venv / 'lib' / 'site-packages'
+        nested.mkdir(parents=True)
+        (nested / 'pkg.py').write_text('y = 2\n')
+
+        found = {p.name for p in find_analyzable_files(tmp_path)}
+        assert 'pkg.py' not in found
+
+    def test_unconditional_dir_always_skipped(self, tmp_path):
+        cache = tmp_path / '__pycache__'
+        cache.mkdir()
+        (cache / 'mod.cpython-310.pyc').write_bytes(b'')
+        (tmp_path / 'real.py').write_text('z = 3\n')
+
+        found = {p.name for p in find_analyzable_files(tmp_path)}
+        assert found == {'real.py'}
+
+
 class TestInstantiateAdapter:
     """Test instantiate_adapter — covers file scheme and signature branches."""
 

@@ -755,6 +755,34 @@ class TestArchitectureDiffIntegration(unittest.TestCase):
         finally:
             fixture['cleanup']()
 
+    def test_materialize_ref_includes_ambiguous_named_source_dir(self):
+        """BACK-913/BACK-552 parity: a real source dir bare-named 'venv'
+        must be materialized, not silently skipped — mirrors the same fix
+        applied to find_analyzable_files (reveal/adapters/diff/resolution.py)."""
+        from reveal.diff.architecture_diff import materialize_ref, _open_repo
+
+        if not PYGIT2_AVAILABLE:
+            raise unittest.SkipTest("pygit2 not available")
+
+        import shutil
+        import tempfile
+
+        tmp_dir = Path(tempfile.mkdtemp(prefix='reveal-archdiff-ambiguous-'))
+        try:
+            repo_path = tmp_dir / "repo"
+            src = repo_path / "src"
+            real_pkg = src / "venv"
+            real_pkg.mkdir(parents=True)
+            (real_pkg / "main.py").write_text("x = 1\n")
+            repo = pygit2.init_repository(str(repo_path))
+            commit = _commit_all(repo, "add real venv/ source package")
+
+            opened_repo = _open_repo(repo_path)
+            with materialize_ref(opened_repo, str(commit), "src") as tmp_root:
+                self.assertTrue((tmp_root / "venv" / "main.py").exists())
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
 
 def _arch_diff_repo_fixture(dirty=True):
     """Non-pytest-fixture variant of arch_diff_repo, usable from unittest.TestCase

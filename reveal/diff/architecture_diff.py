@@ -54,16 +54,33 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
+from ..defaults import SKIP_DIRECTORIES, AMBIGUOUS_SKIP_DIRECTORIES
+
 logger = logging.getLogger(__name__)
 
-# Same ignore-dir set find_analyzable_files() uses (reveal/adapters/diff/resolution.py)
-# — kept in sync by hand since this walks a git tree, not the filesystem, so it
-# can't call that function directly.
-_SKIP_DIRS = {
-    '.git', '__pycache__', 'node_modules', '.venv', 'venv',
-    'dist', 'build', '.pytest_cache', '.mypy_cache', '.tox',
-    'htmlcov', '.coverage', 'eggs', '*.egg-info',
-}
+
+def _is_skippable_tree_entry(repo, entry) -> bool:
+    """Git-tree analog of ``reveal.utils.path_utils.is_skippable_dir``.
+
+    Same unconditional/ambiguous split (BACK-552: 'env'/'venv'/'build'/'dist'
+    only skip when the entry holds no source file directly at its own top
+    level — a real package can legitimately use one of those names). Reads
+    the ambiguous check from the git tree itself rather than ``os.scandir``,
+    since this walk is over a ref, not the filesystem.
+    """
+    name = entry.name
+    if name in SKIP_DIRECTORIES:
+        return True
+    if name not in AMBIGUOUS_SKIP_DIRECTORIES:
+        return False
+    from ..registry import get_code_extensions
+    code_exts = get_code_extensions()
+    subtree = repo[entry.id]
+    for child in subtree:
+        if child.type_str == 'blob' and Path(child.name).suffix.lower() in code_exts:
+            return False
+    return True
+
 
 _DEFAULT_COMPLEXITY_TOP_N = 20
 
@@ -161,9 +178,9 @@ def _subtree_oid(tree, subpath: str) -> Optional[str]:
 def _iter_analyzable_blobs(repo, tree, base_prefix: str = '') -> Iterator[Tuple[str, Any]]:
     """Yield (relpath, blob) for every analyzable blob under `tree`, recursively.
 
-    Mirrors find_analyzable_files' ignore-dir list and get_analyzer() filter
+    Mirrors find_analyzable_files' ignore-dir logic and get_analyzer() filter
     (reveal/adapters/diff/resolution.py:187), but walks a git tree instead of
-    the filesystem.
+    the filesystem (see _is_skippable_tree_entry).
     """
     from reveal.registry import get_analyzer
 
@@ -171,7 +188,7 @@ def _iter_analyzable_blobs(repo, tree, base_prefix: str = '') -> Iterator[Tuple[
         name = entry.name
         relpath = f"{base_prefix}/{name}" if base_prefix else name
         if entry.type_str == 'tree':
-            if name in _SKIP_DIRS:
+            if _is_skippable_tree_entry(repo, entry):
                 continue
             yield from _iter_analyzable_blobs(repo, repo[entry.id], relpath)
         elif entry.type_str == 'blob':
