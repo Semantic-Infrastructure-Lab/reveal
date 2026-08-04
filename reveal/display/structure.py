@@ -430,10 +430,11 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
 
     # Build extractable meta for agent discoverability
     extractable_meta = _build_extractable_meta(structure, file_path)
+    fallback_type = analyzer.__class__.__name__.replace('Analyzer', '').lower()
 
     result = {
         'file': file_path,
-        'type': analyzer.__class__.__name__.replace('Analyzer', '').lower(),
+        'type': get_file_type_from_analyzer(analyzer) or fallback_type,
         'analyzer': {
             'type': 'fallback' if is_fallback else 'explicit',
             'language': fallback_lang if is_fallback else None,

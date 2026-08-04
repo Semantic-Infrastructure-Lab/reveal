@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
-from reveal.utils import format_size
+from reveal.utils import format_size, get_file_type_from_analyzer
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +205,8 @@ class FileAnalyzer(ABC):
         Automatic - works for all file types.
         """
         meta = self.get_metadata()
-        file_type = self.__class__.__name__.replace('Analyzer', '')
+        fallback_type = self.__class__.__name__.replace('Analyzer', '').lower()
+        file_type = get_file_type_from_analyzer(self) or fallback_type
 
         return {
             'path': str(self.path),
