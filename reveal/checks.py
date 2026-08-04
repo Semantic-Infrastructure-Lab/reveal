@@ -186,9 +186,10 @@ def run_schema_validation(
     from .schemas.frontmatter import load_schema
     from .rules.frontmatter import set_validation_context, clear_validation_context
     from .rules import RuleRegistry
+    from .registry import get_markdown_extensions
 
     # Check if file is markdown (schema validation is for markdown front matter)
-    if not path.lower().endswith(('.md', '.markdown')):
+    if not path.lower().endswith(tuple(get_markdown_extensions())):
         print("Warning: Schema validation is designed for markdown files", file=sys.stderr)
         print(f"         File '{path}' does not appear to be markdown", file=sys.stderr)
         print("         Continuing anyway...\n", file=sys.stderr)

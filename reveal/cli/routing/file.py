@@ -19,9 +19,7 @@ if TYPE_CHECKING:
 from .uri import handle_uri  # noqa: E402
 from ...file_handler import handle_file  # noqa: E402
 from ...grep_handler import handle_grep  # noqa: E402
-
-
-_MARKDOWN_EXTENSIONS = {'.md', '.markdown', '.rst', '.txt', ''}
+from ...registry import get_markdown_extensions  # noqa: E402
 
 
 def _parse_file_line_syntax(path_str: str) -> tuple[Path, Optional[str]]:
@@ -229,7 +227,7 @@ def _guard_related_flags(args: 'Namespace', path_str: str) -> None:
     if not (getattr(args, 'related', False) or getattr(args, 'related_all', False)):
         return
     md_ext = Path(path_str).suffix.lower() if '.' in Path(path_str).name else ''
-    if md_ext in _MARKDOWN_EXTENSIONS:
+    if md_ext in get_markdown_extensions():
         return
     flag = '--related-all' if getattr(args, 'related_all', False) else '--related'
     print(f"❌ Error: {flag} only works with markdown files", file=sys.stderr)
@@ -322,7 +320,7 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
 
     element = element_from_path or args.element
     if not element and getattr(args, 'section', None):
-        if path.suffix.lower() in ('.md', '.markdown'):
+        if path.suffix.lower() in get_markdown_extensions():
             element = args.section
         else:
             print("❌ Error: --section only works with markdown files (.md, .markdown)", file=sys.stderr)

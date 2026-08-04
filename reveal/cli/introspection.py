@@ -9,7 +9,7 @@ This module provides commands for understanding how reveal analyzes files:
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
-from ..registry import get_analyzer, get_all_analyzers
+from ..registry import get_analyzer, get_all_analyzers, get_markdown_extensions
 from ..core import node_children as _children
 from ..core import tree_root
 from ..capabilities import get_capability
@@ -547,7 +547,7 @@ def get_capabilities(path: str) -> Dict[str, Any]:
     flags = ["--outline", "--head", "--tail", "--format json"]
     if rule_categories:
         flags.append("--check")
-    if ext in ['.md', '.markdown']:
+    if ext in get_markdown_extensions():
         flags.append("--links")
         flags.append("--section")
 
@@ -681,7 +681,7 @@ def _get_applicable_rule_categories(ext: str) -> list:
         categories.extend(['B', 'C', 'I', 'M', 'R', 'S', 'T'])  # Bugs, Complexity, Imports, Maintainability, Refactoring, Security, Types
 
     # Markdown rules
-    if ext in ['.md', '.markdown']:
+    if ext in get_markdown_extensions():
         categories.extend(['L', 'F'])  # Links, Frontmatter
 
     # Config file rules

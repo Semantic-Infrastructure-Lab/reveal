@@ -519,5 +519,33 @@ class TestAnalyzerCategoryAttribute(unittest.TestCase):
         self.assertEqual(missing, [], f"Tree-sitter extensions missing from code set: {missing}")
 
 
+class TestGetMarkdownExtensions(unittest.TestCase):
+    """Tests for BACK-953: get_markdown_extensions()."""
+
+    def setUp(self):
+        import reveal.analyzers  # noqa: F401 — trigger registration
+        from reveal.registry import get_markdown_extensions
+        self.get_markdown_extensions = get_markdown_extensions
+
+    def test_returns_exact_markdown_extensions(self):
+        """Must be exactly {'.md', '.markdown'} — not a superset or subset."""
+        self.assertEqual(self.get_markdown_extensions(), frozenset({'.md', '.markdown'}))
+
+    def test_excludes_other_doc_category_extensions(self):
+        """CATEGORY == 'doc' alone is not sufficient — html.py is also 'doc'
+        but must not appear in the markdown-specific accessor."""
+        self.assertNotIn('.html', self.get_markdown_extensions())
+        self.assertNotIn('.htm', self.get_markdown_extensions())
+
+    def test_is_frozenset(self):
+        self.assertIsInstance(self.get_markdown_extensions(), frozenset)
+
+    def test_is_cached(self):
+        """Repeated calls must return the same object (lru_cache)."""
+        s1 = self.get_markdown_extensions()
+        s2 = self.get_markdown_extensions()
+        self.assertIs(s1, s2)
+
+
 if __name__ == '__main__':
     unittest.main()

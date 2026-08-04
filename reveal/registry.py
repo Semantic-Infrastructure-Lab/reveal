@@ -578,3 +578,24 @@ def get_code_extensions() -> FrozenSet[str]:
     )
     treesitter = frozenset(TREESITTER_EXTENSION_MAP.keys())
     return explicit | treesitter
+
+
+@functools.lru_cache(maxsize=None)
+def get_markdown_extensions() -> FrozenSet[str]:
+    """Return the extensions registered to the Markdown analyzer.
+
+    Single source of truth for the strict {'.md', '.markdown'} check
+    duplicated across checks.py, rules/coverage.py, cli/introspection.py,
+    adapters/markdown/files.py, and cli/routing/file.py (BACK-953). Filtering
+    by CATEGORY == 'doc' alone is not enough — html.py's HTMLAnalyzer is also
+    'doc' — so this additionally matches on type_name, which register()
+    derives from the analyzer's own `name=` argument ('Markdown').
+
+    Returns:
+        Frozenset of lowercase extensions (e.g. {'.md', '.markdown'})
+    """
+    return frozenset(
+        ext for ext, cls in _ANALYZER_REGISTRY.items()
+        if getattr(cls, 'CATEGORY', 'code') == 'doc'
+        and getattr(cls, 'type_name', '') == 'Markdown'
+    )

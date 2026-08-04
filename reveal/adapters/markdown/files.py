@@ -6,6 +6,8 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, List, cast
 
+from ...registry import get_markdown_extensions
+
 
 def find_markdown_files(base_path: Path) -> List[Path]:
     """Find all markdown files in base_path recursively.
@@ -20,14 +22,16 @@ def find_markdown_files(base_path: Path) -> List[Path]:
     if not base_path.exists():
         return files
 
+    md_exts = tuple(get_markdown_extensions())
+
     if base_path.is_file():
-        if base_path.suffix.lower() in ('.md', '.markdown'):
+        if base_path.suffix.lower() in md_exts:
             return [base_path]
         return []
 
     for root, _, filenames in os.walk(base_path):
         for filename in filenames:
-            if filename.lower().endswith(('.md', '.markdown')):
+            if filename.lower().endswith(md_exts):
                 files.append(Path(root) / filename)
 
     return sorted(files)
@@ -95,7 +99,7 @@ def extract_internal_links(path: Path, base_path: Path) -> List[str]:
         url_file = url.split('#')[0]
         if not url_file:
             continue
-        if not url_file.lower().endswith(('.md', '.markdown')):
+        if not url_file.lower().endswith(tuple(get_markdown_extensions())):
             continue
 
         # Resolve relative to the source file's directory

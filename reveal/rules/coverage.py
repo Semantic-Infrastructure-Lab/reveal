@@ -35,6 +35,7 @@ from ..capabilities import (
     get_all_capabilities,
     get_capability_for_extension,
 )
+from ..registry import get_markdown_extensions
 
 
 def _tier1_languages() -> Set[str]:
@@ -51,10 +52,11 @@ def _tier1_languages() -> Set[str]:
 # dedicated per-format suites (test_nginx_rules.py, the markdown/link rule files,
 # the Dockerfile S701 tests), independent of their analyzer's structural tier —
 # so a `.conf` rule claims "nginx", not the `ini` analyzer's untested tier.
-# Detected from tokens in a rule's file_patterns.
-_FORMAT_TOKENS = (
+# Detected from tokens in a rule's file_patterns. Markdown's tokens come from
+# get_markdown_extensions() at call time, not baked in here — that accessor
+# requires analyzers already registered, which isn't guaranteed at import time.
+_STATIC_FORMAT_TOKENS = (
     ("nginx", ("nginx", ".nginx", ".conf")),
-    ("markdown", (".md", ".markdown")),
     ("dockerfile", ("dockerfile",)),
 )
 
@@ -63,7 +65,9 @@ def _pattern_format(pattern: str) -> Optional[str]:
     """Map a single file_pattern to a verified *format* label, or None if the
     pattern is an ordinary code-file extension handled via capabilities."""
     p = pattern.lower()
-    for label, tokens in _FORMAT_TOKENS:
+    if any(tok in p for tok in get_markdown_extensions()):
+        return "markdown"
+    for label, tokens in _STATIC_FORMAT_TOKENS:
         if any(tok in p for tok in tokens):
             return label
     return None
