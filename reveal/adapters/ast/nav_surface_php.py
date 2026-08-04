@@ -25,7 +25,7 @@ No CLI entrypoint category: PHP CLI scripts have no standard ``main`` node
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once
+from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_prefix
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
@@ -115,17 +115,7 @@ def _process_use(node: Any, file_path: str, content_bytes: bytes,
         for ch in _children(clause):
             if ch.kind() in ('qualified_name', 'name'):
                 module = _get_text(ch, content_bytes)
-                _categorize_module(module, file_path, _get_line(node), surfaces)
-
-
-def _categorize_module(module: str, file_path: str, line: int,
-                       surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    for packages, category in _PACKAGE_TAXONOMY:
-        for prefix in packages:
-            if module == prefix or module.startswith(prefix + '\\'):
-                entry = {'type': 'import', 'name': module, 'file': file_path, 'line': line}
-                _add_once(surfaces[category], entry)
-                return
+                categorize_by_prefix(module, file_path, _get_line(node), surfaces, _PACKAGE_TAXONOMY, '\\')
 
 
 def _string_arg_texts(arguments_node: Any, content_bytes: bytes) -> List[str]:

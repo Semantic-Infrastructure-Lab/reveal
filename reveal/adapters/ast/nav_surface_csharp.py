@@ -8,7 +8,7 @@ network/db/sdk egress.
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from .nav_surface_common import _get_text, _get_line, _add_once
+from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_prefix
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
@@ -89,7 +89,7 @@ def _process_using(node: Any, file_path: str, content_bytes: bytes,
         return
     module = _get_text(target, content_bytes)
     line = _get_line(node)
-    _categorize_module(module, file_path, line, surfaces)
+    categorize_by_prefix(module, file_path, line, surfaces, _PACKAGE_TAXONOMY, '.')
 
 
 _PACKAGE_TAXONOMY: tuple = (
@@ -97,16 +97,6 @@ _PACKAGE_TAXONOMY: tuple = (
     (_DB_PACKAGES, 'db'),
     (_SDK_PACKAGES, 'sdk'),
 )
-
-
-def _categorize_module(module: str, file_path: str, line: int,
-                        surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    for packages, category in _PACKAGE_TAXONOMY:
-        for prefix in packages:
-            if module == prefix or module.startswith(prefix + '.'):
-                entry = {'type': 'import', 'name': module, 'file': file_path, 'line': line}
-                _add_once(surfaces[category], entry)
-                return
 
 
 def _attribute_name(attribute_node: Any, content_bytes: bytes) -> Optional[str]:

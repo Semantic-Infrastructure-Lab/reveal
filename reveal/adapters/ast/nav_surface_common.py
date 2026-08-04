@@ -1,14 +1,25 @@
-"""Shared tree-sitter nav helpers (BACK-570).
+"""Shared tree-sitter nav helpers (BACK-570, BACK-912).
 
 Three helpers were copy-pasted byte-for-byte across every per-language
 ``nav_surface_<lang>.py`` scanner (and ``nav_contracts_ruby.py``): a UTF-8
 node-text slice, a 1-based line number, and a dedup-on-``(name, file, line)``
 list append. Consolidated here so a change to the dedup key or the
 tree-sitter node API lands in one place instead of eight.
+
+``categorize_by_prefix`` (BACK-912) consolidates a second duplicate: five
+language scanners (kotlin, php, csharp, java, go) each defined their own
+``_categorize_module`` with an identical prefix-match loop over a
+``(group, category)`` taxonomy, differing only in the taxonomy constant name
+and the path separator (``.`` for the dotted-package languages, ``/`` for
+Go's slash-delimited module paths, ``\\`` for PHP namespaces). Not every
+scanner fits this shape — Swift matches only the top-level module segment
+(no prefix chain) and TypeScript layers exact/scoped/root lookups across
+three separate package sets — so those two keep their own bespoke
+``_categorize_module``.
 """
 
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 
 def _get_text(node, content_bytes: bytes) -> str:
@@ -25,6 +36,29 @@ def _add_once(lst: List[Dict[str, Any]], entry: Dict[str, Any]) -> None:
         if (existing.get('name', ''), existing.get('file', ''), existing.get('line', 0)) == key:
             return
     lst.append(entry)
+
+
+def categorize_by_prefix(
+    module: str,
+    file_path: str,
+    line: int,
+    surfaces: Dict[str, List[Dict[str, Any]]],
+    taxonomy: Tuple[Tuple[Any, str], ...],
+    sep: str,
+) -> None:
+    """Record `module` as an import surface entry under the first taxonomy
+    category whose group contains it exactly, or as a `sep`-delimited
+    ancestor path (e.g. `module == prefix` or `module.startswith(prefix +
+    sep)`). `taxonomy` is an ordered sequence of `(group, category)` pairs,
+    `group` any container supporting `in`-free iteration of prefix strings.
+    No-op if no group matches (BACK-912).
+    """
+    for group, category in taxonomy:
+        for prefix in group:
+            if module == prefix or module.startswith(prefix + sep):
+                entry = {'type': 'import', 'name': module, 'file': file_path, 'line': line}
+                _add_once(surfaces[category], entry)
+                return
 
 
 # ---------------------------------------------------------------------------

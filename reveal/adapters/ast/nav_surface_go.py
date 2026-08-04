@@ -41,7 +41,7 @@ Rust, C++.
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once
+from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_prefix
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
@@ -157,18 +157,8 @@ def _process_import(node: Any, file_path: str, content_bytes: bytes,
     for ch in _children(node):
         if _zero_arg(ch, 'kind') == 'interpreted_string_literal':
             module = _string_literal_text(ch, content_bytes)
-            _categorize_module(module, file_path, _get_line(node), surfaces)
+            categorize_by_prefix(module, file_path, _get_line(node), surfaces, _MODULE_TAXONOMY, '/')
             return
-
-
-def _categorize_module(module: str, file_path: str, line: int,
-                       surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    for modules, category in _MODULE_TAXONOMY:
-        for prefix in modules:
-            if module == prefix or module.startswith(prefix + '/'):
-                entry = {'type': 'import', 'name': module, 'file': file_path, 'line': line}
-                _add_once(surfaces[category], entry)
-                return
 
 
 def _function_name(node: Any, content_bytes: bytes) -> Optional[str]:
