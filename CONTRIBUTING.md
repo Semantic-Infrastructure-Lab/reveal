@@ -154,15 +154,27 @@ class MySchemeAdapter(ResourceAdapter):
         }
 ```
 
+**Single-file vs package layout**: `reveal/adapters/` mixes both shapes with no
+enforced rule, which drifts (BACK-917). Use this one: package layout
+(`reveal/adapters/<scheme>/` with `__init__.py`, `adapter.py`, `renderer.py`)
+is the default for any new adapter — it's what `reveal scaffold adapter`
+generates and what most existing adapters (`git/`, `nginx/`, `patches/`, ...)
+use. A single file (`reveal/adapters/<scheme>.py`) is acceptable only when
+you're confident the adapter will stay under ~300 lines with no dedicated
+renderer logic worth separating (e.g. `depends.py`/`env.py` are legacy
+single-files well past that line and are debt, not the pattern to copy —
+see BACK-590).
+
 **Adapter checklist** (full details in ARCHITECTURE.md):
 1. Create `reveal/adapters/<scheme>/` with `__init__.py`, `adapter.py`, `renderer.py`
+   — or `reveal scaffold adapter <scheme> <scheme>://` to generate it
 2. Implement `get_structure()` with all four Output Contract fields
 3. Implement `get_schema()` — required for `--discover` and contract compliance tests
 4. Add `get_help()` or `reveal/adapters/help_data/<scheme>.yaml`
 5. Add tests — `pytest tests/test_output_contract_compliance.py` auto-tests all adapters
 6. Add `reveal/docs/<SCHEME>_ADAPTER_GUIDE.md` and link from `reveal/docs/INDEX.md`
 
-**Simplest examples to study**: `adapters/env/adapter.py` (no-arg init), `adapters/git/adapter.py` (resource-arg init)
+**Simplest examples to study**: `adapters/git/adapter.py` (resource-arg init, package layout), `adapters/nginx/adapter.py` (domain-centric, package layout with a `handlers.py` split)
 
 ### 3. Other Contributions
 

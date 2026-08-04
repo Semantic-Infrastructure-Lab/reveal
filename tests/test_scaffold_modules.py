@@ -27,16 +27,28 @@ class TestAdapterScaffold:
 
             result = scaffold_adapter('github', 'github://', output_dir=output_dir)
 
+            assert 'init_file' in result
             assert 'adapter_file' in result
+            assert 'renderer_file' in result
             assert 'test_file' in result
             assert 'doc_file' in result
             assert 'next_steps' in result
             assert 'error' not in result
 
-            # Verify files were created
+            # Verify package layout: adapters/github/{__init__,adapter,renderer}.py
+            init_file = Path(result['init_file'])
+            assert init_file.exists()
+            assert init_file.name == '__init__.py'
+
             adapter_file = Path(result['adapter_file'])
             assert adapter_file.exists()
-            assert adapter_file.name == 'github.py'
+            assert adapter_file.name == 'adapter.py'
+            assert adapter_file.parent.name == 'github'
+
+            renderer_file = Path(result['renderer_file'])
+            assert renderer_file.exists()
+            assert renderer_file.name == 'renderer.py'
+            assert renderer_file.parent == adapter_file.parent
 
             test_file = Path(result['test_file'])
             assert test_file.exists()
@@ -77,7 +89,8 @@ class TestAdapterScaffold:
             result = scaffold_adapter('my-adapter', 'custom://', output_dir=output_dir)
 
             adapter_file = Path(result['adapter_file'])
-            assert adapter_file.name == 'my_adapter.py'
+            assert adapter_file.name == 'adapter.py'
+            assert adapter_file.parent.name == 'my_adapter'
 
     def test_scaffold_adapter_class_name_generation(self):
         """Test class name generation (PascalCase)."""

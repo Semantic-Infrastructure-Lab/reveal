@@ -3,7 +3,12 @@
 import sys
 from pathlib import Path
 from typing import Optional
-from ...templates.adapter_template import ADAPTER_TEMPLATE, TEST_TEMPLATE
+from ...templates.adapter_template import (
+    ADAPTER_TEMPLATE,
+    RENDERER_TEMPLATE,
+    INIT_TEMPLATE,
+    TEST_TEMPLATE,
+)
 
 
 def scaffold_adapter(
@@ -13,6 +18,10 @@ def scaffold_adapter(
     force: bool = False
 ) -> dict:
     """Generate scaffolding for a new adapter.
+
+    Emits the package layout (adapters/<name>/{__init__,adapter,renderer}.py)
+    — the shape CONTRIBUTING.md documents and 17/25 existing adapters already
+    use, not a single monolithic file (BACK-917).
 
     Args:
         name: Adapter name (e.g., 'github', 'docker')
@@ -26,7 +35,7 @@ def scaffold_adapter(
     Example:
         >>> result = scaffold_adapter('github', 'github://')
         >>> print(result['adapter_file'])
-        /path/to/reveal/adapters/github.py
+        /path/to/reveal/adapters/github/adapter.py
     """
     if output_dir is None:
         output_dir = _find_reveal_root()
@@ -40,55 +49,40 @@ def scaffold_adapter(
     scheme = uri_scheme.rstrip('://').lower()
 
     # File paths
-    adapter_file = output_dir / 'reveal' / 'adapters' / f'{adapter_name}.py'
-    test_file = output_dir / 'tests' / f'test_{adapter_name}_adapter.py'
-    doc_file = output_dir / 'reveal' / 'docs' / f'{adapter_name.upper()}_ADAPTER_GUIDE.md'
+    adapter_dir = output_dir / 'reveal' / 'adapters' / adapter_name
+    paths = {
+        'adapter_dir': adapter_dir,
+        'init_file': adapter_dir / '__init__.py',
+        'adapter_file': adapter_dir / 'adapter.py',
+        'renderer_file': adapter_dir / 'renderer.py',
+        'test_file': output_dir / 'tests' / f'test_{adapter_name}_adapter.py',
+        'doc_file': output_dir / 'reveal' / 'docs' / f'{adapter_name.upper()}_ADAPTER_GUIDE.md',
+    }
 
     # Check for existing files
-    existing = []
-    if adapter_file.exists():
-        existing.append(str(adapter_file))
-    if test_file.exists():
-        existing.append(str(test_file))
-    if doc_file.exists():
-        existing.append(str(doc_file))
-
+    existing = [str(p) for key, p in paths.items() if key != 'adapter_dir' and p.exists()]
     if existing and not force:
         print(f"Error: Files already exist: {', '.join(existing)}", file=sys.stderr)
         print("Use --force to overwrite", file=sys.stderr)
         return {'error': 'Files exist', 'existing_files': existing}
 
-    # Generate files
-    adapter_content = ADAPTER_TEMPLATE.format(
-        adapter_name=adapter_name,
-        class_name=class_name,
-        scheme=scheme,
-        description=f"{class_name} adapter for {uri_scheme} URIs"
+    names = {
+        'adapter_name': adapter_name, 'class_name': class_name,
+        'scheme': scheme, 'uri_scheme': uri_scheme,
+    }
+    _write_scaffold_files(names, paths)
+
+    adapter_file, renderer_file, test_file, doc_file = (
+        paths['adapter_file'], paths['renderer_file'], paths['test_file'], paths['doc_file']
     )
-
-    test_content = TEST_TEMPLATE.format(
-        adapter_name=adapter_name,
-        class_name=class_name,
-        scheme=scheme
-    )
-
-    # Write files
-    adapter_file.parent.mkdir(parents=True, exist_ok=True)
-    adapter_file.write_text(adapter_content)
-
-    test_file.parent.mkdir(parents=True, exist_ok=True)
-    test_file.write_text(test_content)
-
-    # Create placeholder doc
-    doc_file.parent.mkdir(parents=True, exist_ok=True)
-    doc_file.write_text(f"# {class_name} Adapter\n\nTODO: Document {uri_scheme} adapter usage.\n")
-
     return {
+        'init_file': str(paths['init_file']),
         'adapter_file': str(adapter_file),
+        'renderer_file': str(renderer_file),
         'test_file': str(test_file),
         'doc_file': str(doc_file),
         'next_steps': [
-            f"1. Implement TODOs in {adapter_file.name}",
+            f"1. Implement TODOs in {adapter_file.name} and {renderer_file.name}",
             f"2. Register it: add `from .{adapter_name} import {class_name}Adapter` to "
             f"reveal/adapters/__init__.py — reveal {uri_scheme} raises "
             f"'Unsupported URI scheme' until this import runs",
@@ -97,6 +91,34 @@ def scaffold_adapter(
             f"5. Document usage in {doc_file.name}"
         ]
     }
+
+
+def _write_scaffold_files(names: dict, paths: dict) -> None:
+    """Render the four templates and write them to their target paths."""
+    init_content = INIT_TEMPLATE.format(class_name=names['class_name'])
+    adapter_content = ADAPTER_TEMPLATE.format(
+        **{k: names[k] for k in ('adapter_name', 'class_name', 'scheme')},
+        description=f"{names['class_name']} adapter for {names['uri_scheme']} URIs",
+    )
+    renderer_content = RENDERER_TEMPLATE.format(
+        **{k: names[k] for k in ('adapter_name', 'class_name')}
+    )
+    test_content = TEST_TEMPLATE.format(
+        **{k: names[k] for k in ('adapter_name', 'class_name', 'scheme')}
+    )
+
+    paths['adapter_dir'].mkdir(parents=True, exist_ok=True)
+    paths['init_file'].write_text(init_content)
+    paths['adapter_file'].write_text(adapter_content)
+    paths['renderer_file'].write_text(renderer_content)
+
+    paths['test_file'].parent.mkdir(parents=True, exist_ok=True)
+    paths['test_file'].write_text(test_content)
+
+    paths['doc_file'].parent.mkdir(parents=True, exist_ok=True)
+    paths['doc_file'].write_text(
+        f"# {names['class_name']} Adapter\n\nTODO: Document {names['uri_scheme']} adapter usage.\n"
+    )
 
 
 def _find_reveal_root() -> Optional[Path]:

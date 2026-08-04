@@ -1,55 +1,26 @@
-"""Templates for adapter scaffolding."""
+"""Templates for adapter scaffolding.
+
+Package layout (adapters/<name>/{{__init__,adapter,renderer}}.py) is the
+default shape emitted by `reveal scaffold adapter` — see CONTRIBUTING.md's
+"single-file vs package" rule. INIT_TEMPLATE ties the three files together;
+ADAPTER_TEMPLATE and RENDERER_TEMPLATE stay in separate modules like every
+existing package adapter (git/, nginx/, patches/, ...).
+"""
+
+INIT_TEMPLATE = '''"""{class_name} adapter package."""
+
+from .adapter import {class_name}Adapter
+from .renderer import {class_name}Renderer
+
+__all__ = ['{class_name}Adapter', '{class_name}Renderer']
+'''
 
 ADAPTER_TEMPLATE = '''"""{description}."""
 
-import sys
 from typing import Dict, Any, Optional
-from .base import ResourceAdapter, register_adapter, register_renderer
-from ..utils.results import ResultBuilder  # BACK-447: sole Output Contract constructor
-
-
-class {class_name}Renderer:
-    """Renderer for {adapter_name} adapter results."""
-
-    @staticmethod
-    def render_structure(result: dict, format: str = 'text') -> None:
-        """Render {adapter_name} structure overview.
-
-        Args:
-            result: Structure dict from {class_name}Adapter.get_structure()
-            format: Output format ('text', 'json', 'grep')
-        """
-        # TODO: Implement custom rendering or use generic renderer
-        from ..utils import safe_json_dumps
-
-        if format == 'json':
-            print(safe_json_dumps(result))
-        else:
-            # TODO: Implement text rendering
-            print(f"{class_name} Structure:")
-            print(f"  Type: {{result.get('type', 'unknown')}}")
-            print(f"  Items: {{len(result.get('items', []))}}")
-
-    @staticmethod
-    def render_element(result: dict, format: str = 'text') -> None:
-        """Render specific {adapter_name} element.
-
-        Args:
-            result: Element dict from {class_name}Adapter.get_element()
-            format: Output format ('text', 'json', 'grep')
-        """
-        from ..utils import safe_json_dumps
-
-        if format == 'json':
-            print(safe_json_dumps(result))
-        else:
-            # TODO: Implement element rendering
-            print(f"Element: {{result.get('name', 'unknown')}}")
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error accessing {adapter_name}: {{error}}", file=sys.stderr)
+from ..base import ResourceAdapter, register_adapter, register_renderer
+from ...utils.results import ResultBuilder  # BACK-447: sole Output Contract constructor
+from .renderer import {class_name}Renderer
 
 
 @register_adapter('{scheme}')
@@ -222,27 +193,53 @@ class {class_name}Adapter(ResourceAdapter):
         }}
 '''
 
-RENDERER_TEMPLATE = '''"""Renderer for {adapter_name} adapter output."""
+RENDERER_TEMPLATE = '''"""Renderer for {adapter_name} adapter results."""
 
-from typing import Dict, Any
+import sys
 
 
-def render_{adapter_name}_structure(result: Dict[str, Any], format: str) -> None:
-    """Render {adapter_name} structure output.
+class {class_name}Renderer:
+    """Renderer for {adapter_name} adapter results."""
 
-    Args:
-        result: Structure dict from adapter
-        format: Output format ('text', 'json', 'grep')
-    """
-    if format == 'json':
-        from ..utils import safe_json_dumps
-        print(safe_json_dumps(result))
-        return
+    @staticmethod
+    def render_structure(result: dict, format: str = 'text') -> None:
+        """Render {adapter_name} structure overview.
 
-    # Text format
-    print(f"{{class_name}} Structure")
-    print(f"Items: {{len(result.get('items', []))}}")
-    # TODO: Implement full text rendering
+        Args:
+            result: Structure dict from {class_name}Adapter.get_structure()
+            format: Output format ('text', 'json', 'grep')
+        """
+        # TODO: Implement custom rendering or use generic renderer
+        from ...utils import safe_json_dumps
+
+        if format == 'json':
+            print(safe_json_dumps(result))
+        else:
+            # TODO: Implement text rendering
+            print(f"{class_name} Structure:")
+            print(f"  Type: {{result.get('type', 'unknown')}}")
+            print(f"  Items: {{len(result.get('items', []))}}")
+
+    @staticmethod
+    def render_element(result: dict, format: str = 'text') -> None:
+        """Render specific {adapter_name} element.
+
+        Args:
+            result: Element dict from {class_name}Adapter.get_element()
+            format: Output format ('text', 'json', 'grep')
+        """
+        from ...utils import safe_json_dumps
+
+        if format == 'json':
+            print(safe_json_dumps(result))
+        else:
+            # TODO: Implement element rendering
+            print(f"Element: {{result.get('name', 'unknown')}}")
+
+    @staticmethod
+    def render_error(error: Exception) -> None:
+        """Render user-friendly errors."""
+        print(f"Error accessing {adapter_name}: {{error}}", file=sys.stderr)
 '''
 
 TEST_TEMPLATE = '''"""Tests for {adapter_name} adapter."""
