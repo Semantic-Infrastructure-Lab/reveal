@@ -13,6 +13,7 @@ from ..structure_options import StructureOptions
 from ..core import node_children as _children
 from ..core import tree_root, ts_parse
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 # Cache for markdown_inline parse results, keyed by (path, mtime_ns).
 # Avoids re-parsing the same file's inline content when multiple rules or
@@ -234,7 +235,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             result_type='markdown_structure',
             source=self.path,
             data=data,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             parse_mode=parse_mode,
             confidence=1.0,
         )

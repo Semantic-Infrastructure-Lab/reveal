@@ -15,6 +15,7 @@ from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 from ..core import tree_root
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 
 @register('.yaml', '.yml', name='YAML', icon='', category='data')
@@ -97,7 +98,7 @@ class YamlAnalyzer(TreeSitterAnalyzer):
             result_type='yaml_structure',
             source=self.path,
             data={'keys': keys},
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             parse_mode='tree_sitter_full',
             confidence=1.0,
         )
@@ -197,7 +198,7 @@ class JsonAnalyzer(TreeSitterAnalyzer):
             result_type='json_structure',
             source=self.path,
             data={'keys': keys},
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             parse_mode='tree_sitter_full',
             confidence=1.0,
         )

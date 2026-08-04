@@ -120,17 +120,23 @@ Both are lists of dicts:
 ## Adapter implementation pattern
 
 ```python
+from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.results import ResultBuilder
 
 return ResultBuilder.create(
     result_type='calls_query',
     source=self.path,
-    contract_version='1.1',
+    contract_version=CONTRACT_VERSION,
     parse_mode='tree_sitter_full',
     confidence=0.85,  # call graph misses dynamic dispatch
     data={'callees': [...]},
 )
 ```
+
+Import `CONTRACT_VERSION` from `reveal.reveal_types` rather than hardcoding
+`'1.1'` — it's the single source of truth for the current contract version
+(BACK-910). `'1.0'` stays a literal: it's `ResultBuilder.create()`'s own
+baseline default, not the value this constant tracks.
 
 For approximate analysis (call graphs, type narrowing, side-effect classification),
 set `confidence` honestly — agents use this to decide whether to act on the result

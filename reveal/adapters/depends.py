@@ -13,6 +13,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict, Any, List, NamedTuple, Optional, Set, Tuple
+from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import print_json_result
@@ -1465,7 +1466,7 @@ class DependsAdapter(ResourceAdapter):
                 dependents.append({'file': str(importer), 'line': 0, 'module': '', 'names': [], 'type': 'unknown', 'is_relative': False, 'alias': None})
 
         result = {
-            'contract_version': '1.1',
+            'contract_version': CONTRACT_VERSION,
             'type': 'module_dependents',
             'source': str(self._target_path),
             'source_type': 'file',
@@ -1514,7 +1515,7 @@ class DependsAdapter(ResourceAdapter):
             modules = modules[:top_n]
 
         result = {
-            'contract_version': '1.1',
+            'contract_version': CONTRACT_VERSION,
             'type': 'dependency_summary',
             'source': str(self._target_path),
             'source_type': 'directory',

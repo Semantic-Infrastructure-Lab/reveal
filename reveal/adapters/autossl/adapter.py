@@ -16,6 +16,7 @@ Examples:
 """
 
 from typing import Any, Dict, Optional
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
@@ -30,7 +31,7 @@ _FAILURE_STATUSES = {'incomplete', 'defective', 'dcv_failed', 'unknown'}
 def _get_error_code_taxonomy() -> dict:
     """Return the AutoSSL error code reference (autossl://error-codes)."""
     return {
-        'contract_version': '1.1',
+        'contract_version': CONTRACT_VERSION,
         'type': 'autossl_error_codes',
         'source': 'autossl://error-codes',
         'source_type': 'runtime',
@@ -418,7 +419,7 @@ class AutosslAdapter(ResourceAdapter):
             result_type='autossl_runs',
             source=AUTOSSL_LOG_DIR,
             source_type='autossl_log_directory',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'log_dir': AUTOSSL_LOG_DIR,
                 'run_count': len(runs),
@@ -475,7 +476,7 @@ class AutosslAdapter(ResourceAdapter):
             result_type='autossl_domain_history',
             source=AUTOSSL_LOG_DIR,
             source_type='autossl_log_directory',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'domain': domain,
                 'run_count': total_run_count,

@@ -7,6 +7,7 @@ import re
 import sqlite3
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import CodexRenderer
@@ -86,7 +87,7 @@ class CodexAdapter(ResourceAdapter):
 
     def _get_contract_base(self) -> Dict[str, Any]:
         return {
-            'contract_version': '1.1',
+            'contract_version': CONTRACT_VERSION,
             'type': '',
             'source': str(self.CODEX_DB),
             'source_type': 'sqlite',

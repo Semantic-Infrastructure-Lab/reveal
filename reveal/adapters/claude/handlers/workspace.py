@@ -2,6 +2,7 @@
 from pathlib import Path
 from typing import Any, Dict, List, Union
 from datetime import datetime
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
 
@@ -52,7 +53,7 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
         result_type='claude_plans',
         source=str(plans_dir),
         source_type='directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     # claude://plans/<name> — read specific plan
@@ -128,7 +129,7 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
         result_type='claude_memory',
         source=str(conversation_base),
         source_type='directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     # claude://memory/<project-fragment> — filter to matching projects
@@ -185,7 +186,7 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
         result_type='claude_agents',
         source=str(agents_dir),
         source_type='directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     # claude://agents/<name> — read specific agent
@@ -259,7 +260,7 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
         result_type='claude_hooks',
         source=str(hooks_dir),
         source_type='directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     if not hooks_dir.exists():

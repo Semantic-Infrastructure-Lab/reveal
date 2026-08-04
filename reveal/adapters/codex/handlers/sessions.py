@@ -5,6 +5,7 @@ import sqlite3
 from datetime import date as _date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
 
@@ -53,7 +54,7 @@ def list_sessions(db_path: Path) -> Dict[str, Any]:
         result_type='codex_session_list',
         source=str(db_path),
         source_type='sqlite',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     if not db_path.exists():
@@ -145,7 +146,7 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
         result_type='codex_content_search',
         source=str(db_path),
         source_type='sqlite',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={'query': query, 'since': since or None, 'until': until or None},
     )
 

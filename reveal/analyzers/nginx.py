@@ -9,6 +9,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from ..base import FileAnalyzer
 from ..registry import register
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 
 # Pattern matching ACME challenge location paths
@@ -497,7 +498,7 @@ class NginxAnalyzer(FileAnalyzer):
             result_type='nginx_structure',
             source=self.path,
             data={'comments': comments},
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             parse_mode='regex',
             confidence=1.0,
         )

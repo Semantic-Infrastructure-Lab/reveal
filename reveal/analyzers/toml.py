@@ -15,6 +15,7 @@ from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 from ..core import tree_root
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 
 @register('.toml', name='TOML', icon='', category='config')
@@ -73,7 +74,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
             result_type='toml_structure',
             source=self.path,
             data=result,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             parse_mode='tree_sitter_full',
             confidence=1.0,
         )

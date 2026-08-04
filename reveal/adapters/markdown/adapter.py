@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Dict, Any, Optional
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.query import parse_query_filters, parse_result_control, ResultControl
@@ -292,7 +293,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 result_type='markdown_link_graph',
                 source=str(self.base_path),
                 source_type='directory',
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data=result,
             )
 
@@ -302,7 +303,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 result_type='markdown_frontmatter_lint',
                 source=self.base_path,
                 source_type='directory',
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data=result,
             )
 
@@ -311,7 +312,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             return ResultBuilder.create(
                 result_type='markdown_backlinks',
                 source=self.base_path,
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data=result,
             )
 
@@ -326,7 +327,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             return ResultBuilder.create(
                 result_type='markdown_aggregate',
                 source=str(self.base_path),
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data=result,
             )
 
@@ -340,7 +341,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             self.extra_fields,
             self.explain,
         )
-        result.update(contract_version='1.1', source_type='directory')
+        result.update(contract_version=CONTRACT_VERSION, source_type='directory')
         return result
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:

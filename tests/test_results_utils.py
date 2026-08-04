@@ -4,14 +4,22 @@ Tests ResultBuilder class and convenience functions for creating standardized
 result dictionaries compliant with Output Contract v1.0 and v1.1 specifications.
 """
 
+import re
 import pytest
 from pathlib import Path
+from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.results import (
     ResultBuilder,
     create_result,
     create_error_result,
     create_meta
 )
+
+# Source files intentionally exempt from the "no raw current-version literal"
+# check below: reveal/utils/results.py's own module docstring shows
+# `contract_version='1.1'` as illustrative Usage-example text, not a real
+# call site, so it isn't wired to the constant.
+_LITERAL_CONTRACT_VERSION_EXEMPT = {'reveal/utils/results.py'}
 
 
 class TestResultBuilderCreate:
@@ -642,3 +650,37 @@ class TestEdgeCases:
         # Very negative
         meta = ResultBuilder._create_meta(confidence=-999.9)
         assert meta['confidence'] == 0.0
+
+
+class TestContractVersionSingleSource:
+    """BACK-910: contract_version must have exactly one source of truth.
+
+    Regression guard against re-introducing the '1.1' string literal at
+    individual call sites — that's the DRY violation the ticket fixed
+    (12+ literal sites became a single reveal.reveal_types.CONTRACT_VERSION
+    constant, referenced everywhere instead of duplicated).
+    """
+
+    def test_current_contract_version_is_1_1(self):
+        assert CONTRACT_VERSION == '1.1'
+
+    def test_no_raw_current_version_literal_outside_constant_definition(self):
+        """No reveal/ source file should hardcode '1.1' as a contract_version value."""
+        reveal_root = Path(__file__).parent.parent / 'reveal'
+        pattern = re.compile(r"""contract_version['"]?\s*[:=]\s*['"]1\.1['"]""")
+        offenders = []
+
+        for path in reveal_root.rglob('*.py'):
+            rel = path.relative_to(reveal_root.parent).as_posix()
+            if rel in _LITERAL_CONTRACT_VERSION_EXEMPT:
+                continue
+            if path.name == 'reveal_types.py':
+                continue  # the constant's own definition
+            text = path.read_text()
+            if pattern.search(text):
+                offenders.append(rel)
+
+        assert not offenders, (
+            f"Found raw '1.1' contract_version literal(s) instead of "
+            f"reveal.reveal_types.CONTRACT_VERSION in: {offenders}"
+        )

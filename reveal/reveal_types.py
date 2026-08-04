@@ -15,6 +15,14 @@ so RevealResult is a minimum contract, not an exhaustive schema.
 from typing import Any, List, TypedDict
 
 
+# Current Output Contract version emitted by adapters/analyzers that opt into
+# v1.1 fields (meta/parse_mode/confidence/...). ResultBuilder.create()'s own
+# `contract_version` default stays '1.0' (the baseline contract, still valid
+# for callers that don't pass v1.1 metadata) — this constant is for the ~150
+# call sites that were duplicating the '1.1' string literal (BACK-910).
+CONTRACT_VERSION = '1.1'
+
+
 class WarningEntry(TypedDict, total=False):
     code: str
     message: str

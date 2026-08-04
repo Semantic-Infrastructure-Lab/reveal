@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Dict, Any, List, cast, TYPE_CHECKING
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ...utils.results import ResultBuilder
 
@@ -39,7 +40,7 @@ def get_ref_structure(
                 result_type='git_ref',
                 source=f"{repo.workdir or repo.path}@{ref}",
                 source_type='directory',
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 ref=ref,
                 commit=format_commit_func(commit_obj, detailed=True),
                 history=commits,
@@ -75,7 +76,7 @@ def get_ref_timeline(
             result_type='git_timeline',
             source=f"{repo.workdir or repo.path}@{ref}",
             source_type='repository',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             path=None,
             ref=ref,
             **timeline,

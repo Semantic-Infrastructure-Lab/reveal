@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from ..base import FileAnalyzer
 from ..registry import register
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 
 @register('.ipynb', name='Jupyter', icon='')
@@ -99,7 +100,7 @@ class JupyterAnalyzer(FileAnalyzer):
                 result_type='jupyter_structure',
                 source=self.path,
                 error=self.parse_error,
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 cells=[],
                 cell_counts={},
                 kernel='unknown',
@@ -120,7 +121,7 @@ class JupyterAnalyzer(FileAnalyzer):
             result_type='jupyter_structure',
             source=self.path,
             data=data,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             confidence=1.0,
         )
 

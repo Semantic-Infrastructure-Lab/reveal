@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Dict, Any, Optional
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
@@ -412,7 +413,7 @@ class StatsAdapter(ResourceAdapter):
             )
             result = aggregate_stats([file_stats] if file_stats else [], self.path)
             result.update(
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 source=str(self.path),
                 source_type='file',
             )
@@ -440,7 +441,7 @@ class StatsAdapter(ResourceAdapter):
             result['hotspots'] = identify_hotspots(controlled_stats, churn_counts=churn_counts)
 
         result.update(
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             source=str(self.path),
             source_type='directory' if self.path.is_dir() else 'file',
         )

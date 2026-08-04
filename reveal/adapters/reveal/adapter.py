@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Dict, List, Any, Optional
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from ...rules.validation.utils import find_reveal_root
@@ -85,7 +86,7 @@ class RevealAdapter(ResourceAdapter):
             result_type='reveal_structure',
             source=f'reveal://{self.component or "."}',
             source_type='runtime',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data=result,
         )
 

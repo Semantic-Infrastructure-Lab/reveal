@@ -2,6 +2,7 @@
 
 from typing import Dict, Any
 from ..help_data import load_help_data
+from reveal.reveal_types import CONTRACT_VERSION
 
 _SCHEMA_COMPARISON_TYPES = [
     'File to file comparison',
@@ -37,7 +38,7 @@ _SCHEMA_OUTPUT_TYPES = [
             }
         },
         'example': {
-            'contract_version': '1.1',
+            'contract_version': CONTRACT_VERSION,
             'type': 'diff_comparison',
             'source': 'diff://app.py:backup/app.py',
             'source_type': 'runtime',

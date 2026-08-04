@@ -7,6 +7,7 @@ from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from ...utils.results import ResultBuilder
 from .renderer import SqliteRenderer
+from reveal.reveal_types import CONTRACT_VERSION
 
 _SCHEMA_OUTPUT_TYPES = [
     {
@@ -27,7 +28,7 @@ _SCHEMA_OUTPUT_TYPES = [
             }
         },
         'example': {
-            'contract_version': '1.1',
+            'contract_version': CONTRACT_VERSION,
             'type': 'sqlite_database',
             'source': '/path/to/app.db',
             'source_type': 'database',
@@ -481,7 +482,7 @@ class SQLiteAdapter(ResourceAdapter):
             result_type='sqlite_database',
             source=self.db_path,
             source_type='database',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'path': self.db_path,
                 'size': f"{db_size_mb:.2f} MB" if db_size_mb >= 1 else f"{db_size / 1024:.2f} KB",
@@ -592,7 +593,7 @@ class SQLiteAdapter(ResourceAdapter):
             result_type='sqlite_table',
             source=self.db_path,
             source_type='table',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'database': self.db_path,
                 'table': element_name,

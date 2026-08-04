@@ -24,6 +24,7 @@ import re
 import socket
 import sys
 from typing import Dict, Any, Optional, List
+from reveal.reveal_types import CONTRACT_VERSION
 
 # fcntl/struct/array are Unix-only; used only in _get_local_ips() for IP
 # enumeration via SIOCGIFCONF ioctl. Guarded here so the module imports
@@ -51,7 +52,7 @@ _USERDATA_ARTIFACT_EXTENSIONS = ('.cache', '.yaml', '.json', '.lock', '.tmp', '.
 def _get_api_reference() -> Dict[str, Any]:
     """Return WHM/cPanel API quick-reference (cpanel://help/api)."""
     return {
-        'contract_version': '1.1',
+        'contract_version': CONTRACT_VERSION,
         'type': 'cpanel_api_reference',
         'source': 'cpanel://help/api',
         'source_type': 'runtime',
@@ -653,7 +654,7 @@ class CpanelAdapter(ResourceAdapter):
             result_type='cpanel_user',
             source=f'cpanel://{self.username}',
             source_type='cpanel_account',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'username': self.username,
                 'userdata_dir': userdata_dir,
@@ -672,7 +673,7 @@ class CpanelAdapter(ResourceAdapter):
             result_type='cpanel_domains',
             source=f'cpanel://{self.username}',
             source_type='cpanel_account',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'username': self.username,
                 'domain_count': len(domains),
@@ -746,7 +747,7 @@ class CpanelAdapter(ResourceAdapter):
             result_type='cpanel_ssl',
             source=f'cpanel://{self.username}',
             source_type='cpanel_account',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'username': self.username,
                 'cpanel_ssl_dir': CPANEL_SSL_DIR,
@@ -796,7 +797,7 @@ class CpanelAdapter(ResourceAdapter):
             result_type='cpanel_acl',
             source=f'cpanel://{self.username}',
             source_type='cpanel_account',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'username': self.username,
                 'domain_count': len(acl_results),
@@ -866,7 +867,7 @@ class CpanelAdapter(ResourceAdapter):
             result_type='cpanel_full_audit',
             source=f'cpanel://{self.username}',
             source_type='cpanel_account',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'username': self.username,
                 'has_failures': has_failures,

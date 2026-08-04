@@ -40,7 +40,7 @@ Usage:
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Union
 
-from reveal.reveal_types import RevealMeta, RevealResult, WarningEntry
+from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, RevealResult, WarningEntry
 
 
 _CONTRACT_FIELDS: frozenset = frozenset(
@@ -117,7 +117,7 @@ class ResultBuilder:
         }
 
         # Add v1.1 meta if metadata provided
-        if contract_version == '1.1' and any([parse_mode, confidence is not None, warnings, errors]):
+        if contract_version == CONTRACT_VERSION and any([parse_mode, confidence is not None, warnings, errors]):
             result['meta'] = ResultBuilder.create_meta(
                 parse_mode=parse_mode,
                 confidence=confidence,

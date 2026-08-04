@@ -2,6 +2,8 @@
 
 from typing import Dict, Any
 
+from reveal.reveal_types import CONTRACT_VERSION
+
 
 _HELP_EXAMPLES = [
     {
@@ -305,7 +307,7 @@ _SCHEMA_OUTPUT_TYPES = [
             }
         },
         'example': {
-            'contract_version': '1.1',
+            'contract_version': CONTRACT_VERSION,
             'type': 'ast_query',
             'source': './src',
             'source_type': 'directory',

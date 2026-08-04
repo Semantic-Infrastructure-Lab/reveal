@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
 from .boundaries import BoundaryProfile, collect_boundary_profiles, module_name_from_file, profile_score
+from ..reveal_types import CONTRACT_VERSION
 from .patches import PatchGroup, group_patches, scan_patches
 
 
@@ -30,7 +31,7 @@ def build_testability_report(
     profile_rows = profile_rows[:top] if top > 0 else profile_rows
 
     return {
-        'contract_version': '1.1',
+        'contract_version': CONTRACT_VERSION,
         'type': 'testability_report',
         'source': str(Path(src_path)),
         'source_type': 'directory' if Path(src_path).is_dir() else 'file',

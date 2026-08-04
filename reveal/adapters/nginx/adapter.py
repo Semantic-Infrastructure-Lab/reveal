@@ -19,6 +19,7 @@ import socket
 import glob
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
 from ..ssl.probe import probe_http_redirect
@@ -795,7 +796,7 @@ def _run_fleet_audit(
         result_type='nginx_fleet_audit',
         source='nginx://',
         source_type='runtime',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={
             'nginx_conf': nginx_conf_path,
             'site_count': site_count,
@@ -1011,7 +1012,7 @@ class NginxUriAdapter(ResourceAdapter):
             result_type='nginx_sites_overview',
             source='nginx://',
             source_type='runtime',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'sites': sites,
                 'artifact_files': artifact_files,
@@ -1029,7 +1030,7 @@ class NginxUriAdapter(ResourceAdapter):
                 result_type='nginx_vhost_not_found',
                 source=f'nginx://{self.domain}',
                 source_type='nginx_vhost',
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data={
                     'domain': self.domain,
                     'searched': _NGINX_SEARCH_DIRS,
@@ -1046,7 +1047,7 @@ class NginxUriAdapter(ResourceAdapter):
                 result_type='nginx_vhost_not_found',
                 source=f'nginx://{self.domain}',
                 source_type='nginx_vhost',
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data={
                     'domain': self.domain,
                     'config_file': config_path,
@@ -1080,7 +1081,7 @@ class NginxUriAdapter(ResourceAdapter):
             result_type='nginx_vhost_summary',
             source=f'nginx://{self.domain}',
             source_type='nginx_vhost',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'domain': self.domain,
                 'config_file': config_path,

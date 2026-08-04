@@ -4,6 +4,7 @@ import sys
 import platform
 import os
 from typing import Dict, Any, Optional, List
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from .bytecode import check_bytecode, pyc_to_source
@@ -46,7 +47,7 @@ _SCHEMA_OUTPUT_TYPES = [
             'architecture': {'type': 'string'}
         }},
         'example': {
-            'contract_version': '1.1', 'type': 'python_runtime',
+            'contract_version': CONTRACT_VERSION, 'type': 'python_runtime',
             'source': '/usr/bin/python3', 'source_type': 'runtime',
             'version': '3.11.5', 'implementation': 'CPython',
             'executable': '/usr/bin/python3',
@@ -154,7 +155,7 @@ class PythonAdapter(ResourceAdapter):
             result_type='python_runtime',
             source=sys.executable,
             source_type='runtime',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'version': platform.python_version(),
                 'implementation': platform.python_implementation(),

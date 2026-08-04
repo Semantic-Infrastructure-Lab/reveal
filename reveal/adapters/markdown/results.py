@@ -3,6 +3,7 @@
 import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ...utils.results import ResultBuilder
 from ...utils.path_utils import to_posix
@@ -141,7 +142,7 @@ def build_response_dict(
     return ResultBuilder.create(
         result_type='markdown_query',
         source=base_path,
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={
             'base_path': str(base_path),
             'query': query,

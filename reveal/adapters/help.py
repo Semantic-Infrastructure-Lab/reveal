@@ -7,6 +7,7 @@ from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY
 from ..rendering import render_help
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 # Valid help_category values for the help:// index listing.
 # Guides without help_category (or with an unknown value) are accessible by
@@ -563,7 +564,7 @@ class HelpAdapter(ResourceAdapter):
             result_type='help',
             source='help://',
             source_type='runtime',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'available_topics': self._list_topics(),
                 'adapters': self._list_adapters(),

@@ -1,6 +1,7 @@
 """Core diff adapter for comparing two reveal resources."""
 
 from typing import Dict, Any, Optional, Tuple, cast
+from reveal.reveal_types import CONTRACT_VERSION
 
 from .parsing import parse_diff_uris
 from .resolution import resolve_uri, extract_metadata, find_element
@@ -146,7 +147,7 @@ class DiffAdapter(ResourceAdapter):
             result_type='diff_comparison',
             source=f"{self.left_uri} vs {self.right_uri}",
             source_type='runtime',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'left': extract_metadata(left_struct, self.left_uri),
                 'right': extract_metadata(right_struct, self.right_uri),

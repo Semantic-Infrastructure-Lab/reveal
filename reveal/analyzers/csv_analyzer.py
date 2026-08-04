@@ -10,6 +10,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from ..base import FileAnalyzer
 from ..registry import register
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +191,7 @@ class CsvAnalyzer(FileAnalyzer):
                         'row_count': 0,
                         'message': 'CSV file appears to be empty or malformed'
                     },
-                    contract_version='1.1',
+                    contract_version=CONTRACT_VERSION,
                     confidence=1.0,
                 )
 
@@ -205,7 +206,7 @@ class CsvAnalyzer(FileAnalyzer):
                         'schema': [],
                         'message': 'Empty CSV file (header only)'
                     },
-                    contract_version='1.1',
+                    contract_version=CONTRACT_VERSION,
                     confidence=1.0,
                 )
 
@@ -229,7 +230,7 @@ class CsvAnalyzer(FileAnalyzer):
                     'sample_rows': [dict(zip(columns, row)) for row in sample_rows],
                     'delimiter': 'comma' if delimiter == ',' else 'tab'
                 },
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 confidence=1.0,
             )
 
@@ -239,7 +240,7 @@ class CsvAnalyzer(FileAnalyzer):
                 result_type='csv_structure',
                 source=self.path,
                 error=str(e),
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 message='Failed to parse CSV file',
             )
 

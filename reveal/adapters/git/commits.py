@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ...utils.query import apply_result_control
 from ...utils.results import ResultBuilder
@@ -27,7 +28,7 @@ def get_repository_overview(
         result_type='git_repository',
         source=repo.workdir or repo.path,
         source_type='directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         path=repo.workdir or repo.path,
         head=head_info,
         branches={

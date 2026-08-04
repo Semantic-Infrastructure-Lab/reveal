@@ -7,6 +7,7 @@ from ..base import FileAnalyzer
 from ..registry import register
 from ..structure_options import StructureOptions
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 # Try to import BeautifulSoup4 - required for HTML parsing
 try:
@@ -101,7 +102,7 @@ class HTMLAnalyzer(FileAnalyzer):
                 result_type='html',
                 source=self.path,
                 data=data,
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 confidence=1.0,
             )
 
@@ -144,7 +145,7 @@ class HTMLAnalyzer(FileAnalyzer):
             result_type='html',
             source=self.path,
             data=data,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             confidence=1.0,
         )
 
@@ -733,7 +734,7 @@ class HTMLAnalyzer(FileAnalyzer):
             result_type='html',
             source=self.path,
             data={'content': content},
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             confidence=1.0,
         )
 

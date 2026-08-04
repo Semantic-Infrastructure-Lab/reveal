@@ -14,6 +14,7 @@ from ...registry import register
 from ...utils import format_size
 from ...utils.results import ResultBuilder
 from .base import ZipXMLAnalyzer
+from reveal.reveal_types import CONTRACT_VERSION
 
 
 # Common OpenXML namespaces
@@ -100,7 +101,7 @@ class DocxAnalyzer(ZipXMLAnalyzer):
             result_type='docx_structure',
             source=self.path,
             data=data,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             confidence=1.0,
         )
 
@@ -302,7 +303,7 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             result_type='xlsx_structure',
             source=self.path,
             data=data,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             confidence=1.0,
         )
 
@@ -553,7 +554,7 @@ class PptxAnalyzer(ZipXMLAnalyzer):
             result_type='pptx_structure',
             source=self.path,
             data=data,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             confidence=1.0,
         )
 

@@ -5,6 +5,7 @@ from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children, node_next_sibling as _next_sibling, node_prev_sibling as _prev_sibling
 from ..core.nav_calls import range_calls
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 
 @register('.zig', name='Zig', icon='⚡')
@@ -42,7 +43,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
             result_type='zig_structure',
             source=self.path,
             data={k: v for k, v in structure.items() if v},
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             parse_mode='tree_sitter_full',
             confidence=1.0,
         )

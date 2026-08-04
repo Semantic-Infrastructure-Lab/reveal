@@ -3,6 +3,7 @@
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
 
@@ -14,7 +15,7 @@ def get_goal(codex_home: Path, thread_id: str) -> Dict[str, Any]:
         result_type='codex_goal',
         source=str(goals_db),
         source_type='sqlite',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={'thread_id': thread_id},
     )
 

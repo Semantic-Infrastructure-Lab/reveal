@@ -11,6 +11,7 @@ from .replication import ReplicationMonitor
 from .storage import StorageAnalyzer
 from .renderer import MySQLRenderer
 from ...utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 
 @dataclass
@@ -373,7 +374,7 @@ class MySQLAdapter(ResourceAdapter):
             result_type='mysql_server',
             source=server_display,
             source_type='database',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'snapshot_time': timing['snapshot_time'],
                 'server': server_display,

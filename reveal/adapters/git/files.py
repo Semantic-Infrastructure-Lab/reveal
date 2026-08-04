@@ -6,6 +6,7 @@ import re
 import sys
 from datetime import datetime
 from typing import Dict, Any, List, Optional, cast, TYPE_CHECKING
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ...core import disk_cache
 from ...utils.results import ResultBuilder
@@ -71,7 +72,7 @@ def get_file_at_ref(
                     result_type='git_file',
                     source=f"{subpath}@{ref}",
                     source_type='file',
-                    contract_version='1.1',
+                    contract_version=CONTRACT_VERSION,
                     path=subpath,
                     ref=ref,
                     commit=short_hash,
@@ -86,7 +87,7 @@ def get_file_at_ref(
                 result_type='git_file_structure',
                 source=f"{subpath}@{ref}",
                 source_type='file',
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 path=subpath,
                 ref=ref,
                 commit=short_hash,
@@ -187,7 +188,7 @@ def get_file_diff(
         result_type='git_file_diff',
         source=f"{subpath}@{ref}",
         source_type='file',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         path=subpath,
         ref=ref,
         commit=short_hash,
@@ -280,7 +281,7 @@ def get_file_history(
             result_type='git_file_history',
             source=f"{subpath}@{ref}",
             source_type='file',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             path=subpath,
             ref=ref,
             commits=controlled_commits,
@@ -346,7 +347,7 @@ def get_file_timeline(
             result_type='git_timeline',
             source=f"{subpath}@{ref}",
             source_type='file',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             path=subpath,
             ref=ref,
             bucket=bucket,
@@ -623,7 +624,7 @@ def get_file_blame(
             result_type='git_file_blame',
             source=f"{subpath}@{ref}",
             source_type='file',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             path=subpath,
             ref=ref,
             commit=str(commit.id)[:7],
@@ -744,7 +745,7 @@ def get_ownership(
         result_type='git_ownership',
         source=f"{git_subpath or '.'}@{ref}",
         source_type=source_type,
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         path=git_subpath or '.',
         ref=ref,
         total_commits=total,

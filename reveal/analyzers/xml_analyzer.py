@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from ..base import FileAnalyzer
 from ..registry import register
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -246,7 +247,7 @@ class XmlAnalyzer(FileAnalyzer):
                     },
                     'children': [self._element_to_dict(child) for child in filtered_children]
                 },
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 confidence=1.0,
             )
 
@@ -272,7 +273,7 @@ class XmlAnalyzer(FileAnalyzer):
                 result_type='xml_structure',
                 source=self.path,
                 error=f'XML parse error: {e}',
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 message='Failed to parse XML file',
             )
         except Exception as e:
@@ -281,7 +282,7 @@ class XmlAnalyzer(FileAnalyzer):
                 result_type='xml_structure',
                 source=self.path,
                 error=str(e),
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 message='Failed to analyze XML file',
             )
 

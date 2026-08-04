@@ -17,6 +17,7 @@ from typing import Dict, Any, List, Optional
 from ...base import FileAnalyzer
 from ...utils import format_size
 from ...utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 
 MAX_XML_PART_SIZE = 50 * 1024 * 1024  # 50 MB per XML part
@@ -41,7 +42,7 @@ class ZipXMLAnalyzer(FileAnalyzer):
             result_type=result_type,
             source=self.path,
             data={'error': [{'message': message}]},
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
         )
 
     def __init__(self, path: str):

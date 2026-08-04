@@ -4,6 +4,7 @@ import json
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
 
@@ -55,7 +56,7 @@ def get_info(codex_home: Path, db_path: Path) -> Dict[str, Any]:
         result_type='codex_info',
         source=str(db_path),
         source_type='sqlite',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     paths = {
@@ -95,7 +96,7 @@ def get_history(codex_home: Path, query_params: Dict[str, Any]) -> Dict[str, Any
         result_type='codex_history',
         source=str(history_path),
         source_type='file',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     if not history_path.exists():
@@ -132,7 +133,7 @@ def get_config(codex_home: Path, query_params: Optional[Dict[str, Any]] = None) 
         result_type='codex_config',
         source=str(config_path),
         source_type='file',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     if not config_path.exists():
@@ -170,7 +171,7 @@ def get_memories(codex_home: Path) -> Dict[str, Any]:
         result_type='codex_memories',
         source=str(memories_dir),
         source_type='file',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     if not memories_dir.exists():
@@ -200,7 +201,7 @@ def get_memories_pipeline(db_path: Path) -> Dict[str, Any]:
         result_type='codex_memories_pipeline',
         source=str(db_path),
         source_type='sqlite',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     if not db_path.exists():
@@ -241,7 +242,7 @@ def get_rules(codex_home: Path) -> Dict[str, Any]:
         result_type='codex_rules',
         source=str(rules_dir),
         source_type='file',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     if not rules_dir.exists():

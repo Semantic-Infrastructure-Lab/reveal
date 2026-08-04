@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Any, Iterable, Optional, List, Tuple
 
-from reveal.reveal_types import RevealMeta, RevealResult, WarningEntry
+from reveal.reveal_types import RevealMeta, RevealResult, WarningEntry, CONTRACT_VERSION
 
 # Re-exported for backward compatibility — existing importers need not change.
 from .factory import (  # noqa: F401
@@ -215,7 +215,7 @@ class ResourceAdapter(ABC):
                 }]
             )
             return {
-                'contract_version': '1.1',
+                'contract_version': CONTRACT_VERSION,
                 'type': 'ast_query',
                 'source': 'src/',
                 'source_type': 'directory',

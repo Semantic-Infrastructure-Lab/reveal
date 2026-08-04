@@ -1,6 +1,7 @@
 """Core AST query adapter."""
 
 import os
+from reveal.reveal_types import CONTRACT_VERSION
 
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -150,7 +151,7 @@ class AstAdapter(ResourceAdapter):
             result = ResultBuilder.create(
                 result_type='ast_dict_heatmap',
                 source=self.path,
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data={
                     'path': self.path,
                     'total_results': len(items),
@@ -170,7 +171,7 @@ class AstAdapter(ResourceAdapter):
             result = ResultBuilder.create(
                 result_type='ast_reveal_type',
                 source=self.path,
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data={
                     'path': self.path,
                     'var_name': self.reveal_type_var,
@@ -247,7 +248,7 @@ class AstAdapter(ResourceAdapter):
         result = ResultBuilder.create(
             result_type='ast_query',
             source=self.path,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'path': self.path,
                 'query': format_query(self.query),

@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime, date as _date
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ..analysis import search_sessions_for_term, get_files_touched
 from ....utils.parallel import grep_files as _grep_files
@@ -219,7 +220,7 @@ def list_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Dict
         result_type='claude_session_list',
         source=str(conversation_base),
         source_type='directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     name_filter = (query_params.get('filter') or query_params.get('search', '')).lower()
@@ -284,7 +285,7 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
             result_type='claude_cross_session_search',
             source=str(conversation_base),
             source_type='directory',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'term': term,
                 'error': str(e),
@@ -310,7 +311,7 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
         result_type='claude_cross_session_search',
         source=str(conversation_base),
         source_type='directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={
             'term': term,
             'since': since or None,
@@ -331,7 +332,7 @@ def _extract_session_ops(session: Dict[str, Any], file_path: str) -> Optional[Di
                 messages.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-    contract_base = {'contract_version': '1.1', 'source': session['path'], 'source_type': 'file'}
+    contract_base = {'contract_version': CONTRACT_VERSION, 'source': session['path'], 'source_type': 'file'}
     files_result = get_files_touched(messages, session['session'], contract_base)
 
     ops_for_file: Dict[str, int] = {}
@@ -372,7 +373,7 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
         result_type='claude_file_sessions',
         source=str(conversation_base),
         source_type='directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={
             'file_path': file_path,
             'since': since or None,
@@ -417,7 +418,7 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
         result_type='claude_file_sessions',
         source=str(conversation_base),
         source_type='directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={
             'file_path': file_path,
             'since': since or None,

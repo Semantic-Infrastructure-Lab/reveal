@@ -6,6 +6,8 @@ import re
 import sys
 from pathlib import Path
 
+from reveal.reveal_types import CONTRACT_VERSION
+
 # Matches the adjective-noun-MMDD pattern used for named TIA/Claude sessions.
 _SESSION_NAME_RE = re.compile(r'^([a-z]+-[a-z]+-\d{4})(?:/|$)')
 # Matches UUID session names (Windows / standard Claude Code layout).
@@ -471,17 +473,17 @@ class ClaudeAdapter(ResourceAdapter):
         self.conversation_path = self._find_conversation()
 
     def _get_contract_base(self) -> Dict[str, Any]:
-        """Get Output Contract v1.0 base fields.
+        """Get Output Contract base fields.
 
         Returns:
             Dictionary with required contract fields:
-            - contract_version: '1.0'
+            - contract_version: CONTRACT_VERSION
             - type: (to be set by caller)
             - source: Path to conversation file
             - source_type: 'file'
         """
         return {
-            'contract_version': '1.1',
+            'contract_version': CONTRACT_VERSION,
             'type': '',  # Set by caller
             'source': str(self.conversation_path) if self.conversation_path else '',
             'source_type': 'file'  # JSONL file

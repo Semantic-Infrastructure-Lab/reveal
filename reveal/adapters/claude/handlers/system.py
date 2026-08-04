@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 from datetime import date as _date
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
 
@@ -50,7 +51,7 @@ def get_history(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, An
         result_type='claude_history',
         source=str(history_path),
         source_type='file',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={
             'search': search or None,
             'project': project_filter or None,
@@ -121,7 +122,7 @@ def get_settings(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, A
         result_type='claude_settings',
         source=str(settings_path),
         source_type='file',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
     if not settings_path.exists():
         return {**base, 'error': f'Not found: {settings_path}', 'settings': {}}
@@ -157,7 +158,7 @@ def get_info(
         result_type='claude_info',
         source=str(claude_home),
         source_type='directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={
             'paths': {
                 'claude_home': _path_info(claude_home),
@@ -186,7 +187,7 @@ def get_config(claude_json: Path, query_params: Dict[str, Any]) -> Dict[str, Any
         result_type='claude_config',
         source=str(claude_json),
         source_type='file',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     if not claude_json.exists():

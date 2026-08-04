@@ -4,6 +4,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any, Dict, List
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ...utils.results import ResultBuilder
 
@@ -140,7 +141,7 @@ def get_schema_result(value: Any, file_path: Path, json_path: List[str | int], m
         result_type='json_schema',
         source=str(file_path),
         source_type='file',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={
             'file': str(file_path),
             'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
@@ -169,7 +170,7 @@ def get_flatten_result(
         result_type='json_flatten',
         source=str(file_path),
         source_type='file',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={
             'file': str(file_path),
             'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
@@ -197,7 +198,7 @@ def get_type_info_result(value: Any, file_path: Path, json_path: List[str | int]
         result_type='json_type',
         source=str(file_path),
         source_type='file',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={
             'file': str(file_path),
             'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
@@ -224,7 +225,7 @@ def get_keys_result(value: Any, file_path: Path, json_path: List[str | int]) -> 
             result_type='json_keys',
             source=str(file_path),
             source_type='file',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'file': str(file_path),
                 'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
@@ -237,7 +238,7 @@ def get_keys_result(value: Any, file_path: Path, json_path: List[str | int]) -> 
             result_type='json_keys',
             source=str(file_path),
             source_type='file',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'file': str(file_path),
                 'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
@@ -250,7 +251,7 @@ def get_keys_result(value: Any, file_path: Path, json_path: List[str | int]) -> 
             result_type='json_error',
             source=str(file_path),
             error=f'Cannot get keys from {type(value).__name__}',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
         )
 
 
@@ -270,7 +271,7 @@ def get_length_result(value: Any, file_path: Path, json_path: List[str | int]) -
             result_type='json_length',
             source=str(file_path),
             source_type='file',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'file': str(file_path),
                 'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
@@ -283,5 +284,5 @@ def get_length_result(value: Any, file_path: Path, json_path: List[str | int]) -
             result_type='json_error',
             source=str(file_path),
             error=f'Cannot get length of {type(value).__name__}',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
         )

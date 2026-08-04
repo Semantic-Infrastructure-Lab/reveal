@@ -13,6 +13,7 @@ import glob
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
@@ -248,7 +249,7 @@ class LetsEncryptAdapter(ResourceAdapter):
             result_type='letsencrypt_inventory',
             source=self.live_dir,
             source_type='letsencrypt_directory',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'live_dir': self.live_dir,
                 'live_dir_exists': live_dir_exists,

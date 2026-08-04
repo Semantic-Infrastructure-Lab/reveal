@@ -11,6 +11,7 @@ from .renderer import SSLRenderer
 from reveal.analyzers.nginx import NginxAnalyzer
 from ...utils.query import parse_query_params
 from ...utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 _SCHEMA_ELEMENTS = {
     'san': 'Subject Alternative Names (all domain names)',
@@ -309,7 +310,7 @@ class SSLAdapter(ResourceAdapter):
                 result_type='ssl_nginx_domains',
                 source=self._nginx_path or 'ssl://nginx',
                 source_type='nginx_config',
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data={
                     'domains': list(all_domains),
                     'files_processed': files_processed,
@@ -334,7 +335,7 @@ class SSLAdapter(ResourceAdapter):
             result_type='ssl_nginx_domains',
             source=self._nginx_path,
             source_type='nginx_config',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'files_processed': len(files_processed),
                 'domains': sorted(all_domains),
@@ -411,7 +412,7 @@ class SSLAdapter(ResourceAdapter):
                 result_type='ssl_certificate',
                 source=source_uri,
                 error='Failed to fetch certificate',
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
             )
             result['source_type'] = 'file' if is_file_mode else 'network'
             if probe_http and self.host and not is_file_mode:
@@ -425,7 +426,7 @@ class SSLAdapter(ResourceAdapter):
             result_type='ssl_certificate',
             source=source_uri,
             source_type='file' if is_file_mode else 'network',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'common_name': cert.common_name,
                 'issuer': cert.issuer_name,

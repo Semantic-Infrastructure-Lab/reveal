@@ -1,6 +1,7 @@
 """JSON navigation adapter (json://) - Core adapter logic."""
 
 from typing import Dict, Any, Optional
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.results import ResultBuilder
@@ -163,7 +164,7 @@ class JsonAdapter(ResourceAdapter):
             result_type='json_error',
             source=str(self.file_path),
             error=error_msg,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             file=str(self.file_path),
             path='/'.join(str(p) for p in self.json_path),
         )
@@ -182,7 +183,7 @@ class JsonAdapter(ResourceAdapter):
             result_type='json_value',
             source=str(self.file_path),
             source_type='file',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'file': str(self.file_path),
                 'path': '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)',
@@ -235,7 +236,7 @@ class JsonAdapter(ResourceAdapter):
                 result_type='json_error',
                 source=str(self.file_path),
                 error=f"Unknown query: {self.query_string}",
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 file=str(self.file_path),
                 valid_queries=list(legacy_modes) + ['field=value', 'field>value', 'sort=field', 'limit=N'],
             )

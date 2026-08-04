@@ -10,6 +10,7 @@ box it extracted zero functions/modules on real Elixir — byte/line count only
 """
 
 from typing import Any, Dict, List, Optional
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ..core import node_children as _children
 from ..registry import register
@@ -52,7 +53,7 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
             result_type='elixir_structure',
             source=self.path,
             data=structure,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             parse_mode='tree_sitter_full',
             confidence=1.0,
         )

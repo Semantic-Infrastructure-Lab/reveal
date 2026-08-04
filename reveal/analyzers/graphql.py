@@ -4,6 +4,7 @@ from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 
 @register('.graphql', '.gql', name='GraphQL', icon='🔷')
@@ -46,7 +47,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
             result_type='graphql_structure',
             source=self.path,
             data={k: v for k, v in structure.items() if v},
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             parse_mode='tree_sitter_full',
             confidence=1.0,
         )

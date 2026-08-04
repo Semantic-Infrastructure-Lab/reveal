@@ -19,6 +19,7 @@ Limitations (static analysis):
 
 import os
 from typing import Any, Dict, Optional
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .index import find_callers, find_callees, find_callees_recursive, find_uncalled, rank_by_callers, build_module_dependency_graph
@@ -308,7 +309,7 @@ class CallsAdapter(ResourceAdapter):
             return ResultBuilder.create(
                 result_type='calls_module_graph',
                 source=self.path,
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data=result_data,
                 **_CALL_GRAPH_META_KWARGS,
             )
@@ -325,7 +326,7 @@ class CallsAdapter(ResourceAdapter):
             return ResultBuilder.create(
                 result_type='calls_ranking',
                 source=self.path,
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data=result_data,
                 **_CALL_GRAPH_META_KWARGS,
             )
@@ -345,7 +346,7 @@ class CallsAdapter(ResourceAdapter):
             return ResultBuilder.create(
                 result_type='calls_uncalled',
                 source=self.path,
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data=result_data,
                 **_CALL_GRAPH_META_KWARGS,
             )
@@ -362,7 +363,7 @@ class CallsAdapter(ResourceAdapter):
             return ResultBuilder.create(
                 result_type='calls_callees_recursive',
                 source=self.path,
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data=result_data,
                 **_CALL_GRAPH_META_KWARGS,
             )
@@ -371,7 +372,7 @@ class CallsAdapter(ResourceAdapter):
             return ResultBuilder.create(
                 result_type='calls_query',
                 source=self.path,
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data={
                     'path': self.path,
                     'error': "Missing required parameter: target=<name>, callees=<name>, root=<name>, or rank=callers",
@@ -391,7 +392,7 @@ class CallsAdapter(ResourceAdapter):
             return ResultBuilder.create(
                 result_type='calls_callees',
                 source=self.path,
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 data=result_data,
                 **_CALL_GRAPH_META_KWARGS,
             )
@@ -409,7 +410,7 @@ class CallsAdapter(ResourceAdapter):
         return ResultBuilder.create(
             result_type='calls_query',
             source=self.path,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data=result_data,
             **_CALL_GRAPH_META_KWARGS,
         )

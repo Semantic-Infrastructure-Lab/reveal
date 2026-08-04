@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ...utils.results import ResultBuilder
 
@@ -28,7 +29,7 @@ def aggregate_stats(file_stats: List[Dict[str, Any]], source_path: Path) -> Dict
         return ResultBuilder.create(
             result_type='stats_summary',
             source=source_path,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'summary': {
                     'total_files': 0,
@@ -57,7 +58,7 @@ def aggregate_stats(file_stats: List[Dict[str, Any]], source_path: Path) -> Dict
     return ResultBuilder.create(
         result_type='stats_summary',
         source=source_path,
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={
             'summary': {
                 'total_files': len(file_stats),

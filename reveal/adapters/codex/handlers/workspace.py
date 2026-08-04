@@ -9,6 +9,7 @@ just previously unexposed by codex://.
 import json
 from pathlib import Path
 from typing import Any, Dict
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
 
@@ -35,7 +36,7 @@ def get_skills(codex_home: Path, resource: str) -> Dict[str, Any]:
         result_type='codex_skills',
         source=str(skills_dir),
         source_type='directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     if not skills_dir.exists():
@@ -91,7 +92,7 @@ def get_plugins(codex_home: Path, resource: str) -> Dict[str, Any]:
         result_type='codex_plugins',
         source=str(plugins_dir),
         source_type='directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
     )
 
     if not plugins_dir.exists():

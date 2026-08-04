@@ -18,6 +18,7 @@ import stat as stat_module
 import sys
 from pathlib import Path
 from typing import Callable, Dict, Any, List, Optional, Tuple
+from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
@@ -1199,7 +1200,7 @@ class ImportsAdapter(ResourceAdapter):
             result_type=response_type,
             source=str(self._target_path),
             source_type='directory' if self._target_path and self._target_path.is_dir() else 'file',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data=data_fields,
         )
         response['metadata'] = self.get_metadata()

@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional
 from ..base import FileAnalyzer
 from ..registry import register
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ class IniAnalyzer(FileAnalyzer):
                     'total_keys': total_keys,
                     'sections': sections_data
                 },
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 confidence=1.0,
             )
 
@@ -188,7 +189,7 @@ class IniAnalyzer(FileAnalyzer):
                     'section_count': 0,
                     'total_keys': 0
                 },
-                contract_version='1.1',
+                contract_version=CONTRACT_VERSION,
                 parse_mode='heuristic',
                 confidence=1.0,
             )
@@ -215,7 +216,7 @@ class IniAnalyzer(FileAnalyzer):
                 }],
                 'format': 'properties'
             },
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             parse_mode='heuristic',
             confidence=1.0,
         )

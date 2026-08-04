@@ -9,6 +9,7 @@ from typing import Dict, List, Any, Optional
 from ..base import FileAnalyzer
 from ..registry import register
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class BatchAnalyzer(FileAnalyzer):
                 'external_calls': external_calls,
                 'stats': stats,  # Named 'stats' to be skipped by _render_text_categories
             },
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             parse_mode='regex',
             confidence=1.0,
         )

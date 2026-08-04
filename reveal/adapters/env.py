@@ -6,6 +6,7 @@ import sys
 from typing import Dict, Any, Optional
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 _SCHEMA_OUTPUT_TYPES = [
     {
@@ -32,7 +33,7 @@ _SCHEMA_OUTPUT_TYPES = [
             }
         },
         'example': {
-            'contract_version': '1.1',
+            'contract_version': CONTRACT_VERSION,
             'type': 'environment',
             'source': 'system',
             'source_type': 'runtime',
@@ -331,7 +332,7 @@ class EnvAdapter(ResourceAdapter):
             result_type='environment',
             source='system',
             source_type='runtime',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'total_count': len(self.variables),
                 'categories': categorized,

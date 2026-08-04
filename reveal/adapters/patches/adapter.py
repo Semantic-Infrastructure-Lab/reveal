@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from reveal.adapters.base import ResourceAdapter, register_adapter, register_renderer
+from reveal.reveal_types import CONTRACT_VERSION
 from reveal.testability.patches import group_patches, scan_patches
 from reveal.utils.query import parse_query_params
 
@@ -131,7 +132,7 @@ class PatchesAdapter(ResourceAdapter):
         }]
 
         return {
-            'contract_version': '1.1',
+            'contract_version': CONTRACT_VERSION,
             'type': 'patches_scan',
             'source': self.path,
             'source_type': 'directory' if Path(self.path).is_dir() else 'file',

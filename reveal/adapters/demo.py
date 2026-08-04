@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import print_json_result
 from ..utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 
 class DemoRenderer:
@@ -184,7 +185,7 @@ class DemoAdapter(ResourceAdapter):
             result_type='demo_structure',
             source='demo://',
             source_type='runtime',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'items': [
                     # TODO: Populate with actual items

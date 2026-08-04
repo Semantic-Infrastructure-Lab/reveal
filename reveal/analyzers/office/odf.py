@@ -14,6 +14,7 @@ from ...registry import register
 from ...utils import format_size
 from ...utils.results import ResultBuilder
 from .base import ZipXMLAnalyzer
+from reveal.reveal_types import CONTRACT_VERSION
 
 
 # ODF namespaces
@@ -211,7 +212,7 @@ class OdtAnalyzer(OdfAnalyzer):
             result_type='odt_structure',
             source=self.path,
             data=result,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             confidence=1.0,
         )
 
@@ -342,7 +343,7 @@ class OdsAnalyzer(OdfAnalyzer):
             result_type='ods_structure',
             source=self.path,
             data=data,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             confidence=1.0,
         )
 
@@ -499,7 +500,7 @@ class OdpAnalyzer(OdfAnalyzer):
             result_type='odp_structure',
             source=self.path,
             data=data,
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             confidence=1.0,
         )
 

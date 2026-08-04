@@ -11,6 +11,7 @@ from .dns import (
 from .renderer import DomainRenderer
 from ..ssl.certificate import check_ssl_health
 from ...utils.results import ResultBuilder
+from reveal.reveal_types import CONTRACT_VERSION
 
 
 # Helper functions for domain health checks
@@ -638,7 +639,7 @@ class DomainAdapter(ResourceAdapter):
             result_type='domain_overview',
             source=f'domain://{self.domain}',
             source_type='network',
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             data={
                 'domain': self.domain,
                 'dns': {

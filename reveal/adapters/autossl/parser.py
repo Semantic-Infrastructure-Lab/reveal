@@ -34,6 +34,7 @@ import json
 import os
 import re
 from typing import Any, Dict, List
+from reveal.reveal_types import CONTRACT_VERSION
 
 from ...utils.results import ResultBuilder
 
@@ -307,7 +308,7 @@ def parse_run(timestamp: str, log_dir: str = AUTOSSL_LOG_DIR) -> Dict[str, Any]:
             result_type='autossl_run',
             source=run_dir,
             error=str(exc),
-            contract_version='1.1',
+            contract_version=CONTRACT_VERSION,
             run_timestamp=timestamp,
             log_dir=run_dir,
         )
@@ -320,7 +321,7 @@ def parse_run(timestamp: str, log_dir: str = AUTOSSL_LOG_DIR) -> Dict[str, Any]:
         result_type='autossl_run',
         source=run_dir,
         source_type='autossl_run_directory',
-        contract_version='1.1',
+        contract_version=CONTRACT_VERSION,
         data={
             'run_timestamp': timestamp,
             'run_start': run_start,
