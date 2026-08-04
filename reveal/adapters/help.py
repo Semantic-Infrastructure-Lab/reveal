@@ -341,6 +341,7 @@ class HelpAdapter(ResourceAdapter):
         'sqlite': 'adapters/SQLITE_ADAPTER_GUIDE.md',
         'ssl': 'adapters/SSL_ADAPTER_GUIDE.md',
         'stats': 'adapters/STATS_ADAPTER_GUIDE.md',
+        'surface': 'adapters/SURFACE_ADAPTER_GUIDE.md',
         'xlsx': 'adapters/XLSX_ADAPTER_GUIDE.md',
         # User guides (reveal/docs/guides/)
         'ci': 'guides/CI_RECIPES.md',
@@ -1158,7 +1159,7 @@ class HelpAdapter(ResourceAdapter):
             'clusters': [
                 {
                     'name': 'Code Analysis',
-                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches'],
+                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface'],
                     'pairs': [
                         ('ast', 'calls', 'structure feeds call-graph queries'),
                         ('ast', 'diff', 'compare element complexity across versions'),
@@ -1170,6 +1171,8 @@ class HelpAdapter(ResourceAdapter):
                         ('imports', 'depends', 'forward imports + reverse dependency graph'),
                         ('stats', 'git', 'quality score over commit history'),
                         ('git', 'diff', 'git history drives structural diff views'),
+                        ('surface', 'imports', 'external boundaries + what imports reach them'),
+                        ('surface', 'stats', 'attack-surface map + quality score for the same tree'),
                     ],
                 },
                 {

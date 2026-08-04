@@ -35,6 +35,7 @@ from .calls import CallsAdapter
 from .depends import DependsAdapter
 from .patches import PatchesAdapter
 from .codex import CodexAdapter
+from .surface import SurfaceAdapter
 
 # Optional adapters (require extra dependencies)
 try:
@@ -79,6 +80,7 @@ __all__ = [
     'DependsAdapter',
     'PatchesAdapter',
     'CodexAdapter',
+    'SurfaceAdapter',
 ]
 if _git_available:
     __all__.append('GitAdapter')
