@@ -313,6 +313,7 @@ class HelpAdapter(ResourceAdapter):
         'calls': 'adapters/CALLS_ADAPTER_GUIDE.md',
         'claude': 'adapters/CLAUDE_ADAPTER_GUIDE.md',
             'codex': 'adapters/CODEX_ADAPTER_GUIDE.md',
+        'contracts': 'adapters/CONTRACTS_ADAPTER_GUIDE.md',
         'cpanel': 'adapters/CPANEL_ADAPTER_GUIDE.md',
         'depends': 'adapters/DEPENDS_ADAPTER_GUIDE.md',
         'diff': 'adapters/DIFF_ADAPTER_GUIDE.md',
@@ -1159,7 +1160,7 @@ class HelpAdapter(ResourceAdapter):
             'clusters': [
                 {
                     'name': 'Code Analysis',
-                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface'],
+                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts'],
                     'pairs': [
                         ('ast', 'calls', 'structure feeds call-graph queries'),
                         ('ast', 'diff', 'compare element complexity across versions'),
@@ -1173,6 +1174,8 @@ class HelpAdapter(ResourceAdapter):
                         ('git', 'diff', 'git history drives structural diff views'),
                         ('surface', 'imports', 'external boundaries + what imports reach them'),
                         ('surface', 'stats', 'attack-surface map + quality score for the same tree'),
+                        ('contracts', 'ast', 'architectural seams + full structure for the same classes'),
+                        ('contracts', 'calls', 'contracts + who calls into their implementations'),
                     ],
                 },
                 {

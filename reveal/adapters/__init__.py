@@ -36,6 +36,7 @@ from .depends import DependsAdapter
 from .patches import PatchesAdapter
 from .codex import CodexAdapter
 from .surface import SurfaceAdapter
+from .contracts import ContractsAdapter
 
 # Optional adapters (require extra dependencies)
 try:
@@ -81,6 +82,7 @@ __all__ = [
     'PatchesAdapter',
     'CodexAdapter',
     'SurfaceAdapter',
+    'ContractsAdapter',
 ]
 if _git_available:
     __all__.append('GitAdapter')
