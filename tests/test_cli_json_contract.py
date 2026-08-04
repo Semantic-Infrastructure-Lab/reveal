@@ -38,7 +38,7 @@ class TestCliJsonContract(unittest.TestCase):
     def test_every_known_json_dumps_site_is_enveloped(self):
         for filename, expected_sites in _EXPECTED_JSON_SITES.items():
             with self.subTest(file=filename):
-                content = (_COMMANDS_DIR / filename).read_text()
+                content = (_COMMANDS_DIR / filename).read_text(encoding='utf-8')
                 dumps_calls = re.findall(r'json\.dumps\(', content)
                 self.assertEqual(
                     len(dumps_calls), expected_sites,
@@ -62,7 +62,7 @@ class TestCliJsonContract(unittest.TestCase):
             if path.name in _EXPECTED_JSON_SITES or path.name == '__init__.py':
                 continue
             with self.subTest(file=path.name):
-                content = path.read_text()
+                content = path.read_text(encoding='utf-8')
                 dumps_calls = len(re.findall(r'json\.dumps\(', content))
                 envelope_calls = len(re.findall(r'add_cli_contract_fields\(', content))
                 self.assertGreaterEqual(
@@ -97,10 +97,11 @@ class TestAddCliContractFields(unittest.TestCase):
         from pathlib import Path as PathlibPath
         from reveal.utils.results import add_cli_contract_fields
 
+        p = PathlibPath('tmp') / 'y'
         enveloped = add_cli_contract_fields(
-            {}, result_type='deps', source=PathlibPath('/tmp/y'),
+            {}, result_type='deps', source=p,
         )
-        self.assertEqual(enveloped['source'], '/tmp/y')
+        self.assertEqual(enveloped['source'], str(p))
         self.assertIsInstance(enveloped['source'], str)
 
     def test_source_type_and_contract_version_are_overridable(self):
