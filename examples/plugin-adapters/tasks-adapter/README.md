@@ -90,21 +90,31 @@ set to the plugin directory.
 
 ## Constructor convention — worth getting right
 
-`ResourceAdapter.from_uri()` tries several constructor call shapes in order
-until one works (see `reveal/adapters/factory.py`). For a `scheme://path?query`
-adapter, the shape that's tried *first* — and the one this example uses — is:
+For a `scheme://path?query` adapter, use the canonical signature and opt out
+of `ResourceAdapter.from_uri()`'s legacy constructor-guessing behavior —
+the shape this example uses:
 
 ```python
-def __init__(self, path: str, query_string: Optional[str] = None):
-    ...
+class TasksAdapter(ResourceAdapter):
+    LEGACY_INIT = False  # construct directly, skip the deprecated try-chain
+
+    def __init__(self, path: str, query_string: Optional[str] = None):
+        ...
 ```
 
 `query_string` arrives as the raw, unparsed string after `?` (e.g.
 `"status=open&priority=high"`); parse it yourself with
 `urllib.parse.parse_qs`, as `adapter.py` does. A `**query_params`-style
-signature looks tempting but isn't tried by the resolver the same way (query
-params in a `?...` URI are passed as one positional string, not unpacked into
-keyword args) — use the `path, query_string=None` shape shown here.
+signature looks tempting but doesn't match this contract either (query
+params in a `?...` URI are passed as one positional string, not unpacked
+into keyword args) — use the `path, query_string=None` shape shown here.
+
+Without `LEGACY_INIT = False`, `from_uri()` falls back to a 5-strategy
+try-chain that guesses at your constructor's shape (see
+`reveal/adapters/factory.py`) — it still works for a canonical-shaped
+`__init__` like this one, but it's deprecated (fires a one-time
+`DeprecationWarning`) and only kept as a compatibility shim for adapters
+that predate this contract. Set `LEGACY_INIT = False` on any new plugin.
 
 ## Not scoped here
 
