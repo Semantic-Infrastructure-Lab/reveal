@@ -37,6 +37,17 @@ class TasksAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'tasks'
 
+    # __init__ below already matches the canonical (resource, query)
+    # signature, so opt out of reveal's deprecated construction try-chain.
+    # See ADAPTER_AUTHORING_GUIDE.md's Quick Start / reveal/adapters/base.py.
+    LEGACY_INIT = False
+
+    # tasks:// requires an explicit file (__init__ raises ValueError
+    # otherwise) — bare 'tasks://' isn't a valid directory-style query, so
+    # keep the empty-resource default as '' rather than '.' to preserve
+    # that guard instead of silently reading the current directory.
+    CANONICAL_EMPTY_RESOURCE = ''
+
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         return {

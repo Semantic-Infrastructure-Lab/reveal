@@ -3,11 +3,25 @@
 These helpers are used by ResourceAdapter.from_uri and by the router when
 initializing adapters that don't inherit ResourceAdapter (e.g. test doubles).
 Each _try_* function returns (adapter_instance, error) — non-None adapter = success.
+
+BACK-948: all 25 production adapters have migrated to the canonical
+__init__(resource='', query=None, **kwargs) signature (LEGACY_INIT = False,
+BACK-907) and construct via _canonical_init instead. The 5-strategy
+try-chain below is now reachable only for third-party/plugin adapters that
+subclass ResourceAdapter without opting in (LEGACY_INIT defaults to True).
+It is kept as an explicit, deprecated compatibility shim for that case
+rather than deleted, so existing plugins don't break silently — see
+_default_from_uri's one-time-per-class deprecation warning.
 """
 
 from __future__ import annotations
 
-from typing import Any, Optional, Tuple
+import warnings
+from typing import Any, Optional, Set, Tuple
+
+# Adapter classes already warned about LEGACY_INIT — one warning per class,
+# not per call, so a hot loop through a legacy plugin adapter doesn't spam.
+_legacy_init_warned: Set[type] = set()
 
 
 def _is_constructor_error(exc: TypeError) -> bool:
@@ -131,6 +145,9 @@ def _default_from_uri(adapter_class: type, scheme: str, resource: str,
 
     Adapters that opt into the canonical signature (LEGACY_INIT = False,
     see adapters/base.py) skip the try-chain entirely — see _canonical_init.
+    Reaching the try-chain below now means either a test double or a
+    third-party plugin adapter that hasn't migrated (BACK-948); a
+    deprecation warning fires once per adapter_class in that case.
 
     Raises:
         ImportError: If initialization failed due to a missing optional dependency.
@@ -138,6 +155,22 @@ def _default_from_uri(adapter_class: type, scheme: str, resource: str,
     """
     if not getattr(adapter_class, 'LEGACY_INIT', True):
         return _canonical_init(adapter_class, resource)
+
+    if adapter_class not in _legacy_init_warned:
+        _legacy_init_warned.add(adapter_class)
+        class_name = getattr(adapter_class, '__qualname__', None) or repr(adapter_class)
+        module_name = getattr(adapter_class, '__module__', '')
+        full_name = f"{module_name}.{class_name}" if module_name else class_name
+        warnings.warn(
+            f"{full_name} is using reveal's deprecated 5-strategy constructor "
+            "try-chain (LEGACY_INIT defaults to True). Migrate __init__ to the "
+            "canonical signature __init__(self, resource='', query=None, "
+            "**kwargs) and set LEGACY_INIT = False to opt out of the try-chain "
+            "and its guessing overhead. See reveal/adapters/base.py for the "
+            "contract.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
 
     if resource:
         init_attempts = [

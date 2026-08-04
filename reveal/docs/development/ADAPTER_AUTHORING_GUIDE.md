@@ -68,9 +68,16 @@ class MyAdapter(ResourceAdapter):
         myscheme://resource/item   # Access specific item
     """
 
-    def __init__(self, resource: str, item: str = None):
+    # False = __init__ matches the canonical (resource, query) signature
+    # below, so from_uri() constructs directly instead of guessing via a
+    # try-chain. Default is True (legacy, deprecated) for backward compat
+    # with adapters that predate this contract — always set False on new
+    # adapters. See reveal/adapters/base.py's LEGACY_INIT docstring.
+    LEGACY_INIT = False
+
+    def __init__(self, resource: str = '', query: str = None, **kwargs):
         self.resource = resource
-        self.item = item
+        self.query = query
 
     def get_structure(self, **kwargs):
         """Return structure of the resource."""

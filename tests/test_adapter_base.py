@@ -1,6 +1,7 @@
 """Tests for reveal.adapters.base module."""
 
 import unittest
+import warnings
 from reveal.adapters.base import (
     ResourceAdapter,
     register_adapter,
@@ -10,6 +11,7 @@ from reveal.adapters.base import (
     _is_constructor_error,
     _default_from_uri,
 )
+from reveal.adapters.factory import _legacy_init_warned
 
 
 class TestResourceAdapter(unittest.TestCase):
@@ -174,6 +176,67 @@ class TestIsConstructorError(unittest.TestCase):
         # This adapter only accepts zero args; _try_no_args_init will succeed.
         adapter = _default_from_uri(SucceedsWithNoArgs, 'test', '', None)
         self.assertTrue(adapter.ok)
+
+
+class TestLegacyInitDeprecation(unittest.TestCase):
+    """BACK-948: try-chain is a deprecated plugin-only compatibility shim."""
+
+    def tearDown(self):
+        _legacy_init_warned.clear()
+
+    def test_legacy_adapter_warns_once_per_class(self):
+        """First use of the try-chain for a class warns; repeats don't."""
+        class LegacyAdapter:
+            LEGACY_INIT = True
+
+            def __init__(self, resource):
+                self.resource = resource
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            _default_from_uri(LegacyAdapter, 'test', 'r', None)
+            _default_from_uri(LegacyAdapter, 'test', 'r', None)
+
+        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        self.assertEqual(len(deprecations), 1)
+        self.assertIn('LegacyAdapter', str(deprecations[0].message))
+        self.assertIn('LEGACY_INIT', str(deprecations[0].message))
+
+    def test_canonical_adapter_does_not_warn(self):
+        """LEGACY_INIT = False adapters skip the try-chain and never warn."""
+        class CanonicalAdapter:
+            LEGACY_INIT = False
+
+            def __init__(self, resource='', query=None, **kwargs):
+                self.resource = resource
+                self.query = query
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            _default_from_uri(CanonicalAdapter, 'test', 'r', None)
+
+        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        self.assertEqual(len(deprecations), 0)
+
+    def test_warning_survives_mock_adapter_class_missing_dunder_attrs(self):
+        """A Mock used as adapter_class (as several routing tests do) lacks a
+        real __qualname__/__module__ and raises AttributeError on access —
+        warning construction must getattr() with a fallback, not crash the
+        whole from_uri() call (BACK-948 regression, caught via test_routing.py
+        failing with 'Error initializing ... adapter: __qualname__')."""
+        from unittest.mock import Mock
+
+        mock_adapter_class = Mock(spec=['LEGACY_INIT', '__call__'])
+        mock_adapter_class.LEGACY_INIT = True
+        mock_adapter_class.return_value = Mock(resource='r')
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            adapter = _default_from_uri(mock_adapter_class, 'test', '', None)
+
+        self.assertEqual(adapter.resource, 'r')
+        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        self.assertEqual(len(deprecations), 1)
 
 
 if __name__ == '__main__':
