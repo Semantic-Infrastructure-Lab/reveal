@@ -15,13 +15,6 @@ from .path_utils import (
     find_project_root,
     get_relative_to_root,
 )
-from .safe_operations import (
-    safe_operation,
-    safe_read_file,
-    safe_json_loads,
-    safe_yaml_loads,
-    SafeContext,
-)
 from .updates import check_for_updates
 from .parallel import grep_files
 from .query import (
@@ -50,11 +43,6 @@ __all__ = [
     'search_parents',
     'find_project_root',
     'get_relative_to_root',
-    'safe_operation',
-    'safe_read_file',
-    'safe_json_loads',
-    'safe_yaml_loads',
-    'SafeContext',
     'check_for_updates',
     'grep_files',
     'coerce_value',
