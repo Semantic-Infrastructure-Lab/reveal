@@ -476,7 +476,9 @@ class BaseRule(ABC):
             override = config.get_rule_config(cls.code, 'skip_categories', None)
             if override is not None:
                 return set(override)
-        except Exception:
+        except (ImportError, KeyError, TypeError):
+            # Config module missing, malformed .reveal.yaml, or bad override
+            # shape — fall back to the class-level default rather than fail.
             pass
         return cls.skip_categories or set()
 

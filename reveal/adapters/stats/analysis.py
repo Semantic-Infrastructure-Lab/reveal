@@ -48,6 +48,8 @@ def find_analyzable_files(
             from ...cli.file_checker import load_gitignore_patterns  # deferred: cli cycle
             gitignore_patterns = load_gitignore_patterns(directory)
         except Exception:
+            # Missing/unreadable .gitignore or import cycle glitch — scan
+            # unfiltered rather than fail the whole directory walk.
             pass
 
     for root, dirs, files in os.walk(directory):

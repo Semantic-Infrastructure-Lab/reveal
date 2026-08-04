@@ -87,8 +87,12 @@ class I005(BaseRule):
                             continue
                         import_occurrences[normalized].append((stmt.line_number, stmt.source_line.strip()))
                     used_extractor = True
-                except Exception:
-                    pass
+                except Exception as e:
+                    # A real extractor crash must not look identical to "no
+                    # extractor for this language" — log it so a silent accuracy
+                    # regression is at least visible, even though we still fall
+                    # back to the structure-dict path below.
+                    logger.debug(f"Import extractor failed for {file_path}: {e}")
 
         if not used_extractor:
             # Fallback: use structure dict (non-Python files, non-existent paths, or extractor failure)

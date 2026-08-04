@@ -68,6 +68,8 @@ def _log_perf(start: float, argv_snapshot: List[str], exit_code: int) -> None:
         with open(PERF_LOG_PATH, 'a', encoding='utf-8') as f:
             f.write(json.dumps(record) + '\n')
     except Exception:
+        # Perf log is a best-effort diagnostic sidecar — disk full, permission
+        # denied, or a read-only filesystem must never fail the actual command.
         pass
 
 

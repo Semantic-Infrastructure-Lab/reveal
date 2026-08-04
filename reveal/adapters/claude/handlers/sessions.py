@@ -90,6 +90,8 @@ def _scan_jsonl_for_title(jsonl_path: Path) -> Optional[str]:
                     if title is not None:
                         text_fallback = title
     except Exception:
+        # Session file may be missing, truncated mid-write, or contain
+        # non-UTF8 bytes — best-effort title lookup, no title beats a crash.
         pass
     return text_fallback
 
@@ -129,6 +131,8 @@ def _read_session_stats(jsonl_path: Path) -> Dict[str, Any]:
                 m = rem // 60
                 stats['duration'] = f"{h}h{m:02d}m" if h else f"{m}m"
     except Exception:
+        # Malformed/partial JSONL or unparsable timestamps — stats are
+        # decorative sidebar info, partial/empty stats beat a crash.
         pass
     return stats
 
