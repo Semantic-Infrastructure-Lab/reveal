@@ -165,7 +165,7 @@ reveal/docs/
 │   ├── CALLS_ADAPTER_GUIDE.md
 │   ├── DEPENDS_ADAPTER_GUIDE.md
 │   ├── NGINX_GUIDE.md
-│   └── ...  (25 adapter guides total)
+│   └── ...  (26 adapter guides total)
 ├── guides/                                # Feature and workflow guides
 │   ├── RECIPES.md                         # help://recipes
 │   ├── CONFIGURATION_GUIDE.md
