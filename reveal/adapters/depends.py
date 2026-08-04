@@ -22,6 +22,7 @@ from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supp
 from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor
 from ..defaults import SKIP_DIRECTORIES
 from ..utils.query import parse_query_params
+from ..utils.results import ResultBuilder
 from ..utils.path_utils import (
     is_skippable_dir,
     is_unsafe_scan_root,
@@ -1465,17 +1466,19 @@ class DependsAdapter(ResourceAdapter):
             if not matched:
                 dependents.append({'file': str(importer), 'line': 0, 'module': '', 'names': [], 'type': 'unknown', 'is_relative': False, 'alias': None})
 
-        result = {
-            'contract_version': CONTRACT_VERSION,
-            'type': 'module_dependents',
-            'source': str(self._target_path),
-            'source_type': 'file',
-            'target': str(target),
-            'dependents': dependents,
-            'count': len(dependents),
-            'metadata': self.get_metadata(),
-            '_meta': self._build_meta(),
-        }
+        result = ResultBuilder.create(
+            result_type='module_dependents',
+            source=str(self._target_path),
+            contract_version=CONTRACT_VERSION,
+            source_type='file',
+            data={
+                'target': str(target),
+                'dependents': dependents,
+                'count': len(dependents),
+                'metadata': self.get_metadata(),
+                '_meta': self._build_meta(),
+            },
+        )
         # BACK-547: undercount_possible flags that an empty result may be a lower
         # bound (intra-project imports that didn't resolve), so the renderer
         # softens the confident "nothing imports this" assertion and the ⚠ shows.
@@ -1514,16 +1517,18 @@ class DependsAdapter(ResourceAdapter):
         if top_n:
             modules = modules[:top_n]
 
-        result = {
-            'contract_version': CONTRACT_VERSION,
-            'type': 'dependency_summary',
-            'source': str(self._target_path),
-            'source_type': 'directory',
-            '_format': fmt,
-            'modules': modules,
-            'metadata': self.get_metadata(),
-            '_meta': self._build_meta(),
-        }
+        result = ResultBuilder.create(
+            result_type='dependency_summary',
+            source=str(self._target_path),
+            contract_version=CONTRACT_VERSION,
+            source_type='directory',
+            data={
+                '_format': fmt,
+                'modules': modules,
+                'metadata': self.get_metadata(),
+                '_meta': self._build_meta(),
+            },
+        )
         empty = not modules
         result['undercount_possible'] = empty and self._unresolved_intra > 0
         warnings = self._warnings(include_honest_decline=empty)

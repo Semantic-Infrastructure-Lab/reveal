@@ -9,6 +9,7 @@ from reveal.adapters.base import ResourceAdapter, register_adapter, register_ren
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.testability.patches import group_patches, scan_patches
 from reveal.utils.query import parse_query_params
+from reveal.utils.results import ResultBuilder
 
 from .renderer import PatchesRenderer
 
@@ -131,28 +132,27 @@ class PatchesAdapter(ResourceAdapter):
             'message': 'Patch pressure is advisory; mocking external boundaries can be correct.',
         }]
 
-        return {
-            'contract_version': CONTRACT_VERSION,
-            'type': 'patches_scan',
-            'source': self.path,
-            'source_type': 'directory' if Path(self.path).is_dir() else 'file',
-            'query': {
-                'group': group_by,
-                'limit': limit,
-                'min': min_count,
-                'target': target_filter,
-                'private': private_only,
-                'suppress': suppress,
+        return ResultBuilder.create(
+            result_type='patches_scan',
+            source=self.path,
+            contract_version=CONTRACT_VERSION,
+            parse_mode='python_ast+tree_sitter',
+            confidence=0.9,
+            warnings=warnings,
+            errors=[],
+            data={
+                'query': {
+                    'group': group_by,
+                    'limit': limit,
+                    'min': min_count,
+                    'target': target_filter,
+                    'private': private_only,
+                    'suppress': suppress,
+                },
+                'total_uses': len(patches),
+                'total_targets': len(targets),
+                'displayed_groups': len(groups),
+                'groups': [g.to_dict() for g in groups],
+                'uses': [p.to_dict() for p in patches],
             },
-            'total_uses': len(patches),
-            'total_targets': len(targets),
-            'displayed_groups': len(groups),
-            'groups': [g.to_dict() for g in groups],
-            'uses': [p.to_dict() for p in patches],
-            'meta': self.create_meta(
-                parse_mode='python_ast+tree_sitter',
-                confidence=0.9,
-                warnings=warnings,
-                errors=[],
-            ),
-        }
+        )
