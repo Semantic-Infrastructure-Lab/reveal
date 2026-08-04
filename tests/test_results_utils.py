@@ -676,7 +676,7 @@ class TestContractVersionSingleSource:
                 continue
             if path.name == 'reveal_types.py':
                 continue  # the constant's own definition
-            text = path.read_text()
+            text = path.read_text(encoding='utf-8')
             if pattern.search(text):
                 offenders.append(rel)
 
