@@ -180,6 +180,11 @@ overrides:
     rules:
       disable:
         - M104  # CLI introspection uses large lookup tables for command metadata
+  - files: "reveal/adapters/ast/nav_effects.py"
+    rules:
+      disable:
+        - M104  # _TAXONOMY_BY_LANG is a corpus-validated per-language side-effect
+                # keyword taxonomy (BACK-547/633/635/636), not staleness-risk drift
   - files: "reveal/elements.py"
     rules:
       disable:
