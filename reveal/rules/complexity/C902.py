@@ -24,7 +24,7 @@ class C902(BaseRule):
     version = "1.0.0"
 
     # Length thresholds
-    THRESHOLD_WARN = 50   # Warning: getting large
+    THRESHOLD_WARN = 75   # Warning: getting large
     THRESHOLD_ERROR = 100  # Error: god function
 
     def check(self,

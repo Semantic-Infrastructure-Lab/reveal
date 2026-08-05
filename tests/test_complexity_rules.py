@@ -31,7 +31,7 @@ class TestC902FunctionTooLong(unittest.TestCase):
     # ==================== Tests for function length thresholds ====================
 
     def test_short_function_ok(self):
-        """Test that short functions (< 50 lines) are not flagged."""
+        """Test that short functions (< 75 lines) are not flagged."""
         structure = {
             'functions': [
                 {'name': 'short_func', 'line': 1, 'line_count': 30}
@@ -42,10 +42,10 @@ class TestC902FunctionTooLong(unittest.TestCase):
         self.assertEqual(len(detections), 0)
 
     def test_medium_function_warning(self):
-        """Test that medium functions (51-100 lines) trigger MEDIUM severity."""
+        """Test that medium functions (76-100 lines) trigger MEDIUM severity."""
         structure = {
             'functions': [
-                {'name': 'medium_func', 'line': 1, 'line_count': 75}
+                {'name': 'medium_func', 'line': 1, 'line_count': 90}
             ]
         }
         path = self.create_temp_file("# content")
@@ -53,7 +53,7 @@ class TestC902FunctionTooLong(unittest.TestCase):
         self.assertEqual(len(detections), 1)
         self.assertEqual(detections[0].rule_code, 'C902')
         self.assertEqual(detections[0].severity, Severity.MEDIUM)
-        self.assertIn('75 lines', detections[0].message)
+        self.assertIn('90 lines', detections[0].message)
         self.assertIn('medium_func', detections[0].message)
         self.assertIn('consider refactoring', detections[0].message.lower())
 
@@ -74,10 +74,10 @@ class TestC902FunctionTooLong(unittest.TestCase):
         self.assertIn('max: 100', detections[0].message)
 
     def test_exactly_at_warn_threshold(self):
-        """Test edge case: exactly at warn threshold (51 lines)."""
+        """Test edge case: exactly at warn threshold (76 lines)."""
         structure = {
             'functions': [
-                {'name': 'func_at_threshold', 'line': 1, 'line_count': 51}
+                {'name': 'func_at_threshold', 'line': 1, 'line_count': 76}
             ]
         }
         path = self.create_temp_file("# content")
@@ -98,10 +98,10 @@ class TestC902FunctionTooLong(unittest.TestCase):
         self.assertEqual(detections[0].severity, Severity.HIGH)
 
     def test_just_below_warn_threshold(self):
-        """Test edge case: just below warn threshold (50 lines)."""
+        """Test edge case: just below warn threshold (75 lines)."""
         structure = {
             'functions': [
-                {'name': 'func_below', 'line': 1, 'line_count': 50}
+                {'name': 'func_below', 'line': 1, 'line_count': 75}
             ]
         }
         path = self.create_temp_file("# content")
@@ -127,7 +127,7 @@ class TestC902FunctionTooLong(unittest.TestCase):
         structure = {
             'functions': [
                 {'name': 'short_func', 'line': 1, 'line_count': 20},
-                {'name': 'medium_func', 'line': 25, 'line_count': 60},
+                {'name': 'medium_func', 'line': 25, 'line_count': 80},
                 {'name': 'long_func', 'line': 90, 'line_count': 150},
                 {'name': 'another_short', 'line': 250, 'line_count': 15},
             ]
@@ -258,7 +258,7 @@ class TestC902FunctionTooLong(unittest.TestCase):
         """Test that MEDIUM severity has appropriate suggestion."""
         structure = {
             'functions': [
-                {'name': 'medium_func', 'line': 1, 'line_count': 75}
+                {'name': 'medium_func', 'line': 1, 'line_count': 90}
             ]
         }
         path = self.create_temp_file("# content")
@@ -303,7 +303,7 @@ class TestC902FunctionTooLong(unittest.TestCase):
         """Test that context field includes function name and line count."""
         structure = {
             'functions': [
-                {'name': 'my_func', 'line': 1, 'line_count': 75}
+                {'name': 'my_func', 'line': 1, 'line_count': 90}
             ]
         }
         path = self.create_temp_file("# content")
@@ -311,7 +311,7 @@ class TestC902FunctionTooLong(unittest.TestCase):
         self.assertEqual(len(detections), 1)
         context = detections[0].context
         self.assertIn('my_func', context)
-        self.assertIn('75 lines', context)
+        self.assertIn('90 lines', context)
 
     # ==================== Tests for rule metadata ====================
 
@@ -337,7 +337,7 @@ class TestC902FunctionTooLong(unittest.TestCase):
 
     def test_thresholds_are_correct(self):
         """Test threshold constants."""
-        self.assertEqual(self.rule.THRESHOLD_WARN, 50)
+        self.assertEqual(self.rule.THRESHOLD_WARN, 75)
         self.assertEqual(self.rule.THRESHOLD_ERROR, 100)
 
     # ==================== Tests for various file types ====================
