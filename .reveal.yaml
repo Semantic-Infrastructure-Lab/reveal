@@ -104,6 +104,12 @@ overrides:
     rules:
       disable:
         - D001  # FileConfig and RevealConfig both have get_rule_config (different classes, different self._config)
+  - files: "reveal/treesitter.py"
+    rules:
+      disable:
+        - D001  # BACK-915: no-op extension-point hooks (_dart_constructor_name etc.) are
+                # intentionally identical trivial defaults, overridden per-language in
+                # analyzers/{dart,lua}.py — same shape as result.py's Success/Failure above
 
   # U502: Docs use example URLs (github.com/user/repo) and third-party URLs by design
   - files: "reveal/docs/**/*.md"

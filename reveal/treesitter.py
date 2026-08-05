@@ -617,106 +617,17 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         functions.extend(self._extract_arrow_functions())
         functions.extend(self._extract_class_field_functions())
-        functions.extend(self._extract_lua_function_expressions())
+        functions.extend(self._extract_language_specific_functions())
 
         return functions
 
-    # ── Lua function-expression-as-value (`name = function(...) ... end`) ───
-    # BACK-758 (Lua calls-recall-oracle pre-flight, BACK-730 sixteenth
-    # language): a bare `function_definition` (Lua's node kind for an
-    # anonymous function literal -- coincidentally the same string Python's
-    # own `def` uses, but a structurally distinct grammar in this language)
-    # carries no name of its own; the name lives on the enclosing
-    # assignment/field, exactly the shape `_arrow_or_fn_value` already
-    # handles for JS/TS `const f = () => {}`. Without an equivalent here,
-    # `local NOOP = function() ... end`, `M.setter = function(x) ... end`
-    # (module-table method idiom), bare `setter = function(x) ... end`
-    # (no `local`), and table-constructor fields (`{ __call = function()
-    # ... end }`, Lua's metatable/dispatch-table idiom) were ALL entirely
-    # invisible to get_structure()/--outline -- not just their calls, the
-    # whole scope -- found via a real Kong corpus grep (643 occurrences of
-    # `= function(` across 176 files). `local function name() ... end` /
-    # `function name() ... end` (both `function_declaration`, already
-    # extracted above) are unaffected; this only covers the
-    # value-is-a-bare-function_definition shape.
-    _LUA_ASSIGN_TARGET_KINDS = ('identifier', 'dot_index_expression')
-
-    def _lua_function_expr_name(self, target_node) -> Optional[str]:
-        """Return the bare name for a Lua assignment/field target node.
-
-        `identifier` -> its own text; `dot_index_expression` (`M.setter`)
-        -> just the final segment, matching `_name_via_dot_index`'s
-        existing convention for `function M.setter(...)` declarations.
+    def _extract_language_specific_functions(self) -> List[Dict[str, Any]]:
+        """Hook for a language whose functions-as-values aren't covered by
+        the shared arrow/class-field extractors above (e.g. Lua's
+        `name = function(...) ... end`, BACK-758). No-op by default —
+        overridden in analyzers/lua.py (BACK-915).
         """
-        kind = _zero_arg(target_node, 'kind')
-        if kind == 'identifier':
-            return self._get_node_text(target_node)
-        if kind == 'dot_index_expression':
-            return self._get_node_text(target_node).rsplit('.', 1)[-1]
-        return None
-
-    def _lua_table_field_name_value(self, field_node) -> Tuple[Optional[Any], Optional[Any]]:
-        """Return (name_node, value_node) for a Lua table-constructor `field`
-        whose key is a LITERAL identifier (`{ key = function() end }`), or
-        (None, None) for a computed key (`{ [expr] = function() end }`) or a
-        positional value (no key at all).
-
-        A computed key's bracketed expression (`[CONTENT_TYPE_POST] =
-        function...`) also parses its inner expression as a bare
-        `identifier` child of the same `field` node -- found via a real
-        Kong corpus false positive (`pdk/service/request.lua`'s
-        `[CONTENT_TYPE_POST] = function(...)`/`[CONTENT_TYPE_FORM_DATA] =
-        function(...)` dynamic dispatch table): naively taking "the first
-        identifier child" misattributed the value function's calls to the
-        KEY EXPRESSION's name, not a real function name at all. A literal
-        string-key field's identifier is always the field's structural
-        FIRST child; a computed key's is preceded by a `[` token — that
-        ordering is the only reliable distinguishing signal.
-        """
-        kids = _children(field_node)
-        if not kids or _zero_arg(kids[0], 'kind') != 'identifier':
-            return None, None
-        name_node = kids[0]
-        value_node = next(
-            (c for c in kids if _zero_arg(c, 'kind') == 'function_definition'), None
-        )
-        return (name_node, value_node) if value_node else (None, None)
-
-    def _extract_lua_function_expressions(self) -> List[Dict[str, Any]]:
-        """Extract `name = function(...) ... end` at assignment or table-field sites.
-
-        `assignment_statement` is Lua-only among reveal's supported grammars
-        (a no-op scan everywhere else), so this needs no language gate.
-        """
-        funcs = []
-
-        # `local NAME = function...` / `NAME = function...` / `M.k = function...`
-        for stmt in self._find_nodes_by_type('assignment_statement'):
-            kids = _children(stmt)
-            try:
-                eq_idx = next(i for i, c in enumerate(kids) if _zero_arg(c, 'kind') == '=')
-            except StopIteration:
-                continue
-            targets = [c for c in kids[:eq_idx] if _zero_arg(c, 'kind') == 'variable_list']
-            values = [c for c in kids[eq_idx + 1:] if _zero_arg(c, 'kind') == 'expression_list']
-            if not targets or not values:
-                continue
-            target_nodes = [c for c in _children(targets[0]) if _zero_arg(c, 'kind') in self._LUA_ASSIGN_TARGET_KINDS]
-            value_nodes = [c for c in _children(values[0]) if _zero_arg(c, 'kind') == 'function_definition']
-            for target_node, value_node in zip(target_nodes, value_nodes):
-                name = self._lua_function_expr_name(target_node)
-                if name:
-                    funcs.append(self._build_function_dict(value_node, name, []))
-
-        # Table-constructor field: `{ key = function(...) ... end }`
-        for field in self._find_nodes_by_type('field'):
-            name_node, value_node = self._lua_table_field_name_value(field)
-            if name_node and value_node:
-                funcs.append(self._build_function_dict(
-                    value_node, self._get_node_text(name_node), []
-                ))
-
-        return funcs
+        return []
 
     # ── JS-family class-field arrow method (`foo = (...) => {}`) ────────────
     # BACK-519: `public_field_definition` (TS/TSX) / `field_definition` (JS)
@@ -881,30 +792,15 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 if name_node and value_node and self._get_node_text(name_node) == name:
                     return value_node
 
-        # 3. Lua `name = function(...) ... end` / `M.k = function(...) ... end`
-        # (BACK-758) — assignment_statement is Lua-only, a no-op scan for
-        # every other language.
-        for stmt in self._find_nodes_by_type('assignment_statement'):
-            kids = _children(stmt)
-            try:
-                eq_idx = next(i for i, c in enumerate(kids) if _zero_arg(c, 'kind') == '=')
-            except StopIteration:
-                continue
-            targets = [c for c in kids[:eq_idx] if _zero_arg(c, 'kind') == 'variable_list']
-            values = [c for c in kids[eq_idx + 1:] if _zero_arg(c, 'kind') == 'expression_list']
-            if not targets or not values:
-                continue
-            target_nodes = [c for c in _children(targets[0]) if _zero_arg(c, 'kind') in self._LUA_ASSIGN_TARGET_KINDS]
-            value_nodes = [c for c in _children(values[0]) if _zero_arg(c, 'kind') == 'function_definition']
-            for target_node, value_node in zip(target_nodes, value_nodes):
-                if self._lua_function_expr_name(target_node) == name:
-                    return value_node
+        # 3. Language-specific fallback (e.g. Lua's `name = function(...) ... end`
+        # / table-field function value, BACK-758) — no-op by default.
+        return self._find_named_language_specific_function(name)
 
-        # 4. Lua table-constructor field `{ key = function(...) ... end }`
-        for field in self._find_nodes_by_type('field'):
-            name_node, value_node = self._lua_table_field_name_value(field)
-            if name_node and value_node and self._get_node_text(name_node) == name:
-                return value_node
+    def _find_named_language_specific_function(self, name: str):
+        """Hook paired with `_extract_language_specific_functions` above:
+        resolve a bare name to a language-specific function-as-value node.
+        No-op by default — overridden in analyzers/lua.py (BACK-915).
+        """
         return None
 
     def _get_function_node_types(self) -> List[str]:
@@ -1617,42 +1513,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return node
 
     def _dart_merge_signature_extra_calls(self, node, calls: List[str]) -> List[str]:
-        """Merge calls found in a Dart signature node's OWN
-        signature-adjacent children into its calls list: a constructor's
-        initializer list (`: super(...), x = y, assert(cond)`) and ANY
-        signature's `formal_parameter_list` DEFAULT VALUES (`{int x =
-        paramDefault()}`) -- see `_build_function_dict`'s call site for
-        why both live outside `body_node` entirely (BACK-760/BACK-764).
+        """Hook: merge calls found in a language's signature-adjacent
+        children (e.g. Dart's constructor initializer list / parameter
+        default values, BACK-760/BACK-764) into a function's calls list.
+        No-op by default — overridden in analyzers/dart.py (BACK-915).
 
-        Safe to call unconditionally (including when `body_node` already
-        equals `node` itself, e.g. a bodyless `const` constructor or any
-        non-Dart language): the `seen`-based dedup below makes a redundant
-        re-walk of already-included calls harmless, and the kind check up
-        front makes this a no-op for every non-Dart-signature node.
+        Safe to call unconditionally, including for any non-Dart language.
         """
-        if _zero_arg(node, 'kind') not in (
-            'function_signature', 'constructor_signature', 'factory_constructor_signature',
-            'getter_signature', 'setter_signature', 'constant_constructor_signature',
-        ):
-            return calls
-        extra: List[str] = []
-        for child in _children(node):
-            if _zero_arg(child, 'kind') == 'formal_parameter_list':
-                _, _, param_calls = self._complexity_depth_and_calls(child)
-                extra.extend(param_calls)
-        sibling = _next_sibling(node)
-        if sibling is not None and _zero_arg(sibling, 'kind') == 'initializers':
-            _, _, init_calls = self._complexity_depth_and_calls(sibling)
-            extra.extend(init_calls)
-        if not extra:
-            return calls
-        seen = set(calls)
-        merged = list(calls)
-        for name in extra:
-            if name not in seen:
-                merged.append(name)
-                seen.add(name)
-        return merged
+        return calls
 
     def _decorator_extra_calls(self, decorated_node, calls: List[str]) -> List[str]:
         """Merge calls made in a Python decorator's own arguments into the
@@ -1754,26 +1622,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return '_init'
 
     def _dart_constructor_name(self, node) -> Optional[str]:
-        """Dart `ClassName(...)` / `ClassName.named(...)` /
-        `factory ClassName.make(...)` -- 'constructor_signature'/
-        'factory_constructor_signature'. Kids are a flat
-        [('factory')?, identifier(Class), ('.', identifier(named))?,
-        formal_parameter_list]. Dart's 'formal_parameter_list' isn't a
-        member of `_PARAM_LIST_KINDS` (BACK-413's set is JS/Go/Java/C#-
-        shaped, never audited against Dart), so PRIORITY-2's param-adjacent
-        strategy never applies here, and PRIORITY-2b's first-identifier scan
-        (`_name_via_identifier_kind`) would grab ONLY the class name --
-        `Dog.named` and `Dog.fromJson` would both collapse to bare "Dog",
-        indistinguishable from the unnamed default constructor and from
-        each other. Returns 'Class' for the unnamed/default form or
-        'Class.named' when a named/factory segment is present (BACK-760).
+        """Hook: name a Dart constructor-signature node ('constructor_signature'/
+        'factory_constructor_signature'/'constant_constructor_signature',
+        BACK-760). No-op by default — overridden in analyzers/dart.py
+        (BACK-915). Only ever invoked for those Dart-only node kinds (see
+        the dispatch a few lines below `_dart_constructor_name` is called
+        from), so an unimplemented base default is unreachable elsewhere.
         """
-        idents = [c for c in _children(node) if _zero_arg(c, 'kind') == 'identifier']
-        if not idents:
-            return None
-        if len(idents) == 1:
-            return self._get_node_text(idents[0])
-        return f"{self._get_node_text(idents[0])}.{self._get_node_text(idents[1])}"
+        return None
 
     def _name_via_declarator(self, kids) -> Optional[str]:
         # PRIORITY 1: For C/C++ functions, look inside declarators FIRST —
@@ -2245,17 +2101,12 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return self._callee_name_dart_new_expression(call_node)
 
     def _callee_name_dart_new_expression(self, call_node) -> Optional[str]:
-        """Dart `new Foo(...)` / `new List<int>.from(...)` -- 'new_expression'
-        with NO named fields (Dart's grammar never uses fields): flat
-        children `new`, type_identifier (the class), optional type_arguments
-        (generics, ignored), optional '.' + identifier (named constructor),
-        'arguments'. Same flat shape as `_callee_name_dart_flat_type_call`
-        handles for constructor_invocation/const_object_expression, just
-        prefixed with an explicit 'new' keyword instead of being bare or
-        'const'-prefixed -- the shared extractor already ignores whatever
-        leading token precedes the type_identifier, so it applies unchanged.
+        """Hook: name a Dart `new Foo(...)`-shaped 'new_expression' call
+        (the fallback branch above, once JS/C++'s field-based shapes are
+        ruled out — BACK-760). No-op by default — overridden in
+        analyzers/dart.py (BACK-915).
         """
-        return self._callee_name_dart_flat_type_call(call_node)
+        return None
 
     def _callee_name_cpp_new(self, call_node) -> Optional[str]:
         # C++: new ClassName(args) / new NS::ClassName(args) — new_expression.
@@ -2514,201 +2365,19 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return f"{receiver_text}.{name_text}"
 
     def _callee_name_dart_flat_type_call(self, call_node) -> Optional[str]:
-        """Shared extractor for Dart's flat type-then-arguments call shapes:
-        'constructor_invocation' (`List<int>.from(...)`, `Map<K,V>()`) and
-        'const_object_expression' (`const Duration(milliseconds: 300)`,
-        `const EdgeInsets.all(8)`). Both have the identical flat child
-        layout modulo a leading token this extractor ignores (nothing for
-        constructor_invocation, a 'const_builtin' token for
-        const_object_expression): a type_identifier (the class, e.g.
-        'List'/'Duration'), an optional type_arguments node (generic
-        params, ignored -- same "don't let a generic suffix leak into the
-        callee name" discipline as Rust's turbofish fix, BACK-733), an
-        optional '.' + identifier (a NAMED constructor, e.g. 'from'/'all'),
-        and 'arguments'. Returns 'List.from' for a named constructor or
-        bare 'List'/'Duration' for the unnamed/default one (BACK-760).
+        """Hook: name Dart's flat type-then-arguments call shapes
+        ('constructor_invocation'/'const_object_expression', BACK-760).
+        No-op by default — overridden in analyzers/dart.py (BACK-915).
         """
-        base = None
-        named = None
-        seen_dot = False
-        for child in _children(call_node):
-            kind = _zero_arg(child, 'kind')
-            if kind == 'type_identifier' and base is None:
-                base = self._get_node_text(child).strip()
-            elif kind == '.':
-                seen_dot = True
-            elif kind == 'identifier' and seen_dot and named is None:
-                named = self._get_node_text(child).strip()
-        if not base:
-            return None
-        return f"{base}.{named}" if named else base
+        return None
 
     def _callee_name_dart_argument_part(self, call_node) -> Optional[str]:
-        """Dart `foo()` / `obj.method()` / `this.foo()` / `Class.static()` /
-        `obj?.method()` / `obj!.method()` / cascaded `..method()` --
-        'argument_part' (the '(args)' selector that marks a call site).
-
-        Unlike every other dotted-call node in this program (Java's
-        method_invocation, Ruby's/GDScript's receiver-qualified nodes),
-        Dart's grammar has NO node that wraps "receiver + call" together at
-        all: a call is just the primary expression (identifier/`this`)
-        followed by a flat run of SIBLING 'selector' nodes -- one per `.foo`
-        segment, one per `(args)` call, one per bare `!`/`?.` operator. This
-        node (the 'argument_part') only ever holds its own arguments; the
-        qualifier, if any, is the selector immediately preceding this one's
-        wrapping 'selector' in that flat sibling list, and the ultimate base
-        (`obj`/`this`/`Class`) is whatever precedes that.
-
-        Reconstructs one level of "receiver.method" (enough for
-        `_bare_callee_name`'s last-segment split to resolve correctly for
-        chains of any depth, matching every prior language's precedent that
-        a full multi-segment reconstruction isn't required for recall).
-        `!` (null-assertion) selectors are transparently skipped when
-        walking backward for the receiver, since they carry no name.
-        A cascade (`..method()`) has no adjacent receiver at all (the cascade
-        target is the base expression of the whole cascade chain, not a
-        structurally-local sibling) -- returns the bare method name only,
-        same "no receiver available, bare name still resolves" convention
-        as BACK-732's Python IIFE quirk. (BACK-760)
+        """Hook: name a Dart 'argument_part' call site — the '(args)'
+        selector that marks a call in Dart's flat, wrapper-less call
+        grammar (BACK-760). No-op by default — overridden in
+        analyzers/dart.py (BACK-915).
         """
-        parent = _zero_arg(call_node, 'parent')
-        if parent is None:
-            return None
-        parent_kind = _zero_arg(parent, 'kind')
-
-        if parent_kind == 'cascade_section':
-            for sib in _children(parent):
-                if _zero_arg(sib, 'kind') == 'cascade_selector':
-                    text = self._get_node_text(sib).strip()
-                    return text or None
-            return None
-
-        if parent_kind != 'selector':
-            return None
-
-        container = _zero_arg(parent, 'parent')
-        if container is None:
-            return None
-        siblings = _children(container)
-
-        # Node equality isn't reliable across the tree-sitter 1.x binding
-        # (BACK-573), so locate `parent`'s position among its own siblings
-        # by matching start_byte instead of identity/`in`.
-        target_start = _zero_arg(parent, 'start_byte')
-        idx = None
-        for i, sib in enumerate(siblings):
-            if _zero_arg(sib, 'kind') == 'selector' and _zero_arg(sib, 'start_byte') == target_start:
-                idx = i
-                break
-        if idx is None or idx == 0:
-            return None
-
-        def _is_bang_selector(node) -> bool:
-            kids = _children(node)
-            return len(kids) == 1 and _zero_arg(kids[0], 'kind') == '!'
-
-        def _qualifier_identifier(qual_node) -> Optional[str]:
-            for sub in _children(qual_node):
-                if _zero_arg(sub, 'kind') == 'identifier':
-                    return self._get_node_text(sub).strip()
-            return None
-
-        def _qualifier_in(node, depth: int = 0) -> Optional[str]:
-            # A `.foo`/`?.foo` qualifier is USUALLY wrapped in its own
-            # 'selector' node (the common case, siblings of a plain
-            # identifier/this primary at container top level) -- but
-            # `super.foo` puts it as a BARE direct sibling with no
-            # 'selector' wrapper at all (verified live: `super.plainInit()`
-            # has NO 'selector' around its 'unconditional_assignable_
-            # selector'), and any unary-prefixed call (`await
-            # x.foo()`/`await super.foo()`) nests the WHOLE receiver+
-            # qualifier chain one level deeper inside the unary node
-            # (`await_expression`'s own children are `[await, super,
-            # unconditional_assignable_selector]` -- no 'selector' wrapper
-            # there either). Both found via the Dart calls-recall-oracle
-            # measurement (BACK-730): `super.initialize(...)`/`await
-            # super.initialize(...)` (a common override-delegation idiom)
-            # were silently dropped, not just misattributed. Recurses into
-            # a wrapper node's LAST child (bounded depth) to find a nested
-            # qualifier, matching Dart's actual "primary + trailing
-            # selector-like suffixes, sometimes nested one level under a
-            # prefix keyword" shape rather than assuming one fixed depth.
-            if depth > 4:
-                return None
-            kind = _zero_arg(node, 'kind')
-            if kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
-                return _qualifier_identifier(node)
-            if kind == 'selector':
-                kids = _children(node)
-                if len(kids) == 1:
-                    return _qualifier_in(kids[0], depth + 1)
-                return None
-            if kind in ('argument_part', 'arguments', 'identifier', 'this', 'super'):
-                return None
-            kids = _children(node)
-            return _qualifier_in(kids[-1], depth + 1) if kids else None
-
-        j = idx - 1
-        while j >= 0 and _zero_arg(siblings[j], 'kind') == 'selector' and _is_bang_selector(siblings[j]):
-            j -= 1
-
-        if j < 0:
-            return None
-
-        prior = siblings[j]
-        prior_kind = _zero_arg(prior, 'kind')
-
-        if prior_kind == 'selector':
-            prior_kids = _children(prior)
-            if len(prior_kids) == 1 and _zero_arg(prior_kids[0], 'kind') in (
-                'unconditional_assignable_selector', 'conditional_assignable_selector',
-            ):
-                method = _qualifier_identifier(prior_kids[0])
-                if not method:
-                    return None
-                k = j - 1
-                while k >= 0 and _zero_arg(siblings[k], 'kind') == 'selector' and _is_bang_selector(siblings[k]):
-                    k -= 1
-                if k >= 0 and _zero_arg(siblings[k], 'kind') in ('identifier', 'this', 'super'):
-                    receiver = self._get_node_text(siblings[k]).strip()
-                    if receiver:
-                        return f"{receiver}.{method}"
-                return method
-            # Some other selector shape precedes this call (e.g. the call is
-            # invoked on the result of a preceding call, `compute()?.process()`
-            # -- `compute`'s own 'argument_part' selector sits here, not a
-            # property qualifier) -- no clean receiver, structural precedent
-            # (BACK-732) says a bare name is the right fallback, not a miss.
-            return None
-
-        if prior_kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
-            # `super.foo()` -- the qualifier is a BARE sibling, no 'selector'
-            # wrapper (see `_qualifier_in`'s docstring above).
-            method = _qualifier_identifier(prior)
-            if not method:
-                return None
-            k = j - 1
-            while k >= 0 and _zero_arg(siblings[k], 'kind') == 'selector' and _is_bang_selector(siblings[k]):
-                k -= 1
-            if k >= 0 and _zero_arg(siblings[k], 'kind') in ('identifier', 'this', 'super'):
-                receiver = self._get_node_text(siblings[k]).strip()
-                if receiver:
-                    return f"{receiver}.{method}"
-            return method
-
-        if prior_kind in ('identifier', 'this'):
-            text = self._get_node_text(prior).strip()
-            return text or None
-
-        # `await x.foo()` / `await super.foo()` -- the receiver+qualifier
-        # chain is nested one level inside the unary `await_expression`
-        # (or a similar prefix-operator node), not a flat sibling of this
-        # call's own selector at all. No clean receiver reconstruction
-        # attempted here (the base is nested too, not a plain adjacent
-        # sibling) -- bare method name only, same "no receiver available,
-        # bare name still resolves" convention as the cascade/computed-
-        # target cases above.
-        return _qualifier_in(prior)
+        return None
 
     def _callee_name_generic(self, call_node) -> Optional[str]:
         return self._callee_name_from_node(call_node.child(0))
