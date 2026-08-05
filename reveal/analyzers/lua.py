@@ -136,3 +136,40 @@ class LuaAnalyzer(TreeSitterAnalyzer):
             if name_node and value_node and self._get_node_text(name_node) == name:
                 return value_node
         return None
+
+    # ── Node naming (BACK-918/BACK-915) ─────────────────────────────────────
+    def _name_via_dot_index(self, kids) -> Optional[str]:
+        # Lua `function table.name(...)` / `function tbl.a.b(...)` — an
+        # extremely common module-method idiom (BACK-431 Issue G tier B
+        # dogfood audit: found via real Kong source,
+        # `kong/concurrency.lua`'s entire public API is declared this way).
+        # The name is a `dot_index_expression`
+        # ("concurrency.with_worker_mutex"), a kind absent from every check
+        # above; return just the final segment, matching how every other
+        # bare-name function lookup in reveal works.
+        for child in kids:
+            if _zero_arg(child, 'kind') == 'dot_index_expression':
+                return self._get_node_text(child).rsplit('.', 1)[-1]
+        return None
+
+    def _name_via_method_index(self, kids) -> Optional[str]:
+        # BACK-722 Lua sideeffects-recall-oracle pre-flight: Lua `function
+        # table:name(...)` — the colon-method idiom, Lua's closest
+        # equivalent to a receiver method (implicitly takes `self` as the
+        # first parameter). Verified via real Kong source (kong/db/*.lua,
+        # kong/plugins/*/handler.lua) that this is the DOMINANT OOP
+        # method-definition idiom in this corpus — more common than the dot
+        # form `_name_via_dot_index` already handles. The name is a
+        # `method_index_expression` ("connector:query"), a distinct
+        # tree-sitter-lua node kind from `dot_index_expression` (same
+        # grammar family as Go's `selector_expression` vs Kotlin/Swift's
+        # `navigation_expression` split) — absent from every check above,
+        # so every `function X:y(...)` was entirely invisible to --outline
+        # and errored outright on a direct name lookup before this fix.
+        # Return just the final segment, matching every other bare-name
+        # function lookup in reveal (and `_name_via_dot_index`'s
+        # convention).
+        for child in kids:
+            if _zero_arg(child, 'kind') == 'method_index_expression':
+                return self._get_node_text(child).rsplit(':', 1)[-1]
+        return None

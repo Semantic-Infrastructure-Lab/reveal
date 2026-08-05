@@ -127,3 +127,34 @@ class ScalaAnalyzer(TreeSitterAnalyzer):
             if text:
                 return text
         return None
+
+    # ── Node naming (BACK-918/BACK-915) ─────────────────────────────────────
+    def _name_via_scala_operator_function(self, kids) -> Optional[str]:
+        # Scala symbolic-name method definitions: `def +(o)`, `def ::(x)`,
+        # `def *` (Slick projection), and any operator overload. The name is
+        # an `operator_identifier` node (not an identifier-family kind any
+        # earlier strategy recognizes), the sibling right after the `def`
+        # keyword. Same invisibility class as Swift's operator overloads,
+        # C#'s operator_declaration, and Ruby's `operator` kind: without
+        # this, every symbolic-named def was absent from
+        # --outline/get_structure(), so any call inside its body had no
+        # caller scope to attribute to. Found via the calls-recall-oracle
+        # Scala measurement (BACK-730, twelfth language): the sole residual
+        # miss was a `Some(...)` call inside GitBucket's Slick `def *`
+        # projection in Repository.scala.
+        #
+        # No language gate needed here (unlike when this lived on the
+        # shared base) -- only reachable via ScalaAnalyzer polymorphism now
+        # (BACK-918 push-down). Python's function_definition also has a
+        # `def` keyword child, but is always followed by an `identifier`,
+        # never an `operator_identifier`, so this would have been safe
+        # unguarded even on the shared base; the explicit `language`
+        # check that used to gate it is gone, dispatch now does that job.
+        for i, child in enumerate(kids):
+            if _zero_arg(child, 'kind') == 'def' and i + 1 < len(kids):
+                nxt = kids[i + 1]
+                if _zero_arg(nxt, 'kind') == 'operator_identifier':
+                    text = self._get_node_text(nxt).strip()
+                    if text:
+                        return text
+        return None

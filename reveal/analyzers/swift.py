@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
-from ..treesitter import TreeSitterAnalyzer
+from ..treesitter import TreeSitterAnalyzer, _NAME_KINDS
 
 
 @register('.swift', name='Swift', icon='🦅')
@@ -138,4 +138,44 @@ class SwiftAnalyzer(TreeSitterAnalyzer):
                         text = self._get_node_text(sub).strip()
                         if text:
                             return f'~{text}'
+        return None
+
+    # ── Node naming (BACK-918/BACK-915) ─────────────────────────────────────
+    def _name_via_swift_operator_function(self, kids) -> Optional[str]:
+        # Swift operator overload (`static func -(left: CGPoint, right:
+        # CGPoint) -> CGPoint`, `static func *(...)`, `static func *=(...)`)
+        # -- the "name" is a literal operator-symbol token whose tree-sitter
+        # KIND literally IS the operator text (e.g. kind '-'), not an
+        # identifier-family kind any `_name_via_*` strategy above
+        # recognizes, and Swift's grammar has no wrapping parameter-list
+        # node kind at all (`(`/`parameter`/`)` are direct siblings, not
+        # nested under a `parameters`-kind node), so
+        # `_name_via_param_adjacent` never even applies to Swift. Found via
+        # the calls-recall-oracle Swift measurement (BACK-730, tenth
+        # language): every operator overload (CGPoint/CGSize arithmetic --
+        # a common idiom in any Swift codebase with custom geometry/value
+        # types) was entirely absent from --outline/get_structure(), so
+        # every call made from inside one had no caller scope to attribute
+        # to at all. Same invisibility class as BACK-651 (C#
+        # operator_declaration) and Ruby's `operator` node kind above --
+        # here the symbol is a plain sibling token (no wrapping node), so
+        # it's found positionally: the sibling immediately after the
+        # literal `func` keyword child, only used as a last-resort fallback
+        # (i.e. no earlier strategy already found a name).
+        #
+        # 'func' is NOT a Swift-exclusive node kind (Go and GDScript both
+        # use it too) -- but this method is only reachable via SwiftAnalyzer
+        # polymorphism now (BACK-918 push-down), so no language gate is
+        # needed here the way the still-shared _name_via_scala_operator_
+        # function requires one. Before this push-down, the unguarded
+        # version on the shared base misnamed Go/GDScript anonymous func
+        # literals (`func(y int) int {...}` reported as its own parameter
+        # list text, `(y int)`) -- confirmed live and fixed as a byproduct
+        # of this move, not a separate fix.
+        for i, child in enumerate(kids):
+            if _zero_arg(child, 'kind') == 'func' and i + 1 < len(kids):
+                nxt = kids[i + 1]
+                nxt_kind = _zero_arg(nxt, 'kind')
+                if nxt_kind not in _NAME_KINDS and nxt_kind != '(':
+                    return self._get_node_text(nxt)
         return None

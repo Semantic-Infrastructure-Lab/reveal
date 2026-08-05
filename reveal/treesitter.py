@@ -1569,113 +1569,33 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return None
 
     def _name_via_dot_index(self, kids) -> Optional[str]:
-        # PRIORITY 2c: Lua `function table.name(...)` / `function tbl.a.b(...)`
-        # — an extremely common module-method idiom (BACK-431 Issue G tier B
-        # dogfood audit: found via real Kong source, `kong/concurrency.lua`'s
-        # entire public API is declared this way). The name is a
-        # `dot_index_expression` ("concurrency.with_worker_mutex"), a kind
-        # absent from every check above; return just the final segment,
-        # matching how every other bare-name function lookup in reveal works.
-        for child in kids:
-            if child.kind() == 'dot_index_expression':
-                return self._get_node_text(child).rsplit('.', 1)[-1]
+        """Hook: Lua `function table.name(...)` naming (`dot_index_expression`).
+        No-op by default — overridden in analyzers/lua.py (BACK-918).
+        """
         return None
 
     def _name_via_method_index(self, kids) -> Optional[str]:
-        # PRIORITY 2d (BACK-722 Lua sideeffects-recall-oracle pre-flight):
-        # Lua `function table:name(...)` — the colon-method idiom, Lua's
-        # closest equivalent to a receiver method (implicitly takes `self`
-        # as the first parameter). Verified via real Kong source
-        # (kong/db/*.lua, kong/plugins/*/handler.lua) that this is the
-        # DOMINANT OOP method-definition idiom in this corpus — more common
-        # than the dot form `_name_via_dot_index` already handles. The name
-        # is a `method_index_expression` ("connector:query"), a distinct
-        # tree-sitter-lua node kind from `dot_index_expression` (same
-        # grammar family as Go's `selector_expression` vs Kotlin/Swift's
-        # `navigation_expression` split) — absent from every check above,
-        # so every `function X:y(...)` was entirely invisible to --outline
-        # and errored outright on a direct name lookup before this fix.
-        # Return just the final segment, matching every other bare-name
-        # function lookup in reveal (and `_name_via_dot_index`'s convention).
-        for child in kids:
-            if child.kind() == 'method_index_expression':
-                return self._get_node_text(child).rsplit(':', 1)[-1]
+        """Hook: Lua `function table:name(...)` naming (`method_index_expression`).
+        No-op by default — overridden in analyzers/lua.py (BACK-918).
+        """
         return None
 
     def _name_via_ruby_special_name(self, kids) -> Optional[str]:
-        # Ruby `def action_key=(val)` / `def [](k)` / `def ===(other)` — the
-        # name is a distinct grammar node kind, not `identifier`: `setter`
-        # for assignment-style methods (whose own text is already the full
-        # "name=" form) and `operator` for operator-overload-style methods
-        # (`[]`, `[]=`, `===`, `<=>`, `+`, ...; whose own text is already the
-        # bare symbol). Found via the calls-recall-oracle Ruby measurement
-        # (BACK-730, sixth language): setter/operator-named methods were
-        # entirely absent from --outline/get_structure(), so every call made
-        # FROM inside one had no caller name to attribute to, showing up as
-        # residual missed edges in an otherwise ~99% recall run (real corpus
-        # examples: WatchedWord#action_key=, TagGroup#parent_tag_name=,
-        # Topic#title=, Onebox::Engine#===). Same invisibility class as
-        # BACK-651 (C# operator_declaration) and BACK-724 (GDScript
-        # constructor_definition) — a name-shaped child whose KIND, not an
-        # identifier/name-kind child of it, carries the name.
-        for child in kids:
-            if _zero_arg(child, 'kind') in ('setter', 'operator'):
-                return self._get_node_text(child)
+        """Hook: Ruby `setter`/`operator`-kind method naming (`def x=`, `def []`).
+        No-op by default — overridden in analyzers/ruby.py (BACK-918).
+        """
         return None
 
     def _name_via_swift_operator_function(self, kids) -> Optional[str]:
-        # Swift operator overload (`static func -(left: CGPoint, right:
-        # CGPoint) -> CGPoint`, `static func *(...)`, `static func *=(...)`)
-        # -- the "name" is a literal operator-symbol token whose tree-sitter
-        # KIND literally IS the operator text (e.g. kind '-'), not an
-        # identifier-family kind any `_name_via_*` strategy above
-        # recognizes, and Swift's grammar has no wrapping parameter-list
-        # node kind at all (`(`/`parameter`/`)` are direct siblings, not
-        # nested under a `parameters`-kind node), so
-        # `_name_via_param_adjacent` never even applies to Swift. Found via
-        # the calls-recall-oracle Swift measurement (BACK-730, tenth
-        # language): every operator overload (CGPoint/CGSize arithmetic --
-        # a common idiom in any Swift codebase with custom geometry/value
-        # types) was entirely absent from --outline/get_structure(), so
-        # every call made from inside one had no caller scope to attribute
-        # to at all. Same invisibility class as BACK-651 (C#
-        # operator_declaration) and Ruby's `operator` node kind above --
-        # here the symbol is a plain sibling token (no wrapping node), so
-        # it's found positionally: the sibling immediately after the
-        # literal `func` keyword child, only used as a last-resort fallback
-        # (i.e. no earlier strategy already found a name).
-        for i, child in enumerate(kids):
-            if _zero_arg(child, 'kind') == 'func' and i + 1 < len(kids):
-                nxt = kids[i + 1]
-                nxt_kind = _zero_arg(nxt, 'kind')
-                if nxt_kind not in _NAME_KINDS and nxt_kind != '(':
-                    return self._get_node_text(nxt)
+        """Hook: Swift operator-overload naming (`static func -(...)`).
+        No-op by default — overridden in analyzers/swift.py (BACK-918).
+        """
         return None
 
     def _name_via_scala_operator_function(self, kids) -> Optional[str]:
-        # Scala symbolic-name method definitions: `def +(o)`, `def ::(x)`,
-        # `def *` (Slick projection), and any operator overload. The name is
-        # an `operator_identifier` node (not an identifier-family kind any
-        # earlier strategy recognizes), the sibling right after the `def`
-        # keyword. Same invisibility class as Swift's operator overloads
-        # (_name_via_swift_operator_function), C#'s operator_declaration, and
-        # Ruby's `operator` kind: without this, every symbolic-named def was
-        # absent from --outline/get_structure(), so any call inside its body
-        # had no caller scope to attribute to. Found via the calls-recall-
-        # oracle Scala measurement (BACK-730, twelfth language): the sole
-        # residual miss was a `Some(...)` call inside GitBucket's Slick
-        # `def *` projection in Repository.scala. Gated on language because
-        # Python's function_definition also has a `def` keyword child (always
-        # followed by an `identifier`, never an `operator_identifier`).
-        if self.language != 'scala':
-            return None
-        for i, child in enumerate(kids):
-            if _zero_arg(child, 'kind') == 'def' and i + 1 < len(kids):
-                nxt = kids[i + 1]
-                if _zero_arg(nxt, 'kind') == 'operator_identifier':
-                    text = self._get_node_text(nxt).strip()
-                    if text:
-                        return text
+        """Hook: Scala symbolic-name def naming (`def +(o)`, `def ::(x)`).
+        No-op by default — overridden in analyzers/scala.py (BACK-918).
+        """
         return None
 
     def _name_via_type_identifier(self, kids) -> Optional[str]:

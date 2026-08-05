@@ -84,3 +84,25 @@ class RubyAnalyzer(TreeSitterAnalyzer):
         if receiver_node is None:
             return method_text
         return f"{self._get_node_text(receiver_node)}.{method_text}"
+
+    # ── Node naming (BACK-918/BACK-915) ─────────────────────────────────────
+    def _name_via_ruby_special_name(self, kids) -> Optional[str]:
+        # `def action_key=(val)` / `def [](k)` / `def ===(other)` — the name
+        # is a distinct grammar node kind, not `identifier`: `setter` for
+        # assignment-style methods (whose own text is already the full
+        # "name=" form) and `operator` for operator-overload-style methods
+        # (`[]`, `[]=`, `===`, `<=>`, `+`, ...; whose own text is already the
+        # bare symbol). Found via the calls-recall-oracle Ruby measurement
+        # (BACK-730, sixth language): setter/operator-named methods were
+        # entirely absent from --outline/get_structure(), so every call made
+        # FROM inside one had no caller name to attribute to, showing up as
+        # residual missed edges in an otherwise ~99% recall run (real corpus
+        # examples: WatchedWord#action_key=, TagGroup#parent_tag_name=,
+        # Topic#title=, Onebox::Engine#===). Same invisibility class as
+        # BACK-651 (C# operator_declaration) and BACK-724 (GDScript
+        # constructor_definition) — a name-shaped child whose KIND, not an
+        # identifier/name-kind child of it, carries the name.
+        for child in kids:
+            if _zero_arg(child, 'kind') in ('setter', 'operator'):
+                return self._get_node_text(child)
+        return None
