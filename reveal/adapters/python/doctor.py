@@ -120,19 +120,7 @@ def check_package_dir_shadowing() -> Tuple[List[Dict[str, Any]], List[Dict[str, 
         import importlib.metadata as im
 
         pkg_to_dist = im.packages_distributions()
-
-        # Ordered, resolved, existing sys.path directories.
-        path_dirs: List[Path] = []
-        for entry in sys.path:
-            d = Path(entry or ".").resolve()
-            if d.is_dir():
-                path_dirs.append(d)
-
-        def _install_dir(dist_name: str) -> Optional[Path]:
-            try:
-                return Path(str(im.distribution(dist_name).locate_file(""))).resolve()
-            except Exception:  # noqa: BLE001 — best-effort metadata probe
-                return None
+        path_dirs = _resolved_syspath_dirs()
 
         seen: set = set()
         for d_idx, d in enumerate(path_dirs):
@@ -145,59 +133,94 @@ def check_package_dir_shadowing() -> Tuple[List[Dict[str, Any]], List[Dict[str, 
                     continue
                 if not (pkg.is_dir() and (pkg / "__init__.py").is_file()):
                     continue
-                dists = set(pkg_to_dist.get(pkg.name, []))
-                if not dists:
+                conflict = _find_package_dir_version_conflict(
+                    pkg, d_idx, pkg_to_dist, path_dirs, im,
+                )
+                if conflict is None:
                     continue
-                local_ver = _read_package_dir_version(pkg)
-                if not local_ver:
-                    continue  # dynamic version — can't compare, don't guess
-                for dist in dists:
-                    inst = _install_dir(dist)
-                    if inst is None or inst == pkg.parent:
-                        continue  # not installed, or this dir IS the install (editable)
-                    # Only shadowing if the install is later on sys.path.
-                    try:
-                        inst_idx = path_dirs.index(inst)
-                    except ValueError:
-                        inst_idx = None
-                    if inst_idx is not None and d_idx >= inst_idx:
-                        continue
-                    try:
-                        installed_ver = im.version(dist)
-                    except Exception:  # noqa: BLE001
-                        continue
-                    if installed_ver and installed_ver != local_ver:
-                        seen.add(pkg.name)
-                        issues.append(
-                            {
-                                "category": "import_shadowing",
-                                "message": (
-                                    f"Package directory '{pkg}' (version {local_ver}) "
-                                    f"shadows installed '{dist}' (version {installed_ver})"
-                                ),
-                                "impact": (
-                                    f"'import {pkg.name}' resolves to the local checkout, not the "
-                                    f"installed package — behavior changes with cwd/PYTHONPATH"
-                                ),
-                                "severity": "high",
-                            }
-                        )
-                        recommendations.append(
-                            {
-                                "action": "resolve_package_shadowing",
-                                "message": (
-                                    f"Reconcile '{pkg.name}': `pip install -e {pkg.parent}` so the "
-                                    f"checkout IS the install, or run from a directory that keeps "
-                                    f"{pkg.parent} off sys.path"
-                                ),
-                                "command": f'python -c "import {pkg.name}; print({pkg.name}.__file__)"',
-                            }
-                        )
-                        break
+                seen.add(pkg.name)
+                issue, recommendation = _package_shadowing_finding(pkg, *conflict)
+                issues.append(issue)
+                recommendations.append(recommendation)
     except Exception:  # noqa: BLE001 — diagnostics must never crash the doctor
         pass
 
     return issues, recommendations
+
+
+def _resolved_syspath_dirs() -> List[Path]:
+    """Ordered, resolved, existing sys.path directories."""
+    path_dirs: List[Path] = []
+    for entry in sys.path:
+        d = Path(entry or ".").resolve()
+        if d.is_dir():
+            path_dirs.append(d)
+    return path_dirs
+
+
+def _install_dir(im, dist_name: str) -> Optional[Path]:
+    try:
+        return Path(str(im.distribution(dist_name).locate_file(""))).resolve()
+    except Exception:  # noqa: BLE001 — best-effort metadata probe
+        return None
+
+
+def _find_package_dir_version_conflict(
+    pkg: Path, d_idx: int, pkg_to_dist: Dict[str, Any], path_dirs: List[Path], im,
+) -> Optional[Tuple[str, str, str]]:
+    """Return (local_ver, dist, installed_ver) if `pkg` shadows an earlier-on-
+    sys.path installed distribution with a differing literal version, else None."""
+    dists = set(pkg_to_dist.get(pkg.name, []))
+    if not dists:
+        return None
+    local_ver = _read_package_dir_version(pkg)
+    if not local_ver:
+        return None  # dynamic version — can't compare, don't guess
+    for dist in dists:
+        inst = _install_dir(im, dist)
+        if inst is None or inst == pkg.parent:
+            continue  # not installed, or this dir IS the install (editable)
+        # Only shadowing if the install is later on sys.path.
+        try:
+            inst_idx = path_dirs.index(inst)
+        except ValueError:
+            inst_idx = None
+        if inst_idx is not None and d_idx >= inst_idx:
+            continue
+        try:
+            installed_ver = im.version(dist)
+        except Exception:  # noqa: BLE001
+            continue
+        if installed_ver and installed_ver != local_ver:
+            return local_ver, dist, installed_ver
+    return None
+
+
+def _package_shadowing_finding(
+    pkg: Path, local_ver: str, dist: str, installed_ver: str,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    issue = {
+        "category": "import_shadowing",
+        "message": (
+            f"Package directory '{pkg}' (version {local_ver}) "
+            f"shadows installed '{dist}' (version {installed_ver})"
+        ),
+        "impact": (
+            f"'import {pkg.name}' resolves to the local checkout, not the "
+            f"installed package — behavior changes with cwd/PYTHONPATH"
+        ),
+        "severity": "high",
+    }
+    recommendation = {
+        "action": "resolve_package_shadowing",
+        "message": (
+            f"Reconcile '{pkg.name}': `pip install -e {pkg.parent}` so the "
+            f"checkout IS the install, or run from a directory that keeps "
+            f"{pkg.parent} off sys.path"
+        ),
+        "command": f'python -c "import {pkg.name}; print({pkg.name}.__file__)"',
+    }
+    return issue, recommendation
 
 
 def check_stale_bytecode() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
