@@ -393,7 +393,6 @@ def _is_cpp_member_function_pointer_misparse(call_node: Any) -> bool:
         stack.extend(_children(n))
     return False
 
-
 def _extract_callee(
     call_node: Any,
     get_text: Callable,
@@ -414,49 +413,9 @@ def _extract_callee(
     if _zero_arg(call_node, 'kind') == 'call_expression' and _is_cpp_member_function_pointer_misparse(call_node):
         return None
 
-    # PHP: $obj->method(args) — emit "<receiver>-><name>" so taxonomy patterns
-    # like '->execute', '->fetch', '->prepare' can match.
-    if call_node.kind() == 'member_call_expression':
-        return _extract_member_call_callee(call_node, get_text)
-
-    # PHP: new ClassName(args) — emit "new <name>" so taxonomy patterns
-    # like 'new pdo' can match.
-    if call_node.kind() == 'object_creation_expression':
-        return _extract_object_creation_callee(call_node, get_text)
-
-    # PHP: self::method() / parent::method() / static::method() /
-    # Class::method() — scoped_call_expression is a DISTINCT node kind from
-    # member_call_expression above, entirely absent from this dispatch
-    # (BACK-740, the ast:// nav side of BACK-736's calls:// fix, found via
-    # the nav_calls.py/treesitter.py dispatch-parity test, BACK-739). The
-    # generic child(0) fallback below returns only the 'scope' node's text
-    # (self/parent/static/ClassName), silently dropping the method name
-    # entirely — confirmed live: `self::baz()` rendered as bare `self`, not
-    # `self::baz`. Mirrors treesitter.py:_callee_name_php_scoped_call.
-    if _zero_arg(call_node, 'kind') == 'scoped_call_expression':
-        return _extract_php_scoped_call_callee(call_node, get_text)
-
-    # Scala: new ClassName(args) / new ClassName[T](args) — a DISTINCT node
-    # kind ('instance_expression') from PHP/C#'s object_creation_expression
-    # above despite the identical source shape (BACK-718/BACK-720 Scala
-    # sideeffects-recall-oracle). Emit the same "new <name>" text so the
-    # exact same taxonomy pattern convention applies unchanged.
-    if _zero_arg(call_node, 'kind') == 'instance_expression':
-        return _extract_scala_instance_callee(call_node, get_text)
-
-    # Scala: infix method calls (`a :: b`, `list map doubler`) parse to
-    # 'infix_expression' — the `operator` field is the method name. Absent from
-    # CALL_NODE_TYPES/this dispatch, every infix call was invisible to
-    # calls:// and --calls/--sideeffects/--boundary (BACK-746). Mirrors
-    # treesitter.py:_callee_name_scala_infix.
-    if _zero_arg(call_node, 'kind') == 'infix_expression':
-        return _extract_scala_infix_callee(call_node, get_text)
-
-    # Swift: `<callee><TypeArgs>(args)` — generic function call or generic
-    # type initializer, both parse to 'constructor_expression' rather than
-    # call_expression (BACK-730 Swift pre-flight).
-    if _zero_arg(call_node, 'kind') == 'constructor_expression':
-        return _extract_swift_constructor_callee(call_node, get_text)
+    handler = _CALLEE_DISPATCH.get(_zero_arg(call_node, 'kind'))
+    if handler is not None:
+        return handler(call_node, get_text)
 
     # 'new_expression' is shared by C++ and JS/TS/TSX with two mutually
     # exclusive field shapes: C++ (`new ClassName(args)` / `new NS::Name(args)`)
@@ -471,12 +430,6 @@ def _extract_callee(
         if call_node.child_by_field_name('constructor') is not None:
             return _extract_js_new_callee(call_node, get_text)
         return _extract_cpp_new_callee(call_node, get_text)
-
-    # C++ direct-initialization (`ClassName obj(args);`, no `new` keyword) —
-    # 'init_declarator' with a bare `argument_list` in its 'value' field.
-    # Mirrors treesitter.py:_callee_name_cpp_direct_init (BACK-744).
-    if _zero_arg(call_node, 'kind') == 'init_declarator':
-        return _extract_cpp_direct_init_callee(call_node, get_text)
 
     # Java: method_invocation is a flat node `[object? . name argument_list]` —
     # child(0) is only the *object* (`Files`, `path`), so the old logic dropped
@@ -849,6 +802,53 @@ def _extract_cpp_direct_init_callee(node: Any, get_text: Callable) -> Optional[s
     if not text:
         return None
     return text.split('::')[-1] if kind == 'qualified_identifier' else text
+
+
+# Pure `node.kind() -> handler(node, get_text)` dispatch for _extract_callee
+# above (BACK-918). Each handler here needs only the call node and the text
+# getter — mirrors treesitter.py:_CALLEE_NAME_DISPATCH (BACK-915 slice 4).
+# Kinds needing `call_node_types` (method_invocation, Ruby's receiver-qualified
+# `call`) or structural sub-dispatch (new_expression, the C++ misparse guard)
+# are deliberately NOT in this table — see the explicit `if` guards around the
+# dict lookup in _extract_callee.
+_CALLEE_DISPATCH: Dict[str, Callable[[Any, Callable], Optional[str]]] = {
+    # PHP: $obj->method(args) — emit "<receiver>-><name>" so taxonomy patterns
+    # like '->execute', '->fetch', '->prepare' can match.
+    'member_call_expression': _extract_member_call_callee,
+    # PHP: new ClassName(args) — emit "new <name>" so taxonomy patterns
+    # like 'new pdo' can match.
+    'object_creation_expression': _extract_object_creation_callee,
+    # PHP: self::method() / parent::method() / static::method() /
+    # Class::method() — scoped_call_expression is a DISTINCT node kind from
+    # member_call_expression above (BACK-740, the ast:// nav side of
+    # BACK-736's calls:// fix, found via the nav_calls.py/treesitter.py
+    # dispatch-parity test, BACK-739). The generic child(0) fallback below
+    # returns only the 'scope' node's text (self/parent/static/ClassName),
+    # silently dropping the method name entirely — confirmed live:
+    # `self::baz()` rendered as bare `self`, not `self::baz`. Mirrors
+    # treesitter.py:_callee_name_php_scoped_call.
+    'scoped_call_expression': _extract_php_scoped_call_callee,
+    # Scala: new ClassName(args) / new ClassName[T](args) — a DISTINCT node
+    # kind ('instance_expression') from PHP/C#'s object_creation_expression
+    # above despite the identical source shape (BACK-718/BACK-720 Scala
+    # sideeffects-recall-oracle). Emit the same "new <name>" text so the
+    # exact same taxonomy pattern convention applies unchanged.
+    'instance_expression': _extract_scala_instance_callee,
+    # Scala: infix method calls (`a :: b`, `list map doubler`) parse to
+    # 'infix_expression' — the `operator` field is the method name. Absent
+    # from CALL_NODE_TYPES/this dispatch, every infix call was invisible to
+    # calls:// and --calls/--sideeffects/--boundary (BACK-746). Mirrors
+    # treesitter.py:_callee_name_scala_infix.
+    'infix_expression': _extract_scala_infix_callee,
+    # Swift: `<callee><TypeArgs>(args)` — generic function call or generic
+    # type initializer, both parse to 'constructor_expression' rather than
+    # call_expression (BACK-730 Swift pre-flight).
+    'constructor_expression': _extract_swift_constructor_callee,
+    # C++ direct-initialization (`ClassName obj(args);`, no `new` keyword) —
+    # 'init_declarator' with a bare `argument_list` in its 'value' field.
+    # Mirrors treesitter.py:_callee_name_cpp_direct_init (BACK-744).
+    'init_declarator': _extract_cpp_direct_init_callee,
+}
 
 
 def _extract_java_method_invocation_callee(
