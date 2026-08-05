@@ -3,11 +3,14 @@
 from typing import Any, Dict, List, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
+from ._js_callee_names import JSCalleeNameMixin
 from ._js_class_bases import JSClassBasesMixin
 from ._js_test_callbacks import JSTestCallbackMixin
 
 
-class _TypeScriptBase(JSClassBasesMixin, JSTestCallbackMixin, TreeSitterAnalyzer):
+class _TypeScriptBase(
+    JSCalleeNameMixin, JSClassBasesMixin, JSTestCallbackMixin, TreeSitterAnalyzer
+):
     """Shared extraction for TypeScript (.ts) and TypeScript React (.tsx)."""
 
     # ── Test callbacks ────────────────────────────────────────────────────

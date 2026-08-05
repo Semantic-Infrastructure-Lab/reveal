@@ -134,6 +134,28 @@ class JavaAnalyzer(TreeSitterAnalyzer):
                     return True
         return False
 
+    # ── Callee naming (BACK-915 slice 4) ──────────────────────────────────────
+
+    def _callee_name_java_method(self, call_node) -> Optional[str]:
+        # Java: obj.method() / Class.staticMethod() / method() —
+        # method_invocation's grammar puts an optional `object` field BEFORE
+        # the `.` token and the `name` field, so child(0) is the *object*
+        # whenever one is present (BACK-734: the generic child(0) fallback
+        # returned the qualifier — e.g. "RamUsageEstimator" — as the callee
+        # name for every qualified/static call, not the method name at all;
+        # confirmed via a calls-recall-oracle measurement that fell to 9.99%
+        # recall on Elasticsearch, then traced to this exact node-shape
+        # mismatch). Use the named fields directly rather than positional
+        # child(0), same fix shape as PHP's member_call_expression handling.
+        name_node = call_node.child_by_field_name('name')
+        if name_node is None:
+            return None
+        name_text = self._get_node_text(name_node)
+        object_node = call_node.child_by_field_name('object')
+        if object_node is None:
+            return name_text
+        return f"{self._get_node_text(object_node)}.{name_text}"
+
     def _extract_java_type_list(self, wrapper_node) -> List[str]:
         # Both 'super_interfaces' and 'extends_interfaces' wrap a single
         # 'type_list' child holding comma-separated base-type nodes — each

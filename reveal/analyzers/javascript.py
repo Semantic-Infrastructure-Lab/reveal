@@ -3,6 +3,7 @@
 from typing import Any, Dict, List
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
+from ._js_callee_names import JSCalleeNameMixin
 from ._js_class_bases import JSClassBasesMixin
 from ._js_test_callbacks import JSTestCallbackMixin
 
@@ -11,7 +12,9 @@ from ._js_test_callbacks import JSTestCallbackMixin
 @register('.jsx', name='JavaScript React', icon='')
 @register('.mjs', name='JavaScript Module', icon='')
 @register('.cjs', name='JavaScript CommonJS', icon='')
-class JavaScriptAnalyzer(JSClassBasesMixin, JSTestCallbackMixin, TreeSitterAnalyzer):
+class JavaScriptAnalyzer(
+    JSCalleeNameMixin, JSClassBasesMixin, JSTestCallbackMixin, TreeSitterAnalyzer
+):
     """JavaScript file analyzer.
 
     Full JavaScript support via tree-sitter!
