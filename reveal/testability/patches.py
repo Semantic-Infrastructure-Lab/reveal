@@ -434,23 +434,21 @@ def _scan_file(file_path: Path) -> List[PatchUse]:
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        target_raw, kind, confidence = _patch_call_target(node)
-        if not kind:
-            continue
-        target_module, target_symbol, qualname = _split_target(target_raw)
-        uses.append(PatchUse(
-            test_file=str(file_path),
-            test_name=_enclosing_test_name(node, parents),
-            line=getattr(node, 'lineno', 0),
-            patch_kind=kind,
-            target_raw=target_raw,
-            target_module=target_module,
-            target_symbol=target_symbol,
-            target_qualname=qualname,
-            is_private_target=_is_private_symbol(target_symbol),
-            context_depth=_context_depth(node, parents),
-            confidence=confidence,
-        ))
+        for target_raw, kind, confidence in _patch_call_targets(node):
+            target_module, target_symbol, qualname = _split_target(target_raw)
+            uses.append(PatchUse(
+                test_file=str(file_path),
+                test_name=_enclosing_test_name(node, parents),
+                line=getattr(node, 'lineno', 0),
+                patch_kind=kind,
+                target_raw=target_raw,
+                target_module=target_module,
+                target_symbol=target_symbol,
+                target_qualname=qualname,
+                is_private_target=_is_private_symbol(target_symbol),
+                context_depth=_context_depth(node, parents),
+                confidence=confidence,
+            ))
     return uses
 
 
@@ -460,6 +458,82 @@ def _parent_map(tree: ast.AST) -> Dict[ast.AST, ast.AST]:
         for child in ast.iter_child_nodes(parent):
             parents[child] = parent
     return parents
+
+
+_MONKEYPATCH_ITEM_KINDS: Dict[str, str] = {
+    'monkeypatch.setitem': 'monkeypatch.setitem',
+    'monkeypatch.delitem': 'monkeypatch.delitem',
+    'monkeypatch.delattr': 'monkeypatch.delattr',
+    'monkeypatch.setenv': 'monkeypatch.setenv',
+    'monkeypatch.delenv': 'monkeypatch.delenv',
+}
+
+
+def _patch_call_targets(node: ast.Call) -> List[tuple[str, str, float]]:
+    """Return zero or more (target, kind, confidence) tuples for a call node.
+
+    Every patch kind produces exactly one target except `patch.multiple`,
+    which patches several attributes on one object in a single call — each
+    keyword argument is an independent patched attribute (BACK-834 recall
+    finding: real corpora use monkeypatch's item/env/delattr methods and
+    patch.multiple as heavily as setattr; measured 37.6% of monkeypatch
+    call sites invisible before this fix, see
+    internal-docs/planning/dogfood-findings/testability-patches-recall-oracle/).
+    """
+    name = _call_name(node.func)
+
+    if name in ('patch.multiple', 'mock.patch.multiple', 'unittest.mock.patch.multiple') or name.endswith('.patch.multiple'):
+        return _patch_multiple_targets(node)
+
+    for suffix, kind in _MONKEYPATCH_ITEM_KINDS.items():
+        if name.endswith(suffix):
+            target, confidence = _monkeypatch_item_target(node, kind)
+            return [(target, kind, confidence)]
+
+    target, kind, confidence = _patch_call_target(node)
+    if not kind:
+        return []
+    return [(target, kind, confidence)]
+
+
+def _monkeypatch_item_target(node: ast.Call, kind: str) -> tuple[str, float]:
+    """Target extraction for setitem/delitem/delattr/setenv/delenv."""
+    if kind in ('monkeypatch.setitem', 'monkeypatch.delitem'):
+        if len(node.args) < 2:
+            return '<unknown>', 0.3
+        mapping = _unparse(node.args[0])
+        key = _literal_or_text_arg(node, 1) or '<unknown>'
+        return f'{mapping}[{key}]', 0.7
+    if kind == 'monkeypatch.delattr':
+        if not node.args:
+            return '<unknown>', 0.3
+        if _is_string_arg(node, 0):
+            return str(node.args[0].value), 0.8  # type: ignore[union-attr]
+        if len(node.args) >= 2:
+            obj = _unparse(node.args[0])
+            attr = _literal_or_text_arg(node, 1)
+            return (f'{obj}.{attr}' if attr else obj), 0.8
+        return _unparse(node.args[0]), 0.5
+    # monkeypatch.setenv / monkeypatch.delenv — target is the env var name
+    if not node.args:
+        return '<unknown>', 0.3
+    env_name = _literal_or_text_arg(node, 0) or '<unknown>'
+    return env_name, 1.0 if _is_string_arg(node, 0) else 0.6
+
+
+def _patch_multiple_targets(node: ast.Call) -> List[tuple[str, str, float]]:
+    """patch.multiple(target, **kwargs) — one target per patched attribute."""
+    base = (_literal_or_text_arg(node, 0) or '<unknown>') if node.args else '<unknown>'
+    results: List[tuple[str, str, float]] = []
+    for kw in node.keywords:
+        if kw.arg is None:
+            # **dict unpacking — attribute names aren't statically known.
+            results.append((f'{base}.<dynamic>', 'patch.multiple', 0.3))
+        else:
+            results.append((f'{base}.{kw.arg}', 'patch.multiple', 0.9))
+    if not results:
+        results.append((base, 'patch.multiple', 0.4))
+    return results
 
 
 def _patch_call_target(node: ast.Call) -> tuple[str, str, float]:

@@ -72,9 +72,18 @@ is a claim we have not yet checked, **not** a claim it is broken.
    Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX, Zig, C, Lua,
    GDScript, Dart — BACK-730, closed).
    `surface`/`contracts` recall is now measured too (10 languages/
-   categories, BACK-719/791/815, see [Scope](#scope) below) — the one
-   remaining gap is `patches://`/testability, which has **no ground-truth
-   validation on any language**.
+   categories, BACK-719/791/815, see [Scope](#scope) below).
+   `patches://`/testability's call-site recall now has its first
+   ground-truth measurement too (Python, BACK-972): all 10 real
+   `unittest.mock`/pytest-`monkeypatch` call shapes measured 100% recall
+   against an independent oracle on the Home Assistant test corpus (7,908
+   files, 19,235 oracle call sites) — 6 of the 10 shapes
+   (`monkeypatch.setitem`/`delitem`/`delattr`/`setenv`/`delenv`,
+   `patch.multiple`) were previously entirely unrecognized (found+fixed,
+   see `internal-docs/planning/dogfood-findings/testability-patches-recall-oracle/`).
+   TypeScript/JavaScript (`jest.mock`/`vi.mock`/`spyOn`) and the
+   production-side boundary-classification join remain unmeasured by this
+   loop — see that README's "Scope not covered" section.
 3. **Sample size still varies.** Java's 97.5% includes `db` and `http`
    categories with one oracle instance each, both at 0% recall — the figure
    is carried by env/file/log/sleep. Swift's own sparsest category (`env`)

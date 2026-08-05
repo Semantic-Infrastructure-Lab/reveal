@@ -223,24 +223,37 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   second-corpus pass) are all measured (see Done, above), including the
   TypeScript/nest import-recall residual — fixed (81.21% → 99.93%) and
   re-measured and confirmed against nest (super-overlord-0723); it no
-  longer appears in VALIDATION.md's residual table. The remaining
-  confidence gap in this track:
+  longer appears in VALIDATION.md's residual table.
 
-  1. **`patches://`/testability has no ground-truth validation on any
-     language** — not even Python or TS, where the signal is implemented
-     (VALIDATION.md footnote 2). This is a different kind of gap than the
-     other three signals: it isn't a residual within a measured program,
-     it's a signal that has never been run through the
-     independent-oracle-diff method at all. Building that first oracle loop
-     (Python or TS, whichever has an easier ground truth — e.g. an existing
-     test-coverage tool) would establish the method for this signal the same
-     way the import-recall program's first oracle loops did.
+  **`patches://`/testability's first ground-truth oracle loop is done
+  (BACK-972, Python)** — all 10 real `unittest.mock`/pytest-`monkeypatch`
+  call shapes measured against an independent oracle on the Home Assistant
+  test corpus (19,235 oracle call sites). 6 of the 10
+  (`monkeypatch.setitem`/`delitem`/`delattr`/`setenv`/`delenv`,
+  `patch.multiple`) were entirely unrecognized before this loop — 48.5% of
+  real monkeypatch call sites in the corpus were invisible. Found and fixed,
+  now 100% recall on all 10 shapes. Detail:
+  `internal-docs/planning/dogfood-findings/testability-patches-recall-oracle/`.
+  The remaining confidence gap in this track:
+
+  1. **TypeScript/JavaScript `patches://` scanning
+     (`jest.mock`/`vi.mock`/`spyOn`) has no ground-truth measurement yet** —
+     the BACK-972 loop covered Python only. A second-language loop would
+     extend the same independent-oracle-diff method used there.
+  2. **The production-side boundary-classification join
+     (`reveal/testability/boundaries.py`) is a separate signal from
+     `patches://`'s call-site recall** and wasn't measured by BACK-972. It
+     reuses the same `--sideeffects`/`--boundary` taxonomy already measured
+     for 11 languages in the side-effect recall program, so the open
+     question is narrower: does the *join* behave correctly, not the
+     underlying classifier.
 
   *Not on this list, deliberately:* `patches://`/testability language breadth
   past Python + TS is filed as an idea rather than committed work — see
   `tt show BACK-632`. That ticket is about extending coverage to more
-  languages, which is a step *after* the item above (a first ground-truth
-  loop doesn't exist yet for any language). Note that `surface`/`contracts`
+  languages, which is a step *after* a first ground-truth loop exists for
+  that language (Python's is now done; TS's is item 1 above). Note that
+  `surface`/`contracts`
   themselves already reached 11-language *coverage* parity (BACK-588/630/631)
   — real recall validation is the item above, not this note. Swift's
   `_RopeModule` residual is closed by design (BACK-704):
