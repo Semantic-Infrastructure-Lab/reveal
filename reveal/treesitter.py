@@ -1119,109 +1119,24 @@ class TreeSitterAnalyzer(FileAnalyzer):
     def _extract_class_bases(self, node) -> List[str]:
         """Extract base class names from a class node.
 
-        Handles:
-        - TypeScript class/abstract_class: class_heritage → extends_clause + implements_clause
-        - TypeScript interface: extends_type_clause with type_identifier(s)
-
-        Python's version lives in analyzers/python.py (PythonAnalyzer override);
-        other languages override this too (see kotlin.py/scala.py/dart.py/etc.)
-        and fall back to super() for node kinds they don't handle. This base
-        default also covers plain JavaScript, whose grammar shares TS's
-        class_declaration/class_heritage node kinds but doesn't have its own
-        analyzer subclass to host these methods (see BACK-631 comment below).
-
-        Returns an empty list for classes with no bases and for node kinds
-        no override recognizes.
+        Base default: no bases. Real per-language logic lives in the
+        analyzer subclasses — Python's in analyzers/python.py, the shared
+        JS/TS class_heritage-based logic (plain JavaScript and TypeScript
+        share the same class_declaration/class_heritage grammar shapes) in
+        analyzers/_js_class_bases.py's JSClassBasesMixin, and most other
+        languages override this directly (kotlin.py/scala.py/dart.py/etc.),
+        falling back to super() for node kinds they don't handle.
         """
-        node_type = node.kind()
-        if node_type in ('class_declaration', 'abstract_class_declaration'):
-            return self._extract_ts_class_bases(node)
-        if node_type == 'interface_declaration':
-            return self._extract_ts_interface_bases(node)
         return []
-
-    def _extract_ts_class_bases(self, node) -> List[str]:
-        # class Foo extends Bar implements IBaz, IQux { ... }
-        for child in _children(node):
-            if child.kind() == 'class_heritage':
-                return self._extract_ts_heritage_bases(child)
-        return []
-
-    def _extract_ts_heritage_bases(self, heritage) -> List[str]:
-        # BACK-631: the plain-JavaScript grammar has no extends_clause/
-        # implements_clause wrapper — `class_heritage` holds the `extends`
-        # keyword and the base identifier as flat siblings (TS wraps them in
-        # extends_clause). Collect both shapes: nested clause children (TS)
-        # and bare identifier/type_identifier children directly under
-        # `heritage` (JS) — JS has no `implements`, so only extends applies.
-        bases = []
-        for heritage_child in _children(heritage):
-            if heritage_child.kind() == 'extends_clause':
-                bases.extend(self._extract_ts_extends_names(heritage_child))
-            elif heritage_child.kind() == 'implements_clause':
-                bases.extend(self._extract_ts_implements_names(heritage_child))
-            elif _zero_arg(heritage_child, 'kind') in ('identifier', 'type_identifier'):
-                text = self._get_node_text(heritage_child).strip()
-                if text:
-                    bases.append(text)
-        return bases
-
-    def _extract_ts_extends_names(self, extends_clause) -> List[str]:
-        # extends_clause: "extends <identifier>" or "extends <ns>.<identifier>"
-        # (generic type args, if any, are flat siblings here — not nested in
-        # a generic_type wrapper — so a dotted base like `React.Component`
-        # or `React.Component<Props, State>` both surface as a bare
-        # member_expression child; BACK-719 dogfood found this tail-dropped
-        # entirely, silently emptying `bases` for any class extending a
-        # namespaced base, e.g. every React.Component-based class component)
-        names = []
-        for item in _children(extends_clause):
-            item_kind = _zero_arg(item, 'kind')
-            if item_kind in ('identifier', 'type_identifier'):
-                text = self._get_node_text(item).strip()
-                if text:
-                    names.append(text)
-            elif item_kind == 'member_expression':
-                for child in _children(item):
-                    if _zero_arg(child, 'kind') == 'property_identifier':
-                        text = self._get_node_text(child).strip()
-                        if text:
-                            names.append(text)
-        return names
-
-    def _extract_ts_implements_names(self, implements_clause) -> List[str]:
-        # implements_clause: "implements TypeA, TypeB, ..."
-        names = []
-        for item in _children(implements_clause):
-            if item.kind() == 'generic_type':
-                # e.g. implements IFoo<T> — extract base name
-                base = self._extract_generic_type_base(item)
-                if base:
-                    names.append(base)
-            elif item.kind() in ('type_identifier', 'identifier'):
-                text = self._get_node_text(item).strip()
-                if text:
-                    names.append(text)
-        return names
 
     def _extract_generic_type_base(self, generic_type) -> Optional[str]:
+        # Shared by JSClassBasesMixin._extract_ts_implements_names and
+        # analyzers/scala.py's _extract_class_bases — kept here rather than
+        # behind the JS-only mixin since scala.py calls it directly.
         for gchild in _children(generic_type):
             if gchild.kind() == 'type_identifier':
                 return self._get_node_text(gchild).strip() or None
         return None
-
-    def _extract_ts_interface_bases(self, node) -> List[str]:
-        # interface IFoo extends IBar, IBaz { ... }
-        for child in _children(node):
-            if child.kind() == 'extends_type_clause':
-                bases = []
-                for item in _children(child):
-                    if item.kind() in ('type_identifier', 'identifier'):
-                        text = self._get_node_text(item).strip()
-                        if text:
-                            bases.append(text)
-                return bases
-        return []
 
     def _extract_interface_declarations(self, node_kind: str = 'interface_declaration') -> List[Dict[str, Any]]:
         """Extract interface declarations as a standalone list (name, line range, bases).
