@@ -42,6 +42,7 @@ from .deps import DepsAdapter
 from .architecture import ArchitectureAdapter
 from .overview import OverviewAdapter
 from .testability import TestabilityAdapter
+from .trace import TraceAdapter
 
 # Optional adapters (require extra dependencies)
 try:

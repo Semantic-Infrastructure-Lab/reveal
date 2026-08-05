@@ -347,6 +347,7 @@ class HelpAdapter(ResourceAdapter):
         'ssl': 'adapters/SSL_ADAPTER_GUIDE.md',
         'stats': 'adapters/STATS_ADAPTER_GUIDE.md',
         'surface': 'adapters/SURFACE_ADAPTER_GUIDE.md',
+        'trace': 'adapters/TRACE_ADAPTER_GUIDE.md',
         'xlsx': 'adapters/XLSX_ADAPTER_GUIDE.md',
         # User guides (reveal/docs/guides/)
         'ci': 'guides/CI_RECIPES.md',
@@ -1164,7 +1165,7 @@ class HelpAdapter(ResourceAdapter):
             'clusters': [
                 {
                     'name': 'Code Analysis',
-                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots', 'deps', 'architecture', 'overview', 'testability'],
+                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots', 'deps', 'architecture', 'overview', 'testability', 'trace'],
                     'pairs': [
                         ('ast', 'calls', 'structure feeds call-graph queries'),
                         ('ast', 'diff', 'compare element complexity across versions'),
@@ -1188,6 +1189,7 @@ class HelpAdapter(ResourceAdapter):
                         ('overview', 'stats', 'dashboard hotspots/quality pulse draw on the same quality score'),
                         ('overview', 'git', 'recent-activity section is a git:// log query'),
                         ('testability', 'patches', 'testability joins the same patch scan against production boundary fan-out'),
+                        ('trace', 'calls', 'trace narrative is built on calls:// BFS machinery'),
                     ],
                 },
                 {

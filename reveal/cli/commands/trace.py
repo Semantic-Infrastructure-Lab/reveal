@@ -1,14 +1,30 @@
-"""reveal trace — execution narrative from an entry-point function."""
+"""reveal trace — execution narrative from an entry-point function.
+
+Thin argparse shim over the trace:// adapter (BACK-901/BACK-960); BFS/render
+logic lives in reveal/adapters/trace.py. Internal names are re-exported here
+for backward compatibility with existing callers/tests, and — unchanged —
+the reveal_trace MCP tool imports run_trace from this module directly.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Any, Dict, List, Set
+
+from reveal.adapters.trace import (  # noqa: F401 - re-exported for back-compat
+    TraceAdapter,
+    TraceRenderer,
+    _bfs_depth,
+    _build_trace,
+    _collect_function_index,
+    _effects_from_calls,
+    _params_from_signature,
+    _relpath,
+    _render_trace,
+)
 
 
 def create_trace_parser() -> argparse.ArgumentParser:
@@ -46,10 +62,11 @@ def run_trace(args: Namespace) -> None:
         print(f"reveal trace: path not found: {path}", file=sys.stderr)
         sys.exit(1)
 
-    depth = max(1, min(args.depth if args.depth is not None else 3, 5))
-    report = _build_trace(str(path), args.root, depth)
+    depth = max(1, min(args.depth if args.depth is not None else 2, 5))
+    query = f'from={args.root}&depth={depth}'
+    result = TraceAdapter(str(path), query).get_structure()
 
-    if report['frames'] and not report['frames'][0]['resolved']:
+    if result['frames'] and not result['frames'][0]['resolved']:
         print(
             f"reveal trace: '{args.root}' not found in {path}\n"
             f"  Check spelling or run: reveal {path}",
@@ -59,253 +76,13 @@ def run_trace(args: Namespace) -> None:
 
     if args.format == 'json':
         from reveal.utils.results import add_cli_contract_fields
+        report = {
+            k: v for k, v in result.items()
+            if k not in ('contract_version', 'type', 'source', 'source_type', 'meta')
+        }
         print(json.dumps(
             add_cli_contract_fields(report, result_type='trace', source=path),
             indent=2,
         ))
     else:
-        _render_trace(report)
-
-
-# ---------------------------------------------------------------------------
-# Core
-# ---------------------------------------------------------------------------
-
-def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
-    """Build a trace report: BFS call tree augmented with per-function info."""
-    from reveal.adapters.calls.index import _lang_family, find_callees_recursive
-
-    bfs = find_callees_recursive(path, root, depth=depth)
-    func_index = _collect_function_index(path)
-
-    # children map: name → ordered list of callee names
-    children: Dict[str, List[str]] = {}
-    # BACK-405: only trust a bare-name lookup in func_index for a callee that
-    # the (language-scoped) BFS actually resolved, and only against the
-    # language family(ies) it resolved through — otherwise a same-named
-    # definition in an unrelated language (e.g. a Python `def write` next to
-    # a C `write()` syscall) renders as if it were the real target.
-    resolved_families: Dict[str, Set[str]] = {}
-    for lvl in bfs.get('levels', []):
-        for entry in lvl['callees']:
-            caller = entry['caller']
-            callee = entry['callee']
-            children.setdefault(caller, [])
-            if callee not in children[caller]:
-                children[caller].append(callee)
-            if entry['resolved']:
-                resolved_families.setdefault(callee, set()).add(
-                    _lang_family(entry['caller_file'])
-                )
-
-    # BFS visit order so frames render root-first, then level 1, level 2 …
-    visited_order: List[str] = [root]
-    seen: Set[str] = {root}
-    for lvl in bfs.get('levels', []):
-        for entry in lvl['callees']:
-            callee = entry['callee']
-            if callee not in seen:
-                seen.add(callee)
-                visited_order.append(callee)
-
-    frames = []
-    for name in visited_order:
-        candidates = func_index.get(name, [])
-        if name == root:
-            info = candidates[0] if candidates else {}
-        else:
-            families = resolved_families.get(name)
-            info = (
-                next((c for c in candidates if _lang_family(c['file']) in families), {})
-                if families else {}
-            )
-        level = _bfs_depth(name, root, bfs)
-        frame: Dict[str, Any] = {
-            'name': name,
-            'file': info.get('file', ''),
-            'line': info.get('line', 0),
-            'params': info.get('params', []),
-            'effects': info.get('effects', []),
-            'calls': children.get(name, []),
-            'depth': level,
-            'resolved': bool(info),
-        }
-        frames.append(frame)
-
-    return {
-        'root': root,
-        'path': path,
-        'depth': depth,
-        'frames': frames,
-        'total_resolved': bfs.get('total_resolved', 0),
-        'total_unresolved': bfs.get('total_unresolved', 0),
-    }
-
-
-def _bfs_depth(name: str, root: str, bfs: Dict[str, Any]) -> int:
-    if name == root:
-        return 0
-    for lvl in bfs.get('levels', []):
-        for entry in lvl['callees']:
-            if entry['callee'] == name:
-                return lvl['level']
-    return -1
-
-
-def _collect_function_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
-    """Scan all files under *path* via collect_structures and return name → [info, ...].
-
-    Returns every same-named definition (not just the first) so callers can
-    disambiguate by language family (BACK-405) instead of silently picking
-    whichever definition happened to be scanned first.
-    """
-    from reveal.adapters.ast.analysis import collect_structures
-    from reveal.adapters.ast.nav_effects import classify_call
-    from reveal.registry import language_for_extension
-
-    structures = collect_structures(path)
-    index: Dict[str, List[Dict[str, Any]]] = {}
-
-    for file_struct in structures:
-        file_path = file_struct.get('file', '')
-        language = language_for_extension(Path(file_path).suffix)
-        for elem in file_struct.get('elements', []):
-            if elem.get('category') not in ('functions', 'methods'):
-                continue
-            name = elem.get('name', '')
-            if not name:
-                continue
-            index.setdefault(name, []).append({
-                'file': file_path,
-                'line': elem.get('line', 0),
-                'params': _params_from_signature(elem.get('signature', ''), name),
-                'effects': _effects_from_calls(elem.get('calls', []), classify_call, language),
-            })
-
-    return index
-
-
-def _split_top_level_commas(text: str) -> List[str]:
-    """Split on commas that are not nested inside (), [] or {}.
-
-    Type annotations routinely contain commas (`dict[str, str]`,
-    `Callable[[int], None]`, `tuple[int, ...]`), so a naive `str.split(',')`
-    over a parameter list fabricates phantom parameters.
-    """
-    parts: List[str] = []
-    depth = 0
-    current: List[str] = []
-    for ch in text:
-        if ch in '([{':
-            depth += 1
-        elif ch in ')]}':
-            depth = max(0, depth - 1)
-        if ch == ',' and depth == 0:
-            parts.append(''.join(current))
-            current = []
-        else:
-            current.append(ch)
-    if current:
-        parts.append(''.join(current))
-    return parts
-
-
-def _params_from_signature(signature: str, func_name: str) -> List[str]:
-    """Extract parameter names from a function signature string.
-
-    Signature format from tree-sitter: '(param1: Type, *args) -> ReturnType'
-    or just '(param1, param2)'. A parameter's type annotation or default can
-    itself contain commas, parens and brackets (`dict[str, str]`,
-    `Callable[[], None]`, `x=foo()`), so the list is delimited by the paren
-    that matches the opening one — not the first close-paren — and split on
-    top-level commas only. A naive `split('(',1)[1].split(')',1)[0]` +
-    `split(',')` produced phantom params like `str] | None` from
-    `error_...placeholders: dict[str, str] | None` and truncated on any
-    default containing `)`.
-    """
-    start = signature.find('(')
-    if start == -1:
-        return []
-    depth = 0
-    end = -1
-    for i in range(start, len(signature)):
-        ch = signature[i]
-        if ch == '(':
-            depth += 1
-        elif ch == ')':
-            depth -= 1
-            if depth == 0:
-                end = i
-                break
-    inner = signature[start + 1:end] if end != -1 else signature[start + 1:]
-    params = []
-    for part in _split_top_level_commas(inner):
-        name = part.strip().lstrip('*').split(':')[0].split('=')[0].strip()
-        if name and name not in ('self', 'cls', '/', ''):
-            params.append(name)
-    return params
-
-
-def _effects_from_calls(calls: List[str], classify_call, language=None) -> List[str]:
-    """Return deduplicated effect labels for a function's call list."""
-    effects: List[str] = []
-    seen: Set[str] = set()
-    for callee in calls:
-        kind = classify_call(callee, language)
-        if kind:
-            label = f"{kind}:{callee.split('.')[-1]}"
-            if label not in seen:
-                seen.add(label)
-                effects.append(label)
-    return effects
-
-
-# ---------------------------------------------------------------------------
-# Rendering
-# ---------------------------------------------------------------------------
-
-def _render_trace(report: Dict[str, Any]) -> None:
-    root = report['root']
-    path = report['path']
-    depth = report['depth']
-    frames = report['frames']
-    total_r = report['total_resolved']
-    total_u = report['total_unresolved']
-
-    print(f"Trace: {root}  (depth {depth})")
-    print(f"Project: {path}")
-    print(f"Resolved: {total_r}  External/unresolved: {total_u}")
-    print()
-
-    if not frames:
-        print(f"  No functions found for '{root}'.")
-        return
-
-    for frame in frames:
-        d = frame['depth']
-        indent = '  ' * d
-        name = frame['name']
-
-        loc = ''
-        if frame['file']:
-            rel = _relpath(frame['file'], path)
-            loc = f"  [{rel}:{frame['line']}]" if frame['line'] else f"  [{rel}]"
-
-        marker = '' if frame['resolved'] else '  [external]'
-        print(f"{indent}{name}{loc}{marker}")
-
-        inner = indent + '  '
-        if frame['params']:
-            print(f"{inner}params:  {', '.join(frame['params'])}")
-        if frame['effects']:
-            print(f"{inner}effects: {', '.join(frame['effects'])}")
-        if frame['calls']:
-            print(f"{inner}calls:   {', '.join(frame['calls'])}")
-        print()
-
-
-def _relpath(file_str: str, base: str) -> str:
-    try:
-        return os.path.relpath(file_str, base)
-    except ValueError:
-        return file_str
+        TraceRenderer.render_structure(result, format=args.format)
