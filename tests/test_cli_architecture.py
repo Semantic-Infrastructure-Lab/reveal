@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from reveal.cli.commands.architecture import (
+from reveal.adapters.architecture import (
     _build_next_commands,
     _compute_risks,
     _is_test_file,
@@ -24,6 +24,8 @@ from reveal.cli.commands.architecture import (
     _run_combined_analysis,
     _run_complex_functions,
     _run_imports_analysis,
+)
+from reveal.cli.commands.architecture import (
     create_architecture_parser,
     run_architecture,
 )
@@ -445,16 +447,16 @@ class TestRunArchitecture(unittest.TestCase):
 
     def test_no_imports_skips_analysis(self):
         args = _args(path='.', no_imports=True)
-        with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=[]):
-            with patch('reveal.cli.commands.architecture._run_imports_analysis') as mock_imports:
-                with patch('reveal.cli.commands.architecture._render_brief'):
+        with patch('reveal.adapters.architecture._run_complex_functions', return_value=[]):
+            with patch('reveal.adapters.architecture._run_imports_analysis') as mock_imports:
+                with patch('reveal.adapters.architecture._render_brief'):
                     run_architecture(args)
         mock_imports.assert_not_called()
 
     def test_json_output(self):
         args = _args(path='.', format='json')
         mock_complex = [{'name': 'f', 'complexity': 25, 'file': '/tmp/a.py'}]
-        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=(mock_complex, _IMPORTS_DATA)):
+        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=(mock_complex, _IMPORTS_DATA)):
             out = _capture(run_architecture, args)
 
         data = json.loads(out)
@@ -469,7 +471,7 @@ class TestRunArchitecture(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, 'a.py').write_text('x = 1\n')
             args = _args(path=tmp, format='json')
-            with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=([], _IMPORTS_DATA)):
+            with patch('reveal.adapters.architecture._run_combined_analysis', return_value=([], _IMPORTS_DATA)):
                 out = _capture(run_architecture, args)
             data = json.loads(out)
         self.assertEqual(data['scope']['total_code_files'], 1)
@@ -477,7 +479,7 @@ class TestRunArchitecture(unittest.TestCase):
 
     def test_json_facts_structure(self):
         args = _args(path='.', format='json')
-        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=([], _IMPORTS_DATA)):
+        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=([], _IMPORTS_DATA)):
             out = _capture(run_architecture, args)
 
         facts = json.loads(out)['facts']
@@ -488,14 +490,14 @@ class TestRunArchitecture(unittest.TestCase):
 
     def test_text_output_renders(self):
         args = _args(path='.')
-        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
+        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
             out = _capture(run_architecture, args)
 
         self.assertIn('Architecture Brief', out)
 
     def test_text_output_sections(self):
         args = _args(path='.')
-        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
+        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
             out = _capture(run_architecture, args)
 
         self.assertIn('Entry Points', out)
@@ -506,13 +508,13 @@ class TestRunArchitecture(unittest.TestCase):
 
     def test_dynamic_imports_note_shown(self):
         args = _args(path='.')
-        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=([], _IMPORTS_DATA)):
+        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=([], _IMPORTS_DATA)):
             out = _capture(run_architecture, args)
         self.assertIn('static imports only', out)
 
     def test_dynamic_imports_note_hidden_when_no_imports(self):
         args = _args(path='.', no_imports=True)
-        with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=[]):
+        with patch('reveal.adapters.architecture._run_complex_functions', return_value=[]):
             out = _capture(run_architecture, args)
         self.assertNotIn('static imports only', out)
 
@@ -539,7 +541,7 @@ class TestRunCombinedAnalysis(unittest.TestCase):
         silently losing data because of an unrelated imports failure."""
         with patch('reveal.adapters.imports.ImportsAdapter', side_effect=Exception('fail')):
             with patch(
-                'reveal.cli.commands.architecture._run_complex_functions',
+                'reveal.adapters.architecture._run_complex_functions',
                 return_value=_COMPLEX_FNS,
             ) as mock_fallback:
                 complex_fns, imports_data = _run_combined_analysis(Path('/p'), 5)
@@ -655,21 +657,21 @@ class TestCoverageWarning(unittest.TestCase):
 
     def test_text_shows_warning_even_with_no_facts(self):
         args = _args(path='.')
-        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=([], self._EMPTY_IMPORTS)):
+        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=([], self._EMPTY_IMPORTS)):
             out = _capture(run_architecture, args)
         self.assertIn('not analyzed', out)
         self.assertIn('.hs', out)
 
     def test_json_includes_unsupported_extensions(self):
         args = _args(path='.', format='json')
-        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=([], self._EMPTY_IMPORTS)):
+        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=([], self._EMPTY_IMPORTS)):
             out = _capture(run_architecture, args)
         data = json.loads(out)
         self.assertEqual(data['unsupported_extensions'], {'.hs': 3})
 
     def test_no_warning_when_fully_supported(self):
         args = _args(path='.')
-        with patch('reveal.cli.commands.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
+        with patch('reveal.adapters.architecture._run_combined_analysis', return_value=(_COMPLEX_FNS, _IMPORTS_DATA)):
             out = _capture(run_architecture, args)
         self.assertNotIn('not analyzed', out)
 

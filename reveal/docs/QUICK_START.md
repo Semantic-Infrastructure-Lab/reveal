@@ -306,7 +306,7 @@ reveal 'ast://./src?complexity>10'
 
 ## Advanced: URI Adapters
 
-Reveal has **29 URI adapters** for specialized queries:
+Reveal has **30 URI adapters** for specialized queries:
 
 ```bash
 # Query code structure

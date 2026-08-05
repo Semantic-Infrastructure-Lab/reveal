@@ -308,6 +308,7 @@ class HelpAdapter(ResourceAdapter):
         'anti-patterns': 'AGENT_HELP.md',  # Merged into AGENT_HELP.md
         'benchmarks': 'BENCHMARKS.md',
         # Adapter guides (reveal/docs/adapters/)
+        'architecture': 'adapters/ARCHITECTURE_ADAPTER_GUIDE.md',
         'ast': 'adapters/AST_ADAPTER_GUIDE.md',
         'autossl': 'adapters/AUTOSSL_ADAPTER_GUIDE.md',
         'calls': 'adapters/CALLS_ADAPTER_GUIDE.md',
@@ -1162,7 +1163,7 @@ class HelpAdapter(ResourceAdapter):
             'clusters': [
                 {
                     'name': 'Code Analysis',
-                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots', 'deps'],
+                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots', 'deps', 'architecture'],
                     'pairs': [
                         ('ast', 'calls', 'structure feeds call-graph queries'),
                         ('ast', 'diff', 'compare element complexity across versions'),
@@ -1181,6 +1182,8 @@ class HelpAdapter(ResourceAdapter):
                         ('hotspots', 'stats', 'ranked hotspot list draws on the same quality score'),
                         ('hotspots', 'ast', 'function-level complexity ranking feeds the hotspot list'),
                         ('deps', 'imports', 'dependency dashboard is composed entirely from imports:// queries'),
+                        ('architecture', 'imports', 'entry points/core abstractions/cycles feed the architecture brief'),
+                        ('architecture', 'ast', 'complexity ranking feeds the high-complexity-entry risk'),
                     ],
                 },
                 {

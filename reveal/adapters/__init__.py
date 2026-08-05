@@ -39,6 +39,7 @@ from .surface import SurfaceAdapter
 from .contracts import ContractsAdapter
 from .hotspots import HotspotsAdapter
 from .deps import DepsAdapter
+from .architecture import ArchitectureAdapter
 
 # Optional adapters (require extra dependencies)
 try:
