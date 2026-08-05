@@ -28,6 +28,11 @@ _INTENTIONALLY_EXCLUDED = {
         "V024 pointer stub only — canonical content is guides/TESTABILITY_GUIDE.md, "
         "already reachable via STATIC_HELP['testability']; not a second help:// route"
     ),
+    'adapters/PACK_ADAPTER_GUIDE.md': (
+        "V024 pointer stub only — canonical content is guides/SUBCOMMANDS_GUIDE.md's "
+        "'reveal pack' section, already reachable via STATIC_HELP['pack']; not a "
+        "second help:// route"
+    ),
 }
 
 _DOCS_ROOT = Path(__file__).parent.parent / 'reveal' / 'docs'

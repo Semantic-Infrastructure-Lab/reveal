@@ -237,6 +237,10 @@ reveal pack src/ --since main --budget 8000    # PR context: changed files first
 reveal pack src/ --since HEAD~3 --budget 4000  # Since 3 commits ago
 reveal pack . --architecture              # Boost core abstractions; show architecture hint
 reveal pack . --format json               # For agent consumption
+
+# pack:// is also a queryable URI in its own right (BACK-961)
+reveal 'pack://.?budget=4000'
+reveal 'pack://.?since=main&content=true'
 ```
 
 ### Agent-Ready Output with --content

@@ -18,6 +18,7 @@ from reveal.adapters.overview import (  # noqa: F401 - re-exported for back-comp
     OverviewAdapter,
     OverviewRenderer,
     StatsAdapter,
+    _NON_CODE_EXT_LABELS,
     _age_label,
     _is_test_file,
     _language_breakdown,

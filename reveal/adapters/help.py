@@ -1165,7 +1165,7 @@ class HelpAdapter(ResourceAdapter):
             'clusters': [
                 {
                     'name': 'Code Analysis',
-                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots', 'deps', 'architecture', 'overview', 'testability', 'trace'],
+                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots', 'deps', 'architecture', 'overview', 'testability', 'trace', 'pack'],
                     'pairs': [
                         ('ast', 'calls', 'structure feeds call-graph queries'),
                         ('ast', 'diff', 'compare element complexity across versions'),
@@ -1190,6 +1190,7 @@ class HelpAdapter(ResourceAdapter):
                         ('overview', 'git', 'recent-activity section is a git:// log query'),
                         ('testability', 'patches', 'testability joins the same patch scan against production boundary fan-out'),
                         ('trace', 'calls', 'trace narrative is built on calls:// BFS machinery'),
+                        ('pack', 'imports', '--architecture/--focus ranking is built on the same import/dependency graph'),
                     ],
                 },
                 {
