@@ -218,41 +218,41 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   rollup, `VALIDATION.md`'s Scope section for the promoted confidence-tier
   summary, and each language's own
   `internal-docs/planning/dogfood-findings/*-surface-contracts-recall-oracle/README.md`.
+- **`patches://`/testability's ground-truth oracle loops complete for both
+  implemented languages (BACK-972 Python, BACK-973 TypeScript/JavaScript).**
+  Python: all 10 real `unittest.mock`/pytest-`monkeypatch` call shapes
+  measured against an independent oracle on the Home Assistant test corpus
+  (19,235 oracle call sites) — 6 of the 10
+  (`monkeypatch.setitem`/`delitem`/`delattr`/`setenv`/`delenv`,
+  `patch.multiple`) were entirely unrecognized before this loop, 48.5% of
+  real monkeypatch call sites invisible; found and fixed, now 100% recall
+  on all 10 shapes. TypeScript/JavaScript: `jest.mock`/`vi.mock`/`spyOn`/`fn`
+  measured against an independent TypeScript-compiler-API oracle on two
+  corpora with different mocking frameworks (Excalidraw/vitest,
+  react-router/jest — 577 combined call sites) — clean on both, no bug
+  found. Detail for both:
+  `internal-docs/planning/dogfood-findings/testability-patches-recall-oracle/`.
 - **Next, in priority order.** Import recall, side-effect recall,
   call-graph recall, and surface/contracts recall (now including its
   second-corpus pass) are all measured (see Done, above), including the
   TypeScript/nest import-recall residual — fixed (81.21% → 99.93%) and
   re-measured and confirmed against nest (super-overlord-0723); it no
-  longer appears in VALIDATION.md's residual table.
+  longer appears in VALIDATION.md's residual table. The remaining confidence
+  gap in this track:
 
-  **`patches://`/testability's first ground-truth oracle loop is done
-  (BACK-972, Python)** — all 10 real `unittest.mock`/pytest-`monkeypatch`
-  call shapes measured against an independent oracle on the Home Assistant
-  test corpus (19,235 oracle call sites). 6 of the 10
-  (`monkeypatch.setitem`/`delitem`/`delattr`/`setenv`/`delenv`,
-  `patch.multiple`) were entirely unrecognized before this loop — 48.5% of
-  real monkeypatch call sites in the corpus were invisible. Found and fixed,
-  now 100% recall on all 10 shapes. Detail:
-  `internal-docs/planning/dogfood-findings/testability-patches-recall-oracle/`.
-  The remaining confidence gap in this track:
-
-  1. **TypeScript/JavaScript `patches://` scanning
-     (`jest.mock`/`vi.mock`/`spyOn`) has no ground-truth measurement yet** —
-     the BACK-972 loop covered Python only. A second-language loop would
-     extend the same independent-oracle-diff method used there.
-  2. **The production-side boundary-classification join
+  1. **The production-side boundary-classification join
      (`reveal/testability/boundaries.py`) is a separate signal from
-     `patches://`'s call-site recall** and wasn't measured by BACK-972. It
-     reuses the same `--sideeffects`/`--boundary` taxonomy already measured
-     for 11 languages in the side-effect recall program, so the open
-     question is narrower: does the *join* behave correctly, not the
-     underlying classifier.
+     `patches://`'s call-site recall** and wasn't measured by the
+     call-site-recall loops above. It reuses the same
+     `--sideeffects`/`--boundary` taxonomy already measured for 11 languages
+     in the side-effect recall program, so the open question is narrower:
+     does the *join* behave correctly, not the underlying classifier.
 
   *Not on this list, deliberately:* `patches://`/testability language breadth
   past Python + TS is filed as an idea rather than committed work — see
   `tt show BACK-632`. That ticket is about extending coverage to more
   languages, which is a step *after* a first ground-truth loop exists for
-  that language (Python's is now done; TS's is item 1 above). Note that
+  that language (both Python's and TS's are now done). Note that
   `surface`/`contracts`
   themselves already reached 11-language *coverage* parity (BACK-588/630/631)
   — real recall validation is the item above, not this note. Swift's
