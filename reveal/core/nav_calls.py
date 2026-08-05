@@ -17,6 +17,162 @@ from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_KINDS
 # callee as the entire chain's source text instead of ".build".
 
 
+def _generic_call_hits(
+    node: Any, call_node_types: frozenset, get_text: Callable, from_line: int, to_line: int,
+) -> List[Dict[str, Any]]:
+    # GDScript's 'attribute_call' is deliberately excluded here even
+    # though it's now a CALL_NODE_TYPES member (added for treesitter.py's
+    # get_structure()/calls:// path, BACK-730 seventeenth language): the
+    # dedicated `attribute`-chain scan (_gdscript_attribute_hits) already
+    # visits every attribute_call in the enclosing chain and reconstructs
+    # its FULL qualified callee (`x.field.method`, not just the bare
+    # `method`). Without this guard, the generic per-node check ALSO
+    # matches attribute_call directly during the same stack walk, emitting
+    # a second, wrongly-bare duplicate entry for every dotted GDScript call
+    # (caught by test_calls_ignores_bare_property_access_in_chain
+    # regressing to ['x.field.method', 'method'] instead of
+    # ['x.field.method']).
+    line = node.start_position().row + 1
+    in_range = from_line <= line <= to_line
+    if not (node.kind() in call_node_types and node.kind() != 'attribute_call' and in_range):
+        return []
+    callee = _extract_callee(node, get_text, call_node_types)
+    # BACK-744: 'init_declarator' is a CALL_NODE_TYPES member for C++
+    # direct-init (`ClassName obj(args);`) but is ALSO the node kind for
+    # every other initialized declaration (`int y = 5;`, `Foo obj2 =
+    # Foo(3, 4);`) — a shape _extract_callee correctly returns None for
+    # (mirrors treesitter.py:_extract_calls_in_function's `if name`
+    # guard). Without this check, every such plain/copy-init declaration
+    # in C/C++ would emit a bogus unknown-callee ('?') entry here.
+    if not callee:
+        return []
+    first_arg, has_more = _extract_first_arg(node, get_text)
+    return [{'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more}]
+
+
+def _dart_selector_hits(
+    children: List[Any], get_text: Callable, from_line: int, to_line: int,
+) -> List[Dict[str, Any]]:
+    # Dart has no call-expression wrapper node at all — `obj.method(x)`
+    # parses as a bare `identifier` followed by flat sibling `selector`
+    # nodes (`.method`, then `(x)`), so it's invisible to the generic
+    # node-kind check regardless of what's in call_node_types. `selector`
+    # is a Dart-only kind name (no-op scan elsewhere), so this is safe to
+    # run unconditionally. Found via real AppFlowy source
+    # (createNewPageInSpace) — every call in the function, including
+    # `find.byWidgetPredicate(...)` and 8 others, was silently invisible
+    # to --calls (BACK-431 feature-breadth pass).
+    if not any(c.kind() == 'selector' for c in children):
+        return []
+    hits = _extract_dart_selector_calls(children, get_text)
+    return [call for call in hits if from_line <= call['line'] <= to_line]
+
+
+def _zig_suffix_hits(
+    node: Any, children: List[Any], get_text: Callable, from_line: int, to_line: int,
+) -> List[Dict[str, Any]]:
+    # Zig has no call-expression wrapper node either — `foo(x)` /
+    # `a.b.c(x)` parse as one `SuffixExpr` holding [IDENTIFIER, then
+    # either a bare `FnCallArguments` or a run of `FieldOrFnCall`
+    # children (`.member` or `.method(args)`)]. `SuffixExpr` is a
+    # Zig-only kind name, so this is a no-op scan for every other
+    # language. Found via real Ghostty source (formatter.zig's
+    # cellStyle): `cell.hasStyling()` and `self.page.styles.get(...)`
+    # were both silently invisible to --calls (BACK-431 feature-breadth
+    # pass).
+    if node.kind() != 'SuffixExpr':
+        return []
+    hits = _extract_zig_suffix_calls(children, get_text)
+    return [call for call in hits if from_line <= call['line'] <= to_line]
+
+
+def _gdscript_attribute_hits(
+    node: Any, children: List[Any], get_text: Callable, from_line: int, to_line: int,
+) -> List[Dict[str, Any]]:
+    # GDScript's dotted method call (`x.size()`, `x.a().b()`) has no
+    # dedicated call node either — it's folded into the same `attribute`
+    # node Python-style plain attribute access uses (`x.field`), as a
+    # flat run of `.` tokens and either bare `identifier` (plain
+    # property) or `attribute_call` (identifier + arguments) segments.
+    # `attribute_call` isn't a member of CALL_NODE_TYPES for any
+    # language, so this whole shape was invisible to --calls. Bare
+    # `foo(x)` (the plain `call` node, shared with Python) already
+    # worked — only the dotted form was blind, which is most real
+    # GDScript call sites. Found via real godot-demo-projects source
+    # (ik_fabrik.gd's chain_backward): `bone_nodes[...].normalized()`
+    # and 4 others were silently invisible (BACK-431 feature-breadth
+    # pass).
+    if not (node.kind() == 'attribute' and any(c.kind() == 'attribute_call' for c in children)):
+        return []
+    hits = _extract_gdscript_attribute_calls(children, get_text)
+    return [call for call in hits if from_line <= call['line'] <= to_line]
+
+
+def _dart_cascade_hits(
+    node: Any, get_text: Callable, from_line: int, to_line: int,
+) -> List[Dict[str, Any]]:
+    # Dart cascade (`recv\n  ..foo()\n  ..bar(x)`) is a THIRD, distinct
+    # shape from the flat identifier+selector chain above: each cascaded
+    # call is its own sibling `cascade_section` node (a sibling of the
+    # base identifier/selector chain, not nested inside it), holding
+    # `..`, a `cascade_selector` (the member name), then either an
+    # `argument_part` directly (plain `..method(args)`) or a further
+    # `unconditional_assignable_selector`/`argument_part` run for a
+    # chained call after the cascade member (`..setup().finish()`) —
+    # note these chained continuations are DIRECT children of
+    # `cascade_section`, unlike the outer flat chain where they're
+    # wrapped in a `selector` node. `_extract_dart_selector_calls` never
+    # looks inside `cascade_section`/`cascade_selector` at all, so every
+    # cascaded call was silently invisible to --calls/--sideeffects/
+    # --boundary (BACK-723 Dart sideeffects-recall-oracle pre-flight
+    # check) despite cascades being AppFlowy's dominant Flutter
+    # builder-chain idiom (289 files use `..`). `cascade_section` is a
+    # Dart-only kind name, so this is a no-op scan for every other
+    # language.
+    if _zero_arg(node, 'kind') != 'cascade_section':
+        return []
+    hits = _extract_dart_cascade_calls(node, get_text)
+    return [call for call in hits if from_line <= call['line'] <= to_line]
+
+
+def _decorator_arg_hits(
+    func_node: Any, call_node_types: frozenset, get_text: Callable, seen_callees: set,
+) -> List[Dict[str, Any]]:
+    # Python decorator arguments (`@validator(vol.Schema(...))`) are
+    # SIBLINGS of func_node under decorated_definition, not part of
+    # func_node's own subtree -- the main stack walk never sees them,
+    # mirroring treesitter.py:_decorator_extra_calls's identical BACK-731
+    # gap on the calls:// side (confirmed on Home Assistant's
+    # helpers/data_entry_flow.py: two `post` methods decorated
+    # `@RequestDataValidator(vol.Schema(...))` were entirely invisible to
+    # --calls). Merged in unconditionally, not range-filtered, same
+    # convention as the Dart signature-adjacent extras above -- a
+    # decorator belongs to the whole function regardless of which
+    # --calls sub-range was requested.
+    parent = func_node.parent()
+    if parent is None or _zero_arg(parent, 'kind') != 'decorated_definition':
+        return []
+    hits: List[Dict[str, Any]] = []
+    for sibling in _children(parent):
+        if _zero_arg(sibling, 'kind') != 'decorator':
+            continue
+        dec_stack = _children(sibling)
+        while dec_stack:
+            dnode = dec_stack.pop()
+            if _zero_arg(dnode, 'kind') in call_node_types:
+                callee = _extract_callee(dnode, get_text, call_node_types)
+                if callee and callee not in seen_callees:
+                    dline = dnode.start_position().row + 1
+                    first_arg, has_more = _extract_first_arg(dnode, get_text)
+                    hits.append({
+                        'line': dline, 'callee': callee,
+                        'first_arg': first_arg, 'has_more_args': has_more,
+                    })
+                    seen_callees.add(callee)
+            dec_stack.extend(_children(dnode))
+    return hits
+
+
 def range_calls(
     func_node: Any,
     from_line: int,
@@ -42,134 +198,16 @@ def range_calls(
         line = node.start_position().row + 1
         if node.end_position().row + 1 < from_line or line > to_line:
             continue
-        # GDScript's 'attribute_call' is deliberately excluded here even
-        # though it's now a CALL_NODE_TYPES member (added for treesitter.py's
-        # get_structure()/calls:// path, BACK-730 seventeenth language): the
-        # dedicated `attribute`-chain scan below (_extract_gdscript_attribute_
-        # calls) already visits every attribute_call in the enclosing chain
-        # and reconstructs its FULL qualified callee (`x.field.method`, not
-        # just the bare `method`). Without this guard, the generic per-node
-        # check ALSO matches attribute_call directly during the same stack
-        # walk, emitting a second, wrongly-bare duplicate entry for every
-        # dotted GDScript call (caught by
-        # test_calls_ignores_bare_property_access_in_chain regressing to
-        # ['x.field.method', 'method'] instead of ['x.field.method']).
-        if (
-            node.kind() in call_node_types
-            and node.kind() != 'attribute_call'
-            and from_line <= line <= to_line
-        ):
-            callee = _extract_callee(node, get_text, call_node_types)
-            # BACK-744: 'init_declarator' is a CALL_NODE_TYPES member for C++
-            # direct-init (`ClassName obj(args);`) but is ALSO the node kind
-            # for every other initialized declaration (`int y = 5;`,
-            # `Foo obj2 = Foo(3, 4);`) — shapes _extract_callee correctly
-            # returns None for (mirrors treesitter.py:_extract_calls_in_
-            # function's `if name` guard). Without this check, every such
-            # plain/copy-init declaration in C/C++ would emit a bogus
-            # unknown-callee ('?') entry here, since this loop unconditionally
-            # appended regardless of whether a callee was actually found.
-            if callee:
-                first_arg, has_more = _extract_first_arg(node, get_text)
-                results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
-        # Dart has no call-expression wrapper node at all — `obj.method(x)`
-        # parses as a bare `identifier` followed by flat sibling `selector`
-        # nodes (`.method`, then `(x)`), so it's invisible to the node-kind
-        # check above regardless of what's in call_node_types. `selector` is
-        # a Dart-only kind name (no-op scan elsewhere), so this is safe to
-        # run unconditionally. Found via real AppFlowy source
-        # (createNewPageInSpace) — every call in the function, including
-        # `find.byWidgetPredicate(...)` and 8 others, was silently invisible
-        # to --calls (BACK-431 feature-breadth pass).
         children = _children(node)
-        if any(c.kind() == 'selector' for c in children):
-            for call in _extract_dart_selector_calls(children, get_text):
-                if from_line <= call['line'] <= to_line:
-                    results.append(call)
-        # Zig has no call-expression wrapper node either — `foo(x)` /
-        # `a.b.c(x)` parse as one `SuffixExpr` holding [IDENTIFIER, then
-        # either a bare `FnCallArguments` or a run of `FieldOrFnCall`
-        # children (`.member` or `.method(args)`)]. `SuffixExpr` is a
-        # Zig-only kind name, so this is a no-op scan for every other
-        # language. Found via real Ghostty source (formatter.zig's
-        # cellStyle): `cell.hasStyling()` and
-        # `self.page.styles.get(...)` were both silently invisible to
-        # --calls (BACK-431 feature-breadth pass).
-        if node.kind() == 'SuffixExpr':
-            for call in _extract_zig_suffix_calls(children, get_text):
-                if from_line <= call['line'] <= to_line:
-                    results.append(call)
-        # GDScript's dotted method call (`x.size()`, `x.a().b()`) has no
-        # dedicated call node either — it's folded into the same `attribute`
-        # node Python-style plain attribute access uses (`x.field`), as a
-        # flat run of `.` tokens and either bare `identifier` (plain
-        # property) or `attribute_call` (identifier + arguments) segments.
-        # `attribute_call` isn't a member of CALL_NODE_TYPES for any
-        # language, so this whole shape was invisible to --calls. Bare
-        # `foo(x)` (the plain `call` node, shared with Python) already
-        # worked — only the dotted form was blind, which is most real
-        # GDScript call sites. Found via real godot-demo-projects source
-        # (ik_fabrik.gd's chain_backward): `bone_nodes[...].normalized()`
-        # and 4 others were silently invisible (BACK-431 feature-breadth
-        # pass).
-        if node.kind() == 'attribute' and any(c.kind() == 'attribute_call' for c in children):
-            for call in _extract_gdscript_attribute_calls(children, get_text):
-                if from_line <= call['line'] <= to_line:
-                    results.append(call)
-        # Dart cascade (`recv\n  ..foo()\n  ..bar(x)`) is a THIRD, distinct
-        # shape from the flat identifier+selector chain above: each cascaded
-        # call is its own sibling `cascade_section` node (a sibling of the
-        # base identifier/selector chain, not nested inside it), holding
-        # `..`, a `cascade_selector` (the member name), then either an
-        # `argument_part` directly (plain `..method(args)`) or a further
-        # `unconditional_assignable_selector`/`argument_part` run for a
-        # chained call after the cascade member (`..setup().finish()`) —
-        # note these chained continuations are DIRECT children of
-        # `cascade_section`, unlike the outer flat chain where they're
-        # wrapped in a `selector` node. `_extract_dart_selector_calls` never
-        # looks inside `cascade_section`/`cascade_selector` at all, so every
-        # cascaded call was silently invisible to --calls/--sideeffects/
-        # --boundary (BACK-723 Dart sideeffects-recall-oracle pre-flight
-        # check) despite cascades being AppFlowy's dominant Flutter
-        # builder-chain idiom (289 files use `..`). `cascade_section` is a
-        # Dart-only kind name, so this is a no-op scan for every other
-        # language.
-        if _zero_arg(node, 'kind') == 'cascade_section':
-            for call in _extract_dart_cascade_calls(node, get_text):
-                if from_line <= call['line'] <= to_line:
-                    results.append(call)
-        stack.extend(reversed(_children(node)))
+        results.extend(_generic_call_hits(node, call_node_types, get_text, from_line, to_line))
+        results.extend(_dart_selector_hits(children, get_text, from_line, to_line))
+        results.extend(_zig_suffix_hits(node, children, get_text, from_line, to_line))
+        results.extend(_gdscript_attribute_hits(node, children, get_text, from_line, to_line))
+        results.extend(_dart_cascade_hits(node, get_text, from_line, to_line))
+        stack.extend(reversed(children))
 
-    # Python decorator arguments (`@validator(vol.Schema(...))`) are SIBLINGS
-    # of func_node under decorated_definition, not part of func_node's own
-    # subtree -- the stack walk above never sees them, mirroring
-    # treesitter.py:_decorator_extra_calls's identical BACK-731 gap on the
-    # calls:// side (confirmed on Home Assistant's helpers/data_entry_flow.py:
-    # two `post` methods decorated `@RequestDataValidator(vol.Schema(...))`
-    # were entirely invisible to --calls). Merged in unconditionally, not
-    # range-filtered, same convention as the Dart signature-adjacent extras
-    # above -- a decorator belongs to the whole function regardless of which
-    # --calls sub-range was requested.
-    parent = func_node.parent()
-    if parent is not None and _zero_arg(parent, 'kind') == 'decorated_definition':
-        seen_callees = {r['callee'] for r in results}
-        for sibling in _children(parent):
-            if _zero_arg(sibling, 'kind') != 'decorator':
-                continue
-            dec_stack = _children(sibling)
-            while dec_stack:
-                dnode = dec_stack.pop()
-                if _zero_arg(dnode, 'kind') in call_node_types:
-                    callee = _extract_callee(dnode, get_text, call_node_types)
-                    if callee and callee not in seen_callees:
-                        dline = dnode.start_position().row + 1
-                        first_arg, has_more = _extract_first_arg(dnode, get_text)
-                        results.append({
-                            'line': dline, 'callee': callee,
-                            'first_arg': first_arg, 'has_more_args': has_more,
-                        })
-                        seen_callees.add(callee)
-                dec_stack.extend(_children(dnode))
+    seen_callees = {r['callee'] for r in results}
+    results.extend(_decorator_arg_hits(func_node, call_node_types, get_text, seen_callees))
 
     results.sort(key=lambda r: r['line'])
     return results
