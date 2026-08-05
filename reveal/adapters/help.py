@@ -315,6 +315,7 @@ class HelpAdapter(ResourceAdapter):
             'codex': 'adapters/CODEX_ADAPTER_GUIDE.md',
         'contracts': 'adapters/CONTRACTS_ADAPTER_GUIDE.md',
         'cpanel': 'adapters/CPANEL_ADAPTER_GUIDE.md',
+        'deps': 'adapters/DEPS_ADAPTER_GUIDE.md',
         'depends': 'adapters/DEPENDS_ADAPTER_GUIDE.md',
         'diff': 'adapters/DIFF_ADAPTER_GUIDE.md',
         'domain': 'adapters/DOMAIN_ADAPTER_GUIDE.md',
@@ -1161,7 +1162,7 @@ class HelpAdapter(ResourceAdapter):
             'clusters': [
                 {
                     'name': 'Code Analysis',
-                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots'],
+                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots', 'deps'],
                     'pairs': [
                         ('ast', 'calls', 'structure feeds call-graph queries'),
                         ('ast', 'diff', 'compare element complexity across versions'),
@@ -1179,6 +1180,7 @@ class HelpAdapter(ResourceAdapter):
                         ('contracts', 'calls', 'contracts + who calls into their implementations'),
                         ('hotspots', 'stats', 'ranked hotspot list draws on the same quality score'),
                         ('hotspots', 'ast', 'function-level complexity ranking feeds the hotspot list'),
+                        ('deps', 'imports', 'dependency dashboard is composed entirely from imports:// queries'),
                     ],
                 },
                 {

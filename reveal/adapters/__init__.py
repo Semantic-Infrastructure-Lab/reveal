@@ -38,6 +38,7 @@ from .codex import CodexAdapter
 from .surface import SurfaceAdapter
 from .contracts import ContractsAdapter
 from .hotspots import HotspotsAdapter
+from .deps import DepsAdapter
 
 # Optional adapters (require extra dependencies)
 try:

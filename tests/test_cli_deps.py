@@ -8,7 +8,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from reveal.cli.commands.deps import (
+from reveal.adapters.deps import (
     _analyse_imports,
     _local_package_names,
     _render_circular,
@@ -21,6 +21,8 @@ from reveal.cli.commands.deps import (
     _run_base,
     _run_circular,
     _run_unused,
+)
+from reveal.cli.commands.deps import (
     create_deps_parser,
     run_deps,
 )
@@ -248,14 +250,14 @@ class TestAnalyseImports(unittest.TestCase):
 
 class TestRunBase(unittest.TestCase):
 
-    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    @patch('reveal.adapters.deps.ImportsAdapter')
     def test_returns_adapter_data(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_BASE_JSON)
         result = _run_base(Path('/project'))
         self.assertIn('files', result)
         MockAdapter.assert_called_once_with(str(Path('/project')))
 
-    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    @patch('reveal.adapters.deps.ImportsAdapter')
     def test_exception_returns_empty_dict(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         self.assertEqual(_run_base(Path('/project')), {})
@@ -263,7 +265,7 @@ class TestRunBase(unittest.TestCase):
 
 class TestRunCircular(unittest.TestCase):
 
-    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    @patch('reveal.adapters.deps.ImportsAdapter')
     def test_returns_cycles(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_CIRCULAR_JSON)
         result = _run_circular(Path('/project'))
@@ -271,7 +273,7 @@ class TestRunCircular(unittest.TestCase):
         self.assertEqual(len(result['cycles']), 2)
         MockAdapter.assert_called_once_with(str(Path('/project')), 'circular')
 
-    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    @patch('reveal.adapters.deps.ImportsAdapter')
     def test_exception_returns_empty_dict(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         self.assertEqual(_run_circular(Path('/project')), {})
@@ -279,19 +281,19 @@ class TestRunCircular(unittest.TestCase):
 
 class TestRunUnused(unittest.TestCase):
 
-    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    @patch('reveal.adapters.deps.ImportsAdapter')
     def test_returns_unused_list(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_UNUSED_JSON)
         result = _run_unused(Path('/project'))
         self.assertEqual(len(result), 2)
         MockAdapter.assert_called_once_with(str(Path('/project')), 'unused')
 
-    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    @patch('reveal.adapters.deps.ImportsAdapter')
     def test_exception_returns_empty_list(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         self.assertEqual(_run_unused(Path('/project')), [])
 
-    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    @patch('reveal.adapters.deps.ImportsAdapter')
     def test_missing_unused_key_returns_empty(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = {'other': 'data'}
         self.assertEqual(_run_unused(Path('/project')), [])
@@ -482,9 +484,9 @@ class TestRunDeps(unittest.TestCase):
         circ_val = circular if circular is not None else _CIRCULAR_DATA
         unused_val = unused if unused is not None else _UNUSED_DATA
         return (
-            patch('reveal.cli.commands.deps._run_base', return_value=base_val),
-            patch('reveal.cli.commands.deps._run_circular', return_value=circ_val),
-            patch('reveal.cli.commands.deps._run_unused', return_value=unused_val),
+            patch('reveal.adapters.deps._run_base', return_value=base_val),
+            patch('reveal.adapters.deps._run_circular', return_value=circ_val),
+            patch('reveal.adapters.deps._run_unused', return_value=unused_val),
         )
 
     def test_nonexistent_path_exits_1(self):
