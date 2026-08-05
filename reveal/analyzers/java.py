@@ -50,8 +50,8 @@ class JavaAnalyzer(TreeSitterAnalyzer):
             # 'record_declaration' fell through to the base
             # TreeSitterAnalyzer._extract_class_bases, which only recognizes
             # 'class_declaration'/'abstract_class_declaration'/
-            # 'interface_declaration' and otherwise falls back to
-            # _extract_python_class_bases — always [] for a Java node. A
+            # 'interface_declaration' and otherwise returns [] — a Java
+            # node fell straight through with no bases. A
             # record implementing an interface was therefore invisible to
             # `contracts`' implementer classification entirely (bases==[]
             # means _classify_ts's 'implementation' branch never fires).
