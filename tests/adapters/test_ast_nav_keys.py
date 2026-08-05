@@ -19,6 +19,7 @@ from reveal.analyzers.csharp import CSharpAnalyzer
 from reveal.analyzers.lua import LuaAnalyzer
 from reveal.analyzers.kotlin import KotlinAnalyzer
 from reveal.analyzers.swift import SwiftAnalyzer
+from reveal.analyzers.dart import DartAnalyzer
 from reveal.adapters.ast.nav_keys import collect_keys, render_keys
 from reveal.adapters.ast.nav_cross_varflow import _find_function_node
 
@@ -37,7 +38,15 @@ def _keys(analyzer_cls, path: str, func_name: str, var_name: str):
     assert func_node is not None, f'{func_name} not found'
     get_text = a._get_node_text
     from_line = func_node.start_position().row + 1
-    to_line = func_node.end_position().row + 1
+    # Dart's grammar splits a function into disjoint SIBLING
+    # function_signature + function_body nodes rather than nesting the body
+    # inside one function node — without this swap (same one file_handler.py's
+    # CLI dispatch already applies), func_node would be the 1-line signature
+    # only and every subscript inside the real body would be invisible.
+    end_node = getattr(a, '_function_end_node', lambda n: n)(func_node)
+    to_line = end_node.end_position().row + 1
+    if end_node is not func_node:
+        func_node = end_node
     return collect_keys(func_node, var_name, from_line, to_line, get_text)
 
 
@@ -452,6 +461,77 @@ func handle(_ m: [String: Int]) {
 """, '.swift')
         try:
             events = _keys(SwiftAnalyzer, path, 'handle', 'm')
+        finally:
+            os.unlink(path)
+        self.assertEqual([e for e in events if e['access'] == 'subscript'], [])
+
+
+class TestDartSubscript(unittest.TestCase):
+    """BACK-458 item 1 cont'd (BACK-582): Dart's subscript write
+    (`assignable_expression` wrapping [base, unconditional_assignable_selector
+    [index_selector]]) and read (a bare `identifier` immediately followed by
+    a flat SIBLING `selector` node — no wrapping subscript node at all,
+    unlike every other language's shape) were both entirely absent from
+    --keys."""
+
+    def test_subscript_write_and_read(self):
+        path = _write("""\
+void handle(Map<String, int> m) {
+  m['host'] = 1;
+  var p = m['port'];
+  print(p);
+}
+""", '.dart')
+        try:
+            events = _keys(DartAnalyzer, path, 'handle', 'm')
+        finally:
+            os.unlink(path)
+        by_key_kind = [(e['key'], e['kind'], e['access']) for e in events]
+        self.assertIn(('host', 'WRITE', 'subscript'), by_key_kind)
+        self.assertIn(('port', 'READ', 'subscript'), by_key_kind)
+
+    def test_member_access_not_misclassified_as_subscript(self):
+        """`m.field` shares the same sibling-selector shape as `m['key']`
+        (identifier + selector) — the discriminator is the selector's inner
+        node kind (unconditional_assignable_selector[index_selector] vs
+        [., identifier]), not adjacency alone."""
+        path = _write("""\
+void handle(Foo m) {
+  var v = m.field;
+  print(v);
+}
+""", '.dart')
+        try:
+            events = _keys(DartAnalyzer, path, 'handle', 'm')
+        finally:
+            os.unlink(path)
+        self.assertEqual([e for e in events if e['access'] == 'subscript'], [])
+
+    def test_call_not_misclassified_as_subscript(self):
+        """`print(m)` also flattens to identifier + selector siblings
+        (Dart has no node wrapping receiver+call at all) — must not be
+        mistaken for a subscript on the same var name."""
+        path = _write("""\
+void handle(Map<String, int> m) {
+  print(m);
+}
+""", '.dart')
+        try:
+            events = _keys(DartAnalyzer, path, 'handle', 'm')
+        finally:
+            os.unlink(path)
+        self.assertEqual([e for e in events if e['access'] == 'subscript'], [])
+
+    def test_subscript_on_other_variable_not_misattributed(self):
+        """`other['a']` must not be reported when tracking `m`."""
+        path = _write("""\
+void handle(Map<String, int> m, Map<String, int> other) {
+  var x = other['a'];
+  print(x);
+}
+""", '.dart')
+        try:
+            events = _keys(DartAnalyzer, path, 'handle', 'm')
         finally:
             os.unlink(path)
         self.assertEqual([e for e in events if e['access'] == 'subscript'], [])

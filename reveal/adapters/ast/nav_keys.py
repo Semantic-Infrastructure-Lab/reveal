@@ -44,6 +44,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 from ...core import node_children as _children
+from ...core.treesitter_compat import _zero_arg
 from .nav_statewrites import _ASSIGNMENT_NODES, _SUBSCRIPT_NODES
 from .nav_varflow import _MEMBER_ACCESS_KINDS as _MEMBER_ACCESS_NODES
 from .nav_varflow import resolve_assignment_sides
@@ -156,6 +157,55 @@ def _swift_subscript_parts(node: Any) -> tuple:
     return base, key
 
 
+_DART_INDEX_WRAPPERS = ('unconditional_assignable_selector', 'conditional_assignable_selector')
+
+
+def _dart_assignable_subscript_parts(node: Any) -> tuple:
+    """Return (base, key) if a Dart `assignable_expression` wraps a
+    subscript write (`m['host'] = 1`), else (None, None).
+
+    Unlike Kotlin's `directly_assignable_expression` (indexing_suffix) or
+    Swift's `call_expression` (call_suffix), Dart's write shape has no
+    intermediate wrapper at all around the index itself: `[base,
+    unconditional_assignable_selector[index_selector[...]]]` sits directly
+    as the two children — a clean, single-node structural check (BACK-458
+    Dart item, the write half — see `_dart_selector_subscript_key` below
+    for the harder read half).
+    """
+    children = _children(node)
+    if len(children) != 2 or children[1].kind() not in _DART_INDEX_WRAPPERS:
+        return None, None
+    wrapper_children = _children(children[1])
+    if len(wrapper_children) != 1 or wrapper_children[0].kind() != 'index_selector':
+        return None, None
+    key = next((c for c in _children(wrapper_children[0]) if _zero_arg(c, 'is_named')), None)
+    return children[0], key
+
+
+def _dart_selector_subscript_key(selector_node: Any) -> Optional[Any]:
+    """If `selector_node` (a Dart 'selector') wraps an index access
+    (`[...]`), return the key node; else None (a plain member `.foo` or
+    call `(...)` selector).
+
+    Dart's *read* shape has no wrapping subscript node at all —
+    `m['host']` parses as a bare `identifier` followed by a flat SIBLING
+    `selector` node, both children of a third, unrelated parent (e.g.
+    `initialized_variable_definition`), not of each other. `walk()`'s
+    per-node dispatch (matching on one node's own kind/children, same as
+    every other _*_subscript_parts helper above) can't see this shape at
+    all — it needs the adjacent-sibling-pair scan in `walk()`'s fallback
+    loop instead, this helper is just the "is this selector an index"
+    predicate that scan calls (BACK-458 Dart item, the read half).
+    """
+    kids = _children(selector_node)
+    if len(kids) != 1 or kids[0].kind() not in _DART_INDEX_WRAPPERS:
+        return None
+    wrapper_kids = _children(kids[0])
+    if len(wrapper_kids) != 1 or wrapper_kids[0].kind() != 'index_selector':
+        return None
+    return next((c for c in _children(wrapper_kids[0]) if _zero_arg(c, 'is_named')), None)
+
+
 def _member_parts(node: Any) -> tuple:
     """Return (object_node, property_node) for a member/attribute-access node.
 
@@ -254,8 +304,35 @@ class _KeysWalker:
         # checked structurally here instead (BACK-458).
         if ntype == 'call_expression' and self._walk_swift_subscript(node, start, context):
             return
+        # Dart write target (`m['host'] = 1`) — same overloaded-wrapper
+        # situation as Kotlin's directly_assignable_expression above, but a
+        # different node kind and inner shape (BACK-458 Dart item).
+        if ntype == 'assignable_expression' and self._walk_dart_assignable_subscript(
+                node, start, context):
+            return
 
+        prev_identifier = None
         for child in _children(node):
+            ctype = child.kind()
+            # Dart read target (`m['host']`) — no wrapping subscript node at
+            # all, just a bare `identifier` immediately followed by a
+            # sibling `selector` node, both children of THIS node rather
+            # than of each other. Every other subscript check above matches
+            # on one node's own kind/children; this is the one case that
+            # needs an adjacent-sibling-pair lookahead while iterating a
+            # node's children instead (BACK-458 Dart item, the read half).
+            if ctype == 'selector' and prev_identifier is not None:
+                key_node = _dart_selector_subscript_key(child)
+                base_matches = key_node is not None and _base_matches(
+                    prev_identifier, self.var_name, self.get_text)
+                if base_matches:
+                    key = _clean_literal(self.get_text(key_node))
+                    line = prev_identifier.start_position().row + 1
+                    self.results.append(
+                        {'key': key, 'kind': context, 'line': line, 'access': 'subscript'})
+                    prev_identifier = None
+                    continue
+            prev_identifier = child if ctype == 'identifier' else None
             self.walk(child, context)
 
     def _walk_assignment(self, node: Any, ntype: str, context: str) -> None:
@@ -348,6 +425,14 @@ class _KeysWalker:
 
     def _walk_swift_subscript(self, node: Any, start: int, context: str) -> bool:
         base, key_node = _swift_subscript_parts(node)
+        if base is None or not _base_matches(base, self.var_name, self.get_text):
+            return False
+        key = _clean_literal(self.get_text(key_node)) if key_node is not None else '?'
+        self.results.append({'key': key, 'kind': context, 'line': start, 'access': 'subscript'})
+        return True
+
+    def _walk_dart_assignable_subscript(self, node: Any, start: int, context: str) -> bool:
+        base, key_node = _dart_assignable_subscript_parts(node)
         if base is None or not _base_matches(base, self.var_name, self.get_text):
             return False
         key = _clean_literal(self.get_text(key_node)) if key_node is not None else '?'
