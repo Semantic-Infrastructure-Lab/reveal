@@ -769,88 +769,12 @@ class DependsAdapter(ResourceAdapter):
         # languages for a directory target), so this is a no-op glob for every
         # other tree.
         load_path_roots = self._build_load_path_roots(files, scan_root)
-        for file_path in files:
-            extractor = get_extractor(file_path)
-            if not extractor:
-                continue
-            if getattr(extractor, 'spec', None) is not None:
-                file_imports = extractor.extract_imports(file_path, constant_index=constant_index)
-            else:
-                file_imports = extractor.extract_imports(file_path)
-            all_imports.extend(file_imports)
-            spec = getattr(extractor, 'spec', None)
-            # BACK-557: require-statement coverage for the convention-autoloaded
-            # language (Ruby). Counted over EVERY scanned file of that language,
-            # including zero-import ones (which never enter self._graph.files),
-            # so the density denominator is the true file count.
-            if getattr(spec, 'convention_autoloaded', False):
-                self._autoload_total += 1
-                if file_imports:
-                    self._autoload_with_imports += 1
-            if getattr(spec, 'zeitwerk_convention', False):
-                const_path = _zeitwerk_constant_path(file_path)
-                if const_path:
-                    # First declaration wins on a naming collision (two
-                    # autoload roots producing the same constant is a
-                    # pre-existing Zeitwerk-app misconfiguration, not
-                    # something to guess between).
-                    zeitwerk_index.setdefault(const_path, file_path)
-            if getattr(spec, 'module_dir_convention', None):
-                # BACK-567: index this file under its SwiftPM target. An explicit
-                # manifest `path:` (manifest_dirs) wins over the directory
-                # convention (real case: GraphAPI's `path: "./Sources"`); the
-                # convention is the fallback for the common default layout.
-                # Every scanned file of the module participates, including
-                # zero-import ones, so `import Foo` fans out to the whole target.
-                # The module name also joins project_namespaces as the in-tree
-                # module inventory is_intra_project_import checks against.
-                module_name = self._swift_module_for(extractor, file_path, manifest_dirs)
-                if module_name:
-                    module_index.setdefault(module_name, []).append(file_path)
-                    project_namespaces.add(module_name)
-            if getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None):
-                declared = extractor.extract_namespaces(file_path)
-                project_namespaces.update(declared)
-                if getattr(spec, 'resolve_namespaces', False):
-                    for ns in declared:
-                        namespace_index.setdefault(ns, []).append(file_path)
-                if getattr(spec, 'member_symbol_fallback', False) and declared:
-                    for symbol in extractor.extract_top_level_members(file_path):
-                        for ns in declared:
-                            member_index.setdefault((ns, symbol), []).append(file_path)
-                if getattr(spec, 'container_member_fallback', False) and declared:
-                    # BACK-557 Scala measurement loop: `import a.b.container.member`
-                    # where `container` is a lowerCamelCase top-level object (e.g.
-                    # `object helpers`) that BACK-551's Uppercase-gated peel
-                    # deliberately refuses to reach. Synthesize the same
-                    # (package, symbol) shape member_symbol_fallback uses, keyed
-                    # under the container's own qualified name
-                    # (`declared_package<sep>containerName`), so
-                    # resolve_member_targets's existing split-on-last-component
-                    # lookup finds it with no further changes.
-                    sep = spec.module_separator or ''
-                    for container_name, symbol in extractor.extract_container_members(file_path):
-                        for ns in declared:
-                            key = (f'{ns}{sep}{container_name}', symbol)
-                            member_index.setdefault(key, []).append(file_path)
-                if getattr(spec, 'namespaced_type_fallback', False) and declared:
-                    # BACK-669 C# recall loop: `using static Foo.Bar.Type;` /
-                    # `using Alias = Foo.Bar.Type;` name a specific TYPE, one
-                    # dotted component longer than any namespace the tree
-                    # declares — resolve_namespace_targets never matches, and
-                    # the plain dotted-suffix match only succeeds when the
-                    # directory layout mirrors the namespace and the type's
-                    # filename is tree-wide unique (real Jellyfin corpus:
-                    # `LinkedChildType` is declared in two different
-                    # namespaces, both under an `Entities/` dir, so the
-                    # bare-basename match correctly declines on ambiguity).
-                    # Reuses the same (namespace, symbol) member_index shape
-                    # member_symbol_fallback populates above.
-                    for typename in extractor.extract_namespaced_type_names(file_path):
-                        for ns in declared:
-                            member_index.setdefault((ns, typename), []).append(file_path)
-
-        return _ResolutionIndices(
+        # Built empty and mutated in place by _index_one_file below — every
+        # field is a mutable List/Set/Dict, so there is no reassignment
+        # risk, and it lets the per-file helper take the same one-bundle
+        # `indices` param its edge-resolution siblings already do (BACK-919:
+        # replaces 5 separate positional index params with 1).
+        indices = _ResolutionIndices(
             all_imports=all_imports,
             project_namespaces=project_namespaces,
             namespace_index=namespace_index,
@@ -859,6 +783,97 @@ class DependsAdapter(ResourceAdapter):
             module_index=module_index,
             load_path_roots=load_path_roots,
         )
+        for file_path in files:
+            extractor = get_extractor(file_path)
+            if not extractor:
+                continue
+            self._index_one_file(file_path, extractor, constant_index, manifest_dirs, indices)
+
+        return indices
+
+    def _index_one_file(
+        self, file_path: Path, extractor, constant_index: Dict[str, Tuple[str, str]],
+        manifest_dirs: List[Tuple[Path, str]], indices: '_ResolutionIndices',
+    ) -> None:
+        """One file's contribution to every `_build_resolution_indices` index
+        (BACK-919 phase-split of the former single per-file loop body).
+        Mutates `indices`' fields in place."""
+        if getattr(extractor, 'spec', None) is not None:
+            file_imports = extractor.extract_imports(file_path, constant_index=constant_index)
+        else:
+            file_imports = extractor.extract_imports(file_path)
+        indices.all_imports.extend(file_imports)
+        spec = getattr(extractor, 'spec', None)
+        # BACK-557: require-statement coverage for the convention-autoloaded
+        # language (Ruby). Counted over EVERY scanned file of that language,
+        # including zero-import ones (which never enter self._graph.files),
+        # so the density denominator is the true file count.
+        if getattr(spec, 'convention_autoloaded', False):
+            self._autoload_total += 1
+            if file_imports:
+                self._autoload_with_imports += 1
+        if getattr(spec, 'zeitwerk_convention', False):
+            const_path = _zeitwerk_constant_path(file_path)
+            if const_path:
+                # First declaration wins on a naming collision (two
+                # autoload roots producing the same constant is a
+                # pre-existing Zeitwerk-app misconfiguration, not
+                # something to guess between).
+                indices.zeitwerk_index.setdefault(const_path, file_path)
+        if getattr(spec, 'module_dir_convention', None):
+            # BACK-567: index this file under its SwiftPM target. An explicit
+            # manifest `path:` (manifest_dirs) wins over the directory
+            # convention (real case: GraphAPI's `path: "./Sources"`); the
+            # convention is the fallback for the common default layout.
+            # Every scanned file of the module participates, including
+            # zero-import ones, so `import Foo` fans out to the whole target.
+            # The module name also joins project_namespaces as the in-tree
+            # module inventory is_intra_project_import checks against.
+            module_name = self._swift_module_for(extractor, file_path, manifest_dirs)
+            if module_name:
+                indices.module_index.setdefault(module_name, []).append(file_path)
+                indices.project_namespaces.add(module_name)
+        if getattr(spec, 'resolve_namespaces', False) or getattr(spec, 'package_node_types', None):
+            declared = extractor.extract_namespaces(file_path)
+            indices.project_namespaces.update(declared)
+            if getattr(spec, 'resolve_namespaces', False):
+                for ns in declared:
+                    indices.namespace_index.setdefault(ns, []).append(file_path)
+            if getattr(spec, 'member_symbol_fallback', False) and declared:
+                for symbol in extractor.extract_top_level_members(file_path):
+                    for ns in declared:
+                        indices.member_index.setdefault((ns, symbol), []).append(file_path)
+            if getattr(spec, 'container_member_fallback', False) and declared:
+                # BACK-557 Scala measurement loop: `import a.b.container.member`
+                # where `container` is a lowerCamelCase top-level object (e.g.
+                # `object helpers`) that BACK-551's Uppercase-gated peel
+                # deliberately refuses to reach. Synthesize the same
+                # (package, symbol) shape member_symbol_fallback uses, keyed
+                # under the container's own qualified name
+                # (`declared_package<sep>containerName`), so
+                # resolve_member_targets's existing split-on-last-component
+                # lookup finds it with no further changes.
+                sep = spec.module_separator or ''
+                for container_name, symbol in extractor.extract_container_members(file_path):
+                    for ns in declared:
+                        key = (f'{ns}{sep}{container_name}', symbol)
+                        indices.member_index.setdefault(key, []).append(file_path)
+            if getattr(spec, 'namespaced_type_fallback', False) and declared:
+                # BACK-669 C# recall loop: `using static Foo.Bar.Type;` /
+                # `using Alias = Foo.Bar.Type;` name a specific TYPE, one
+                # dotted component longer than any namespace the tree
+                # declares — resolve_namespace_targets never matches, and
+                # the plain dotted-suffix match only succeeds when the
+                # directory layout mirrors the namespace and the type's
+                # filename is tree-wide unique (real Jellyfin corpus:
+                # `LinkedChildType` is declared in two different
+                # namespaces, both under an `Entities/` dir, so the
+                # bare-basename match correctly declines on ambiguity).
+                # Reuses the same (namespace, symbol) member_index shape
+                # member_symbol_fallback populates above.
+                for typename in extractor.extract_namespaced_type_names(file_path):
+                    for ns in declared:
+                        indices.member_index.setdefault((ns, typename), []).append(file_path)
 
     @staticmethod
     def _build_load_path_roots(files: List[Path], scan_root: Path) -> List[Path]:
@@ -1021,6 +1036,28 @@ class DependsAdapter(ResourceAdapter):
         """Resolve a single import statement, walking the fallback cascade:
         direct resolution → namespace index (BACK-554) → member index
         (BACK-547/557) → honest-decline classification (BACK-547)."""
+        added = self._add_direct_edges(
+            stmt, file_path, extractor, base_path, extra_paths, uses_file_index, file_index)
+        spec = getattr(extractor, 'spec', None)
+        if not added and indices.namespace_index and getattr(spec, 'resolve_namespaces', False):
+            added = self._add_namespace_edges(stmt, file_path, extractor, indices) or added
+        if not added and indices.member_index and (
+                getattr(spec, 'member_symbol_fallback', False)
+                or getattr(spec, 'container_member_fallback', False)
+                or getattr(spec, 'namespaced_type_fallback', False)):
+            added = self._add_member_edges(stmt, file_path, extractor, indices) or added
+        if indices.module_index and getattr(spec, 'module_dir_convention', None):
+            # Deliberately NOT gated on `not added` — see _add_module_edges.
+            added = self._add_module_edges(stmt, file_path, extractor, indices) or added
+        if not added:
+            self._record_unresolved_if_intra(stmt, file_path, extractor, base_path, extra_paths, indices)
+
+    def _add_direct_edges(
+        self, stmt: 'ImportStatement', file_path: Path, extractor,
+        base_path: Path, extra_paths: List[Path], uses_file_index: bool,
+        file_index: Dict[str, List[Path]],
+    ) -> bool:
+        """Stage 1: direct dotted-name resolution."""
         if uses_file_index:
             # Generic extractors' resolve_import needs the file_index
             # kwarg the base resolve_import_targets can't pass, and
@@ -1042,71 +1079,85 @@ class DependsAdapter(ResourceAdapter):
                 self._graph.resolved_paths[stmt.module_name] = resolved
                 self._edge_stmts[(file_path, resolved)] = stmt
                 added = True
-        spec = getattr(extractor, 'spec', None)
-        if not added and indices.namespace_index and getattr(spec, 'resolve_namespaces', False):
-            # BACK-554: the single-file dotted match above only catches a
-            # namespace that coincidentally names one matching file — the
-            # common case (a namespace declared across several files, or
-            # a file reachable only via a project-wide `global using`)
-            # needs the namespace index instead, fanning out to every
-            # declaring file (mirrors ImportsAdapter._resolve_dependencies,
-            # BACK-544).
-            for resolved in extractor.resolve_namespace_targets(stmt, indices.namespace_index):
-                if resolved != file_path:
-                    self._graph.add_dependency(file_path, resolved)
-                    self._edge_stmts[(file_path, resolved)] = stmt
-                    added = True
-        if not added and indices.member_index and (
-                getattr(spec, 'member_symbol_fallback', False)
-                or getattr(spec, 'container_member_fallback', False)
-                or getattr(spec, 'namespaced_type_fallback', False)):
-            # BACK-547 Kotlin measurement loop: `import a.b.foo` for a
-            # top-level fun/val/var — the direct dotted match above
-            # looked for `foo.kt` and failed, and BACK-551's
-            # enclosing-class peel can't help either (there is no
-            # enclosing type in the import path to peel down to).
-            # BACK-557 Scala measurement loop: same fallback also
-            # covers `import a.b.container.member` where `container`
-            # is a lowerCamelCase object BACK-551's peel refuses to
-            # reach. BACK-669 C# recall loop: same fallback also
-            # covers `using static Foo.Bar.Type;` / `using Alias =
-            # Foo.Bar.Type;`, whose target is a type one dotted
-            # component past any namespace the tree declares. Fall
-            # back to the content-scanned member index.
-            for resolved in extractor.resolve_member_targets(stmt, indices.member_index):
-                if resolved != file_path:
-                    self._graph.add_dependency(file_path, resolved)
-                    self._edge_stmts[(file_path, resolved)] = stmt
-                    added = True
-        if indices.module_index and getattr(spec, 'module_dir_convention', None):
-            # BACK-567 Swift: `import Foo` names a whole SwiftPM target, not a
-            # file. Fan out to every file in module Foo via the path-derived
-            # module index — the same module→many-files shape C#'s namespace
-            # index uses. Deliberately NOT gated on `not added`: the direct
-            # bare-basename match above resolves `import Foo` iff a UNIQUE
-            # `Foo.swift` exists (real case: ServerDrivenUI/ServerDrivenUI.swift),
-            # which is just one of the target's files — letting that pre-empt
-            # the fan-out would under-report the module to a single file. The
-            # fan-out is a superset (it includes that Foo.swift) and reverse_deps
-            # is set-keyed, so unioning is idempotent.
-            for resolved in extractor.resolve_module_targets(stmt, indices.module_index):
-                if resolved != file_path:
-                    self._graph.add_dependency(file_path, resolved)
-                    self._edge_stmts.setdefault((file_path, resolved), stmt)
-                    added = True
-        if not added:
-            # BACK-547 honest-decline: an extracted import that produced
-            # no edge is only a false-negative risk if it points
-            # intra-project. External (stdlib/dep) imports correctly have
-            # no in-tree edge; None means the extractor can't tell, and
-            # we conservatively don't count it (never cry wolf).
-            verdict = extractor.is_intra_project_import(
-                stmt, base_path, search_paths=extra_paths,
-                project_namespaces=indices.project_namespaces)
-            if verdict is True:
-                self._unresolved_intra += 1
-                if len(self._unresolved_examples) < 5:
-                    self._unresolved_examples.append((file_path, stmt))
+        return added
+
+    def _add_namespace_edges(
+        self, stmt: 'ImportStatement', file_path: Path, extractor, indices: '_ResolutionIndices',
+    ) -> bool:
+        """Stage 2 (BACK-554): the single-file dotted match above only
+        catches a namespace that coincidentally names one matching file —
+        the common case (a namespace declared across several files, or a
+        file reachable only via a project-wide `global using`) needs the
+        namespace index instead, fanning out to every declaring file
+        (mirrors ImportsAdapter._resolve_dependencies, BACK-544)."""
+        added = False
+        for resolved in extractor.resolve_namespace_targets(stmt, indices.namespace_index):
+            if resolved != file_path:
+                self._graph.add_dependency(file_path, resolved)
+                self._edge_stmts[(file_path, resolved)] = stmt
+                added = True
+        return added
+
+    def _add_member_edges(
+        self, stmt: 'ImportStatement', file_path: Path, extractor, indices: '_ResolutionIndices',
+    ) -> bool:
+        """Stage 3: BACK-547 Kotlin measurement loop: `import a.b.foo` for a
+        top-level fun/val/var — the direct dotted match above looked for
+        `foo.kt` and failed, and BACK-551's enclosing-class peel can't help
+        either (there is no enclosing type in the import path to peel down
+        to). BACK-557 Scala measurement loop: same fallback also covers
+        `import a.b.container.member` where `container` is a lowerCamelCase
+        object BACK-551's peel refuses to reach. BACK-669 C# recall loop:
+        same fallback also covers `using static Foo.Bar.Type;` / `using
+        Alias = Foo.Bar.Type;`, whose target is a type one dotted component
+        past any namespace the tree declares. Fall back to the
+        content-scanned member index."""
+        added = False
+        for resolved in extractor.resolve_member_targets(stmt, indices.member_index):
+            if resolved != file_path:
+                self._graph.add_dependency(file_path, resolved)
+                self._edge_stmts[(file_path, resolved)] = stmt
+                added = True
+        return added
+
+    def _add_module_edges(
+        self, stmt: 'ImportStatement', file_path: Path, extractor, indices: '_ResolutionIndices',
+    ) -> bool:
+        """Stage 4 (BACK-567 Swift): `import Foo` names a whole SwiftPM
+        target, not a file. Fan out to every file in module Foo via the
+        path-derived module index — the same module→many-files shape C#'s
+        namespace index uses. Deliberately called unconditionally by the
+        caller (not gated on prior stages having added an edge): the direct
+        bare-basename match resolves `import Foo` iff a UNIQUE `Foo.swift`
+        exists (real case: ServerDrivenUI/ServerDrivenUI.swift), which is
+        just one of the target's files — letting that pre-empt the fan-out
+        would under-report the module to a single file. The fan-out is a
+        superset (it includes that Foo.swift) and reverse_deps is
+        set-keyed, so unioning is idempotent."""
+        added = False
+        for resolved in extractor.resolve_module_targets(stmt, indices.module_index):
+            if resolved != file_path:
+                self._graph.add_dependency(file_path, resolved)
+                self._edge_stmts.setdefault((file_path, resolved), stmt)
+                added = True
+        return added
+
+    def _record_unresolved_if_intra(
+        self, stmt: 'ImportStatement', file_path: Path, extractor,
+        base_path: Path, extra_paths: List[Path], indices: '_ResolutionIndices',
+    ) -> None:
+        """Stage 5 (BACK-547 honest-decline): an extracted import that
+        produced no edge is only a false-negative risk if it points
+        intra-project. External (stdlib/dep) imports correctly have no
+        in-tree edge; None means the extractor can't tell, and we
+        conservatively don't count it (never cry wolf)."""
+        verdict = extractor.is_intra_project_import(
+            stmt, base_path, search_paths=extra_paths,
+            project_namespaces=indices.project_namespaces)
+        if verdict is True:
+            self._unresolved_intra += 1
+            if len(self._unresolved_examples) < 5:
+                self._unresolved_examples.append((file_path, stmt))
 
     def _build_zeitwerk_edges(
         self, files: List[Path], zeitwerk_index: Dict[str, Path],
