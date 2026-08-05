@@ -1038,6 +1038,269 @@ class TestMySQLRenderer(unittest.TestCase):
         self.assertIn('localhost:3306', output)
         self.assertIn('8.0.32', output)
 
+    def _render_and_capture(self, result):
+        """Render result via render_structure(format='text') and return stdout."""
+        from reveal.adapters.mysql.renderer import MySQLRenderer
+        from io import StringIO
+
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+        try:
+            MySQLRenderer.render_structure(result, format='text')
+        finally:
+            sys.stdout = old_stdout
+        return captured_output.getvalue()
+
+    def test_renderer_connections_output(self):
+        """Renderer should format the connections element as text, not raw JSON."""
+        result = {
+            'type': 'connections',
+            'measurement_window': '5d 2h (since server start)',
+            'total_connections': 12,
+            'by_state': {'Sleep': 10, 'Query': 2},
+            'long_running_queries': [
+                {'id': 42, 'user': 'app', 'db': 'prod', 'time': 90,
+                 'state': 'Sending data', 'info': 'SELECT * FROM big_table'},
+            ],
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Connections', output)
+        self.assertIn('Total Connections: 12', output)
+        self.assertIn('Sleep: 10', output)
+        self.assertIn('app@prod', output)
+        self.assertIn('SELECT * FROM big_table', output)
+        self.assertNotIn('"type"', output)
+
+    def test_renderer_errors_output(self):
+        """Renderer should format the errors element as text, not raw JSON."""
+        result = {
+            'type': 'errors',
+            'measurement_window': '5d 2h (since server start)',
+            'aborted_clients': '3 (since server start)',
+            'aborted_connects': '1 (since server start)',
+            'connection_errors_internal': '0 (since server start)',
+            'connection_errors_max_connections': '0 (since server start)',
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Errors', output)
+        self.assertIn('Aborted Clients: 3', output)
+        self.assertNotIn('"type"', output)
+
+    def test_renderer_variables_output(self):
+        """Renderer should format the variables element as text, not raw JSON."""
+        result = {
+            'type': 'variables',
+            'measurement_window': '5d 2h (since server start)',
+            'variables': {'max_connections': '151', 'tmp_table_size': '16777216'},
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Variables', output)
+        self.assertIn('max_connections: 151', output)
+        self.assertNotIn('"type"', output)
+
+    def test_renderer_databases_output(self):
+        """Renderer should format the databases element as text, not raw JSON."""
+        result = {
+            'type': 'databases',
+            'measurement_window': '5d 2h (since server start)',
+            'databases': ['app_prod', 'app_staging'],
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Databases (2)', output)
+        self.assertIn('app_prod', output)
+        self.assertNotIn('"type"', output)
+
+    def test_renderer_indexes_output(self):
+        """Renderer should format the indexes element as text, not raw JSON."""
+        result = {
+            'type': 'indexes',
+            'measurement_basis': 'since_server_start',
+            'measurement_start_time': '2026-08-01T00:00:00+00:00',
+            'performance_schema_status': {'enabled': True, 'counters_reset_detected': False,
+                                          'likely_reset_time': None},
+            'most_used': [
+                {'object_schema': 'app', 'object_name': 'users', 'index_name': 'PRIMARY',
+                 'total_accesses': 1000, 'read_accesses': 900, 'write_accesses': 100, 'read_pct': 90.0},
+            ],
+            'unused': [
+                {'object_schema': 'app', 'object_name': 'orders', 'index_name': 'idx_legacy'},
+            ],
+            'unused_count': 1,
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Index Usage', output)
+        self.assertIn('app.users.PRIMARY', output)
+        self.assertIn('Unused Indexes: 1', output)
+        self.assertIn('app.orders.idx_legacy', output)
+        self.assertNotIn('"type"', output)
+
+    def test_renderer_slow_queries_output(self):
+        """Renderer should format the slow-queries element as text, not raw JSON."""
+        result = {
+            'type': 'slow_queries',
+            'period': '24 hours',
+            'summary': {'total_slow_queries': 2, 'min_time': 1.5, 'max_time': 8.2,
+                        'avg_time': 4.85, 'total_rows_examined': 50000},
+            'top_queries': [
+                {'start_time': '2026-08-04T01:00:00', 'user_host': 'app[app] @ localhost',
+                 'query_time_seconds': 8.2, 'lock_time_seconds': 0.1, 'rows_sent': 1,
+                 'rows_examined': 40000, 'query_preview': 'SELECT * FROM orders WHERE ...'},
+            ],
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Slow Queries (last 24 hours)', output)
+        self.assertIn('Total: 2', output)
+        self.assertIn('SELECT * FROM orders WHERE ...', output)
+        self.assertNotIn('"type"', output)
+
+    def test_renderer_slow_queries_unavailable(self):
+        """Renderer should handle the slow-query-log-unavailable error shape."""
+        result = {
+            'type': 'slow_queries',
+            'error': "Table 'mysql.slow_log' doesn't exist",
+            'message': 'Slow query log may not be enabled or accessible',
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Slow Queries: unavailable', output)
+        self.assertIn('Slow query log may not be enabled', output)
+
+    def test_renderer_tables_output(self):
+        """Renderer should format the tables element as text, not raw JSON."""
+        result = {
+            'type': 'tables',
+            'measurement_basis': 'since_server_start',
+            'measurement_start_time': '2026-08-01T00:00:00+00:00',
+            'tables': [
+                {'table_name': 'orders', 'reads': 5000, 'writes': 10,
+                 'read_write_ratio': 500.0, 'total_time_sec': 12.5, 'total_time_hours': 0.0,
+                 'read_time_sec': 12.0, 'write_time_sec': 0.5,
+                 'alert': 'extreme_read_ratio', 'recommendation': 'Review queries for missing LIMIT clauses'},
+            ],
+            'table_count': 1,
+            'alerts': [
+                {'table': 'orders', 'type': 'extreme_read_ratio', 'ratio': 500.0,
+                 'recommendation': 'Review queries for missing LIMIT clauses'},
+            ],
+            'alert_count': 1,
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Table I/O (1 tables)', output)
+        self.assertIn('orders: 5000 reads / 10 writes', output)
+        self.assertIn('extreme_read_ratio', output)
+        self.assertIn('Alerts: 1', output)
+        self.assertNotIn('"type"', output)
+
+    def test_renderer_performance_output(self):
+        """Renderer should format the performance element as text, not raw JSON."""
+        result = {
+            'type': 'performance',
+            'measurement_window': '5d 2h (since server start)',
+            'queries_per_second': 123.456,
+            'slow_queries_total': '5 (since server start)',
+            'sort_merge_passes': '0 (since server start)',
+            'full_table_scans': {'select_scan_ratio': '5.00%', 'status': '✅',
+                                 'select_scan': '10', 'select_range': '190',
+                                 'handler_read_rnd_next': '0', 'note': 'note-scans'},
+            'thread_cache_efficiency': {'miss_rate': '2.00%', 'status': '✅',
+                                        'threads_created': '2', 'connections': '100',
+                                        'note': 'note-threads'},
+            'temp_tables': {'disk_ratio': '10.00%', 'status': '✅',
+                            'on_disk': '10', 'total': '100', 'note': 'note-temp'},
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Performance', output)
+        self.assertIn('QPS: 123.46', output)
+        self.assertIn('note-scans', output)
+        self.assertIn('note-threads', output)
+        self.assertIn('note-temp', output)
+        self.assertNotIn('"type"', output)
+
+    def test_renderer_innodb_output(self):
+        """Renderer should format the innodb element as text, not raw JSON."""
+        result = {
+            'type': 'innodb',
+            'measurement_window': '5d 2h (since server start)',
+            'buffer_pool_hit_rate': '99.50%',
+            'buffer_pool_reads': '10 (since server start)',
+            'buffer_pool_read_requests': '10000 (since server start)',
+            'row_lock_waits': '0 (since server start)',
+            'row_lock_time_avg': '0 ms',
+            'deadlocks': '0 (since server start)',
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL InnoDB', output)
+        self.assertIn('Buffer Pool Hit Rate: 99.50%', output)
+        self.assertNotIn('"type"', output)
+
+    def test_renderer_replication_slave_output(self):
+        """Renderer should format the replication element for a Slave role."""
+        result = {
+            'type': 'replication',
+            'role': 'Slave',
+            'master_host': 'master.internal',
+            'master_port': 3306,
+            'io_running': 'Yes',
+            'sql_running': 'Yes',
+            'seconds_behind_master': 0,
+            'last_error': 'None',
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Replication: Slave', output)
+        self.assertIn('master.internal:3306', output)
+        self.assertNotIn('"type"', output)
+
+    def test_renderer_replication_master_output(self):
+        """Renderer should format the replication element for a Master role."""
+        result = {
+            'type': 'replication',
+            'role': 'Master',
+            'slaves': [{'server_id': 2, 'host': 'replica1.internal'}],
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Replication: Master', output)
+        self.assertIn('replica1.internal', output)
+
+    def test_renderer_replication_standalone_output(self):
+        """Renderer should format the replication element for a Standalone role."""
+        result = {
+            'type': 'replication',
+            'role': 'Standalone',
+            'message': 'No replication configured',
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Replication: Standalone', output)
+        self.assertIn('No replication configured', output)
+
+    def test_renderer_storage_output(self):
+        """Renderer should format the storage element as text, not raw JSON."""
+        result = {
+            'type': 'storage',
+            'measurement_window': '5d 2h (since server start)',
+            'databases': [
+                {'db_name': 'app_prod', 'table_count': 20, 'size_gb': 12.5,
+                 'data_gb': 10.0, 'index_gb': 2.5},
+            ],
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Storage', output)
+        self.assertIn('app_prod: 12.5 GB', output)
+        self.assertNotIn('"type"', output)
+
+    def test_renderer_database_storage_output(self):
+        """Renderer should format the storage/<db> element as text, not raw JSON."""
+        result = {
+            'type': 'database_storage',
+            'measurement_window': '5d 2h (since server start)',
+            'database': 'app_prod',
+            'tables': [
+                {'table_name': 'orders', 'engine': 'InnoDB', 'table_rows': 100000, 'size_mb': 512.5},
+            ],
+        }
+        output = self._render_and_capture(result)
+        self.assertIn('MySQL Storage: app_prod', output)
+        self.assertIn('orders (InnoDB): 512.5 MB, 100000 rows', output)
+        self.assertNotIn('"type"', output)
+
 
 class TestMySQLConnectionSnapshotContext(unittest.TestCase):
     """Test MySQLConnection.get_snapshot_context() method."""

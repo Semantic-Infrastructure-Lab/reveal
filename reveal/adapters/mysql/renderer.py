@@ -79,6 +79,208 @@ class MySQLRenderer(TypeDispatchRenderer):
                 print(f"💡 Try: {example}")
 
     @staticmethod
+    def _print_measurement_window(result: dict) -> None:
+        """Print the shared snapshot-timing line most elements carry."""
+        window = result.get('measurement_window')
+        if window:
+            print(f"Measurement window: {window}")
+            print()
+
+    @staticmethod
+    def _render_connections(result: dict) -> None:
+        """Render connections/processlist element."""
+        print("MySQL Connections")
+        MySQLRenderer._print_measurement_window(result)
+
+        print(f"Total Connections: {result['total_connections']}")
+        print()
+
+        print("By State:")
+        for state, count in result['by_state'].items():
+            print(f"  {state}: {count}")
+        print()
+
+        long_running = result['long_running_queries']
+        print(f"Long-Running Queries (>5s): {len(long_running)}")
+        for q in long_running:
+            print(f"  [{q['id']}] {q['user']}@{q['db']} - {q['time']}s ({q['state']})")
+            if q['info']:
+                print(f"    {q['info']}")
+
+    @staticmethod
+    def _render_errors(result: dict) -> None:
+        """Render error-indicator element."""
+        print("MySQL Errors")
+        MySQLRenderer._print_measurement_window(result)
+
+        print(f"Aborted Clients: {result['aborted_clients']}")
+        print(f"Aborted Connects: {result['aborted_connects']}")
+        print(f"Connection Errors (internal): {result['connection_errors_internal']}")
+        print(f"Connection Errors (max_connections): {result['connection_errors_max_connections']}")
+
+    @staticmethod
+    def _render_variables(result: dict) -> None:
+        """Render server-variables element."""
+        print("MySQL Variables")
+        MySQLRenderer._print_measurement_window(result)
+
+        for name, value in result['variables'].items():
+            print(f"  {name}: {value}")
+
+    @staticmethod
+    def _render_databases(result: dict) -> None:
+        """Render database-list element."""
+        databases = result['databases']
+        print(f"MySQL Databases ({len(databases)})")
+        MySQLRenderer._print_measurement_window(result)
+
+        for db in databases:
+            print(f"  • {db}")
+
+    @staticmethod
+    def _render_indexes(result: dict) -> None:
+        """Render index-usage element."""
+        print("MySQL Index Usage")
+        print(f"Measurement basis: {result['measurement_basis']} (since {result['measurement_start_time']})")
+        ps_status = result['performance_schema_status']
+        print(f"Performance Schema: {'enabled' if ps_status.get('enabled') else 'disabled'}")
+        print()
+
+        most_used = result['most_used']
+        print(f"Most Used Indexes (top {len(most_used)}):")
+        for row in most_used:
+            print(f"  {row['object_schema']}.{row['object_name']}.{row['index_name']}: "
+                  f"{row['total_accesses']} accesses ({row['read_pct']}% read)")
+        print()
+
+        unused = result['unused']
+        print(f"Unused Indexes: {result['unused_count']}")
+        for row in unused:
+            print(f"  {row['object_schema']}.{row['object_name']}.{row['index_name']}")
+
+    @staticmethod
+    def _render_slow_queries(result: dict) -> None:
+        """Render slow-query-log element."""
+        if 'error' in result:
+            print("MySQL Slow Queries: unavailable")
+            print(f"  {result['message']}")
+            print(f"  ({result['error']})")
+            return
+
+        print(f"MySQL Slow Queries (last {result['period']})")
+        print()
+
+        summary = result['summary'] or {}
+        print("Summary:")
+        print(f"  Total: {summary.get('total_slow_queries', 0)}")
+        print(f"  Avg time: {summary.get('avg_time')}s "
+              f"(min {summary.get('min_time')}s, max {summary.get('max_time')}s)")
+        print(f"  Rows examined: {summary.get('total_rows_examined', 0)}")
+        print()
+
+        top_queries = result['top_queries']
+        print(f"Top Queries ({len(top_queries)}):")
+        for q in top_queries:
+            print(f"  [{q['query_time_seconds']}s] {q['user_host']} - {q['rows_examined']} rows examined")
+            print(f"    {q['query_preview']}")
+
+    @staticmethod
+    def _render_tables(result: dict) -> None:
+        """Render table I/O statistics element."""
+        print(f"MySQL Table I/O ({result['table_count']} tables)")
+        print(f"Measurement basis: {result['measurement_basis']} (since {result['measurement_start_time']})")
+        print()
+
+        for entry in result['tables']:
+            print(f"  {entry['table_name']}: {entry['reads']} reads / {entry['writes']} writes "
+                  f"(ratio {entry['read_write_ratio']}), {entry['total_time_hours']}h total")
+            if entry['alert']:
+                print(f"    ⚠️  {entry['alert']}: {entry['recommendation']}")
+        print()
+
+        print(f"Alerts: {result['alert_count']}")
+        for alert in result['alerts']:
+            print(f"  • {alert['table']}: {alert['type']} - {alert['recommendation']}")
+
+    @staticmethod
+    def _render_performance(result: dict) -> None:
+        """Render query-performance element."""
+        print("MySQL Performance")
+        MySQLRenderer._print_measurement_window(result)
+
+        print(f"QPS: {result['queries_per_second']:.2f}")
+        print(f"Slow Queries: {result['slow_queries_total']}")
+        print(f"Sort Merge Passes: {result['sort_merge_passes']}")
+        print()
+
+        scans = result['full_table_scans']
+        print(f"Full Table Scans: {scans['status']} {scans['select_scan_ratio']}")
+        print(f"  {scans['note']}")
+        print()
+
+        threads = result['thread_cache_efficiency']
+        print(f"Thread Cache: {threads['status']} {threads['miss_rate']} miss rate")
+        print(f"  {threads['note']}")
+        print()
+
+        tmp = result['temp_tables']
+        print(f"Temp Tables: {tmp['status']} {tmp['disk_ratio']} on disk")
+        print(f"  {tmp['note']}")
+
+    @staticmethod
+    def _render_innodb(result: dict) -> None:
+        """Render InnoDB engine-status element."""
+        print("MySQL InnoDB")
+        MySQLRenderer._print_measurement_window(result)
+
+        print(f"Buffer Pool Hit Rate: {result['buffer_pool_hit_rate']}")
+        print(f"  Reads: {result['buffer_pool_reads']}")
+        print(f"  Read Requests: {result['buffer_pool_read_requests']}")
+        print(f"Row Lock Waits: {result['row_lock_waits']}")
+        print(f"Row Lock Time (avg): {result['row_lock_time_avg']}")
+        print(f"Deadlocks: {result['deadlocks']}")
+
+    @staticmethod
+    def _render_replication(result: dict) -> None:
+        """Render replication-status element."""
+        role = result['role']
+        print(f"MySQL Replication: {role}")
+        print()
+
+        if role == 'Slave':
+            print(f"Master: {result['master_host']}:{result['master_port']}")
+            print(f"IO Running: {result['io_running']}")
+            print(f"SQL Running: {result['sql_running']}")
+            print(f"Seconds Behind Master: {result['seconds_behind_master']}")
+            print(f"Last Error: {result['last_error']}")
+        elif role == 'Master':
+            slaves = result['slaves']
+            print(f"Slaves: {len(slaves)}")
+            for s in slaves:
+                print(f"  • server_id={s['server_id']} host={s['host']}")
+        else:
+            print(result['message'])
+
+    @staticmethod
+    def _render_storage(result: dict) -> None:
+        """Render storage-by-database element."""
+        print("MySQL Storage")
+        MySQLRenderer._print_measurement_window(result)
+
+        for db in result['databases']:
+            print(f"  {db['db_name']}: {db['size_gb']} GB "
+                  f"({db['table_count']} tables, {db['data_gb']} data / {db['index_gb']} index)")
+
+    @staticmethod
+    def _render_database_storage(result: dict) -> None:
+        """Render storage/<db_name> element (per-table breakdown)."""
+        print(f"MySQL Storage: {result['database']}")
+        MySQLRenderer._print_measurement_window(result)
+
+        for t in result['tables']:
+            print(f"  {t['table_name']} ({t['engine']}): {t['size_mb']} MB, {t['table_rows']} rows")
+
+    @staticmethod
     def _get_status_icon(status: str) -> str:
         """Get icon for check status."""
         if status == 'pass':
