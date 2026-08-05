@@ -9,7 +9,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
-from reveal.cli.commands.overview import (
+from reveal.adapters.overview import (
     _age_label,
     _is_test_file,
     _language_breakdown,
@@ -27,6 +27,8 @@ from reveal.cli.commands.overview import (
     _run_git_log,
     _run_imports_analysis,
     _run_stats,
+)
+from reveal.cli.commands.overview import (
     create_overview_parser,
     run_overview,
 )
@@ -220,7 +222,7 @@ class TestAgeLabel(unittest.TestCase):
 
 class TestRunStats(unittest.TestCase):
 
-    @patch('reveal.cli.commands.overview.StatsAdapter')
+    @patch('reveal.adapters.overview.StatsAdapter')
     def test_returns_adapter_data(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_STATS_JSON)
         result = _run_stats(Path('/project'))
@@ -228,7 +230,7 @@ class TestRunStats(unittest.TestCase):
         self.assertEqual(result['summary']['total_files'], 100)
         MockAdapter.assert_called_once_with(str(Path('/project')), 'hotspots=true')
 
-    @patch('reveal.cli.commands.overview.StatsAdapter')
+    @patch('reveal.adapters.overview.StatsAdapter')
     def test_exception_returns_empty_dict(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         result = _run_stats(Path('/project'))
@@ -237,26 +239,26 @@ class TestRunStats(unittest.TestCase):
 
 class TestRunGitLog(unittest.TestCase):
 
-    @patch('reveal.cli.commands.overview.GitAdapter')
+    @patch('reveal.adapters.overview.GitAdapter')
     def test_returns_history_list(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_GIT_JSON)
         result = _run_git_log(Path('/project'), 5)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]['hash'], 'abc1234')
 
-    @patch('reveal.cli.commands.overview.GitAdapter')
+    @patch('reveal.adapters.overview.GitAdapter')
     def test_exception_returns_empty(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         result = _run_git_log(Path('/project'), 5)
         self.assertEqual(result, [])
 
-    @patch('reveal.cli.commands.overview.GitAdapter')
+    @patch('reveal.adapters.overview.GitAdapter')
     def test_missing_history_key_returns_empty(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = {'other': 'data'}
         result = _run_git_log(Path('/project'), 5)
         self.assertEqual(result, [])
 
-    @patch('reveal.cli.commands.overview.GitAdapter')
+    @patch('reveal.adapters.overview.GitAdapter')
     def test_limit_passed_as_query_param(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = {}
         _run_git_log(Path('/project'), 7)
@@ -266,19 +268,19 @@ class TestRunGitLog(unittest.TestCase):
 class TestResolveGitRoot(unittest.TestCase):
     """BACK-516: discover the repo root actually backing a target directory."""
 
-    @patch('reveal.cli.commands.overview.GitAdapter')
+    @patch('reveal.adapters.overview.GitAdapter')
     def test_returns_discovered_root(self, MockAdapter):
         MockAdapter.return_value.get_metadata.return_value = {'path': '/enclosing/repo', 'type': 'git_repository'}
         result = _resolve_git_root(Path('/enclosing/repo/samples/csharp'))
         self.assertEqual(result, Path('/enclosing/repo').resolve())
 
-    @patch('reveal.cli.commands.overview.GitAdapter')
+    @patch('reveal.adapters.overview.GitAdapter')
     def test_no_path_in_metadata_returns_none(self, MockAdapter):
         MockAdapter.return_value.get_metadata.return_value = {'type': 'git_repository'}
         result = _resolve_git_root(Path('/not/a/repo'))
         self.assertIsNone(result)
 
-    @patch('reveal.cli.commands.overview.GitAdapter')
+    @patch('reveal.adapters.overview.GitAdapter')
     def test_exception_returns_none(self, MockAdapter):
         MockAdapter.return_value.get_metadata.side_effect = Exception('fail')
         result = _resolve_git_root(Path('/whatever'))
@@ -287,20 +289,20 @@ class TestResolveGitRoot(unittest.TestCase):
 
 class TestRunComplexFunctions(unittest.TestCase):
 
-    @patch('reveal.cli.commands.overview.AstAdapter')
+    @patch('reveal.adapters.overview.AstAdapter')
     def test_returns_results_list(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_AST_JSON)
         result = _run_complex_functions(Path('/project'), 5)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]['name'], 'complex_fn')
 
-    @patch('reveal.cli.commands.overview.AstAdapter')
+    @patch('reveal.adapters.overview.AstAdapter')
     def test_falls_back_to_elements_key(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = {'elements': [{'name': 'fn', 'complexity': 15}]}
         result = _run_complex_functions(Path('/project'), 5)
         self.assertEqual(result[0]['name'], 'fn')
 
-    @patch('reveal.cli.commands.overview.AstAdapter')
+    @patch('reveal.adapters.overview.AstAdapter')
     def test_exception_returns_empty(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         result = _run_complex_functions(Path('/project'), 5)
@@ -556,10 +558,10 @@ class TestRunOverview(unittest.TestCase):
         ast_val = ast if ast is not None else _AST_DATA
         arch_val = arch if arch is not None else _ARCH_DATA
         return (
-            patch('reveal.cli.commands.overview._run_stats', return_value=stats_val),
-            patch('reveal.cli.commands.overview._run_git_log', return_value=git_val),
-            patch('reveal.cli.commands.overview._run_complex_functions', return_value=ast_val),
-            patch('reveal.cli.commands.overview._run_imports_analysis', return_value=arch_val),
+            patch('reveal.adapters.overview._run_stats', return_value=stats_val),
+            patch('reveal.adapters.overview._run_git_log', return_value=git_val),
+            patch('reveal.adapters.overview._run_complex_functions', return_value=ast_val),
+            patch('reveal.adapters.overview._run_imports_analysis', return_value=arch_val),
         )
 
     def test_nonexistent_path_exits_1(self):
@@ -645,7 +647,7 @@ class TestRunOverview(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             enclosing_root = Path(tmp).parent.resolve()
             with p_stats, p_git, p_ast, p_arch, \
-                    patch('reveal.cli.commands.overview._resolve_git_root', return_value=enclosing_root):
+                    patch('reveal.adapters.overview._resolve_git_root', return_value=enclosing_root):
                 out = _capture(run_overview, _args(path=tmp))
                 self.assertIn('enclosing repo', out)
                 self.assertIn(str(enclosing_root), out)
@@ -657,7 +659,7 @@ class TestRunOverview(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             own_root = Path(tmp).resolve()
             with p_stats, p_git, p_ast, p_arch, \
-                    patch('reveal.cli.commands.overview._resolve_git_root', return_value=own_root):
+                    patch('reveal.adapters.overview._resolve_git_root', return_value=own_root):
                 out = _capture(run_overview, _args(path=tmp))
                 self.assertNotIn('enclosing repo', out)
 
@@ -667,7 +669,7 @@ class TestRunOverview(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             enclosing_root = Path(tmp).parent.resolve()
             with p_stats, p_git, p_ast, p_arch, \
-                    patch('reveal.cli.commands.overview._resolve_git_root', return_value=enclosing_root):
+                    patch('reveal.adapters.overview._resolve_git_root', return_value=enclosing_root):
                 buf = StringIO()
                 with patch('sys.stdout', buf):
                     run_overview(_args(path=tmp, format='json'))
@@ -680,7 +682,7 @@ class TestRunOverview(unittest.TestCase):
         p_stats, p_git, p_ast, p_arch = self._patch_runners(git=[])
         with tempfile.TemporaryDirectory() as tmp:
             with p_stats, p_git, p_ast, p_arch, \
-                    patch('reveal.cli.commands.overview._resolve_git_root') as mock_resolve:
+                    patch('reveal.adapters.overview._resolve_git_root') as mock_resolve:
                 run_overview(_args(path=tmp))
                 mock_resolve.assert_not_called()
 
@@ -722,7 +724,7 @@ class TestRelpath(unittest.TestCase):
 
 class TestRunImportsAnalysis(unittest.TestCase):
 
-    @patch('reveal.cli.commands.overview.ImportsAdapter')
+    @patch('reveal.adapters.overview.ImportsAdapter')
     def test_returns_structured_dict(self, MockAdapter):
         instance = MockAdapter.return_value
         instance._format_fan_in.return_value = {'entries': [{'file': 'a.py', 'fan_in': 5, 'fan_out': 1}]}
@@ -734,7 +736,7 @@ class TestRunImportsAnalysis(unittest.TestCase):
         self.assertEqual(result['entrypoints'], [{'file': 'main.py', 'fan_out': 3}])
         self.assertEqual(result['circular_count'], 2)
 
-    @patch('reveal.cli.commands.overview.ImportsAdapter')
+    @patch('reveal.adapters.overview.ImportsAdapter')
     def test_exception_returns_empty_structure(self, MockAdapter):
         MockAdapter.side_effect = Exception("boom")
         result = _run_imports_analysis(Path('/proj'))
@@ -744,7 +746,7 @@ class TestRunImportsAnalysis(unittest.TestCase):
         self.assertEqual(result['circular_count'], 0)
         self.assertEqual(result['unsupported_extensions'], {})
 
-    @patch('reveal.cli.commands.overview.ImportsAdapter')
+    @patch('reveal.adapters.overview.ImportsAdapter')
     def test_propagates_unsupported_extensions(self, MockAdapter):
         """BACK-518 part 2: the coverage signal ImportsAdapter already computes
         must reach the caller, not just live unread in adapter.get_metadata()."""

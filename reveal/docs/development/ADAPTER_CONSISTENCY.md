@@ -16,7 +16,7 @@ help_token_estimate: "~3,900"
 
 ## Overview
 
-Reveal has 30 URI adapters that follow a **3-tier UX model** for consistency:
+Reveal has 31 URI adapters that follow a **3-tier UX model** for consistency:
 
 1. **Resource Identity** (URI) - What to inspect
 2. **Operations** (Flags) - What to do with it

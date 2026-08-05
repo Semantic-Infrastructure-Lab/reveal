@@ -1,37 +1,43 @@
-"""reveal overview — one-glance codebase dashboard."""
+"""reveal overview — one-glance codebase dashboard.
+
+Thin argparse shim over the overview:// adapter (BACK-901/BACK-958); scan/
+render logic lives in reveal/adapters/overview.py. Internal names are
+re-exported here for backward compatibility with existing callers/tests.
+"""
 
 import argparse
 import json
-import logging
 import sys
 from argparse import Namespace
-from collections import Counter
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Optional
 
-from reveal.adapters.stats import StatsAdapter
-from reveal.adapters.git import GitAdapter
-from reveal.adapters.ast import AstAdapter
-from reveal.adapters.imports import ImportsAdapter
-from reveal.registry import display_name_for_extension
-from reveal.capabilities import scope_dict_for_path
-
-logger = logging.getLogger(__name__)
-
-
-# Display labels for extensions the language registry doesn't know at all
-# (BACK-431 Issue B #5) — these are document/data formats, not tree-sitter
-# languages, so they aren't derivable from language_for_extension(); genuinely
-# different knowledge from the language-identity table, not a parallel copy
-# of it. Extensions the registry *does* know (code + config languages like
-# JSON/YAML/HCL) are resolved via display_name_for_extension() instead — see
-# _language_breakdown().
-_NON_CODE_EXT_LABELS: Dict[str, str] = {
-    '.jsonl': 'JSONL', '.html': 'HTML', '.xml': 'XML', '.csv': 'CSV',
-    '.dockerfile': 'Dockerfile', '.ini': 'INI', '.ipynb': 'Jupyter',
-    '.xlsx': 'Excel', '.docx': 'Word', '.pptx': 'PowerPoint',
-}
+from reveal.adapters.overview import (  # noqa: F401 - re-exported for back-compat
+    AstAdapter,
+    GitAdapter,
+    ImportsAdapter,
+    OverviewAdapter,
+    OverviewRenderer,
+    StatsAdapter,
+    _age_label,
+    _is_test_file,
+    _language_breakdown,
+    _relpath,
+    _render_architecture,
+    _render_codebase_stats,
+    _render_complex_functions,
+    _render_git_log,
+    _render_hotspots,
+    _render_language_breakdown,
+    _render_next_steps,
+    _render_overview,
+    _render_quality_pulse,
+    _resolve_git_root,
+    _run_complex_functions,
+    _run_git_log,
+    _run_imports_analysis,
+    _run_scope,
+    _run_stats,
+)
 
 
 def create_overview_parser() -> argparse.ArgumentParser:
@@ -87,396 +93,22 @@ def run_overview(args: Namespace) -> None:
     no_git = getattr(args, 'no_git', False)
     no_imports = getattr(args, 'no_imports', False)
 
-    stats = _run_stats(path)
-    git_log = [] if no_git else _run_git_log(path, top)
-    git_foreign_root: Optional[Path] = None
-    if git_log:
-        git_root = _resolve_git_root(path)
-        if git_root is not None and git_root != path:
-            git_foreign_root = git_root
-    complex_fns = _run_complex_functions(path, top)
-    architecture = {} if no_imports else _run_imports_analysis(path)
-
-    report = {
-        'path': str(path),
-        'stats': stats,
-        'git_log': git_log,
-        'git_foreign_root': str(git_foreign_root) if git_foreign_root else None,
-        'complex_functions': complex_fns,
-        'architecture': architecture,
-        'scope': _run_scope(path),
-    }
+    query = (
+        f'top={top}&no_git={"true" if no_git else "false"}'
+        f'&no_imports={"true" if no_imports else "false"}'
+    )
+    result = OverviewAdapter(str(path), query).get_structure()
 
     if args.format == 'json':
         from reveal.utils.results import add_cli_contract_fields
+        report = {
+            k: v for k, v in result.items()
+            if k not in ('contract_version', 'type', 'source', 'source_type', 'meta')
+        }
         print(json.dumps(
             add_cli_contract_fields(report, result_type='overview', source=path),
             indent=2, default=str,
         ))
         return
 
-    _render_overview(report, top)
-
-
-# ── Data collectors ────────────────────────────────────────────────────────────
-
-def _run_stats(path: Path) -> Dict[str, Any]:
-    """Fetch stats and hotspots via StatsAdapter."""
-    try:
-        return StatsAdapter(str(path), 'hotspots=true').get_structure()
-    except Exception as exc:
-        logger.warning("stats collection failed for %s: %s", path, exc)
-        return {}
-
-
-def _run_scope(path: Path) -> Dict[str, Any]:
-    """BACK-884: files discovered/analyzed/skipped by language, with
-    per-language capability tier — additive 'scope' key in JSON output.
-    Shared with architecture.py via capabilities.scope_dict_for_path()."""
-    try:
-        return scope_dict_for_path(path)
-    except Exception as exc:
-        logger.warning("scope census failed for %s: %s", path, exc)
-        return {}
-
-
-def _resolve_git_root(path: Path) -> Optional[Path]:
-    """Discover the git repo root enclosing *path* (BACK-516).
-
-    ``GitAdapter``/pygit2 walk up to the nearest ancestor ``.git`` unconditionally
-    (correct git behavior), so a directory with no ``.git`` of its own — a vendored
-    tree, a sample corpus, a submodule checked out without its own ``.git`` — silently
-    inherits its enclosing repo's history. Returns the discovered root so callers can
-    detect and disclose that mismatch; returns ``None`` if *path* isn't inside a repo
-    at all.
-    """
-    try:
-        metadata = GitAdapter(path=str(path)).get_metadata()
-        root = metadata.get('path')
-        return Path(root).resolve() if root else None
-    except Exception:
-        return None
-
-
-def _run_git_log(path: Path, limit: int) -> List[Dict[str, Any]]:
-    """Fetch recent commits via GitAdapter."""
-    try:
-        data = GitAdapter(path=str(path), query={'type': 'log', 'limit': str(limit)}).get_structure()
-        return data.get('history', [])
-    except Exception as exc:
-        logger.warning("git log collection failed for %s: %s", path, exc)
-        return []
-
-
-def _run_complex_functions(path: Path, limit: int) -> List[Dict[str, Any]]:
-    """Fetch top complex functions via AstAdapter."""
-    try:
-        data = AstAdapter(str(path), f'complexity>9&sort=-complexity&limit={limit}').get_structure()
-        return data.get('results', data.get('elements', []))
-    except Exception as exc:
-        logger.warning("AST collection failed for %s: %s", path, exc)
-        return []
-
-
-def _run_imports_analysis(path: Path) -> Dict[str, Any]:
-    """Build import graph once and return architectural data for overview."""
-    try:
-        adapter = ImportsAdapter(str(path))
-        adapter._build_graph(path)
-        fan_in = adapter._format_fan_in()
-        entrypoints = adapter._format_entrypoints()
-        components = adapter._format_components()
-        circular = adapter._format_circular()
-        return {
-            'fan_in': fan_in.get('entries', []),
-            'entrypoints': entrypoints.get('entries', []),
-            'components': components.get('components', []),
-            'circular_count': circular.get('count', 0),
-            # BACK-518 part 2: disclose files the import graph couldn't cover,
-            # same signal imports:// itself already gives — otherwise an
-            # unsupported-language repo (all fan_in/entrypoints/components
-            # empty) renders as a blank Architecture section, which reads as
-            # "nothing here" rather than "not analyzed".
-            'unsupported_extensions': adapter.get_metadata().get('unsupported_extensions', {}),
-        }
-    except Exception as exc:
-        logger.warning("imports analysis failed for %s: %s", path, exc)
-        return {'fan_in': [], 'entrypoints': [], 'components': [], 'circular_count': 0, 'unsupported_extensions': {}}
-
-
-def _language_breakdown(files: List[Dict[str, Any]]) -> List[tuple]:
-    """Derive language→file count from stats files list."""
-    counts: Counter = Counter()
-    for f in files:
-        path = f.get('file', '')
-        ext = Path(path).suffix.lower()
-        # Dockerfile has no extension
-        if not ext and Path(path).name.lower() == 'dockerfile':
-            lang = 'Dockerfile'
-        else:
-            lang = (
-                display_name_for_extension(ext)
-                or _NON_CODE_EXT_LABELS.get(ext)
-                or (ext.lstrip('.').upper() if ext else 'Other')
-            )
-        counts[lang] += 1
-    return counts.most_common()
-
-
-def _age_label(timestamp: Optional[int]) -> str:
-    """Convert unix timestamp to human-friendly age string."""
-    if not timestamp:
-        return ''
-    now = datetime.now(timezone.utc).timestamp()
-    diff = int(now - timestamp)
-    if diff < 3600:
-        return f"{diff // 60}m ago"
-    if diff < 86400:
-        return f"{diff // 3600}h ago"
-    days = diff // 86400
-    return f"{days}d ago"
-
-
-# ── Renderers ──────────────────────────────────────────────────────────────────
-
-def _render_overview(report: Dict[str, Any], top: int) -> None:
-    path_str = report['path']
-    path = Path(path_str)
-    stats = report['stats']
-    git_log = report['git_log']
-    complex_fns = report['complex_functions']
-    architecture = report.get('architecture', {})
-
-    summary = stats.get('summary', {})
-    hotspots = stats.get('hotspots', [])
-    files_list = stats.get('files', [])
-
-    print()
-    print(f"Overview: {path_str}")
-    print("━" * 60)
-
-    _render_codebase_stats(summary)
-    _render_language_breakdown(files_list, top)
-    _render_quality_pulse(summary, hotspots)
-    _render_hotspots(hotspots, top)
-    _render_complex_functions(complex_fns, base_path=path)
-    _render_architecture(architecture, complex_fns, top, base_path=path)
-    _render_git_log(git_log, report.get('git_foreign_root'))
-    _render_next_steps()
-
-
-def _render_codebase_stats(summary: Dict[str, Any]) -> None:
-    if not summary:
-        return
-    total_files = summary.get('total_files', 0)
-    total_lines = summary.get('total_lines', 0)
-    total_fns = summary.get('total_functions', 0)
-    total_cls = summary.get('total_classes', 0)
-
-    parts = [f"{total_files:,} files"]
-    if total_lines:
-        parts.append(f"{total_lines:,} lines")
-    if total_fns:
-        parts.append(f"{total_fns:,} functions")
-    if total_cls:
-        parts.append(f"{total_cls:,} classes")
-
-    print(f"\nCodebase  {' · '.join(parts)}")
-
-
-def _render_language_breakdown(files_list: List[Dict[str, Any]], top: int) -> None:
-    if not files_list:
-        return
-    langs = _language_breakdown(files_list)
-    total = sum(c for _, c in langs)
-    shown = langs[:top]
-
-    print("\nLanguages")
-    for lang, count in shown:
-        pct = int(count / total * 100) if total else 0
-        bar = '█' * (pct // 5)
-        print(f"  {lang:<16} {count:>4} files  {bar} {pct}%")
-    remaining = len(langs) - len(shown)
-    if remaining > 0:
-        print(f"  ... and {remaining} more")
-
-
-def _render_quality_pulse(summary: Dict[str, Any], hotspots: List[Dict[str, Any]]) -> None:
-    if not summary:
-        return
-    avg_q = summary.get('avg_quality_score')
-    avg_cx = summary.get('avg_complexity')
-    critical = sum(1 for h in hotspots if h.get('quality_score', 100) < 70)
-    warning = sum(1 for h in hotspots if 70 <= h.get('quality_score', 100) < 85)
-
-    if avg_q is None:
-        return
-
-    if avg_q >= 90:
-        icon = '✅'
-    elif avg_q >= 75:
-        icon = '⚠️ '
-    else:
-        icon = '❌'
-
-    parts = [f"{avg_q}/100 avg quality"]
-    if avg_cx is not None and avg_cx > 0:
-        parts.append(f"avg complexity {avg_cx:.1f}")
-    if critical:
-        parts.append(f"{critical} critical file(s)")
-    elif warning:
-        parts.append(f"{warning} warning file(s)")
-    else:
-        parts.append("no hotspots")
-
-    print(f"\nQuality   {icon} {' · '.join(parts)}")
-
-
-def _render_hotspots(hotspots: List[Dict[str, Any]], top: int) -> None:
-    if not hotspots:
-        return
-    print(f"\nHotspots  (top {min(len(hotspots), top)} files needing attention)")
-    for h in hotspots[:top]:
-        name = h.get('file', '?')
-        q = h.get('quality_score', '?')
-        issues = h.get('issues', [])
-
-        if isinstance(q, (int, float)):
-            icon = '❌' if q < 70 else '⚠️ '
-        else:
-            icon = '  '
-
-        issue_str = f"  — {', '.join(issues)}" if issues else ''
-        print(f"  {icon} {name}  {q}/100{issue_str}")
-        print(f"       → reveal {name}")
-
-
-def _render_complex_functions(fns: List[Dict[str, Any]], base_path: Optional[Path] = None) -> None:
-    if not fns:
-        return
-    print(f"\nComplex functions  (complexity > 9)")
-    for fn in fns:
-        name = fn.get('name', '?')
-        cx = fn.get('complexity', '?')
-        loc = fn.get('file', '')
-        line = fn.get('line', '')
-        lc = fn.get('line_count', '')
-
-        # Show relative path if possible
-        if loc and base_path:
-            try:
-                loc = Path(loc).relative_to(base_path).as_posix()
-            except ValueError:
-                pass
-
-        icon = '❌' if isinstance(cx, int) and cx >= 20 else '⚠️ '
-        lc_str = f"  {lc}L" if lc else ''
-        loc_str = f"  {loc}:{line}" if loc else ''
-        print(f"  {icon} {name}  cx:{cx}{lc_str}{loc_str}")
-
-
-def _render_architecture(
-    arch: Dict[str, Any],
-    complex_fns: List[Dict[str, Any]],
-    top: int,
-    base_path: Optional[Path] = None,
-) -> None:
-    """Render architectural overview: entry points, core abstractions, components."""
-    fan_in = arch.get('fan_in', [])
-    entrypoints = arch.get('entrypoints', [])
-    components = arch.get('components', [])
-    circular_count = arch.get('circular_count', 0)
-    unsupported = arch.get('unsupported_extensions', {})
-
-    if not fan_in and not entrypoints and not components and not unsupported:
-        return
-
-    print("\nArchitecture")
-
-    from reveal.adapters.imports import coverage_warning_line
-    warning = coverage_warning_line(unsupported)
-    if warning:
-        print(f"  {warning}")
-
-    if not fan_in and not entrypoints and not components:
-        return
-
-    parts = [f"circulars: {circular_count}"]
-    if complex_fns:
-        sample = complex_fns[:10]
-        centroid = sum(f.get('complexity', 0) for f in sample) / len(sample)
-        parts.append(f"complexity centroid: {centroid:.1f}")
-    print(f"  {'  ·  '.join(parts)}")
-
-    live_eps = [
-        e for e in entrypoints
-        if e.get('fan_out', 0) > 0
-        and not _is_test_file(e['file'])
-        and Path(e['file']).name != '__init__.py'
-    ]
-    if live_eps:
-        print(f"  Entry points  ({len(entrypoints)} fan-in=0, {len(live_eps)} active)")
-        for ep in live_eps[:top]:
-            rel = _relpath(ep['file'], base_path)
-            print(f"    {rel:<50}  fan-out {ep['fan_out']}")
-
-    core = [e for e in fan_in if e.get('fan_in', 0) > 0][:5]
-    if core:
-        print("  Core abstractions  (most imported)")
-        for e in core:
-            rel = _relpath(e['file'], base_path)
-            print(f"    {rel:<50}  fan-in {e['fan_in']}")
-
-    if components:
-        print(f"  Components  ({len(components)} directories, by cohesion)")
-        for c in components[:top]:
-            rel = _relpath(c['component'], base_path)
-            cohesion = c['cohesion']
-            bar = '█' * int(cohesion * 10) + '░' * (10 - int(cohesion * 10))
-            print(f"    {rel:<42}  {cohesion:.2f}  {bar}  {c['files']} files")
-
-
-def _is_test_file(file_str: str) -> bool:
-    """Return True if file looks like a test file."""
-    name = Path(file_str).name
-    path_norm = file_str.replace('\\', '/')
-    return name.startswith('test_') or name.endswith('_test.py') or '/test' in path_norm
-
-
-def _relpath(file_str: str, base_path: Optional[Path]) -> str:
-    """Return path relative to base_path if possible, else the original string."""
-    if base_path:
-        try:
-            return Path(file_str).relative_to(base_path).as_posix()
-        except ValueError:
-            pass
-    return file_str
-
-
-def _render_git_log(history: List[Dict[str, Any]], foreign_root: Optional[str] = None) -> None:
-    if not history:
-        return
-    print("\nRecent changes")
-    if foreign_root:
-        print(f"  ⚠ this directory has no .git of its own — history is from the enclosing repo {foreign_root}")
-    for commit in history:
-        ts = commit.get('timestamp')
-        age = _age_label(ts)
-        msg = commit.get('message', '').strip()
-        sha = commit.get('hash', '')[:7]
-        # Truncate long messages
-        if len(msg) > 55:
-            msg = msg[:52] + '...'
-        age_str = f"{age:<8}" if age else ''
-        print(f"  {age_str}  {msg}  [{sha}]")
-
-
-def _render_next_steps() -> None:
-    print("\nNext steps")
-    print("  reveal hotspots .                    # Full hotspot breakdown")
-    print("  reveal check .                       # Run quality rules")
-    print("  reveal deps .                        # Dependency graph")
-    print("  reveal 'imports://.?rank=fan-in'     # Full fan-in ranking")
-    print("  reveal 'imports://.?entrypoints'     # All entry points")
-    print("  reveal pack .                        # Agent context snapshot")
-    print()
+    OverviewRenderer.render_structure(result, format=args.format, top=top)

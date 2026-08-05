@@ -330,6 +330,7 @@ class HelpAdapter(ResourceAdapter):
         'markdown': 'adapters/MARKDOWN_GUIDE.md',
         'mysql': 'adapters/MYSQL_ADAPTER_GUIDE.md',
         'nginx': 'adapters/NGINX_GUIDE.md',
+        'overview': 'adapters/OVERVIEW_ADAPTER_GUIDE.md',
         'patches': 'adapters/PATCHES_ADAPTER_GUIDE.md',
         'python': 'adapters/PYTHON_ADAPTER_GUIDE.md',
         # 'python-guide' (not 'python') is the canonical topic below — pre-dates
@@ -1163,7 +1164,7 @@ class HelpAdapter(ResourceAdapter):
             'clusters': [
                 {
                     'name': 'Code Analysis',
-                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots', 'deps', 'architecture'],
+                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots', 'deps', 'architecture', 'overview'],
                     'pairs': [
                         ('ast', 'calls', 'structure feeds call-graph queries'),
                         ('ast', 'diff', 'compare element complexity across versions'),
@@ -1184,6 +1185,8 @@ class HelpAdapter(ResourceAdapter):
                         ('deps', 'imports', 'dependency dashboard is composed entirely from imports:// queries'),
                         ('architecture', 'imports', 'entry points/core abstractions/cycles feed the architecture brief'),
                         ('architecture', 'ast', 'complexity ranking feeds the high-complexity-entry risk'),
+                        ('overview', 'stats', 'dashboard hotspots/quality pulse draw on the same quality score'),
+                        ('overview', 'git', 'recent-activity section is a git:// log query'),
                     ],
                 },
                 {

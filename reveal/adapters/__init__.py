@@ -40,6 +40,7 @@ from .contracts import ContractsAdapter
 from .hotspots import HotspotsAdapter
 from .deps import DepsAdapter
 from .architecture import ArchitectureAdapter
+from .overview import OverviewAdapter
 
 # Optional adapters (require extra dependencies)
 try:
