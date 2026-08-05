@@ -1164,7 +1164,7 @@ class HelpAdapter(ResourceAdapter):
             'clusters': [
                 {
                     'name': 'Code Analysis',
-                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots', 'deps', 'architecture', 'overview'],
+                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots', 'deps', 'architecture', 'overview', 'testability'],
                     'pairs': [
                         ('ast', 'calls', 'structure feeds call-graph queries'),
                         ('ast', 'diff', 'compare element complexity across versions'),
@@ -1187,6 +1187,7 @@ class HelpAdapter(ResourceAdapter):
                         ('architecture', 'ast', 'complexity ranking feeds the high-complexity-entry risk'),
                         ('overview', 'stats', 'dashboard hotspots/quality pulse draw on the same quality score'),
                         ('overview', 'git', 'recent-activity section is a git:// log query'),
+                        ('testability', 'patches', 'testability joins the same patch scan against production boundary fan-out'),
                     ],
                 },
                 {

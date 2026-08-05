@@ -1,4 +1,10 @@
-"""reveal testability - correlate patch pressure with production boundaries."""
+"""reveal testability - correlate patch pressure with production boundaries.
+
+Thin argparse shim over the testability:// adapter (BACK-901/BACK-959);
+render logic and test-path resolution live in
+reveal/adapters/testability.py. Internal names are re-exported here for
+backward compatibility with existing callers/tests.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +13,16 @@ import json
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import List
+
+from reveal.adapters.testability import (  # noqa: F401 - re-exported for back-compat
+    TestabilityAdapter,
+    TestabilityRenderer,
+    _render_boundary_hotspots,
+    _render_patch_hotspots,
+    _render_report,
+    _resolve_test_paths,
+)
 
 
 def create_testability_parser() -> argparse.ArgumentParser:
@@ -69,136 +84,32 @@ def run_testability(args: Namespace) -> None:
         print(f"reveal testability: path not found: {path}", file=sys.stderr)
         sys.exit(1)
 
-    test_paths = _resolve_test_paths(path, getattr(args, 'tests', None))
-    if not test_paths:
+    tests: List[str] | None = getattr(args, 'tests', None)
+    query_parts = [
+        f'top={max(0, int(args.top))}',
+        f'min_patches={max(1, int(args.min_patches))}',
+        f'min_categories={max(1, int(args.min_categories))}',
+        f'include_unresolved={"true" if getattr(args, "include_unresolved", False) else "false"}',
+    ]
+    if tests:
+        query_parts.append(f'tests={",".join(tests)}')
+    query = '&'.join(query_parts)
+
+    try:
+        result = TestabilityAdapter(str(path), query).get_structure()
+    except ValueError:
         print(
             "reveal testability: no tests found. Pass --tests <path>.",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    from reveal.testability.report import build_testability_report
-    from reveal.utils.path_utils import detect_non_python_language
-
-    report = build_testability_report(
-        str(path),
-        [str(p) for p in test_paths],
-        top=max(0, int(args.top)),
-        min_patches=max(1, int(args.min_patches)),
-        min_categories=max(1, int(args.min_categories)),
-        include_unresolved=bool(getattr(args, 'include_unresolved', False)),
-    )
-
-    # When no patches were found, check whether the test suite is non-Python
-    # (patch pressure is Python-only) so the renderer can explain the silence.
-    if report.get('summary', {}).get('total_patch_uses', 0) == 0:
-        lang = detect_non_python_language(test_paths[0])
-        if lang:
-            note = (
-                f'patch pressure not computed for {lang} test suites — '
-                "`reveal testability`'s boundary-profile pipeline is Python-only."
-            )
-            if lang in ('TypeScript', 'JavaScript'):
-                note += (
-                    ' For JS/TS mock pressure use `reveal patches://<tests>` '
-                    '(jest/vitest supported).'
-                )
-            report['_patch_note'] = note
-
     if args.format == 'json':
         from reveal.utils.results import add_cli_contract_fields
         print(json.dumps(
-            add_cli_contract_fields(report, result_type='testability', source=path),
+            add_cli_contract_fields(result, result_type='testability', source=path),
             indent=2, default=str,
         ))
         return
 
-    _render_report(report)
-
-
-def _resolve_test_paths(src_path: Path, tests: List[str] | None) -> List[Path]:
-    if tests:
-        return [Path(t).expanduser().resolve() for t in tests if Path(t).expanduser().exists()]
-
-    roots = []
-    candidates = []
-    if src_path.is_dir():
-        candidates.append(src_path)
-        candidates.append(src_path.parent)
-    else:
-        candidates.append(src_path.parent)
-
-    for root in candidates:
-        for name in ('tests', 'test', 'spec'):
-            candidate = root / name
-            if candidate.exists():
-                roots.append(candidate.resolve())
-    return sorted(set(roots))
-
-
-def _render_report(report: Dict[str, Any]) -> None:
-    print(f"Testability: {report.get('source')}")
-    tests = ', '.join(report.get('tests', []))
-    print(f"Tests: {tests}")
-    print("-" * 50)
-    summary = report.get('summary', {})
-    print(
-        f"Patch uses: {summary.get('total_patch_uses', 0)}  "
-        f"Patch targets: {summary.get('total_patch_targets', 0)}"
-    )
-    print()
-
-    _render_patch_hotspots(report.get('patch_hotspots', []), note=report.get('_patch_note', ''))
-    _render_boundary_hotspots(report.get('boundary_hotspots', []))
-
-    print("Summary")
-    print(f"  {summary.get('patch_groups_reported', 0)} patch hotspot(s) reported")
-    print(f"  {summary.get('boundary_profiles_reported', 0)} boundary hotspot(s) reported")
-
-
-def _render_patch_hotspots(rows: List[Dict[str, Any]], note: str = '') -> None:
-    print("Production Patch Hotspots")
-    if not rows:
-        if note:
-            print(f"  {note}")
-        else:
-            print("  none above threshold")
-        print()
-        return
-    for row in rows:
-        print()
-        print(f"  {row.get('key')}")
-        print(
-            f"    patched {row.get('patch_count', 0)} times across "
-            f"{row.get('test_count', 0)} test(s)"
-        )
-        categories = row.get('boundary_categories') or []
-        if categories:
-            print(f"    boundary categories: {', '.join(categories)}")
-        profiles = row.get('related_profiles') or []
-        if profiles:
-            print("    related production functions:")
-            for profile in profiles[:3]:
-                print(
-                    f"      {profile.get('file')}::{profile.get('function')} "
-                    f"(cx {profile.get('complexity')}, line {profile.get('line')})"
-                )
-        print(f"    suggestion: {row.get('suggestion')}")
-    print()
-
-
-def _render_boundary_hotspots(rows: List[Dict[str, Any]]) -> None:
-    print("Boundary Fan-Out Hotspots")
-    if not rows:
-        print("  none above threshold")
-        print()
-        return
-    for row in rows:
-        print()
-        print(f"  {row.get('file')}::{row.get('function')}")
-        print(f"    complexity: {row.get('complexity')}  lines: {row.get('lines')}")
-        print(f"    categories: {', '.join(row.get('categories', []))}")
-        if row.get('patch_count'):
-            print(f"    related patch pressure: {row.get('patch_count')} patches")
-        print(f"    suggestion: {row.get('suggestion')}")
-    print()
+    _render_report(result)

@@ -29,6 +29,11 @@ reveal 'patches://tests?group=target&limit=20'
 reveal testability src --tests tests
 reveal testability src --tests tests --top 20
 reveal testability src --tests tests --format json
+
+# testability:// is also a queryable URI in its own right (BACK-959)
+reveal 'testability://src'
+reveal 'testability://src?tests=tests,integration_tests'
+reveal 'testability://src?top=10'
 ```
 
 Read the output as a ranked review queue:

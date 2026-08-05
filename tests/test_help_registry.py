@@ -24,6 +24,10 @@ _INTENTIONALLY_EXCLUDED = {
     'INDEX.md': 'table-of-contents meta-file, not standalone content',
     'README.md': 'mirrors top-level package README, not a guide',
     'development/WINDOWS_SIGNING.md': 'internal signing cert workflow, not a user guide',
+    'adapters/TESTABILITY_ADAPTER_GUIDE.md': (
+        "V024 pointer stub only — canonical content is guides/TESTABILITY_GUIDE.md, "
+        "already reachable via STATIC_HELP['testability']; not a second help:// route"
+    ),
 }
 
 _DOCS_ROOT = Path(__file__).parent.parent / 'reveal' / 'docs'
