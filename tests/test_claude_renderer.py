@@ -632,55 +632,6 @@ class TestClaudeRenderer:
         assert '[list with 10 items]' in captured.out
         assert '[dict with 10 items]' in captured.out
 
-    def test_render_element_with_content(self, capsys):
-        """Test render_element with content field."""
-        from reveal.adapters.claude.renderer import ClaudeRenderer
-
-        result = {
-            'content': 'This is the main content'
-        }
-
-        ClaudeRenderer.render_element(result, format='text')
-        captured = capsys.readouterr()
-
-        assert 'This is the main content' in captured.out
-
-    def test_render_element_without_content(self, capsys):
-        """Test render_element without content field."""
-        from reveal.adapters.claude.renderer import ClaudeRenderer
-
-        result = {
-            'field1': 'value1',
-            'field2': 'value2',
-            'adapter': 'claude',  # Should be skipped
-            'uri': 'claude://test',  # Should be skipped
-            'timestamp': '2024-01-01'  # Should be skipped
-        }
-
-        ClaudeRenderer.render_element(result, format='text')
-        captured = capsys.readouterr()
-
-        assert 'field1: value1' in captured.out
-        assert 'field2: value2' in captured.out
-        assert 'adapter' not in captured.out
-        assert 'uri' not in captured.out
-        assert 'timestamp' not in captured.out
-
-    def test_render_element_json_format(self, capsys):
-        """Test render_element with JSON format."""
-        from reveal.adapters.claude.renderer import ClaudeRenderer
-
-        result = {
-            'field1': 'value1',
-            'field2': 'value2'
-        }
-
-        ClaudeRenderer.render_element(result, format='json')
-        captured = capsys.readouterr()
-
-        # Should render as JSON
-        assert 'field1' in captured.out
-        assert 'field2' in captured.out
 
     def test_render_error(self, capsys):
         """Test render_error outputs to stderr."""

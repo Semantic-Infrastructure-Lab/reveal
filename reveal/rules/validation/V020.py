@@ -92,9 +92,16 @@ class V020(BaseRule):
         adapter_file: Path,
     ) -> List[Detection]:
         """Check a single adapter/renderer pair for contract compliance."""
+        from ...adapters.base import ResourceAdapter
+
         detections: List[Detection] = []
         supports_elements = hasattr(renderer_class, 'render_element')
-        has_get_element = hasattr(adapter_class, 'get_element')
+        # BACK-908: hasattr() alone is always True — ResourceAdapter defines a
+        # no-op get_element() that every adapter inherits, so this must check
+        # for a real override, not mere attribute presence.
+        _missing = object()
+        raw_get_element = getattr(adapter_class, 'get_element', _missing)
+        has_get_element = raw_get_element is not _missing and raw_get_element is not ResourceAdapter.get_element
         has_get_structure = hasattr(adapter_class, 'get_structure')
         class_line = self._find_line_matching(adapter_file, f'class {adapter_class.__name__}')
 

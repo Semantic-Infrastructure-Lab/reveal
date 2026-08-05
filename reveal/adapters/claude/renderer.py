@@ -140,20 +140,6 @@ class ClaudeRenderer(TypeDispatchRenderer):
                 else:
                     print(f"{key}: {value}")
 
-    @classmethod
-    def render_element(cls, result: dict, format: str = 'text') -> None:
-        """Render specific Claude element (message, tool call, etc.)."""
-        if cls.should_render_json(format):
-            cls.render_json(result)
-            return
-
-        if 'content' in result:
-            print(result['content'])
-        else:
-            for key, value in result.items():
-                if key not in ('adapter', 'uri', 'timestamp'):
-                    print(f"{key}: {value}")
-
     @staticmethod
     def render_error(error: Exception) -> None:
         """Render user-friendly errors."""

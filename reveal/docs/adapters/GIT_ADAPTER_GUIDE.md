@@ -816,6 +816,8 @@ that shares are limited to the fetched history. Run `git fetch --unshallow` firs
 | `ref` | string | branch/tag/commit | Override the starting ref — alias for `@ref` in the URI (e.g., `?ref=v0.63.0`) |
 | `merges` | string | `1` | Include merge commits in ownership walk (default: excluded) |
 | `bucket` | string | `week`, `month` | Modifier on `type=history`: bucket commits into periods (commit_count + distinct author_count per period) instead of a flat list |
+| `ignore` | string | comma-separated hash prefixes | For `type=blame`: suppress these commits (any prefix length, 4–7 chars typical) |
+| `raw` | string | `1` | For file-at-ref: return raw file contents instead of structural view |
 
 ### Filter Parameters
 
