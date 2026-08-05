@@ -1,12 +1,100 @@
 """Dart analyzer using tree-sitter."""
 
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from ..core import node_children as _children
 from ..core import node_next_sibling as _next_sibling
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
+
+
+def _dart_cascade_callee(cascade_section, get_text: Callable) -> Optional[str]:
+    for sib in _children(cascade_section):
+        if _zero_arg(sib, 'kind') == 'cascade_selector':
+            text = get_text(sib).strip()
+            return text or None
+    return None
+
+
+def _dart_selector_index(siblings, target_start) -> Optional[int]:
+    # Node equality isn't reliable across the tree-sitter 1.x binding
+    # (BACK-573), so locate a selector's position among its own siblings
+    # by matching start_byte instead of identity/`in`.
+    for i, sib in enumerate(siblings):
+        if _zero_arg(sib, 'kind') == 'selector' and _zero_arg(sib, 'start_byte') == target_start:
+            return i
+    return None
+
+
+def _dart_is_bang_selector(node) -> bool:
+    kids = _children(node)
+    return len(kids) == 1 and _zero_arg(kids[0], 'kind') == '!'
+
+
+def _dart_skip_bang_backward(siblings, start_idx: int) -> int:
+    j = start_idx
+    while j >= 0 and _zero_arg(siblings[j], 'kind') == 'selector':
+        if not _dart_is_bang_selector(siblings[j]):
+            break
+        j -= 1
+    return j
+
+
+def _dart_qualifier_identifier(qual_node, get_text: Callable) -> Optional[str]:
+    for sub in _children(qual_node):
+        if _zero_arg(sub, 'kind') == 'identifier':
+            return get_text(sub).strip()
+    return None
+
+
+def _dart_qualifier_in(node, get_text: Callable, depth: int = 0) -> Optional[str]:
+    # A `.foo`/`?.foo` qualifier is USUALLY wrapped in its own 'selector'
+    # node (the common case, siblings of a plain identifier/this primary
+    # at container top level) -- but `super.foo` puts it as a BARE direct
+    # sibling with no 'selector' wrapper at all (verified live:
+    # `super.plainInit()` has NO 'selector' around its
+    # 'unconditional_assignable_selector'), and any unary-prefixed call
+    # (`await x.foo()`/`await super.foo()`) nests the WHOLE receiver+
+    # qualifier chain one level deeper inside the unary node
+    # (`await_expression`'s own children are `[await, super,
+    # unconditional_assignable_selector]` -- no 'selector' wrapper there
+    # either). Both found via the Dart calls-recall-oracle measurement
+    # (BACK-730): `super.initialize(...)`/`await super.initialize(...)`
+    # (a common override-delegation idiom) were silently dropped, not
+    # just misattributed. Recurses into a wrapper node's LAST child
+    # (bounded depth) to find a nested qualifier, matching Dart's actual
+    # "primary + trailing selector-like suffixes, sometimes nested one
+    # level under a prefix keyword" shape rather than assuming one fixed
+    # depth.
+    if depth > 4:
+        return None
+    kind = _zero_arg(node, 'kind')
+    if kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
+        return _dart_qualifier_identifier(node, get_text)
+    if kind == 'selector':
+        kids = _children(node)
+        if len(kids) == 1:
+            return _dart_qualifier_in(kids[0], get_text, depth + 1)
+        return None
+    if kind in ('argument_part', 'arguments', 'identifier', 'this', 'super'):
+        return None
+    kids = _children(node)
+    return _dart_qualifier_in(kids[-1], get_text, depth + 1) if kids else None
+
+
+def _dart_qualifier_and_receiver(
+    qualifier_node, siblings, j: int, get_text: Callable,
+) -> Optional[str]:
+    method = _dart_qualifier_identifier(qualifier_node, get_text)
+    if not method:
+        return None
+    k = _dart_skip_bang_backward(siblings, j - 1)
+    if k >= 0 and _zero_arg(siblings[k], 'kind') in ('identifier', 'this', 'super'):
+        receiver = get_text(siblings[k]).strip()
+        if receiver:
+            return f"{receiver}.{method}"
+    return method
 
 
 @register('.dart', name='Dart', icon='🎯')
@@ -183,13 +271,10 @@ class DartAnalyzer(TreeSitterAnalyzer):
         if parent is None:
             return None
         parent_kind = _zero_arg(parent, 'kind')
+        get_text = self._get_node_text
 
         if parent_kind == 'cascade_section':
-            for sib in _children(parent):
-                if _zero_arg(sib, 'kind') == 'cascade_selector':
-                    text = self._get_node_text(sib).strip()
-                    return text or None
-            return None
+            return _dart_cascade_callee(parent, get_text)
 
         if parent_kind != 'selector':
             return None
@@ -199,67 +284,12 @@ class DartAnalyzer(TreeSitterAnalyzer):
             return None
         siblings = _children(container)
 
-        # Node equality isn't reliable across the tree-sitter 1.x binding
-        # (BACK-573), so locate `parent`'s position among its own siblings
-        # by matching start_byte instead of identity/`in`.
         target_start = _zero_arg(parent, 'start_byte')
-        idx = None
-        for i, sib in enumerate(siblings):
-            if _zero_arg(sib, 'kind') == 'selector' and _zero_arg(sib, 'start_byte') == target_start:
-                idx = i
-                break
+        idx = _dart_selector_index(siblings, target_start)
         if idx is None or idx == 0:
             return None
 
-        def _is_bang_selector(node) -> bool:
-            kids = _children(node)
-            return len(kids) == 1 and _zero_arg(kids[0], 'kind') == '!'
-
-        def _qualifier_identifier(qual_node) -> Optional[str]:
-            for sub in _children(qual_node):
-                if _zero_arg(sub, 'kind') == 'identifier':
-                    return self._get_node_text(sub).strip()
-            return None
-
-        def _qualifier_in(node, depth: int = 0) -> Optional[str]:
-            # A `.foo`/`?.foo` qualifier is USUALLY wrapped in its own
-            # 'selector' node (the common case, siblings of a plain
-            # identifier/this primary at container top level) -- but
-            # `super.foo` puts it as a BARE direct sibling with no
-            # 'selector' wrapper at all (verified live: `super.plainInit()`
-            # has NO 'selector' around its 'unconditional_assignable_
-            # selector'), and any unary-prefixed call (`await
-            # x.foo()`/`await super.foo()`) nests the WHOLE receiver+
-            # qualifier chain one level deeper inside the unary node
-            # (`await_expression`'s own children are `[await, super,
-            # unconditional_assignable_selector]` -- no 'selector' wrapper
-            # there either). Both found via the Dart calls-recall-oracle
-            # measurement (BACK-730): `super.initialize(...)`/`await
-            # super.initialize(...)` (a common override-delegation idiom)
-            # were silently dropped, not just misattributed. Recurses into
-            # a wrapper node's LAST child (bounded depth) to find a nested
-            # qualifier, matching Dart's actual "primary + trailing
-            # selector-like suffixes, sometimes nested one level under a
-            # prefix keyword" shape rather than assuming one fixed depth.
-            if depth > 4:
-                return None
-            kind = _zero_arg(node, 'kind')
-            if kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
-                return _qualifier_identifier(node)
-            if kind == 'selector':
-                kids = _children(node)
-                if len(kids) == 1:
-                    return _qualifier_in(kids[0], depth + 1)
-                return None
-            if kind in ('argument_part', 'arguments', 'identifier', 'this', 'super'):
-                return None
-            kids = _children(node)
-            return _qualifier_in(kids[-1], depth + 1) if kids else None
-
-        j = idx - 1
-        while j >= 0 and _zero_arg(siblings[j], 'kind') == 'selector' and _is_bang_selector(siblings[j]):
-            j -= 1
-
+        j = _dart_skip_bang_backward(siblings, idx - 1)
         if j < 0:
             return None
 
@@ -271,17 +301,7 @@ class DartAnalyzer(TreeSitterAnalyzer):
             if len(prior_kids) == 1 and _zero_arg(prior_kids[0], 'kind') in (
                 'unconditional_assignable_selector', 'conditional_assignable_selector',
             ):
-                method = _qualifier_identifier(prior_kids[0])
-                if not method:
-                    return None
-                k = j - 1
-                while k >= 0 and _zero_arg(siblings[k], 'kind') == 'selector' and _is_bang_selector(siblings[k]):
-                    k -= 1
-                if k >= 0 and _zero_arg(siblings[k], 'kind') in ('identifier', 'this', 'super'):
-                    receiver = self._get_node_text(siblings[k]).strip()
-                    if receiver:
-                        return f"{receiver}.{method}"
-                return method
+                return _dart_qualifier_and_receiver(prior_kids[0], siblings, j, get_text)
             # Some other selector shape precedes this call (e.g. the call is
             # invoked on the result of a preceding call, `compute()?.process()`
             # -- `compute`'s own 'argument_part' selector sits here, not a
@@ -291,21 +311,11 @@ class DartAnalyzer(TreeSitterAnalyzer):
 
         if prior_kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
             # `super.foo()` -- the qualifier is a BARE sibling, no 'selector'
-            # wrapper (see `_qualifier_in`'s docstring above).
-            method = _qualifier_identifier(prior)
-            if not method:
-                return None
-            k = j - 1
-            while k >= 0 and _zero_arg(siblings[k], 'kind') == 'selector' and _is_bang_selector(siblings[k]):
-                k -= 1
-            if k >= 0 and _zero_arg(siblings[k], 'kind') in ('identifier', 'this', 'super'):
-                receiver = self._get_node_text(siblings[k]).strip()
-                if receiver:
-                    return f"{receiver}.{method}"
-            return method
+            # wrapper (see `_dart_qualifier_in`'s comment above).
+            return _dart_qualifier_and_receiver(prior, siblings, j, get_text)
 
         if prior_kind in ('identifier', 'this'):
-            text = self._get_node_text(prior).strip()
+            text = get_text(prior).strip()
             return text or None
 
         # `await x.foo()` / `await super.foo()` -- the receiver+qualifier
@@ -316,4 +326,4 @@ class DartAnalyzer(TreeSitterAnalyzer):
         # sibling) -- bare method name only, same "no receiver available,
         # bare name still resolves" convention as the cascade/computed-
         # target cases above.
-        return _qualifier_in(prior)
+        return _dart_qualifier_in(prior, get_text)
