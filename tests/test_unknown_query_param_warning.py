@@ -76,6 +76,7 @@ def _wired_adapters():
     from reveal.adapters.calls.adapter import CallsAdapter
     from reveal.adapters.patches.adapter import PatchesAdapter
     from reveal.adapters.stats.adapter import StatsAdapter
+    from reveal.adapters.git.adapter import GitAdapter
 
     return {
         'ssl': (SSLAdapter, lambda q: SSLAdapter(f'ssl://example.com?{q}')),
@@ -84,6 +85,7 @@ def _wired_adapters():
         'calls': (CallsAdapter, lambda q: CallsAdapter('.', q)),
         'patches': (PatchesAdapter, lambda q: PatchesAdapter('.', q)),
         'stats': (StatsAdapter, lambda q: StatsAdapter('.', q)),
+        'git': (GitAdapter, lambda q: GitAdapter('.', q)),
     }
 
 

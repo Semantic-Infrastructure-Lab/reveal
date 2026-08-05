@@ -29,8 +29,14 @@ _SCHEMA_QUERY_PARAMS = {
     'email': {'type': 'string', 'description': 'Filter commits by author email (case-insensitive)', 'examples': ['?email=john@example.com', '?email~=@example.com']},
     'message': {'type': 'string', 'description': 'Filter commits by message (supports regex with ~=)', 'examples': ['?message~=bug', '?message=Initial commit']},
     'hash': {'type': 'string', 'description': 'Filter commits by hash prefix', 'examples': ['?hash=a1b2c3d']},
+    'date': {'type': 'string', 'description': 'Filter commits by date — supports >, <, >=, <= with ISO date string. ?since=YYYY-MM-DD is an ergonomic alias for date>=YYYY-MM-DD', 'examples': ['?date>2026-01-01']},
     'ref': {'type': 'string', 'description': 'Override starting ref — alias for @ref in the URI (branch, tag, or commit)', 'examples': ['?type=history&ref=v0.63.0', '?ref=main']},
     'bucket': {'type': 'string', 'description': 'Modifier on type=history: bucket commits into periods (commit_count + distinct author_count per period) instead of a flat list. Works on a file, directory, or the whole repo.', 'values': ['week', 'month'], 'examples': ['?type=history&bucket=month', '?type=history&bucket=week']},
+    'no_merges': {'type': 'string', 'description': 'Set to "1" to exclude merge commits (commits with more than one parent)', 'examples': ['?type=history&no_merges=1']},
+    'since': {'type': 'string', 'description': 'Ergonomic alias for date>=YYYY-MM-DD (rewritten into a date filter)', 'examples': ['?since=2026-01-01']},
+    'ignore': {'type': 'string', 'description': 'For blame: comma-separated commit hash prefixes to suppress', 'examples': ['?type=blame&ignore=69b0093,f5fcac0']},
+    'raw': {'type': 'string', 'description': 'For file-at-ref: "1" returns raw file contents instead of structural view', 'examples': ['?raw=1']},
+    'content~': {'type': 'string', 'description': 'Pickaxe search: only commits where the diff added or removed the given string (regex)', 'examples': ['?content~=TODO']},
 }
 
 def _git_output_type(type_name: str, description: str, extra_props: dict) -> dict:
@@ -317,6 +323,16 @@ class GitAdapter(ResourceAdapter):
         # Initialize result control and filters
         self._initialize_result_control(result_control_parts)
         self._initialize_query_filters(filter_parts)
+
+        # BACK-909: warn on unrecognized params (e.g. ?verbose=1, which isn't a
+        # git:// param). Mixed adapter: skip filter-expression keys (author~=john,
+        # date>=2026-01-01 — these carry an operator char in the raw key) and the
+        # cross-cutting result-control params handled separately.
+        self._warn_unknown_query_params(
+            self.query,
+            skip_filter_keys=True,
+            extra_known_keys={'sort', 'limit', 'offset'},
+        )
 
     @staticmethod
     def _parse_resource_string(resource: str) -> Dict[str, Any]:
