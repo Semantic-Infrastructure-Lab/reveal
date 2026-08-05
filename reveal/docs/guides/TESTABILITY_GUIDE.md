@@ -51,9 +51,22 @@ Read the output as a ranked review queue:
 - `patch("pkg.mod.name")`
 - `mock.patch("pkg.mod.name")`
 - `patch.object(obj, "attr")`
+- `patch.dict(...)`
+- `patch.multiple(target, **kwargs)` — one target per patched attribute
 - `monkeypatch.setattr("pkg.mod.name", value)`
 - `monkeypatch.setattr(obj, "attr", value)`
-- `patch.dict(...)`
+- `monkeypatch.setitem(mapping, key, value)` / `delitem(mapping, key)`
+- `monkeypatch.delattr(obj, "attr")`
+- `monkeypatch.setenv(name, value)` / `delenv(name)`
+
+TypeScript/JavaScript test files (`.test.ts`/`.spec.ts`/`__tests__/`) are
+scanned with tree-sitter and detect `jest.mock`/`vi.mock`,
+`jest.spyOn`/`vi.spyOn`, `jest.fn`/`vi.fn`, and
+`jest.replaceProperty`/`vi.replaceProperty`.
+
+All of the above are measured against an independent ground-truth oracle
+(100% recall on both languages) — see
+[VALIDATION.md](../../../VALIDATION.md).
 
 `reveal testability` joins those patch groups to production function profiles.
 The production side uses a conservative boundary taxonomy:
