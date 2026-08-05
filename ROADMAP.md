@@ -232,21 +232,27 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   react-router/jest — 577 combined call sites) — clean on both, no bug
   found. Detail for both:
   `internal-docs/planning/dogfood-findings/testability-patches-recall-oracle/`.
-- **Next, in priority order.** Import recall, side-effect recall,
-  call-graph recall, and surface/contracts recall (now including its
-  second-corpus pass) are all measured (see Done, above), including the
-  TypeScript/nest import-recall residual — fixed (81.21% → 99.93%) and
-  re-measured and confirmed against nest (super-overlord-0723); it no
-  longer appears in VALIDATION.md's residual table. The remaining confidence
-  gap in this track:
-
-  1. **The production-side boundary-classification join
-     (`reveal/testability/boundaries.py`) is a separate signal from
-     `patches://`'s call-site recall** and wasn't measured by the
-     call-site-recall loops above. It reuses the same
-     `--sideeffects`/`--boundary` taxonomy already measured for 11 languages
-     in the side-effect recall program, so the open question is narrower:
-     does the *join* behave correctly, not the underlying classifier.
+- **The production-side boundary-classification JOIN is now measured too
+  (BACK-974)** — the one gap the call-site-recall loops above named as
+  separate and unmeasured. 1,384 patch/profile join checks across 15 Home
+  Assistant integrations (759 independently resolvable) found and fixed two
+  real defects: a false negative where every patch targeting a package-root
+  `__init__.py` entry point (the highest-volume target shape —
+  `async_setup_entry`/`async_setup`/`async_unload_entry`) silently joined to
+  nothing (49/49 misses), and a false-positive class where an unbounded
+  module-name search matched a coincidental word anywhere in an unrelated
+  target's dotted path (12/14 pre-existing spurious matches). Both fixed in
+  `reveal/testability/boundaries.py`/`report.py`; `tests/test_testability.py`
+  23/23 passing (3 new regression tests). Detail:
+  `internal-docs/planning/dogfood-findings/testability-boundary-join-oracle/`.
+- **Next.** Import recall, side-effect recall, call-graph recall, and
+  surface/contracts recall (now including its second-corpus pass) are all
+  measured (see Done, above), including the TypeScript/nest import-recall
+  residual — fixed (81.21% → 99.93%) and re-measured and confirmed against
+  nest (super-overlord-0723); it no longer appears in VALIDATION.md's
+  residual table. `patches://`/testability's oracle programs (call-site
+  recall for both implemented languages, and now the boundary-join) are all
+  complete — see Done, above.
 
   *Not on this list, deliberately:* `patches://`/testability language breadth
   past Python + TS is filed as an idea rather than committed work — see

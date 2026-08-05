@@ -167,10 +167,23 @@ def _module_matches(target_module: str, source_module: str) -> bool:
         return False
     target_parts = target_module.split('.')
     source_parts = source_module.split('.')
-    for i in range(0, len(target_parts) - len(source_parts) + 1):
-        if target_parts[i:i + len(source_parts)] == source_parts:
+    n = len(source_parts)
+    # Anchor the comparison at the tail of target_module (offset 0), or one
+    # component earlier (offset 1) to allow for an embedded class name between
+    # the module qualifier and the patched symbol (e.g. target_module
+    # "pkg.bridge.HueBridge" vs source_module "bridge"). Matching at
+    # arbitrary earlier offsets (the prior unbounded scan) let an unrelated
+    # ancestor package segment that merely shares a name with a same-rooted
+    # submodule (e.g. source_module "backup" vs target_module
+    # "homeassistant.components.backup.manager.BackupManager", an unrelated
+    # component) produce a false join.
+    for offset in (0, 1):
+        i = len(target_parts) - n - offset
+        if i >= 0 and target_parts[i:i + n] == source_parts:
             return True
-    return target_module.endswith(source_module) or source_module.endswith(target_module)
+    if len(target_parts) <= len(source_parts):
+        return source_parts[-len(target_parts):] == target_parts
+    return False
 
 
 def _suggestion(target: str, categories: List[str], patch_count: int) -> str:

@@ -185,6 +185,87 @@ def test_one():
     assert [Path(row['file']).name for row in related] == ['a.py']
 
 
+def test_report_joins_patch_to_package_root_init_entry_point(tmp_path):
+    _write(tmp_path / 'mypkg' / '__init__.py', '''
+import requests
+
+def async_setup_entry(hass, entry):
+    return requests.get("https://example.com")
+''')
+    _write(tmp_path / 'tests' / 'test_init.py', '''
+from unittest.mock import patch
+
+def test_one():
+    with patch("homeassistant.components.mypkg.async_setup_entry"):
+        pass
+''')
+
+    report = build_testability_report(
+        str(tmp_path / 'mypkg'),
+        [str(tmp_path / 'tests')],
+        min_patches=1,
+        min_categories=1,
+    )
+
+    related = report['patch_hotspots'][0]['related_profiles']
+    assert [Path(row['file']).name for row in related] == ['__init__.py']
+
+
+def test_report_does_not_join_unrelated_local_var_to_package_root_init(tmp_path):
+    _write(tmp_path / 'src' / '__init__.py', '''
+import requests
+
+def use_stream_for_stills(self):
+    return requests.get("https://example.com")
+''')
+    _write(tmp_path / 'tests' / 'test_init.py', '''
+from unittest.mock import patch
+
+def test_one():
+    with patch.object(camera_obj, "use_stream_for_stills"):
+        pass
+''')
+
+    report = build_testability_report(
+        str(tmp_path / 'src'),
+        [str(tmp_path / 'tests')],
+        min_patches=1,
+        min_categories=1,
+        include_unresolved=True,
+    )
+
+    related = report['patch_hotspots'][0]['related_profiles']
+    assert related == []
+
+
+def test_report_does_not_join_coincidental_ancestor_package_word(tmp_path):
+    _write(tmp_path / 'src' / 'backup.py', '''
+import requests
+
+class BackupManager:
+    def async_get_backup(self):
+        return requests.get("https://example.com")
+''')
+    _write(tmp_path / 'tests' / 'test_x.py', '''
+from unittest.mock import patch
+
+def test_one():
+    with patch("homeassistant.components.backup.manager.BackupManager.async_get_backup"):
+        pass
+''')
+
+    report = build_testability_report(
+        str(tmp_path / 'src'),
+        [str(tmp_path / 'tests')],
+        min_patches=1,
+        min_categories=1,
+        include_unresolved=True,
+    )
+
+    related = report['patch_hotspots'][0]['related_profiles']
+    assert related == []
+
+
 def test_create_testability_parser_defaults():
     parser = create_testability_parser()
     args = parser.parse_args([])

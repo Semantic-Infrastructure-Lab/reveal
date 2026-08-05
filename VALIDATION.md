@@ -86,9 +86,19 @@ is a claim we have not yet checked, **not** a claim it is broken.
    frameworks (Excalidraw/vitest, react-router/jest — 577 combined call
    sites) — clean on both, no bug found in reveal itself. Detail for both:
    `internal-docs/planning/dogfood-findings/testability-patches-recall-oracle/`.
-   The production-side boundary-classification join (the taxonomy
-   `reveal testability` joins patch groups against) remains unmeasured by
-   either loop — see that README's "Scope not covered" section.
+   The production-side boundary-classification JOIN (BACK-974): measured
+   against 15 Home Assistant integrations (1,384 patch/profile join checks,
+   759 independently resolvable) and found two real defects, both found+fixed
+   — a false negative affecting every patch targeting a package-root
+   `__init__.py` entry point (49/49 misses; the single highest-volume target
+   shape, since `async_setup_entry`/`async_setup`/`async_unload_entry` all
+   live there) caused by `module_name_from_file()` returning `''` for the
+   scanned root's own `__init__.py`; and a false-positive class where an
+   unbounded module-name search matched a coincidental word anywhere in an
+   unrelated target's dotted path (12/14 pre-existing spurious matches, e.g.
+   a `cloud/backup.py` submodule falsely joining to the unrelated `backup`
+   *component*'s patches). Detail:
+   `internal-docs/planning/dogfood-findings/testability-boundary-join-oracle/`.
 3. **Sample size still varies.** Java's 97.5% includes `db` and `http`
    categories with one oracle instance each, both at 0% recall — the figure
    is carried by env/file/log/sleep. Swift's own sparsest category (`env`)
