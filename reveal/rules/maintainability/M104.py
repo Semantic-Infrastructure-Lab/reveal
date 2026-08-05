@@ -15,13 +15,26 @@ This rule helps identify:
 - Lists that should be centralized constants
 - Duplicated lists across files
 - Lists likely to become outdated
+
+Multi-language: Python is checked via the stdlib `ast` module (its own
+scoring/classification logic below). JS/TS, Go, Rust, and Java are checked
+via tree-sitter through `_m104_treesitter.extract_collections` — a hardcoded
+extension/language list is exactly as stale-prone in a `.go` or `.java` file
+as in a `.py` one (BACK-750), and the classification heuristics
+(_classify_list, _detect_list_risk_factors, _should_skip_collection) already
+operate on plain (name, values) pairs, not ast nodes, so they're reused as-is.
 """
 
 import ast
+from pathlib import Path
 from typing import List, Dict, Any, Optional
+
+from tree_sitter_language_pack import get_parser
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
+from ...core.treesitter_compat import tree_root, ts_parse
+from ._m104_treesitter import extract_collections
 
 
 class M104(BaseRule, ASTParsingMixin):
@@ -31,7 +44,17 @@ class M104(BaseRule, ASTParsingMixin):
     message = "Hardcoded list detected"
     category = RulePrefix.M
     severity = Severity.LOW
-    file_patterns = ['.py']
+    file_patterns = ['.py', '.js', '.jsx', '.mjs', '.ts', '.tsx', '.go', '.rs', '.java']
+
+    # Extension -> tree-sitter-language-pack language name, for the
+    # non-Python check path. `.py` is handled separately via `ast`.
+    _TS_LANGUAGE_BY_EXT = {
+        '.js': 'javascript', '.jsx': 'javascript', '.mjs': 'javascript',
+        '.ts': 'typescript', '.tsx': 'tsx',
+        '.go': 'go',
+        '.rs': 'rust',
+        '.java': 'java',
+    }
 
     # Minimum list size to flag (smaller lists are often intentional)
     MIN_LIST_SIZE = 5
@@ -164,7 +187,18 @@ class M104(BaseRule, ASTParsingMixin):
               file_path: str,
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
-        """Check for hardcoded lists in Python files."""
+        """Check for hardcoded lists/arrays across Python, JS/TS, Go, Rust, Java."""
+        ext = Path(file_path).suffix.lower()
+        if ext == '.py':
+            return self._check_python(file_path, content)
+
+        language = self._TS_LANGUAGE_BY_EXT.get(ext)
+        if language is None:
+            return []
+        return self._check_treesitter(file_path, content, language)
+
+    def _check_python(self, file_path: str, content: str) -> List[Detection]:
+        """Check for hardcoded lists in Python files (ast-based)."""
         tree, detections = self._parse_python_or_skip(content, file_path)
         if tree is None:
             return detections
@@ -179,13 +213,58 @@ class M104(BaseRule, ASTParsingMixin):
 
         return detections
 
-    def _should_skip_list(self, name: str, list_node: ast.List) -> bool:
-        """Check if list should be skipped (too small or stable pattern)."""
-        if len(list_node.elts) < self.MIN_LIST_SIZE:
+    def _check_treesitter(self, file_path: str, content: str, language: str) -> List[Detection]:
+        """Check for hardcoded collection literals via tree-sitter (JS/TS/Go/Rust/Java)."""
+        try:
+            parser = get_parser(language)
+        except Exception:
+            return []
+        tree = ts_parse(parser, content)
+        root = tree_root(tree)
+        if root is None:
+            return []
+
+        content_bytes = content.encode('utf-8')
+        detections = []
+        for name, line, kind, values in extract_collections(language, root, content_bytes):
+            if self._should_skip_collection(name, len(values)):
+                continue
+            classification = self._classify_list(name, values)
+            if classification == 'STABLE':
+                continue
+            risk_reason, classification = self._detect_list_risk_factors(
+                name, values, classification
+            )
+            if not risk_reason and classification == 'OTHER':
+                continue
+            detections.append(self.create_detection(
+                file_path=file_path,
+                line=line,
+                message=f"Hardcoded {kind} '{name}' ({classification})",
+                suggestion=(
+                    "Consider extracting to a constant or deriving dynamically. "
+                    f"{risk_reason or ''}"
+                ),
+                context=self._format_list_sample(values),
+            ))
+        return detections
+
+    def _should_skip_collection(self, name: str, size: int) -> bool:
+        """Check if a named collection should be skipped (too small or stable pattern).
+
+        Language-agnostic: takes an element count rather than an ast node so
+        tree-sitter-derived collections (JS/TS/Go/Rust/Java) can share this
+        check with the Python ast path.
+        """
+        if size < self.MIN_LIST_SIZE:
             return True
 
         name_lower = name.lower()
         return any(pattern in name_lower for pattern in self.STABLE_PATTERNS)
+
+    def _should_skip_list(self, name: str, list_node: ast.List) -> bool:
+        """Check if list should be skipped (too small or stable pattern)."""
+        return self._should_skip_collection(name, len(list_node.elts))
 
     def _detect_list_risk_factors(self, name: str, values: list, classification: str) -> tuple:
         """Derive a risk reason for an already-classified collection.

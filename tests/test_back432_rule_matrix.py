@@ -46,7 +46,6 @@ from reveal.rules.imports.I006 import I006
 from reveal.rules.maintainability.M101 import M101
 from reveal.rules.maintainability.M102 import M102
 from reveal.rules.maintainability.M103 import M103
-from reveal.rules.maintainability.M104 import M104
 from reveal.rules.maintainability.M105 import M105
 from reveal.rules.maintainability.M501 import M501
 from reveal.rules.refactoring.R913 import R913
@@ -551,12 +550,16 @@ class TestPythonOnlyByDesignRulesHonestlySkipNonPython(_TempDirMixin, unittest.T
     M103 (`__init__.py`) and M105 (`reveal/cli/handlers_*.py`) use non-suffix
     file_patterns and are covered separately below, alongside a real bug this
     tranche found in M105's glob pattern.
+
+    M104 was removed from this list (BACK-750): it's no longer Python-only —
+    JS/TS/Go/Rust/Java are now checked via tree-sitter alongside the existing
+    ast-based Python path. See TestM104MultiLanguage in test_M104.py.
     """
 
     PYTHON_ONLY_RULES = [
         B001, B002, B003, B004, B005, B006,
         D005, I004, I006,
-        M102, M104,
+        M102,
         R913,
         T004, T005, T006,
     ]

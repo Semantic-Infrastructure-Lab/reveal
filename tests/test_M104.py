@@ -365,16 +365,13 @@ this is not valid python code at all!!!
         # Should not crash, may return parse error or empty list
         self.assertIsInstance(detections, list)
 
-    # ===== Non-Python Files =====
+    # ===== Non-Python Files: unsupported extensions still skipped =====
 
-    def test_non_python_file_skipped(self):
-        """Non-Python files should be skipped."""
-        content = """
-const ITEMS = ['a', 'b', 'c', 'd', 'e'];
-"""
-        path = self.create_temp_file(content, filename="test.js")
+    def test_unsupported_extension_skipped(self):
+        """Extensions with no tree-sitter mapping (e.g. plain text) are skipped."""
+        content = "ITEMS = a, b, c, d, e\n"
+        path = self.create_temp_file(content, filename="test.txt")
         detections = self.rule.check(path, None, content)
-        # Rule has file_patterns = ['.py'], should skip
         self.assertEqual(len(detections), 0)
 
 
@@ -552,6 +549,134 @@ class TestM104CollectionTypes(unittest.TestCase):
             any('lookup table' in d.message.lower() for d in detections),
             "Dict of set values should trigger the lookup-table detection",
         )
+
+
+class TestM104MultiLanguage(unittest.TestCase):
+    """M104 must catch stale extension/language lists outside Python too
+    (BACK-750) — via tree-sitter, since JS/TS/Go/Rust/Java have no `ast` module.
+    """
+
+    def setUp(self):
+        self.rule = M104()
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def create_temp_file(self, content: str, filename: str) -> str:
+        path = os.path.join(self.temp_dir, filename)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    # ----- JavaScript / TypeScript -----
+
+    def test_js_array_extension_list_flagged(self):
+        content = "const FILE_EXTENSIONS = ['.py', '.js', '.ts', '.go', '.rs'];\n"
+        path = self.create_temp_file(content, "test.js")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('FILE_EXTENSIONS', detections[0].message)
+
+    def test_js_small_array_not_flagged(self):
+        content = "const SMALL = ['.py', '.js', '.ts'];\n"
+        path = self.create_temp_file(content, "test.js")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_js_stable_pattern_not_flagged(self):
+        content = "const OUTPUT_FORMATS = ['text', 'json', 'grep', 'typed', 'xml'];\n"
+        path = self.create_temp_file(content, "test.js")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_ts_typed_array_extension_list_flagged(self):
+        content = "const extensions: string[] = ['.py', '.js', '.ts', '.go', '.rs'];\n"
+        path = self.create_temp_file(content, "test.ts")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('FILE_EXTENSIONS', detections[0].message)
+
+    # ----- Go -----
+
+    def test_go_slice_extension_list_flagged(self):
+        content = (
+            'package main\n'
+            'const Extensions = []string{".py", ".js", ".ts", ".go", ".rs"}\n'
+        )
+        path = self.create_temp_file(content, "test.go")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('Extensions', detections[0].message)
+        self.assertIn('FILE_EXTENSIONS', detections[0].message)
+
+    def test_go_map_not_flagged(self):
+        """A map composite literal is not a stale-list risk the same way; skip it."""
+        content = (
+            'package main\n'
+            'var Lookup = map[string]int{"a": 1, "b": 2, "c": 3, "d": 4, "e": 5}\n'
+        )
+        path = self.create_temp_file(content, "test.go")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_go_short_var_declaration_flagged(self):
+        content = (
+            'package main\n'
+            'func main() {\n'
+            '\textensions := []string{".py", ".js", ".ts", ".go", ".rs"}\n'
+            '\t_ = extensions\n'
+            '}\n'
+        )
+        path = self.create_temp_file(content, "test.go")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    # ----- Rust -----
+
+    def test_rust_array_extension_list_flagged(self):
+        content = 'const EXTS: [&str; 5] = [".py", ".js", ".ts", ".go", ".rs"];\n'
+        path = self.create_temp_file(content, "test.rs")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('FILE_EXTENSIONS', detections[0].message)
+
+    def test_rust_vec_macro_extension_list_flagged(self):
+        content = (
+            'fn main() {\n'
+            '    let extensions = vec![".py", ".js", ".ts", ".go", ".rs"];\n'
+            '}\n'
+        )
+        path = self.create_temp_file(content, "test.rs")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn("vec!", detections[0].message)
+
+    # ----- Java -----
+
+    def test_java_array_initializer_extension_list_flagged(self):
+        content = (
+            'class X {\n'
+            '    static final String[] EXTS = {".py", ".js", ".ts", ".go", ".rs"};\n'
+            '}\n'
+        )
+        path = self.create_temp_file(content, "test.java")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('FILE_EXTENSIONS', detections[0].message)
+
+    def test_java_list_of_extension_list_flagged(self):
+        content = (
+            'class X {\n'
+            '    static final List<String> EXTS = List.of(".py", ".js", ".ts", ".go", ".rs");\n'
+            '}\n'
+        )
+        path = self.create_temp_file(content, "test.java")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('List.of', detections[0].message)
 
 
 if __name__ == '__main__':
