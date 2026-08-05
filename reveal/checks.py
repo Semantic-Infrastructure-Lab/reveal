@@ -37,12 +37,16 @@ def _format_detections_json(path: str, detections: List[Any]) -> None:
         path: File path
         detections: List of Detection objects
     """
+    from reveal.utils.results import add_cli_contract_fields
+
     result = {
         'file': path,
         'detections': [d.to_dict() for d in detections],
         'total': len(detections)
     }
-    print(safe_json_dumps(result))
+    print(safe_json_dumps(
+        add_cli_contract_fields(result, result_type='check', source=path, source_type='file')
+    ))
 
 
 def _format_detections_grep(detections: List[Any]) -> None:

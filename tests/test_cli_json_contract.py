@@ -73,6 +73,44 @@ class TestCliJsonContract(unittest.TestCase):
                 )
 
 
+class TestCheckJsonContract(unittest.TestCase):
+    """BACK-962: check.py's own --format json output lives in reveal/checks.py
+    and reveal/cli/file_checker.py, not cli/commands/check.py (which has zero
+    json.dumps calls and delegates entirely) — so BACK-906's cli/commands/-only
+    sweep and its regression test above never saw these sites. Covered here
+    explicitly rather than widening _COMMANDS_DIR, since these two files are
+    check-specific helpers, not general cli/commands/ output."""
+
+    _REVEAL_DIR = Path(__file__).parent.parent / 'reveal'
+
+    # file (relative to reveal/) -> number of --format json print sites.
+    _EXPECTED_CHECK_JSON_SITES = {
+        'checks.py': 1,
+        'cli/file_checker.py': 2,
+    }
+
+    def test_check_json_dumps_sites_are_enveloped(self):
+        for relpath, expected_sites in self._EXPECTED_CHECK_JSON_SITES.items():
+            with self.subTest(file=relpath):
+                content = (self._REVEAL_DIR / relpath).read_text(encoding='utf-8')
+                dumps_calls = len(re.findall(r'json\.dumps\(', content))
+                dumps_json_calls = len(re.findall(r'safe_json_dumps\(', content))
+                total_calls = dumps_calls + dumps_json_calls
+                self.assertEqual(
+                    total_calls, expected_sites,
+                    f"{relpath}: expected {expected_sites} json.dumps()/"
+                    f"safe_json_dumps() call(s), found {total_calls} — update "
+                    f"_EXPECTED_CHECK_JSON_SITES if this is intentional."
+                )
+                envelope_calls = len(re.findall(r'add_cli_contract_fields\(', content))
+                self.assertGreaterEqual(
+                    envelope_calls, expected_sites,
+                    f"{relpath} has a json output call not wrapped by "
+                    f"add_cli_contract_fields() — `reveal check --format json` must "
+                    f"carry contract_version/type/source/source_type (BACK-962)."
+                )
+
+
 class TestAddCliContractFields(unittest.TestCase):
     """Unit tests for the envelope helper itself."""
 

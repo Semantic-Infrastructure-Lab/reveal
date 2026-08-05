@@ -499,9 +499,10 @@ def _handle_no_files_found(directory: Path, output_format: str) -> None:
         output_format: Output format (json or text)
     """
     import json
+    from reveal.utils.results import add_cli_contract_fields
 
     if output_format == 'json':
-        print(json.dumps({
+        result = {
             "files": [],
             "summary": {
                 "files_checked": 0,
@@ -509,7 +510,11 @@ def _handle_no_files_found(directory: Path, output_format: str) -> None:
                 "total_issues": 0,
                 "exit_code": 0
             }
-        }, indent=2))
+        }
+        print(json.dumps(
+            add_cli_contract_fields(result, result_type='check', source=directory, source_type='directory'),
+            indent=2,
+        ))
     else:
         print(f"No supported files found in {directory}")
 
@@ -669,6 +674,7 @@ def _print_json_output(
     files_checked: int,
     files_with_issues: int,
     total_issues: int,
+    source: Path,
     scope: Optional[ScopeCensus] = None,
 ) -> None:
     """Print JSON output with results and summary.
@@ -681,8 +687,11 @@ def _print_json_output(
         scope: BACK-884 census (files discovered/analyzed/skipped by reason,
             per-language capability tier) — additive top-level key, omitted
             when not supplied.
+        source: Directory that was checked, for the Output Contract envelope
+            (BACK-962).
     """
     import json
+    from reveal.utils.results import add_cli_contract_fields
 
     result = {
         "files": file_results,
@@ -698,7 +707,10 @@ def _print_json_output(
         result["scope"] = scope.to_scope_dict(
             capability_tiers=capability_tiers_for(scope.language_extensions)
         )
-    print(json.dumps(result, indent=2))
+    print(json.dumps(
+        add_cli_contract_fields(result, result_type='check', source=source, source_type='directory'),
+        indent=2,
+    ))
 
 
 def _print_text_summary(
@@ -773,7 +785,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         )
         _print_json_output(
             file_results, len(files_to_check), files_with_issues, total_issues,
-            scope=collection.to_scope_census(),
+            scope=collection.to_scope_census(), source=directory,
         )
     else:
         total_issues, files_with_issues = _check_files_text(
