@@ -44,6 +44,17 @@ class V004(BaseRule):
         # exercised by TestBack334TestCallbacks there (plus JS-side coverage in
         # test_new_analyzers.py and the BACK-530 conformance-fixture audit).
         '_js_test_callbacks': 'test_typescript_react.py',
+        # BACK-915: not a registered analyzer itself, a mixin shared by
+        # JavaScriptAnalyzer/TypeScriptAnalyzer's extends/implements
+        # extraction — exercised by test_typescript_react.py's TS/TSX
+        # interface/extends tests plus plain-JS `class X extends Y` coverage
+        # in test_new_analyzers.py.
+        '_js_class_bases': 'test_typescript_react.py',
+        # BACK-915 slice 4: not a registered analyzer itself, a mixin shared
+        # by JavaScriptAnalyzer/TypeScriptAnalyzer's `new Foo(args)` callee-
+        # name extraction — exercised live by test_typescript_react.py's
+        # `new_expression` tests (BACK-730).
+        '_js_callee_names': 'test_typescript_react.py',
     }
 
     def check(self,
