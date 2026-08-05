@@ -320,6 +320,7 @@ class HelpAdapter(ResourceAdapter):
         'domain': 'adapters/DOMAIN_ADAPTER_GUIDE.md',
         'env': 'adapters/ENV_ADAPTER_GUIDE.md',
         'git': 'adapters/GIT_ADAPTER_GUIDE.md',
+        'hotspots': 'adapters/HOTSPOTS_ADAPTER_GUIDE.md',
         'html': 'adapters/HTML_GUIDE.md',
         'imports': 'adapters/IMPORTS_ADAPTER_GUIDE.md',
         'json': 'adapters/JSON_ADAPTER_GUIDE.md',
@@ -1160,7 +1161,7 @@ class HelpAdapter(ResourceAdapter):
             'clusters': [
                 {
                     'name': 'Code Analysis',
-                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts'],
+                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots'],
                     'pairs': [
                         ('ast', 'calls', 'structure feeds call-graph queries'),
                         ('ast', 'diff', 'compare element complexity across versions'),
@@ -1176,6 +1177,8 @@ class HelpAdapter(ResourceAdapter):
                         ('surface', 'stats', 'attack-surface map + quality score for the same tree'),
                         ('contracts', 'ast', 'architectural seams + full structure for the same classes'),
                         ('contracts', 'calls', 'contracts + who calls into their implementations'),
+                        ('hotspots', 'stats', 'ranked hotspot list draws on the same quality score'),
+                        ('hotspots', 'ast', 'function-level complexity ranking feeds the hotspot list'),
                     ],
                 },
                 {

@@ -8,7 +8,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from reveal.cli.commands.hotspots import (
+from reveal.adapters.hotspots import (
     _build_test_name_index,
     _is_covered,
     _render_file_hotspots,
@@ -17,6 +17,8 @@ from reveal.cli.commands.hotspots import (
     _render_summary,
     _run_file_hotspots,
     _run_function_hotspots,
+)
+from reveal.cli.commands.hotspots import (
     create_hotspots_parser,
     run_hotspots,
 )
@@ -291,9 +293,9 @@ class TestRunHotspots(unittest.TestCase):
     def _make_run(self, file_hotspots=None, fn_hotspots=None):
         """Patch both internal helpers."""
         return (
-            patch('reveal.cli.commands.hotspots._run_file_hotspots',
+            patch('reveal.adapters.hotspots._run_file_hotspots',
                   return_value=file_hotspots or []),
-            patch('reveal.cli.commands.hotspots._run_function_hotspots',
+            patch('reveal.adapters.hotspots._run_function_hotspots',
                   return_value=fn_hotspots or []),
         )
 
@@ -355,8 +357,8 @@ class TestRunHotspots(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as d:
             args = _args(path=d, functions_only=True)
-            with patch('reveal.cli.commands.hotspots._run_file_hotspots') as mock_file:
-                with patch('reveal.cli.commands.hotspots._run_function_hotspots', return_value=[]):
+            with patch('reveal.adapters.hotspots._run_file_hotspots') as mock_file:
+                with patch('reveal.adapters.hotspots._run_function_hotspots', return_value=[]):
                     buf = StringIO()
                     with patch('sys.stdout', buf):
                         run_hotspots(args)
@@ -366,8 +368,8 @@ class TestRunHotspots(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as d:
             args = _args(path=d, files_only=True)
-            with patch('reveal.cli.commands.hotspots._run_file_hotspots', return_value=[]):
-                with patch('reveal.cli.commands.hotspots._run_function_hotspots') as mock_fn:
+            with patch('reveal.adapters.hotspots._run_file_hotspots', return_value=[]):
+                with patch('reveal.adapters.hotspots._run_function_hotspots') as mock_fn:
                     buf = StringIO()
                     with patch('sys.stdout', buf):
                         run_hotspots(args)
@@ -492,8 +494,8 @@ class TestRunHotspotsTestCoverage(unittest.TestCase):
             Path(os.path.join(tests_dir, 'test_x.py')).write_text('def test_my_func(): pass\n')
             fn = _fn_hotspot('my_func', 15)
             args = _args(path=d, format='json')
-            with patch('reveal.cli.commands.hotspots._run_file_hotspots', return_value=[]):
-                with patch('reveal.cli.commands.hotspots._run_function_hotspots', return_value=[fn]):
+            with patch('reveal.adapters.hotspots._run_file_hotspots', return_value=[]):
+                with patch('reveal.adapters.hotspots._run_function_hotspots', return_value=[fn]):
                     buf = StringIO()
                     with patch('sys.stdout', buf):
                         run_hotspots(args)
@@ -511,8 +513,8 @@ class TestRunHotspotsTestCoverage(unittest.TestCase):
             )
             fn = _fn_hotspot('generate', 15, file='src/liquidity_sweep.py')
             args = _args(path=d, format='json')
-            with patch('reveal.cli.commands.hotspots._run_file_hotspots', return_value=[]):
-                with patch('reveal.cli.commands.hotspots._run_function_hotspots', return_value=[fn]):
+            with patch('reveal.adapters.hotspots._run_file_hotspots', return_value=[]):
+                with patch('reveal.adapters.hotspots._run_function_hotspots', return_value=[fn]):
                     buf = StringIO()
                     with patch('sys.stdout', buf):
                         run_hotspots(args)
@@ -523,8 +525,8 @@ class TestRunHotspotsTestCoverage(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as d:
             args = _args(path=d, files_only=True)
-            with patch('reveal.cli.commands.hotspots._run_file_hotspots', return_value=[]):
-                with patch('reveal.cli.commands.hotspots._build_test_name_index') as mock_idx:
+            with patch('reveal.adapters.hotspots._run_file_hotspots', return_value=[]):
+                with patch('reveal.adapters.hotspots._build_test_name_index') as mock_idx:
                     buf = StringIO()
                     with patch('sys.stdout', buf):
                         run_hotspots(args)

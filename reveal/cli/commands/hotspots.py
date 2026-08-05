@@ -1,13 +1,28 @@
-"""reveal hotspots — identify high-complexity, low-quality files and functions."""
+"""reveal hotspots — identify high-complexity, low-quality files and functions.
+
+Thin argparse shim over the hotspots:// adapter (BACK-901/BACK-955); scan/
+render logic lives in reveal/adapters/hotspots.py. Internal names are
+re-exported here for backward compatibility with existing callers/tests.
+"""
 
 import argparse
-import json
-import os
-import re
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, cast
+
+from reveal.adapters.hotspots import (  # noqa: F401 - re-exported for back-compat
+    HotspotsAdapter,
+    HotspotsRenderer,
+    _build_test_name_index,
+    _camel_to_snake,
+    _is_covered,
+    _render_file_hotspots,
+    _render_function_hotspots,
+    _render_report,
+    _render_summary,
+    _run_file_hotspots,
+    _run_function_hotspots,
+)
 
 
 def create_hotspots_parser() -> argparse.ArgumentParser:
@@ -72,219 +87,34 @@ def run_hotspots(args: Namespace) -> None:
     functions_only = getattr(args, 'functions_only', False)
     files_only = getattr(args, 'files_only', False)
 
-    file_hotspots: List[Dict[str, Any]] = []
-    fn_hotspots: List[Dict[str, Any]] = []
+    query = (
+        f'top={top}&min_complexity={min_cx}'
+        f'&functions_only={"true" if functions_only else "false"}'
+        f'&files_only={"true" if files_only else "false"}'
+    )
+    adapter = HotspotsAdapter(str(path), query)
+    result = adapter.get_structure()
 
-    if not functions_only:
-        file_hotspots = _run_file_hotspots(path, top)
-    if not files_only:
-        fn_hotspots = _run_function_hotspots(path, min_cx, top)
-
-    test_index: Optional[Set[str]] = None
-    if not files_only:
-        test_index = _build_test_name_index(path)
-        for fn in fn_hotspots:
-            fn_name = fn.get('name', '')
-            module_name = Path(fn.get('file', '')).stem
-            bare = fn_name.lstrip('_')
-            fn['has_test_hint'] = (
-                fn_name in test_index or bare in test_index or module_name in test_index
-                or any(s.startswith(bare) for s in test_index)
-                or any(
-                    bare.endswith('_' + s) or bare.startswith(s + '_') or ('_' + s + '_') in bare
-                    for s in test_index if len(s) >= 5
-                )
-            )
-
-    report = {
-        'path': str(path),
-        'file_hotspots': file_hotspots,
-        'function_hotspots': fn_hotspots,
-    }
+    file_hotspots = result['file_hotspots']
+    fn_hotspots = result['function_hotspots']
 
     if args.format == 'json':
         from reveal.utils.results import add_cli_contract_fields
+        import json
+        report = {
+            k: v for k, v in result.items()
+            if k not in ('contract_version', 'type', 'source', 'source_type', 'meta')
+        }
         print(json.dumps(
             add_cli_contract_fields(report, result_type='hotspots', source=path),
             indent=2, default=str,
         ))
         return
 
-    _render_report(report, top, test_index=test_index)
+    HotspotsRenderer.render_structure(result, format=args.format, top=top, test_index=adapter.test_index)
 
     # Exit with non-zero if there are serious hotspots (quality < 70 or complexity > 20)
     serious_files = [h for h in file_hotspots if h.get('quality_score', 100) < 70]
     serious_fns = [f for f in fn_hotspots if f.get('complexity', 0) > 20]
     if serious_files or serious_fns:
         sys.exit(1)
-
-
-def _run_file_hotspots(path: Path, top: int) -> List[Dict[str, Any]]:
-    """Fetch file-level hotspots via StatsAdapter."""
-    try:
-        from reveal.adapters.stats import StatsAdapter
-        data = StatsAdapter(str(path), 'hotspots=true').get_structure()
-        hotspots = data.get('hotspots', [])
-        return cast(List[Dict[str, Any]], hotspots[:top])
-    except Exception:
-        return []
-
-
-def _run_function_hotspots(path: Path, min_complexity: int, top: int) -> List[Dict[str, Any]]:
-    """Fetch high-complexity functions via AstAdapter."""
-    try:
-        from reveal.adapters.ast import AstAdapter
-        query = f'complexity>{min_complexity - 1}&sort=-complexity&limit={top}'
-        data = AstAdapter(str(path), query).get_structure()
-        results = data.get('results', data.get('elements', []))
-        return cast(List[Dict[str, Any]], results[:top])
-    except Exception:
-        return []
-
-
-def _render_report(report: Dict[str, Any], top: int, test_index: Optional[Set[str]] = None) -> None:
-    """Render hotspots as human-readable text."""
-    path = report['path']
-    file_hotspots = report['file_hotspots']
-    fn_hotspots = report['function_hotspots']
-
-    print()
-    print(f"Hotspots: {path}")
-    print("━" * 50)
-
-    if not file_hotspots and not fn_hotspots:
-        print("\nNo hotspots found ✅  Code quality looks good.")
-        print()
-        return
-
-    _render_file_hotspots(file_hotspots, top)
-    _render_function_hotspots(fn_hotspots, test_index=test_index)
-    _render_summary(file_hotspots, fn_hotspots)
-
-
-def _render_file_hotspots(hotspots: List[Dict[str, Any]], top: int) -> None:
-    if not hotspots:
-        return
-    print(f"\nFile hotspots (top {min(len(hotspots), top)} by severity):")
-    for h in hotspots:
-        name = h.get('file', '?')
-        quality = h.get('quality_score', '?')
-        score = h.get('hotspot_score', 0)
-        issues = h.get('issues', [])
-        details = h.get('details', {})
-        lines = details.get('lines', '')
-
-        # Quality indicator
-        if isinstance(quality, (int, float)):
-            if quality < 70:
-                icon = '❌'
-            elif quality < 85:
-                icon = '⚠️ '
-            else:
-                icon = '💡'
-        else:
-            icon = '  '
-
-        lines_str = f"  {lines}L" if lines else ''
-        print(f"  {icon} {name}")
-        print(f"      quality: {quality}/100  score: {score}{lines_str}")
-        if issues:
-            print(f"      issues: {', '.join(issues)}")
-
-        # Suggest next command
-        print(f"      → reveal {name}")
-
-
-def _is_covered(name: str, loc: str, test_index: Set[str]) -> bool:
-    module_name = Path(loc).stem if loc else ''
-    bare = name.lstrip('_')
-    return (
-        name in test_index
-        or bare in test_index
-        or module_name in test_index
-        or any(s.startswith(bare) for s in test_index)
-        or any(  # reverse: bare contains an index word, e.g. get_file_blame ← file_blame
-            bare.endswith('_' + s) or bare.startswith(s + '_') or ('_' + s + '_') in bare
-            for s in test_index if len(s) >= 5
-        )
-    )
-
-
-def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Set[str]] = None) -> None:
-    if not fns:
-        return
-    has_coverage_info = test_index is not None
-    print("\nComplex functions:")
-    if has_coverage_info:
-        print("  (✅ = test found  ⚪ = no test found)")
-    for fn in fns:
-        name = fn.get('name', '?')
-        cx = fn.get('complexity', '?')
-        loc = fn.get('file', '')
-        line = fn.get('line', '')
-        line_count = fn.get('line_count', '')
-
-        if isinstance(cx, int) and cx >= 20:
-            icon = '❌'
-        elif isinstance(cx, int) and cx >= 15:
-            icon = '⚠️ '
-        else:
-            icon = '💡'
-
-        if has_coverage_info:
-            cov = '✅' if _is_covered(name, loc, test_index)  else '⚪'  # type: ignore[arg-type]
-            cov_str = f' {cov}'
-        else:
-            cov_str = ''
-
-        loc_str = f"  {loc}" if loc else ''
-        lc_str = f"  ({line_count}L)" if line_count else ''
-        print(f"  {icon}{cov_str} {name}  complexity: {cx}{lc_str}{loc_str}:{line}")
-
-
-def _camel_to_snake(name: str) -> str:
-    return re.sub(r'([A-Z])', lambda m: '_' + m.group(1).lower(), name).lstrip('_')
-
-
-def _build_test_name_index(path: Path) -> Set[str]:
-    """Heuristic: collect base names covered by test files, test_* functions, and Test* classes."""
-    names: Set[str] = set()
-    fn_pattern = re.compile(r'^\s*def\s+test_(\w+)', re.MULTILINE)
-    cls_pattern = re.compile(r'^\s*class\s+Test(\w+)', re.MULTILINE)
-    for candidate in ('tests', 'test', 'spec'):
-        test_dir = path / candidate
-        if not test_dir.is_dir():
-            continue
-        for root, dirs, files in os.walk(str(test_dir)):
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
-            for fname in files:
-                if not fname.endswith('.py'):
-                    continue
-                if fname.startswith('test_'):
-                    names.add(fname[5:-3])  # test_liquidity_sweep.py → liquidity_sweep
-                try:
-                    content = Path(os.path.join(root, fname)).read_text(errors='replace')
-                    names.update(m.group(1) for m in fn_pattern.finditer(content))
-                    # TestClassifyGuard → classify_guard
-                    names.update(_camel_to_snake(m.group(1)) for m in cls_pattern.finditer(content))
-                except OSError:
-                    pass
-    return names
-
-
-def _render_summary(file_hotspots: List[Dict[str, Any]], fn_hotspots: List[Dict[str, Any]]) -> None:
-    critical_files = sum(1 for h in file_hotspots if h.get('quality_score', 100) < 70)
-    critical_fns = sum(1 for f in fn_hotspots if f.get('complexity', 0) > 20)
-    total = len(file_hotspots) + len(fn_hotspots)
-
-    print()
-    if critical_files or critical_fns:
-        parts = []
-        if critical_files:
-            parts.append(f"{critical_files} critical file(s)")
-        if critical_fns:
-            parts.append(f"{critical_fns} critical function(s)")
-        print(f"Summary: {total} hotspot(s) — {', '.join(parts)} need immediate attention ❌")
-    else:
-        print(f"Summary: {total} hotspot(s) — no critical issues, review when convenient ⚠️")
-    print()

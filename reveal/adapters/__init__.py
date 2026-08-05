@@ -37,6 +37,7 @@ from .patches import PatchesAdapter
 from .codex import CodexAdapter
 from .surface import SurfaceAdapter
 from .contracts import ContractsAdapter
+from .hotspots import HotspotsAdapter
 
 # Optional adapters (require extra dependencies)
 try:
