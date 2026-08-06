@@ -528,37 +528,44 @@ def _scan_contracts_go(
 
     Go's contract is the `interface`; its implementers are not declared
     (no `implements` keyword) but *computed* — a struct implements an interface
-    when its method-name set is a superset of the interface's (embedded
-    interfaces resolved transitively). Marker/empty interfaces (0 methods, e.g.
-    `interface{}`) are surfaced as contracts but excluded from implementer
-    matching, since every type would trivially satisfy them. See
-    `nav_contracts_go.py` for the extraction detail.
+    when it has a method of every name+signature the interface declares
+    (embedded interfaces resolved transitively). Signature matching is on
+    syntactic parameter/return type text (BACK-816) — a struct method with
+    the same name but a different return type (the `ObserverVec`/`*Vec`
+    shape from `client_golang`) is correctly excluded, not just name-matched.
+    Marker/empty interfaces (0 methods, e.g. `interface{}`) are surfaced as
+    contracts but excluded from implementer matching, since every type would
+    trivially satisfy them. See `nav_contracts_go.py` for the extraction
+    detail and its disclosed limitations (aliases, generics, cross-package
+    promoted methods).
     """
     from reveal.adapters.ast.nav_contracts_go import scan_file_contracts_go
 
     interfaces: List[Dict[str, Any]] = []
     structs: List[Dict[str, Any]] = []
-    struct_methods: Dict[str, Set[str]] = {}
+    struct_methods: Dict[str, Dict[str, Dict[str, Any]]] = {}
     for file_path in _collect_go_files(path):
         scanned = scan_file_contracts_go(str(file_path))
         interfaces.extend(scanned['interfaces'])
         structs.extend(scanned['structs'])
         for m in scanned['methods']:
-            struct_methods.setdefault(m['recv'], set()).add(m['name'])
+            struct_methods.setdefault(m['recv'], {})[m['name']] = m
 
     iface_by_name = {i['name']: i for i in interfaces}
 
-    def _full_methods(iface: Dict[str, Any], seen: Set[str]) -> Set[str]:
+    def _full_methods(iface: Dict[str, Any], seen: Set[str]) -> Dict[str, Dict[str, Any]]:
         """Interface's own methods plus those of every embedded interface,
-        resolved transitively (cycle-guarded)."""
+        resolved transitively (cycle-guarded). A name already set by the
+        interface itself (or a closer embed) is not overridden."""
         if iface['name'] in seen:
-            return set()
+            return {}
         seen.add(iface['name'])
-        methods: Set[str] = set(iface['methods'])
+        methods: Dict[str, Dict[str, Any]] = {m['name']: m for m in iface['methods']}
         for embed in iface['embeds']:
             embedded = iface_by_name.get(embed.split('.')[-1])
             if embedded is not None:
-                methods |= _full_methods(embedded, seen)
+                for name, sig in _full_methods(embedded, seen).items():
+                    methods.setdefault(name, sig)
         return methods
 
     # Normalise each interface into the shared contract shape (bases empty —
@@ -574,8 +581,13 @@ def _scan_contracts_go(
             if not required:  # marker/empty interface — everything satisfies it
                 continue
             for struct in structs:
-                have = struct_methods.get(struct['name'], set())
-                if required <= have:
+                have = struct_methods.get(struct['name'], {})
+                if all(
+                    name in have
+                    and have[name]['params'] == sig['params']
+                    and have[name]['returns'] == sig['returns']
+                    for name, sig in required.items()
+                ):
                     iface['implementations'].append({
                         'name': struct['name'], 'file': struct['file'], 'line': struct['line'],
                     })

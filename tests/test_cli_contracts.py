@@ -1500,6 +1500,43 @@ class TestScanContractsGo(unittest.TestCase):
         doer = next(p for p in report['protocols'] if p['name'] == 'Doer')
         self.assertIn('Worker', [i['name'] for i in doer['implementations']])
 
+    def test_same_method_name_different_return_type_is_not_an_implementer(self):
+        """BACK-816: name-only matching let a struct method with the same
+        name but an incompatible return type falsely satisfy an interface
+        (the ObserverVec/*Vec shape from client_golang) — `With(l Labels)
+        Observer` is not satisfied by `With(l Labels) *Gauge`."""
+        self._write_go('vec.go', '''\
+            package prometheus
+            type Observer interface {
+            \tObserve(v float64)
+            }
+            type ObserverVec interface {
+            \tWith(l Labels) Observer
+            }
+            type GaugeVec struct{}
+            func (v *GaugeVec) With(l Labels) *Gauge { return nil }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        ov = next(p for p in report['protocols'] if p['name'] == 'ObserverVec')
+        self.assertEqual(ov['implementations'], [])
+        self.assertEqual(report['dataclasses'], [])
+
+    def test_same_method_name_different_param_type_is_not_an_implementer(self):
+        """BACK-816: same principle on the parameter side — `With(l Labels)`
+        is not satisfied by a method named `With` that takes a different
+        parameter type."""
+        self._write_go('vec.go', '''\
+            package prometheus
+            type Setter interface {
+            \tWith(l Labels) error
+            }
+            type Other struct{}
+            func (o *Other) With(n int) error { return nil }
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        setter = next(p for p in report['protocols'] if p['name'] == 'Setter')
+        self.assertEqual(setter['implementations'], [])
+
     def test_go_abstract_only_omits_implementers(self):
         self._write_go('store.go', '''\
             package storage
