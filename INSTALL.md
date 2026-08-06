@@ -73,7 +73,7 @@ Just `pip install reveal-cli` gives you everything:
 - Nginx configs, Dockerfiles
 - Office documents: Word (.docx), Excel (.xlsx), PowerPoint (.pptx)
 - LibreOffice: Writer (.odt), Calc (.ods), Impress (.odp)
-- All other tree-sitter grammars work immediately as a structure-only fallback - no extra installation needed.
+- All other tree-sitter grammars work immediately as a structure-only fallback - no extra installation needed, though the underlying `tree-sitter-language-pack` dependency downloads its grammar bundle from GitHub the first time it's used on a machine — see [Network Requirements](#network-requirements) below.
 
 **URI Adapters (run `reveal --adapters` for the live, current list):**
 - `help://` - Self-documenting help system
@@ -141,6 +141,50 @@ pip install reveal-cli[treesitter]
 # New (recommended)
 pip install reveal-cli
 ```
+
+## Network Requirements
+
+`pip install reveal-cli` needs network access to PyPI as usual. Beyond that,
+reveal itself only makes network calls for explicitly network-oriented
+features (`ssl://`, `domain://`, `nginx` upstream checks, `cpanel://`,
+`mysql://`, the opt-in `L002` link-checker, the `reveal-mcp` server) and a
+daily PyPI update check (disable with `REVEAL_NO_UPDATE_CHECK=1`).
+
+**One thing to plan for in air-gapped or network-restricted environments**:
+the `tree-sitter-language-pack` dependency does not ship every grammar
+inside its wheel. The first time reveal parses a file in a language it
+hasn't parsed before on that machine, the pack downloads an ~18–21MB
+platform-specific grammar bundle from GitHub Releases
+(`github.com` + `release-assets.githubusercontent.com`) and caches it at
+`~/.cache/tree-sitter-language-pack/v<version>/`. After that first fetch,
+parsing that language (and any other language already cached) works fully
+offline.
+
+If your environment can't reach GitHub at runtime (CI sandboxes, air-gapped
+hosts, restrictive egress policies), pre-seed the cache while building your
+base image or container, on a machine that does have network access:
+
+```bash
+pip install reveal-cli
+# Official pre-download API — no need to parse a sample file per language:
+python3 -c "from tree_sitter_language_pack import download; download(['python', 'javascript', 'go'])"
+# or pre-cache every supported grammar (306+ languages, larger image):
+python3 -c "from tree_sitter_language_pack import download_all; download_all()"
+# then copy ~/.cache/tree-sitter-language-pack/ into the restricted image
+```
+
+**Known gap**: if the cache isn't pre-seeded and the download fails, reveal
+currently degrades silently rather than erroring clearly — `reveal file.py`
+falls back to a raw file dump with no warning, and `--explain-file` can
+incorrectly claim full support. `--show-ast` is the only command that
+currently reports the failure. Tracked as `BACK-979`; until fixed, verify
+your environment's cache is warm for every language you need before relying
+on reveal's output in an air-gapped or restricted-network setup.
+
+An egress allowlist for CI needs `pypi.org` + `files.pythonhosted.org` (pip
+install) and `github.com` + `release-assets.githubusercontent.com`
+(grammar bundle) — a PyPI-only allowlist will let install succeed but the
+first real parse will hang or fail.
 
 ## Troubleshooting
 
