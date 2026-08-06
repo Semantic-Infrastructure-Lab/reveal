@@ -830,8 +830,9 @@ class TestRenderHelp(unittest.TestCase):
         self.assertNotIn('Output types:', output)
 
     def test_text_help_rules_renders_categories_and_unambiguous_total(self):
-        """BACK-846: help://rules text view. The total is spelled out because the
-        --rules flag's 'Total: N rules (M opt-in)' uses N = enabled, not the total."""
+        """BACK-846: help://rules text view. The total is spelled out (N rules,
+        E enabled, M opt-in) rather than mislabeling the enabled count as the
+        total — the --rules flag's summary line was later aligned to match."""
         data = {
             'type': 'help_rules',
             'title': 'Rules',

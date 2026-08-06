@@ -135,7 +135,7 @@ Earlier releases (v0.33–v0.91) and full per-item notes: [CHANGELOG.md](CHANGEL
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: **9,400 passing** (v0.101.0) — 22 skipped (intentional: PowerPivot fixtures, network adapters)
+- Test count: **11,681 passing** (v0.113.0+HEAD) — 28 skipped, 2 xfailed (intentional: PowerPivot fixtures, network adapters)
 - Coverage: **~68%** — target 90%+
 - UX query/navigation surface: complete (query operators, field selection, element discovery, `--outline`/`--scope`/`--varflow`/`--calls` range)
 
@@ -325,8 +325,9 @@ reveal 'ast://src/?name~=^[A-Z_]+$'    # all SCREAMING_SNAKE constants
 
 ### BACK-296: `codex://` adapter — Codex CLI session analysis
 
-**Status:** ✅ Phase 1 shipped v0.97.0 — retained as the `claude://`-vs-`codex://` structural reference and Phase 2/3 plan.
+**Status:** ✅ Phase 1/2/3 all shipped (Phase 1 v0.97.0; Phase 2/3 depth — `/tools`, `/shell`, `/errors`, `?tokens`, `/workflow`, `/timeline`, `?goal`, content search — landed by v0.113.0+HEAD, plus `/digest`, `/exchanges`, `/message/<n>`, `skills`, `plugins` beyond the original plan, BACK-943-947). Retained below as the `claude://`-vs-`codex://` structural reference.
 **Design doc:** `internal-docs/design/CODEX_ADAPTER_DESIGN_2026-05-24.md`
+**Live schema:** `reveal help://schemas/codex` — source of truth for current query params/output types, don't hand-maintain the list here.
 
 A peer adapter to `claude://` for navigating [OpenAI Codex CLI](https://github.com/openai/codex) sessions. Codex stores sessions differently from Claude Code — SQLite index + per-session JSONL with a typed event envelope — so this is a new adapter, not a fork of `claude://`.
 
@@ -334,7 +335,8 @@ A peer adapter to `claude://` for navigating [OpenAI Codex CLI](https://github.c
 
 ```bash
 reveal 'codex://'                            # list sessions from SQLite threads table
-reveal 'codex://sessions/?search=auth-refactor'     # fast metadata search (SQLite)
+reveal 'codex://sessions/?filter=auth-refactor'     # fast metadata search (SQLite)
+reveal 'codex://sessions/?search=auth-refactor'     # full-text content search (JSONL scan)
 reveal 'codex://019e5cc5'                    # session overview (turns, tools, tokens, duration)
 reveal 'codex://019e5cc5?last'               # last agent message — recovery pattern
 reveal 'codex://info'                        # resolved paths, DB stats
@@ -344,8 +346,7 @@ reveal 'codex://memories'                    # ~/.codex/memories/ (MEMORY.md + s
 reveal 'codex://rules'                       # ~/.codex/rules/*.rules (Starlark permission rules)
 ```
 
-Phase 2 adds session analysis depth (`/tools`, `/shell`, `/errors`, `?tokens`, content search).  
-Phase 3 adds `/workflow`, `/timeline`, goal tracking, memory pipeline introspection.
+BACK-947 renamed the query params to match `claude://`'s split: old `?search=` (metadata) is now `?filter=`, old `?content=` (full-text) is now `?search=` — the old names now surface reveal's unknown-query-param warning instead of silently matching.
 
 **Key structural differences from `claude://`:**
 

@@ -115,11 +115,14 @@ class TestHandleRulesList(unittest.TestCase):
         handle_rules_list(version="0.36.1")
 
         output = mock_stdout.getvalue()
-        # Totals must mention opt-in count and how to enable
+        # Totals must mention the real total, enabled count, opt-in count, and
+        # how to enable — not just the enabled count mislabeled as "Total"
+        # (that ambiguity is exactly what help://rules's phrasing was written
+        # to avoid; the flag now matches it).
         self.assertRegex(
             output,
-            r'Total: \d+ rules \(\d+ opt-in, enable via --select <code>\)',
-            "Totals line must follow format: N rules (M opt-in, enable via --select <code>)"
+            r'Total: \d+ rules \(\d+ enabled, \d+ opt-in — enable via --select <code>\)',
+            "Totals line must follow format: N rules (E enabled, M opt-in — enable via --select <code>)"
         )
         mock_exit.assert_called_once_with(0)
 

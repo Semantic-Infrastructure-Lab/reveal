@@ -299,7 +299,12 @@ def handle_rules_list(version: str, show_all: bool = False):
                 print(f"             Verified: {', '.join(verified)}")
         print()
 
-    print(f"Total: {enabled_count} rules ({disabled_count} opt-in, enable via --select <code>)")
+    # Spelled out (total vs enabled) rather than the old "Total: N rules (M
+    # opt-in)" where N was actually the *enabled* count and N+M the real
+    # total — that phrasing double-reads as "N is the total" and undercounts
+    # by the opt-in rules, same fix already applied to help://rules's renderer.
+    print(f"Total: {len(rules)} rules ({enabled_count} enabled, {disabled_count} opt-in — "
+          f"enable via --select <code>)")
     print("Verified = correctness-checked on these languages/formats (BACK-432 matrix); "
           "rules still run beyond them as best-effort.")
     if not show_all:
