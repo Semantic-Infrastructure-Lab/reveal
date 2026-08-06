@@ -44,7 +44,6 @@ def _line_text(analyzer, line_number: int) -> str:
 
 from .types import ImportStatement
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
-from ...registry import get_analyzer
 
 # Cross-invocation disk cache (BACK-626, extending BACK-625 to Go): same
 # independent-reparse gap as PythonExtractor had -- extract_imports() does not
@@ -82,17 +81,8 @@ class GoExtractor(LanguageExtractor):
         return _IMPORTS_CACHE.get_or_compute(file_path, lambda: self._extract_imports_uncached(file_path))
 
     def _extract_imports_uncached(self, file_path: Path) -> List[ImportStatement]:
-        try:
-            analyzer_class = get_analyzer(str(file_path))
-            if not analyzer_class:
-                return []
-
-            analyzer = analyzer_class(str(file_path))
-            if not analyzer.tree:
-                return []
-
-        except Exception as e:
-            logger.debug("extract_imports failed for %s: %s", file_path, e)
+        analyzer = self._get_tree_analyzer(file_path)
+        if not analyzer:
             return []
 
         imports = []
@@ -118,17 +108,8 @@ class GoExtractor(LanguageExtractor):
         Used for detecting unused imports by comparing imported package names
         with actually-used symbols.
         """
-        try:
-            analyzer_class = get_analyzer(str(file_path))
-            if not analyzer_class:
-                return set()
-
-            analyzer = analyzer_class(str(file_path))
-            if not analyzer.tree:
-                return set()
-
-        except Exception as e:
-            logger.debug("extract_symbols failed for %s: %s", file_path, e)
+        analyzer = self._get_tree_analyzer(file_path)
+        if not analyzer:
             return set()
 
         symbols = set()
@@ -435,6 +416,9 @@ class GoExtractor(LanguageExtractor):
                 if line.startswith('module '):
                     return line.split()[1]
         except Exception as e:
+            # Intentional silence: a malformed/unreadable go.mod just means
+            # module-relative import resolution degrades to best-effort --
+            # not a parse failure of any Go source file.
             logger.debug("_get_module_name failed for %s: %s", module_root, e)
             return None
 

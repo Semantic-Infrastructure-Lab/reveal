@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 from .types import ImportStatement, restamp_file_path
 from .base import LanguageExtractor, register_extractor
 from .resolver import resolve_python_import, resolve_python_from_import_submodules
-from ...registry import get_analyzer
 
 # Module-level cache for extract_imports results keyed by (file_path_str, mtime_ns).
 # I002 builds an import graph by calling extract_imports on every file in a directory,
@@ -143,17 +142,6 @@ class PythonExtractor(LanguageExtractor):
             disk_cache.put(_IMPORTS_CACHE_NAMESPACE, fingerprint, imports,
                             max_entries=_imports_cache_max_files())
         return imports
-
-    def _get_tree_analyzer(self, path_str: str):
-        """Get a tree-sitter analyzer instance for *path_str*, or None if parse fails."""
-        try:
-            analyzer_class = get_analyzer(path_str)
-            if not analyzer_class:
-                return None
-            analyzer = analyzer_class(path_str)
-            return analyzer if analyzer.tree else None
-        except Exception:  # noqa: BLE001
-            return None
 
     def _is_inside_type_checking(self, node, analyzer=None) -> bool:
         """Check if import node is inside a TYPE_CHECKING conditional block.
@@ -349,17 +337,8 @@ class PythonExtractor(LanguageExtractor):
         Used for detecting unused imports by comparing imported names
         with actually-used symbols.
         """
-        try:
-            analyzer_class = get_analyzer(str(file_path))
-            if not analyzer_class:
-                return set()
-
-            analyzer = analyzer_class(str(file_path))
-            if not analyzer.tree:
-                return set()
-
-        except Exception as e:
-            logger.debug("extract_symbols failed for %s: %s", file_path, e)
+        analyzer = self._get_tree_analyzer(str(file_path))
+        if not analyzer:
             return set()
 
         symbols = set()

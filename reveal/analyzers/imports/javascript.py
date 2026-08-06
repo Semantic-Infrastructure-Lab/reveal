@@ -20,7 +20,6 @@ from typing import Any, Dict, List, Set, Optional, Tuple
 
 from .types import ImportStatement
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
-from ...registry import get_analyzer
 from ...core import node_children as _children
 
 logger = logging.getLogger(__name__)
@@ -312,6 +311,9 @@ def _load_workspace_package_globs(workspace_root: Path) -> List[str]:
             import yaml
             data = yaml.safe_load(pnpm_file.read_text(encoding='utf-8', errors='replace'))
         except Exception:
+            # Intentional silence: a malformed pnpm-workspace.yaml just means
+            # workspace-glob resolution degrades to none -- not a parse
+            # failure of any JS/TS source file.
             data = None
         if isinstance(data, dict):
             packages = data.get('packages')
@@ -497,17 +499,8 @@ class JavaScriptExtractor(LanguageExtractor):
         return _IMPORTS_CACHE.get_or_compute(file_path, lambda: self._extract_imports_uncached(file_path))
 
     def _extract_imports_uncached(self, file_path: Path) -> List[ImportStatement]:
-        try:
-            analyzer_class = get_analyzer(str(file_path))
-            if not analyzer_class:
-                return []
-
-            analyzer = analyzer_class(str(file_path))
-            if not analyzer.tree:
-                return []
-
-        except Exception as e:
-            logger.debug("extract_imports failed for %s: %s", file_path, e)
+        analyzer = self._get_tree_analyzer(file_path)
+        if not analyzer:
             return []
 
         imports = []
@@ -551,17 +544,8 @@ class JavaScriptExtractor(LanguageExtractor):
         Used for detecting unused imports by comparing imported names
         with actually-used symbols.
         """
-        try:
-            analyzer_class = get_analyzer(str(file_path))
-            if not analyzer_class:
-                return set()
-
-            analyzer = analyzer_class(str(file_path))
-            if not analyzer.tree:
-                return set()
-
-        except Exception as e:
-            logger.debug("extract_symbols failed for %s: %s", file_path, e)
+        analyzer = self._get_tree_analyzer(file_path)
+        if not analyzer:
             return set()
 
         symbols = set()

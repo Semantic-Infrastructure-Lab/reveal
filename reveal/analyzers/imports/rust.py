@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 from .types import ImportStatement
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
-from ...registry import get_analyzer
 
 # Cross-invocation disk cache (BACK-626, extending BACK-625 to Rust): same
 # independent-reparse gap as PythonExtractor had -- extract_imports() does not
@@ -72,17 +71,8 @@ class RustExtractor(LanguageExtractor):
         return _IMPORTS_CACHE.get_or_compute(file_path, lambda: self._extract_imports_uncached(file_path))
 
     def _extract_imports_uncached(self, file_path: Path) -> List[ImportStatement]:
-        try:
-            analyzer_class = get_analyzer(str(file_path))
-            if not analyzer_class:
-                return []
-
-            analyzer = analyzer_class(str(file_path))
-            if not analyzer.tree:
-                return []
-
-        except Exception as e:
-            logger.debug("extract_imports failed for %s: %s", file_path, e)
+        analyzer = self._get_tree_analyzer(file_path)
+        if not analyzer:
             return []
 
         imports = []
@@ -106,17 +96,8 @@ class RustExtractor(LanguageExtractor):
         Used for detecting unused imports by comparing imported names
         with actually-used symbols.
         """
-        try:
-            analyzer_class = get_analyzer(str(file_path))
-            if not analyzer_class:
-                return set()
-
-            analyzer = analyzer_class(str(file_path))
-            if not analyzer.tree:
-                return set()
-
-        except Exception as e:
-            logger.debug("extract_symbols failed for %s: %s", file_path, e)
+        analyzer = self._get_tree_analyzer(file_path)
+        if not analyzer:
             return set()
 
         symbols = set()

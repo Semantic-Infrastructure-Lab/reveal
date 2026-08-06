@@ -211,7 +211,19 @@ class I001(BaseRule):
             if hasattr(extractor, 'extract_exports'):
                 exports = extractor.extract_exports(path)
         except Exception as e:
-            logger.debug(f"Failed to analyze {file_path}: {e}")
+            logger.warning(f"I001: failed to analyze {file_path}: {e}")
+            return detections
+
+        # BACK-982: a parse failure makes extract_symbols() return an empty
+        # set indistinguishable from "genuinely uses nothing" -- comparing
+        # imports against that would flag every import in the file as unused
+        # (a false positive, not a missing result). Skip rather than report.
+        if extractor.parse_failed:
+            logger.warning(
+                "I001: %s failed to parse -- skipping unused-import check "
+                "(result would be unreliable, not confirmed clean)",
+                file_path,
+            )
             return detections
 
         # Check each import for usage

@@ -505,6 +505,20 @@ class ImportsRenderer:
             print(f"  ⚠️  {skipped_total} code file(s) skipped — no import support for: {exts}")
             print("      (these are not counted above; import graph excludes them)")
             print()
+
+        # Honesty note (BACK-982): a supported file that tree-sitter could not
+        # parse silently contributed zero imports/symbols above -- indistinguishable
+        # from a genuinely empty file without this. Also means Cycles Found can
+        # under-report: a real cycle running through one of these is invisible.
+        files_failed_count = metadata.get('files_failed_count', 0)
+        if files_failed_count:
+            print(f"  ⚠️  {files_failed_count} file(s) failed to parse — excluded from the graph above")
+            print("      (import/unused/cycle results may be incomplete for these files)")
+            for fp in metadata.get('files_failed', [])[:10]:
+                print(f"      - {fp}")
+            if files_failed_count > 10:
+                print(f"      ... and {files_failed_count - 10} more")
+            print()
         print("Query options:")
         print(f"  reveal 'imports://{resource}?unused'       - Find unused imports")
         print(f"  reveal 'imports://{resource}?circular'     - Detect circular deps")
@@ -726,28 +740,39 @@ def _extract_one_file(fp_str: str, want_structure: bool):
 
     Module-level and picklable so it runs unchanged under a
     `ProcessPoolExecutor` (fork *or* spawn). Returns
-    `(fp_str, imports_or_None, symbols_or_None, structure_or_None)`:
+    `(fp_str, imports_or_None, symbols_or_None, structure_or_None, failed)`:
     `imports`/`symbols` are None when the file has no import extractor (mirrors
     the serial path only populating them for extractable files); `structure`
     is None when not requested or when analysis raised (mirrors the serial
     `collect_structure`'s try/except-to-None). Import extraction errors are NOT
-    swallowed here — the serial path lets them propagate too.
+    swallowed here — the serial path lets them propagate too. `failed` is True
+    when the extractor had one (i.e. the file's language IS supported) but
+    tree-sitter could not parse it (`extractor.parse_failed`, BACK-982) — such
+    a file's `imports`/`symbols` are an empty/partial result, not a confirmed-
+    clean one, so callers (I001/I002, this adapter's own summary) must not
+    treat it the same as a genuinely-clean file.
     """
     fp = Path(fp_str)
     imports = symbols = structure = None
+    failed = False
     extractor = get_extractor(fp)
     if extractor is not None:
         imports = extractor.extract_imports(fp)
         symbols = extractor.extract_symbols(fp)
         if hasattr(extractor, 'extract_exports'):
             symbols = symbols | extractor.extract_exports(fp)
+        failed = extractor.parse_failed
     if want_structure:
         try:
             from .ast.analysis import analyze_file
             structure = analyze_file(fp_str)
         except Exception:
+            # Intentional silence: structure is a separate, optional add-on
+            # (only requested via collect_structures=True) -- unlike
+            # imports/symbols above, its failure doesn't affect this file's
+            # unused-import/cycle results, so it degrades to None quietly.
             structure = None
-    return fp_str, imports, symbols, structure
+    return fp_str, imports, symbols, structure, failed
 
 
 @register_adapter('imports')
@@ -769,6 +794,10 @@ class ImportsAdapter(ResourceAdapter):
         self._symbols_by_file: Dict[Path, set] = {}
         self._scanned_files: set = set()
         self._unsupported_extensions: Dict[str, int] = {}
+        # Files whose language IS supported but tree-sitter could not parse
+        # (BACK-982) -- their imports/symbols are an incomplete result, not a
+        # confirmed-clean one, so they're surfaced separately from scanned_files.
+        self._files_failed: List[Path] = []
         # Populated only when _build_graph is called with collect_structures=True
         # (reveal architecture) — per-file AST structures from the shared walk.
         self._structures: List[Dict[str, Any]] = []
@@ -862,6 +891,13 @@ class ImportsAdapter(ResourceAdapter):
             'analyzer': 'imports',
             # Recognized code files whose language has no import extractor yet.
             'unsupported_extensions': dict(sorted(self._unsupported_extensions.items())),
+            # Files with a supported language that tree-sitter could not parse
+            # (BACK-982) -- included in scanned_files but their imports/symbols
+            # are incomplete, not confirmed-empty; has_cycles can under-report
+            # when a cycle runs through one of these. Sorted+capped for stable,
+            # bounded JSON/text output; the count alone (below) is exact.
+            'files_failed_count': len(self._files_failed),
+            'files_failed': sorted(str(fp) for fp in self._files_failed)[:50],
         }
 
     @staticmethod
@@ -908,7 +944,7 @@ class ImportsAdapter(ResourceAdapter):
         return imports, symbols
 
     def _extract_files(self, candidates: List[Path], want_structure: bool):
-        """Yield ``(Path, imports_or_None, symbols_or_None, structure_or_None)``
+        """Yield ``(Path, imports_or_None, symbols_or_None, structure_or_None, failed)``
         per candidate file, in candidate order.
 
         Fans the independent per-file extraction out across processes when the
@@ -920,8 +956,8 @@ class ImportsAdapter(ResourceAdapter):
         workers = _parallel_worker_count(len(candidates))
         if workers <= 1:
             for fp in candidates:
-                fp_str, imports, symbols, structure = _extract_one_file(str(fp), want_structure)
-                yield fp, imports, symbols, structure
+                fp_str, imports, symbols, structure, failed = _extract_one_file(str(fp), want_structure)
+                yield fp, imports, symbols, structure, failed
             return
 
         from concurrent.futures import ProcessPoolExecutor
@@ -932,10 +968,10 @@ class ImportsAdapter(ResourceAdapter):
         chunksize = max(1, n // (workers * 8))
         paths = [str(fp) for fp in candidates]
         with ProcessPoolExecutor(max_workers=workers) as executor:
-            for fp_str, imports, symbols, structure in executor.map(
+            for fp_str, imports, symbols, structure, failed in executor.map(
                 _extract_one_file, paths, repeat(want_structure), chunksize=chunksize
             ):
-                yield Path(fp_str), imports, symbols, structure
+                yield Path(fp_str), imports, symbols, structure, failed
 
     @staticmethod
     def _discover_candidate_files(
@@ -981,20 +1017,23 @@ class ImportsAdapter(ResourceAdapter):
     ) -> List[ImportStatement]:
         """Run per-file extraction (parallel on large repos, else serial),
         consumed in candidate order so assembly is deterministic. Populates
-        self._symbols_by_file/_scanned_files/_unsupported_extensions/_structures
-        and returns the collected import statements.
+        self._symbols_by_file/_scanned_files/_unsupported_extensions/_structures/
+        _files_failed and returns the collected import statements.
         """
         files: List[Path] = []
         all_imports: List[ImportStatement] = []
         structures: List[Dict[str, Any]] = []
         unextractable: Dict[str, int] = {}
+        failed_files: List[Path] = []
 
-        for fp, imports, symbols, structure in self._extract_files(candidates, collect_structures):
+        for fp, imports, symbols, structure, failed in self._extract_files(candidates, collect_structures):
             if fp.suffix in supported_exts:
                 files.append(fp)
                 if imports is not None:
                     self._symbols_by_file[fp] = symbols
                     all_imports.extend(imports)
+                if failed:
+                    failed_files.append(fp)
             else:
                 ext = fp.suffix.lower()
                 if ext in code_exts:
@@ -1007,6 +1046,7 @@ class ImportsAdapter(ResourceAdapter):
         self._scanned_files = set(files)
         self._unsupported_extensions = unextractable
         self._structures = structures
+        self._files_failed = failed_files
         return all_imports
 
     @staticmethod

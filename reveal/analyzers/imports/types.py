@@ -60,6 +60,12 @@ class ImportGraph:
     resolved_paths: Dict[str, Optional[Path]] = field(default_factory=dict)
     dependencies: Dict[Path, Set[Path]] = field(default_factory=lambda: defaultdict(set))
     reverse_deps: Dict[Path, Set[Path]] = field(default_factory=lambda: defaultdict(set))
+    # Files that failed to parse (BACK-982) -- absent from `files`/the graph
+    # entirely, so a cycle running through one of them is structurally
+    # invisible to find_cycles(). Carried on the graph (not just logged at
+    # build time) so it survives the disk/in-process graph cache and callers
+    # can tell a clean "no cycles" apart from "couldn't see everything".
+    failed_files: List[Path] = field(default_factory=list)
 
     @classmethod
     def from_imports(cls, imports: List[ImportStatement]) -> 'ImportGraph':

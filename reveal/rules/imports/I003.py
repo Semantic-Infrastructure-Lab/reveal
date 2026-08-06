@@ -100,7 +100,7 @@ class I003(BaseRule):
         try:
             imports = extract_python_imports(path)
         except Exception as e:
-            logger.debug(f"Failed to extract imports from {file_path}: {e}")
+            logger.warning(f"I003: failed to extract imports from {file_path}: {e}")
             return detections
 
         # Check each import against layer rules
@@ -174,7 +174,7 @@ class I003(BaseRule):
                 context=f"Import: {import_stmt.module_name}",
             )
         except Exception as e:
-            logger.debug(f"Error checking import {import_stmt.module_name} in {file_path}: {e}")
+            logger.warning(f"I003: error checking import {import_stmt.module_name} in {file_path}: {e}")
             return None
 
     def _create_suggestion(self, layer_name: str, config) -> str:

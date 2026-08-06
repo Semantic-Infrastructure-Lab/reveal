@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import List, Optional, Set
 
 from ...core import node_children as _children
-from ...registry import get_analyzer
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from .types import ImportStatement
 
@@ -57,15 +56,8 @@ class ZigImportExtractor(LanguageExtractor):
         return _IMPORTS_CACHE.get_or_compute(file_path, lambda: self._extract_imports_uncached(file_path))
 
     def _extract_imports_uncached(self, file_path: Path) -> List[ImportStatement]:
-        try:
-            analyzer_class = get_analyzer(str(file_path))
-            if not analyzer_class:
-                return []
-            analyzer = analyzer_class(str(file_path))
-            if not analyzer.tree:
-                return []
-        except Exception as e:  # pragma: no cover - defensive
-            logger.debug("extract_imports failed for %s: %s", file_path, e)
+        analyzer = self._get_tree_analyzer(file_path)
+        if not analyzer:
             return []
 
         imports: List[ImportStatement] = []

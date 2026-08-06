@@ -58,30 +58,33 @@ class TestExtractImportsErrorPaths:
         assert result == []
 
     def test_get_analyzer_returns_none_path(self):
-        """Cover line 47: get_analyzer() returning None."""
+        """Cover line 47: get_analyzer() returning None -- not a parse failure."""
         e = GoExtractor()
-        with patch('reveal.analyzers.imports.go.get_analyzer', return_value=None):
+        with patch('reveal.analyzers.imports.base.get_analyzer', return_value=None):
             result = e.extract_imports(Path('fake.go'))
         assert result == []
+        assert e.parse_failed is False
 
     def test_analyzer_tree_is_none_path(self, tmp_path):
-        """Cover lines 50-51: analyzer.tree is None."""
+        """Cover lines 50-51: analyzer.tree is None -- a real parse failure (BACK-982)."""
         f = _write_go(tmp_path, 'x.go', 'package main')
         mock_analyzer = MagicMock()
         mock_analyzer.tree = None
         mock_cls = MagicMock(return_value=mock_analyzer)
         e = GoExtractor()
-        with patch('reveal.analyzers.imports.go.get_analyzer', return_value=mock_cls):
+        with patch('reveal.analyzers.imports.base.get_analyzer', return_value=mock_cls):
             result = e.extract_imports(f)
         assert result == []
+        assert e.parse_failed is True
 
     def test_exception_in_extract_imports_returns_empty(self, tmp_path):
-        """Cover lines 53-55: exception path returns []."""
+        """Cover lines 53-55: exception path returns [] and marks parse_failed (BACK-982)."""
         f = _write_go(tmp_path, 'x.go', 'package main')
         e = GoExtractor()
-        with patch('reveal.analyzers.imports.go.get_analyzer', side_effect=RuntimeError('boom')):
+        with patch('reveal.analyzers.imports.base.get_analyzer', side_effect=RuntimeError('boom')):
             result = e.extract_imports(f)
         assert result == []
+        assert e.parse_failed is True
 
 
 # ─── extract_symbols error paths ─────────────────────────────────────────────
@@ -99,29 +102,32 @@ class TestExtractSymbolsErrorPaths:
         assert result == set()
 
     def test_get_analyzer_none_returns_empty_set(self):
-        """Cover extract_symbols line 82."""
+        """Cover extract_symbols line 82 -- not a parse failure."""
         e = GoExtractor()
-        with patch('reveal.analyzers.imports.go.get_analyzer', return_value=None):
+        with patch('reveal.analyzers.imports.base.get_analyzer', return_value=None):
             result = e.extract_symbols(Path('fake.go'))
         assert result == set()
+        assert e.parse_failed is False
 
     def test_tree_none_returns_empty_set(self, tmp_path):
-        """Cover extract_symbols lines 86-87."""
+        """Cover extract_symbols lines 86-87 -- a real parse failure (BACK-982)."""
         f = _write_go(tmp_path, 'x.go', 'package main')
         mock_analyzer = MagicMock()
         mock_analyzer.tree = None
         mock_cls = MagicMock(return_value=mock_analyzer)
         e = GoExtractor()
-        with patch('reveal.analyzers.imports.go.get_analyzer', return_value=mock_cls):
+        with patch('reveal.analyzers.imports.base.get_analyzer', return_value=mock_cls):
             result = e.extract_symbols(f)
         assert result == set()
+        assert e.parse_failed is True
 
     def test_exception_in_extract_symbols_returns_empty_set(self):
-        """Cover extract_symbols lines 89-90."""
+        """Cover extract_symbols lines 89-90 and marks parse_failed (BACK-982)."""
         e = GoExtractor()
-        with patch('reveal.analyzers.imports.go.get_analyzer', side_effect=RuntimeError('boom')):
+        with patch('reveal.analyzers.imports.base.get_analyzer', side_effect=RuntimeError('boom')):
             result = e.extract_symbols(Path('fake.go'))
         assert result == set()
+        assert e.parse_failed is True
 
 
 # ─── extract_symbols real Go file ────────────────────────────────────────────

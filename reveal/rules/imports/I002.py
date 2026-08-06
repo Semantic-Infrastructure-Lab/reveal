@@ -22,7 +22,10 @@ logger = logging.getLogger(__name__)
 # Disk-cache namespace for the resolved import graph. Value keyed on a
 # fingerprint of the whole source-file set (path + mtime_ns + size), so any
 # edit/add/delete/rename under the root produces a different key and misses.
-_IMPORT_GRAPH_NAMESPACE = "import_graph"
+# Bumped to v2 (BACK-982): ImportGraph gained a failed_files field, so an
+# old-shape cached object (pickled before this field existed) must never be
+# unpickled and returned as-is.
+_IMPORT_GRAPH_NAMESPACE = "import_graph_v2"
 
 # Module-level cache: project_root → ImportGraph.
 # _build_import_graph scans every source file under the project root via
@@ -81,22 +84,31 @@ def _graph_worker_count(n_files: int) -> int:
     return max(1, min(os.cpu_count() or 1, _GRAPH_PARALLEL_MAX_WORKERS))
 
 
-def _extract_imports_for_file(fp_str: str) -> list:
+def _extract_imports_for_file(fp_str: str) -> tuple:
     """Extract imports for one file. Module-level and picklable so it runs
     unchanged under a ProcessPoolExecutor (fork or spawn).
 
-    Swallows per-file extraction errors and returns [] for files with no
-    extractor — mirroring _collect_raw_imports's serial per-file try/except so
-    the parallel and serial paths produce identical results.
+    Returns ``(imports, failed)``. Swallows per-file extraction errors and
+    returns ``([], False)`` for files with no extractor — mirroring
+    _collect_raw_imports's serial per-file try/except so the parallel and
+    serial paths produce identical results. ``failed`` is True when the
+    extractor's language IS supported but tree-sitter could not parse the
+    file (``extractor.parse_failed``, BACK-982) — such a file is silently
+    absent from the graph, so a cycle running through it becomes invisible;
+    the caller surfaces this rather than treating an empty result as clean.
     """
     fp = Path(fp_str)
     extractor = get_extractor(fp)
     if not extractor:
-        return []
+        return [], False
     try:
-        return list(extractor.extract_imports(fp))
+        imports = list(extractor.extract_imports(fp))
+        return imports, extractor.parse_failed
     except Exception:
-        return []
+        # Intentional silence here: the `True` failed-flag IS the visible
+        # signal, surfaced as a logger.warning by the caller once per graph
+        # build (_build_import_graph) rather than once per file here.
+        return [], True
 
 
 def _max_graph_files() -> int:
@@ -184,6 +196,8 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
             hasher.update(f"\x02{mtime_ns}\x03{size}\x04".encode("ascii"))
         return hasher.hexdigest()
     except Exception:
+        # Intentional silence: None means "skip the cache, build directly" --
+        # not a lost result. See the docstring above.
         return None
 
 
@@ -292,7 +306,7 @@ class I002(BaseRule):
                 ))
 
         except Exception as e:
-            logger.debug(f"Failed to analyze {file_path}: {e}")
+            logger.warning(f"I002: failed to analyze {file_path}: {e}")
             return detections
 
         return detections
@@ -325,17 +339,37 @@ class I002(BaseRule):
                 _graph_cache[directory] = cached
                 return cached
 
-        all_imports = self._collect_raw_imports(directory)
+        all_imports, failed_files = self._collect_raw_imports(directory)
         graph = ImportGraph.from_imports(all_imports)
+        graph.failed_files = failed_files
         self._resolve_graph_dependencies(graph)
+
+        if failed_files:
+            logger.warning(
+                "I002: %d file(s) under %s failed to parse and are excluded "
+                "from the import graph -- circular-dependency results may be "
+                "incomplete (a cycle running through one of them would be "
+                "invisible): %s",
+                len(failed_files), directory,
+                ", ".join(str(f) for f in failed_files[:10])
+                + (f", ... and {len(failed_files) - 10} more" if len(failed_files) > 10 else ""),
+            )
 
         _graph_cache[directory] = graph
         if fingerprint is not None:
             disk_cache.put(_IMPORT_GRAPH_NAMESPACE, fingerprint, graph)
         return graph
 
-    def _collect_raw_imports(self, directory: Path) -> list:
+    def _collect_raw_imports(self, directory: Path) -> tuple:
         """Phase 1: Walk directory and extract raw import statements from all files.
+
+        Returns ``(all_imports, failed_files)`` -- ``failed_files`` (BACK-982)
+        are source files whose language IS supported but that tree-sitter
+        could not parse, so they contribute no edges to the graph at all; a
+        real cycle running through one becomes structurally invisible to
+        find_cycles(). Empty in the two early-abort paths below (the scan
+        never reached Pass B, so failure status is simply unknown, not "none
+        failed").
 
         Two passes on purpose. Pass A only *counts* supported source files (a
         cheap directory walk, no parsing); if the count exceeds the configured
@@ -375,7 +409,7 @@ class I002(BaseRule):
                     "mis-detection — set REVEAL_I002_MAX_FILES to raise the limit)",
                     directory, max_files,
                 )
-                return []
+                return [], []
 
         cycle_limit = _cycle_detection_max_files()
         if cycle_limit and len(source_files) > cycle_limit:
@@ -386,7 +420,7 @@ class I002(BaseRule):
                 "REVEAL_I002_CYCLE_LIMIT to raise the limit or 0 to disable it",
                 directory, len(source_files), cycle_limit,
             )
-            return []
+            return [], []
 
         # Pass B: parse the (now bounded) set of files. Independent per file, so
         # fan out across processes on large trees (BACK-536). map() preserves
@@ -396,25 +430,38 @@ class I002(BaseRule):
 
         if workers <= 1:
             all_imports: list = []
+            failed_files: list = []
             for fp_str in file_strs:
-                all_imports.extend(_extract_imports_for_file(fp_str))
-            return all_imports
+                imports, failed = _extract_imports_for_file(fp_str)
+                all_imports.extend(imports)
+                if failed:
+                    failed_files.append(Path(fp_str))
+            return all_imports, failed_files
 
         try:
             from concurrent.futures import ProcessPoolExecutor
             all_imports = []
+            failed_files = []
             with ProcessPoolExecutor(max_workers=workers) as executor:
-                for imports in executor.map(_extract_imports_for_file, file_strs):
+                for fp_str, (imports, failed) in zip(
+                    file_strs, executor.map(_extract_imports_for_file, file_strs)
+                ):
                     all_imports.extend(imports)
-            return all_imports
+                    if failed:
+                        failed_files.append(Path(fp_str))
+            return all_imports, failed_files
         except Exception as e:
             # Degrade to serial on any pool failure (restricted/forbidden-fork
             # environments) rather than losing the analysis entirely.
             logger.debug("I002: parallel import extraction failed (%s); running serially", e)
             all_imports = []
+            failed_files = []
             for fp_str in file_strs:
-                all_imports.extend(_extract_imports_for_file(fp_str))
-            return all_imports
+                imports, failed = _extract_imports_for_file(fp_str)
+                all_imports.extend(imports)
+                if failed:
+                    failed_files.append(Path(fp_str))
+            return all_imports, failed_files
 
     def _resolve_graph_dependencies(self, graph: ImportGraph) -> None:
         """Phase 2: Resolve import statements to actual file paths and add edges."""

@@ -50,29 +50,36 @@ class TestExtractImportsErrorPaths:
         assert result == []
 
     def test_get_analyzer_none_returns_empty(self):
-        """Cover line 51: get_analyzer returns None."""
+        """Cover line 51: get_analyzer returns None -- not a parse failure."""
         e = JavaScriptExtractor()
-        with patch('reveal.analyzers.imports.javascript.get_analyzer', return_value=None):
+        with patch('reveal.analyzers.imports.base.get_analyzer', return_value=None):
             result = e.extract_imports(Path('fake.js'))
         assert result == []
+        assert e.parse_failed is False
 
     def test_tree_none_returns_empty(self, tmp_path):
-        """Cover lines 54-55: analyzer.tree is None."""
+        """Cover lines 54-55: analyzer.tree is None -- a real parse failure (BACK-982)."""
         f = _write_js(tmp_path, 'x.js', 'const x = 1;')
         mock_analyzer = MagicMock()
         mock_analyzer.tree = None
         mock_cls = MagicMock(return_value=mock_analyzer)
         e = JavaScriptExtractor()
-        with patch('reveal.analyzers.imports.javascript.get_analyzer', return_value=mock_cls):
+        with patch('reveal.analyzers.imports.base.get_analyzer', return_value=mock_cls):
             result = e.extract_imports(f)
         assert result == []
+        assert e.parse_failed is True
 
     def test_exception_returns_empty(self):
-        """Cover lines 57-59: exception path."""
+        """Cover lines 57-59: exception path marks parse_failed (BACK-982)."""
         e = JavaScriptExtractor()
-        with patch('reveal.analyzers.imports.javascript.get_analyzer', side_effect=RuntimeError('boom')):
-            result = e.extract_imports(Path('fake.js'))
+        # Distinct filename from test_get_analyzer_none_returns_empty above --
+        # _IMPORTS_CACHE is a module-level singleton keyed by (path, mtime_ns),
+        # and a nonexistent file always hashes to mtime_ns=0, so reusing
+        # 'fake.js' here would hit that test's cached [] and skip compute().
+        with patch('reveal.analyzers.imports.base.get_analyzer', side_effect=RuntimeError('boom')):
+            result = e.extract_imports(Path('fake_exception.js'))
         assert result == []
+        assert e.parse_failed is True
 
 
 # ─── extract_symbols error paths ─────────────────────────────────────────────
@@ -90,29 +97,32 @@ class TestExtractSymbolsErrorPaths:
         assert result == set()
 
     def test_get_analyzer_none_returns_empty_set(self):
-        """Cover extract_symbols line 92."""
+        """Cover extract_symbols line 92 -- not a parse failure."""
         e = JavaScriptExtractor()
-        with patch('reveal.analyzers.imports.javascript.get_analyzer', return_value=None):
+        with patch('reveal.analyzers.imports.base.get_analyzer', return_value=None):
             result = e.extract_symbols(Path('fake.js'))
         assert result == set()
+        assert e.parse_failed is False
 
     def test_tree_none_returns_empty_set(self, tmp_path):
-        """Cover extract_symbols lines 95-96."""
+        """Cover extract_symbols lines 95-96 -- a real parse failure (BACK-982)."""
         f = _write_js(tmp_path, 'x.js', 'const x = 1;')
         mock_analyzer = MagicMock()
         mock_analyzer.tree = None
         mock_cls = MagicMock(return_value=mock_analyzer)
         e = JavaScriptExtractor()
-        with patch('reveal.analyzers.imports.javascript.get_analyzer', return_value=mock_cls):
+        with patch('reveal.analyzers.imports.base.get_analyzer', return_value=mock_cls):
             result = e.extract_symbols(f)
         assert result == set()
+        assert e.parse_failed is True
 
     def test_exception_returns_empty_set(self):
-        """Cover extract_symbols lines 98-99."""
+        """Cover extract_symbols lines 98-99 and marks parse_failed (BACK-982)."""
         e = JavaScriptExtractor()
-        with patch('reveal.analyzers.imports.javascript.get_analyzer', side_effect=RuntimeError('boom')):
+        with patch('reveal.analyzers.imports.base.get_analyzer', side_effect=RuntimeError('boom')):
             result = e.extract_symbols(Path('fake.js'))
         assert result == set()
+        assert e.parse_failed is True
 
 
 # ─── extract_symbols real JS files ───────────────────────────────────────────

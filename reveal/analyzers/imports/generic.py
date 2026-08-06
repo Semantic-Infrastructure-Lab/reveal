@@ -61,7 +61,6 @@ from typing import ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
 from ...core import node_children as _children
 from ...core import tree_root
 from ...core.treesitter_compat import _zero_arg
-from ...registry import get_analyzer
 from ...utils.path_utils import is_skippable_dir
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from .types import ImportStatement
@@ -1259,20 +1258,15 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
     # --- internals -------------------------------------------------------
 
-    @staticmethod
-    def _get_analyzer(file_path: Path):
-        """Instantiate the tree-sitter analyzer for a file, or None on failure."""
-        try:
-            analyzer_class = get_analyzer(str(file_path))
-            if not analyzer_class:
-                return None
-            analyzer = analyzer_class(str(file_path))
-            if not analyzer.tree:
-                return None
-            return analyzer
-        except Exception as e:  # pragma: no cover - defensive
-            logger.debug("generic import analyzer failed for %s: %s", file_path, e)
-            return None
+    def _get_analyzer(self, file_path: Path):
+        """Instantiate the tree-sitter analyzer for a file, or None on failure.
+
+        Delegates to the shared LanguageExtractor._get_tree_analyzer() so a
+        genuine parse failure sets self.parse_failed and logs at warning,
+        rather than being indistinguishable from "file has no imports"
+        (BACK-982).
+        """
+        return self._get_tree_analyzer(file_path)
 
     def _node_to_import(
         self, node, analyzer, file_path: Path,

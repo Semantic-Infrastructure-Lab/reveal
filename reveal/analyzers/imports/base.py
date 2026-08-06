@@ -19,6 +19,7 @@ from typing import Callable, List, Set, ClassVar, Optional, Tuple, Type, Dict
 
 from .types import ImportStatement, restamp_file_path
 from ...core import disk_cache
+from ...registry import get_analyzer
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +214,49 @@ class LanguageExtractor(ABC):
     # Subclasses MUST define these class variables
     extensions: ClassVar[Set[str]]  # {'.py', '.pyi'}
     language_name: ClassVar[str]    # 'Python'
+
+    def __init__(self) -> None:
+        # Set by _get_tree_analyzer() when a file this extractor claims to
+        # support (matching extension) fails to parse — as opposed to genuinely
+        # having no imports/symbols. Callers (I001/I002, the imports:// adapter)
+        # check this after calling extract_imports()/extract_symbols() to tell
+        # "confirmed empty" apart from "analysis could not run", instead of
+        # treating both as a clean/empty result (BACK-982).
+        self.parse_failed: bool = False
+
+    def _get_tree_analyzer(self, file_path):
+        """Get a tree-sitter analyzer instance for *file_path*, or None.
+
+        Returns None in two distinct situations, only one of which is an
+        error: no analyzer is registered for this file (not an error --
+        extract_imports/extract_symbols degrade to empty as documented), or
+        an analyzer was found but the file failed to parse (sets
+        ``self.parse_failed`` and logs a warning, since a silent empty result
+        here is indistinguishable from "genuinely no imports" to callers).
+        """
+        path_str = str(file_path)
+        try:
+            analyzer_class = get_analyzer(path_str)
+            if not analyzer_class:
+                return None
+            analyzer = analyzer_class(path_str)
+            if not analyzer.tree:
+                self.parse_failed = True
+                logger.warning(
+                    "Parse failed for %s -- tree-sitter returned no tree; "
+                    "imports/symbols for this file are incomplete, not confirmed empty",
+                    path_str,
+                )
+                return None
+            return analyzer
+        except Exception as e:
+            self.parse_failed = True
+            logger.warning(
+                "Parse failed for %s: %s -- imports/symbols for this file "
+                "are incomplete, not confirmed empty",
+                path_str, e,
+            )
+            return None
 
     @abstractmethod
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
