@@ -20,12 +20,15 @@ Adapters should raise TypeError when their signature doesn't match a pattern.
 This allows generic_adapter_handler to try the next pattern gracefully.
 """
 
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
 from .adapter_utils import find_adapter_file, find_init_definition_line
+
+logger = logging.getLogger(__name__)
 
 
 class V019(BaseRule):
@@ -55,7 +58,8 @@ class V019(BaseRule):
         # Get all registered adapters
         try:
             from ...adapters.base import list_supported_schemes, get_adapter_class
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V019: failed to import adapter registry: {e}")
             return []
 
         detections: List[Detection] = []

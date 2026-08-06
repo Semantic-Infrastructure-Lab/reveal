@@ -29,11 +29,14 @@ This means resource strings become element names if no explicit element provided
 Adapters must handle this gracefully.
 """
 
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+
+logger = logging.getLogger(__name__)
 
 
 class V020(BaseRule):
@@ -67,7 +70,8 @@ class V020(BaseRule):
                 get_adapter_class,
                 get_renderer_class
             )
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V020: failed to import adapter/renderer registries: {e}")
             return []
 
         detections: List[Detection] = []

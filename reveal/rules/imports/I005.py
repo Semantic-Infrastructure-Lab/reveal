@@ -92,7 +92,7 @@ class I005(BaseRule):
                     # extractor for this language" — log it so a silent accuracy
                     # regression is at least visible, even though we still fall
                     # back to the structure-dict path below.
-                    logger.debug(f"Import extractor failed for {file_path}: {e}")
+                    logger.warning(f"I005: import extractor failed for {file_path}: {e}")
 
         if not used_extractor:
             # Fallback: use structure dict (non-Python files, non-existent paths, or extractor failure)

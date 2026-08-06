@@ -163,6 +163,6 @@ class M103(BaseRule):
                 return match.group(1)
 
         except Exception as e:
-            logger.debug(f"Error reading pyproject.toml: {e}")
+            logger.warning(f"M103: error reading pyproject.toml: {e}")
 
         return None

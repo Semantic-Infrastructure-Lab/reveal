@@ -89,7 +89,7 @@ class I003(BaseRule):
         try:
             layer_config, project_root = self._load_config_and_find_root(path)
         except Exception as e:
-            logger.debug(f"Failed to load layer config for {file_path}: {e}")
+            logger.warning(f"I003: failed to load layer config for {file_path}: {e}")
             return detections
 
         # No layer config found - skip this file

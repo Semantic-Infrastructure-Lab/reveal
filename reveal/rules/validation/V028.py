@@ -21,11 +21,14 @@ V024/V027.
 See internal-docs/design/HELP_SYSTEM_ARCHITECTURE.md §5 for the full surface map.
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...utils.path_utils import to_posix
 from .utils import find_reveal_root
+
+logger = logging.getLogger(__name__)
 
 # The two key spellings the dead surface used across the yaml files.
 _FORBIDDEN_KEYS = ('query_params', 'query_parameters')
@@ -52,7 +55,8 @@ class V028(BaseRule):
 
         try:
             import yaml
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V028: failed to import yaml: {e}")
             return []
 
         reveal_root = find_reveal_root()

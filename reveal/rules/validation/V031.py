@@ -21,11 +21,14 @@ no longer backs — is what this catches.
 Scope: reveal:// self-check only, not applicable to external user code.
 """
 
+import logging
 import re
 from typing import Any, Dict, List, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+
+logger = logging.getLogger(__name__)
 
 # VALIDATION.md's "at a glance" table language labels -> capabilities.py's
 # LanguageCapability.language values. "TSX, plain JS" is one combined row
@@ -96,7 +99,8 @@ class V031(BaseRule):
 
         try:
             doc_lines = doc_path.read_text(encoding='utf-8').split('\n')
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V031: failed to read {doc_path}: {e}")
             return []
 
         doc_cells_by_language = self._parse_table(doc_lines)
@@ -178,7 +182,8 @@ class V031(BaseRule):
         """Build {language: {signal: {claimed_pct, ...}}} from capabilities.py."""
         try:
             from reveal.capabilities import get_all_capabilities
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V031: failed to import capabilities registry: {e}")
             return None
 
         registry: Dict[str, Dict[str, set]] = {}

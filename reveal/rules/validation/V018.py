@@ -12,11 +12,14 @@ Example violation:
 This rule ensures the renderer registry stays in sync with the adapter registry.
 """
 
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+
+logger = logging.getLogger(__name__)
 
 
 class V018(BaseRule):
@@ -48,8 +51,8 @@ class V018(BaseRule):
             from ...adapters.base import list_supported_schemes, list_renderer_schemes
             adapters = set(list_supported_schemes())
             renderers = set(list_renderer_schemes())
-        except Exception:
-            # If we can't import, skip check
+        except Exception as e:
+            logger.warning(f"V018: failed to import adapter/renderer registries: {e}")
             return []
 
         # Check for adapters without renderers

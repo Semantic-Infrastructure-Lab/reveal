@@ -88,6 +88,6 @@ class M501(BaseRule):
                 ))
 
         except Exception as e:
-            logger.debug(f"M501 check failed on {file_path}: {e}")
+            logger.warning(f"M501 check failed on {file_path}: {e}")
 
         return detections

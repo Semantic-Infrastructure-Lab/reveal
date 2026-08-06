@@ -24,11 +24,14 @@ Scope:
       equivalent adapters/rules total-count claim is ever added to the body.
 """
 
+import logging
 import re
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+
+logger = logging.getLogger(__name__)
 
 
 class V030(BaseRule):
@@ -69,7 +72,8 @@ class V030(BaseRule):
 
         try:
             lines = agent_help_path.read_text(encoding='utf-8').split('\n')
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V030: failed to read {agent_help_path}: {e}")
             return []
 
         actual_counts = {'languages': self._count_supported_languages()}
@@ -105,5 +109,6 @@ class V030(BaseRule):
             listing = list_supported_languages()
             match = re.search(r'Total:\s*(\d+)\s+languages?\s+supported', listing)
             return int(match.group(1)) if match else None
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V030: failed to count supported languages: {e}")
             return None

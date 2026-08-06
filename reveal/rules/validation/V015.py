@@ -12,12 +12,15 @@ How it counts:
     - Excludes non-rule entries (utils, __init__, *_utils)
 """
 
+import logging
 import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+
+logger = logging.getLogger(__name__)
 
 
 class V015(BaseRule):
@@ -111,7 +114,8 @@ class V015(BaseRule):
                     continue
                 count += self._count_category_rules(category_dir)
             return count
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V015: failed to count registered rules: {e}")
             return None
 
     def _extract_rules_count_from_readme(self, readme_file: Path) -> List[Tuple[int, int, bool]]:
@@ -137,5 +141,6 @@ class V015(BaseRule):
                     claims.append((i, count, is_minimum))
 
             return claims
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V015: failed to read {readme_file}: {e}")
             return []

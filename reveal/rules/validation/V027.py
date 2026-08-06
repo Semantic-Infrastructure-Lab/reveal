@@ -48,6 +48,7 @@ Scope:
       guide that exists, so the two rules don't double-report the same gap.
 """
 
+import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
@@ -55,6 +56,8 @@ from typing import Any, Dict, Iterator, List, Optional
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...core.treesitter_compat import node_children, tree_root, ts_parse
 from ...utils.path_utils import to_posix
+
+logger = logging.getLogger(__name__)
 from .utils import find_reveal_root
 
 # Universal result-control params handled by shared query-parsing plumbing,
@@ -97,7 +100,8 @@ class V027(BaseRule):
         try:
             from tree_sitter_language_pack import get_parser
             from reveal.adapters.base import _ADAPTER_REGISTRY
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V027: failed to import parser/adapter registry: {e}")
             return []
 
         # find_reveal_root() returns the reveal *package* dir (the one holding
@@ -126,7 +130,8 @@ class V027(BaseRule):
 
             try:
                 schema = _ADAPTER_REGISTRY[scheme].get_schema()
-            except Exception:
+            except Exception as e:
+                logger.warning(f"V027: get_schema() failed for {scheme}://: {e}")
                 continue
             query_params: Dict[str, Any] = schema.get('query_params') or {}
 
