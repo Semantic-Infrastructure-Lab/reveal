@@ -7,7 +7,7 @@ help_category: ai_guides
 help_token_estimate: "~40,000"
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.113.0
+**Version:** 0.114.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~40,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -4398,6 +4398,19 @@ Use that guidance - it tells you exactly what to do next!
 Use `--grep` for any text or identifier that isn't a named element `ast://` can filter on
 (constants, string literals, config keys). For a *definition* by name, use `ast://?name=X`
 (e.g. `reveal 'ast://src/?name=load_config'`) — both beat `grep -rn`.
+
+### Mistake 6: Using sed/grep line-windows instead of resolving the semantic unit
+```bash
+❌ sed -n '120,180p' file.py           # arbitrary window, may cut mid-function
+❌ grep -A 20 'pattern' file.py        # fixed line count, not a semantic unit
+✅ reveal file.py :150 --scope         # resolve line 150 to its enclosing function/class
+✅ reveal file.py <that_function>      # then extract the real semantic unit — right-sized, not padded
+```
+A line number from a stack trace, test failure, or diagnostic is not a reason to shell out.
+Note `:LINE --around` is *not* the fix here — it's a fixed ±N line window (default 20),
+mechanically the same padding trick as `grep -A/-B/-C`, just centered. Use `--scope` to find
+the real enclosing unit first; reach for `--around`/`:START-END` only when you deliberately
+want an arbitrary range (e.g. spanning multiple functions).
 
 ---
 

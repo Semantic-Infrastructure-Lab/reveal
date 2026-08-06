@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-08-02 (nexobite-0801 — v0.113.0 release: Output Contract v1.1 complete, --provenance, scope census, mcp 2.0 migration)
+> **Last updated**: 2026-08-06 (rainbow-mural-0805 — v0.114.0 release: CLI report envelope migration complete, help-system coherence pass, canonical adapter constructors, codex:// parity + breaking rename, security hardening)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,16 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.114.0 — CLI report envelope migration complete, help-system coherence pass, canonical adapter constructors, codex:// parity, security hardening
+- ✅ Every remaining hand-rolled CLI report now emits through `ResultBuilder`/the Output Contract — `surface://`, `contracts://`, `hotspots://`, `deps://`, `architecture://`, `overview://`, `testability://`, `trace://`, `pack://`, `check --format json`, plus `claude://`/`codex://`/`depends://`/`patches://` (BACK-904, 905, 955–962, 949) — closing out the architecture initiative Output Contract v1.1 (v0.113.0) started.
+- ✅ Help-system coherence pass — unified `help://` signposting, `see_also` reachability, alias marking, guide-index parity, a schema-corruption bug fix (BACK-926–936).
+- ✅ Canonical `ResourceAdapter.__init__` signature for all 25 adapters, `factory.py`'s try-chain retired to a deprecated shim (BACK-907, BACK-948).
+- ✅ `codex://` primitive-parity pass (`/digest`, `/exchanges`, `/message/<n>`, skills, plugins) with a breaking query-param rename (`?search=`/`?content=` → `?filter=`/`?search=`, BACK-943–947).
+- ✅ `claude://` `/user`+`/assistant` consolidated into `?raw`, two real defects fixed alongside it (BACK-937, 939).
+- ✅ Security: SQL injection hardening in `mysql://`/`sqlite://` (BACK-896, 897); `types.py` renamed off a stdlib-shadowing name (BACK-900); `analyzers/`↔`adapters/` import cycle broken (BACK-911).
+- ✅ New detection capabilities: hardcoded-collection-literal rule M104 (BACK-750), project-configurable `?uncalled` entry points (BACK-952), Dart `--keys` map-subscript support (BACK-582).
+- ✅ `patches://testability` boundary-join oracle found and fixed 2 real defects (BACK-974); Go `contracts://` implementer matching now requires signature, not just name (BACK-816); directory listings honor `--format json` (BACK-975). Full detail in CHANGELOG.md.
 
 ### v0.113.0 — Output Contract v1.1 complete, --provenance, scope census, capability validation data, mcp 2.0 migration
 - ✅ Output Contract v1.1 migration complete — all `analyzers/` (BACK-885) and `adapters/` (BACK-891) files, plus `xlsx.py`'s separate gap (BACK-892), migrated onto `ResultBuilder`.
@@ -135,7 +145,7 @@ Earlier releases (v0.33–v0.91) and full per-item notes: [CHANGELOG.md](CHANGEL
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: **11,681 passing** (v0.113.0+HEAD) — 28 skipped, 2 xfailed (intentional: PowerPivot fixtures, network adapters)
+- Test count: **11,681 passing** (v0.114.0) — 28 skipped, 2 xfailed (intentional: PowerPivot fixtures, network adapters)
 - Coverage: **~68%** — target 90%+
 - UX query/navigation surface: complete (query operators, field selection, element discovery, `--outline`/`--scope`/`--varflow`/`--calls` range)
 
@@ -325,7 +335,7 @@ reveal 'ast://src/?name~=^[A-Z_]+$'    # all SCREAMING_SNAKE constants
 
 ### BACK-296: `codex://` adapter — Codex CLI session analysis
 
-**Status:** ✅ Phase 1/2/3 all shipped (Phase 1 v0.97.0; Phase 2/3 depth — `/tools`, `/shell`, `/errors`, `?tokens`, `/workflow`, `/timeline`, `?goal`, content search — landed by v0.113.0+HEAD, plus `/digest`, `/exchanges`, `/message/<n>`, `skills`, `plugins` beyond the original plan, BACK-943-947). Retained below as the `claude://`-vs-`codex://` structural reference.
+**Status:** ✅ Phase 1/2/3 all shipped (Phase 1 v0.97.0; Phase 2/3 depth — `/tools`, `/shell`, `/errors`, `?tokens`, `/workflow`, `/timeline`, `?goal`, content search — landed by v0.114.0, plus `/digest`, `/exchanges`, `/message/<n>`, `skills`, `plugins` beyond the original plan, BACK-943-947). Retained below as the `claude://`-vs-`codex://` structural reference.
 **Design doc:** `internal-docs/design/CODEX_ADAPTER_DESIGN_2026-05-24.md`
 **Live schema:** `reveal help://schemas/codex` — source of truth for current query params/output types, don't hand-maintain the list here.
 
