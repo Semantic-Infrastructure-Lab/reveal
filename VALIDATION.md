@@ -1732,9 +1732,10 @@ on the second corpus too — no category collapsed the way TypeScript's
 import recall once did (BACK-669's original motivation). Along the way the
 overfit-guard pass found and fixed 3 real oracle-side bugs (regression-
 checked byte-identical against each original corpus's committed results)
-and found and filed 6 new, narrow reveal-side residuals as tracked,
-not-yet-fixed tickets: BACK-816 (Go `contracts-structs`, same-named/
-different-return-type method matching), BACK-827/BACK-828 (C++ pure-
+and found and filed 6 new, narrow reveal-side residuals as tracked
+tickets: BACK-816 (Go `contracts-structs`, same-named/different-return-type
+method matching — **fixed**: implementer matching now requires
+name+parameter/return-signature text, not name alone), BACK-827/BACK-828 (C++ pure-
 virtual-destructor-only classes; out-of-line qualified nested classes),
 BACK-829 (Swift `~Copyable`/suppressed-conformance bases), BACK-830 (Kotlin
 class implementing a bare function-type supertype), and BACK-831 (TS `http`

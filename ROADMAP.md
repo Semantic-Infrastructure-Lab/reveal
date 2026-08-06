@@ -207,8 +207,9 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   corpus before being trusted (see Done, above), and that pass found real
   bugs in 6+ languages. The surface/contracts program has now had the same
   treatment across all 10 language/category slices — Go (BACK-816:
-  `contracts-structs` precision 93.15% on a second corpus, disclosed
-  name-only-matching tradeoff, not a new bug), Rust (all 4 categories true
+  `contracts-structs` precision 93.15% on a second corpus, the disclosed
+  name-only-matching tradeoff — since fixed, implementer matching now
+  requires name+signature text, not just name), Rust (all 4 categories true
   100%/100% after fixing 1 oracle-only bug), C++ (2 new defects filed,
   BACK-827/828), Java, C# (both clean 100%/100%), PHP, Ruby (1 oracle bug
   each, fixed), Swift (1 new defect filed, BACK-829), Kotlin (1 new defect
