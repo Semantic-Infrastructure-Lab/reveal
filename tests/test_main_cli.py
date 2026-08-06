@@ -183,6 +183,23 @@ class TestOutputFormats(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertNotIn("execution", data)
 
+    def test_plain_directory_format_json_emits_json(self):
+        """BACK-975: `reveal <dir> --format json` used to silently ignore
+        --format and return the same ASCII tree text as a bare `reveal <dir>`."""
+        result = self.run_reveal("tests/fixtures", "--format", "json")
+
+        self.assertEqual(result.returncode, 0)
+        data = json.loads(result.stdout)  # must not raise — was tree text pre-fix
+        self.assertIn("entries", data)
+
+    def test_directory_files_flag_format_json_emits_json(self):
+        """Same BACK-975 gap on the --files flat-listing branch."""
+        result = self.run_reveal("tests/fixtures", "--files", "--format", "json")
+
+        self.assertEqual(result.returncode, 0)
+        data = json.loads(result.stdout)
+        self.assertIn("entries", data)
+
 
 class TestPerfLogging(unittest.TestCase):
     """Test --perf invocation logging (reveal/main.py PERF_LOG_PATH)."""

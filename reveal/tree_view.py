@@ -59,33 +59,21 @@ def _sort_files(files: list, sort_by: Optional[str], sort_desc: bool) -> None:
         files.sort(key=lambda x: x[0].name.lower(), reverse=sort_desc)
 
 
-def show_file_list(path: str, show_hidden: bool = False,
-                   respect_gitignore: bool = True,
-                   exclude_patterns: Optional[List[str]] = None,
-                   sort_by: Optional[str] = None,
-                   sort_desc: bool = True,
-                   include_extensions: Optional[List[str]] = None,
-                   max_entries: int = 500) -> str:
-    """Show a flat sorted file list — replaces `find dir/ | sort -rn`.
+def _collect_sorted_file_entries(root_path: Path, show_hidden: bool,
+                                 respect_gitignore: bool,
+                                 exclude_patterns: Optional[List[str]],
+                                 sort_by: Optional[str], sort_desc: bool,
+                                 include_extensions: Optional[List[str]],
+                                 max_entries: int) -> Tuple[List[Tuple[Path, os.stat_result]], Optional[int]]:
+    """Collect and sort (fpath, stat) entries for a flat file listing.
 
-    Args:
-        path: Directory path
-        show_hidden: Whether to include hidden files/dirs
-        respect_gitignore: Whether to respect .gitignore rules
-        exclude_patterns: Additional patterns to exclude
-        sort_by: Sort key: 'mtime'/'modified' (default), 'name', 'size'
-        sort_desc: If True, newest/largest/z-first (default: True)
-        include_extensions: If set, only include files with these extensions
-        max_entries: Cap on files shown. 0 (or negative) means unlimited,
-                     matching show_directory_tree's --max-entries semantics.
+    Shared by show_file_list (text) and show_file_list_json — the collection/
+    sort/cap logic is identical, only the rendering differs.
 
     Returns:
-        Formatted list string, one file per line with date prefix
+        (files, total_count) — total_count is set only when capping discarded
+        entries beyond max_entries (None if unlimited or nothing was capped).
     """
-    root_path = Path(path)
-    if not root_path.is_dir():
-        return f"Error: {root_path} is not a directory"
-
     path_filter = PathFilter(
         root_path=root_path,
         respect_gitignore=respect_gitignore,
@@ -119,6 +107,40 @@ def show_file_list(path: str, show_hidden: bool = False,
             total_count = len(files)
             files = files[:max_entries]
 
+    return files, total_count
+
+
+def show_file_list(path: str, show_hidden: bool = False,
+                   respect_gitignore: bool = True,
+                   exclude_patterns: Optional[List[str]] = None,
+                   sort_by: Optional[str] = None,
+                   sort_desc: bool = True,
+                   include_extensions: Optional[List[str]] = None,
+                   max_entries: int = 500) -> str:
+    """Show a flat sorted file list — replaces `find dir/ | sort -rn`.
+
+    Args:
+        path: Directory path
+        show_hidden: Whether to include hidden files/dirs
+        respect_gitignore: Whether to respect .gitignore rules
+        exclude_patterns: Additional patterns to exclude
+        sort_by: Sort key: 'mtime'/'modified' (default), 'name', 'size'
+        sort_desc: If True, newest/largest/z-first (default: True)
+        include_extensions: If set, only include files with these extensions
+        max_entries: Cap on files shown. 0 (or negative) means unlimited,
+                     matching show_directory_tree's --max-entries semantics.
+
+    Returns:
+        Formatted list string, one file per line with date prefix
+    """
+    root_path = Path(path)
+    if not root_path.is_dir():
+        return f"Error: {root_path} is not a directory"
+
+    files, total_count = _collect_sorted_file_entries(
+        root_path, show_hidden, respect_gitignore, exclude_patterns,
+        sort_by, sort_desc, include_extensions, max_entries)
+
     if not files:
         ext_suffix = f" (ext: {','.join(include_extensions)})" if include_extensions else ""
         return f"No files found in {path}{ext_suffix}"
@@ -132,12 +154,46 @@ def show_file_list(path: str, show_hidden: bool = False,
             rel = fpath
         lines.append(f"{date_str}  {rel}")
 
-    if not unlimited and len(files) == max_entries:
+    if not (max_entries <= 0) and len(files) == max_entries:
         lines.append(f"\n... showing first {max_entries} entries (use --max-entries 0 to show all)"
                       if total_count is None else
                       f"\n... showing first {max_entries} of {total_count} entries (use --max-entries 0 to show all)")
 
     return '\n'.join(lines)
+
+
+def show_file_list_json(path: str, show_hidden: bool = False,
+                        respect_gitignore: bool = True,
+                        exclude_patterns: Optional[List[str]] = None,
+                        sort_by: Optional[str] = None,
+                        sort_desc: bool = True,
+                        include_extensions: Optional[List[str]] = None,
+                        max_entries: int = 500) -> dict:
+    """JSON counterpart to show_file_list — same entries, structured shape."""
+    root_path = Path(path)
+    if not root_path.is_dir():
+        return {'error': f'{root_path} is not a directory'}
+
+    files, total_count = _collect_sorted_file_entries(
+        root_path, show_hidden, respect_gitignore, exclude_patterns,
+        sort_by, sort_desc, include_extensions, max_entries)
+
+    entries = []
+    for fpath, stat in files:
+        try:
+            rel = fpath.relative_to(root_path)
+        except ValueError:
+            rel = fpath
+        entries.append({
+            'path': str(rel),
+            'modified': datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
+            'size': stat.st_size,
+        })
+
+    result: dict = {'path': str(root_path), 'entries': entries}
+    if total_count is not None:
+        result['total_count'] = total_count
+    return result
 
 
 def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **kwargs) -> str:
@@ -402,6 +458,126 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
         elif entry.is_dir():
             dir_entry_count += _process_dir_entry(entry, lines, prefix, connector, extension,
                                                   context, depth, show_hidden, fast, path_filter)
+
+
+def show_directory_tree_json(path: str, options: Optional[TreeViewOptions] = None, **kwargs) -> dict:
+    """JSON counterpart to show_directory_tree — same traversal (depth,
+    dir_limit, max_entries, sort, filters), structured shape instead of an
+    ASCII tree. See show_directory_tree for arg semantics.
+    """
+    if options is None:
+        options = TreeViewOptions(
+            depth=kwargs.get('depth', 3),
+            show_hidden=kwargs.get('show_hidden', False),
+            max_entries=kwargs.get('max_entries', 200),
+            fast=kwargs.get('fast', False),
+            respect_gitignore=kwargs.get('respect_gitignore', True),
+            exclude_patterns=kwargs.get('exclude_patterns', None),
+            dir_limit=kwargs.get('dir_limit', 50),
+            sort_by=kwargs.get('sort_by', None),
+            sort_desc=kwargs.get('sort_desc', False),
+            include_extensions=kwargs.get('include_extensions', None),
+        )
+
+    root_path = Path(path)
+    if not root_path.is_dir():
+        return {'error': f'{root_path} is not a directory'}
+
+    path_filter = PathFilter(
+        root_path=root_path,
+        respect_gitignore=options.respect_gitignore,
+        exclude_patterns=options.exclude_patterns,
+        include_defaults=True
+    )
+
+    context: dict[str, Any] = {
+        'count': 0, 'max_entries': options.max_entries, 'truncated': 0,
+        'dir_limit': options.dir_limit, 'sort_by': options.sort_by,
+        'sort_desc': options.sort_desc, 'include_extensions': options.include_extensions,
+        'max_entries_hit': False, 'dir_limit_hit': False,
+    }
+    entries = _walk_directory_json(root_path, depth=options.depth, show_hidden=options.show_hidden,
+                                   fast=options.fast, context=context, path_filter=path_filter)
+
+    result: dict = {'path': str(root_path), 'name': root_path.name or str(root_path), 'entries': entries}
+    if context['truncated'] > 0:
+        result['truncated'] = context['truncated']
+    return result
+
+
+def _check_dir_limit_json(dir_limit: int, dir_entry_count: int, entries: List[Path], i: int,
+                          context: dict) -> bool:
+    """JSON counterpart to _check_dir_limit — records the truncation count
+    without appending an ASCII "[snipped ...]" line."""
+    if dir_limit > 0 and dir_entry_count >= dir_limit:
+        context['truncated'] += len(entries) - i
+        context['dir_limit_hit'] = True
+        return True
+    return False
+
+
+def _file_entry_json(path: Path, fast: bool) -> dict:
+    """Structured counterpart to _get_file_info."""
+    entry: dict = {'name': path.name, 'type': 'file'}
+    try:
+        if fast:
+            entry['size'] = os.stat(path).st_size
+            return entry
+        analyzer_class = get_analyzer(str(path))
+        if analyzer_class:
+            analyzer = analyzer_class(str(path))
+            meta = analyzer.get_metadata()
+            entry['lines'] = meta['lines']
+            entry['language'] = analyzer.type_name
+        else:
+            entry['size'] = os.stat(path).st_size
+    except Exception:
+        pass
+    return entry
+
+
+def _walk_directory_json(path: Path, depth: int = 3, show_hidden: bool = False, fast: bool = False,
+                         context: Optional[dict] = None,
+                         path_filter: Optional[PathFilter] = None) -> List[dict]:
+    """JSON counterpart to _walk_directory — same traversal/filter/limit
+    logic, building nested entry dicts instead of ASCII tree lines."""
+    if depth <= 0:
+        return []
+
+    context = context or _initialize_context()
+
+    sort_by = context.get('sort_by')
+    sort_desc = context.get('sort_desc', False)
+    include_extensions = context.get('include_extensions')
+
+    entries = _get_sorted_entries(path, sort_by=sort_by, sort_desc=sort_desc)
+    if entries is None:
+        return []
+
+    entries = _filter_entries(entries, show_hidden, path_filter, include_extensions=include_extensions)
+
+    dir_limit = context.get('dir_limit', 0)
+    dir_entry_count = 0
+    result: List[dict] = []
+
+    for i, entry in enumerate(entries):
+        if _check_global_limit(context, entries, i):
+            return result
+
+        if _check_dir_limit_json(dir_limit, dir_entry_count, entries, i, context):
+            return result
+
+        if entry.is_file():
+            result.append(_file_entry_json(entry, fast))
+            context['count'] += 1
+            dir_entry_count += 1
+        elif entry.is_dir():
+            children = _walk_directory_json(entry, depth - 1, show_hidden, fast, context, path_filter)
+            result.append({'name': entry.name, 'type': 'dir', 'children': children})
+            context['count'] += 1
+            dir_entry_count += 1
+
+    return result
 
 
 def _get_file_info(path: Path, fast: bool = False) -> str:

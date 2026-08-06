@@ -6,7 +6,9 @@ import os
 import shutil
 from reveal.tree_view import (
     show_directory_tree,
+    show_directory_tree_json,
     show_file_list,
+    show_file_list_json,
     _count_entries,
     _get_file_info,
     _walk_directory
@@ -207,6 +209,71 @@ class TestTreeView(unittest.TestCase):
 
         self.assertIn('--max-entries 0', result)
         self.assertNotIn('--dir-limit 0', result)
+
+
+class TestDirectoryTreeJson(unittest.TestCase):
+    """BACK-975: --format json was silently ignored on a plain directory
+    listing, always returning ASCII tree text. show_directory_tree_json /
+    show_file_list_json are the JSON counterparts wired up to fix that."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        with open(os.path.join(self.temp_dir, 'file1.py'), 'w') as f:
+            f.write('\n'.join([f'line{i}' for i in range(10)]))
+        with open(os.path.join(self.temp_dir, '.hidden'), 'w') as f:
+            f.write('hidden file')
+        os.makedirs(os.path.join(self.temp_dir, 'subdir1'))
+        with open(os.path.join(self.temp_dir, 'subdir1', 'nested.py'), 'w') as f:
+            f.write('# nested file\n')
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir)
+
+    def test_returns_dict_not_string(self):
+        result = show_directory_tree_json(self.temp_dir)
+        self.assertIsInstance(result, dict)
+
+    def test_json_serializable(self):
+        import json
+        result = show_directory_tree_json(self.temp_dir)
+        json.dumps(result)  # must not raise
+
+    def test_contains_files_and_dirs(self):
+        result = show_directory_tree_json(self.temp_dir)
+        names = {e['name']: e for e in result['entries']}
+        self.assertIn('file1.py', names)
+        self.assertEqual(names['file1.py']['type'], 'file')
+        self.assertIn('subdir1', names)
+        self.assertEqual(names['subdir1']['type'], 'dir')
+        child_names = {c['name'] for c in names['subdir1']['children']}
+        self.assertIn('nested.py', child_names)
+
+    def test_hidden_files_excluded_by_default(self):
+        result = show_directory_tree_json(self.temp_dir)
+        names = {e['name'] for e in result['entries']}
+        self.assertNotIn('.hidden', names)
+
+    def test_hidden_files_included_when_requested(self):
+        result = show_directory_tree_json(self.temp_dir, show_hidden=True)
+        names = {e['name'] for e in result['entries']}
+        self.assertIn('.hidden', names)
+
+    def test_not_a_directory_returns_error_dict(self):
+        file_path = os.path.join(self.temp_dir, 'file1.py')
+        result = show_directory_tree_json(file_path)
+        self.assertIn('error', result)
+
+    def test_file_list_json_returns_dict(self):
+        result = show_file_list_json(self.temp_dir)
+        self.assertIsInstance(result, dict)
+        paths = {e['path'] for e in result['entries']}
+        self.assertIn('file1.py', paths)
+        self.assertIn(str(Path('subdir1') / 'nested.py'), paths)
+
+    def test_file_list_json_serializable(self):
+        import json
+        result = show_file_list_json(self.temp_dir)
+        json.dumps(result)  # must not raise
 
 
 class TestCountEntries(unittest.TestCase):

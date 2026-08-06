@@ -242,7 +242,9 @@ def _guard_related_flags(args: 'Namespace', path_str: str) -> None:
 
 def _handle_directory_path(path: Path, args: 'Namespace') -> None:
     """Route a resolved directory path to directory-meta, file-list, or tree view."""
-    from ...tree_view import show_directory_tree, show_file_list
+    from ...tree_view import (
+        show_directory_tree, show_file_list, show_directory_tree_json, show_file_list_json,
+    )
     if getattr(args, 'meta', False):
         _show_directory_meta(path, args)
         return
@@ -287,24 +289,45 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
         return
     sort_by = getattr(args, 'sort', None)
     include_extensions = _parse_ext_arg(ext_from_args)
+    output_format = getattr(args, 'format', 'text')
     if getattr(args, 'files', False):
         # --files defaults to newest-first; --asc flips it
         sort_desc = not getattr(args, 'asc', False)
-        print(show_file_list(str(path),
-                             respect_gitignore=args.respect_gitignore,
-                             exclude_patterns=args.exclude,
-                             sort_by=sort_by, sort_desc=sort_desc,
-                             include_extensions=include_extensions,
-                             max_entries=args.max_entries))
+        if output_format == 'json':
+            from ...utils import safe_json_dumps
+            print(safe_json_dumps(show_file_list_json(
+                str(path), respect_gitignore=args.respect_gitignore,
+                exclude_patterns=args.exclude,
+                sort_by=sort_by, sort_desc=sort_desc,
+                include_extensions=include_extensions,
+                max_entries=args.max_entries)))
+        else:
+            print(show_file_list(str(path),
+                                 respect_gitignore=args.respect_gitignore,
+                                 exclude_patterns=args.exclude,
+                                 sort_by=sort_by, sort_desc=sort_desc,
+                                 include_extensions=include_extensions,
+                                 max_entries=args.max_entries))
     else:
         sort_desc = getattr(args, 'desc', False)
-        print(show_directory_tree(str(path), depth=args.depth if args.depth is not None else 3,
-                                  max_entries=args.max_entries, fast=args.fast,
-                                  respect_gitignore=args.respect_gitignore,
-                                  exclude_patterns=args.exclude,
-                                  dir_limit=getattr(args, 'dir_limit', 0),
-                                  sort_by=sort_by, sort_desc=sort_desc,
-                                  include_extensions=include_extensions))
+        if output_format == 'json':
+            from ...utils import safe_json_dumps
+            print(safe_json_dumps(show_directory_tree_json(
+                str(path), depth=args.depth if args.depth is not None else 3,
+                max_entries=args.max_entries, fast=args.fast,
+                respect_gitignore=args.respect_gitignore,
+                exclude_patterns=args.exclude,
+                dir_limit=getattr(args, 'dir_limit', 0),
+                sort_by=sort_by, sort_desc=sort_desc,
+                include_extensions=include_extensions)))
+        else:
+            print(show_directory_tree(str(path), depth=args.depth if args.depth is not None else 3,
+                                      max_entries=args.max_entries, fast=args.fast,
+                                      respect_gitignore=args.respect_gitignore,
+                                      exclude_patterns=args.exclude,
+                                      dir_limit=getattr(args, 'dir_limit', 0),
+                                      sort_by=sort_by, sort_desc=sort_desc,
+                                      include_extensions=include_extensions))
 
 
 def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Namespace') -> None:
