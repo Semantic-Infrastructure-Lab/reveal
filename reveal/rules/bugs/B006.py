@@ -1,7 +1,14 @@
 """B006: Silent broad exception handler detector.
 
-Detects broad exception handlers (except Exception:) with only pass statement
-and no explanatory comment, which can hide serious bugs.
+Detects broad exception handlers (except Exception:) that produce no visible
+signal on failure — no re-raise, no WARNING/ERROR/CRITICAL-level log, no
+print — and no explanatory comment. This covers bare `pass` as well as
+`logger.debug(...)` followed by a return/assignment: debug-level logging is
+invisible in a normal run, so a handler that only logs at that level is just
+as silent as one that does nothing at all (see BACK-983 / BACK-979/981/982:
+this exact shape — `except Exception: logger.debug(...); return <empty>` —
+was found to hide real infrastructure failures behind results that look like
+a clean, valid empty output).
 """
 
 import ast
@@ -16,11 +23,16 @@ class B006(BaseRule, ASTParsingMixin):
     """Detect silent broad exception handlers that swallow errors."""
 
     code = "B006"
-    message = "Broad exception handler with silent pass can hide bugs"
+    message = "Broad exception handler with no visible failure signal can hide bugs"
     category = RulePrefix.B
     severity = Severity.MEDIUM
     file_patterns = ['.py']
-    version = "1.0.0"
+    version = "1.1.0"
+
+    # Logger/print calls that count as a *visible* signal. logger.debug() is
+    # deliberately excluded — it's invisible in a normal run, so a handler
+    # that only logs at debug level is still effectively silent.
+    _VISIBLE_LOG_CALLS = frozenset({'warning', 'error', 'critical', 'exception'})
 
     # Pattern to detect explanatory comments near pass statement
     COMMENT_PATTERN = re.compile(r'#\s*\w+')
@@ -73,7 +85,7 @@ class B006(BaseRule, ASTParsingMixin):
         """Check a single exception handler for silent broad exception swallowing."""
         if not self._is_broad_exception(node):
             return None
-        if not self._is_silent_pass(node):
+        if not self._is_silent(node):
             return None
         if self._has_explanatory_comment(node, lines):
             return None
@@ -95,7 +107,8 @@ class B006(BaseRule, ASTParsingMixin):
             suggestion=(
                 "Consider:\n"
                 "  1. Use specific exception types (ValueError, KeyError, etc.)\n"
-                "  2. Add logging: logger.debug(f'Ignoring error: {e}')\n"
+                "  2. Add visible logging: logger.warning(f'Ignoring error: {e}') —\n"
+                "     logger.debug() alone is invisible by default and does not count\n"
                 "  3. Add comment explaining why silence is intentional\n"
                 "  4. Re-raise if you can't handle: raise"
             ),
@@ -127,19 +140,38 @@ class B006(BaseRule, ASTParsingMixin):
 
         return False
 
-    def _is_silent_pass(self, node: ast.ExceptHandler) -> bool:
-        """Check if exception handler body is just pass.
+    def _is_silent(self, node: ast.ExceptHandler) -> bool:
+        """Check if exception handler body produces no visible failure signal.
+
+        A handler is silent if it never re-raises and never calls a
+        WARNING-or-higher log method or print — regardless of whether the
+        body is a bare `pass`, a `return`/`continue`/`break`, an assignment,
+        or `logger.debug(...)` followed by any of those. Debug-level logging
+        does not count as visible: it's off by default in a normal run, so a
+        handler that only logs at that level is just as silent to an actual
+        user as one that does nothing (see BACK-983).
 
         Args:
             node: AST ExceptHandler node
 
         Returns:
-            True if body contains only pass statement
+            True if the handler body has no visible signal on failure
         """
-        if len(node.body) != 1:
-            return False
-
-        return isinstance(node.body[0], ast.Pass)
+        for stmt in node.body:
+            for sub in ast.walk(stmt):
+                if isinstance(sub, ast.Raise):
+                    return False
+                if isinstance(sub, ast.Call):
+                    func = sub.func
+                    if isinstance(func, ast.Attribute):
+                        name = func.attr
+                    elif isinstance(func, ast.Name):
+                        name = func.id
+                    else:
+                        name = None
+                    if name in self._VISIBLE_LOG_CALLS or name == 'print':
+                        return False
+        return True
 
     # Keywords that indicate a docstring explicitly documents error-tolerance
     _DOCSTRING_ERROR_TOLERANCE = re.compile(

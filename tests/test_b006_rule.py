@@ -156,8 +156,14 @@ def foo():
         # B006 should not flag bare except (that's B001's job)
         self.assertEqual(len(detections), 0)
 
-    def test_allow_exception_with_logging(self):
-        """Test that exception with logging is allowed (not just pass)."""
+    def test_debug_logging_alone_still_flagged(self):
+        """logger.debug() alone is invisible by default — still silent (BACK-983).
+
+        Previously B006 treated any logging call as sufficient to exempt a
+        handler. debug-level logging doesn't show in a normal run, so this
+        is just as silent as bare pass — this is the exact shape found
+        hiding real bugs in BACK-979/981/982.
+        """
         content = """
 import logging
 logger = logging.getLogger(__name__)
@@ -171,10 +177,30 @@ def foo():
 """
         path = self.create_temp_file(content)
         detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_warning_logging_exempts(self):
+        """logger.warning() (or higher) is a real visible signal — exempt."""
+        content = """
+import logging
+logger = logging.getLogger(__name__)
+
+def foo():
+    try:
+        risky_operation()
+    except Exception as e:
+        logger.warning(f"Ignoring error: {e}")
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 0)
 
-    def test_allow_exception_with_other_action(self):
-        """Test that exception with other actions besides pass is allowed."""
+    def test_silent_return_none_now_flagged(self):
+        """except Exception: return None with no log/comment is silent — flag it (BACK-983).
+
+        No log at all is at least as silent as logger.debug(); this is the
+        return-a-plausible-empty-value shape found across BACK-981/982.
+        """
         content = """
 def foo():
     try:
@@ -184,7 +210,7 @@ def foo():
 """
         path = self.create_temp_file(content)
         detections = self.rule.check(path, None, content)
-        self.assertEqual(len(detections), 0)
+        self.assertEqual(len(detections), 1)
 
     def test_allow_exception_with_inline_comment(self):
         """Test that exception with inline comment on except line is allowed."""
@@ -353,8 +379,15 @@ def cleanup():
         self.assertEqual(len(detections), 0)
 
 
-    def test_try_then_try_fallback_not_flagged(self):
-        """try → except pass → try (multi-attempt pattern) should not be flagged."""
+    def test_try_then_try_fallback_first_handler_not_flagged(self):
+        """try → except pass → try (multi-attempt pattern): first handler is exempt,
+        but the terminal handler with no visible signal is now flagged (BACK-983).
+
+        The first handler is a genuine "continue to next attempt" — exempt.
+        The second (terminal) handler silently returns b'' on ANY exception,
+        indistinguishable from "fetched successfully, got empty content" —
+        exactly the shape found masking real failures in BACK-981/982.
+        """
         content = """
 def fetch_data(url):
     try:
@@ -372,9 +405,10 @@ def fetch_data(url):
 """
         path = self.create_temp_file(content)
         detections = self.rule.check(path, None, content)
-        # First except pass is multi-attempt fallback — should not be flagged
-        # Second except returns b'' — not a silent pass, should not be flagged either
-        self.assertEqual(len(detections), 0)
+        self.assertEqual(len(detections), 1)
+        lines = content.split('\n')
+        second_except_line = max(i + 1 for i, l in enumerate(lines) if 'except Exception' in l)
+        self.assertEqual(detections[0].line, second_except_line)
 
     def test_try_then_return_still_flagged(self):
         """try → except pass → return default should still be flagged (not a multi-attempt pattern)."""
