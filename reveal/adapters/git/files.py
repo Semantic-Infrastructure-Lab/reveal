@@ -1,6 +1,7 @@
 """Git file operations: history, blame, and content retrieval."""
 
 import hashlib
+import logging
 import os
 import re
 import sys
@@ -10,6 +11,8 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ...core import disk_cache
 from ...utils.results import ResultBuilder
+
+logger = logging.getLogger(__name__)
 
 # One entry per (repo, HEAD commit, since, no_merges) -- low cardinality like
 # I002's import-graph cache (one entry per scan root), not per-file like the
@@ -390,7 +393,8 @@ def _commit_diff_contains(
                     and pattern in line):
                 return True
         return False
-    except Exception:
+    except Exception as e:
+        logger.warning("pattern search failed for commit %s: %s", commit.id, e)
         return False
 
 
@@ -434,7 +438,8 @@ def _file_has_no_named_elements(path: str, subpath: str) -> bool:
             return True
         structure = analyzer_class(file_path).get_structure()
         return not structure.get('functions') and not structure.get('classes')
-    except Exception:
+    except Exception as e:
+        logger.warning("could not determine named elements for %s: %s", subpath, e)
         return False
 
 
@@ -836,7 +841,8 @@ def commit_touches_file(
                 return True
         return False
 
-    except Exception:
+    except Exception as e:
+        logger.warning("could not determine if commit %s touched %s: %s", commit.id, filepath, e)
         return False
 
 
@@ -866,7 +872,8 @@ def commit_touches_path(
                 return True
             return any(commit.tree.id != p.tree.id for p in commit.parents)
         return commit_touches_file(repo, commit, path)
-    except Exception:
+    except Exception as e:
+        logger.warning("could not determine if commit %s touched %s: %s", commit.id, path, e)
         return False
 
 
@@ -968,6 +975,8 @@ def _churn_fingerprint(
     try:
         workdir = repo.workdir or str(repo.path)
     except Exception:
+        # Intentional: caller treats None as "skip caching", not an error —
+        # the walk itself still runs, just uncached (see docstring).
         return None
     hasher = hashlib.sha256()
     hasher.update(str(workdir).encode("utf-8", "replace"))
