@@ -146,10 +146,16 @@ class TestCheckCode(unittest.TestCase):
         self.assertIn('critical', summary)
 
     @patch('subprocess.run')
-    def test_empty_stdout_returns_0(self, mock_run):
+    def test_empty_stdout_with_zero_returncode_returns_2(self, mock_run):
+        """Empty/unparseable output on a *successful* subprocess exit is an
+        unknown state, not a clean bill of health — must not report
+        code 0/"healthy" (regression: previously fell through to healthy
+        whenever returncode == 0, masking a `reveal check` output-format
+        regression as passing)."""
         mock_run.return_value = MagicMock(returncode=0, stdout='')
         code, summary = _check_code(Path('/tmp'), Namespace(select=None))
-        self.assertEqual(code, 0)
+        self.assertEqual(code, 2)
+        self.assertNotIn('healthy', summary)
 
     @patch('subprocess.run')
     def test_nonzero_returncode_returns_1(self, mock_run):
@@ -166,6 +172,15 @@ class TestCheckCode(unittest.TestCase):
         code, summary = _check_code(Path('/tmp'), Namespace(select=None))
         self.assertEqual(code, 1)
         self.assertIn('failed', summary)
+
+    @patch('subprocess.run')
+    def test_malformed_json_with_zero_returncode_returns_2(self, mock_run):
+        """A successful subprocess exit with output that doesn't parse as the
+        expected JSON shape is an unknown state, not "healthy"."""
+        mock_run.return_value = MagicMock(returncode=0, stdout='not valid json')
+        code, summary = _check_code(Path('/tmp'), Namespace(select=None))
+        self.assertEqual(code, 2)
+        self.assertNotIn('healthy', summary)
 
     @patch('subprocess.run')
     def test_subprocess_called_with_timeout(self, mock_run):

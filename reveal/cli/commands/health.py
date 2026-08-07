@@ -101,6 +101,7 @@ def run_health(args: Namespace) -> None:
         try:
             exit_code, summary = _check_target(target, args)
         except Exception as exc:
+            # Visible via the 'summary' field appended to results below.
             exit_code, summary = 2, f"error: {exc}"
         results.append({'target': target, 'exit_code': exit_code, 'summary': summary})
         if exit_code > overall_exit:
@@ -180,10 +181,14 @@ def _check_code(path: Path, args: Namespace):
             return 1, f"code: {violations} violations"
         else:
             return 0, "code: healthy"
-    except Exception:
+    except Exception as e:
         if result.returncode != 0:
             return 1, "code: check failed"
-        return 0, "code: healthy"
+        # Subprocess exited 0 but its output didn't parse as the expected
+        # JSON shape (or was empty) — that's an unknown state, not a clean
+        # bill of health. Reporting "healthy" here would silently mask a
+        # `reveal check` regression as passing.
+        return 2, f"code: could not parse check results ({e})"
 
 
 def _check_uri(scheme: str, uri: str, args: Namespace):
