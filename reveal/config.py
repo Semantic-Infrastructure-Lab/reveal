@@ -881,7 +881,10 @@ def _try_load_yaml_file(path: Path) -> Optional[Dict[str, Any]]:
         with open(path, encoding='utf-8') as f:
             loaded = yaml.safe_load(f)
             return cast(Dict[str, Any], loaded) if loaded is not None else None
-    except Exception:
+    except Exception as e:
+        # A malformed config file must not look identical to "no config file
+        # here" — the caller silently falls through to its default otherwise.
+        logger.warning(f"Failed to load config file {path}: {e}")
         return None
 
 

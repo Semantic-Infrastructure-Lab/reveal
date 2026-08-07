@@ -1,5 +1,6 @@
 """Git reference, branch, and tag handling."""
 
+import logging
 from datetime import datetime
 from typing import Dict, Any, List, cast, TYPE_CHECKING
 from reveal.reveal_types import CONTRACT_VERSION
@@ -8,6 +9,8 @@ from ...utils.results import ResultBuilder
 
 if TYPE_CHECKING:
     import pygit2
+
+logger = logging.getLogger(__name__)
 
 
 def get_ref_structure(
@@ -97,7 +100,10 @@ def get_head_info(repo: 'pygit2.Repository') -> Dict[str, Any]:
             'commit': str(repo.head.target)[:7],
             'detached': repo.head_is_detached,
         }
-    except Exception:
+    except Exception as e:
+        # Same shape as a genuinely empty/unborn repo (line 92) — log so a
+        # corrupted-HEAD failure isn't indistinguishable from a fresh repo.
+        logger.warning(f"Failed to read HEAD info: {e}")
         return {'branch': None, 'commit': None, 'detached': False}
 
 

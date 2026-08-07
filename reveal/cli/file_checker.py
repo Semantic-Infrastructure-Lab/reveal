@@ -88,6 +88,8 @@ def _i002_preload(directory: Path, select, ignore) -> dict:
         I002()._build_import_graph(root)   # populates _graph_cache in main process
         return dict(_graph_cache)          # plain dict is picklable
     except Exception:
+        # Documented fallback (see docstring): caller degrades to the old
+        # per-worker build behaviour when the shared cache can't be built.
         return {}
 
 
@@ -558,6 +560,8 @@ def _check_files_json(
         try:
             results = _run_parallel(sorted_files, directory, select, ignore)
         except Exception:
+            # Parallel execution itself failed (e.g. pool startup) — fall back to
+            # serial, still checking every file in sorted_files, not a smaller set.
             results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
     else:
         results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
@@ -631,6 +635,8 @@ def _check_files_text(
         try:
             result_iter = _run_parallel_streaming(sorted_files, directory, select, ignore)
         except Exception:
+            # Parallel execution itself failed (e.g. pool startup) — fall back to
+            # serial, still checking every file in sorted_files, not a smaller set.
             result_iter = (
                 (f, *check_and_collect_file(f, directory, select, ignore))
                 for f in sorted_files
