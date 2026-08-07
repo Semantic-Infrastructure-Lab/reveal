@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-08-06 (rainbow-mural-0805 — v0.114.0 release: CLI report envelope migration complete, help-system coherence pass, canonical adapter constructors, codex:// parity + breaking rename, security hardening)
+> **Last updated**: 2026-08-07 (wiyomexi-0807 — v0.115.0 release: silent-exception-swallowing audit round 2, help-system recipe-coverage + payload-size fixes)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,12 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.115.0 — silent-exception-swallowing audit round 2, help-system recipe-coverage + payload-size fixes
+- ✅ Second full pass of the "infrastructure failure renders as a clean/healthy result" bug class (BACK-979–992): most user-facing, malformed YAML frontmatter no longer reported as "no frontmatter"; `reveal health`'s code-check no longer reports false "healthy"; composite adapters (`hotspots://`, `architecture://`, `deps://`, `overview://`) now attribute sub-scan crashes via a new `ResourceAdapter.compose()` instead of swallowing them into an empty section; corrupted git `HEAD`/malformed config no longer silently identical to "nothing there"; explicit `0` in a numeric query param no longer treated as absent.
+- ✅ B006 detector generalized to recognize deferred error-variable use, helper-call/dict-literal/`ResultBuilder.create_error` signals, and logged-but-silent handlers — 121 false positives cleared with zero per-site changes; real tracked hits on reveal's own source 200 → 79 (BACK-983, 992, 989). Wired into CI as a regression gate (BACK-988).
+- ✅ `reveal offline` subcommand to pre-download tree-sitter grammars for air-gapped use (BACK-980).
+- ✅ `help://` discoverability and payload-size fixes: bare `help://examples --format=json` gets its own success type instead of overloading the error shape (BACK-998); `static_guides` deduped 33,029 → 14,164 bytes (BACK-999); 11 previously-uncovered adapters gained a recipe under `help://examples/<task>` (BACK-1000); `deps://`/`depends://`/`imports://` and `help://tricks`↔`help://examples` cross-linked (BACK-996, 997); 15 pre-existing wrong `output_type` values corpus-wide fixed after a hardcoded 6-of-11 test task list was found masking them. Full detail in CHANGELOG.md.
 
 ### v0.114.0 — CLI report envelope migration complete, help-system coherence pass, canonical adapter constructors, codex:// parity, security hardening
 - ✅ Every remaining hand-rolled CLI report now emits through `ResultBuilder`/the Output Contract — `surface://`, `contracts://`, `hotspots://`, `deps://`, `architecture://`, `overview://`, `testability://`, `trace://`, `pack://`, `check --format json`, plus `claude://`/`codex://`/`depends://`/`patches://` (BACK-904, 905, 955–962, 949) — closing out the architecture initiative Output Contract v1.1 (v0.113.0) started.
