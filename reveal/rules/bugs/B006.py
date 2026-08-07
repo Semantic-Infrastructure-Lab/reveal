@@ -46,7 +46,9 @@ class B006(BaseRule, ASTParsingMixin):
     # explicitly rather than matched by a broad "*_error()" heuristic — that
     # would risk exempting a genuinely silent handler that happens to call a
     # no-op method with an error-sounding name (BACK-992).
-    _VISIBLE_HELPER_CALLS = frozenset({'record_composed_error'})
+    _VISIBLE_HELPER_CALLS = frozenset({
+        'record_composed_error', 'create_error', 'create_error_result',
+    })
 
     # Dict-key / attribute names that, when assigned to inside an except
     # body, record the failure in-band for the caller to inspect instead of

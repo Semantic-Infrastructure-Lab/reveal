@@ -530,6 +530,36 @@ def get_agent(base, name):
         detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 0)
 
+    def test_result_builder_create_error_is_visible_signal(self):
+        """ResultBuilder.create_error(...) always sets the dict's 'error'
+        field — a canonical factory helper, same idea as
+        record_composed_error (BACK-992), found widespread in xlsx.py and
+        the analyzers/adapters that use ResultBuilder (BACK-989 triage)."""
+        content = """
+def read(path):
+    try:
+        return ResultBuilder.create(result_type='x', source=path, data={})
+    except Exception as e:
+        return ResultBuilder.create_error(result_type='x', source=path, error=str(e))
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_create_error_result_convenience_function_is_visible_signal(self):
+        """create_error_result(...) — the module-level convenience wrapper
+        around ResultBuilder.create_error() — counts the same way."""
+        content = """
+def read(path):
+    try:
+        return create(result_type='x', source=path, data={})
+    except Exception as e:
+        return create_error_result(result_type='x', source=path, error=str(e))
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
     def test_unrelated_dict_literal_still_flagged(self):
         """A dict literal without an error-field key doesn't earn the pass —
         the escape hatch stays narrow (BACK-992)."""
