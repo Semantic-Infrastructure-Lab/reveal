@@ -364,6 +364,7 @@ _SCHEMA_NOTES = [
     'Unused import detection works with Python, JavaScript, Go, etc.',
     'False positives: imports that trigger side effects (e.g. decorator-based registration) will be flagged as unused — these are intentional and safe to ignore',
     'Fan-in ranking covers static imports only — decorator-based registration and importlib dynamic imports are not captured',
+    'Two summary views sit on top of this adapter: deps:// (whole-tree dashboard) and depends:// (single-module reverse lookup) — use imports:// directly for the raw graph or a query neither of those covers',
 ]
 
 

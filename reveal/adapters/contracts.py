@@ -1077,7 +1077,7 @@ class ContractsAdapter(ResourceAdapter):
                 },
             ],
             'example_queries': [
-                {'uri': 'contracts://src', 'description': 'All contracts in src/', 'output_type': 'contracts'},
+                {'uri': 'contracts://src', 'description': 'All contracts in src/', 'output_type': 'contracts', 'task': 'codebase'},
             ],
             'notes': [
                 'Polyglot repos (more than one supported language present) nest results under by_language.',

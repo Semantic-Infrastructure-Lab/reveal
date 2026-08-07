@@ -104,6 +104,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Find authentication functions', 'query': 'ast://src?name~=auth&type=function', 'description': 'Locate authentication-related code', 'output_type': 'ast_query'},
             {'goal': 'Check SSL certificate expiry', 'query': 'ssl://example.com --expiring-within=30', 'description': 'Find certificates expiring soon', 'output_type': 'ssl_certificate'},
             {'goal': 'Find SQL query construction', 'query': 'ast://src?name~=query&complexity>5', 'description': 'Locate complex database queries (SQL injection risk)', 'output_type': 'ast_query'},
+            {'goal': 'Map the external attack surface', 'query': 'surface://src', 'description': 'Every CLI, HTTP route, env var, network call, and filesystem write the system touches — taxonomy-based, project-specific clients outside known libraries not detected', 'output_type': 'surface_scan'},
         ]
     },
     'codebase': {
@@ -115,6 +116,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Find entry points', 'query': 'ast://src?name=main*&type=function', 'description': 'Locate main() and main_* entry point functions', 'output_type': 'ast_query'},
             {'goal': 'List all classes', 'query': 'ast://src?type=class&sort=name', 'description': 'Enumerate class hierarchy for structural overview', 'output_type': 'ast_query'},
             {'goal': 'Find complex code', 'query': 'ast://src?complexity>15', 'description': 'Locate high-complexity functions', 'output_type': 'ast_query'},
+            {'goal': 'Find architectural seams', 'query': 'contracts://src', 'description': 'ABCs, Protocols, TypedDicts, dataclasses, BaseModels — where the interface boundaries are', 'output_type': 'contracts'},
         ]
     },
     'due-diligence': {
@@ -122,15 +124,16 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'due-diligence',
         'description': 'Technical due-diligence workflow — orient, find risk, quantify coupling, blast-radius, dead code, test honesty (run in order)',
         'recipes': [
-            {'goal': '1. Orient in 60 seconds', 'query': 'reveal overview <repo>', 'description': 'Counts, language mix, quality, top hotspots, architecture summary in one command. On multi-million-line repos this can take minutes — skip to the targeted steps below', 'output_type': 'reveal_overview'},
+            {'goal': '1. Orient in 60 seconds', 'query': 'reveal overview <repo>', 'description': 'Counts, language mix, quality, top hotspots, architecture summary in one command. On multi-million-line repos this can take minutes — skip to the targeted steps below', 'output_type': 'overview'},
             {'goal': '2. Where is the risk concentrated', 'query': "reveal 'ast://<repo>?complexity>25&sort=-complexity'", 'description': 'The files/functions carrying disproportionate complexity — where future incidents will trace back to (also: reveal hotspots <repo>)', 'output_type': 'ast_query'},
-            {'goal': '3. How coupled is it', 'query': "reveal 'imports://<repo>?circular=true'", 'description': 'Circular-dependency groups — a concrete, checkable architectural-debt number for a DD memo', 'output_type': 'imports_circular'},
-            {'goal': '4. What is everything built on', 'query': 'reveal pack <repo> --architecture', 'description': 'Fan-in ranking names the true core abstractions — changing their contracts is the highest-blast-radius work (also: reveal architecture <repo>)', 'output_type': 'pack_context'},
+            {'goal': '3. How coupled is it', 'query': "reveal 'imports://<repo>?circular=true'", 'description': 'Circular-dependency groups — a concrete, checkable architectural-debt number for a DD memo', 'output_type': 'circular_dependencies'},
+            {'goal': '4. What is everything built on', 'query': 'reveal architecture <repo>', 'description': 'Entry points, core abstractions (by fan-in), risks, and suggested next commands in one brief — changing a core abstraction\'s contract is the highest-blast-radius work. For a token-budgeted LLM context snapshot boosted the same way, use reveal pack <repo> --architecture instead', 'output_type': 'architecture'},
             {'goal': '5. If I touch this, what breaks', 'query': "reveal 'depends://<repo>/<module>'", 'description': 'Who imports this module (blast radius). For a function: reveal <repo>/<file> <fn> --sideeffects (note: intra-procedural only — "none" means none in this body, not safe to change)', 'output_type': 'module_dependents'},
             {'goal': "6. What's dead or duplicated", 'query': "reveal 'calls://<repo>?uncalled=true&type=function'", 'description': 'Statically-uncalled functions (test-runner entry points excluded by default; add &test-framework=true to include). Also: reveal check <repo> --select B,C,D,I,U for duplicates', 'output_type': 'calls_uncalled'},
-            {'goal': '7. Is the test suite honest', 'query': "reveal 'patches://<repo>/tests?group=target&limit=15'", 'description': 'Mock/patch-pressure grouped by target (Python/TS-JS) — which boundaries are over-mocked, a test-trust smell', 'output_type': 'patches_summary'},
-            {'goal': '8. Did recent changes hold up', 'query': 'reveal review <old-tag>..<new-tag>', 'description': 'Quality + structural assessment over a git range (or main..feature for an open PR)', 'output_type': 'review_summary'},
-            {'goal': '9. Diff structure across two revisions', 'query': "reveal 'diff://<repo>/<file>@<refA>::<repo>/<file>@<refB>'", 'description': 'Structural diff between two revisions of a file. For a whole-repo architecture delta, use reveal architecture <repo> --against <ref> instead', 'output_type': 'diff_structure'},
+            {'goal': '7. Is the test suite honest', 'query': "reveal 'patches://<repo>/tests?group=target&limit=15'", 'description': 'Mock/patch-pressure grouped by target (Python/TS-JS) — which boundaries are over-mocked, a test-trust smell', 'output_type': 'patches_scan'},
+            {'goal': '8. Did recent changes hold up', 'query': 'reveal review <old-tag>..<new-tag>', 'description': 'Quality + structural assessment over a git range (or main..feature for an open PR) — CLI subcommand, no URI adapter form'},
+            {'goal': '9. Diff structure across two revisions', 'query': "reveal 'diff://<repo>/<file>@<refA>::<repo>/<file>@<refB>'", 'description': 'Structural diff between two revisions of a file. For a whole-repo architecture delta, use reveal architecture <repo> --against <ref> instead', 'output_type': 'diff_comparison'},
+            {'goal': 'Bonus: curate an LLM-ready context snapshot', 'query': 'reveal pack <repo> --architecture', 'description': 'Token-budgeted export of the whole tree, boosted toward the same core abstractions step 4 identifies — for handing the codebase to another agent, not for the DD memo itself', 'output_type': 'pack'},
         ]
     },
     'debugging': {
@@ -141,6 +144,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Find error handlers', 'query': 'ast://src?name~=error&type=function', 'description': 'Locate error handling code', 'output_type': 'ast_query'},
             {'goal': 'Check recent changes', 'query': 'git://.?type=history', 'description': 'Review recent commit history', 'output_type': 'git_ref'},
             {'goal': 'Find large functions', 'query': 'ast://src?lines>100&type=function', 'description': 'Locate potentially problematic large functions', 'output_type': 'ast_query'},
+            {'goal': 'Walk the call chain from an entry point', 'query': 'trace://src?from=main', 'description': 'Depth-indented execution narrative built on calls:// BFS — see the actual path a bug report walks', 'output_type': 'trace'},
         ]
     },
     'quality': {
@@ -148,9 +152,12 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'quality',
         'description': 'Code quality and hotspot analysis',
         'recipes': [
-            {'goal': 'Find quality hotspots', 'query': 'stats://src?hotspots=true', 'description': 'Ranked list of files with quality issues', 'output_type': 'stats_summary'},
+            {'goal': 'Find quality hotspots', 'query': 'hotspots://src', 'description': 'File- and function-level hotspots in one ranked list — composes stats:// (file quality) and ast:// (function complexity) so you don\'t have to run both yourself', 'output_type': 'hotspots_scan'},
+            {'goal': 'Get an overall quality score', 'query': 'stats://src', 'description': 'Codebase-wide metrics — lines, functions, quality score — the raw numbers hotspots:// ranks against', 'output_type': 'stats_summary'},
             {'goal': 'Check code complexity', 'query': 'ast://src?complexity>10', 'description': 'High complexity functions', 'output_type': 'ast_query'},
             {'goal': 'Find long functions lacking simplicity', 'query': 'ast://src?type=function&lines>50&sort=-lines', 'description': 'Large functions sorted by size — prime documentation/refactor targets', 'output_type': 'ast_query'},
+            {'goal': 'Dependency health at a glance', 'query': 'deps://src', 'description': 'External packages, circular deps, unused imports — a dashboard composed from three imports:// queries, for when you want the summary not the raw graph', 'output_type': 'deps_scan'},
+            {'goal': 'Where test mocking hides real coupling', 'query': 'testability://src', 'description': 'Joins test patch/mock pressure with production boundary fan-out — over-mocked boundaries are untested boundaries', 'output_type': 'testability_report'},
         ]
     },
     'infrastructure': {
@@ -164,6 +171,9 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Check SSL certificate', 'query': 'ssl://example.com --check', 'description': 'Certificate health, expiry, chain validity', 'output_type': 'ssl_certificate'},
             {'goal': 'Validate nginx SSL certs from config', 'query': 'ssl://nginx:///etc/nginx/conf.d/*.conf --check --local-certs', 'description': 'Check cert files referenced by nginx (no network)', 'output_type': 'ssl_certificate'},
             {'goal': 'Domain health check', 'query': 'domain://example.com --check', 'description': 'DNS propagation, SSL status, registration info', 'output_type': 'domain_health'},
+            {'goal': 'Check cPanel AutoSSL run outcomes', 'query': 'autossl://latest?only-failures', 'description': 'Most recent AutoSSL run, failures only — per-domain DCV/TLS outcomes without wading through the passing domains', 'output_type': 'autossl_run'},
+            {'goal': 'Full cPanel user audit', 'query': 'cpanel://johndoe/full-audit', 'description': 'One-shot composite: SSL + ACL + nginx ACME readiness; exits 2 on any failure (add --format=json for scripting)', 'output_type': 'cpanel_full_audit'},
+            {'goal': "Find Let's Encrypt cert issues", 'query': 'letsencrypt:// --check-orphans', 'description': 'Certs not referenced by any nginx ssl_certificate directive — renewal candidates nobody is using (also: --check-duplicates for identical-SAN certs)', 'output_type': 'letsencrypt_inventory'},
         ]
     },
     'documentation': {
@@ -194,9 +204,9 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Files touched in a session', 'query': 'reveal claude://session/my-session/files', 'description': 'All Read/Write/Edit operations', 'output_type': 'claude_files'},
             {'goal': 'Session errors', 'query': 'reveal claude://session/my-session?errors', 'description': 'All errors with context', 'output_type': 'claude_errors'},
             {'goal': 'Prompt/answer pairs for a session', 'query': 'reveal claude://session/my-session/exchanges', 'description': 'Each human prompt paired with the assistant\'s final answer, skipping thinking-only and tool-only turns in between', 'output_type': 'claude_exchanges'},
-            {'goal': 'Codex session overview', 'query': 'reveal codex://SESSION-ID', 'description': 'Turns, tools, tokens, duration for a Codex CLI session', 'output_type': 'codex_overview'},
+            {'goal': 'Codex session overview', 'query': 'reveal codex://SESSION-ID', 'description': 'Turns, tools, tokens, duration for a Codex CLI session', 'output_type': 'codex_session_overview'},
             {'goal': 'Filter Codex sessions by title', 'query': "reveal 'codex://sessions/?filter=validate_token'", 'description': 'Metadata filter by title or first message (SQLite index, no JSONL scan)', 'output_type': 'codex_session_list'},
-            {'goal': 'Full-text search across Codex content', 'query': "reveal 'codex://sessions/?search=authentication'", 'description': 'Scan JSONL event files for a term', 'output_type': 'codex_search'},
+            {'goal': 'Full-text search across Codex content', 'query': "reveal 'codex://sessions/?search=authentication'", 'description': 'Scan JSONL event files for a term', 'output_type': 'codex_content_search'},
         ]
     },
     'history': {
@@ -215,10 +225,11 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'data',
         'description': 'Database and structured data inspection — SQLite, MySQL, Excel',
         'recipes': [
-            {'goal': 'List database tables', 'query': 'reveal sqlite:///path/to/app.db', 'description': 'Schema overview with row counts', 'output_type': 'sqlite_overview'},
+            {'goal': 'List database tables', 'query': 'reveal sqlite:///path/to/app.db', 'description': 'Schema overview with row counts', 'output_type': 'sqlite_database'},
             {'goal': 'Inspect a table', 'query': 'reveal sqlite:///path/to/app.db/users', 'description': 'Column types, constraints, sample rows', 'output_type': 'sqlite_table'},
-            {'goal': 'MySQL database overview', 'query': 'reveal mysql://user:pass@host/dbname', 'description': 'Tables, row counts, schema summary', 'output_type': 'mysql_overview'},
-            {'goal': 'Inspect an Excel workbook', 'query': 'reveal data.xlsx', 'description': 'Sheet names, column headers, row counts', 'output_type': 'xlsx_overview'},
+            {'goal': 'MySQL database overview', 'query': 'reveal mysql://user:pass@host/dbname', 'description': 'Tables, row counts, schema summary', 'output_type': 'mysql_health'},
+            {'goal': 'Inspect an Excel workbook', 'query': 'reveal xlsx:///path/to/data.xlsx', 'description': 'Sheet names, dimensions, header rows (the .xlsx extension auto-routes here too — reveal data.xlsx works the same)', 'output_type': 'xlsx_workbook'},
+            {'goal': 'Query a JSON file by path', 'query': 'json://config.json?flatten', 'description': 'Flatten to grep-able dotted-path format (also: ?schema for type structure, ?gron as an alias for ?flatten)', 'output_type': 'json_flatten'},
         ]
     },
     'runtime': {
@@ -226,10 +237,10 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'runtime',
         'description': 'Runtime environment — env vars, Python packages, reveal install state',
         'recipes': [
-            {'goal': 'All environment variables', 'query': 'reveal env://', 'description': 'Full env dump grouped by prefix', 'output_type': 'env_overview'},
-            {'goal': 'Filter env by prefix', 'query': "reveal 'env://?prefix=DB'", 'description': 'Show only DB_* variables', 'output_type': 'env_filtered'},
-            {'goal': 'Python package versions', 'query': 'reveal python://', 'description': 'Installed packages with versions', 'output_type': 'python_overview'},
-            {'goal': 'Reveal install info', 'query': 'reveal reveal://', 'description': 'Registered analyzers, adapters, rules', 'output_type': 'reveal_overview'},
+            {'goal': 'All environment variables', 'query': 'reveal env://', 'description': 'Full env dump grouped by prefix', 'output_type': 'environment'},
+            {'goal': 'Filter env by prefix', 'query': "reveal 'env://?prefix=DB'", 'description': 'Show only DB_* variables', 'output_type': 'environment'},
+            {'goal': 'Python package versions', 'query': 'reveal python://', 'description': 'Installed packages with versions', 'output_type': 'python_runtime'},
+            {'goal': 'Reveal install info', 'query': 'reveal reveal://', 'description': 'Registered analyzers, adapters, rules', 'output_type': 'reveal_structure'},
         ]
     },
 }
@@ -1465,6 +1476,17 @@ class HelpAdapter(ResourceAdapter):
                     'reveal help:// (no topic).'
                 )
                 result.setdefault('next', []).insert(0, 'reveal help://')
+            elif topic == 'tricks':
+                # BACK-997: this guide (prose, organized by workflow) and
+                # help://examples/<task> (structured JSON recipes) both curate
+                # task->command mappings but neither pointed at the other —
+                # an agent landing on one had no signal the other exists.
+                result['note'] = (
+                    'Looking for machine-readable, per-task query recipes '
+                    'instead of prose workflows? That is help://examples '
+                    '(help://examples/security, help://examples/quality, ...).'
+                )
+                result.setdefault('next', []).insert(0, 'reveal help://examples')
             return result
         except FileNotFoundError:
             return {

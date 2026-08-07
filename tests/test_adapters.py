@@ -446,15 +446,24 @@ class TestHelpAdapter(unittest.TestCase):
 
     # --- help://examples/* ---
 
-    def test_examples_bare_returns_error_with_tasks(self):
-        """help://examples returns error listing available tasks."""
+    def test_examples_bare_returns_success_index_with_tasks(self):
+        """help://examples returns a success-typed index listing available tasks (BACK-998)."""
         adapter = HelpAdapter()
         result = adapter.get_element('examples')
         self.assertIsNotNone(result)
-        self.assertEqual(result['type'], 'query_recipes')
+        self.assertEqual(result['type'], 'query_recipes_index')
+        self.assertNotIn('error', result)
         self.assertIn('available_tasks', result)
         self.assertIn('quality', result['available_tasks'])
         self.assertIn('security', result['available_tasks'])
+
+    def test_examples_unknown_task_returns_error(self):
+        """help://examples/<bogus> still returns the error shape (only the bare listing changed)."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('examples/nonexistent-task')
+        self.assertIsNotNone(result)
+        self.assertEqual(result['type'], 'query_recipes')
+        self.assertIn('error', result)
 
     def test_examples_task_returns_recipes(self):
         """help://examples/quality returns valid recipe list."""

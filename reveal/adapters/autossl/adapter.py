@@ -276,6 +276,7 @@ _SCHEMA: Dict[str, Any] = {
     'example_queries': [
         {
             'uri': 'autossl://',
+            'task': 'infrastructure',
             'description': 'List all available AutoSSL run timestamps on this server',
             'output_type': 'autossl_runs',
         },

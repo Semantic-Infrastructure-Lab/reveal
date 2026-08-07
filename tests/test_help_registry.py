@@ -401,6 +401,42 @@ class TestExampleRecipesNoTicketRefs(unittest.TestCase):
         self.assertFalse(offenders, 'Ticket references found in recipe text:\n' + '\n'.join(offenders))
 
 
+class TestAllAdaptersInExampleRecipes(unittest.TestCase):
+    """BACK-1000: every registered public adapter should appear in at least
+    one help://examples/<task> recipe's query, the same coverage guarantee
+    test_all_adapters_in_relationships already gives help://relationships.
+    Without this, a shipped adapter can go permanently invisible to the
+    task-based recipe index with nothing catching it (found: 11 of 33
+    adapters had zero coverage, silently, until an audit turned it up)."""
+
+    _SCHEME_RE = re.compile(r"\b([a-zA-Z][a-zA-Z0-9_-]*)://")
+    # Several adapters (overview, architecture, pack, stats, ...) have a
+    # blessed CLI-subcommand form (`reveal overview <repo>`) that's the same
+    # adapter under the hood, not a workaround — recipes use whichever reads
+    # more naturally, so both forms count as coverage.
+    _SUBCOMMAND_RE = re.compile(r"\breveal\s+([a-z][a-z_-]*)\b")
+
+    def test_all_adapters_referenced_in_some_recipe_query(self):
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+        all_registered = set(_ADAPTER_REGISTRY.keys()) - HelpAdapter._INTERNAL_ADAPTERS - {'help'}
+
+        referenced = set()
+        for task_data in _EXAMPLE_RECIPES.values():
+            for recipe in task_data.get('recipes', []):
+                query = recipe.get('query', '')
+                referenced.update(self._SCHEME_RE.findall(query))
+                referenced.update(
+                    m for m in self._SUBCOMMAND_RE.findall(query)
+                    if m in all_registered
+                )
+
+        missing = all_registered - referenced
+        self.assertEqual(
+            missing, set(),
+            f"Registered adapters missing from every help://examples/* recipe query: {missing}"
+        )
+
+
 class TestHelpEnvelopeConsistency(unittest.TestCase):
     """BACK-696: every get_element() tier carries contract_version; error
     dicts carry a 'next' list of follow-up commands."""

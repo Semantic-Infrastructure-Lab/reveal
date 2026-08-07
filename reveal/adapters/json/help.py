@@ -48,7 +48,7 @@ _SCHEMA_NOTES = [
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
-    {'uri': 'json://package.json', 'description': 'View entire JSON file (pretty-printed)', 'output_type': 'json_value'},
+    {'uri': 'json://package.json', 'description': 'View entire JSON file (pretty-printed)', 'output_type': 'json_value', 'task': 'data'},
     {'uri': 'json://package.json/name', 'description': 'Get package name', 'output_type': 'json_value'},
     {'uri': 'json://data.json/users/0', 'description': 'Get first user from array', 'output_type': 'json_value'},
     {'uri': 'json://data.json/users[0:3]', 'description': 'Get first 3 users (array slice)', 'output_type': 'json_value'},

@@ -273,7 +273,7 @@ class HotspotsAdapter(ResourceAdapter):
                 },
             ],
             'example_queries': [
-                {'uri': 'hotspots://src', 'description': 'Hotspots in src/', 'output_type': 'hotspots_scan'},
+                {'uri': 'hotspots://src', 'description': 'Hotspots in src/', 'output_type': 'hotspots_scan', 'task': 'quality'},
             ],
             'notes': [
                 'Composes StatsAdapter (file quality) and AstAdapter (function complexity) — not an independent scan.',

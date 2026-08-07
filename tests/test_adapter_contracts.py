@@ -415,12 +415,17 @@ class TestHelpSystemContracts(unittest.TestCase):
 
         Prevents recipe/schema drift: if you rename an output_type in a schema,
         any recipe referencing the old name should fail here.
+
+        Iterates the live _EXAMPLE_RECIPES task list rather than a hand-copied
+        subset — a hardcoded ['security', 'codebase', ...] here previously
+        missed 5 of 11 tasks (due-diligence, sessions, history, data, runtime),
+        which is exactly how data's 'xlsx_overview' (not a real output_type —
+        xlsx's schema defines 'xlsx_workbook') went undetected.
         """
-        from reveal.adapters.help import HelpAdapter
+        from reveal.adapters.help import HelpAdapter, _EXAMPLE_RECIPES
         h = HelpAdapter()
         defined_types = self._collect_defined_output_types()
-        tasks = ['security', 'codebase', 'debugging', 'infrastructure', 'quality', 'documentation']
-        for task in tasks:
+        for task in _EXAMPLE_RECIPES:
             with self.subTest(task=task):
                 result = h.get_element(f'examples/{task}')
                 self.assertIsNotNone(result, f'examples/{task} returned None')

@@ -394,7 +394,7 @@ class SurfaceAdapter(ResourceAdapter):
                 },
             ],
             'example_queries': [
-                {'uri': 'surface://src', 'description': 'All surfaces in src/', 'output_type': 'surface_scan'},
+                {'uri': 'surface://src', 'description': 'All surfaces in src/', 'output_type': 'surface_scan', 'task': 'security'},
             ],
             'notes': [
                 'Taxonomy-based — project-specific clients outside known libraries not detected.',

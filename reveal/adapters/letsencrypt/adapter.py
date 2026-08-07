@@ -333,6 +333,7 @@ class LetsEncryptAdapter(ResourceAdapter):
             'example_queries': [
                 {
                     'uri': 'letsencrypt://',
+                    'task': 'infrastructure',
                     'description': 'List all certs with SANs and expiry (add --check-orphans to find certs not referenced by any nginx ssl_certificate, --check-duplicates for identical-SAN renewal candidates, --format json for machine-readable output)',
                 },
             ],

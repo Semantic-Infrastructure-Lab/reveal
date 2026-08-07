@@ -192,7 +192,7 @@ class TestabilityAdapter(ResourceAdapter):
                 },
             ],
             'example_queries': [
-                {'uri': 'testability://src', 'description': 'Testability report for src/', 'output_type': 'testability_report'},
+                {'uri': 'testability://src', 'description': 'Testability report for src/', 'output_type': 'testability_report', 'task': 'quality'},
             ],
             'notes': [
                 'Patch-pressure detection is Python-only; JS/TS test suites see a note pointing at patches://.',

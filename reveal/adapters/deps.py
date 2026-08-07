@@ -295,6 +295,9 @@ class DepsAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Composed entirely from imports:// — not an independent scan.',
+                'Not depends:// (one character apart) — deps:// is a dashboard '
+                'over the whole tree; depends:// answers "who imports this one '
+                'module" for a single target.',
             ],
             'see_also': [
                 'reveal deps <path> - CLI subcommand form',
@@ -331,7 +334,7 @@ class DepsAdapter(ResourceAdapter):
                 },
             ],
             'example_queries': [
-                {'uri': 'deps://src', 'description': 'Dependency dashboard for src/', 'output_type': 'deps_scan'},
+                {'uri': 'deps://src', 'description': 'Dependency dashboard for src/', 'output_type': 'deps_scan', 'task': 'quality'},
             ],
             'notes': [
                 'Composed from three imports:// queries (base, ?circular, ?unused) — not an independent scan.',

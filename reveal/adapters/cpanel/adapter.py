@@ -491,7 +491,7 @@ _SCHEMA_OUTPUT_TYPES = [
 
 _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'cpanel://johndoe/full-audit', 'description': 'One-shot composite: ssl + ACL + nginx ACME; exits 2 on any failure (add --format=json for scripting)', 'output_type': 'cpanel_full_audit'},
-    {'uri': 'cpanel://johndoe', 'description': 'Overview: domain count, SSL summary, nginx config path', 'output_type': 'cpanel_user'},
+    {'uri': 'cpanel://johndoe', 'description': 'Overview: domain count, SSL summary, nginx config path', 'output_type': 'cpanel_user', 'task': 'infrastructure'},
     {'uri': 'cpanel://johndoe/domains', 'description': 'List all domains with docroots and type (main/addon/subdomain)', 'output_type': 'cpanel_domains'},
     {'uri': 'cpanel://johndoe/ssl', 'description': 'Disk cert health per domain — sorted by severity (add --dns-verified to exclude NXDOMAIN/elsewhere-pointing domains, --only-failures for non-ok only)', 'output_type': 'cpanel_ssl'},
     {'uri': 'cpanel://johndoe/ssl?domain_type=main_domain', 'description': 'Disk cert health for main domain only', 'output_type': 'cpanel_ssl'},

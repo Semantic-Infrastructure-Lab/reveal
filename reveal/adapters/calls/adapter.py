@@ -187,6 +187,23 @@ _SCHEMA: Dict[str, Any] = {
                              'calls': ['check_required', 'normalize_value', 'log_validation', 'raise_error']}],
             },
         },
+        # BACK-1000: uncalled/rank/modules were live ResultBuilder result_types
+        # (get_structure() above) with no matching output_types entry — any
+        # recipe/consumer declaring these against the schema silently failed
+        # validation. Minimal entries (no full example payload) close the gap;
+        # expand if a consumer needs the detailed shape.
+        {
+            'type': 'calls_uncalled',
+            'description': 'Statically-uncalled functions/files (?uncalled=true) — dead-code candidates',
+        },
+        {
+            'type': 'calls_ranking',
+            'description': 'Files/functions ranked by caller count (?rank=callers)',
+        },
+        {
+            'type': 'calls_module_graph',
+            'description': 'Module-level dependency graph derived from call relationships (?modules=true)',
+        },
     ],
     'example_queries': [
         {

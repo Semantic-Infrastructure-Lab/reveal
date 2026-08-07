@@ -340,7 +340,7 @@ class TraceAdapter(ResourceAdapter):
                 },
             ],
             'example_queries': [
-                {'uri': 'trace://src?from=main', 'description': 'Trace from main()', 'output_type': 'trace'},
+                {'uri': 'trace://src?from=main', 'description': 'Trace from main()', 'output_type': 'trace', 'task': 'debugging'},
             ],
             'notes': [
                 'Built on calls:// BFS machinery (find_callees_recursive) — not an independent scan.',

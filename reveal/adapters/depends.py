@@ -208,6 +208,8 @@ _SCHEMA_NOTES = [
     'Results are conservative: false negatives possible, never false positives',
     'Use ?top=N on a directory to find high-coupling modules (many dependents = high impact if changed)',
     'Use depends://file.py to do impact analysis before refactoring a module',
+    'Not deps:// (one character apart) — depends:// answers "who imports this '
+    'one module" for a single target; deps:// is a whole-tree dependency dashboard',
     'Scan root: ?root=DIR > .reveal.yaml root:true > package marker > VCS root > inferred subtree',
 ]
 

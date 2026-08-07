@@ -396,7 +396,7 @@ class ArchitectureAdapter(ResourceAdapter):
                 },
             ],
             'example_queries': [
-                {'uri': 'architecture://src', 'description': 'Brief for src/', 'output_type': 'architecture'},
+                {'uri': 'architecture://src', 'description': 'Brief for src/', 'output_type': 'architecture', 'task': 'due-diligence'},
             ],
             'notes': [
                 'Composed from imports:// (fan-in/fan-out/circular) and ast:// (complexity) — not an independent scan.',
