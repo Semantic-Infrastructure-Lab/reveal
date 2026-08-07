@@ -233,6 +233,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal pack <path>` | Token-budgeted context snapshot for LLM consumption (use `--budget`, `--focus`, `--since`) | `reveal pack --help` |
 | `reveal dev <command>` | Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config | `reveal dev --help` |
 | `reveal scaffold <kind>` | Older alias of `reveal dev new-*` — prefer `reveal dev` for new work | `reveal scaffold --help` |
+| `reveal offline` | Pre-download tree-sitter grammars for offline/air-gapped use | `reveal offline --help` |
 
 **Rule of thumb:**
 - Exploring an unfamiliar codebase → `reveal overview` first, then `reveal architecture`.
