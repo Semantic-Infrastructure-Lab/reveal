@@ -426,6 +426,82 @@ def read_config(path):
         # Single try block with silent pass + return default — still a B006 finding
         self.assertEqual(len(detections), 1)
 
+    # ==================== BACK-992: false-positive tuning ====================
+
+    def test_known_helper_call_is_visible_signal(self):
+        """record_composed_error() logs internally (BACK-984) — not silent."""
+        content = """
+def scan(adapter, path):
+    try:
+        return other.get_structure()
+    except Exception as exc:
+        adapter.record_composed_error('OtherAdapter', path, exc)
+        return {}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_unknown_helper_call_still_flagged(self):
+        """A method call with an error-sounding name is NOT a free pass —
+        only the explicitly-named known helper is recognized (BACK-992)."""
+        content = """
+def scan(adapter, path):
+    try:
+        return other.get_structure()
+    except Exception as exc:
+        adapter.handle_error(exc)
+        return {}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_error_field_dict_assignment_is_visible_signal(self):
+        """result['status'] = 'query_failed' records failure in-band."""
+        content = """
+def query(nameserver):
+    result = {}
+    try:
+        result['answer'] = do_query(nameserver)
+    except Exception as e:
+        result['status'] = 'query_failed'
+    return result
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_error_field_attribute_assignment_is_visible_signal(self):
+        """self.parse_error = ... records failure in-band."""
+        content = """
+class Doc:
+    def open(self, path):
+        try:
+            self.tree = parse(path)
+        except Exception as e:
+            self.parse_error = f"Error opening document: {e}"
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_unrelated_field_assignment_still_flagged(self):
+        """Assigning to a field NOT in the known error-name set stays silent —
+        the escape hatch is narrow, not 'any assignment counts' (BACK-992)."""
+        content = """
+def query(nameserver):
+    result = {}
+    try:
+        result['answer'] = do_query(nameserver)
+    except Exception:
+        result['value'] = None
+    return result
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

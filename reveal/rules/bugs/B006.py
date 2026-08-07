@@ -9,6 +9,12 @@ as silent as one that does nothing at all (see BACK-983 / BACK-979/981/982:
 this exact shape — `except Exception: logger.debug(...); return <empty>` —
 was found to hide real infrastructure failures behind results that look like
 a clean, valid empty output).
+
+Also recognizes two visible-signal shapes beyond a direct logger/print call
+(BACK-992): a call to a known helper that logs internally on the caller's
+behalf (e.g. ``record_composed_error()``), and an assignment that records the
+failure in-band on a result object (``result['status'] = 'query_failed'``,
+``self.parse_error = ...``).
 """
 
 import ast
@@ -27,12 +33,28 @@ class B006(BaseRule, ASTParsingMixin):
     category = RulePrefix.B
     severity = Severity.MEDIUM
     file_patterns = ['.py']
-    version = "1.1.0"
+    version = "1.2.0"
 
     # Logger/print calls that count as a *visible* signal. logger.debug() is
     # deliberately excluded — it's invisible in a normal run, so a handler
     # that only logs at debug level is still effectively silent.
     _VISIBLE_LOG_CALLS = frozenset({'warning', 'error', 'critical', 'exception'})
+
+    # Helper methods known to emit a visible warning-level signal internally,
+    # even though the call site here doesn't call logger directly (BACK-984's
+    # ResourceAdapter.compose()/record_composed_error() pattern). Named
+    # explicitly rather than matched by a broad "*_error()" heuristic — that
+    # would risk exempting a genuinely silent handler that happens to call a
+    # no-op method with an error-sounding name (BACK-992).
+    _VISIBLE_HELPER_CALLS = frozenset({'record_composed_error'})
+
+    # Dict-key / attribute names that, when assigned to inside an except
+    # body, record the failure in-band for the caller to inspect instead of
+    # (or alongside) a log call — e.g. result['status'] = 'query_failed',
+    # self.parse_error = f"...". A real visible-signal pattern B006 used to
+    # miss entirely (BACK-992). Kept to exact, unambiguous names so this
+    # doesn't become a blanket escape hatch for actually-silent handlers.
+    _ERROR_FIELD_NAMES = frozenset({'error', 'status', 'parse_error', 'failed'})
 
     # Pattern to detect explanatory comments near pass statement
     COMMENT_PATTERN = re.compile(r'#\s*\w+')
@@ -171,7 +193,28 @@ class B006(BaseRule, ASTParsingMixin):
                         name = None
                     if name in self._VISIBLE_LOG_CALLS or name == 'print':
                         return False
+                    if name in self._VISIBLE_HELPER_CALLS:
+                        return False
+                if isinstance(sub, (ast.Assign, ast.AugAssign)):
+                    targets = sub.targets if isinstance(sub, ast.Assign) else [sub.target]
+                    if any(self._is_error_field_target(t) for t in targets):
+                        return False
         return True
+
+    def _is_error_field_target(self, target: ast.expr) -> bool:
+        """True if an assignment target records failure state in-band.
+
+        Recognizes ``self.parse_error = ...`` (attribute) and
+        ``result['status'] = ...`` (subscript with a string-literal key)
+        against a fixed, unambiguous name set (see ``_ERROR_FIELD_NAMES``).
+        """
+        if isinstance(target, ast.Attribute):
+            return target.attr in self._ERROR_FIELD_NAMES
+        if isinstance(target, ast.Subscript):
+            key = target.slice
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                return key.value in self._ERROR_FIELD_NAMES
+        return False
 
     # Keywords that indicate a docstring explicitly documents error-tolerance
     _DOCSTRING_ERROR_TOLERANCE = re.compile(
