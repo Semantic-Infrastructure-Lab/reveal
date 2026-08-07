@@ -941,12 +941,16 @@ class TestParseTextFrontmatter:
         text = "some text\n---\ntitle: Late\n---\n"
         assert _parse_text_frontmatter(text) is None
 
-    def test_malformed_yaml_returns_none(self):
+    def test_malformed_yaml_raises_value_error(self):
+        """A frontmatter block that IS present but fails to parse must be
+        distinguishable from "no frontmatter at all" (BACK-989) — silently
+        returning None here made `reveal doc.md --frontmatter` tell users
+        "No YAML frontmatter found" even when they had a block with a typo."""
+        import pytest
         from reveal.cli.routing.uri import _parse_text_frontmatter
         text = "---\n: invalid: yaml: : :\n---\n"
-        # Should not raise, should return None or a result
-        result = _parse_text_frontmatter(text)
-        assert result is None or isinstance(result, dict)
+        with pytest.raises(ValueError):
+            _parse_text_frontmatter(text)
 
     def test_empty_text_returns_none(self):
         from reveal.cli.routing.uri import _parse_text_frontmatter
@@ -1012,6 +1016,22 @@ class TestRenderElementLinksAndFrontmatter:
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         err = capsys.readouterr().err
         assert 'No YAML frontmatter' in err
+        mock_renderer.render_element.assert_not_called()
+
+    def test_frontmatter_malformed_prints_distinct_error(self, capsys):
+        """A frontmatter block that's present but fails to parse must not be
+        reported the same way as "no frontmatter" (BACK-989)."""
+        from reveal.cli.routing import _render_element
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {
+            'topic': 'x', 'content': "---\n: invalid: yaml: : :\n---\n# Body"
+        }
+        mock_renderer = MagicMock()
+        args = _args(frontmatter=True)
+        _render_element(mock_adapter, mock_renderer, 'x', None, args)
+        err = capsys.readouterr().err
+        assert 'failed to parse' in err
+        assert 'No YAML frontmatter' not in err
         mock_renderer.render_element.assert_not_called()
 
     def test_no_text_field_falls_through_for_links(self):

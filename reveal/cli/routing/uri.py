@@ -45,7 +45,14 @@ def _parse_text_frontmatter(text: str) -> Optional[dict]:
     """Extract YAML frontmatter (---...---) from a markdown text string.
 
     Returns {'data': dict, 'line_start': int, 'line_end': int, 'raw': str}
-    or None if no valid frontmatter is present.
+    or None if no frontmatter block is present at all.
+
+    Raises:
+        ValueError: a frontmatter block IS present but isn't valid YAML — a
+            distinct case from "no frontmatter" (BACK-989: previously
+            swallowed to None, indistinguishable from a doc that never had
+            frontmatter — `reveal doc.md --frontmatter` told the user "No
+            YAML frontmatter found" even when they had a block with a typo).
     """
     if not text.startswith('---'):
         return None
@@ -56,8 +63,8 @@ def _parse_text_frontmatter(text: str) -> Optional[dict]:
     try:
         import yaml
         data = yaml.safe_load(yaml_content)
-    except Exception:
-        return None
+    except Exception as e:
+        raise ValueError(f"frontmatter block found but failed to parse as YAML: {e}") from e
     if not isinstance(data, dict):
         return None
     line_end = text[:end_match.start() + 3].count('\n') + 2
@@ -357,7 +364,11 @@ def _handle_frontmatter_mode(result: dict, args: 'Namespace', text_field: Option
     if not (getattr(args, 'frontmatter', False) and text_field):
         return False
     from reveal.display.formatting import _format_frontmatter
-    fm = _parse_text_frontmatter(result[text_field])
+    try:
+        fm = _parse_text_frontmatter(result[text_field])
+    except ValueError as e:
+        print(f"Error: {label} has a frontmatter block that failed to parse: {e}", file=sys.stderr)
+        return True
     if fm is not None:
         _format_frontmatter(fm)
     else:
