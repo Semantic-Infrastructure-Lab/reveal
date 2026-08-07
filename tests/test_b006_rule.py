@@ -502,6 +502,48 @@ def query(nameserver):
         detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 1)
 
+    def test_error_field_dict_literal_return_is_visible_signal(self):
+        """return {'error': str(e), ...} records failure in-band via a dict
+        *literal*, not an assignment — the dominant real shape adapter
+        handlers use (BACK-989 triage)."""
+        content = """
+def get_plan(path):
+    try:
+        return {'content': path.read_text()}
+    except Exception as e:
+        return {'type': 'plan', 'error': str(e)}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_error_field_dict_literal_with_spread_is_visible_signal(self):
+        """return {**base, 'error': str(e), ...} — spread plus literal keys."""
+        content = """
+def get_agent(base, name):
+    try:
+        return {**base, 'name': name}
+    except Exception as e:
+        return {**base, 'type': 'agent', 'error': str(e), 'name': name}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_unrelated_dict_literal_still_flagged(self):
+        """A dict literal without an error-field key doesn't earn the pass —
+        the escape hatch stays narrow (BACK-992)."""
+        content = """
+def query(nameserver):
+    try:
+        return {'answer': do_query(nameserver)}
+    except Exception:
+        return {'value': None}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

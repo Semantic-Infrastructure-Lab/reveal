@@ -33,7 +33,7 @@ class B006(BaseRule, ASTParsingMixin):
     category = RulePrefix.B
     severity = Severity.MEDIUM
     file_patterns = ['.py']
-    version = "1.2.0"
+    version = "1.3.0"
 
     # Logger/print calls that count as a *visible* signal. logger.debug() is
     # deliberately excluded — it's invisible in a normal run, so a handler
@@ -199,7 +199,25 @@ class B006(BaseRule, ASTParsingMixin):
                     targets = sub.targets if isinstance(sub, ast.Assign) else [sub.target]
                     if any(self._is_error_field_target(t) for t in targets):
                         return False
+                if isinstance(sub, ast.Dict) and self._has_error_field_key(sub):
+                    return False
         return True
+
+    def _has_error_field_key(self, node: ast.Dict) -> bool:
+        """True if a dict literal has a string-literal key recording failure state in-band.
+
+        Covers ``return {'error': str(e), ...}`` / ``return {**base, 'error':
+        ..., 'status': 'failure', ...}`` — the same in-band-signal idea as
+        ``_is_error_field_target`` (BACK-992), extended to dict *literals*
+        (construction), not just assignment to an existing dict/attribute.
+        This is the dominant real shape adapter handlers use to surface a
+        failure to the caller (BACK-989 triage).
+        """
+        return any(
+            isinstance(key, ast.Constant) and isinstance(key.value, str)
+            and key.value in self._ERROR_FIELD_NAMES
+            for key in node.keys
+        )
 
     def _is_error_field_target(self, target: ast.expr) -> bool:
         """True if an assignment target records failure state in-band.
