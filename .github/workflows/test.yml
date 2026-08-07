@@ -88,7 +88,18 @@ jobs:
           # current hits are triaged yet (BACK-989), so this is a ratchet against
           # a tracked baseline, not a zero-issues gate.
           BASELINE=$(cat .github/b006_baseline.txt)
-          COUNT=$(reveal check reveal --select=B006 --format=json 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin)['summary']['total_issues'])")
+          # `reveal check` exits 1 whenever it finds any issues -- expected
+          # here, since the baseline is a nonzero count by design (BACK-989
+          # tracks triaging it down to 0). Under bash's default `-e -o
+          # pipefail` for `shell: bash` steps, piping that nonzero exit
+          # straight into python3 killed this step before the baseline
+          # comparison ever ran, regardless of whether the count actually
+          # regressed -- silently broken since this gate was added (BACK-988)
+          # because the 24-commit batch push that introduced it only
+          # triggered CI on the final SHA, never validating it. `|| true`
+          # discards reveal check's own exit code while still letting
+          # pipefail catch a genuine failure in the python3 parse step.
+          COUNT=$( (reveal check reveal --select=B006 --format=json 2>/dev/null || true) | python3 -c "import json,sys; print(json.load(sys.stdin)['summary']['total_issues'])")
           echo "B006 issues: $COUNT (baseline: $BASELINE)"
           if [ "$COUNT" -gt "$BASELINE" ]; then
             echo "❌ B006 issue count increased ($BASELINE -> $COUNT) — a new silent broad-exception handler was introduced."
