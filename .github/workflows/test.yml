@@ -77,3 +77,24 @@ jobs:
           print('✅ Reveal self-validation passed (all V001-V006 checks)')
           EOF
 
+      - name: B006 silent-exception-handler regression gate (dogfooding)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        shell: bash
+        run: |
+          # BACK-988: B006 catches the exact bug shape behind BACK-979/981/982/
+          # 984/985/990/991 (an except-Exception handler with no visible failure
+          # signal, rendering a crash as a clean empty result). Nothing previously
+          # ran it in CI, so this class of bug could silently regress. Not all
+          # current hits are triaged yet (BACK-989), so this is a ratchet against
+          # a tracked baseline, not a zero-issues gate.
+          BASELINE=$(cat .github/b006_baseline.txt)
+          COUNT=$(reveal check reveal --select=B006 --format=json 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin)['summary']['total_issues'])")
+          echo "B006 issues: $COUNT (baseline: $BASELINE)"
+          if [ "$COUNT" -gt "$BASELINE" ]; then
+            echo "❌ B006 issue count increased ($BASELINE -> $COUNT) — a new silent broad-exception handler was introduced."
+            echo "   See internal-docs/case-studies/bugs-2026-08-06-silent-exception-swallowing-audit.md."
+            exit 1
+          elif [ "$COUNT" -lt "$BASELINE" ]; then
+            echo "✅ B006 count decreased ($BASELINE -> $COUNT) — update .github/b006_baseline.txt to $COUNT to lock in the improvement."
+          fi
+
