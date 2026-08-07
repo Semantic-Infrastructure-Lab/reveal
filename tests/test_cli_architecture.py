@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from reveal.adapters.architecture import (
+    ArchitectureAdapter,
     _build_next_commands,
     _compute_risks,
     _is_test_file,
@@ -524,9 +525,13 @@ class TestRunArchitecture(unittest.TestCase):
 class TestRunComplexFunctions(unittest.TestCase):
 
     def test_returns_list_on_failure(self):
+        adapter = ArchitectureAdapter('/p')
         with patch('reveal.adapters.ast.AstAdapter', side_effect=Exception('fail')):
-            result = _run_complex_functions(Path('/p'), 5)
+            result = _run_complex_functions(adapter, Path('/p'), 5)
         self.assertEqual(result, [])
+        meta = adapter.composed_meta()
+        self.assertIsNotNone(meta)
+        self.assertEqual(len(meta['errors']), 1)
 
 
 # ── _run_combined_analysis ─────────────────────────────────────────────────────
@@ -539,16 +544,20 @@ class TestRunCombinedAnalysis(unittest.TestCase):
         """If the shared walk (ImportsAdapter._build_graph) never runs, complexity
         analysis must still fall back to its own independent walk rather than
         silently losing data because of an unrelated imports failure."""
+        adapter = ArchitectureAdapter('/p')
         with patch('reveal.adapters.imports.ImportsAdapter', side_effect=Exception('fail')):
             with patch(
                 'reveal.adapters.architecture._run_complex_functions',
                 return_value=_COMPLEX_FNS,
             ) as mock_fallback:
-                complex_fns, imports_data = _run_combined_analysis(Path('/p'), 5)
+                complex_fns, imports_data = _run_combined_analysis(adapter, Path('/p'), 5)
 
-        mock_fallback.assert_called_once_with(Path('/p'), 5)
+        mock_fallback.assert_called_once_with(adapter, Path('/p'), 5)
         self.assertEqual(complex_fns, _COMPLEX_FNS)
         self.assertEqual(imports_data, {})
+        meta = adapter.composed_meta()
+        self.assertIsNotNone(meta)
+        self.assertEqual(len(meta['errors']), 1)
 
     def test_merges_imports_and_complexity_from_one_walk(self):
         mock_adapter = MagicMock()
@@ -570,12 +579,13 @@ class TestRunCombinedAnalysis(unittest.TestCase):
         mock_adapter._format_components.return_value = {'components': []}
         mock_adapter._format_circular.return_value = {'cycles': [], 'count': 0}
 
+        adapter = ArchitectureAdapter('/p')
         with patch('reveal.adapters.imports.ImportsAdapter', return_value=mock_adapter):
             with patch('reveal.adapters.ast.AstAdapter') as mock_ast_adapter_cls:
                 mock_ast_adapter_cls.return_value.get_structure.return_value = {
                     'results': [{'name': 'f', 'complexity': 25, 'file': '/p/a.py'}]
                 }
-                complex_fns, imports_data = _run_combined_analysis(Path('/p'), 5)
+                complex_fns, imports_data = _run_combined_analysis(adapter, Path('/p'), 5)
 
         # The structures collected during the shared walk must be the ones handed
         # to AstAdapter.get_structure — i.e. it must NOT re-walk the directory.
@@ -591,7 +601,7 @@ class TestRunImportsAnalysis(unittest.TestCase):
 
     def test_returns_empty_on_failure(self):
         with patch('reveal.adapters.imports.ImportsAdapter', side_effect=Exception('fail')):
-            result = _run_imports_analysis(Path('/p'))
+            result = _run_imports_analysis(ArchitectureAdapter('/p'), Path('/p'))
         self.assertEqual(result, {})
 
     def test_filters_init_from_entry_points(self):
@@ -605,7 +615,7 @@ class TestRunImportsAnalysis(unittest.TestCase):
         mock_adapter._format_circular.return_value = {'cycles': [], 'count': 0}
 
         with patch('reveal.adapters.imports.ImportsAdapter', return_value=mock_adapter):
-            result = _run_imports_analysis(Path('/p'))
+            result = _run_imports_analysis(ArchitectureAdapter('/p'), Path('/p'))
 
         ep_files = [e['file'] for e in result.get('entry_points', [])]
         self.assertNotIn('/p/__init__.py', ep_files)
@@ -622,7 +632,7 @@ class TestRunImportsAnalysis(unittest.TestCase):
         mock_adapter._format_circular.return_value = {'cycles': [], 'count': 0}
 
         with patch('reveal.adapters.imports.ImportsAdapter', return_value=mock_adapter):
-            result = _run_imports_analysis(Path('/p'))
+            result = _run_imports_analysis(ArchitectureAdapter('/p'), Path('/p'))
 
         ep_files = [e['file'] for e in result.get('entry_points', [])]
         self.assertNotIn('/p/tests/test_main.py', ep_files)
@@ -638,7 +648,7 @@ class TestRunImportsAnalysis(unittest.TestCase):
         mock_adapter.get_metadata.return_value = {'unsupported_extensions': {'.hs': 3}}
 
         with patch('reveal.adapters.imports.ImportsAdapter', return_value=mock_adapter):
-            result = _run_imports_analysis(Path('/p'))
+            result = _run_imports_analysis(ArchitectureAdapter('/p'), Path('/p'))
 
         self.assertEqual(result['unsupported_extensions'], {'.hs': 3})
 

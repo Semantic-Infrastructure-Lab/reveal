@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from reveal.adapters.hotspots import (
+    HotspotsAdapter,
     _build_test_name_index,
     _is_covered,
     _render_file_hotspots,
@@ -101,58 +102,84 @@ class TestCreateHotspotsParser(unittest.TestCase):
 
 
 class TestRunFileHotspots(unittest.TestCase):
-    """_run_file_hotspots: StatsAdapter mocked."""
+    """_run_file_hotspots: StatsAdapter mocked, composed via adapter.compose()."""
+
+    def setUp(self):
+        self.adapter = HotspotsAdapter('.')
 
     @patch('reveal.adapters.stats.StatsAdapter.get_structure')
     def test_returns_hotspots_list(self, mock_gs):
         mock_gs.return_value = {'hotspots': [_file_hotspot('a.py', 60), _file_hotspot('b.py', 75)]}
-        result = _run_file_hotspots(Path('.'), top=10)
+        result = _run_file_hotspots(self.adapter, Path('.'), top=10)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]['file'], 'a.py')
 
     @patch('reveal.adapters.stats.StatsAdapter.get_structure')
     def test_respects_top_limit(self, mock_gs):
         mock_gs.return_value = {'hotspots': [_file_hotspot(f'f{i}.py', 50) for i in range(20)]}
-        result = _run_file_hotspots(Path('.'), top=5)
+        result = _run_file_hotspots(self.adapter, Path('.'), top=5)
         self.assertEqual(len(result), 5)
 
     @patch('reveal.adapters.stats.StatsAdapter.get_structure')
     def test_missing_hotspots_key_returns_empty(self, mock_gs):
         mock_gs.return_value = {'other': []}
-        result = _run_file_hotspots(Path('.'), top=10)
+        result = _run_file_hotspots(self.adapter, Path('.'), top=10)
         self.assertEqual(result, [])
 
     @patch('reveal.adapters.stats.StatsAdapter.get_structure', side_effect=Exception("boom"))
     def test_exception_returns_empty(self, _mock):
-        result = _run_file_hotspots(Path('.'), top=10)
+        result = _run_file_hotspots(self.adapter, Path('.'), top=10)
         self.assertEqual(result, [])
+
+    @patch('reveal.adapters.stats.StatsAdapter.get_structure', side_effect=Exception("boom"))
+    def test_exception_records_attributed_error(self, _mock):
+        """BACK-984: a crashed sub-scan must not be silently indistinguishable
+        from a clean empty result — it records an attributed error."""
+        _run_file_hotspots(self.adapter, Path('.'), top=10)
+        meta = self.adapter.composed_meta()
+        self.assertIsNotNone(meta)
+        self.assertEqual(len(meta['errors']), 1)
+        self.assertIn('boom', meta['errors'][0]['message'])
 
 
 class TestRunFunctionHotspots(unittest.TestCase):
-    """_run_function_hotspots: AstAdapter mocked."""
+    """_run_function_hotspots: AstAdapter mocked, composed via adapter.compose()."""
+
+    def setUp(self):
+        self.adapter = HotspotsAdapter('.')
 
     @patch('reveal.adapters.ast.AstAdapter.get_structure')
     def test_returns_results_list(self, mock_gs):
         mock_gs.return_value = {'results': [_fn_hotspot('foo', 15), _fn_hotspot('bar', 12)]}
-        result = _run_function_hotspots(Path('/tmp'), min_complexity=10, top=10)
+        result = _run_function_hotspots(self.adapter, Path('/tmp'), min_complexity=10, top=10)
         self.assertEqual(len(result), 2)
 
     @patch('reveal.adapters.ast.AstAdapter.get_structure')
     def test_falls_back_to_elements_key(self, mock_gs):
         mock_gs.return_value = {'elements': [_fn_hotspot('baz', 11)]}
-        result = _run_function_hotspots(Path('/tmp'), min_complexity=10, top=10)
+        result = _run_function_hotspots(self.adapter, Path('/tmp'), min_complexity=10, top=10)
         self.assertEqual(len(result), 1)
 
     @patch('reveal.adapters.ast.AstAdapter.get_structure')
     def test_respects_top_limit(self, mock_gs):
         mock_gs.return_value = {'results': [_fn_hotspot(f'fn{i}', 10 + i) for i in range(15)]}
-        result = _run_function_hotspots(Path('/tmp'), min_complexity=10, top=5)
+        result = _run_function_hotspots(self.adapter, Path('/tmp'), min_complexity=10, top=5)
         self.assertEqual(len(result), 5)
 
     @patch('reveal.adapters.ast.AstAdapter.get_structure', side_effect=Exception("oops"))
     def test_exception_returns_empty(self, _mock):
-        result = _run_function_hotspots(Path('/tmp'), min_complexity=10, top=10)
+        result = _run_function_hotspots(self.adapter, Path('/tmp'), min_complexity=10, top=10)
         self.assertEqual(result, [])
+
+    def test_uses_ge_operator_not_off_by_one_hack(self):
+        """BACK-984: query built with 'complexity>=N' directly — the filter
+        parser supports >= natively, so the old 'complexity>{N-1}' hack to
+        emulate it is no longer needed."""
+        with patch('reveal.adapters.ast.AstAdapter.__init__', return_value=None) as mock_init, \
+             patch('reveal.adapters.ast.AstAdapter.get_structure', return_value={'results': []}):
+            _run_function_hotspots(self.adapter, Path('/tmp'), min_complexity=10, top=10)
+            called_query = mock_init.call_args.args[1]
+            self.assertIn('complexity>=10', called_query)
 
 
 class TestRenderFileHotspots(unittest.TestCase):

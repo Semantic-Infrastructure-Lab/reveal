@@ -7,7 +7,6 @@ other capability follows.
 
 from __future__ import annotations
 
-import logging
 import sys as _sys
 from collections import Counter
 from pathlib import Path
@@ -20,8 +19,6 @@ from .imports import ImportsAdapter
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
-
-logger = logging.getLogger(__name__)
 
 # Python stdlib module names (Python 3.10+, with fallback set for older versions)
 try:
@@ -46,32 +43,20 @@ _KNOWN_STDLIB = _STDLIB | _STDLIB_FALLBACK
 
 # ── Data collectors ────────────────────────────────────────────────────────────
 
-def _run_base(path: Path) -> Dict[str, Any]:
+def _run_base(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
     """Fetch base import map via ImportsAdapter."""
-    try:
-        return ImportsAdapter(str(path)).get_structure()
-    except Exception as exc:
-        logger.warning("import map collection failed for %s: %s", path, exc)
-        return {}
+    return adapter.compose(ImportsAdapter, str(path), default={})
 
 
-def _run_circular(path: Path) -> Dict[str, Any]:
+def _run_circular(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
     """Fetch circular dependency cycles via ImportsAdapter."""
-    try:
-        return ImportsAdapter(str(path), 'circular').get_structure()
-    except Exception as exc:
-        logger.warning("circular dependency collection failed for %s: %s", path, exc)
-        return {}
+    return adapter.compose(ImportsAdapter, str(path), default={}, query='circular')
 
 
-def _run_unused(path: Path) -> List[Dict[str, Any]]:
+def _run_unused(adapter: 'DepsAdapter', path: Path) -> List[Dict[str, Any]]:
     """Fetch unused imports via ImportsAdapter."""
-    try:
-        data = ImportsAdapter(str(path), 'unused').get_structure()
-        return data.get('unused', [])
-    except Exception as exc:
-        logger.warning("unused imports collection failed for %s: %s", path, exc)
-        return []
+    data = adapter.compose(ImportsAdapter, str(path), default={}, query='unused')
+    return data.get('unused', [])
 
 
 def _local_package_names(base_path: Path) -> frozenset:
@@ -358,9 +343,9 @@ class DepsAdapter(ResourceAdapter):
         no_unused = str(self.query_params.get('no_unused', False)).lower() == 'true'
         no_circular = str(self.query_params.get('no_circular', False)).lower() == 'true'
 
-        base = _run_base(path)
-        circular = {} if no_circular else _run_circular(path)
-        unused = [] if no_unused else _run_unused(path)
+        base = _run_base(self, path)
+        circular = {} if no_circular else _run_circular(self, path)
+        unused = [] if no_unused else _run_unused(self, path)
 
         report = {
             'path': str(path),
@@ -369,9 +354,13 @@ class DepsAdapter(ResourceAdapter):
             'unused': unused,
         }
 
+        meta = self.composed_meta()
         return ResultBuilder.create(
             result_type='deps_scan',
             source=self.path,
             contract_version=CONTRACT_VERSION,
             data=report,
+            warnings=meta.get('warnings') if meta else None,
+            errors=meta.get('errors') if meta else None,
+            confidence=meta.get('confidence') if meta else None,
         )

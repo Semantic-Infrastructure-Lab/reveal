@@ -20,27 +20,23 @@ from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
 
-def _run_file_hotspots(path: Path, top: int) -> List[Dict[str, Any]]:
+def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List[Dict[str, Any]]:
     """Fetch file-level hotspots via StatsAdapter."""
-    try:
-        from reveal.adapters.stats import StatsAdapter
-        data = StatsAdapter(str(path), 'hotspots=true').get_structure()
-        hotspots = data.get('hotspots', [])
-        return cast(List[Dict[str, Any]], hotspots[:top])
-    except Exception:
-        return []
+    from reveal.adapters.stats import StatsAdapter
+    data = adapter.compose(StatsAdapter, str(path), default={}, hotspots=True)
+    hotspots = data.get('hotspots', [])
+    return cast(List[Dict[str, Any]], hotspots[:top])
 
 
-def _run_function_hotspots(path: Path, min_complexity: int, top: int) -> List[Dict[str, Any]]:
+def _run_function_hotspots(adapter: 'HotspotsAdapter', path: Path, min_complexity: int, top: int) -> List[Dict[str, Any]]:
     """Fetch high-complexity functions via AstAdapter."""
-    try:
-        from reveal.adapters.ast import AstAdapter
-        query = f'complexity>{min_complexity - 1}&sort=-complexity&limit={top}'
-        data = AstAdapter(str(path), query).get_structure()
-        results = data.get('results', data.get('elements', []))
-        return cast(List[Dict[str, Any]], results[:top])
-    except Exception:
-        return []
+    from reveal.adapters.ast import AstAdapter
+    # BACK-984: '>=' directly, not the old '>{min_complexity - 1}' hack —
+    # the filter parser supports it natively.
+    query = f'complexity>={min_complexity}&sort=-complexity&limit={top}'
+    data = adapter.compose(AstAdapter, str(path), default={}, query=query)
+    results = data.get('results', data.get('elements', []))
+    return cast(List[Dict[str, Any]], results[:top])
 
 
 def _camel_to_snake(name: str) -> str:
@@ -291,8 +287,8 @@ class HotspotsAdapter(ResourceAdapter):
         functions_only = str(self.query_params.get('functions_only', False)).lower() == 'true'
         files_only = str(self.query_params.get('files_only', False)).lower() == 'true'
 
-        file_hotspots: List[Dict[str, Any]] = [] if functions_only else _run_file_hotspots(path, top)
-        fn_hotspots: List[Dict[str, Any]] = [] if files_only else _run_function_hotspots(path, min_cx, top)
+        file_hotspots: List[Dict[str, Any]] = [] if functions_only else _run_file_hotspots(self, path, top)
+        fn_hotspots: List[Dict[str, Any]] = [] if files_only else _run_function_hotspots(self, path, min_cx, top)
 
         test_index: Optional[Set[str]] = None
         if not files_only:
@@ -317,9 +313,13 @@ class HotspotsAdapter(ResourceAdapter):
             'function_hotspots': fn_hotspots,
         }
 
+        meta = self.composed_meta()
         return ResultBuilder.create(
             result_type='hotspots_scan',
             source=self.path,
             contract_version=CONTRACT_VERSION,
             data=report,
+            warnings=meta.get('warnings') if meta else None,
+            errors=meta.get('errors') if meta else None,
+            confidence=meta.get('confidence') if meta else None,
         )

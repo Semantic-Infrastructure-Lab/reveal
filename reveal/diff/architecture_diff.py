@@ -293,6 +293,7 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     _run_complex_functions(), unmodified.
     """
     from reveal.cli.commands.architecture import _run_complex_functions
+    from reveal.adapters.architecture import ArchitectureAdapter
     from reveal.adapters.imports import ImportsAdapter
 
     fan_in_out: List[Dict[str, Any]] = []
@@ -313,7 +314,13 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     except Exception as exc:
         logger.warning("imports analysis failed for %s: %s", root, exc)
 
-    complex_fns = _run_complex_functions(root, top_n * 4)
+    # BACK-984: _run_complex_functions composes AstAdapter via
+    # ResourceAdapter.compose(), which needs an adapter instance to attribute
+    # a sub-scan failure to. This snapshot function isn't itself an adapter
+    # method, so it carries its own throwaway ArchitectureAdapter for that —
+    # its composed_meta() isn't consulted here; this diff has its own
+    # contract/tests (BACK-435 area), unaffected by this internal plumbing.
+    complex_fns = _run_complex_functions(ArchitectureAdapter(str(root)), root, top_n * 4)
 
     return {
         'root': root,

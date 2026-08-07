@@ -230,6 +230,95 @@ class ResourceAdapter(ABC):
         from reveal.utils.results import ResultBuilder
         return ResultBuilder.create_meta(parse_mode, confidence, warnings, errors)
 
+    def compose(self, adapter_cls: type, resource: Any, *,
+                query: Optional[str] = None, default: Any = None,
+                **params: Any) -> Any:
+        """Run a sibling adapter in-process as part of this adapter's own scan.
+
+        Replaces the "build a query string by hand, construct the sibling,
+        swallow any exception into `[]`/`{}`" pattern that produced BACK-984:
+        a crashed sub-scan rendered as an empty section, indistinguishable
+        from a genuinely clean result, with the trust envelope
+        (``meta.warnings``/``errors``/``confidence``) never consulted.
+
+        ``adapter_cls`` must accept the canonical ``(resource, query)``
+        constructor. Pass simple params as keywords (``hotspots=True`` becomes
+        ``?hotspots=True``, safely urlencoded — no per-call-site string
+        formatting); pass ``query=`` directly for adapters using a
+        filter-expression or bare-flag query dialect (e.g.
+        ``query='complexity>=10&sort=-complexity'``, ``query='circular'``).
+
+        On success, the child's ``meta.warnings``/``errors`` are folded into
+        this adapter's own accumulated meta, and its ``meta.confidence`` (if
+        present) is tracked so the parent's composed confidence
+        (``composed_meta()``) reflects the weakest part, not just the parts
+        that happened to succeed. On exception, records an *attributed*
+        error (child adapter name, resource, exception message) instead of
+        silently discarding it, and returns ``default``.
+
+        Call ``self.composed_meta()`` once, when building the final result,
+        and pass its warnings/errors/confidence into ``ResultBuilder.create()``.
+        """
+        if query is None and params:
+            from urllib.parse import urlencode
+            query = urlencode(params)
+
+        child_name = getattr(adapter_cls, '__name__', str(adapter_cls))
+        try:
+            child = adapter_cls(str(resource), query)
+            result = child.get_structure()
+        except Exception as exc:
+            self.record_composed_error(child_name, resource, exc)
+            return default
+
+        if isinstance(result, dict):
+            child_meta = result.get('meta')
+            if child_meta:
+                self.__dict__.setdefault('_composed_warnings', []).extend(
+                    child_meta.get('warnings', []))
+                self.__dict__.setdefault('_composed_errors', []).extend(
+                    child_meta.get('errors', []))
+                confidence = child_meta.get('confidence')
+                if confidence is not None:
+                    self.__dict__.setdefault('_composed_confidences', []).append(confidence)
+
+        return result
+
+    def record_composed_error(self, source_name: str, resource: Any, exc: Exception) -> None:
+        """Record an attributed sub-scan failure that didn't go through
+        ``compose()`` — e.g. a sibling adapter driven via its private
+        methods (a shared-walk perf optimization) rather than its
+        ``get_structure()`` contract. Feeds the same accumulator
+        ``compose()`` does, so ``composed_meta()`` sees both. Same fix as
+        ``compose()`` for BACK-984, for the sites that can't use it directly.
+        """
+        self.__dict__.setdefault('_composed_errors', []).append({
+            'code': 'E_COMPOSE',
+            'message': f"{source_name}({resource!r}) failed: {exc}",
+            'file': str(resource),
+        })
+        logger.warning("%s(%r) failed during composition: %s", source_name, resource, exc)
+
+    def composed_meta(self) -> Optional[RevealMeta]:
+        """Merge everything recorded by ``compose()``/``record_composed_error()``
+        into one meta dict, or ``None`` if nothing was recorded (the common
+        case — a clean scan emits no meta, unchanged from before BACK-984).
+        Composed confidence is the minimum of any child confidences seen —
+        a composite is only as trustworthy as its weakest part.
+        """
+        warnings_list = self.__dict__.get('_composed_warnings')
+        errors_list = self.__dict__.get('_composed_errors')
+        confidences_list = self.__dict__.get('_composed_confidences')
+        if not warnings_list and not errors_list and not confidences_list:
+            return None
+
+        from reveal.utils.results import ResultBuilder
+        return ResultBuilder.create_meta(
+            warnings=warnings_list or None,
+            errors=errors_list or None,
+            confidence=min(confidences_list) if confidences_list else None,
+        )
+
     def get_element(self, element_name: str, **kwargs) -> Optional[RevealResult]:
         """Get details about a specific element within the resource.
 

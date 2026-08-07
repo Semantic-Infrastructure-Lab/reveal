@@ -30,14 +30,11 @@ _COMPLEXITY_ENTRY_THRESHOLD = 20  # entry point complexity that warrants a warni
 _FAN_IN_RISK_THRESHOLD = 8        # fan-in count that makes a file load-bearing
 
 
-def _run_complex_functions(path: Path, limit: int) -> List[Dict[str, Any]]:
-    try:
-        from reveal.adapters.ast import AstAdapter
-        data = AstAdapter(str(path), f'complexity>9&sort=-complexity&limit={limit}').get_structure()
-        return data.get('results', data.get('elements', []))
-    except Exception as exc:
-        logger.warning("AST analysis failed for %s: %s", path, exc)
-        return []
+def _run_complex_functions(adapter: 'ArchitectureAdapter', path: Path, limit: int) -> List[Dict[str, Any]]:
+    from reveal.adapters.ast import AstAdapter
+    data = adapter.compose(AstAdapter, str(path), default={},
+                            query=f'complexity>9&sort=-complexity&limit={limit}')
+    return data.get('results', data.get('elements', []))
 
 
 def _run_scope(path: Path) -> Dict[str, Any]:
@@ -51,14 +48,17 @@ def _run_scope(path: Path) -> Dict[str, Any]:
         return {}
 
 
-def _run_imports_analysis(path: Path) -> Dict[str, Any]:
+def _run_imports_analysis(adapter: 'ArchitectureAdapter', path: Path) -> Dict[str, Any]:
+    # Uses ImportsAdapter's private walk/format methods directly (not
+    # get_structure()) so cannot go through compose() — record the failure
+    # the same way compose() would (BACK-984).
     try:
         from reveal.adapters.imports import ImportsAdapter
-        adapter = ImportsAdapter(str(path))
-        adapter._build_graph(path)
-        return _format_imports_data(adapter, path)
+        importer = ImportsAdapter(str(path))
+        importer._build_graph(path)
+        return _format_imports_data(importer, path)
     except Exception as exc:
-        logger.warning("imports analysis failed for %s: %s", path, exc)
+        adapter.record_composed_error('ImportsAdapter', path, exc)
         return {}
 
 
@@ -94,7 +94,7 @@ def _format_imports_data(adapter, path: Path) -> Dict[str, Any]:
     }
 
 
-def _run_combined_analysis(path: Path, limit: int) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: int) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Run imports + complexity analysis sharing one walk, one parse per file.
 
     Running these as two independent full-repo walk+parse passes (the original
@@ -111,27 +111,30 @@ def _run_combined_analysis(path: Path, limit: int) -> Tuple[List[Dict[str, Any]]
     graph_built = False
     try:
         from reveal.adapters.imports import ImportsAdapter
-        adapter = ImportsAdapter(str(path))
+        importer = ImportsAdapter(str(path))
         # collect_structures=True runs per-file AST analysis in the same
         # (parallelized) walk as import extraction — no second full-repo pass.
-        adapter._build_graph(path, collect_structures=True)
-        structures = adapter._structures
+        importer._build_graph(path, collect_structures=True)
+        structures = importer._structures
         graph_built = True
-        imports_data = _format_imports_data(adapter, path)
+        imports_data = _format_imports_data(importer, path)
     except Exception as exc:
-        logger.warning("imports analysis failed for %s: %s", path, exc)
+        adapter.record_composed_error('ImportsAdapter', path, exc)
 
     if not graph_built:
         # The shared walk never ran, so no structures were collected either —
         # fall back to complexity analysis's own independent walk.
-        return _run_complex_functions(path, limit), imports_data
+        return _run_complex_functions(adapter, path, limit), imports_data
 
     try:
         from reveal.adapters.ast import AstAdapter
+        # Reuses `structures` from the shared walk above (get_structure()'s
+        # extra kwarg), so this can't go through compose() either — same
+        # attributed-failure treatment as the ImportsAdapter branch (BACK-984).
         data = AstAdapter(str(path), f'complexity>9&sort=-complexity&limit={limit}').get_structure(structures=structures)
         complex_fns = data.get('results', data.get('elements', []))
     except Exception as exc:
-        logger.warning("AST analysis failed for %s: %s", path, exc)
+        adapter.record_composed_error('AstAdapter', path, exc)
         complex_fns = []
 
     return complex_fns, imports_data
@@ -407,10 +410,10 @@ class ArchitectureAdapter(ResourceAdapter):
         no_imports = str(self.query_params.get('no_imports', False)).lower() == 'true'
 
         if no_imports:
-            complex_fns = _run_complex_functions(path, top * 4)
+            complex_fns = _run_complex_functions(self, path, top * 4)
             imports_data: Dict[str, Any] = {}
         else:
-            complex_fns, imports_data = _run_combined_analysis(path, top * 4)
+            complex_fns, imports_data = _run_combined_analysis(self, path, top * 4)
 
         risks = _compute_risks(imports_data, complex_fns, path)
         next_commands = _build_next_commands(path, risks, imports_data)
@@ -429,9 +432,13 @@ class ArchitectureAdapter(ResourceAdapter):
             'scope': _run_scope(path),
         }
 
+        meta = self.composed_meta()
         return ResultBuilder.create(
             result_type='architecture',
             source=self.path,
             contract_version=CONTRACT_VERSION,
             data=report,
+            warnings=meta.get('warnings') if meta else None,
+            errors=meta.get('errors') if meta else None,
+            confidence=meta.get('confidence') if meta else None,
         )

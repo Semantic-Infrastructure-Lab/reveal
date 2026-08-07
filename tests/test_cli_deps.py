@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from reveal.adapters.deps import (
+    DepsAdapter,
     _analyse_imports,
     _local_package_names,
     _render_circular,
@@ -250,25 +251,31 @@ class TestAnalyseImports(unittest.TestCase):
 
 class TestRunBase(unittest.TestCase):
 
+    def setUp(self):
+        self.adapter = DepsAdapter('/project')
+
     @patch('reveal.adapters.deps.ImportsAdapter')
     def test_returns_adapter_data(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_BASE_JSON)
-        result = _run_base(Path('/project'))
+        result = _run_base(self.adapter, Path('/project'))
         self.assertIn('files', result)
-        MockAdapter.assert_called_once_with(str(Path('/project')))
+        MockAdapter.assert_called_once_with(str(Path('/project')), None)
 
     @patch('reveal.adapters.deps.ImportsAdapter')
     def test_exception_returns_empty_dict(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
-        self.assertEqual(_run_base(Path('/project')), {})
+        self.assertEqual(_run_base(self.adapter, Path('/project')), {})
 
 
 class TestRunCircular(unittest.TestCase):
 
+    def setUp(self):
+        self.adapter = DepsAdapter('/project')
+
     @patch('reveal.adapters.deps.ImportsAdapter')
     def test_returns_cycles(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_CIRCULAR_JSON)
-        result = _run_circular(Path('/project'))
+        result = _run_circular(self.adapter, Path('/project'))
         self.assertEqual(result['count'], 2)
         self.assertEqual(len(result['cycles']), 2)
         MockAdapter.assert_called_once_with(str(Path('/project')), 'circular')
@@ -276,27 +283,30 @@ class TestRunCircular(unittest.TestCase):
     @patch('reveal.adapters.deps.ImportsAdapter')
     def test_exception_returns_empty_dict(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
-        self.assertEqual(_run_circular(Path('/project')), {})
+        self.assertEqual(_run_circular(self.adapter, Path('/project')), {})
 
 
 class TestRunUnused(unittest.TestCase):
 
+    def setUp(self):
+        self.adapter = DepsAdapter('/project')
+
     @patch('reveal.adapters.deps.ImportsAdapter')
     def test_returns_unused_list(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_UNUSED_JSON)
-        result = _run_unused(Path('/project'))
+        result = _run_unused(self.adapter, Path('/project'))
         self.assertEqual(len(result), 2)
         MockAdapter.assert_called_once_with(str(Path('/project')), 'unused')
 
     @patch('reveal.adapters.deps.ImportsAdapter')
     def test_exception_returns_empty_list(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
-        self.assertEqual(_run_unused(Path('/project')), [])
+        self.assertEqual(_run_unused(self.adapter, Path('/project')), [])
 
     @patch('reveal.adapters.deps.ImportsAdapter')
     def test_missing_unused_key_returns_empty(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = {'other': 'data'}
-        self.assertEqual(_run_unused(Path('/project')), [])
+        self.assertEqual(_run_unused(self.adapter, Path('/project')), [])
 
 
 # ── Renderer tests ─────────────────────────────────────────────────────────────

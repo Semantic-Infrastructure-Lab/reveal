@@ -45,13 +45,9 @@ _NON_CODE_EXT_LABELS: Dict[str, str] = {
 
 # ── Data collectors ────────────────────────────────────────────────────────────
 
-def _run_stats(path: Path) -> Dict[str, Any]:
+def _run_stats(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
     """Fetch stats and hotspots via StatsAdapter."""
-    try:
-        return StatsAdapter(str(path), 'hotspots=true').get_structure()
-    except Exception as exc:
-        logger.warning("stats collection failed for %s: %s", path, exc)
-        return {}
+    return adapter.compose(StatsAdapter, str(path), default={}, hotspots=True)
 
 
 def _run_scope(path: Path) -> Dict[str, Any]:
@@ -93,25 +89,27 @@ def _run_git_log(path: Path, limit: int) -> List[Dict[str, Any]]:
         return []
 
 
-def _run_complex_functions(path: Path, limit: int) -> List[Dict[str, Any]]:
+def _run_complex_functions(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dict[str, Any]]:
     """Fetch top complex functions via AstAdapter."""
-    try:
-        data = AstAdapter(str(path), f'complexity>9&sort=-complexity&limit={limit}').get_structure()
-        return data.get('results', data.get('elements', []))
-    except Exception as exc:
-        logger.warning("AST collection failed for %s: %s", path, exc)
-        return []
+    data = adapter.compose(AstAdapter, str(path), default={},
+                            query=f'complexity>9&sort=-complexity&limit={limit}')
+    return data.get('results', data.get('elements', []))
 
 
-def _run_imports_analysis(path: Path) -> Dict[str, Any]:
-    """Build import graph once and return architectural data for overview."""
+def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
+    """Build import graph once and return architectural data for overview.
+
+    Uses ImportsAdapter's private walk/format methods directly (not
+    get_structure()) so cannot go through compose() — record the failure
+    the same way compose() would (BACK-984).
+    """
     try:
-        adapter = ImportsAdapter(str(path))
-        adapter._build_graph(path)
-        fan_in = adapter._format_fan_in()
-        entrypoints = adapter._format_entrypoints()
-        components = adapter._format_components()
-        circular = adapter._format_circular()
+        importer = ImportsAdapter(str(path))
+        importer._build_graph(path)
+        fan_in = importer._format_fan_in()
+        entrypoints = importer._format_entrypoints()
+        components = importer._format_components()
+        circular = importer._format_circular()
         return {
             'fan_in': fan_in.get('entries', []),
             'entrypoints': entrypoints.get('entries', []),
@@ -122,10 +120,10 @@ def _run_imports_analysis(path: Path) -> Dict[str, Any]:
             # unsupported-language repo (all fan_in/entrypoints/components
             # empty) renders as a blank Architecture section, which reads as
             # "nothing here" rather than "not analyzed".
-            'unsupported_extensions': adapter.get_metadata().get('unsupported_extensions', {}),
+            'unsupported_extensions': importer.get_metadata().get('unsupported_extensions', {}),
         }
     except Exception as exc:
-        logger.warning("imports analysis failed for %s: %s", path, exc)
+        adapter.record_composed_error('ImportsAdapter', path, exc)
         return {'fan_in': [], 'entrypoints': [], 'components': [], 'circular_count': 0, 'unsupported_extensions': {}}
 
 
@@ -503,15 +501,15 @@ class OverviewAdapter(ResourceAdapter):
         no_git = str(self.query_params.get('no_git', False)).lower() == 'true'
         no_imports = str(self.query_params.get('no_imports', False)).lower() == 'true'
 
-        stats = _run_stats(path)
+        stats = _run_stats(self, path)
         git_log = [] if no_git else _run_git_log(path, top)
         git_foreign_root: Optional[Path] = None
         if git_log:
             git_root = _resolve_git_root(path)
             if git_root is not None and git_root != path:
                 git_foreign_root = git_root
-        complex_fns = _run_complex_functions(path, top)
-        architecture = {} if no_imports else _run_imports_analysis(path)
+        complex_fns = _run_complex_functions(self, path, top)
+        architecture = {} if no_imports else _run_imports_analysis(self, path)
 
         report = {
             'path': str(path),
@@ -523,9 +521,13 @@ class OverviewAdapter(ResourceAdapter):
             'scope': _run_scope(path),
         }
 
+        meta = self.composed_meta()
         return ResultBuilder.create(
             result_type='overview',
             source=self.path,
             contract_version=CONTRACT_VERSION,
             data=report,
+            warnings=meta.get('warnings') if meta else None,
+            errors=meta.get('errors') if meta else None,
+            confidence=meta.get('confidence') if meta else None,
         )

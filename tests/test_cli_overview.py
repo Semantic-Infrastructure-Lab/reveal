@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
 from reveal.adapters.overview import (
+    OverviewAdapter,
     _age_label,
     _is_test_file,
     _language_breakdown,
@@ -222,18 +223,21 @@ class TestAgeLabel(unittest.TestCase):
 
 class TestRunStats(unittest.TestCase):
 
+    def setUp(self):
+        self.adapter = OverviewAdapter('/project')
+
     @patch('reveal.adapters.overview.StatsAdapter')
     def test_returns_adapter_data(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_STATS_JSON)
-        result = _run_stats(Path('/project'))
+        result = _run_stats(self.adapter, Path('/project'))
         self.assertIn('summary', result)
         self.assertEqual(result['summary']['total_files'], 100)
-        MockAdapter.assert_called_once_with(str(Path('/project')), 'hotspots=true')
+        MockAdapter.assert_called_once_with(str(Path('/project')), 'hotspots=True')
 
     @patch('reveal.adapters.overview.StatsAdapter')
     def test_exception_returns_empty_dict(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
-        result = _run_stats(Path('/project'))
+        result = _run_stats(self.adapter, Path('/project'))
         self.assertEqual(result, {})
 
 
@@ -289,23 +293,26 @@ class TestResolveGitRoot(unittest.TestCase):
 
 class TestRunComplexFunctions(unittest.TestCase):
 
+    def setUp(self):
+        self.adapter = OverviewAdapter('/project')
+
     @patch('reveal.adapters.overview.AstAdapter')
     def test_returns_results_list(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_AST_JSON)
-        result = _run_complex_functions(Path('/project'), 5)
+        result = _run_complex_functions(self.adapter, Path('/project'), 5)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]['name'], 'complex_fn')
 
     @patch('reveal.adapters.overview.AstAdapter')
     def test_falls_back_to_elements_key(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = {'elements': [{'name': 'fn', 'complexity': 15}]}
-        result = _run_complex_functions(Path('/project'), 5)
+        result = _run_complex_functions(self.adapter, Path('/project'), 5)
         self.assertEqual(result[0]['name'], 'fn')
 
     @patch('reveal.adapters.overview.AstAdapter')
     def test_exception_returns_empty(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
-        result = _run_complex_functions(Path('/project'), 5)
+        result = _run_complex_functions(self.adapter, Path('/project'), 5)
         self.assertEqual(result, [])
 
 
@@ -724,6 +731,9 @@ class TestRelpath(unittest.TestCase):
 
 class TestRunImportsAnalysis(unittest.TestCase):
 
+    def setUp(self):
+        self.adapter = OverviewAdapter('/proj')
+
     @patch('reveal.adapters.overview.ImportsAdapter')
     def test_returns_structured_dict(self, MockAdapter):
         instance = MockAdapter.return_value
@@ -731,7 +741,7 @@ class TestRunImportsAnalysis(unittest.TestCase):
         instance._format_entrypoints.return_value = {'entries': [{'file': 'main.py', 'fan_out': 3}]}
         instance._format_components.return_value = {'components': [{'component': 'src', 'cohesion': 0.8, 'files': 4}]}
         instance._format_circular.return_value = {'count': 2}
-        result = _run_imports_analysis(Path('/proj'))
+        result = _run_imports_analysis(self.adapter, Path('/proj'))
         self.assertEqual(result['fan_in'], [{'file': 'a.py', 'fan_in': 5, 'fan_out': 1}])
         self.assertEqual(result['entrypoints'], [{'file': 'main.py', 'fan_out': 3}])
         self.assertEqual(result['circular_count'], 2)
@@ -739,7 +749,7 @@ class TestRunImportsAnalysis(unittest.TestCase):
     @patch('reveal.adapters.overview.ImportsAdapter')
     def test_exception_returns_empty_structure(self, MockAdapter):
         MockAdapter.side_effect = Exception("boom")
-        result = _run_imports_analysis(Path('/proj'))
+        result = _run_imports_analysis(self.adapter, Path('/proj'))
         self.assertEqual(result['fan_in'], [])
         self.assertEqual(result['entrypoints'], [])
         self.assertEqual(result['components'], [])
@@ -756,7 +766,7 @@ class TestRunImportsAnalysis(unittest.TestCase):
         instance._format_components.return_value = {'components': []}
         instance._format_circular.return_value = {'count': 0}
         instance.get_metadata.return_value = {'unsupported_extensions': {'.hs': 3}}
-        result = _run_imports_analysis(Path('/proj'))
+        result = _run_imports_analysis(self.adapter, Path('/proj'))
         self.assertEqual(result['unsupported_extensions'], {'.hs': 3})
 
 
