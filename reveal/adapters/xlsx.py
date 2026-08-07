@@ -1,5 +1,6 @@
 """Xlsx adapter for xlsx:// URIs - Excel spreadsheet analysis and extraction."""
 
+import logging
 import sys
 import re
 import base64
@@ -18,6 +19,8 @@ from ..utils import print_json_result
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
+
+logger = logging.getLogger(__name__)
 
 
 class XlsxRenderer:
@@ -1155,10 +1158,13 @@ class XlsxAdapter(ResourceAdapter):
             return {'has_powerquery': False, 'queries': []}
 
         blob_b64 = m.group(1).replace('\n', '').replace('\r', '').replace(' ', '')
-        try:
-            binary = base64.b64decode(blob_b64)
-        except Exception:
-            return {'has_powerquery': False, 'queries': []}
+        # No try/except here: a regex match means real base64 content was
+        # found (the "no power query present" case is already handled
+        # above), so a decode failure here is a genuine corruption/format
+        # bug, not an absence. Let it propagate to the caller's own
+        # except Exception, which reports it via ResultBuilder.create_error
+        # instead of silently degrading to a clean-looking empty result.
+        binary = base64.b64decode(blob_b64)
 
         # Scan local file headers (streaming ZIP — central directory may be empty)
         def _scan_local_headers(data: bytes) -> Dict[str, bytes]:
@@ -1311,8 +1317,10 @@ class XlsxAdapter(ResourceAdapter):
                 'relationships': relationships,
             }
         except ImportError:
+            # pbixray not installed — caller falls back to Tier 3 (pivot cache)
             return None
         except Exception:
+            # extraction failed on this file — caller falls back to Tier 3
             return None
 
     @staticmethod
@@ -1526,7 +1534,8 @@ class XlsxAdapter(ResourceAdapter):
                         pass
 
                 return result if result else None
-        except Exception:
+        except Exception as e:
+            logger.warning("powerpivot banner build failed for %s: %s", self.file_path, e)
             return None
 
     def _get_powerquery(self, mode: str) -> Dict[str, Any]:
