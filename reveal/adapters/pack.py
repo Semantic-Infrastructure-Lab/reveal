@@ -103,6 +103,8 @@ def _build_pack_import_graph(path: Path) -> Tuple[Optional[Any], Set[Path]]:
         adapter._build_graph(adapter._target_path)
         return adapter._graph, adapter._scanned_files
     except Exception:
+        # Documented fallback: fan-in/relevance are additive scoring signals,
+        # not required for a pack to succeed — callers treat a missing graph as 0.
         return None, set()
 
 
@@ -188,6 +190,8 @@ def _get_file_raw_content(file_path: str, max_lines: int = 500) -> str:
     try:
         text = Path(file_path).read_text(encoding='utf-8', errors='replace')
     except Exception:
+        # The text-mode caller renders '' as '[unreadable]' — visible to the
+        # reader, just not at this call site.
         return ''
     lines = text.splitlines(keepends=True)
     if len(lines) > max_lines:
@@ -220,6 +224,7 @@ def _get_file_structure(file_path: str) -> str:
     try:
         show_structure(analyzer, 'text')
     except Exception:
+        # The text-mode caller renders '' as '[no structure analysis available]'.
         return ''
     finally:
         sys.stdout = old_stdout
@@ -539,6 +544,8 @@ def _count_lines(path: Path) -> int:
     try:
         return path.read_text(encoding='utf-8', errors='ignore').count('\n')
     except Exception:
+        # Line count feeds priority scoring only; an unreadable file just
+        # sorts as if it were empty rather than blocking the pack.
         return 0
 
 
