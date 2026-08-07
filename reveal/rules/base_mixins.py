@@ -23,10 +23,10 @@ def _cached_ast_parse(content: str, file_path: str) -> Optional[ast.AST]:
     try:
         return ast.parse(content, filename=file_path)
     except SyntaxError as e:
-        logger.debug(f"Syntax error in {file_path}: {e}")
+        logger.warning(f"AST parse failed (syntax error) for {file_path}: {e}")
         return None
     except Exception as e:
-        logger.debug(f"Failed to parse {file_path}: {e}")
+        logger.warning(f"AST parse failed for {file_path}: {e}")
         return None
 
 
