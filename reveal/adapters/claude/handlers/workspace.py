@@ -1,10 +1,13 @@
 """Workspace resource handlers for the claude:// adapter — plans, memory, agents, hooks."""
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Union
 from datetime import datetime
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_md_resource(directory: Path, name: str) -> Union[Path, List[str], None]:
@@ -111,7 +114,8 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
                 'size_kb': round(stat.st_size / 1024, 1),
                 'title': title,
             })
-        except Exception:
+        except Exception as e:
+            logger.warning("skipping unreadable plan %s: %s", plan_file, e)
             continue
 
     return {
@@ -168,7 +172,8 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
                     'size_bytes': stat.st_size,
                     'path': str(mem_file),
                 })
-            except Exception:
+            except Exception as e:
+                logger.warning("skipping unreadable memory file %s: %s", mem_file, e)
                 continue
 
     return {
@@ -242,7 +247,8 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
                 'tools': fm.get('tools', []),
                 'model': fm.get('model', ''),
             })
-        except Exception:
+        except Exception as e:
+            logger.warning("skipping unreadable agent file %s: %s", agent_file, e)
             continue
 
     return {
@@ -305,7 +311,8 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
                     'executable': is_exec,
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
                 })
-            except Exception:
+            except Exception as e:
+                logger.warning("skipping unreadable hook script %s: %s", script, e)
                 continue
         return {**base, 'event': event_name, 'kind': 'directory', 'scripts': scripts}
 
@@ -333,7 +340,8 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
                     'script_count': script_count,
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
                 })
-        except Exception:
+        except Exception as e:
+            logger.warning("skipping unreadable hook entry %s: %s", entry, e)
             continue
 
     return {
