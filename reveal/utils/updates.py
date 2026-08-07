@@ -32,19 +32,33 @@ def _print_update_notice(latest: str, current: str) -> None:
         pass
 
 
+def _update_check_disabled_in_config() -> bool:
+    """BACK-980: check the persisted network.no_update_check user preference.
+
+    Set via `reveal offline --disable-update-check` /
+    config.disable_update_check_permanently() as an alternative to setting
+    REVEAL_NO_UPDATE_CHECK every session.
+    """
+    from ..config import _read_user_config
+    return bool(_read_user_config().get('network', {}).get('no_update_check'))
+
+
 def check_for_updates():
     """Check PyPI for newer version (once per day, non-blocking).
 
     - Checks at most once per day (cached in ~/.cache/reveal/last_update_check)
     - 1-second timeout (doesn't slow down CLI)
     - Fails silently (no errors shown to user)
-    - Opt-out: Set REVEAL_NO_UPDATE_CHECK=1 environment variable
+    - Opt-out: Set REVEAL_NO_UPDATE_CHECK=1 environment variable, or persist
+      it via `reveal offline --disable-update-check`
     """
     # Import from version module (separate to avoid circular dependencies)
     from ..version import __version__
     from ..config import get_cache_path
 
     if os.environ.get('REVEAL_NO_UPDATE_CHECK'):
+        return
+    if _update_check_disabled_in_config():
         return
 
     try:

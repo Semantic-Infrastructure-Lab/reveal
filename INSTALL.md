@@ -166,20 +166,20 @@ base image or container, on a machine that does have network access:
 
 ```bash
 pip install reveal-cli
-# Official pre-download API — no need to parse a sample file per language:
-python3 -c "from tree_sitter_language_pack import download; download(['python', 'javascript', 'go'])"
-# or pre-cache every grammar the pack ships (306+ total, larger image):
-python3 -c "from tree_sitter_language_pack import download_all; download_all()"
+reveal offline --languages python,javascript,go   # pre-download just what you need
+reveal offline                                    # or every grammar the pack ships (306+, larger image)
+reveal offline --disable-update-check             # also stop the daily PyPI version check permanently
 # then copy ~/.cache/tree-sitter-language-pack/ into the restricted image
 ```
 
-**Known gap**: if the cache isn't pre-seeded and the download fails, reveal
-currently degrades silently rather than erroring clearly — `reveal file.py`
-falls back to a raw file dump with no warning, and `--explain-file` can
-incorrectly claim full support. `--show-ast` is the only command that
-currently reports the failure. Tracked as `BACK-979`; until fixed, verify
-your environment's cache is warm for every language you need before relying
-on reveal's output in an air-gapped or restricted-network setup.
+(`reveal offline` wraps the pack's own `download()`/`download_all()` — calling
+those directly still works if you'd rather not shell out.)
+
+If the cache isn't pre-seeded and the download fails, reveal surfaces it
+rather than degrading silently: a `WARNING`-level log before the fetch
+attempt, `--explain-file` reports the grammar isn't cached instead of
+claiming full support, and `--format json` includes an explicit `"error"`
+key instead of an ambiguous empty structure (fixed by `BACK-979`).
 
 An egress allowlist for CI needs `pypi.org` + `files.pythonhosted.org` (pip
 install) and `github.com` + `release-assets.githubusercontent.com`

@@ -6,7 +6,30 @@ import pytest
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch, mock_open
-from reveal.utils.updates import check_for_updates
+from reveal.utils.updates import check_for_updates, _update_check_disabled_in_config
+
+
+class TestUpdateCheckDisabledInConfig:
+    """BACK-980: check_for_updates() also honors the persisted user-config opt-out."""
+
+    def test_true_when_config_sets_no_update_check(self):
+        with patch('reveal.config._read_user_config', return_value={'network': {'no_update_check': True}}):
+            assert _update_check_disabled_in_config() is True
+
+    def test_false_when_config_empty(self):
+        with patch('reveal.config._read_user_config', return_value={}):
+            assert _update_check_disabled_in_config() is False
+
+    def test_false_when_network_key_present_but_flag_unset(self):
+        with patch('reveal.config._read_user_config', return_value={'network': {}}):
+            assert _update_check_disabled_in_config() is False
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch('reveal.config.get_cache_path')
+    def test_check_for_updates_skips_when_config_disables_it(self, mock_cache_path):
+        with patch('reveal.utils.updates._update_check_disabled_in_config', return_value=True):
+            check_for_updates()
+        mock_cache_path.assert_not_called()
 
 
 class TestCheckForUpdates:

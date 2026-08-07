@@ -147,6 +147,7 @@ Subcommands (reveal <subcommand> --help for details):
   reveal pack <path>          Token-budgeted context snapshot for LLM consumption
   reveal dev <command>        Scaffold adapters/analyzers/rules; inspect .reveal.yaml
   reveal scaffold <kind>      (alias of `reveal dev new-*` — prefer `reveal dev`)
+  reveal offline              Pre-download tree-sitter grammars for offline/air-gapped use
 
 Discovery (find what reveal can do):
   reveal --adapters           List all URI adapters (env://, ast://, git://, claude://, ...)

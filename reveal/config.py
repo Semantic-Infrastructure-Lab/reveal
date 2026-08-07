@@ -944,6 +944,32 @@ def get_data_path(name: str) -> Path:
     return data_dir / name
 
 
+def _read_user_config() -> Dict[str, Any]:
+    """Read ~/.config/reveal/config.yaml, or {} if missing/unparseable."""
+    config_path = RevealConfig._get_user_config_path()
+    if not config_path.exists():
+        return {}
+    try:
+        with open(config_path, encoding='utf-8') as f:
+            return yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+
+
+def _write_user_config(config: Dict[str, Any], success_message: str) -> bool:
+    """Write config to ~/.config/reveal/config.yaml, printing success_message on success."""
+    config_path = RevealConfig._get_user_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(config_path, 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, default_flow_style=False)
+        print(f"{success_message} in {config_path}")
+        return True
+    except Exception as e:
+        print(f"Failed to update config: {e}", file=sys.stderr)
+        return False
+
+
 def disable_breadcrumbs_permanently() -> bool:
     """Disable breadcrumbs by updating user config file.
 
@@ -954,27 +980,26 @@ def disable_breadcrumbs_permanently() -> bool:
     Returns:
         True if successful, False otherwise
     """
-    config_path = RevealConfig._get_user_config_path()
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Load existing config or start fresh
-    config: Dict[str, Any] = {}
-    if config_path.exists():
-        try:
-            with open(config_path, encoding='utf-8') as f:
-                config = yaml.safe_load(f) or {}
-        except (OSError, yaml.YAMLError):
-            pass
-
-    # Update display.breadcrumbs
+    config = _read_user_config()
     config.setdefault('display', {})['breadcrumbs'] = False
+    return _write_user_config(config, "Breadcrumbs disabled")
 
-    # Write back
-    try:
-        with open(config_path, 'w', encoding='utf-8') as f:
-            yaml.dump(config, f, default_flow_style=False)
-        print(f"Breadcrumbs disabled in {config_path}")
-        return True
-    except Exception as e:
-        print(f"Failed to update config: {e}", file=sys.stderr)
-        return False
+
+def disable_update_check_permanently() -> bool:
+    """Persist REVEAL_NO_UPDATE_CHECK by updating user config file (BACK-980).
+
+    Creates or updates ~/.config/reveal/config.yaml with:
+        network:
+          no_update_check: true
+
+    Read back by check_for_updates() (reveal/utils/updates.py) as an
+    alternative to setting the REVEAL_NO_UPDATE_CHECK environment variable
+    every session — useful for offline/air-gapped machines set up once via
+    `reveal offline --disable-update-check`.
+
+    Returns:
+        True if successful, False otherwise
+    """
+    config = _read_user_config()
+    config.setdefault('network', {})['no_update_check'] = True
+    return _write_user_config(config, "Update check disabled")
