@@ -176,7 +176,8 @@ def _run_check(path: Optional[Path], select: str,
                     'message': d.get('message', ''),
                 })
         return violations
-    except Exception:
+    except Exception as e:
+        print(f"Warning: lint check failed, skipping: {e}", file=sys.stderr)
         return []
 
 
@@ -197,11 +198,13 @@ def _run_hotspots(path: Optional[Path],
                 data = adapter.get_structure(hotspots=True)
                 found = data.get('hotspots', data.get('files', [])) or []
                 hotspots.extend(found)
-            except Exception:
+            except Exception as e:
+                print(f"Warning: hotspot analysis failed for {target}, skipping: {e}", file=sys.stderr)
                 continue
         hotspots.sort(key=_hotspot_score, reverse=True)
         return hotspots[:10]
-    except Exception:
+    except Exception as e:
+        print(f"Warning: hotspot analysis failed, skipping: {e}", file=sys.stderr)
         return []
 
 
@@ -231,11 +234,13 @@ def _run_complexity(path: Optional[Path],
                 data = adapter.get_structure()
                 found = data.get('results', data.get('elements', [])) or []
                 results.extend(found)
-            except Exception:
+            except Exception as e:
+                print(f"Warning: complexity analysis failed for {target}, skipping: {e}", file=sys.stderr)
                 continue
         results.sort(key=lambda r: r.get('complexity', 0) or 0, reverse=True)
         return results[:10]
-    except Exception:
+    except Exception as e:
+        print(f"Warning: complexity analysis failed, skipping: {e}", file=sys.stderr)
         return []
 
 
@@ -267,7 +272,8 @@ def _changed_files(git_range: str) -> List[Path]:
             if candidate.is_file():
                 files.append(candidate.resolve())
         return files
-    except Exception:
+    except Exception as e:
+        print(f"Warning: could not determine changed files for {git_range!r}: {e}", file=sys.stderr)
         return []
 
 
