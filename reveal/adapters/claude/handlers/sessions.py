@@ -36,6 +36,7 @@ def _parse_jsonl_line_for_title(line: str) -> Optional[str]:
     try:
         rec = json.loads(line)
     except Exception:
+        # Malformed/truncated JSONL line — skip it, keep scanning for a title.
         return None
     if rec.get('type') != 'user':
         return None
@@ -77,7 +78,7 @@ def _scan_jsonl_for_title(jsonl_path: Path) -> Optional[str]:
                 try:
                     rec = json.loads(line)
                 except Exception:
-                    continue
+                    continue  # malformed/truncated JSONL line — skip, keep scanning
                 rec_type = rec.get('type')
                 if rec_type == 'assistant':
                     for block in rec.get('message', {}).get('content', []):
@@ -104,6 +105,8 @@ def _read_session_title(jsonl_path: Path) -> Optional[str]:
     try:
         return _scan_jsonl_for_title(jsonl_path)
     except Exception:
+        # Belt-and-suspenders: _scan_jsonl_for_title already catches its own
+        # failures internally and returns None, so this should be unreachable.
         return None
 
 
@@ -413,7 +416,7 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
             if entry:
                 results.append(entry)
         except Exception as e:
-            logger.debug("session parse failed for %s: %s", session.get('path'), e)
+            logger.warning("skipping unparseable session %s: %s", session.get('path'), e)
             continue
 
     results.sort(key=lambda x: x['modified'], reverse=True)
