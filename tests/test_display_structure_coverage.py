@@ -431,6 +431,7 @@ class TestHandleOutlineMode:
         a.path = Path(str(Path('/fake/x.py')))
         a.is_fallback = False
         a.fallback_language = None
+        a.parse_error = None  # BACK-979: real analyzers default this to None
         a.lines = ['line'] * line_count
         a.content = '\n'.join(['line'] * line_count)
         a.format_with_lines.return_value = '\n'.join(
@@ -607,6 +608,7 @@ class TestRenderJsonOutput:
         a.path = Path(str(Path('/fake/x.py')))
         a.is_fallback = is_fallback
         a.fallback_language = fallback_lang
+        a.parse_error = None  # BACK-979: real analyzers default this to None
         a.__class__.__name__ = 'PythonAnalyzer'
         a._extract_relationships.return_value = None
         return a
@@ -661,6 +663,31 @@ class TestRenderJsonOutput:
                 _render_json_output(analyzer, structure)
         call_arg = mock_j.call_args[0][0]
         assert 'relationships' in call_arg
+
+    def test_parse_error_adds_error_key_when_structure_empty(self):
+        """BACK-979: empty structure + parse_error → explicit 'error' key,
+        distinguishing a parse/fetch failure from a genuinely empty file."""
+        analyzer = self._make_analyzer()
+        analyzer.parse_error = 'Download error: no network'
+        structure = {}
+        with patch('reveal.display.structure.safe_json_dumps', return_value='{}') as mock_j:
+            with patch('reveal.display.structure._build_extractable_meta', return_value={}):
+                _render_json_output(analyzer, structure)
+        call_arg = mock_j.call_args[0][0]
+        assert call_arg['error']['type'] == 'parse_infrastructure_failure'
+        assert call_arg['error']['message'] == 'Download error: no network'
+
+    def test_parse_error_omitted_when_structure_non_empty(self):
+        """A parse_error alongside a disk-cache-served non-empty structure
+        isn't misleading, so no 'error' key is added."""
+        analyzer = self._make_analyzer()
+        analyzer.parse_error = 'Download error: no network'
+        structure = {'functions': [{'name': 'foo'}]}
+        with patch('reveal.display.structure.safe_json_dumps', return_value='{}') as mock_j:
+            with patch('reveal.display.structure._build_extractable_meta', return_value={}):
+                _render_json_output(analyzer, structure)
+        call_arg = mock_j.call_args[0][0]
+        assert 'error' not in call_arg
 
     def test_fallback_analyzer_info(self):
         """Lines 392-438: fallback analyzer sets type/language fields correctly."""
@@ -741,6 +768,7 @@ class TestHandleStandardOutput:
         a.path = Path(str(Path('/fake/x.py')))
         a.is_fallback = False
         a.fallback_language = None
+        a.parse_error = None  # BACK-979: real analyzers default this to None
         a.__class__.__name__ = 'PythonAnalyzer'
         a._extract_relationships.return_value = None
         a.lines = ['line'] * line_count
@@ -785,6 +813,19 @@ class TestHandleStandardOutput:
             out = _capture(_handle_standard_output, analyzer, {}, 'text', False, None)
         assert 'No structure available' not in out
         analyzer.format_with_lines.assert_called_once_with(analyzer.content, 1)
+
+    def test_empty_structure_with_parse_error_shows_failure_not_raw_dump(self):
+        """BACK-979: a tree-sitter parse/fetch failure must not silently
+        degrade to a raw file dump or a generic 'no structure' message —
+        both looked identical to a genuinely empty file."""
+        analyzer = self._make_analyzer(line_count=7)
+        analyzer.parse_error = 'Download error: no network'
+        with patch('reveal.display.structure._print_file_header'):
+            out = _capture(_handle_standard_output, analyzer, {}, 'text', False, None)
+        assert 'Parse failed' in out
+        assert 'Download error: no network' in out
+        assert 'No structure available' not in out
+        analyzer.format_with_lines.assert_not_called()
 
     def test_text_output_renders_categories(self):
         """Lines 618-624: text output renders categories and breadcrumbs."""

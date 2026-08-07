@@ -30,6 +30,31 @@ def _get_analyzer_capabilities(analyzer_cls) -> list:
     return [label for method, label in _CAPABILITY_METHODS if hasattr(analyzer_cls, method)]
 
 
+def _language_support_line(analyzer_cls) -> str:
+    """Report full-analysis support honestly for BACK-979.
+
+    A registered analyzer class only means reveal *knows how* to parse this
+    language, not that the grammar is available right now — tree-sitter
+    grammars are fetched from the network on first use of each language, and
+    `--explain-file` used to unconditionally claim "Full language-specific
+    analysis" regardless of whether that fetch had happened or would even
+    succeed (offline/air-gapped hosts). Distinguish the two here.
+    """
+    from ..treesitter import TreeSitterAnalyzer
+    language = getattr(analyzer_cls, 'language', None)
+    if not (language and issubclass(analyzer_cls, TreeSitterAnalyzer)):
+        return "   ✅ Full language-specific analysis"
+
+    from tree_sitter_language_pack import downloaded_languages
+    if language in downloaded_languages():
+        return "   ✅ Full language-specific analysis (grammar cached locally)"
+    return (
+        "   ⚠️  Full language-specific analysis — grammar not yet downloaded; "
+        "first parse will attempt a network fetch (see "
+        "INSTALL.md#network-requirements for offline setups)"
+    )
+
+
 def explain_file(path: str, verbose: bool = False) -> str:
     """Explain how reveal will analyze a file.
 
@@ -77,7 +102,7 @@ def explain_file(path: str, verbose: bool = False) -> str:
         lines.append("   • No language-specific features")
         lines.append("   • Generic tree-sitter parsing")
     else:
-        lines.append("   ✅ Full language-specific analysis")
+        lines.append(_language_support_line(analyzer_cls))
 
     # Show capabilities (if verbose)
     if verbose:

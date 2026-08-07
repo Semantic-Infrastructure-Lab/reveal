@@ -446,6 +446,17 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
         },
         'structure': enriched_structure
     }
+    # BACK-979: an empty structure is ambiguous — a genuinely structure-less
+    # file looks identical to one where tree-sitter's grammar fetch failed
+    # (offline/air-gapped host). Surface the distinction explicitly so
+    # scripts/agents consuming JSON don't need to scrape stderr.
+    parse_error = getattr(analyzer, 'parse_error', None)
+    if not structure and parse_error:
+        result['error'] = {
+            'type': 'parse_infrastructure_failure',
+            'message': parse_error,
+            'hint': 'Tree-sitter grammar fetch/parse failed — see INSTALL.md#network-requirements',
+        }
     relationships = analyzer._extract_relationships(structure)
     if relationships:
         result['relationships'] = relationships
@@ -583,6 +594,13 @@ def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[
     _print_file_header(path, is_fallback, fallback_lang)
 
     if not structure:
+        parse_error = getattr(analyzer, 'parse_error', None)
+        if parse_error:
+            # BACK-979: same infra-failure-vs-empty-file distinction as
+            # _handle_standard_output.
+            print(f"⚠️  Parse failed: {parse_error}")
+            print("   See INSTALL.md#network-requirements")
+            return
         line_count = len(analyzer.lines)
         if line_count <= 50:
             print()
@@ -629,6 +647,14 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
     # Handle empty structure
     if not structure:
         _print_file_header(path, is_fallback, fallback_lang)
+        parse_error = getattr(analyzer, 'parse_error', None)
+        if parse_error:
+            # BACK-979: don't silently fall through to a raw file dump when
+            # the empty structure is actually a tree-sitter parse/fetch
+            # failure, not a genuinely structure-less file.
+            print(f"⚠️  Parse failed: {parse_error}")
+            print("   See INSTALL.md#network-requirements")
+            return
         line_count = len(analyzer.lines)
         if line_count <= 50:
             print()

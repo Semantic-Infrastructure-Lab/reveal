@@ -62,6 +62,30 @@ class TestExplainFile(unittest.TestCase):
         self.assertIn("📋 Extension:", result)
         self.assertIn(".py", result)
 
+    def test_explain_cached_grammar_is_unqualified_success(self):
+        """BACK-979: a downloaded grammar keeps the plain success claim."""
+        import tree_sitter_language_pack as tslp
+        from unittest.mock import patch
+
+        with patch.object(tslp, "downloaded_languages", return_value=["python"]):
+            result = explain_file(str(self.py_file))
+
+        self.assertIn("✅ Full language-specific analysis", result)
+        self.assertNotIn("not yet downloaded", result)
+
+    def test_explain_uncached_grammar_warns_of_network_fetch(self):
+        """BACK-979: --explain-file must not claim full support for a
+        grammar that hasn't been downloaded yet — that claim was actively
+        wrong on air-gapped hosts (see BACK-979 case study)."""
+        import tree_sitter_language_pack as tslp
+        from unittest.mock import patch
+
+        with patch.object(tslp, "downloaded_languages", return_value=[]):
+            result = explain_file(str(self.py_file))
+
+        self.assertIn("grammar not yet downloaded", result)
+        self.assertIn("network fetch", result)
+
 
 class TestShowAST(unittest.TestCase):
     """Tests for show_ast function."""

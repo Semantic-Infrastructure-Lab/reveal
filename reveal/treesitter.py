@@ -24,9 +24,16 @@ from .core import ts_parse
 # Suppress tree-sitter deprecation warnings (centralized in core module)
 suppress_treesitter_warnings()
 
-from tree_sitter_language_pack import get_parser  # noqa: E402
+from tree_sitter_language_pack import get_parser, downloaded_languages  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+# BACK-979: dedup state for the two grammar-availability warnings below, kept
+# module-level (not per-instance) so a directory scan touching hundreds of
+# files in an uncached/offline language only warns once per language, not
+# once per file.
+_warned_uncached_languages: Set[str] = set()
+_warned_failed_languages: Set[str] = set()
 
 # Module-level cache: (path_str, mtime_ns) -> {'tree': ..., 'node_cache': ...}
 # Eliminates redundant parses when multiple rules/callers analyze the same
@@ -406,6 +413,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         self._tree_parsed: bool = False  # tree is parsed lazily, see `tree` property
         self._node_cache: Optional[Dict[str, List[Any]]] = None  # None = unbuilt; {} = built but empty
         self._content_bytes: Optional[bytes] = None
+        self.parse_error: Optional[str] = None  # BACK-979: set when _parse_tree()'s except branch fires
 
         # Cache key is cheap (one stat) and computed eagerly — some subclasses
         # (e.g. MarkdownAnalyzer's inline-tree cache) read it right after
@@ -458,11 +466,35 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 self._node_cache = cached['node_cache']
             return
 
+        # Proactive check (BACK-979): downloaded_languages() is a local
+        # cache-directory read with no network attempt, unlike get_parser()
+        # below which downloads the grammar bundle on first use of a
+        # language. Warn before that fetch, not after it silently fails.
+        if self.language not in downloaded_languages() and self.language not in _warned_uncached_languages:
+            _warned_uncached_languages.add(self.language)
+            logger.warning(
+                "tree-sitter grammar for %r not yet downloaded — first parse "
+                "will attempt to fetch it from the network (see "
+                "INSTALL.md#network-requirements for offline setups)",
+                self.language,
+            )
+
         try:
             parser = get_parser(self.language)  # type: ignore[arg-type]  # language is validated at runtime
             self.tree = ts_parse(parser, self.content)
         except Exception as e:
-            logger.debug("tree-sitter parse failed for %s: %s", self.path, e)
+            self.parse_error = str(e)
+            if self.language not in _warned_failed_languages:
+                _warned_failed_languages.add(self.language)
+                logger.warning(
+                    "tree-sitter parse failed for %s (language=%r): %s — "
+                    "structure extraction degrades to empty for this "
+                    "language until resolved (see "
+                    "INSTALL.md#network-requirements)",
+                    self.path, self.language, e,
+                )
+            else:
+                logger.debug("tree-sitter parse failed for %s: %s", self.path, e)
             self.tree = None
 
         if self.tree is not None:
