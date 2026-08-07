@@ -574,6 +574,109 @@ def query(nameserver):
         detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 1)
 
+    # ============ Tests for deferred visible signal (BACK-989) ============
+
+    def test_captured_error_surfaced_in_later_dict_literal(self):
+        """except Exception as e: error = str(e); ... later: {'error': error}
+        surfaces the failure one statement outside the handler — not silent."""
+        content = """
+def check_upstreams(servers):
+    results = []
+    for server in servers:
+        try:
+            connect(server)
+            reachable = True
+            error = None
+        except Exception as e:
+            reachable = False
+            error = str(e)
+        results.append({'server': server, 'reachable': reachable, 'error': error})
+    return results
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_captured_tuple_assignment_surfaced_later(self):
+        """except Exception as exc: a, b = 1, f"...{exc}"; a/b used later —
+        tuple-target form of the same deferred-signal pattern."""
+        content = """
+def run_all(targets):
+    results = []
+    for target in targets:
+        try:
+            exit_code, summary = check(target)
+        except Exception as exc:
+            exit_code, summary = 2, f"error: {exc}"
+        results.append({'exit_code': exit_code, 'summary': summary})
+    return results
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_captured_variable_never_used_still_flagged(self):
+        """Capturing str(e) into a variable that's never read again is just
+        as silent as not capturing it at all — must still be flagged."""
+        content = """
+def check_upstream(server):
+    try:
+        connect(server)
+        return True
+    except Exception as e:
+        error = str(e)
+        return False
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_unrelated_variable_alongside_capture_does_not_launder_silence(self):
+        """A plain `ok = False` that doesn't reference the exception, with no
+        later use of anything from the handler, stays flagged — the escape
+        hatch requires an actual reference to the exception binding."""
+        content = """
+def check_upstream(server):
+    try:
+        connect(server)
+        ok = True
+    except Exception:
+        ok = False
+    return None
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_docstring_fails_for_any_reason_recognized(self):
+        """Broadened docstring-tolerance wording: 'fails for any reason'
+        wasn't matched by the original narrower 'if fails' phrase."""
+        content = """
+def resolve_thresholds(file_path=None):
+    '''Falls back to class defaults if config resolution fails for any reason.'''
+    try:
+        return load_config(file_path)
+    except Exception:
+        return DEFAULTS
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_docstring_best_effort_recognized(self):
+        """Broadened docstring-tolerance wording: 'best-effort'."""
+        content = """
+def scan_optional(path):
+    '''Best-effort scan; returns None if it can't complete.'''
+    try:
+        return do_scan(path)
+    except Exception:
+        return None
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
 
 if __name__ == '__main__':
     unittest.main()

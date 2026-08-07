@@ -15,6 +15,12 @@ Also recognizes two visible-signal shapes beyond a direct logger/print call
 behalf (e.g. ``record_composed_error()``), and an assignment that records the
 failure in-band on a result object (``result['status'] = 'query_failed'``,
 ``self.parse_error = ...``).
+
+A third shape (BACK-989): the exception is captured into a plain variable
+inside the handler (``error = str(e)``), and that variable is read again by
+a *later* statement in the same enclosing block (``results.append({'error':
+error, ...})``) — visible to the caller, just one statement outside the
+handler body itself.
 """
 
 import ast
@@ -33,7 +39,7 @@ class B006(BaseRule, ASTParsingMixin):
     category = RulePrefix.B
     severity = Severity.MEDIUM
     file_patterns = ['.py']
-    version = "1.3.0"
+    version = "1.4.0"
 
     # Logger/print calls that count as a *visible* signal. logger.debug() is
     # deliberately excluded — it's invisible in a normal run, so a handler
@@ -114,6 +120,8 @@ class B006(BaseRule, ASTParsingMixin):
         if self._has_explanatory_comment(node, lines):
             return None
         if parent_map and self._is_intentional_fallback(node, parent_map):
+            return None
+        if parent_map and self._has_deferred_visible_signal(node, parent_map):
             return None
 
         context = None
@@ -236,10 +244,16 @@ class B006(BaseRule, ASTParsingMixin):
                 return key.value in self._ERROR_FIELD_NAMES
         return False
 
-    # Keywords that indicate a docstring explicitly documents error-tolerance
+    # Keywords that indicate a docstring explicitly documents error-tolerance.
+    # Deliberately covers common paraphrases ("fails for any reason", "best
+    # effort", "degrades gracefully") in addition to the original exact
+    # phrases — BACK-989 triage found several genuinely-documented fallbacks
+    # this missed purely on wording (e.g. "falls back ... if X fails for any
+    # reason" didn't match the narrower "if fails").
     _DOCSTRING_ERROR_TOLERANCE = re.compile(
-        r'\b(unavailable|raises any|if raises|on error|if error|if fails|'
-        r'if not available|error is ignored|returns.*if.*error|error is expected)\b',
+        r'\b(unavailable|raises any|if raises|on error|if error|if fails|fails\b|'
+        r'if not available|error is ignored|returns.*if.*error|error is expected|'
+        r'any (error|failure)|on (any )?failure|best.effort|degrades? gracefully)\b',
         re.IGNORECASE,
     )
 
@@ -287,6 +301,82 @@ class B006(BaseRule, ASTParsingMixin):
 
         docstring = first.value.value
         return bool(self._DOCSTRING_ERROR_TOLERANCE.search(docstring))
+
+    def _has_deferred_visible_signal(
+        self, node: ast.ExceptHandler, parent_map: Dict[ast.AST, ast.AST]
+    ) -> bool:
+        """Return True if the handler captures the exception into a variable
+        that a later statement in the same block actually reads — e.g.::
+
+            except Exception as e:
+                reachable = False
+                error = str(e)
+            results.append({'reachable': reachable, 'error': error})
+
+        The failure IS visible to the caller, just one statement outside the
+        handler body itself, which ``_is_silent``'s body-only walk can't see
+        (BACK-989 triage found this exact shape repeatedly: a variable set in
+        the handler from ``str(e)``/an f-string over the exception, read back
+        a line or two later in a returned/logged/appended value).
+
+        Requires the captured variable's *value* to actually reference the
+        exception binding — a plain ``ok = False`` assigned alongside it
+        does not by itself qualify — so a genuinely silent handler with an
+        unrelated variable set in the body doesn't accidentally pass.
+        """
+        if node.name is None:
+            return False  # no `as e` binding to trace
+
+        captured: set = set()
+        for stmt in node.body:
+            if isinstance(stmt, ast.Assign):
+                targets = stmt.targets
+                value = stmt.value
+            elif isinstance(stmt, ast.AugAssign):
+                targets = [stmt.target]
+                value = stmt.value
+            else:
+                continue
+            references_exc = any(
+                isinstance(sub, ast.Name) and sub.id == node.name
+                for sub in ast.walk(value)
+            )
+            if not references_exc:
+                continue
+            for t in targets:
+                if isinstance(t, ast.Tuple):
+                    captured.update(elt.id for elt in t.elts if isinstance(elt, ast.Name))
+                elif isinstance(t, ast.Name):
+                    captured.add(t.id)
+        if not captured:
+            return False
+
+        try_node = parent_map.get(node)
+        if not isinstance(try_node, ast.Try):
+            return False
+        body = self._get_enclosing_body(try_node, parent_map)
+        if not body or try_node not in body:
+            return False
+
+        for later in body[body.index(try_node) + 1:]:
+            for sub in ast.walk(later):
+                if (isinstance(sub, ast.Name) and sub.id in captured
+                        and isinstance(sub.ctx, ast.Load)):
+                    return True
+        return False
+
+    def _get_enclosing_body(
+        self, node: ast.AST, parent_map: Dict[ast.AST, ast.AST]
+    ) -> Optional[List[ast.stmt]]:
+        """Return the statement list of *node*'s immediate parent that contains it."""
+        parent = parent_map.get(node)
+        if parent is None:
+            return None
+        for attr in ('body', 'orelse', 'finalbody'):
+            candidate = getattr(parent, attr, None)
+            if isinstance(candidate, list) and node in candidate:
+                return candidate
+        return None
 
     def _has_explanatory_comment(self, node: ast.ExceptHandler, lines: List[str]) -> bool:
         """Check if exception handler has an explanatory comment.
