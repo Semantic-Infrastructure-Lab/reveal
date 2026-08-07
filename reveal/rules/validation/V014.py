@@ -27,12 +27,15 @@ Scope:
       those narrate history, not a current claim).
 """
 
+import logging
 import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+
+logger = logging.getLogger(__name__)
 
 
 class V014(BaseRule):
@@ -98,7 +101,8 @@ class V014(BaseRule):
             content = agent_help_path.read_text(encoding='utf-8')
             body = _strip_frontmatter(content)
             return len(body) // self._CHARS_PER_TOKEN
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V014: failed to read/strip {agent_help_path}: {e}")
             return None
 
     def _check_frontmatter(self, agent_help_path: Path, actual: int,
@@ -106,7 +110,8 @@ class V014(BaseRule):
         try:
             from reveal.adapters.markdown.files import extract_frontmatter
             fm = extract_frontmatter(agent_help_path) or {}
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V014: failed to extract frontmatter from {agent_help_path}: {e}")
             return []
         raw = fm.get('help_token_estimate')
         if raw is None:
@@ -127,7 +132,8 @@ class V014(BaseRule):
         detections = []
         try:
             lines = agent_help_path.read_text(encoding='utf-8').split('\n')
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V014: failed to read {agent_help_path}: {e}")
             return []
         for i, line in enumerate(lines, 1):
             match = self._BODY_TOKEN_COST_PATTERN.search(line)
@@ -150,7 +156,8 @@ class V014(BaseRule):
         detections = []
         try:
             lines = help_py_path.read_text(encoding='utf-8').split('\n')
-        except Exception:
+        except Exception as e:
+            logger.warning(f"V014: failed to read {help_py_path}: {e}")
             return []
         for i, line in enumerate(lines, 1):
             stripped = line.strip()

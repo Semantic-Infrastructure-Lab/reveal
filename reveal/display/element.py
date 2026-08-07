@@ -315,7 +315,8 @@ def _print_available_names(analyzer):
             shown = available[:MAX_NAMES]
             suffix = f" (and {len(available) - MAX_NAMES} more)" if len(available) > MAX_NAMES else ""
             print(f"Available: {', '.join(shown)}{suffix}", file=sys.stderr)
-    except Exception:
+    except Exception as e:
+        print(f"Warning: could not list available names: {e}", file=sys.stderr)
         return
 
 
@@ -639,7 +640,9 @@ def _extract_line_range(analyzer, start_line: int, end_line: int):
             'line_end': end_line,
             'source': source,
         }
-    except Exception:
+    except Exception as e:
+        print(f"Warning: could not extract lines {start_line}-{end_line} from {analyzer.path}: {e}",
+              file=sys.stderr)
         return None
 
 
@@ -683,7 +686,9 @@ def _get_analyzer_structure(analyzer):
     try:
         structure = analyzer.get_structure()
         return structure if structure else None
-    except Exception:
+    except Exception as e:
+        print(f"Warning: could not get structure for {getattr(analyzer, 'path', '<unknown>')}: {e}",
+              file=sys.stderr)
         return None
 
 
@@ -799,7 +804,8 @@ def _read_lines(path, start_line, end_line):
         if start_line < 1 or end_line > len(lines):
             return None
         return ''.join(lines[start_line - 1:end_line]).rstrip('\n')
-    except Exception:
+    except Exception as e:
+        print(f"Warning: could not read lines {start_line}-{end_line} from {path}: {e}", file=sys.stderr)
         return None
 
 
