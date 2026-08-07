@@ -530,31 +530,34 @@ def _render_help_see_also(data: Dict[str, Any]) -> None:
         print()
 
 
+def _render_query_recipes_index(data: Dict[str, Any]) -> None:
+    """Render bare help://examples — the task-category catalog listing."""
+    available = data.get('available_tasks', [])
+    print("# Query Recipes")
+    print()
+    print("**Usage:** `reveal help://examples/<task>`")
+    print()
+    print("## Available Tasks")
+    for name in sorted(available):
+        print(f"  {name}")
+    print()
+    print("## Examples")
+    print("  reveal help://examples/quality")
+    print("  reveal help://examples/security")
+    print("  reveal help://examples/codebase")
+    print()
+    for line in data.get('see_also', []):
+        print(f"See also: {line}")
+    if data.get('see_also'):
+        print()
+    _render_schema_next(data)
+
+
 def _render_query_recipes(data: Dict[str, Any]) -> None:
     """Render help://examples/<task> — canonical query recipes for a task."""
     if 'error' in data:
-        available = data.get('available_tasks', [])
-        task = data.get('task', '')
-        if _is_catalog_listing(data):
-            # Bare help://examples — list all task categories
-            print("# Query Recipes")
-            print()
-            print("**Usage:** `reveal help://examples/<task>`")
-            print()
-            print("## Available Tasks")
-            for name in sorted(available):
-                print(f"  {name}")
-            print()
-            print("## Examples")
-            print("  reveal help://examples/quality")
-            print("  reveal help://examples/security")
-            print("  reveal help://examples/codebase")
-            print()
-            _render_schema_next(data)
-        else:
-            print(f"Error: {data['message']}", file=sys.stderr)
-            sys.exit(1)
-        return
+        print(f"Error: {data['message']}", file=sys.stderr)
+        sys.exit(1)
 
     task = data.get('task', '')
     description = data.get('description', '')
@@ -1037,6 +1040,7 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
         'adapter_summary': _render_help_adapter_summary,
         'help_section': _render_help_section,
         'query_recipes': _render_query_recipes,
+        'query_recipes_index': _render_query_recipes_index,
         'adapter_schema': _render_adapter_schema,
         'adapter_schema_all': _render_adapter_schema_all,
         'help_rules': _render_help_rules,

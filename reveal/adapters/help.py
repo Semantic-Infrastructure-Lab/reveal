@@ -565,6 +565,33 @@ class HelpAdapter(ResourceAdapter):
 
         return merged
 
+    def _indexed_static_guides(self) -> List[Dict[str, str]]:
+        """The static_guides list as shown on the help:// index: one entry per
+        guide FILE, not per topic (BACK-999).
+
+        self.help_topics has ~110 entries because every alias (mcp-setup,
+        quick-start, ...) and every adapter guide (already listed separately
+        under 'adapters') gets its own topic key. The text renderer has always
+        deduped this down to ~33 index-worthy entries by file path, keeping
+        the shortest topic name per file and dropping category='' (adapter
+        guide) entries — but that dedup lived only in the renderer, so the
+        JSON 'static_guides' field shipped all ~110 undeduped entries, nearly
+        doubling help:// --format=json for no informational gain (measured:
+        19.2KB of the 33KB total, ~2x the ~10.7KB a deduped list costs).
+        Moving the dedup here means text and JSON agree on what the index is.
+        """
+        best_by_file: Dict[str, GuideEntry] = {}
+        for entry in self.help_topics.values():
+            if not entry.category:
+                continue
+            existing = best_by_file.get(entry.file)
+            if existing is None or len(entry.topic) < len(existing.topic):
+                best_by_file[entry.file] = entry
+        return [
+            e.to_dict() for e in
+            sorted(best_by_file.values(), key=lambda e: e.topic)
+        ]
+
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get help structure (list of available topics)."""
         return ResultBuilder.create(
@@ -577,8 +604,11 @@ class HelpAdapter(ResourceAdapter):
                 'adapters': self._list_adapters(),
                 # Each entry: {topic, file, description, category, token_estimate}.
                 # The renderer reads category/description/token_estimate from here;
-                # there is no parallel dict in the renderer module.
-                'static_guides': [entry.to_dict() for entry in self.help_topics.values()],
+                # there is no parallel dict in the renderer module. Deduped to
+                # one entry per file (see _indexed_static_guides) — the full
+                # alias-inclusive map is self.help_topics, used for per-topic
+                # lookups, not for this listing.
+                'static_guides': self._indexed_static_guides(),
             }
         )
 
@@ -1811,26 +1841,32 @@ class HelpAdapter(ResourceAdapter):
     def _get_example_recipes(self, task_name: str) -> Optional[Dict[str, Any]]:
         """Get canonical query recipes for a specific task."""
         if task_name not in _EXAMPLE_RECIPES:
+            if not task_name:
+                # BACK-998: the bare listing is a navigational index, not a
+                # failure — give it its own success-typed shape (no 'error'
+                # key) instead of overloading the "unknown task" error dict.
+                # A JSON caller building an intent->task router should be able
+                # to trust 'error' absence == valid response, not have to know
+                # that this particular error is actually a listing.
+                return {
+                    'type': 'query_recipes_index',
+                    'available_tasks': sorted(_EXAMPLE_RECIPES.keys()),
+                    'next': [
+                        f'reveal help://examples/{task}'
+                        for task in sorted(_EXAMPLE_RECIPES)[:3]
+                    ] + ['reveal help://quick'],
+                    # BACK-997: reciprocal of the tricks->examples pointer above.
+                    'see_also': ['reveal help://tricks — the same idea as prose, organized by workflow'],
+                }
             available = ', '.join(sorted(_EXAMPLE_RECIPES.keys()))
-            error_msg = f"Specify a task. Available: {available}" if not task_name else f"Unknown task '{task_name}'. Available: {available}"
-            # BACK-841: on the bare catalog listing, pointing at
-            # 'reveal help://examples' is a self-loop — it was this page's only
-            # pointer, which is why the page measured as a dead end. Send the
-            # reader into actual recipes instead; a mistyped task still routes
-            # back to the catalog, where that pointer is the correct one.
-            if task_name:
-                next_steps = ['reveal help://examples']
-            else:
-                next_steps = [
-                    f'reveal help://examples/{task}'
-                    for task in sorted(_EXAMPLE_RECIPES)[:3]
-                ] + ['reveal help://quick']
+            # BACK-841: a mistyped task name routes back to the catalog listing
+            # above rather than looping on itself.
             return {
                 'type': 'query_recipes',
                 'task': task_name,
-                'error': 'Unknown task' if task_name else 'No task specified',
-                'message': error_msg,
+                'error': 'Unknown task',
+                'message': f"Unknown task '{task_name}'. Available: {available}",
                 'available_tasks': list(_EXAMPLE_RECIPES.keys()),
-                'next': next_steps,
+                'next': ['reveal help://examples'],
             }
         return _EXAMPLE_RECIPES[task_name]
