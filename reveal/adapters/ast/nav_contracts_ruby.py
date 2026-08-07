@@ -20,12 +20,15 @@ shape as `nav_surface_ruby.py`.
   how it already treats "bases" as the full inheritance-relationship set.
 """
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+
+logger = logging.getLogger(__name__)
 
 
 def scan_file_contracts_ruby(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -35,7 +38,8 @@ def scan_file_contracts_ruby(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
         source = Path(file_path).read_text(errors='replace')
         parser = get_parser('ruby')
         tree = ts_parse(parser, source)
-    except Exception:
+    except Exception as e:
+        logger.warning("contracts scan (Ruby) failed to parse %s: %s", file_path, e)
         return {'modules': [], 'classes': []}
 
     content_bytes = source.encode('utf-8')

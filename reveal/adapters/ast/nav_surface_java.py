@@ -7,9 +7,12 @@ here), `System.getenv` for env access, `public static void main` for the CLI
 entrypoint, and import-root taxonomy for network/db/sdk egress.
 """
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_prefix
+
+logger = logging.getLogger(__name__)
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
@@ -53,7 +56,8 @@ def scan_file_surface_java(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
         source = Path(file_path).read_text(errors='replace')
         parser = get_parser('java')
         tree = ts_parse(parser, source)
-    except Exception:
+    except Exception as e:
+        logger.warning("surface scan (Java) failed to parse %s: %s", file_path, e)
         return {k: [] for k in _EMPTY_KEYS}
 
     content_bytes = source.encode('utf-8')

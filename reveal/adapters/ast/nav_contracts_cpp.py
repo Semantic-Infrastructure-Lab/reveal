@@ -22,6 +22,7 @@ blank. Reaching `.h`-declared classes is a follow-on tied to the broader
 `.h`→C-vs-C++ classification question (matrix footnote 2), not a silent gap here.
 """
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line, normalize_cpp_macro_class_modifiers
@@ -29,6 +30,8 @@ from .nav_surface_common import _get_text, _get_line, normalize_cpp_macro_class_
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
+
+logger = logging.getLogger(__name__)
 
 
 def scan_file_contracts_cpp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -40,7 +43,8 @@ def scan_file_contracts_cpp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
         source = normalize_cpp_macro_class_modifiers(source)
         parser = get_parser('cpp')
         tree = ts_parse(parser, source)
-    except Exception:
+    except Exception as e:
+        logger.warning("contracts scan (C++) failed to parse %s: %s", file_path, e)
         return empty
 
     content_bytes = source.encode('utf-8')

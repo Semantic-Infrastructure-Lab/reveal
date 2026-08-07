@@ -1,8 +1,11 @@
 """Tree-sitter surface extraction for TypeScript/TSX/JavaScript/JSX — env vars, FS writes, HTTP routes, CLI, imports."""
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line, _add_once
+
+logger = logging.getLogger(__name__)
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
@@ -71,7 +74,8 @@ def scan_file_surface_ts(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
         lang = 'tsx' if path.suffix in ('.tsx', '.jsx') else 'typescript'
         parser = get_parser(lang)
         tree = ts_parse(parser, source)
-    except Exception:
+    except Exception as e:
+        logger.warning("surface scan (TS/JS) failed to parse %s: %s", file_path, e)
         return {k: [] for k in _EMPTY_KEYS}
 
     content_bytes = source.encode('utf-8')
