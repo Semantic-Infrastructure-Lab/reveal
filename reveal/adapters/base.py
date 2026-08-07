@@ -319,6 +319,17 @@ class ResourceAdapter(ABC):
             confidence=min(confidences_list) if confidences_list else None,
         )
 
+    def int_param(self, key: str, default: int) -> int:
+        """Read a numeric query param, treating an explicit 0 as present.
+
+        The naive ``int(self.query_params.get(key) or default)`` idiom treats
+        an explicit ``0`` as falsy and silently substitutes ``default`` —
+        ``?top=0`` returns ``default`` results instead of zero, with no
+        warning. See BACK-985.
+        """
+        raw = self.query_params.get(key)
+        return int(raw) if raw is not None else default
+
     def get_element(self, element_name: str, **kwargs) -> Optional[RevealResult]:
         """Get details about a specific element within the resource.
 

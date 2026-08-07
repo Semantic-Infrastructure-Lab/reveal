@@ -497,7 +497,7 @@ class OverviewAdapter(ResourceAdapter):
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         path = Path(self.path)
-        top = int(self.query_params.get('top') or 5)
+        top = self.int_param('top', 5)
         no_git = str(self.query_params.get('no_git', False)).lower() == 'true'
         no_imports = str(self.query_params.get('no_imports', False)).lower() == 'true'
 

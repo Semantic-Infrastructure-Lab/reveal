@@ -282,8 +282,8 @@ class HotspotsAdapter(ResourceAdapter):
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         path = Path(self.path)
-        top = int(self.query_params.get('top') or 10)
-        min_cx = int(self.query_params.get('min_complexity') or 10)
+        top = self.int_param('top', 10)
+        min_cx = self.int_param('min_complexity', 10)
         functions_only = str(self.query_params.get('functions_only', False)).lower() == 'true'
         files_only = str(self.query_params.get('files_only', False)).lower() == 'true'
 

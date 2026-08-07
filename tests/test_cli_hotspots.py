@@ -142,6 +142,29 @@ class TestRunFileHotspots(unittest.TestCase):
         self.assertIn('boom', meta['errors'][0]['message'])
 
 
+class TestGetStructureFalsyDefaults(unittest.TestCase):
+    """BACK-985: '?top=0'/'?min_complexity=0' must be respected, not silently
+    replaced by the adapter's default."""
+
+    @patch('reveal.adapters.ast.AstAdapter.get_structure')
+    @patch('reveal.adapters.stats.StatsAdapter.get_structure')
+    def test_top_zero_returns_zero_hotspots(self, mock_stats, mock_ast):
+        mock_stats.return_value = {'hotspots': [_file_hotspot('a.py', 60)]}
+        mock_ast.return_value = {'results': [_fn_hotspot('foo', 15)]}
+        adapter = HotspotsAdapter('.', 'top=0')
+        result = adapter.get_structure()
+        self.assertEqual(result['file_hotspots'], [])
+        self.assertEqual(result['function_hotspots'], [])
+
+    @patch('reveal.adapters.ast.AstAdapter.__init__', return_value=None)
+    @patch('reveal.adapters.ast.AstAdapter.get_structure', return_value={'results': []})
+    def test_min_complexity_zero_is_respected(self, _mock_gs, mock_init):
+        adapter = HotspotsAdapter('.', 'min_complexity=0')
+        adapter.get_structure()
+        _resource, query = mock_init.call_args.args
+        self.assertTrue(query.startswith('complexity>=0&'))
+
+
 class TestRunFunctionHotspots(unittest.TestCase):
     """_run_function_hotspots: AstAdapter mocked, composed via adapter.compose()."""
 

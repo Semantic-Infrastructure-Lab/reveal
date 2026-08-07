@@ -109,8 +109,8 @@ class PatchesAdapter(ResourceAdapter):
         group_by = str(self.query_params.get('group') or 'target')
         if group_by not in {'target', 'test', 'file'}:
             group_by = 'target'
-        limit = int(self.query_params.get('limit') or 20)
-        min_count = int(self.query_params.get('min') or 1)
+        limit = self.int_param('limit', 20)
+        min_count = self.int_param('min', 1)
         target_filter = str(self.query_params.get('target') or '')
         private_only = bool(self.query_params.get('private') or False)
         _suppress_raw = self.query_params.get('suppress')

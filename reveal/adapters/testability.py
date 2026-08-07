@@ -206,9 +206,9 @@ class TestabilityAdapter(ResourceAdapter):
         path = Path(self.path)
         tests_param = self.query_params.get('tests')
         tests = [t.strip() for t in str(tests_param).split(',') if t.strip()] if tests_param else None
-        top = int(self.query_params.get('top') or 20)
-        min_patches = int(self.query_params.get('min_patches') or 3)
-        min_categories = int(self.query_params.get('min_categories') or 3)
+        top = self.int_param('top', 20)
+        min_patches = self.int_param('min_patches', 3)
+        min_categories = self.int_param('min_categories', 3)
         include_unresolved = str(self.query_params.get('include_unresolved', False)).lower() == 'true'
 
         test_paths = _resolve_test_paths(path, tests)

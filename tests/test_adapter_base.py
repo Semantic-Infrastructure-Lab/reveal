@@ -43,6 +43,33 @@ class TestResourceAdapter(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class TestIntParam(unittest.TestCase):
+    """int_param(): explicit 0 must not be treated as absent (BACK-985)."""
+
+    def setUp(self):
+        class ConcreteAdapter(ResourceAdapter):
+            def get_structure(self, **kwargs):
+                return {'structure': 'data'}
+
+        self.adapter = ConcreteAdapter()
+
+    def test_explicit_zero_is_respected(self):
+        self.adapter.query_params = {'top': 0}
+        self.assertEqual(self.adapter.int_param('top', 10), 0)
+
+    def test_absent_key_uses_default(self):
+        self.adapter.query_params = {}
+        self.assertEqual(self.adapter.int_param('top', 10), 10)
+
+    def test_nonzero_value_is_respected(self):
+        self.adapter.query_params = {'top': 3}
+        self.assertEqual(self.adapter.int_param('top', 10), 3)
+
+    def test_string_value_is_coerced(self):
+        self.adapter.query_params = {'top': '0'}
+        self.assertEqual(self.adapter.int_param('top', 10), 0)
+
+
 class TestAdapterRegistry(unittest.TestCase):
     """Test adapter registration and lookup."""
 
