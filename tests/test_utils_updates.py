@@ -31,6 +31,14 @@ class TestUpdateCheckDisabledInConfig:
             check_for_updates()
         mock_cache_path.assert_not_called()
 
+    def test_returns_false_instead_of_raising_when_home_dir_unresolvable(self):
+        """Regression: Path.home() can raise (observed on Windows CI with a
+        cleared environment / no HOME or USERPROFILE) — this must degrade
+        to 'not disabled', never propagate and break check_for_updates()."""
+        from pathlib import Path
+        with patch.object(Path, 'home', side_effect=RuntimeError('Could not determine home directory')):
+            assert _update_check_disabled_in_config() is False
+
 
 class TestCheckForUpdates:
     """Tests for check_for_updates function."""

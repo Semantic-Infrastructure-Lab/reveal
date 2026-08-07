@@ -38,9 +38,17 @@ def _update_check_disabled_in_config() -> bool:
     Set via `reveal offline --disable-update-check` /
     config.disable_update_check_permanently() as an alternative to setting
     REVEAL_NO_UPDATE_CHECK every session.
+
+    Resolving the user config path can raise (e.g. Path.home() with no
+    HOME/USERPROFILE set — observed on Windows CI with a cleared
+    environment) — check_for_updates() must never fail the caller over
+    this, so any error here just means "not disabled."
     """
-    from ..config import _read_user_config
-    return bool(_read_user_config().get('network', {}).get('no_update_check'))
+    try:
+        from ..config import _read_user_config
+        return bool(_read_user_config().get('network', {}).get('no_update_check'))
+    except Exception:
+        return False
 
 
 def check_for_updates():
