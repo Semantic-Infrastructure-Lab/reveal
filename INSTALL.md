@@ -168,7 +168,7 @@ base image or container, on a machine that does have network access:
 pip install reveal-cli
 # Official pre-download API — no need to parse a sample file per language:
 python3 -c "from tree_sitter_language_pack import download; download(['python', 'javascript', 'go'])"
-# or pre-cache every supported grammar (306+ languages, larger image):
+# or pre-cache every grammar the pack ships (306+ total, larger image):
 python3 -c "from tree_sitter_language_pack import download_all; download_all()"
 # then copy ~/.cache/tree-sitter-language-pack/ into the restricted image
 ```
