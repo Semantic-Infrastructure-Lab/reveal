@@ -9,6 +9,13 @@ This document outlines reveal's development priorities and future direction. For
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
 
+### v0.116.0 — cross-language bug-rule ports, trust-envelope closure round 3, ~ expansion fix
+- ✅ B001/B003/B005/B006 ported across 7 additional languages (C#, C++, Java, JS/TS, PHP, Kotlin, Swift) via tree-sitter, verified live against real open-source corpora (Jellyfin, Elasticsearch, VS Code, WordPress, Godot, Tivi, Kickstarter iOS) (BACK-1011).
+- ✅ B007, an internal-only adapter-scoped envelope-blind handler detector, closes the structural gap that let BACK-1016's sites survive the prior remediation sweep (BACK-1017).
+- ✅ `~` in URI resource paths (`markdown://~/...`, `git://~/...`, etc.) now expands consistently across every adapter — only 15 of 44 called `expanduser()` themselves before, missing 4 of the 10 DD-critical commands (BACK-1024).
+- ✅ Trust-envelope closure round 3 — `overview`/`architecture`'s scope+git-log crash paths now reach `meta.errors` instead of rendering as fully trusted (BACK-1016); `calls://?uncalled=true&top=N` no longer reports the truncated count as the true total; S001 secret detection, circular-import severity, and TS/JS dead-constructor false positives fixed (BACK-1002–1010).
+- ✅ Doc-hygiene pre-release check now ratchets against a tracked baseline instead of failing on all pre-existing issues every release, mirroring B006's CI gate pattern.
+
 ### v0.115.0 — silent-exception-swallowing audit round 2, help-system recipe-coverage + payload-size fixes
 - ✅ Second full pass of the "infrastructure failure renders as a clean/healthy result" bug class (BACK-979–992): most user-facing, malformed YAML frontmatter no longer reported as "no frontmatter"; `reveal health`'s code-check no longer reports false "healthy"; composite adapters (`hotspots://`, `architecture://`, `deps://`, `overview://`) now attribute sub-scan crashes via a new `ResourceAdapter.compose()` instead of swallowing them into an empty section; corrupted git `HEAD`/malformed config no longer silently identical to "nothing there"; explicit `0` in a numeric query param no longer treated as absent.
 - ✅ B006 detector generalized to recognize deferred error-variable use, helper-call/dict-literal/`ResultBuilder.create_error` signals, and logged-but-silent handlers — 121 false positives cleared with zero per-site changes; real tracked hits on reveal's own source 200 → 79 (BACK-983, 992, 989). Wired into CI as a regression gate (BACK-988).
