@@ -626,7 +626,7 @@ class ClaudeAdapter(ResourceAdapter):
         if '/tools' in self.resource:
             return get_all_tools(messages, self.session_name, contract_base)
         if '/files' in self.resource:
-            include_patches = self.query_params.get('patches') == 'true'
+            include_patches = str(self.query_params.get('patches', False)).lower() == 'true'
             return get_files_touched(messages, self.session_name, contract_base, include_patches=include_patches)
         if '/workflow' in self.resource:
             return get_workflow(messages, self.session_name, contract_base)

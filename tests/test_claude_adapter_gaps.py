@@ -210,6 +210,47 @@ class TestRouteByResourceMessages:
         assert result.get('type') == 'claude_messages'
 
 
+# ─── _route_by_resource: /files with ?patches= (BACK-1018) ────────────────────
+
+class TestRouteByResourceFilesPatches:
+    """?patches= must coerce case-insensitively, matching every other boolean
+    query param in the codebase (BACK-1018)."""
+
+    def _files_result(self, tmp_path, patches_value):
+        msgs = [_tool_use_msg('Edit', tool_id='tu_001', file_path='/tmp/foo.py'),
+                _tool_result_msg('tu_001')]
+        msgs[1]['toolUseResult'] = {'structuredPatch': [{'oldStart': 1, 'newStart': 1}]}
+        jsonl = _write_session(tmp_path, 'sess', msgs)
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('session/sess', query=f'patches={patches_value}')
+        adapter.conversation_path = jsonl
+        adapter.messages = msgs
+        adapter.resource = 'session/sess/files'
+        adapter.query_params = {'patches': patches_value}
+        base = adapter._get_contract_base()
+        return adapter._route_by_resource(msgs, '', base)
+
+    def test_patches_lowercase_true_includes_patch(self, tmp_path):
+        result = self._files_result(tmp_path, 'true')
+        op = result['operations'][0]
+        assert 'patch' in op
+
+    def test_patches_titlecase_true_includes_patch(self, tmp_path):
+        result = self._files_result(tmp_path, 'True')
+        op = result['operations'][0]
+        assert 'patch' in op
+
+    def test_patches_uppercase_true_includes_patch(self, tmp_path):
+        result = self._files_result(tmp_path, 'TRUE')
+        op = result['operations'][0]
+        assert 'patch' in op
+
+    def test_patches_false_omits_patch(self, tmp_path):
+        result = self._files_result(tmp_path, 'false')
+        op = result['operations'][0]
+        assert 'patch' not in op
+
+
 # ─── _handle_composite_query ──────────────────────────────────────────────────
 
 class TestHandleCompositeQuery:
