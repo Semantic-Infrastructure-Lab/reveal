@@ -1029,5 +1029,127 @@ class TestB006PHP(unittest.TestCase):
         self.assertEqual(len(detections), 1)
 
 
+class TestB006Kotlin(unittest.TestCase):
+    """Test B006's Kotlin port (BACK-1011)."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.rule = B006()
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def create_temp_file(self, content: str, name: str = "test.kt") -> str:
+        path = os.path.join(self.temp_dir, name)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    def test_broad_exception_silent_flagged(self):
+        content = "fun f() { try { g() } catch (e: Exception) { } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_broad_throwable_silent_flagged(self):
+        content = "fun f() { try { g() } catch (e: Throwable) { } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_specific_type_not_flagged(self):
+        content = "fun f() { try { g() } catch (e: IOException) { } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_logger_e_not_flagged(self):
+        content = 'fun f() { try { g() } catch (e: Exception) { logger.e(e) { "failed" } } }'
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_logger_debug_still_flagged(self):
+        content = 'fun f() { try { g() } catch (e: Exception) { logger.d(e) { "failed" } } }'
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_rethrow_not_flagged(self):
+        content = "fun f() { try { g() } catch (e: Exception) { throw e } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_explanatory_comment_not_flagged(self):
+        content = "fun f() { try { g() } catch (e: Exception) { // intentional\n } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+
+class TestB006Swift(unittest.TestCase):
+    """Test B006's Swift port (BACK-1011)."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.rule = B006()
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def create_temp_file(self, content: str, name: str = "test.swift") -> str:
+        path = os.path.join(self.temp_dir, name)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    def test_bare_catch_silent_flagged(self):
+        content = "func f() { do { try g() } catch { } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_untyped_let_binding_silent_flagged(self):
+        content = "func f() { do { try g() } catch let e { } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_typed_catch_not_flagged(self):
+        content = "func f() { do { try g() } catch let e as MyError { } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_enum_case_match_not_flagged(self):
+        content = "func f() { do { try g() } catch MyError.specific { } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_print_not_flagged(self):
+        content = "func f() { do { try g() } catch { print(error) } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_rethrow_not_flagged(self):
+        content = "func f() { do { try g() } catch { throw error } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_explanatory_comment_not_flagged(self):
+        content = "func f() { do { try g() } catch {\n// intentional\n} }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

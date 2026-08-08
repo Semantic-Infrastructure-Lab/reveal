@@ -27,14 +27,17 @@ the same bug shape — a broad ``catch`` with no visible failure signal — is
 just as real in any exception-based language. Cross-language ports (tree-
 sitter's `catch_clause` node, checked for a `throw`/re-raise or a visible
 logging call in the body) now cover C#, Java, JavaScript, TypeScript, and
-PHP. All are deliberately simpler heuristics than the Python side: no
-docstring-tolerance or deferred-signal detection, just broad-catch +
-empty-of-signal body (+ explanatory-comment exemption). "Broad" itself is
-language-specific: C#/Java/PHP require a bare or Exception/Throwable-typed
-catch; JavaScript/TypeScript have no catch-type syntax at all, so every
-catch is broad there and only the silence check discriminates. C++ (`...`
-ellipsis catch-all) and Kotlin/Swift (`catch_block`, a different node
-shape) remain open — see BACK-1011.
+PHP. Kotlin and Swift share the same heuristic but a different node kind
+(`catch_block`, not `catch_clause`). All are deliberately simpler heuristics
+than the Python side: no docstring-tolerance or deferred-signal detection,
+just broad-catch + empty-of-signal body (+ explanatory-comment exemption).
+"Broad" itself is language-specific: C#/Java/PHP/Kotlin require a bare or
+Exception/Throwable-typed catch; JavaScript/TypeScript have no catch-type
+syntax at all, so every catch is broad there and only the silence check
+discriminates; Swift narrows only when a pattern explicitly types the catch
+via `as`/an enum-case match to something other than `Error`/`NSError` — a
+bare `catch {}` or an untyped `catch let e` stays broad. C++ (`...`
+ellipsis catch-all) remains open — see BACK-1011.
 """
 
 import ast
@@ -56,9 +59,9 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     file_patterns = [
         '.py', '.cs', '.java',
         '.js', '.jsx', '.mjs', '.cjs', '.ts',
-        '.php',
+        '.php', '.kt', '.kts', '.swift',
     ]
-    version = "1.6.0"
+    version = "1.7.0"
 
     _CS_LANGUAGE = 'csharp'
     _CS_BROAD_TYPES = frozenset({'Exception', 'System.Exception'})
@@ -96,6 +99,29 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     # equivalents, same rationale as the Python/C#/Java debug exclusions).
     _PHP_VISIBLE_METHODS = frozenset({
         'error', 'warning', 'critical', 'alert', 'emergency',
+    })
+
+    _KOTLIN_LANGUAGE = 'kotlin'
+    _KOTLIN_BROAD_TYPES = frozenset({'Exception', 'Throwable', 'RuntimeException'})
+    # Real corpus (Tivi) uses Kermit ('logger.e { }'/'Logger.e(t) { }') and
+    # Android Log/Timber ('Log.e'/'Timber.e') conventions almost
+    # exclusively — single-letter e/w method names are the idiom, not an
+    # abbreviation of something else. 'd' (debug) and 'i' (info) excluded,
+    # same invisible-by-default rationale as every other language here.
+    _KOTLIN_VISIBLE_METHODS = frozenset({
+        'e', 'w', 'error', 'warn', 'warning', 'severe', 'fatal', 'critical', 'printStackTrace',
+    })
+
+    _SWIFT_LANGUAGE = 'swift'
+    # Swift's Error protocol has no Java-style Exception/Throwable split —
+    # NSError is the other broad catch-all in Cocoa-interop code.
+    _SWIFT_BROAD_TYPES = frozenset({'Error', 'NSError'})
+    # Swift has no built-in level-gated logger convention as dominant as
+    # Java/C#'s — real corpus (Kickstarter iOS) overwhelmingly uses bare
+    # print()/NSLog() in catch bodies, not a logging framework.
+    _SWIFT_VISIBLE_FUNCTIONS = frozenset({'print', 'NSLog'})
+    _SWIFT_VISIBLE_METHODS = frozenset({
+        'error', 'warning', 'warn', 'critical', 'fatal', 'record',
     })
 
     # Logger/print calls that count as a *visible* signal. logger.debug() is
@@ -149,6 +175,10 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             return self._check_js_like(file_path, content, self._TS_LANGUAGE)
         if file_path.endswith('.php'):
             return self._check_php(file_path, content)
+        if file_path.endswith(('.kt', '.kts')):
+            return self._check_kotlin(file_path, content)
+        if file_path.endswith('.swift'):
+            return self._check_swift(file_path, content)
 
         tree, detections = self._parse_python_or_skip(content, file_path)
         if tree is None:
@@ -797,5 +827,180 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
                 # receiver, e.g. `$this->logger` in `$this->logger->error()`).
                 names = [c for c in node_children(descendant) if c.kind() == 'name']
                 if names and self._ts_node_text(names[-1], content_bytes) in self._PHP_VISIBLE_METHODS:
+                    return True
+        return False
+
+    # ── Kotlin (BACK-1011) ───────────────────────────────────────────────────
+
+    def _check_kotlin(self, file_path: str, content: str) -> List[Detection]:
+        """Check Kotlin source for silent broad `catch` clauses.
+
+        Kotlin's `catch_block` is a different tree-sitter node kind from the
+        `catch_clause` shared by C#/Java/JS/TS/PHP, but Kotlin always
+        requires a typed parameter (no bare `catch {}`, unlike Java/C#), so
+        the broad-type check mirrors Java's rather than needing a
+        no-declaration fallback.
+        """
+        root, detections = self._parse_treesitter_or_skip(content, file_path, self._KOTLIN_LANGUAGE)
+        if root is None:
+            return detections
+
+        content_bytes = content.encode('utf-8')
+        for node in self._ts_walk(root):
+            if node.kind() != 'catch_block':
+                continue
+            if not self._kotlin_is_broad_catch(node, content_bytes):
+                continue
+            if self._kotlin_has_visible_signal(node, content_bytes):
+                continue
+            if any('comment' in d.kind() for d in self._ts_walk(node)):
+                continue
+
+            detections.append(self.create_detection(
+                file_path=file_path,
+                line=node.start_position().row + 1,
+                column=node.start_position().column + 1,
+                suggestion=(
+                    "Consider:\n"
+                    "  1. Catch specific exception types instead of Exception/Throwable\n"
+                    "  2. Add visible logging: logger.e(e) { \"...\" } / Log.w(TAG, ...) —\n"
+                    "     debug/verbose-level logging alone is invisible by default and does not count\n"
+                    "  3. Re-throw if you can't handle it: throw e"
+                ),
+                context=self._ts_node_text(node, content_bytes).split('\n')[0],
+            ))
+
+        return detections
+
+    def _kotlin_is_broad_catch(self, node, content_bytes: bytes) -> bool:
+        """True if the catch parameter's type is Exception/Throwable/RuntimeException."""
+        type_node = next(
+            (c for c in node_children(node) if c.kind() == 'user_type'), None
+        )
+        if type_node is None:
+            return False
+        return self._ts_node_text(type_node, content_bytes) in self._KOTLIN_BROAD_TYPES
+
+    def _kotlin_has_visible_signal(self, node, content_bytes: bytes) -> bool:
+        """True if the catch body re-throws or calls a visible logging method."""
+        statements = next((c for c in node_children(node) if c.kind() == 'statements'), None)
+        if statements is None:
+            return False
+
+        for descendant in self._ts_walk(statements):
+            if descendant.kind() == 'jump_expression':
+                first = node_children(descendant)
+                if first and first[0].kind() == 'throw':
+                    return True
+            if descendant.kind() != 'call_expression':
+                continue
+            callee = node_children(descendant)[0] if node_children(descendant) else None
+            if callee is None:
+                continue
+            if callee.kind() == 'navigation_expression':
+                suffix = next(
+                    (c for c in node_children(callee) if c.kind() == 'navigation_suffix'), None
+                )
+                if suffix is None:
+                    continue
+                name_node = next(
+                    (c for c in node_children(suffix) if c.kind() == 'simple_identifier'), None
+                )
+                if name_node and self._ts_node_text(name_node, content_bytes) in self._KOTLIN_VISIBLE_METHODS:
+                    return True
+            elif callee.kind() == 'simple_identifier':
+                if self._ts_node_text(callee, content_bytes) in self._KOTLIN_VISIBLE_METHODS:
+                    return True
+        return False
+
+    # ── Swift (BACK-1011) ────────────────────────────────────────────────────
+
+    def _check_swift(self, file_path: str, content: str) -> List[Detection]:
+        """Check Swift source for silent broad `catch` clauses.
+
+        Swift's `catch_block` (same node kind name as Kotlin's, unrelated
+        grammar) narrows only when a `pattern` child actually types the
+        catch — via `as SomeType` or an enum-case match like
+        `MyError.specific` — to something other than `Error`/`NSError`. A
+        bare `catch {}` or an untyped `catch let e` has no `pattern` (or a
+        `pattern` with no type at all) and stays broad, same as an
+        unqualified `catch` in the other languages.
+        """
+        root, detections = self._parse_treesitter_or_skip(content, file_path, self._SWIFT_LANGUAGE)
+        if root is None:
+            return detections
+
+        content_bytes = content.encode('utf-8')
+        for node in self._ts_walk(root):
+            if node.kind() != 'catch_block':
+                continue
+            if not self._swift_is_broad_catch(node, content_bytes):
+                continue
+            if self._swift_has_visible_signal(node, content_bytes):
+                continue
+            if any(d.kind() == 'comment' for d in self._ts_walk(node)):
+                continue
+
+            detections.append(self.create_detection(
+                file_path=file_path,
+                line=node.start_position().row + 1,
+                column=node.start_position().column + 1,
+                suggestion=(
+                    "Consider:\n"
+                    "  1. Catch a specific error type: catch let e as SomeError\n"
+                    "  2. Add visible logging: print(error) / logger.error(\"...\")\n"
+                    "  3. Re-throw if you can't handle it: throw error"
+                ),
+                context=self._ts_node_text(node, content_bytes).split('\n')[0],
+            ))
+
+        return detections
+
+    def _swift_is_broad_catch(self, node, content_bytes: bytes) -> bool:
+        """True unless a `pattern` child types the catch to a non-broad type.
+
+        Covers both `catch let e as SomeError` (an `as` type-cast pattern)
+        and `catch SomeError.specific` (an enum-case match pattern) — both
+        produce a `user_type` node somewhere inside `pattern`; an untyped
+        `catch let e` binding produces a `pattern` with no `user_type` at
+        all, which stays broad.
+        """
+        pattern = next((c for c in node_children(node) if c.kind() == 'pattern'), None)
+        if pattern is None:
+            return True
+        type_node = next((c for c in self._ts_walk(pattern) if c.kind() == 'user_type'), None)
+        if type_node is None:
+            return True
+        return self._ts_node_text(type_node, content_bytes) in self._SWIFT_BROAD_TYPES
+
+    def _swift_has_visible_signal(self, node, content_bytes: bytes) -> bool:
+        """True if the catch body re-throws or calls a visible print/log call."""
+        statements = next((c for c in node_children(node) if c.kind() == 'statements'), None)
+        if statements is None:
+            return False
+
+        for descendant in self._ts_walk(statements):
+            if descendant.kind() == 'control_transfer_statement':
+                first = node_children(descendant)
+                if first and first[0].kind() == 'throw_keyword':
+                    return True
+            if descendant.kind() != 'call_expression':
+                continue
+            callee = node_children(descendant)[0] if node_children(descendant) else None
+            if callee is None:
+                continue
+            if callee.kind() == 'simple_identifier':
+                if self._ts_node_text(callee, content_bytes) in self._SWIFT_VISIBLE_FUNCTIONS:
+                    return True
+            elif callee.kind() == 'navigation_expression':
+                suffix = next(
+                    (c for c in node_children(callee) if c.kind() == 'navigation_suffix'), None
+                )
+                if suffix is None:
+                    continue
+                name_node = next(
+                    (c for c in node_children(suffix) if c.kind() == 'simple_identifier'), None
+                )
+                if name_node and self._ts_node_text(name_node, content_bytes) in self._SWIFT_VISIBLE_METHODS:
                     return True
         return False
