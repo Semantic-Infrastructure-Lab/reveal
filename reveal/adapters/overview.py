@@ -50,14 +50,21 @@ def _run_stats(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
     return adapter.compose(StatsAdapter, str(path), default={}, hotspots=True)
 
 
-def _run_scope(path: Path) -> Dict[str, Any]:
+def _run_scope(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
     """BACK-884: files discovered/analyzed/skipped by language, with
     per-language capability tier — additive 'scope' key in JSON output.
-    Shared with architecture.py via capabilities.scope_dict_for_path()."""
+    Shared with architecture.py via capabilities.scope_dict_for_path().
+
+    BACK-1016: routes failures through record_composed_error() (in addition
+    to the existing logger.warning) so a crashed census is reflected in
+    meta.errors/confidence instead of silently rendering as an empty-but-
+    trusted 'scope': {} — the same fix BACK-984 already gave every other
+    sibling-adapter site in this file."""
     try:
         return scope_dict_for_path(path)
     except Exception as exc:
         logger.warning("scope census failed for %s: %s", path, exc)
+        adapter.record_composed_error('scope_dict_for_path', path, exc)
         return {}
 
 
@@ -79,13 +86,21 @@ def _resolve_git_root(path: Path) -> Optional[Path]:
         return None
 
 
-def _run_git_log(path: Path, limit: int) -> List[Dict[str, Any]]:
-    """Fetch recent commits via GitAdapter."""
+def _run_git_log(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dict[str, Any]]:
+    """Fetch recent commits via GitAdapter.
+
+    BACK-1016: a 13th sibling-adapter-construction site the BACK-984 sweep
+    missed — it constructs GitAdapter directly (query is a dict, not the
+    canonical query string compose() expects, so it can't route through
+    compose() as-is) and previously swallowed a crashed git log into `[]`
+    with only a logger.warning, no envelope error. record_composed_error()
+    closes that the same way BACK-984 did for every compose()-based site."""
     try:
         data = GitAdapter(path=str(path), query={'type': 'log', 'limit': str(limit)}).get_structure()
         return data.get('history', [])
     except Exception as exc:
         logger.warning("git log collection failed for %s: %s", path, exc)
+        adapter.record_composed_error('GitAdapter', path, exc)
         return []
 
 
@@ -502,7 +517,7 @@ class OverviewAdapter(ResourceAdapter):
         no_imports = str(self.query_params.get('no_imports', False)).lower() == 'true'
 
         stats = _run_stats(self, path)
-        git_log = [] if no_git else _run_git_log(path, top)
+        git_log = [] if no_git else _run_git_log(self, path, top)
         git_foreign_root: Optional[Path] = None
         if git_log:
             git_root = _resolve_git_root(path)
@@ -518,7 +533,7 @@ class OverviewAdapter(ResourceAdapter):
             'git_foreign_root': str(git_foreign_root) if git_foreign_root else None,
             'complex_functions': complex_fns,
             'architecture': architecture,
-            'scope': _run_scope(path),
+            'scope': _run_scope(self, path),
         }
 
         meta = self.composed_meta()

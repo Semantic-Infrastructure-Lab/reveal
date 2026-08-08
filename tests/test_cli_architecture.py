@@ -25,6 +25,7 @@ from reveal.adapters.architecture import (
     _run_combined_analysis,
     _run_complex_functions,
     _run_imports_analysis,
+    _run_scope,
 )
 from reveal.cli.commands.architecture import (
     create_architecture_parser,
@@ -615,6 +616,34 @@ class TestRunCombinedAnalysis(unittest.TestCase):
         self.assertEqual(kwargs.get('structures'), fake_structures)
         self.assertEqual(complex_fns, [{'name': 'f', 'complexity': 25, 'file': '/p/a.py'}])
         self.assertIn('entry_points', imports_data)
+
+
+# ── _run_scope ──────────────────────────────────────────────────────────────
+
+class TestRunScope(unittest.TestCase):
+    """BACK-1016: a crashed scope census must show up in composed_meta(),
+    not just render as a silent, fully-trusted empty 'scope': {}."""
+
+    def test_returns_empty_dict_on_failure(self):
+        adapter = ArchitectureAdapter('/p')
+        with patch('reveal.adapters.architecture.scope_dict_for_path', side_effect=Exception('fail')):
+            result = _run_scope(adapter, Path('/p'))
+        self.assertEqual(result, {})
+
+    def test_failure_records_composed_error(self):
+        adapter = ArchitectureAdapter('/p')
+        with patch('reveal.adapters.architecture.scope_dict_for_path', side_effect=Exception('fail')):
+            _run_scope(adapter, Path('/p'))
+        meta = adapter.composed_meta()
+        self.assertIsNotNone(meta)
+        self.assertTrue(meta.get('errors'))
+
+    def test_success_returns_scope_dict_untouched(self):
+        adapter = ArchitectureAdapter('/p')
+        with patch('reveal.adapters.architecture.scope_dict_for_path', return_value={'python': {}}):
+            result = _run_scope(adapter, Path('/p'))
+        self.assertEqual(result, {'python': {}})
+        self.assertIsNone(adapter.composed_meta())
 
 
 # ── _run_imports_analysis ──────────────────────────────────────────────────────

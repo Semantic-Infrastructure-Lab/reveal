@@ -48,14 +48,21 @@ def _run_complex_functions(adapter: 'ArchitectureAdapter', path: Path, limit: in
     return data.get('results', data.get('elements', []))
 
 
-def _run_scope(path: Path) -> Dict[str, Any]:
+def _run_scope(adapter: 'ArchitectureAdapter', path: Path) -> Dict[str, Any]:
     """BACK-884: files discovered/analyzed/skipped by language, with
     per-language capability tier — additive 'scope' key in JSON output.
-    Shared with overview.py via capabilities.scope_dict_for_path()."""
+    Shared with overview.py via capabilities.scope_dict_for_path().
+
+    BACK-1016: routes failures through record_composed_error() (in addition
+    to the existing logger.warning) so a crashed census is reflected in
+    meta.errors/confidence instead of silently rendering as an empty-but-
+    trusted 'scope': {} — the same fix BACK-984 already gave every other
+    sibling-adapter site in this file."""
     try:
         return scope_dict_for_path(path)
     except Exception as exc:
         logger.warning("scope census failed for %s: %s", path, exc)
+        adapter.record_composed_error('scope_dict_for_path', path, exc)
         return {}
 
 
@@ -465,7 +472,7 @@ class ArchitectureAdapter(ResourceAdapter):
             'risks': risks,
             'next_commands': next_commands,
             'unsupported_extensions': imports_data.get('unsupported_extensions', {}),
-            'scope': _run_scope(path),
+            'scope': _run_scope(self, path),
         }
 
         meta = self.composed_meta()

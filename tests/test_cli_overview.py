@@ -27,6 +27,7 @@ from reveal.adapters.overview import (
     _run_complex_functions,
     _run_git_log,
     _run_imports_analysis,
+    _run_scope,
     _run_stats,
 )
 from reveal.cli.commands.overview import (
@@ -241,31 +242,72 @@ class TestRunStats(unittest.TestCase):
         self.assertEqual(result, {})
 
 
+class TestRunScope(unittest.TestCase):
+    """BACK-1016: a crashed scope census must show up in composed_meta(),
+    not just render as a silent, fully-trusted empty 'scope': {}."""
+
+    def setUp(self):
+        self.adapter = OverviewAdapter('/project')
+
+    def test_returns_empty_dict_on_failure(self):
+        with patch('reveal.adapters.overview.scope_dict_for_path', side_effect=Exception('fail')):
+            result = _run_scope(self.adapter, Path('/project'))
+        self.assertEqual(result, {})
+
+    def test_failure_records_composed_error(self):
+        with patch('reveal.adapters.overview.scope_dict_for_path', side_effect=Exception('fail')):
+            _run_scope(self.adapter, Path('/project'))
+        meta = self.adapter.composed_meta()
+        self.assertIsNotNone(meta)
+        self.assertTrue(meta.get('errors'))
+
+    def test_success_returns_scope_dict_untouched(self):
+        with patch('reveal.adapters.overview.scope_dict_for_path', return_value={'python': {}}):
+            result = _run_scope(self.adapter, Path('/project'))
+        self.assertEqual(result, {'python': {}})
+        self.assertIsNone(self.adapter.composed_meta())
+
+
 class TestRunGitLog(unittest.TestCase):
+
+    def setUp(self):
+        self.adapter = OverviewAdapter('/project')
 
     @patch('reveal.adapters.overview.GitAdapter')
     def test_returns_history_list(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_GIT_JSON)
-        result = _run_git_log(Path('/project'), 5)
+        result = _run_git_log(self.adapter, Path('/project'), 5)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]['hash'], 'abc1234')
 
     @patch('reveal.adapters.overview.GitAdapter')
     def test_exception_returns_empty(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
-        result = _run_git_log(Path('/project'), 5)
+        result = _run_git_log(self.adapter, Path('/project'), 5)
         self.assertEqual(result, [])
+
+    @patch('reveal.adapters.overview.GitAdapter')
+    def test_exception_records_composed_error(self, MockAdapter):
+        """BACK-1016: a crashed git log must not render as a clean, fully-
+        trusted result — it needs to show up in composed_meta()'s errors so
+        the envelope carries an attributed failure instead of silence."""
+        MockAdapter.return_value.get_structure.side_effect = Exception('fail')
+        _run_git_log(self.adapter, Path('/project'), 5)
+        meta = self.adapter.composed_meta()
+        self.assertIsNotNone(meta)
+        self.assertTrue(meta.get('errors'))
+        self.assertIn('GitAdapter', meta['errors'][0]['message'])
 
     @patch('reveal.adapters.overview.GitAdapter')
     def test_missing_history_key_returns_empty(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = {'other': 'data'}
-        result = _run_git_log(Path('/project'), 5)
+        result = _run_git_log(self.adapter, Path('/project'), 5)
         self.assertEqual(result, [])
 
     @patch('reveal.adapters.overview.GitAdapter')
     def test_limit_passed_as_query_param(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = {}
-        _run_git_log(Path('/project'), 7)
+        _run_git_log(self.adapter, Path('/project'), 7)
         MockAdapter.assert_called_once_with(path=str(Path('/project')), query={'type': 'log', 'limit': '7'})
 
 
