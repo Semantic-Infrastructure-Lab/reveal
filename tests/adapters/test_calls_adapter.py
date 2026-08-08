@@ -1553,6 +1553,23 @@ class TestFindUncalled(unittest.TestCase):
         self.assertNotIn('__init__', names)
         self.assertNotIn('__str__', names)
 
+    def test_ts_constructor_excluded(self):
+        """TS/JS 'constructor' methods are excluded (BACK-1009): `new X()` call
+        sites index under the class name, never the literal 'constructor'
+        definition name, so without this exclusion every constructor false-flags."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('c.ts', '''\
+            class Foo {
+                constructor() {
+                }
+                regular() {
+                }
+            }
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        self.assertNotIn('constructor', names)
+
     def test_property_decorator_excluded(self):
         """@property methods are excluded (called implicitly by attribute access)."""
         from reveal.adapters.calls.index import find_uncalled

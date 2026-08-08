@@ -128,10 +128,23 @@ def _is_implicit_element(
     FastAPI @app.get, Click @cli.command, …) that are invoked by the
     framework, not a static call expression, so they'd otherwise false-flag
     as dead code on every web app codebase.
+
+    JS/TS/Java-family ``constructor`` methods (BACK-1009) get the same
+    treatment as Python's ``__init__``, for a different reason: unlike
+    Python (where ``ClassName()`` indexes under the literal definition
+    name) or Java/C# (where the constructor method is itself named after
+    the class), JS/TS's `new ClassName(...)` is indexed under "ClassName"
+    (`_extract_js_new_callee`/`_bare_callee_name`) while the method
+    definition is always literally named ``constructor`` — the two names
+    never match, so every constructor in a TS/JS codebase was flagged
+    dead code (measured 18.5% of all `?uncalled` hits on the VS Code
+    corpus).
     """
     if only_functions and is_method:
         return True
     if name.startswith('__') and name.endswith('__'):
+        return True
+    if name == 'constructor':
         return True
     return bool(decorator_names & (_IMPLICIT_DECORATORS | extra_implicit_decorators))
 
