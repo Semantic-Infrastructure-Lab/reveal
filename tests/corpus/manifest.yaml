@@ -120,7 +120,7 @@ corpora:
   # ---- Tier B additions: .git already removed on disk, sha unrecoverable ----
   - language: dart
     repo: https://github.com/AppFlowy-IO/AppFlowy.git
-    sha: null  # snapshot 2026-07-02; re-pin via fetch_corpus.py
+    sha: 5cf3a365dec0d59f64bad1ee4bb1050471a39b93  # re-pinned 2026-08-07 via fetch_corpus.py (BACK-1002)
     license: AGPLv3 — restrictive, do not extract
     role: Real product (notes/knowledge app), Flutter frontend
   - language: lua
