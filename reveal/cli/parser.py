@@ -3,7 +3,14 @@
 import sys
 import argparse
 import shutil
+from pathlib import Path
 from typing import Optional
+
+# Package root, resolved the same way for both an editable and a physical
+# install. Surfaced by --version so a stale/orphaned non-editable copy
+# shadowing the editable dev checkout (BACK-1014) shows up immediately as
+# an unexpected site-packages path instead of silently resolving.
+_PACKAGE_DIR = Path(__file__).resolve().parent.parent
 
 
 def _build_core_examples() -> str:
@@ -233,7 +240,8 @@ def _add_positional_arguments(parser: argparse.ArgumentParser, version: str) -> 
     """Add positional arguments and --version (must go on the parser, not a group)."""
     parser.add_argument('path', nargs='?', help='File or directory to reveal')
     parser.add_argument('element', nargs='?', help='Element to extract: name (load_config), Class.method, :N or bare integer (line number → enclosing element), :N-M (line range), @N (Nth element)')
-    parser.add_argument('--version', action='version', version=f'reveal {version}')
+    parser.add_argument('--version', action='version',
+                        version=f'reveal {version} ({_PACKAGE_DIR})')
     parser.add_argument('--help-all', action=_HelpAllAction, nargs=0,
                         help='Show every flag, including file- and adapter-specific groups')
 

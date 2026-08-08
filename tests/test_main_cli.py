@@ -43,6 +43,17 @@ class TestCLIFlags(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertRegex(result.stdout, r"reveal \d+\.\d+\.\d+")
 
+    def test_version_shows_source_path(self):
+        """--version must print the resolved package directory (BACK-1014):
+        a stale non-editable install shadowing an editable dev checkout
+        produces no error and no warning anywhere else, so this is the only
+        place that failure mode is visible."""
+        result = self.run_reveal("--version")
+
+        self.assertEqual(result.returncode, 0)
+        expected_dir = str(Path(__file__).resolve().parent.parent / "reveal")
+        self.assertIn(expected_dir, result.stdout)
+
     def test_list_supported_flag(self):
         """Should list supported file types with --list-supported."""
         result = self.run_reveal("--list-supported")
