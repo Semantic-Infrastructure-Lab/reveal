@@ -1631,6 +1631,27 @@ class TestFindUncalled(unittest.TestCase):
         result = find_uncalled(self.tmpdir, top=3)
         self.assertLessEqual(len(result['entries']), 3)
 
+    def test_top_does_not_truncate_total_uncalled_count(self):
+        """total_uncalled must report the true count, not len(entries) post-top.
+
+        Regression test: top truncated `entries` before `total_uncalled` was
+        computed, so a DD script reading `top=30` on a repo with 269 real
+        dead-code candidates would see 'Uncalled: 30' -- a wrong finding, not
+        just a truncated one.
+        """
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('g.py', '''\
+            def a(): pass
+            def b(): pass
+            def c(): pass
+            def d(): pass
+            def e(): pass
+        ''')
+        full = find_uncalled(self.tmpdir)
+        limited = find_uncalled(self.tmpdir, top=2)
+        self.assertEqual(limited['total_uncalled'], full['total_uncalled'])
+        self.assertEqual(len(limited['entries']), 2)
+
     def test_total_counts_accurate(self):
         """total_defined and total_uncalled fields are correct.
 

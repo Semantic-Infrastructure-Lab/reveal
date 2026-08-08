@@ -166,7 +166,10 @@ def _render_uncalled_text(data: Dict[str, Any]) -> None:
 
     print(f"Dead code candidates: {path}")
     print(f"Total defined:        {total_defined} functions/methods")
-    print(f"Uncalled:             {total_uncalled}")
+    if entries and len(entries) < total_uncalled:
+        print(f"Uncalled:             {total_uncalled}  (showing top {len(entries)})")
+    else:
+        print(f"Uncalled:             {total_uncalled}")
     print(f"Note: excludes __dunder__ methods and @property/@classmethod/@staticmethod")
     if test_excluded:
         print(f"Note: excluded {test_excluded} test-runner entrypoint(s) "

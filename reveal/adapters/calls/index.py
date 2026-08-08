@@ -869,6 +869,7 @@ def find_uncalled(
             })
 
     entries.sort(key=lambda e: (_uncalled_entry_mtime(e), e['file'], e['line']))
+    total_uncalled = len(entries)
     if top > 0:
         entries = entries[:top]
 
@@ -876,7 +877,7 @@ def find_uncalled(
         'query': 'uncalled',
         'path': path,
         'total_defined': total_defined,
-        'total_uncalled': len(entries),
+        'total_uncalled': total_uncalled,
         'test_entrypoints_excluded': test_entrypoints_excluded,
         'entries': entries,
     }
