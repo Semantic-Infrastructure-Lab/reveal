@@ -273,6 +273,7 @@ Default penalties:
 | `churn` | boolean | Fold commit-touch counts into hotspot scoring (default: on for git repos, silently off otherwise) | `?hotspots=true&churn=false` |
 | `since` | string (ISO date) | Bound the churn walk to commits on/after this date (default: full history) | `?hotspots=true&since=2026-01-01` |
 | `no_merges` | boolean | Exclude merge commits from the churn tally | `?hotspots=true&no_merges=1` |
+| `summary_only` | boolean | Omit the per-file `files` array — aggregate summary (+ hotspots, if requested) only. Use on large repos where the per-file array is impractically large. | `?summary_only=true` |
 
 **Note**: Legacy parameters still work but unified query syntax (below) is preferred for new queries. `churn`/`since`/`no_merges` only affect hotspot scoring (`hotspots=true`) and are ignored otherwise.
 
