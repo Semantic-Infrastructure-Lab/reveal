@@ -8,11 +8,29 @@ auto-property `{ get; set; }` or an expression-bodied `=> expr`) is the same
 shape as a Python `@property`: syntactically a field access, semantically
 allowed to hide arbitrary logic. Only the `get` accessor's own block is
 measured (not `set`, which is a separate accessor_declaration sibling under
-the same accessor_list). Kotlin/Swift not yet ported — see BACK-1011 note #7:
-Kotlin's `getter` node is a *sibling* of `property_declaration` when the
-getter is on its own line, but *nested inside* it for a same-line
-`get() = expr` form, a real grammar-layout quirk that needs its own care
-rather than reusing C#'s walk as-is.
+the same accessor_list).
+
+Kotlin: real grammar-layout quirk confirmed via direct AST inspection (BACK-
+1011 note #7) — a `getter` node is a *sibling* of `property_declaration`
+under `class_body` when the getter is on its own line (`val bar: String\n
+get() { ... }`), but *nested inside* it for a same-line `get() = expr`
+form. Both shapes are handled: the sibling case walks backward to the
+nearest preceding `property_declaration` for the name (nodes aren't
+identity/equality-comparable across separate tree-sitter accesses, so
+siblings are matched by `start_byte`, not `is`/`==`/`.index()`). Only a
+block-bodied getter (`get() { ... }`) is measured — `get() = expr`
+(expression form) has nothing to measure, same exclusion as C#'s `=> expr`.
+
+Swift: `computed_property` is always nested inside `property_declaration`
+(no Kotlin-style sibling quirk). Two shapes measured: an explicit `get { }`
+block (`computed_getter` node) and the implicit-getter shorthand — a
+read-only computed property with no `get`/`set` keyword at all
+(`var x: T { <body> }`) — whose `computed_property` node IS the getter
+body. `willSet`/`didSet` observers live under a different node kind
+(`willset_didset_block`, not `computed_property`) and are correctly never
+matched — they're stored-property write hooks, not a getter. A
+`computed_setter`-only property (no getter) is invalid Swift but handled
+defensively by skipping it rather than crashing.
 """
 
 import logging
@@ -32,13 +50,15 @@ class B003(BaseRule, TreeSitterParsingMixin):
     message = "@property is too complex - properties should be simple getters"
     category = RulePrefix.B
     severity = Severity.MEDIUM
-    file_patterns = ['.py', '.cs']
-    version = "1.1.0"
+    file_patterns = ['.py', '.cs', '.kt', '.kts', '.swift']
+    version = "1.2.0"
 
     # Properties over this line count are flagged
     MAX_PROPERTY_LINES = 15
 
     _CS_LANGUAGE = 'csharp'
+    _KOTLIN_LANGUAGE = 'kotlin'
+    _SWIFT_LANGUAGE = 'swift'
 
     thresholds = {"max_lines": MAX_PROPERTY_LINES}
     compliant_example = """\
@@ -106,6 +126,139 @@ def compute_status(self) -> str:
 
         return detections
 
+    # ── Kotlin (BACK-1011) ───────────────────────────────────────────────────
+
+    def _check_kotlin(self, file_path: str, content: str) -> List[Detection]:
+        """Check Kotlin `getter` blocks for line count. Handles both the
+        sibling-of-property_declaration and nested-in-property_declaration
+        grammar shapes — see module docstring."""
+        root, detections = self._parse_treesitter_or_skip(content, file_path, self._KOTLIN_LANGUAGE)
+        if root is None:
+            return detections
+
+        content_bytes = content.encode('utf-8')
+
+        for node in self._ts_walk(root):
+            if _zero_arg(node, 'kind') != 'getter':
+                continue
+
+            function_body = next(
+                (c for c in node_children(node) if _zero_arg(c, 'kind') == 'function_body'), None
+            )
+            if function_body is None:
+                continue
+
+            body_children = node_children(function_body)
+            if not body_children or _zero_arg(body_children[0], 'kind') != '{':
+                continue  # expression-bodied `get() = expr` — nothing to measure
+
+            name = self._kotlin_property_name(node, content_bytes)
+            line = function_body.start_position().row + 1
+            end_line = function_body.end_position().row + 1
+            line_count = end_line - line + 1
+            if line_count > self.MAX_PROPERTY_LINES:
+                detections.append(self.create_detection(
+                    file_path=file_path,
+                    line=line,
+                    message=f"@property '{name}' is {line_count} lines (max {self.MAX_PROPERTY_LINES})",
+                    suggestion=f"Consider converting to a regular method: fun get{name[:1].upper()}{name[1:]}()",
+                    context=f"getter with {line_count} lines - properties should be simple getters"
+                ))
+
+        return detections
+
+    def _kotlin_property_name(self, getter_node, content_bytes: bytes) -> str:
+        """Resolve a `getter` node's owning property name, handling both the
+        nested (same-line `get() = expr`) and sibling (own-line `get() {}`)
+        grammar shapes. Nodes from separate tree-sitter accesses aren't
+        identity/equality-comparable, so the sibling case matches by
+        `start_byte` rather than `is`/`==`/`list.index()`."""
+        parent = _zero_arg(getter_node, 'parent')
+        if parent is None:
+            return '?'
+        if _zero_arg(parent, 'kind') == 'property_declaration':
+            return self._kotlin_extract_name(parent, content_bytes)
+
+        siblings = node_children(parent)
+        getter_start = _zero_arg(getter_node, 'start_byte')
+        idx = next(
+            (i for i, s in enumerate(siblings) if _zero_arg(s, 'start_byte') == getter_start), None
+        )
+        if idx is None:
+            return '?'
+        for sib in reversed(siblings[:idx]):
+            if _zero_arg(sib, 'kind') == 'property_declaration':
+                return self._kotlin_extract_name(sib, content_bytes)
+        return '?'
+
+    def _kotlin_extract_name(self, property_decl_node, content_bytes: bytes) -> str:
+        for c in node_children(property_decl_node):
+            if _zero_arg(c, 'kind') == 'variable_declaration':
+                for gc in node_children(c):
+                    if _zero_arg(gc, 'kind') == 'simple_identifier':
+                        return self._ts_node_text(gc, content_bytes)
+        return '?'
+
+    # ── Swift (BACK-1011) ────────────────────────────────────────────────────
+
+    def _check_swift(self, file_path: str, content: str) -> List[Detection]:
+        """Check Swift computed-property getters for line count. Measures an
+        explicit `get { }` block or, for the implicit-getter shorthand
+        (`var x: T { <body> }`, no `get`/`set` keyword), the whole
+        `computed_property` body. `willSet`/`didSet` observers (a different
+        node kind entirely) and set-only properties are never matched."""
+        root, detections = self._parse_treesitter_or_skip(content, file_path, self._SWIFT_LANGUAGE)
+        if root is None:
+            return detections
+
+        content_bytes = content.encode('utf-8')
+
+        for node in self._ts_walk(root):
+            if _zero_arg(node, 'kind') != 'property_declaration':
+                continue
+
+            computed_property = next(
+                (c for c in node_children(node) if _zero_arg(c, 'kind') == 'computed_property'), None
+            )
+            if computed_property is None:
+                continue  # stored property, or a willSet/didSet observer block
+
+            cp_children = node_children(computed_property)
+            computed_getter = next(
+                (c for c in cp_children if _zero_arg(c, 'kind') == 'computed_getter'), None
+            )
+            has_setter = any(_zero_arg(c, 'kind') == 'computed_setter' for c in cp_children)
+
+            if computed_getter is not None:
+                target = computed_getter
+            elif not has_setter:
+                target = computed_property  # implicit-getter shorthand
+            else:
+                continue  # set-only, no getter to measure (invalid Swift, but be defensive)
+
+            name = self._swift_property_name(node, content_bytes)
+            line = target.start_position().row + 1
+            end_line = target.end_position().row + 1
+            line_count = end_line - line + 1
+            if line_count > self.MAX_PROPERTY_LINES:
+                detections.append(self.create_detection(
+                    file_path=file_path,
+                    line=line,
+                    message=f"@property '{name}' is {line_count} lines (max {self.MAX_PROPERTY_LINES})",
+                    suggestion=f"Consider converting to a regular method: func get{name[:1].upper()}{name[1:]}()",
+                    context=f"computed property getter with {line_count} lines - properties should be simple getters"
+                ))
+
+        return detections
+
+    def _swift_property_name(self, property_decl_node, content_bytes: bytes) -> str:
+        for c in node_children(property_decl_node):
+            if _zero_arg(c, 'kind') == 'pattern':
+                for gc in node_children(c):
+                    if _zero_arg(gc, 'kind') == 'simple_identifier':
+                        return self._ts_node_text(gc, content_bytes)
+        return '?'
+
     def check(self,
              file_path: str,
              structure: Optional[Dict[str, Any]],
@@ -126,6 +279,10 @@ def compute_status(self) -> str:
         """
         if file_path.endswith('.cs'):
             return self._check_csharp(file_path, content)
+        if file_path.endswith(('.kt', '.kts')):
+            return self._check_kotlin(file_path, content)
+        if file_path.endswith('.swift'):
+            return self._check_swift(file_path, content)
 
         detections: List[Detection] = []
 

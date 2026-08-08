@@ -310,6 +310,162 @@ class Foo {{
         assert len(detections) == 0
 
 
+class TestB003Kotlin:
+    """Test B003's Kotlin port (BACK-1011): oversized `getter` blocks.
+
+    Covers the confirmed grammar-layout quirk — `getter` is a sibling of
+    `property_declaration` when on its own line, but nested inside it for a
+    same-line `get() = expr` form."""
+
+    def test_own_line_getter_flagged(self):
+        """Own-line `get() { ... }` — the sibling-of-property_declaration shape."""
+        rule = B003()
+        body = "\n".join(f"            val x{i} = {i}" for i in range(20))
+        content = f"""
+class Foo {{
+    val bar: String
+        get() {{
+{body}
+            return "hello"
+        }}
+}}
+"""
+        detections = rule.check("test.kt", None, content)
+        assert len(detections) == 1
+        assert "bar" in detections[0].message
+
+    def test_short_own_line_getter_not_flagged(self):
+        rule = B003()
+        content = """
+class Foo {
+    val bar: String
+        get() { return "hello" }
+}
+"""
+        detections = rule.check("test.kt", None, content)
+        assert len(detections) == 0
+
+    def test_expression_bodied_getter_not_flagged(self):
+        """`get() = expr` (nested-in-property_declaration shape) — nothing to measure."""
+        rule = B003()
+        content = """
+class Foo {
+    val bar: String get() = someExpression()
+}
+"""
+        detections = rule.check("test.kt", None, content)
+        assert len(detections) == 0
+
+    def test_no_getter_not_flagged(self):
+        rule = B003()
+        content = """
+class Foo {
+    val bar: String = "hello"
+}
+"""
+        detections = rule.check("test.kt", None, content)
+        assert len(detections) == 0
+
+    def test_property_name_resolved_across_multiple_siblings(self):
+        """Sibling-shape name resolution walks back to the nearest preceding
+        property_declaration, not just the first one in the class."""
+        rule = B003()
+        body = "\n".join(f"            val x{i} = {i}" for i in range(20))
+        content = f"""
+class Foo {{
+    val first: String
+        get() {{ return "short" }}
+
+    val second: String
+        get() {{
+{body}
+            return "hello"
+        }}
+}}
+"""
+        detections = rule.check("test.kt", None, content)
+        assert len(detections) == 1
+        assert "second" in detections[0].message
+
+
+class TestB003Swift:
+    """Test B003's Swift port (BACK-1011): oversized computed-property getters."""
+
+    def test_explicit_get_block_flagged(self):
+        rule = B003()
+        body = "\n".join(f"            let x{i} = {i}" for i in range(20))
+        content = f"""
+class Foo {{
+    var bar: String {{
+        get {{
+{body}
+            return "hello"
+        }}
+    }}
+}}
+"""
+        detections = rule.check("test.swift", None, content)
+        assert len(detections) == 1
+        assert "bar" in detections[0].message
+
+    def test_implicit_getter_shorthand_flagged(self):
+        """`var x: T { <body> }` with no get/set keyword at all — the whole
+        computed_property body IS the getter."""
+        rule = B003()
+        body = "\n".join(f"        let x{i} = {i}" for i in range(20))
+        content = f"""
+class Foo {{
+    var bar: String {{
+{body}
+        return "hello"
+    }}
+}}
+"""
+        detections = rule.check("test.swift", None, content)
+        assert len(detections) == 1
+        assert "bar" in detections[0].message
+
+    def test_short_implicit_getter_not_flagged(self):
+        rule = B003()
+        content = """
+class Foo {
+    var bar: String { "short" }
+}
+"""
+        detections = rule.check("test.swift", None, content)
+        assert len(detections) == 0
+
+    def test_will_set_did_set_not_flagged(self):
+        """willSet/didSet observers are stored-property write hooks, not a
+        getter — must never be mistaken for one, however long they are."""
+        rule = B003()
+        body = "\n".join(f"        print({i})" for i in range(20))
+        content = f"""
+class Foo {{
+    var bar: Int = 0 {{
+        willSet {{
+{body}
+        }}
+        didSet {{
+{body}
+        }}
+    }}
+}}
+"""
+        detections = rule.check("test.swift", None, content)
+        assert len(detections) == 0
+
+    def test_stored_property_not_flagged(self):
+        rule = B003()
+        content = """
+class Foo {
+    var bar: String = "hello"
+}
+"""
+        detections = rule.check("test.swift", None, content)
+        assert len(detections) == 0
+
+
 class TestB004:
     """Test B004: @property without return statement detection."""
 
