@@ -556,6 +556,23 @@ class TestS001HardcodedSecrets(unittest.TestCase):
         dets = self._check(path, content)
         self.assertEqual(len(dets), 0)
 
+    def test_py_url_value_ok(self):
+        """BACK-1010: API_KEY_URL = 'https://...' -- name matches, value is a
+        URL (where to go get a key), not a credential."""
+        content = 'API_KEY_URL = "https://freedompro.eu/"\n'
+        path = self._py(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    def test_py_bare_word_value_ok(self):
+        """BACK-1010: CONF_SECRET = 'secret' / TOKEN_TYPE_NORMAL = 'normal' --
+        name matches the secret pattern, but a plain dictionary word has none
+        of the structure (digits/punctuation) a real secret has."""
+        content = 'CONF_SECRET = "secret"\nTOKEN_TYPE_NORMAL = "normal"\n'
+        path = self._py(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
     # .env file
 
     def test_env_secret_flagged(self):
@@ -593,6 +610,16 @@ class TestS001HardcodedSecrets(unittest.TestCase):
 
     def test_yaml_env_ref_ok(self):
         content = 'api_key: ${API_KEY}\n'
+        path = self._yaml(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    def test_yaml_github_actions_secret_ref_ok(self):
+        """BACK-1010: GitHub Actions '${{ secrets.X }}' is the CI-standard way
+        to reference a secret WITHOUT hardcoding it -- the opposite of what
+        S001 should flag. Double-brace form previously wasn't recognized by
+        the single-brace ${ENV_VAR} safe pattern."""
+        content = 'key: "${{ secrets.REPO_KEY }}"\n'
         path = self._yaml(content)
         dets = self._check(path, content)
         self.assertEqual(len(dets), 0)

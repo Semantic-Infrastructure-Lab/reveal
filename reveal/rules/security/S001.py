@@ -37,7 +37,7 @@ _KNOWN_SECRET_PREFIXES = (
 _SAFE_VALUE_RE = re.compile(
     r'^('
     r'<[^>]*>'              # <placeholder>, <YOUR_KEY>, etc.
-    r'|\$\{[^}]*\}'         # ${ENV_VAR}
+    r'|\$\{\{?[^}]*\}\}?'   # ${ENV_VAR} or GitHub Actions ${{ secrets.X }}
     r'|\$[A-Z_]+'           # $ENV_VAR
     r'|%\([^)]*\)s'         # %(env_var)s
     r'|your[-_]'            # your-secret, your_token
@@ -45,6 +45,15 @@ _SAFE_VALUE_RE = re.compile(
     r')$',
     re.IGNORECASE,
 )
+
+# A value string is a URL, not a credential — e.g. API_KEY_URL = "https://..."
+_URL_VALUE_RE = re.compile(r'^[a-z][a-z0-9+.-]*://', re.IGNORECASE)
+
+# Letters/underscores only, no digits or other punctuation — an enum tag or
+# label ("normal", "long_lived_access_token"), not a credential. Real secrets
+# have structure (digits, mixed segments, symbols); a clean identifier-shaped
+# string doesn't.
+_LABEL_VALUE_RE = re.compile(r'^[a-zA-Z_]+$')
 
 _SAFE_VALUE_WORDS = frozenset({
     'test', 'example', 'placeholder', 'dummy', 'fake', 'sample',
@@ -201,6 +210,11 @@ class S001(BaseRule, ASTParsingMixin):
         # Skip clearly safe patterns
         if _SAFE_VALUE_RE.match(value):
             return False
+        # A URL is not itself a hardcoded credential (BACK-1010, e.g.
+        # API_KEY_URL = "https://provider.example/get-key" — the *name*
+        # matches the secret pattern, the *value* is just where to go get one)
+        if _URL_VALUE_RE.match(value):
+            return False
         # Skip very short values (real secrets are at least 6 chars)
         if len(value) < _MIN_VALUE_LENGTH:
             return False
@@ -208,6 +222,15 @@ class S001(BaseRule, ASTParsingMixin):
         if value.lower() in _SAFE_VALUE_WORDS:
             return False
         if any(word in value.lower() for word in ('example', 'placeholder', 'your_', 'your-', 'dummy', 'fake')):
+            return False
+        # A plain alphabetic/underscore label (no digits or other punctuation)
+        # is almost never a real secret value -- it's a label/enum/field-name
+        # constant whose *name* happens to match the secret pattern (BACK-1010,
+        # e.g. CONF_SECRET = "secret", TOKEN_TYPE_NORMAL = "normal",
+        # TOKEN_TYPE_LONG_LIVED_ACCESS_TOKEN = "long_lived_access_token"). Real
+        # secrets have structure (digits, symbols, mixed segments); dictionary
+        # words and snake_case tags don't.
+        if _LABEL_VALUE_RE.match(value):
             return False
         return True
 
