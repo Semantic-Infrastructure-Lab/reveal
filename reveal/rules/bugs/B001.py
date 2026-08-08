@@ -17,7 +17,7 @@ from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin, TreeSitterParsingMixin
-from ...core import node_children
+from ...core import node_children, _zero_arg
 
 
 class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
@@ -91,9 +91,9 @@ class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
         content_bytes = content.encode('utf-8')
         for node in self._ts_walk(root):
-            if node.kind() != 'catch_clause':
+            if _zero_arg(node, 'kind') != 'catch_clause':
                 continue
-            if any(c.kind() == 'catch_declaration' for c in node_children(node)):
+            if any(_zero_arg(c, 'kind') == 'catch_declaration' for c in node_children(node)):
                 continue
 
             detections.append(self.create_detection(
@@ -120,14 +120,14 @@ class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
         content_bytes = content.encode('utf-8')
         for node in self._ts_walk(root):
-            if node.kind() != 'catch_clause':
+            if _zero_arg(node, 'kind') != 'catch_clause':
                 continue
             param_list = next(
-                (c for c in node_children(node) if c.kind() == 'parameter_list'), None
+                (c for c in node_children(node) if _zero_arg(c, 'kind') == 'parameter_list'), None
             )
             if param_list is None:
                 continue
-            if not any(c.kind() == '...' for c in node_children(param_list)):
+            if not any(_zero_arg(c, 'kind') == '...' for c in node_children(param_list)):
                 continue
 
             detections.append(self.create_detection(

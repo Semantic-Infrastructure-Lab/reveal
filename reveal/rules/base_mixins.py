@@ -9,6 +9,8 @@ import functools
 import logging
 from typing import Optional
 
+from ..core import _zero_arg
+
 logger = logging.getLogger(__name__)
 
 
@@ -181,4 +183,6 @@ class TreeSitterParsingMixin:
 
     def _ts_node_text(self, node, content_bytes: bytes) -> str:
         """Return the source text spanned by a tree-sitter node."""
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8', errors='replace')
+        start = _zero_arg(node, 'start_byte')
+        end = _zero_arg(node, 'end_byte')
+        return content_bytes[start:end].decode('utf-8', errors='replace')

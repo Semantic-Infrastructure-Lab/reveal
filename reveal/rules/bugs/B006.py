@@ -46,7 +46,7 @@ from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin, TreeSitterParsingMixin
-from ...core import node_children
+from ...core import node_children, _zero_arg
 
 
 class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
@@ -550,7 +550,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
         content_bytes = content.encode('utf-8')
         for node in self._ts_walk(root):
-            if node.kind() != 'catch_clause':
+            if _zero_arg(node, 'kind') != 'catch_clause':
                 continue
             if not self._cs_is_broad_catch(node, content_bytes):
                 continue
@@ -584,14 +584,14 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         port yet — see BACK-1011).
         """
         declaration = next(
-            (c for c in node_children(node) if c.kind() == 'catch_declaration'), None
+            (c for c in node_children(node) if _zero_arg(c, 'kind') == 'catch_declaration'), None
         )
         if declaration is None:
             return True
 
         type_node = next(
             (c for c in node_children(declaration)
-             if c.kind() in ('identifier', 'qualified_name')),
+             if _zero_arg(c, 'kind') in ('identifier', 'qualified_name')),
             None
         )
         if type_node is None:
@@ -600,14 +600,14 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
     def _cs_has_visible_signal(self, node, content_bytes: bytes) -> bool:
         """True if the catch body re-throws or calls a visible logging method."""
-        block = next((c for c in node_children(node) if c.kind() == 'block'), None)
+        block = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'block'), None)
         if block is None:
             return False
 
         for descendant in self._ts_walk(block):
-            if descendant.kind() == 'throw_statement':
+            if _zero_arg(descendant, 'kind') == 'throw_statement':
                 return True
-            if descendant.kind() == 'invocation_expression':
+            if _zero_arg(descendant, 'kind') == 'invocation_expression':
                 function = node_children(descendant)[0] if node_children(descendant) else None
                 if function is None:
                     continue
@@ -622,7 +622,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         (BACK-1011: real corpus check found ~1/3 of raw hits were an
         explicitly-commented intentional swallow, e.g.
         `catch { // Logged at lower levels }`)."""
-        return any(descendant.kind() == 'comment' for descendant in self._ts_walk(node))
+        return any(_zero_arg(descendant, 'kind') == 'comment' for descendant in self._ts_walk(node))
 
     # ── Java (BACK-1011) ─────────────────────────────────────────────────────
 
@@ -634,13 +634,13 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
         content_bytes = content.encode('utf-8')
         for node in self._ts_walk(root):
-            if node.kind() != 'catch_clause':
+            if _zero_arg(node, 'kind') != 'catch_clause':
                 continue
             if not self._java_is_broad_catch(node, content_bytes):
                 continue
             if self._java_has_visible_signal(node, content_bytes):
                 continue
-            if any(d.kind() == 'comment' for d in self._ts_walk(node)):
+            if any(_zero_arg(d, 'kind') == 'comment' for d in self._ts_walk(node)):
                 continue
 
             detections.append(self.create_detection(
@@ -665,30 +665,30 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         Java always requires a typed parameter — there's no bare `catch {}`.
         """
         param = next(
-            (c for c in node_children(node) if c.kind() == 'catch_formal_parameter'), None
+            (c for c in node_children(node) if _zero_arg(c, 'kind') == 'catch_formal_parameter'), None
         )
         if param is None:
             return False
         catch_type = next(
-            (c for c in node_children(param) if c.kind() == 'catch_type'), None
+            (c for c in node_children(param) if _zero_arg(c, 'kind') == 'catch_type'), None
         )
         if catch_type is None:
             return False
         return any(
             self._ts_node_text(t, content_bytes) in self._JAVA_BROAD_TYPES
-            for t in node_children(catch_type) if t.kind() == 'type_identifier'
+            for t in node_children(catch_type) if _zero_arg(t, 'kind') == 'type_identifier'
         )
 
     def _java_has_visible_signal(self, node, content_bytes: bytes) -> bool:
         """True if the catch body re-throws or calls a visible logging method."""
-        block = next((c for c in node_children(node) if c.kind() == 'block'), None)
+        block = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'block'), None)
         if block is None:
             return False
 
         for descendant in self._ts_walk(block):
-            if descendant.kind() == 'throw_statement':
+            if _zero_arg(descendant, 'kind') == 'throw_statement':
                 return True
-            if descendant.kind() == 'method_invocation':
+            if _zero_arg(descendant, 'kind') == 'method_invocation':
                 if self._java_call_name(descendant, content_bytes) in self._JAVA_VISIBLE_METHODS:
                     return True
         return False
@@ -703,9 +703,9 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         """
         children = node_children(node)
         for i, child in enumerate(children):
-            if child.kind() == '.' and i + 1 < len(children):
+            if _zero_arg(child, 'kind') == '.' and i + 1 < len(children):
                 return self._ts_node_text(children[i + 1], content_bytes)
-        ident = next((c for c in children if c.kind() == 'identifier'), None)
+        ident = next((c for c in children if _zero_arg(c, 'kind') == 'identifier'), None)
         return self._ts_node_text(ident, content_bytes) if ident else None
 
     # ── JavaScript / TypeScript (BACK-1011) ─────────────────────────────────
@@ -723,11 +723,11 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
         content_bytes = content.encode('utf-8')
         for node in self._ts_walk(root):
-            if node.kind() != 'catch_clause':
+            if _zero_arg(node, 'kind') != 'catch_clause':
                 continue
             if self._js_has_visible_signal(node, content_bytes):
                 continue
-            if any(d.kind() == 'comment' for d in self._ts_walk(node)):
+            if any(_zero_arg(d, 'kind') == 'comment' for d in self._ts_walk(node)):
                 continue
 
             detections.append(self.create_detection(
@@ -747,27 +747,27 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
     def _js_has_visible_signal(self, node, content_bytes: bytes) -> bool:
         """True if the catch body re-throws or calls a visible logging method."""
-        block = next((c for c in node_children(node) if c.kind() == 'statement_block'), None)
+        block = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'statement_block'), None)
         if block is None:
             return False
 
         for descendant in self._ts_walk(block):
-            if descendant.kind() == 'throw_statement':
+            if _zero_arg(descendant, 'kind') == 'throw_statement':
                 return True
-            if descendant.kind() != 'call_expression':
+            if _zero_arg(descendant, 'kind') != 'call_expression':
                 continue
             callee = node_children(descendant)[0] if node_children(descendant) else None
             if callee is None:
                 continue
-            if callee.kind() == 'identifier':
+            if _zero_arg(callee, 'kind') == 'identifier':
                 if self._ts_node_text(callee, content_bytes) in self._JS_VISIBLE_METHODS:
                     return True
-            elif callee.kind() == 'member_expression':
+            elif _zero_arg(callee, 'kind') == 'member_expression':
                 members = node_children(callee)
                 if not members:
                     continue
                 obj_text = self._ts_node_text(members[0], content_bytes)
-                prop = next((c for c in members if c.kind() == 'property_identifier'), None)
+                prop = next((c for c in members if _zero_arg(c, 'kind') == 'property_identifier'), None)
                 prop_text = self._ts_node_text(prop, content_bytes) if prop else None
                 if obj_text == 'console':
                     return True
@@ -785,13 +785,13 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
         content_bytes = content.encode('utf-8')
         for node in self._ts_walk(root):
-            if node.kind() != 'catch_clause':
+            if _zero_arg(node, 'kind') != 'catch_clause':
                 continue
             if not self._php_is_broad_catch(node, content_bytes):
                 continue
             if self._php_has_visible_signal(node, content_bytes):
                 continue
-            if any(d.kind() == 'comment' for d in self._ts_walk(node)):
+            if any(_zero_arg(d, 'kind') == 'comment' for d in self._ts_walk(node)):
                 continue
 
             detections.append(self.create_detection(
@@ -812,14 +812,14 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
     def _php_is_broad_catch(self, node, content_bytes: bytes) -> bool:
         """True if any type in a (possibly multi-catch `A | B`) clause is broad."""
-        type_list = next((c for c in node_children(node) if c.kind() == 'type_list'), None)
+        type_list = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'type_list'), None)
         if type_list is None:
             return False
         for named_type in node_children(type_list):
-            if named_type.kind() != 'named_type':
+            if _zero_arg(named_type, 'kind') != 'named_type':
                 continue
             name_node = next(
-                (n for n in self._ts_walk(named_type) if n.kind() == 'name'), None
+                (n for n in self._ts_walk(named_type) if _zero_arg(n, 'kind') == 'name'), None
             )
             if name_node and self._ts_node_text(name_node, content_bytes) in self._PHP_BROAD_TYPES:
                 return True
@@ -828,25 +828,25 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     def _php_has_visible_signal(self, node, content_bytes: bytes) -> bool:
         """True if the catch body re-throws or calls a visible logging function/method."""
         block = next(
-            (c for c in node_children(node) if c.kind() == 'compound_statement'), None
+            (c for c in node_children(node) if _zero_arg(c, 'kind') == 'compound_statement'), None
         )
         if block is None:
             return False
 
         for descendant in self._ts_walk(block):
-            if descendant.kind() == 'throw_expression':
+            if _zero_arg(descendant, 'kind') == 'throw_expression':
                 return True
-            if descendant.kind() == 'function_call_expression':
+            if _zero_arg(descendant, 'kind') == 'function_call_expression':
                 name_node = next(
-                    (c for c in node_children(descendant) if c.kind() == 'name'), None
+                    (c for c in node_children(descendant) if _zero_arg(c, 'kind') == 'name'), None
                 )
                 if name_node and self._ts_node_text(name_node, content_bytes) in self._PHP_VISIBLE_FUNCTIONS:
                     return True
-            if descendant.kind() == 'member_call_expression':
+            if _zero_arg(descendant, 'kind') == 'member_call_expression':
                 # The method name is the LAST direct 'name' child (the first
                 # 'name' inside member_access_expression belongs to the
                 # receiver, e.g. `$this->logger` in `$this->logger->error()`).
-                names = [c for c in node_children(descendant) if c.kind() == 'name']
+                names = [c for c in node_children(descendant) if _zero_arg(c, 'kind') == 'name']
                 if names and self._ts_node_text(names[-1], content_bytes) in self._PHP_VISIBLE_METHODS:
                     return True
         return False
@@ -868,13 +868,13 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
         content_bytes = content.encode('utf-8')
         for node in self._ts_walk(root):
-            if node.kind() != 'catch_block':
+            if _zero_arg(node, 'kind') != 'catch_block':
                 continue
             if not self._kotlin_is_broad_catch(node, content_bytes):
                 continue
             if self._kotlin_has_visible_signal(node, content_bytes):
                 continue
-            if any('comment' in d.kind() for d in self._ts_walk(node)):
+            if any('comment' in _zero_arg(d, 'kind') for d in self._ts_walk(node)):
                 continue
 
             detections.append(self.create_detection(
@@ -896,7 +896,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     def _kotlin_is_broad_catch(self, node, content_bytes: bytes) -> bool:
         """True if the catch parameter's type is Exception/Throwable/RuntimeException."""
         type_node = next(
-            (c for c in node_children(node) if c.kind() == 'user_type'), None
+            (c for c in node_children(node) if _zero_arg(c, 'kind') == 'user_type'), None
         )
         if type_node is None:
             return False
@@ -904,32 +904,32 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
     def _kotlin_has_visible_signal(self, node, content_bytes: bytes) -> bool:
         """True if the catch body re-throws or calls a visible logging method."""
-        statements = next((c for c in node_children(node) if c.kind() == 'statements'), None)
+        statements = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'statements'), None)
         if statements is None:
             return False
 
         for descendant in self._ts_walk(statements):
-            if descendant.kind() == 'jump_expression':
+            if _zero_arg(descendant, 'kind') == 'jump_expression':
                 first = node_children(descendant)
-                if first and first[0].kind() == 'throw':
+                if first and _zero_arg(first[0], 'kind') == 'throw':
                     return True
-            if descendant.kind() != 'call_expression':
+            if _zero_arg(descendant, 'kind') != 'call_expression':
                 continue
             callee = node_children(descendant)[0] if node_children(descendant) else None
             if callee is None:
                 continue
-            if callee.kind() == 'navigation_expression':
+            if _zero_arg(callee, 'kind') == 'navigation_expression':
                 suffix = next(
-                    (c for c in node_children(callee) if c.kind() == 'navigation_suffix'), None
+                    (c for c in node_children(callee) if _zero_arg(c, 'kind') == 'navigation_suffix'), None
                 )
                 if suffix is None:
                     continue
                 name_node = next(
-                    (c for c in node_children(suffix) if c.kind() == 'simple_identifier'), None
+                    (c for c in node_children(suffix) if _zero_arg(c, 'kind') == 'simple_identifier'), None
                 )
                 if name_node and self._ts_node_text(name_node, content_bytes) in self._KOTLIN_VISIBLE_METHODS:
                     return True
-            elif callee.kind() == 'simple_identifier':
+            elif _zero_arg(callee, 'kind') == 'simple_identifier':
                 if self._ts_node_text(callee, content_bytes) in self._KOTLIN_VISIBLE_METHODS:
                     return True
         return False
@@ -953,13 +953,13 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
         content_bytes = content.encode('utf-8')
         for node in self._ts_walk(root):
-            if node.kind() != 'catch_block':
+            if _zero_arg(node, 'kind') != 'catch_block':
                 continue
             if not self._swift_is_broad_catch(node, content_bytes):
                 continue
             if self._swift_has_visible_signal(node, content_bytes):
                 continue
-            if any(d.kind() == 'comment' for d in self._ts_walk(node)):
+            if any(_zero_arg(d, 'kind') == 'comment' for d in self._ts_walk(node)):
                 continue
 
             detections.append(self.create_detection(
@@ -986,41 +986,41 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         `catch let e` binding produces a `pattern` with no `user_type` at
         all, which stays broad.
         """
-        pattern = next((c for c in node_children(node) if c.kind() == 'pattern'), None)
+        pattern = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'pattern'), None)
         if pattern is None:
             return True
-        type_node = next((c for c in self._ts_walk(pattern) if c.kind() == 'user_type'), None)
+        type_node = next((c for c in self._ts_walk(pattern) if _zero_arg(c, 'kind') == 'user_type'), None)
         if type_node is None:
             return True
         return self._ts_node_text(type_node, content_bytes) in self._SWIFT_BROAD_TYPES
 
     def _swift_has_visible_signal(self, node, content_bytes: bytes) -> bool:
         """True if the catch body re-throws or calls a visible print/log call."""
-        statements = next((c for c in node_children(node) if c.kind() == 'statements'), None)
+        statements = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'statements'), None)
         if statements is None:
             return False
 
         for descendant in self._ts_walk(statements):
-            if descendant.kind() == 'control_transfer_statement':
+            if _zero_arg(descendant, 'kind') == 'control_transfer_statement':
                 first = node_children(descendant)
-                if first and first[0].kind() == 'throw_keyword':
+                if first and _zero_arg(first[0], 'kind') == 'throw_keyword':
                     return True
-            if descendant.kind() != 'call_expression':
+            if _zero_arg(descendant, 'kind') != 'call_expression':
                 continue
             callee = node_children(descendant)[0] if node_children(descendant) else None
             if callee is None:
                 continue
-            if callee.kind() == 'simple_identifier':
+            if _zero_arg(callee, 'kind') == 'simple_identifier':
                 if self._ts_node_text(callee, content_bytes) in self._SWIFT_VISIBLE_FUNCTIONS:
                     return True
-            elif callee.kind() == 'navigation_expression':
+            elif _zero_arg(callee, 'kind') == 'navigation_expression':
                 suffix = next(
-                    (c for c in node_children(callee) if c.kind() == 'navigation_suffix'), None
+                    (c for c in node_children(callee) if _zero_arg(c, 'kind') == 'navigation_suffix'), None
                 )
                 if suffix is None:
                     continue
                 name_node = next(
-                    (c for c in node_children(suffix) if c.kind() == 'simple_identifier'), None
+                    (c for c in node_children(suffix) if _zero_arg(c, 'kind') == 'simple_identifier'), None
                 )
                 if name_node and self._ts_node_text(name_node, content_bytes) in self._SWIFT_VISIBLE_METHODS:
                     return True
@@ -1034,13 +1034,13 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
         content_bytes = content.encode('utf-8')
         for node in self._ts_walk(root):
-            if node.kind() != 'catch_clause':
+            if _zero_arg(node, 'kind') != 'catch_clause':
                 continue
             if not self._cpp_is_broad_catch(node, content_bytes):
                 continue
             if self._cpp_has_visible_signal(node, content_bytes):
                 continue
-            if any(d.kind() == 'comment' for d in self._ts_walk(node)):
+            if any(_zero_arg(d, 'kind') == 'comment' for d in self._ts_walk(node)):
                 continue
 
             detections.append(self.create_detection(
@@ -1066,21 +1066,21 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         `...` token directly under `parameter_list`.
         """
         param_list = next(
-            (c for c in node_children(node) if c.kind() == 'parameter_list'), None
+            (c for c in node_children(node) if _zero_arg(c, 'kind') == 'parameter_list'), None
         )
         if param_list is None:
             return False
-        if any(c.kind() == '...' for c in node_children(param_list)):
+        if any(_zero_arg(c, 'kind') == '...' for c in node_children(param_list)):
             return True
 
         declaration = next(
-            (c for c in node_children(param_list) if c.kind() == 'parameter_declaration'), None
+            (c for c in node_children(param_list) if _zero_arg(c, 'kind') == 'parameter_declaration'), None
         )
         if declaration is None:
             return False
         type_node = next(
             (c for c in node_children(declaration)
-             if c.kind() in ('type_identifier', 'qualified_identifier')),
+             if _zero_arg(c, 'kind') in ('type_identifier', 'qualified_identifier')),
             None
         )
         if type_node is None:
@@ -1091,12 +1091,12 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     def _cpp_has_visible_signal(self, node, content_bytes: bytes) -> bool:
         """True if the catch body re-throws, streams to cerr/clog, or calls
         a visible stderr/logging function."""
-        block = next((c for c in node_children(node) if c.kind() == 'compound_statement'), None)
+        block = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'compound_statement'), None)
         if block is None:
             return False
 
         for descendant in self._ts_walk(block):
-            kind = descendant.kind()
+            kind = _zero_arg(descendant, 'kind')
             if kind == 'throw_statement':
                 return True
             if kind in ('qualified_identifier', 'identifier'):
@@ -1119,13 +1119,13 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         callee = children[0] if children else None
         if callee is None:
             return None
-        if callee.kind() == 'field_expression':
+        if _zero_arg(callee, 'kind') == 'field_expression':
             field = next(
-                (c for c in node_children(callee) if c.kind() == 'field_identifier'), None
+                (c for c in node_children(callee) if _zero_arg(c, 'kind') == 'field_identifier'), None
             )
             return self._ts_node_text(field, content_bytes) if field else None
-        if callee.kind() == 'qualified_identifier':
+        if _zero_arg(callee, 'kind') == 'qualified_identifier':
             return self._ts_node_text(callee, content_bytes).rsplit('::', 1)[-1]
-        if callee.kind() == 'identifier':
+        if _zero_arg(callee, 'kind') == 'identifier':
             return self._ts_node_text(callee, content_bytes)
         return None

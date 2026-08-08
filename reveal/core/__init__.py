@@ -19,6 +19,7 @@ from .treesitter_compat import (
     iter_tree,
     tree_root,
     ts_parse,
+    _zero_arg,
 )
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     'iter_tree',
     'tree_root',
     'ts_parse',
+    '_zero_arg',
 ]

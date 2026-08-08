@@ -45,8 +45,17 @@ def test_universal_rule_claims_exactly_the_tier1_families():
 
 
 def test_python_only_rule_claims_only_python():
-    verified = derive_verified_languages(_rule("B001"))  # ['.py']
+    # B002 (@staticmethod+self) has no non-Python analog (BACK-1011 note #1) —
+    # unlike B001, it stays ['.py'] permanently, making it the stable example.
+    verified = derive_verified_languages(_rule("B002"))  # ['.py']
     assert verified == ["python"], f"python-only rule claims {verified}"
+
+
+def test_multi_language_rule_claims_all_its_verified_languages():
+    # B001 (bare/untyped except-all) was ported to C#/C++ (BACK-1011) — its
+    # file_patterns now span three tier-1-verified languages, all claimed.
+    verified = derive_verified_languages(_rule("B001"))
+    assert verified == ["cpp", "csharp", "python"], f"B001 claims {verified}"
 
 
 def test_nginx_rule_claims_nginx_not_its_ini_analyzer_tier():
