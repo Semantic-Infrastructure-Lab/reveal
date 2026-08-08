@@ -70,6 +70,42 @@ def _head_sha(dest: Path) -> str | None:
         return None
 
 
+def _tracked_top_level(dest: Path) -> set[str] | None:
+    """Return a repo's own top-level tracked entries (dirs and files), or
+    None if `dest` isn't a git repo at all.
+
+    A repo checked out with `--filter=blob:none --depth 1` still has a full
+    tree listing for the checked-out commit, so `ls-tree` on HEAD is exact —
+    no need to walk the whole working copy.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(dest), "ls-tree", "--name-only", "HEAD"],
+            capture_output=True, text=True, check=True,
+        )
+        return {line.strip() for line in out.stdout.splitlines() if line.strip()}
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def _stray_entries(dest: Path) -> list[str]:
+    """Return on-disk top-level entries that the repo itself doesn't track.
+
+    Catches foreign content dropped alongside a correctly-fetched corpus —
+    the exact failure class BACK-1002 found live: an unrelated repo's
+    subtree (`overfit-guard-BACK815`, a leftover from a different
+    investigation) sitting inside the same per-language cache directory as
+    the pinned corpus, invisible to a plain "does this directory exist"
+    check. Returns [] if `dest` isn't a git repo (nothing to compare
+    against) — that case is `dest`'s own problem, reported separately.
+    """
+    tracked = _tracked_top_level(dest)
+    if tracked is None or not dest.exists():
+        return []
+    on_disk = {p.name for p in dest.iterdir()}
+    return sorted(on_disk - tracked - {".git"})
+
+
 def fetch_one(entry: dict, root: Path, dry: bool = False) -> None:
     lang = entry["language"]
     repo = entry["repo"]
@@ -78,7 +114,12 @@ def fetch_one(entry: dict, root: Path, dry: bool = False) -> None:
 
     current = _head_sha(dest) if dest.exists() else None
     if sha and current == sha:
-        print(f"[{lang}] already at {sha[:12]} — skip")
+        stray = _stray_entries(dest)
+        note = (
+            f" — ⚠ {len(stray)} stray top-level entries not part of this repo: {stray}"
+            if stray else ""
+        )
+        print(f"[{lang}] already at {sha[:12]} — skip{note}")
         return
     if current and not sha:
         print(f"[{lang}] present (unpinned, at {current[:12]}) — skip; "
@@ -109,16 +150,50 @@ def fetch_one(entry: dict, root: Path, dry: bool = False) -> None:
                   f"(pin this into {MANIFEST.name})")
 
 
+def _status_for(dest: Path, pinned_sha: str | None) -> tuple[str, str]:
+    """Classify a corpus directory's actual state, honestly.
+
+    BACK-1002: the previous version of this check was `dest.exists()` —
+    true the instant ANY file sits there, so a directory holding nothing
+    but an unrelated stray repo (no `.git` of its own at the top level)
+    silently reported "present", indistinguishable from a correctly
+    fetched corpus. Found live: 8 of 12 corpora had exactly this shape,
+    and 3 of those (php/ruby/rust) had NO real content underneath the
+    stray at all — a completely unfetched corpus reporting as healthy.
+
+    Returns (disk_sha_display, status) where status is one of:
+    '—' (nothing here), 'not a git repo' (stray/junk only, no pinned
+    commit possible), 'SHA MISMATCH', 'unpinned' (present, manifest has
+    no pinned sha), or 'ok' — each of the last three additionally flagged
+    with the count of untracked stray top-level entries, if any.
+    """
+    if not dest.exists():
+        return "—", "—"
+
+    disk_sha = _head_sha(dest)
+    if disk_sha is None:
+        return "present", "⚠ not a git repo"
+
+    stray = _stray_entries(dest)
+    stray_note = f" (+{len(stray)} stray)" if stray else ""
+
+    if pinned_sha is None:
+        return disk_sha[:12], "unpinned" + stray_note
+    if disk_sha != pinned_sha:
+        return disk_sha[:12], "✗ SHA MISMATCH" + stray_note
+    return disk_sha[:12], ("⚠ ok" + stray_note if stray else "ok")
+
+
 def cmd_list(manifest: dict, root: Path) -> None:
     print(f"cache root: {root}\n")
-    print(f"{'language':<12} {'pinned sha':<14} {'on-disk':<14} repo")
-    print("-" * 78)
+    print(f"{'language':<12} {'pinned sha':<14} {'on-disk':<14} {'status':<24} repo")
+    print("-" * 100)
     for e in manifest["corpora"]:
         lang = e["language"]
-        sha = (e.get("sha") or "—")[:12]
-        disk = _head_sha(root / lang)
-        disk = disk[:12] if disk else ("present" if (root / lang).exists() else "—")
-        print(f"{lang:<12} {sha:<14} {disk:<14} {e['repo']}")
+        pinned = e.get("sha")
+        sha_display = (pinned or "—")[:12]
+        disk, status = _status_for(root / lang, pinned)
+        print(f"{lang:<12} {sha_display:<14} {disk:<14} {status:<24} {e['repo']}")
 
 
 def main(argv: list[str] | None = None) -> int:
