@@ -2,6 +2,20 @@
 
 Detects @property methods that don't have a return statement.
 Properties that don't return anything will return None, which is almost always a bug.
+
+BACK-1011: deliberately stays Python-only, unlike its sibling B001/B003/B006.
+The bug this rule catches — a getter silently falling off the end and
+returning nothing — is specific to Python's dynamic typing, where a missing
+`return` is a runtime surprise (implicit `None`) rather than a build failure.
+C#, Kotlin, and Swift all statically type-check every path through a
+non-void property getter: a `get` accessor / computed-property body that
+doesn't return a value of the declared type on every path is a compile
+error (C# CS0161, Kotlin's "a 'return' expression required", Swift's
+"missing return in a function expected to return ..."). There is no
+non-Python analog to port — same "doesn't generalize" shape of finding as
+B002 (BACK-1011 note #1), for a different underlying reason (B002's
+@staticmethod+self mistake has no cross-language concept match at all;
+B004's bug is real in concept but compile-time-impossible elsewhere).
 """
 
 import re

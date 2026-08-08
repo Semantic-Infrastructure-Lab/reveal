@@ -234,6 +234,82 @@ class TestB003:
         assert len(detections) == 0
 
 
+class TestB003CSharp:
+    """Test B003's C# port (BACK-1011): oversized `get` accessor blocks."""
+
+    def test_oversized_get_accessor_flagged(self):
+        rule = B003()
+        body = "\n".join(f"        x{i} = {i};" for i in range(20))
+        content = f"""
+class Foo {{
+    public string Name {{
+        get {{
+{body}
+            return _name;
+        }}
+        set {{ _name = value; }}
+    }}
+}}
+"""
+        detections = rule.check("test.cs", None, content)
+        assert len(detections) == 1
+        assert "Name" in detections[0].message
+
+    def test_short_get_accessor_not_flagged(self):
+        rule = B003()
+        content = """
+class Foo {
+    public string Name {
+        get { return _name; }
+        set { _name = value; }
+    }
+}
+"""
+        detections = rule.check("test.cs", None, content)
+        assert len(detections) == 0
+
+    def test_auto_property_not_flagged(self):
+        """Auto-properties (`{ get; set; }`) have no accessor block to measure."""
+        rule = B003()
+        content = """
+class Foo {
+    public string Name { get; set; }
+}
+"""
+        detections = rule.check("test.cs", None, content)
+        assert len(detections) == 0
+
+    def test_expression_bodied_property_not_flagged(self):
+        """Expression-bodied properties (`=> expr`) have no accessor_list at all."""
+        rule = B003()
+        content = """
+class Foo {
+    public string Name => _name;
+}
+"""
+        detections = rule.check("test.cs", None, content)
+        assert len(detections) == 0
+
+    def test_oversized_set_accessor_not_flagged(self):
+        """Only the `get` accessor is measured — B003 is about property *reads*
+        hiding logic, mirroring the Python-only-checks-getters behavior."""
+        rule = B003()
+        body = "\n".join(f"        x{i} = {i};" for i in range(20))
+        content = f"""
+class Foo {{
+    public string Name {{
+        get {{ return _name; }}
+        set {{
+{body}
+            _name = value;
+        }}
+    }}
+}}
+"""
+        detections = rule.check("test.cs", None, content)
+        assert len(detections) == 0
+
+
 class TestB004:
     """Test B004: @property without return statement detection."""
 
