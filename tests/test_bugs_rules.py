@@ -362,9 +362,63 @@ from proj.gone_3 import c
         """Test that B005 is categorized as bugs."""
         self.assertEqual(self.rule.category.value, 'B')
 
-    def test_file_patterns_python_only(self):
-        """Test that B005 only applies to .py files."""
-        self.assertEqual(self.rule.file_patterns, ['.py'])
+    def test_file_patterns_includes_python(self):
+        """Test that B005 applies to .py files."""
+        self.assertIn('.py', self.rule.file_patterns)
+
+
+class TestB005JavaScriptTypeScript(unittest.TestCase):
+    """Test B005's JS/TS port (BACK-1011): relative + alias-resolvable imports only."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.rule = B005()
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def create_temp_file(self, content: str, name: str) -> str:
+        path = os.path.join(self.temp_dir, name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    def test_broken_relative_import_flagged(self):
+        content = "import { thing } from './missing';\n"
+        path = self.create_temp_file(content, "mod.js")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertEqual(detections[0].rule_code, 'B005')
+
+    def test_existing_relative_import_not_flagged(self):
+        self.create_temp_file("export const thing = 1;\n", "real.js")
+        content = "import { thing } from './real';\n"
+        path = self.create_temp_file(content, "mod.js")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_bare_npm_specifier_not_flagged(self):
+        """A third-party package with no local match is 'unknown', never 'dead'."""
+        content = "import React from 'react';\n"
+        path = self.create_temp_file(content, "mod.js")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_broken_relative_import_ts(self):
+        content = "import { thing } from './missing';\n"
+        path = self.create_temp_file(content, "mod.ts")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_existing_relative_import_with_extension_resolution(self):
+        self.create_temp_file("export const thing = 1;\n", "real.ts")
+        content = "import { thing } from './real';\n"
+        path = self.create_temp_file(content, "mod.ts")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
 
 
 if __name__ == '__main__':

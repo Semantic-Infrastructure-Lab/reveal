@@ -1072,7 +1072,12 @@ class JavaScriptExtractor(LanguageExtractor):
     # TS ESM idiom: source imports use the compiled-output extension
     # (e.g. `./foo.js`) while the source file on disk is `.ts`/`.tsx`/`.mts`.
     _TS_ESM_EXTENSION_FALLBACKS = {
-        '.js': ['.ts', '.tsx'],
+        # '.d.ts' after '.ts'/'.tsx' (BACK-1011): a '.js'-suffixed import can
+        # resolve to a type-only declaration file with no co-located '.ts'
+        # implementation at all -- found live on VS Code's own source
+        # (observableInternal/logging/debugger: 'debuggerApi.js' resolves
+        # only to 'debuggerApi.d.ts', a real ambient-declaration-only module).
+        '.js': ['.ts', '.tsx', '.d.ts'],
         '.jsx': ['.tsx'],
         '.mjs': ['.mts'],
     }

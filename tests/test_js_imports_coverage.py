@@ -1232,6 +1232,18 @@ class TestResolveRelativeJs:
         result = e._resolve_relative_js('./missing.js', tmp_path)
         assert result is None
 
+    def test_js_extension_falls_back_to_declaration_only_dts(self, tmp_path):
+        """BACK-1011: a '.js'-suffixed import can resolve to a type-only
+        '.d.ts' file with no co-located '.ts' implementation -- found live
+        on VS Code's own source (debuggerApi.js -> debuggerApi.d.ts only,
+        no debuggerApi.ts). Without this fallback, B005's JS/TS port
+        false-positived on a real, resolvable import."""
+        f = tmp_path / 'debuggerApi.d.ts'
+        f.write_text('export interface Foo {}')
+        e = JavaScriptExtractor()
+        result = e._resolve_relative_js('./debuggerApi.js', tmp_path)
+        assert result == f.resolve()
+
     def test_dotted_basename_with_extension_omitted_resolves(self, tmp_path):
         """BACK-621: './charts.constants' -> charts.constants.ts, a real
         Excalidraw naming convention (also 'WelcomeScreen.Center',

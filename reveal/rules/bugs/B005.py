@@ -11,6 +11,17 @@ importable in reveal's own environment: `find_spec` against the analyzer's
 venv is not evidence the module doesn't exist for the analyzed project (it
 would flag every uninstalled dependency of every external repo). Such imports
 are treated as 'unknown' and left alone.
+
+BACK-1011: the JS/TS port reuses the same provable-absence boundary via
+JavaScriptExtractor.is_intra_project_import()/resolve_import() (already
+built for depends://'s import graph) — a specifier is only flagged when the
+extractor itself says it SHOULD resolve locally (relative path, a matching
+tsconfig `paths` alias, or a workspace-package name) and then can't find the
+target. A bare npm specifier ('react', '@angular/core') with no matching
+alias is 'unknown', exactly like an uninstalled third-party Python package —
+never flagged. Not ported to Java/C#/Go/etc: those need build-file-aware
+package/namespace resolution reveal doesn't have (see BACK-1011 note #1) —
+a separate, larger scope than this relative/alias-only slice.
 """
 
 import ast
@@ -21,6 +32,7 @@ from importlib.util import find_spec
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
 from ..imports import STDLIB_MODULES
+from ...analyzers.imports.javascript import JavaScriptExtractor
 
 
 class B005(BaseRule, ASTParsingMixin):
@@ -30,8 +42,8 @@ class B005(BaseRule, ASTParsingMixin):
     message = "Import references non-existent or unresolvable module"
     category = RulePrefix.B
     severity = Severity.HIGH
-    file_patterns = ['.py']
-    version = "1.0.0"
+    file_patterns = ['.py', '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs']
+    version = "1.1.0"
 
     def _check_import_statement(self,
                                 node: ast.Import,
@@ -154,6 +166,9 @@ class B005(BaseRule, ASTParsingMixin):
         Returns:
             List of detections for dead imports
         """
+        if file_path.endswith(('.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs')):
+            return self._check_js_like(file_path)
+
         tree, detections = self._parse_python_or_skip(content, file_path)
         if tree is None:
             return detections
@@ -274,3 +289,42 @@ class B005(BaseRule, ASTParsingMixin):
         else:
             # from . import foo -> check __init__.py exists
             return (target_dir / "__init__.py").exists()
+
+    # ── JavaScript / TypeScript (BACK-1011) ──────────────────────────────────
+
+    def _check_js_like(self, file_path: str) -> List[Detection]:
+        """Check JS/TS source for a specifier that the extractor itself says
+        SHOULD resolve locally (relative path, or a matching tsconfig/
+        workspace alias) but can't find on disk. A bare npm specifier with no
+        matching alias is 'unknown' (is_intra_project_import returns False)
+        and is never flagged, mirroring the Python side's third-party-import
+        handling.
+
+        Reads the file from disk via JavaScriptExtractor (its extract_imports
+        always parses file_path directly, ignoring any in-memory content) --
+        the same source every other consumer of the JS import graph (I002,
+        depends://, imports://) uses.
+        """
+        path = Path(file_path)
+        extractor = JavaScriptExtractor()
+        imports = extractor.extract_imports(path)
+        if extractor.parse_failed:
+            return []
+
+        base_path = path.parent
+        detections: List[Detection] = []
+        for stmt in imports:
+            if not extractor.is_intra_project_import(stmt, base_path):
+                continue
+            if extractor.resolve_import(stmt, base_path) is not None:
+                continue
+
+            detections.append(self.create_detection(
+                file_path=file_path,
+                line=stmt.line_number,
+                message=f"Import '{stmt.module_name}' references a missing module",
+                suggestion=f"Remove the orphaned import or fix the path '{stmt.module_name}'",
+                context=stmt.source_line.strip() or f"import ... from '{stmt.module_name}'",
+            ))
+
+        return detections
