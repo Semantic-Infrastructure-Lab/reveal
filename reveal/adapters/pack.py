@@ -789,6 +789,13 @@ class PackAdapter(ResourceAdapter):
         # Populated by get_structure(); CLI needs this for its stderr warning,
         # but it's not part of the JSON contract (only meta.since is).
         self.since_error: Optional[str] = None
+        # Same pattern, for BACK-1006: fan_in/graph_relevance are opt-in
+        # (--architecture / --focus) for performance on large repos, but
+        # nothing said so when neither is passed -- files were silently
+        # ranked by filename/entry-point heuristics alone while `pack --help`
+        # and the adapter's own priority-ranking description read as though
+        # fan-in/relevance are always part of the ranking.
+        self.relevance_warning: Optional[str] = None
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -871,6 +878,13 @@ class PackAdapter(ResourceAdapter):
         fan_in_scores = _fetch_fan_in(path) if architecture else None
         graph_relevance_scores = _compute_graph_relevance(path, focus) if focus else {}
 
+        if not architecture and not focus:
+            self.relevance_warning = (
+                "fan-in and graph-relevance signals were not computed (pass "
+                "--architecture and/or --focus to enable) -- files are "
+                "ranked by filename/entry-point heuristics and recency only"
+            )
+
         candidates = _collect_candidates(
             path, focus, changed_files, fan_in_scores=fan_in_scores,
             graph_relevance_scores=graph_relevance_scores,
@@ -879,6 +893,8 @@ class PackAdapter(ResourceAdapter):
         if since:
             meta['since'] = since
             meta['changed_files_count'] = len(changed_files)
+        if self.relevance_warning:
+            meta['relevance_warning'] = self.relevance_warning
 
         report: Dict[str, Any] = {
             'path': str(path),

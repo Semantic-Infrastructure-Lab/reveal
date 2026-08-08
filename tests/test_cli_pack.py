@@ -953,6 +953,57 @@ class TestRunPackSince(unittest.TestCase):
             data = json.loads(buf.getvalue())
             self.assertIn('since', data)
 
+    def test_relevance_warning_emitted_when_no_architecture_or_focus(self):
+        """BACK-1006: default `pack --budget N` (no --architecture, no --focus)
+        never computes fan_in/graph_relevance, so a DD user has no signal that
+        selection is filename/recency heuristic only unless we say so."""
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "app.py").write_text("x = 1\n")
+            args = self._make_args(d, since=None)
+            buf = io.StringIO()
+            stderr_buf = io.StringIO()
+            import sys
+            old_err = sys.stderr
+            sys.stderr = stderr_buf
+            try:
+                with redirect_stdout(buf):
+                    run_pack(args)
+            finally:
+                sys.stderr = old_err
+            self.assertIn('fan-in and graph-relevance', stderr_buf.getvalue())
+
+    def test_relevance_warning_absent_with_focus(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "app.py").write_text("x = 1\n")
+            args = self._make_args(d, focus='app', since=None)
+            buf = io.StringIO()
+            stderr_buf = io.StringIO()
+            import sys
+            old_err = sys.stderr
+            sys.stderr = stderr_buf
+            try:
+                with redirect_stdout(buf):
+                    run_pack(args)
+            finally:
+                sys.stderr = old_err
+            self.assertNotIn('fan-in and graph-relevance', stderr_buf.getvalue())
+
+    def test_relevance_warning_in_json_meta(self):
+        import io, json
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "app.py").write_text("x = 1\n")
+            args = self._make_args(d, fmt='json', since=None)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run_pack(args)
+            data = json.loads(buf.getvalue())
+            self.assertIn('relevance_warning', data['meta'])
+
     def test_changed_flag_in_json_candidates(self):
         """Every file in JSON output has a 'changed' field."""
         import io, json

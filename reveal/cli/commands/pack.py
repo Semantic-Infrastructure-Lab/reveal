@@ -135,6 +135,8 @@ def run_pack(args: Namespace) -> None:
 
     if since and adapter.since_error:
         print(f"Warning: --since: {adapter.since_error}", file=sys.stderr)
+    if adapter.relevance_warning:
+        print(f"Warning: {adapter.relevance_warning}", file=sys.stderr)
 
     if args.format == 'json':
         from reveal.utils.results import add_cli_contract_fields
