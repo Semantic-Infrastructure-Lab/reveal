@@ -12,6 +12,39 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.116.0] - 2026-08-08 (sessions maroon-jewel-0808 and prior DD-dogfood sessions — see internal-docs/planning/dogfood-findings/ for individual attributions)
+
+### Added
+- **Cross-language bug-rule ports, B001/B003/B005/B006 (BACK-1011)** — B-category rules were Python-only; triaged all 7 for portability and ported the 4 viable ones across 7 additional languages via tree-sitter, verified live against real open-source corpora (Jellyfin, Elasticsearch, VS Code, WordPress, Godot, Tivi, Kickstarter iOS):
+  - **B006** (silent broad-exception handler) — now covers C#, Java, JS/TS, PHP, Kotlin, Swift, C++, on top of Python.
+  - **B001** (bare except) — C#, C++.
+  - **B003** (oversized `@property`) — C#, Kotlin, Swift.
+  - **B005** (dead import) — JS/TS.
+  - B002/B004 confirmed and documented as genuinely Python-only (compile-time impossible in the typed languages).
+- **B007, adapter-scoped envelope-blind handler detector (BACK-1017)** — internal-only rule (doesn't fire on client code) closing the structural gap that let BACK-1016's sites survive the prior remediation sweep: a handler that logs but never calls `record_composed_error()` is invisible to `--format json`/`meta.errors` even though it "looks" visible.
+- **`reveal --version` prints its resolved package directory (BACK-1014)** — permanent tripwire against a stale shadow install silently shadowing the editable dev checkout.
+- **`stats://`/`overview` gain `summary_only` (BACK-1008)** — drops the per-file array (15.6MB on a 24K-file repo) when only the aggregate is wanted.
+- **`pack` warns when relevance ranking didn't run (BACK-1006)** — `--budget N` without `--architecture`/`--focus` silently fell back to filename-only ranking with no signal to the caller.
+- **`ResourceAdapter` gets a real `__init__` (BACK-1019, BACK-1020)** — matches the documented canonical signature; `composed_meta()` now clears its accumulators after read so a reused adapter instance doesn't re-report stale errors.
+
+### Fixed
+- **`~` not expanded in URI resource paths across most adapters (BACK-1024)** — only 15 of 44 adapters called `expanduser()` themselves; `markdown://`, `git://`, `imports://`, `stats://` (4 of the 10 DD-critical commands) did not. A single-quoted `scheme://~/dir?query` never reaches shell tilde expansion, and the unresolved `~` silently concatenated onto cwd instead of erroring with a hint. Centralized in `handle_uri()` so every scheme (CLI and MCP, which share the same entry point) behaves consistently.
+- **Trust-envelope closure, round 3 (BACK-1016)** — `overview`/`architecture`'s `_run_scope`/`_run_git_log` crash paths logged to stderr but reported `meta.confidence=1.0`/`errors=0` — a crashed sub-scan rendering as fully trusted. Now routed through `record_composed_error()` like every other sibling-construction site.
+- **`calls://?uncalled=true&top=N` reported the truncated count as the true total** — `top=30` said "Uncalled: 30" when the real count was 269. Now reports the true total with a "(showing top N)" qualifier.
+- **S001 secret detection ignored value shape, matched name only (BACK-1010)** — flagged `${{ secrets.X }}` GitHub Actions refs and non-secret constants purely by variable name. Verified: Jellyfin workflows 34→0, Home Assistant 484→16 (all real).
+- **Circular-import severity was language-blind (BACK-1005)** — C#/Java/Kotlin/Swift's idiomatic bidirectional entity references were flagged `severity:high`, the same signal that's a real bug in Python/JS. Now downgraded one notch with an explanatory note for tolerant languages.
+- **TS/JS constructors misreported as dead code (BACK-1009)** — `new ClassName()` never matches the AST's literal `"constructor"` name; excluded from `calls://?uncalled`, was 18.5% of all hits on a VS Code sample.
+- **`fetch_corpus.py --list` reported presence via `exists()`, not real state (BACK-1002)** — a stray unrelated repo sitting in the same cache dir masked 3 completely unfetched corpora as "present." Now checks SHA + `git ls-tree` for real content.
+- **Interface extraction re-walked the tree uncached on every call (BACK-1003, perf)** — C#/Java/PHP paid this twice per file via `overview`; attributed 41% of `overview`'s wall time on a C# corpus. Now covered by the same disk cache as the rest of `get_structure()`.
+- **`REVEAL_MAX_WORKERS` wasn't honored by `stats`'s directory-scan pool (BACK-1004)** — the only uncapped worker pool reachable from `overview`/`stats://`; concurrent engagement scans could push each other past timeout.
+- **`?patches=` boolean coercion was case-sensitive (BACK-1018)** — `True`/`TRUE` silently ignored, unlike every other boolean query param.
+- **xlsx powerpivot banner build failure invisible to the envelope** — found by B007's first real run; `_get_workbook_overview` never wired `composed_meta()` into its result at all.
+
+### Changed
+- **Doc-hygiene pre-release check now ratchets against a tracked baseline** (`.github/doc_hygiene_baseline.txt`, mirrors `.github/b006_baseline.txt`'s pattern) instead of failing on all pre-existing issues every release — most of that count is `VALIDATION.md` links into `internal-docs/`, intentionally moved out of the public repo. Also excludes `build/`/`dist/`/`*.egg-info` from the scan (was counting stale local build artifacts as shipped docs).
+
+Known open items not addressed in this release: `BACK-1021` (no confidence signal for unsupported rule-category coverage) and `BACK-738` (Kotlin/Compose silent AST-drop) remain open, scoped, documented caveats.
+
 ## [0.115.0] - 2026-08-07 (sessions hidden-matter-0806, vivid-glint-0806, fugivo-0806, roaring-steam-0806, omniscient-shield-0806, tempestuous-breeze-0807, wiyomexi-0807)
 
 ### Added
