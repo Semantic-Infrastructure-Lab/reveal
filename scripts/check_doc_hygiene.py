@@ -7,8 +7,11 @@ Catches:
   3. TIA/personal leaks (beth_topics, tia commands, /home/scottsen, sociamonials)
 
 Usage:
-  python scripts/check_doc_hygiene.py          # check, exit 1 on problems
-  python scripts/check_doc_hygiene.py --json   # structured output
+  python scripts/check_doc_hygiene.py                       # check, exit 1 on any problem
+  python scripts/check_doc_hygiene.py --json                # structured output
+  python scripts/check_doc_hygiene.py --baseline FILE       # ratchet: exit 1 only if
+                                                              # total_issues > FILE's count
+                                                              # (mirrors .github/b006_baseline.txt)
 """
 
 import json
@@ -29,7 +32,7 @@ LEAK_PATTERNS = [
 ]
 
 # Files/dirs to skip
-SKIP_DIRS = {'.pytest_cache', '.git', '__pycache__', 'node_modules', '.benchmarks'}
+SKIP_DIRS = {'.pytest_cache', '.git', '__pycache__', 'node_modules', '.benchmarks', 'build', 'dist'}
 SKIP_FILES = {'CHANGELOG.md'}  # historical entries are acceptable noise
 
 
@@ -37,7 +40,7 @@ def find_markdown_files():
     """Find all .md files in the public repo, excluding tests and caches."""
     files = []
     for root, dirs, filenames in os.walk(PROJECT_ROOT):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and d != 'tests']
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and d != 'tests' and not d.endswith('.egg-info')]
         for f in filenames:
             if f.endswith('.md'):
                 files.append(Path(root) / f)
@@ -138,8 +141,26 @@ def check_leak_patterns(md_file):
     return hits
 
 
+def _read_baseline(path: str) -> int:
+    try:
+        return int(Path(path).read_text().strip())
+    except (OSError, ValueError) as e:
+        print(f"Error: couldn't read baseline count from {path}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main():
     as_json = '--json' in sys.argv
+    baseline = None
+    if '--baseline' in sys.argv:
+        idx = sys.argv.index('--baseline')
+        try:
+            baseline_path = sys.argv[idx + 1]
+        except IndexError:
+            print("Error: --baseline requires a file path", file=sys.stderr)
+            sys.exit(1)
+        baseline = _read_baseline(baseline_path)
+
     md_files = find_markdown_files()
 
     all_broken = []
@@ -186,10 +207,27 @@ def main():
 
         if total == 0:
             print('All clear — no doc hygiene issues found.')
+        elif baseline is not None:
+            print(f'{total} issue(s) found (baseline: {baseline}).')
         else:
             print(f'{total} issue(s) found. Fix before release.')
 
-    sys.exit(1 if total > 0 else 0)
+    if baseline is None:
+        sys.exit(1 if total > 0 else 0)
+
+    # Ratchet mode (mirrors .github/b006_baseline.txt): only a regression above
+    # the tracked baseline fails release prep. The baseline itself is known,
+    # pre-existing debt (mostly VALIDATION.md links into internal-docs/, which
+    # was intentionally moved out of the public repo) that isn't being cleared
+    # in a single pass — a permanently-red check gets ignored, a ratchet doesn't.
+    if total > baseline:
+        print(f"\n❌ Doc hygiene issue count increased ({baseline} -> {total}) — "
+              f"a new broken link/internal-docs leak was introduced.", file=sys.stderr)
+        sys.exit(1)
+    elif total < baseline:
+        print(f"\n✅ Doc hygiene count decreased ({baseline} -> {total}) — "
+              f"update the baseline file to {total} to lock in the improvement.")
+    sys.exit(0)
 
 
 if __name__ == '__main__':

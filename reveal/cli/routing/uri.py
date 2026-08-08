@@ -85,6 +85,16 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
 
     scheme, resource = uri.split('://', 1)
 
+    # Expand a leading ~/... in the resource path before dispatch. A single-quoted
+    # 'scheme://~/dir?query' never reaches shell tilde expansion (the ? forces
+    # quoting), and only some adapters called expanduser() themselves — centralize
+    # it here so every scheme behaves consistently instead of adapter-by-adapter
+    # opt-in. os.path.expanduser is a no-op unless the string leads with ~/~user,
+    # so this is safe for non-path resources (env://VAR, help://topic, etc.).
+    # Query string is left untouched so a literal '~' in a query value survives.
+    _path_part, _sep, _query_part = resource.partition('?')
+    resource = os.path.expanduser(_path_part) + _sep + _query_part
+
     # --grep is only implemented for file-path targets (routing/file.py).  Warn rather
     # than silently ignoring so users know their filter didn't apply (BACK-351).
     if getattr(args, 'grep', None):

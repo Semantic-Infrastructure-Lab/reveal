@@ -465,6 +465,54 @@ class TestHandleUri(unittest.TestCase):
 
         self.assertIn('sort=-lines', captured['resource'])
 
+    def test_tilde_expanded_in_resource_path(self):
+        """A leading ~/... in the resource is expanded before dispatch.
+
+        Single-quoted 'scheme://~/dir?query' never reaches shell tilde expansion
+        (the ? forces quoting), and only some adapters called expanduser()
+        themselves — this is centralized in handle_uri() so every scheme behaves
+        consistently.
+        """
+        captured = {}
+
+        def capture_adapter(adapter_class, scheme, resource, element, args):
+            captured['resource'] = resource
+
+        mock_args = Namespace(format='text', sort=None, desc=False)
+        with patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
+            handle_uri('markdown://~/notes?type=x', None, mock_args)
+
+        expected_home = os.path.expanduser('~')
+        self.assertTrue(captured['resource'].startswith(expected_home))
+        self.assertNotIn('~', captured['resource'])
+        self.assertTrue(captured['resource'].endswith('?type=x'))
+
+    def test_tilde_in_query_value_left_untouched(self):
+        """A literal ~ inside the query string (not the path) is not expanded."""
+        captured = {}
+
+        def capture_adapter(adapter_class, scheme, resource, element, args):
+            captured['resource'] = resource
+
+        mock_args = Namespace(format='text', sort=None, desc=False)
+        with patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
+            handle_uri('ast://src?name=~foo', None, mock_args)
+
+        self.assertIn('name=~foo', captured['resource'])
+
+    def test_no_tilde_resource_unchanged(self):
+        """A resource with no leading ~ is passed through unmodified."""
+        captured = {}
+
+        def capture_adapter(adapter_class, scheme, resource, element, args):
+            captured['resource'] = resource
+
+        mock_args = Namespace(format='text', sort=None, desc=False)
+        with patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
+            handle_uri('ast://src?complexity>10', None, mock_args)
+
+        self.assertEqual(captured['resource'], 'src?complexity>10')
+
 
 class TestHandleAdapter(unittest.TestCase):
     """Tests for handle_adapter function."""

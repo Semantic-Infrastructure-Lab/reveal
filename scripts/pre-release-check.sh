@@ -95,12 +95,16 @@ for doc in README.md CHANGELOG.md ROADMAP.md; do
 done
 
 # 6. Doc Hygiene (broken links, internal-docs refs, TIA leaks)
+# Ratcheted against a tracked baseline, not a zero-issues gate — most of the
+# current count is pre-existing debt (VALIDATION.md links into internal-docs/,
+# intentionally moved out of the public repo) that a single pass won't clear,
+# and a permanently-red check gets ignored instead of catching new leaks.
 check_step "Doc Hygiene (Links + Leak Detection)" 6 9
 
-if python3 "$SCRIPT_DIR/check_doc_hygiene.py"; then
-    echo -e "${GREEN}✓ Doc hygiene passed${NC}"
+if python3 "$SCRIPT_DIR/check_doc_hygiene.py" --baseline "$SCRIPT_DIR/../.github/doc_hygiene_baseline.txt"; then
+    echo -e "${GREEN}✓ Doc hygiene passed (no new issues vs. baseline)${NC}"
 else
-    echo -e "${RED}✗ Doc hygiene issues found${NC}"
+    echo -e "${RED}✗ Doc hygiene regressed vs. baseline${NC}"
     FAILURES=$((FAILURES + 1))
 fi
 
