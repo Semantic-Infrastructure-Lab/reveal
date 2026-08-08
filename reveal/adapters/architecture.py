@@ -13,6 +13,7 @@ indirection without benefit).
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -20,6 +21,7 @@ from reveal.capabilities import scope_dict_for_path
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..registry import language_for_extension
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
@@ -28,6 +30,15 @@ logger = logging.getLogger(__name__)
 
 _COMPLEXITY_ENTRY_THRESHOLD = 20  # entry point complexity that warrants a warning
 _FAN_IN_RISK_THRESHOLD = 8        # fan-in count that makes a file load-bearing
+
+# Languages where bidirectional references between files are routine, idiomatic
+# domain modeling (e.g. EF Core / JPA / Hibernate navigation properties on
+# parent<->child entities), not the "accidental coupling, latent ImportError"
+# pattern a Python/JS circular *module* import usually signals (BACK-1005).
+# One severity heuristic applied uniformly across languages misled a DD
+# reviewer unfamiliar with C#/EF conventions: 42-105-file EF-entity clusters
+# in Jellyfin (C#) were flagged severity:high, same as a real Python/JS cycle.
+_CIRCULAR_TOLERANT_LANGUAGES = frozenset({'csharp', 'java', 'kotlin', 'swift'})
 
 
 def _run_complex_functions(adapter: 'ArchitectureAdapter', path: Path, limit: int) -> List[Dict[str, Any]]:
@@ -140,6 +151,20 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
     return complex_fns, imports_data
 
 
+def _group_language(group: List[str]) -> Optional[str]:
+    """Return the dominant reveal language slug among *group*'s file paths.
+
+    A mixed-language cycle group is rare and not the case this heuristic is
+    for; majority vote over the group's extensions is enough to decide
+    whether BACK-1005's OO-entity-modeling tolerance applies.
+    """
+    langs = Counter(
+        lang for f in group
+        if (lang := language_for_extension(Path(f).suffix))
+    )
+    return langs.most_common(1)[0][0] if langs else None
+
+
 def _compute_risks(
     imports_data: Dict[str, Any],
     complex_fns: List[Dict[str, Any]],
@@ -157,10 +182,21 @@ def _compute_risks(
     for group in imports_data.get('circular_groups', []):
         count = len(group)
         rep = _relpath(group[0], base_path) if group else ''
+        tolerant = _group_language(group) in _CIRCULAR_TOLERANT_LANGUAGES
+        if tolerant:
+            severity = 'medium' if count > 10 else 'low'
+            description = (
+                f"{count}-file circular group — likely idiomatic bidirectional "
+                "domain-model refs (common in this language's entity/navigation-"
+                "property conventions); verify before treating as a design smell"
+            )
+        else:
+            severity = 'high' if count > 10 else 'medium'
+            description = f"{count}-file circular group"
         risks.append({
             'type': 'circular',
-            'severity': 'high' if count > 10 else 'medium',
-            'description': f"{count}-file circular group",
+            'severity': severity,
+            'description': description,
             'detail': f"{rep} + {count - 1} more" if count > 1 else rep,
             'file_count': count,
             'representative': group[0] if group else '',

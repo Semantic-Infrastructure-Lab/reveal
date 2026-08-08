@@ -200,6 +200,28 @@ class TestComputeRisks(unittest.TestCase):
         risks = _compute_risks(imports_data, [], Path('/p'))
         self.assertEqual(risks[0]['severity'], 'medium')
 
+    def test_circular_risk_csharp_downgraded(self):
+        """BACK-1005: bidirectional refs between C# files are idiomatic EF-style
+        domain modeling, not the Python/JS accidental-coupling pattern -- same
+        file count gets a lower severity than the Python/JS case."""
+        imports_data = {
+            'circular_groups': [[f'/p/Entity{i}.cs' for i in range(15)]],
+            'entry_points': [],
+            'core_abstractions': [],
+        }
+        risks = _compute_risks(imports_data, [], Path('/p'))
+        self.assertEqual(risks[0]['severity'], 'medium')
+        self.assertIn('idiomatic', risks[0]['description'])
+
+    def test_circular_risk_csharp_small_group_low(self):
+        imports_data = {
+            'circular_groups': [['/p/Parent.cs', '/p/Child.cs']],
+            'entry_points': [],
+            'core_abstractions': [],
+        }
+        risks = _compute_risks(imports_data, [], Path('/p'))
+        self.assertEqual(risks[0]['severity'], 'low')
+
     def test_high_complexity_entry_point(self):
         imports_data = {
             'circular_groups': [],
