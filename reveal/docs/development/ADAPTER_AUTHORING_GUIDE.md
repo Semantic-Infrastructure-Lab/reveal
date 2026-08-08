@@ -76,8 +76,18 @@ class MyAdapter(ResourceAdapter):
     LEGACY_INIT = False
 
     def __init__(self, resource: str = '', query: str = None, **kwargs):
-        self.resource = resource
-        self.query = query
+        # super().__init__() sets self.resource/self.query/self.query_params
+        # (empty dict) and the compose()/record_composed_error() accumulators
+        # (BACK-1020) — call it first so int_param() and friends never hit an
+        # AttributeError, then parse your own query params over the top:
+        super().__init__(resource, query, **kwargs)
+        if query:
+            from reveal.utils.query_parser import parse_query_params
+            # coerce=True is the convention every query-toolkit helper
+            # (int_param(), boolean checks) assumes — skipping it means a
+            # caller comparing `== 'true'` case-sensitively can silently
+            # miss `?flag=True` (BACK-1018).
+            self.query_params = parse_query_params(query, coerce=True)
 
     def get_structure(self, **kwargs):
         """Return structure of the resource."""

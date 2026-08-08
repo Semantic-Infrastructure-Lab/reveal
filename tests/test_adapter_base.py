@@ -266,5 +266,89 @@ class TestLegacyInitDeprecation(unittest.TestCase):
         self.assertEqual(len(deprecations), 1)
 
 
+class TestCanonicalInit(unittest.TestCase):
+    """ResourceAdapter.__init__ (BACK-1020): documented, additive, non-forced."""
+
+    def test_super_init_sets_documented_attributes(self):
+        class CallsSuper(ResourceAdapter):
+            def __init__(self, resource='', query=None, **kwargs):
+                super().__init__(resource, query, **kwargs)
+
+            def get_structure(self, **kwargs):
+                return {}
+
+        adapter = CallsSuper('some/path', 'top=5')
+        self.assertEqual(adapter.resource, 'some/path')
+        self.assertEqual(adapter.query, 'top=5')
+        self.assertEqual(adapter.query_params, {})
+        self.assertEqual(adapter._composed_warnings, [])
+        self.assertEqual(adapter._composed_errors, [])
+        self.assertEqual(adapter._composed_confidences, [])
+
+    def test_subclass_without_super_call_still_works(self):
+        """Existing convention (no adapter calls super().__init__() today) —
+        record_composed_error()'s setdefault() fallback must keep working."""
+        class OwnInit(ResourceAdapter):
+            def __init__(self, resource=''):
+                self.resource = resource  # deliberately does NOT call super()
+
+            def get_structure(self, **kwargs):
+                return {}
+
+        adapter = OwnInit('x')
+        adapter.record_composed_error('child', 'x', RuntimeError('boom'))
+        meta = adapter.composed_meta()
+        self.assertIsNotNone(meta)
+        self.assertEqual(len(meta['errors']), 1)
+
+
+class TestComposedMetaConsuming(unittest.TestCase):
+    """composed_meta() clears its accumulators after reading (BACK-1019) —
+    a reused instance's next scan must not re-report a prior scan's errors."""
+
+    def setUp(self):
+        class ConcreteAdapter(ResourceAdapter):
+            def get_structure(self, **kwargs):
+                return {'structure': 'data'}
+
+        self.adapter = ConcreteAdapter()
+
+    def test_second_call_after_recorded_error_returns_none(self):
+        self.adapter.record_composed_error('child', 'r', RuntimeError('boom'))
+        first = self.adapter.composed_meta()
+        self.assertIsNotNone(first)
+        self.assertEqual(len(first['errors']), 1)
+
+        second = self.adapter.composed_meta()
+        self.assertIsNone(second)
+
+    def test_fresh_error_after_consumption_is_reported_alone(self):
+        self.adapter.record_composed_error('child', 'r', RuntimeError('first'))
+        self.adapter.composed_meta()  # consumes it
+
+        self.adapter.record_composed_error('child', 'r', RuntimeError('second'))
+        meta = self.adapter.composed_meta()
+        self.assertEqual(len(meta['errors']), 1)
+        self.assertIn('second', meta['errors'][0]['message'])
+
+    def test_healthy_scan_after_failed_scan_reports_no_errors(self):
+        """BACK-1019's own verified repro shape, generalized: a DepsAdapter-like
+        reused instance where compose() failed once, then succeeds — the
+        second, healthy call must not carry over the first call's error."""
+        from reveal.adapters.deps import DepsAdapter
+        from reveal.adapters.imports import ImportsAdapter
+        from unittest.mock import patch
+
+        adapter = DepsAdapter('reveal/utils', None)
+
+        with patch.object(ImportsAdapter, 'get_structure', side_effect=RuntimeError('boom')):
+            first = adapter.get_structure()
+        self.assertIsNotNone(first.get('meta'))
+        self.assertTrue(first['meta'].get('errors'))
+
+        second = adapter.get_structure()
+        self.assertIsNone(second.get('meta'), "healthy re-scan must not re-report the prior call's errors")
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -138,6 +138,30 @@ class ResourceAdapter(ABC):
     # substituting '.' would misread it as a literal host/path instead.
     CANONICAL_EMPTY_RESOURCE: str = '.'
 
+    def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any) -> None:
+        """Canonical constructor matching the signature LEGACY_INIT already
+        documents (BACK-1020). Establishes the instance state int_param()/
+        compose()/record_composed_error() assume but the base class never
+        declared: self.resource, self.query, self.query_params (empty until
+        a subclass parses it — see reveal.utils.query_parser.parse_query_params),
+        and the three composition accumulators compose()/record_composed_error()
+        previously had to poke into self.__dict__ via setdefault() because
+        there was nowhere to initialize them.
+
+        NOT force-called by every subclass. Most existing adapters define
+        their own __init__ without calling super() — that stays safe:
+        compose()/record_composed_error() still use setdefault() as a
+        fallback for instances that never ran this. A subclass that DOES
+        call super().__init__(resource, query, **kwargs) gets everything
+        pre-declared as a normal attribute instead of a setdefault'd one.
+        """
+        self.resource = resource
+        self.query = query
+        self.query_params: Dict[str, Any] = {}
+        self._composed_warnings: List[Dict[str, Any]] = []
+        self._composed_errors: List[Dict[str, Any]] = []
+        self._composed_confidences: List[float] = []
+
     @classmethod
     def from_uri(cls, scheme: str, resource: str,
                  element: Optional[str]) -> 'ResourceAdapter':
@@ -305,12 +329,23 @@ class ResourceAdapter(ABC):
         case — a clean scan emits no meta, unchanged from before BACK-984).
         Composed confidence is the minimum of any child confidences seen —
         a composite is only as trustworthy as its weakest part.
+
+        Consuming: clears the accumulators after reading (BACK-1019) — a
+        reused adapter instance's next ``get_structure()`` call starts clean
+        instead of re-reporting this call's errors/warnings/confidence.
+        Safe because every in-tree call site already follows the documented
+        contract of calling this once, at the end, building the final result
+        (nothing calls it twice per scan — verified by grep).
         """
         warnings_list = self.__dict__.get('_composed_warnings')
         errors_list = self.__dict__.get('_composed_errors')
         confidences_list = self.__dict__.get('_composed_confidences')
         if not warnings_list and not errors_list and not confidences_list:
             return None
+
+        self._composed_warnings = []
+        self._composed_errors = []
+        self._composed_confidences = []
 
         from reveal.utils.results import ResultBuilder
         return ResultBuilder.create_meta(
@@ -326,6 +361,15 @@ class ResourceAdapter(ABC):
         an explicit ``0`` as falsy and silently substitutes ``default`` —
         ``?top=0`` returns ``default`` results instead of zero, with no
         warning. See BACK-985.
+
+        Precondition (BACK-1020): ``self.query_params`` must already be a
+        dict — either set by ``__init__`` (empty ``{}`` if you never parse
+        one) or, more usefully, populated by calling
+        ``reveal.utils.query_parser.parse_query_params(query, coerce=True)``
+        yourself in your subclass's ``__init__``. ``coerce=True`` is the
+        convention this toolkit assumes: without it, values stay raw strings
+        and a caller comparing ``== 'true'`` case-sensitively can silently
+        miss ``?flag=True`` (see BACK-1018).
         """
         raw = self.query_params.get(key)
         return int(raw) if raw is not None else default
