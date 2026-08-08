@@ -807,5 +807,227 @@ def foo():
         self.assertEqual(len(detections), 1)
 
 
+class TestB006Java(unittest.TestCase):
+    """Test B006's Java port (BACK-1011)."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.rule = B006()
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def create_temp_file(self, content: str, name: str = "test.java") -> str:
+        path = os.path.join(self.temp_dir, name)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    def test_broad_exception_silent_flagged(self):
+        content = """
+class C {
+    void m() {
+        try { foo(); } catch (Exception e) { }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertEqual(detections[0].rule_code, 'B006')
+
+    def test_multi_catch_specific_types_not_flagged(self):
+        """IOException | SQLException — neither is a broad type."""
+        content = """
+class C {
+    void m() {
+        try { foo(); } catch (IOException | SQLException e) { }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_logged_not_flagged(self):
+        content = """
+class C {
+    void m() {
+        try { foo(); } catch (Exception e) { log.error("x", e); }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_print_stack_trace_not_flagged(self):
+        content = """
+class C {
+    void m() {
+        try { foo(); } catch (Exception e) { e.printStackTrace(); }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_debug_only_still_flagged(self):
+        content = """
+class C {
+    void m() {
+        try { foo(); } catch (Exception e) { log.debug("x", e); }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_rethrow_not_flagged(self):
+        content = """
+class C {
+    void m() {
+        try { foo(); } catch (Exception e) { throw new RuntimeException(e); }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+
+class TestB006JavaScriptTypeScript(unittest.TestCase):
+    """Test B006's JS/TS port (BACK-1011).
+
+    Unlike the typed-language ports, every catch is unconditionally
+    "broad" here (JS/TS have no catch-type syntax), so only silence
+    matters.
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.rule = B006()
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def create_temp_file(self, content: str, name: str) -> str:
+        path = os.path.join(self.temp_dir, name)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    def test_silent_catch_with_param_flagged_js(self):
+        content = "try { foo(); } catch (e) { }"
+        path = self.create_temp_file(content, "a.js")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_silent_paramless_catch_flagged_ts(self):
+        content = "try { foo(); } catch { }"
+        path = self.create_temp_file(content, "a.ts")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_console_error_not_flagged(self):
+        content = "try { foo(); } catch (e) { console.error(e); }"
+        path = self.create_temp_file(content, "a.js")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_console_log_not_flagged(self):
+        """console.* is always emitted (no configurable level), unlike a
+        backend logger's debug/trace — any console method counts."""
+        content = "try { foo(); } catch (e) { console.log(e); }"
+        path = self.create_temp_file(content, "a.js")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_custom_logger_warn_not_flagged(self):
+        content = "try { foo(); } catch (e) { logger.warn(e); }"
+        path = self.create_temp_file(content, "a.ts")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_rethrow_not_flagged(self):
+        content = "try { foo(); } catch (e) { throw e; }"
+        path = self.create_temp_file(content, "a.ts")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_explanatory_comment_not_flagged(self):
+        content = "try { foo(); } catch (e) { /* swallowed intentionally */ }"
+        path = self.create_temp_file(content, "a.js")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+
+class TestB006PHP(unittest.TestCase):
+    """Test B006's PHP port (BACK-1011)."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.rule = B006()
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def create_temp_file(self, content: str, name: str = "test.php") -> str:
+        path = os.path.join(self.temp_dir, name)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    def test_broad_exception_silent_flagged(self):
+        content = "<?php try { foo(); } catch (Exception $e) { } ?>"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_specific_type_not_flagged(self):
+        content = "<?php try { foo(); } catch (IOException $e) { } ?>"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_error_log_not_flagged(self):
+        content = "<?php try { foo(); } catch (Exception $e) { error_log($e); } ?>"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_member_logger_error_not_flagged(self):
+        content = "<?php try { foo(); } catch (Exception $e) { $this->logger->error('x', $e); } ?>"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_member_logger_debug_still_flagged(self):
+        content = "<?php try { foo(); } catch (Exception $e) { $this->logger->debug('x', $e); } ?>"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_rethrow_not_flagged(self):
+        content = "<?php try { foo(); } catch (Exception $e) { throw $e; } ?>"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_multi_catch_broad_flagged(self):
+        content = "<?php try { foo(); } catch (IOException | Throwable $e) { } ?>"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

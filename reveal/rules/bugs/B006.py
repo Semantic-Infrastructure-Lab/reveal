@@ -24,14 +24,17 @@ handler body itself.
 
 BACK-1011: this rule was Python-only (`file_patterns = ['.py']`) even though
 the same bug shape — a broad ``catch`` with no visible failure signal — is
-just as real in any exception-based language. C# support was added as the
-first cross-language port (tree-sitter's `catch_clause` node, checked for a
-`throw`/re-raise or a visible logging call in the body). It's deliberately
-a simpler heuristic than the Python side: no docstring-tolerance or
-deferred-signal detection yet, just bare/`Exception`-typed catch + empty-of-
-signal body. Extending to Java/JS/TS/PHP/C++ (which share the same
-`catch_clause` node kind) or Kotlin/Swift (`catch_block`) is mechanical
-from here — see BACK-1011 for the remaining language list.
+just as real in any exception-based language. Cross-language ports (tree-
+sitter's `catch_clause` node, checked for a `throw`/re-raise or a visible
+logging call in the body) now cover C#, Java, JavaScript, TypeScript, and
+PHP. All are deliberately simpler heuristics than the Python side: no
+docstring-tolerance or deferred-signal detection, just broad-catch +
+empty-of-signal body (+ explanatory-comment exemption). "Broad" itself is
+language-specific: C#/Java/PHP require a bare or Exception/Throwable-typed
+catch; JavaScript/TypeScript have no catch-type syntax at all, so every
+catch is broad there and only the silence check discriminates. C++ (`...`
+ellipsis catch-all) and Kotlin/Swift (`catch_block`, a different node
+shape) remain open — see BACK-1011.
 """
 
 import ast
@@ -50,8 +53,12 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     message = "Broad exception handler with no visible failure signal can hide bugs"
     category = RulePrefix.B
     severity = Severity.MEDIUM
-    file_patterns = ['.py', '.cs']
-    version = "1.5.0"
+    file_patterns = [
+        '.py', '.cs', '.java',
+        '.js', '.jsx', '.mjs', '.cjs', '.ts',
+        '.php',
+    ]
+    version = "1.6.0"
 
     _CS_LANGUAGE = 'csharp'
     _CS_BROAD_TYPES = frozenset({'Exception', 'System.Exception'})
@@ -61,6 +68,34 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     _CS_VISIBLE_LOG_METHODS = frozenset({
         'LogWarning', 'LogError', 'LogCritical',
         'WriteLine', 'Write',  # Console.Error.Write(Line) / Console.Write(Line)
+    })
+
+    _JAVA_LANGUAGE = 'java'
+    _JAVA_BROAD_TYPES = frozenset({'Exception', 'RuntimeException', 'Throwable'})
+    # SLF4J/JUL naming differs (warn vs warning, error vs severe) — cover both
+    # conventions. printStackTrace is the single most common raw Java
+    # swallow-with-signal idiom, included even though it targets stderr
+    # rather than a logger.
+    _JAVA_VISIBLE_METHODS = frozenset({
+        'error', 'warn', 'warning', 'severe', 'fatal', 'critical', 'printStackTrace',
+    })
+
+    _JS_LANGUAGE = 'javascript'
+    _TS_LANGUAGE = 'typescript'
+    # console.* is always emitted (no configurable level like a backend
+    # logger), so ANY console method counts as visible — unlike the
+    # Debug/Trace exclusion elsewhere in this rule. error/warn(ing) on any
+    # other object (a custom logger) uses the same name-only heuristic as
+    # the other languages.
+    _JS_VISIBLE_METHODS = frozenset({'error', 'warn', 'warning'})
+
+    _PHP_LANGUAGE = 'php'
+    _PHP_BROAD_TYPES = frozenset({'Exception', 'Throwable'})
+    _PHP_VISIBLE_FUNCTIONS = frozenset({'error_log', 'trigger_error'})
+    # PSR-3 log levels, excluding debug/info/notice (invisible-by-default
+    # equivalents, same rationale as the Python/C#/Java debug exclusions).
+    _PHP_VISIBLE_METHODS = frozenset({
+        'error', 'warning', 'critical', 'alert', 'emergency',
     })
 
     # Logger/print calls that count as a *visible* signal. logger.debug() is
@@ -106,6 +141,14 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         """
         if file_path.endswith('.cs'):
             return self._check_csharp(file_path, content)
+        if file_path.endswith('.java'):
+            return self._check_java(file_path, content)
+        if file_path.endswith(('.js', '.jsx', '.mjs', '.cjs')):
+            return self._check_js_like(file_path, content, self._JS_LANGUAGE)
+        if file_path.endswith('.ts'):
+            return self._check_js_like(file_path, content, self._TS_LANGUAGE)
+        if file_path.endswith('.php'):
+            return self._check_php(file_path, content)
 
         tree, detections = self._parse_python_or_skip(content, file_path)
         if tree is None:
@@ -529,3 +572,230 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         explicitly-commented intentional swallow, e.g.
         `catch { // Logged at lower levels }`)."""
         return any(descendant.kind() == 'comment' for descendant in self._ts_walk(node))
+
+    # ── Java (BACK-1011) ─────────────────────────────────────────────────────
+
+    def _check_java(self, file_path: str, content: str) -> List[Detection]:
+        """Check Java source for silent broad `catch` clauses."""
+        root, detections = self._parse_treesitter_or_skip(content, file_path, self._JAVA_LANGUAGE)
+        if root is None:
+            return detections
+
+        content_bytes = content.encode('utf-8')
+        for node in self._ts_walk(root):
+            if node.kind() != 'catch_clause':
+                continue
+            if not self._java_is_broad_catch(node, content_bytes):
+                continue
+            if self._java_has_visible_signal(node, content_bytes):
+                continue
+            if any(d.kind() == 'comment' for d in self._ts_walk(node)):
+                continue
+
+            detections.append(self.create_detection(
+                file_path=file_path,
+                line=node.start_position().row + 1,
+                column=node.start_position().column + 1,
+                suggestion=(
+                    "Consider:\n"
+                    "  1. Catch specific exception types instead of Exception/Throwable\n"
+                    "  2. Add visible logging: log.error(\"...\", e) —\n"
+                    "     debug/trace-level logging alone is invisible by default and does not count\n"
+                    "  3. Re-throw if you can't handle it: throw e; / throw new ...(e);"
+                ),
+                context=self._ts_node_text(node, content_bytes).split('\n')[0],
+            ))
+
+        return detections
+
+    def _java_is_broad_catch(self, node, content_bytes: bytes) -> bool:
+        """True if any type in a (possibly multi-catch `A | B`) clause is broad.
+
+        Java always requires a typed parameter — there's no bare `catch {}`.
+        """
+        param = next(
+            (c for c in node_children(node) if c.kind() == 'catch_formal_parameter'), None
+        )
+        if param is None:
+            return False
+        catch_type = next(
+            (c for c in node_children(param) if c.kind() == 'catch_type'), None
+        )
+        if catch_type is None:
+            return False
+        return any(
+            self._ts_node_text(t, content_bytes) in self._JAVA_BROAD_TYPES
+            for t in node_children(catch_type) if t.kind() == 'type_identifier'
+        )
+
+    def _java_has_visible_signal(self, node, content_bytes: bytes) -> bool:
+        """True if the catch body re-throws or calls a visible logging method."""
+        block = next((c for c in node_children(node) if c.kind() == 'block'), None)
+        if block is None:
+            return False
+
+        for descendant in self._ts_walk(block):
+            if descendant.kind() == 'throw_statement':
+                return True
+            if descendant.kind() == 'method_invocation':
+                if self._java_call_name(descendant, content_bytes) in self._JAVA_VISIBLE_METHODS:
+                    return True
+        return False
+
+    def _java_call_name(self, node, content_bytes: bytes) -> Optional[str]:
+        """Extract a `method_invocation`'s callee name.
+
+        Java's grammar is flat (`identifier '.' identifier argument_list`
+        for a member call, not a nested member-access node like C#), so the
+        name is the identifier immediately after a `.` token if present,
+        else the sole identifier (a bare, non-member call).
+        """
+        children = node_children(node)
+        for i, child in enumerate(children):
+            if child.kind() == '.' and i + 1 < len(children):
+                return self._ts_node_text(children[i + 1], content_bytes)
+        ident = next((c for c in children if c.kind() == 'identifier'), None)
+        return self._ts_node_text(ident, content_bytes) if ident else None
+
+    # ── JavaScript / TypeScript (BACK-1011) ─────────────────────────────────
+
+    def _check_js_like(self, file_path: str, content: str, language: str) -> List[Detection]:
+        """Check JS/TS source for silent `catch` clauses.
+
+        Neither language has catch-type syntax — every `catch` is
+        unconditionally broad, so only the silence check discriminates
+        (unlike the typed-language ports above).
+        """
+        root, detections = self._parse_treesitter_or_skip(content, file_path, language)
+        if root is None:
+            return detections
+
+        content_bytes = content.encode('utf-8')
+        for node in self._ts_walk(root):
+            if node.kind() != 'catch_clause':
+                continue
+            if self._js_has_visible_signal(node, content_bytes):
+                continue
+            if any(d.kind() == 'comment' for d in self._ts_walk(node)):
+                continue
+
+            detections.append(self.create_detection(
+                file_path=file_path,
+                line=node.start_position().row + 1,
+                column=node.start_position().column + 1,
+                suggestion=(
+                    "Consider:\n"
+                    "  1. Add visible logging: console.error(err) — any console.* call counts\n"
+                    "  2. Re-throw if you can't handle it: throw err;\n"
+                    "  3. Add a comment explaining why silence is intentional"
+                ),
+                context=self._ts_node_text(node, content_bytes).split('\n')[0],
+            ))
+
+        return detections
+
+    def _js_has_visible_signal(self, node, content_bytes: bytes) -> bool:
+        """True if the catch body re-throws or calls a visible logging method."""
+        block = next((c for c in node_children(node) if c.kind() == 'statement_block'), None)
+        if block is None:
+            return False
+
+        for descendant in self._ts_walk(block):
+            if descendant.kind() == 'throw_statement':
+                return True
+            if descendant.kind() != 'call_expression':
+                continue
+            callee = node_children(descendant)[0] if node_children(descendant) else None
+            if callee is None:
+                continue
+            if callee.kind() == 'identifier':
+                if self._ts_node_text(callee, content_bytes) in self._JS_VISIBLE_METHODS:
+                    return True
+            elif callee.kind() == 'member_expression':
+                members = node_children(callee)
+                if not members:
+                    continue
+                obj_text = self._ts_node_text(members[0], content_bytes)
+                prop = next((c for c in members if c.kind() == 'property_identifier'), None)
+                prop_text = self._ts_node_text(prop, content_bytes) if prop else None
+                if obj_text == 'console':
+                    return True
+                if prop_text in self._JS_VISIBLE_METHODS:
+                    return True
+        return False
+
+    # ── PHP (BACK-1011) ──────────────────────────────────────────────────────
+
+    def _check_php(self, file_path: str, content: str) -> List[Detection]:
+        """Check PHP source for silent broad `catch` clauses."""
+        root, detections = self._parse_treesitter_or_skip(content, file_path, self._PHP_LANGUAGE)
+        if root is None:
+            return detections
+
+        content_bytes = content.encode('utf-8')
+        for node in self._ts_walk(root):
+            if node.kind() != 'catch_clause':
+                continue
+            if not self._php_is_broad_catch(node, content_bytes):
+                continue
+            if self._php_has_visible_signal(node, content_bytes):
+                continue
+            if any(d.kind() == 'comment' for d in self._ts_walk(node)):
+                continue
+
+            detections.append(self.create_detection(
+                file_path=file_path,
+                line=node.start_position().row + 1,
+                column=node.start_position().column + 1,
+                suggestion=(
+                    "Consider:\n"
+                    "  1. Catch specific exception types instead of Exception/Throwable\n"
+                    "  2. Add visible logging: error_log(...) or $logger->error(...) —\n"
+                    "     debug/info-level logging alone is invisible by default and does not count\n"
+                    "  3. Re-throw if you can't handle it: throw $e;"
+                ),
+                context=self._ts_node_text(node, content_bytes).split('\n')[0],
+            ))
+
+        return detections
+
+    def _php_is_broad_catch(self, node, content_bytes: bytes) -> bool:
+        """True if any type in a (possibly multi-catch `A | B`) clause is broad."""
+        type_list = next((c for c in node_children(node) if c.kind() == 'type_list'), None)
+        if type_list is None:
+            return False
+        for named_type in node_children(type_list):
+            if named_type.kind() != 'named_type':
+                continue
+            name_node = next(
+                (n for n in self._ts_walk(named_type) if n.kind() == 'name'), None
+            )
+            if name_node and self._ts_node_text(name_node, content_bytes) in self._PHP_BROAD_TYPES:
+                return True
+        return False
+
+    def _php_has_visible_signal(self, node, content_bytes: bytes) -> bool:
+        """True if the catch body re-throws or calls a visible logging function/method."""
+        block = next(
+            (c for c in node_children(node) if c.kind() == 'compound_statement'), None
+        )
+        if block is None:
+            return False
+
+        for descendant in self._ts_walk(block):
+            if descendant.kind() == 'throw_expression':
+                return True
+            if descendant.kind() == 'function_call_expression':
+                name_node = next(
+                    (c for c in node_children(descendant) if c.kind() == 'name'), None
+                )
+                if name_node and self._ts_node_text(name_node, content_bytes) in self._PHP_VISIBLE_FUNCTIONS:
+                    return True
+            if descendant.kind() == 'member_call_expression':
+                # The method name is the LAST direct 'name' child (the first
+                # 'name' inside member_access_expression belongs to the
+                # receiver, e.g. `$this->logger` in `$this->logger->error()`).
+                names = [c for c in node_children(descendant) if c.kind() == 'name']
+                if names and self._ts_node_text(names[-1], content_bytes) in self._PHP_VISIBLE_METHODS:
+                    return True
+        return False
