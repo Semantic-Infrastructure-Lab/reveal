@@ -810,11 +810,15 @@ class XlsxAdapter(ResourceAdapter):
         if banner:
             result_data['powerpivot_banner'] = banner
 
+        meta = self.composed_meta()
         return ResultBuilder.create(
             contract_version=CONTRACT_VERSION,
             result_type='xlsx_workbook',
             source=self.file_path or Path('unknown'),
-            data=result_data
+            data=result_data,
+            warnings=meta.get('warnings') if meta else None,
+            errors=meta.get('errors') if meta else None,
+            confidence=meta.get('confidence') if meta else None,
         )
 
     def _get_sheet_data(self, sheet_identifier: str) -> Dict[str, Any]:
@@ -1536,6 +1540,7 @@ class XlsxAdapter(ResourceAdapter):
                 return result if result else None
         except Exception as e:
             logger.warning("powerpivot banner build failed for %s: %s", self.file_path, e)
+            self.record_composed_error('_build_powerpivot_banner', self.file_path, e)
             return None
 
     def _get_powerquery(self, mode: str) -> Dict[str, Any]:

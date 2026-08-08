@@ -1009,6 +1009,21 @@ class TestPowerPivotGetStructure:
         assert result['type'] == 'xlsx_workbook'
         assert 'powerpivot_banner' not in result
 
+    def test_banner_build_failure_recorded_in_envelope(self, pp_adapter, monkeypatch):
+        """BACK-1017: a crashed powerpivot banner build must be reflected in
+        meta.errors/confidence, not just a stderr warning (matches the
+        BACK-1016 fix already applied to overview.py/architecture.py)."""
+        def _boom(self, zf):
+            raise RuntimeError("simulated powerpivot detection failure")
+        monkeypatch.setattr(XlsxAdapter, '_detect_powerpivot', _boom)
+
+        result = pp_adapter.get_structure()
+        assert result['type'] == 'xlsx_workbook'
+        assert 'powerpivot_banner' not in result
+        meta = result.get('meta')
+        assert meta and meta.get('errors'), "banner build failure must surface in meta.errors"
+        assert any('_build_powerpivot_banner' in e.get('message', '') for e in meta['errors'])
+
     def test_no_model_returns_has_model_false(self, tmp_path):
         p = _make_minimal_xlsx(tmp_path)
         adapter = XlsxAdapter(f"xlsx://{p}")
