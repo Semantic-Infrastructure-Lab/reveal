@@ -19,7 +19,7 @@ class TestB001:
         rule = B001()
         assert rule.code == "B001"
         assert "bare except" in rule.message.lower() or "except:" in rule.message.lower()
-        assert '.py' in rule.file_patterns[0]  # Python-specific rule
+        assert '.py' in rule.file_patterns[0]  # Python is the primary/first-listed language
 
     def test_b001_detects_bare_except(self):
         """B001 detects bare except clauses."""
@@ -76,6 +76,50 @@ except:
 """
         detections = rule.check("test.py", None, content)
         assert len(detections) >= 2
+
+
+class TestB001CSharp:
+    """Test B001's C# port (BACK-1011): bare `catch { }`."""
+
+    def test_bare_catch_flagged(self):
+        rule = B001()
+        content = "void F() { try { G(); } catch { Console.WriteLine(\"x\"); } }"
+        detections = rule.check("test.cs", None, content)
+        assert len(detections) == 1
+
+    def test_typed_catch_not_flagged(self):
+        rule = B001()
+        content = "void F() { try { G(); } catch (Exception e) { } }"
+        detections = rule.check("test.cs", None, content)
+        assert len(detections) == 0
+
+    def test_specific_typed_catch_not_flagged(self):
+        rule = B001()
+        content = "void F() { try { G(); } catch (IOException e) { } }"
+        detections = rule.check("test.cs", None, content)
+        assert len(detections) == 0
+
+
+class TestB001Cpp:
+    """Test B001's C++ port (BACK-1011): `catch (...)` ellipsis."""
+
+    def test_ellipsis_catch_flagged(self):
+        rule = B001()
+        content = "void f() { try { g(); } catch (...) { log(); } }"
+        detections = rule.check("test.cpp", None, content)
+        assert len(detections) == 1
+
+    def test_std_exception_catch_not_flagged(self):
+        rule = B001()
+        content = "void f() { try { g(); } catch (const std::exception& e) { } }"
+        detections = rule.check("test.cpp", None, content)
+        assert len(detections) == 0
+
+    def test_specific_type_catch_not_flagged(self):
+        rule = B001()
+        content = "void f() { try { g(); } catch (const MyError& e) { } }"
+        detections = rule.check("test.cpp", None, content)
+        assert len(detections) == 0
 
 
 class TestB002:
