@@ -583,6 +583,15 @@ class TreeSitterAnalyzer(FileAnalyzer):
         structure['functions'] = functions
         structure['classes'] = self._extract_classes()
         structure['structs'] = self._extract_structs()
+        # BACK-1003: interfaces used to be extracted outside this cached dict
+        # (C#/Java/PHP each re-walked the tree for 'interface_declaration' on
+        # every get_structure() call, uncached, even on a disk-cache hit for
+        # everything else here). Folding it in means it's built once and
+        # cached like every other category — languages with no distinct
+        # interface node kind just cache an empty list from the cheap walk.
+        interfaces = self._extract_interface_declarations()
+        if interfaces:
+            structure['interfaces'] = interfaces
 
         if fingerprint is not None:
             disk_cache.put(_STRUCTURE_CACHE_NAMESPACE, fingerprint, structure,

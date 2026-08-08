@@ -1,6 +1,6 @@
 """PHP analyzer using tree-sitter."""
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from ..core import node_children as _children
 from ..registry import register
@@ -27,16 +27,8 @@ class PhpAnalyzer(TreeSitterAnalyzer):
     # child. Each wraps comma-separated 'name'/'qualified_name' nodes. Abstract
     # classes carry a distinct 'abstract_modifier' node child (not a grouped
     # modifiers node like Java, nor a per-keyword 'modifier' like C#).
-
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
-        structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
-        interfaces = self._extract_interface_declarations()
-        if interfaces:
-            if head or tail or range:
-                interfaces = self._apply_semantic_slice(interfaces, head, tail, range)
-            structure['interfaces'] = interfaces
-        return structure
+    # Interface extraction itself (BACK-1003) is now handled generically and
+    # cached in TreeSitterAnalyzer._get_or_build_structure().
 
     def _extract_class_bases(self, node) -> List[str]:
         node_type = node.kind()

@@ -125,6 +125,28 @@ public class Circle : IDrawable
         finally:
             os.unlink(temp_path)
 
+    def test_interfaces_are_part_of_cached_structure_build(self):
+        """BACK-1003: interfaces must come from _get_or_build_structure()'s
+        cached dict, not a get_structure() override that re-walks the tree
+        on every call regardless of a disk-cache hit for everything else."""
+        code = '''public interface IDrawable
+{
+    void Draw();
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cs', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CSharpAnalyzer(temp_path)
+            cached = analyzer._get_or_build_structure()
+            self.assertIn('interfaces', cached)
+            self.assertEqual(cached['interfaces'][0]['name'], 'IDrawable')
+        finally:
+            os.unlink(temp_path)
+
     def test_enum(self):
         """Should handle enum definitions."""
         code = '''public enum DayOfWeek

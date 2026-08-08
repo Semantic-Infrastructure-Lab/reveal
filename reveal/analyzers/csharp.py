@@ -1,6 +1,6 @@
 """C# analyzer using tree-sitter."""
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
@@ -25,17 +25,8 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
     # get_structure() (not in CLASS_NODE_TYPES) and class/interface bases fell
     # through to the base class's TS-shaped dispatch, which looks for
     # 'class_heritage'/'extends_type_clause' — neither exists in C#'s grammar —
-    # so bases always returned [].
-
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
-        structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
-        interfaces = self._extract_interface_declarations()
-        if interfaces:
-            if head or tail or range:
-                interfaces = self._apply_semantic_slice(interfaces, head, tail, range)
-            structure['interfaces'] = interfaces
-        return structure
+    # so bases always returned []. Interface extraction itself (BACK-1003) is
+    # now handled generically and cached in TreeSitterAnalyzer._get_or_build_structure().
 
     def _extract_class_bases(self, node) -> List[str]:
         node_type = node.kind()
