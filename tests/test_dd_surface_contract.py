@@ -1,6 +1,6 @@
 """BACK-442 — DD-critical-surface regression guard.
 
-TechDNA's due-diligence playbook is a pipe composition of ~10 Reveal commands.
+A due-diligence playbook is a pipe composition of ~10 Reveal commands.
 Every one is covered *in isolation* by some other suite, and `pack` has its own
 battery (BACK-435, `test_pack_validation.py`) — but nothing asserts the DD
 surface *as a set*: that `overview` / `architecture` / `surface` / `ast://` /
@@ -9,11 +9,11 @@ surface *as a set*: that `overview` / `architecture` / `surface` / `ast://` /
 
 A silent regression — a schema field renamed, a category dropped, a `--format
 json` path that starts crash-dumping — would break the cross-repo DD playbook
-with *no CI signal*, and TechDNA would discover it mid-engagement. This suite
-converts the DD-critical-surface contract in
+with *no CI signal*, and a due-diligence consumer would discover it
+mid-engagement. This suite converts the DD-critical-surface contract in
 `internal-docs/research/DD_READINESS_2026-07-04.md` into an executable one.
 
-Scope, deliberately: exit 0 + *minimal* shape (only the fields TechDNA's
+Scope, deliberately: exit 0 + *minimal* shape (only the fields a due-diligence
 capability map actually reads), not exact values — the estimators/counts are
 allowed to evolve. This is a contract guard, not a correctness matrix (that is
 BACK-432). The three DD rows that need external data-room artifacts
