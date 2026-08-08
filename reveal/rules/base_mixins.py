@@ -13,6 +13,31 @@ logger = logging.getLogger(__name__)
 
 
 @functools.lru_cache(maxsize=4)
+def _cached_treesitter_parse(content: str, file_path: str, language: str):
+    """Parse non-Python content into a tree-sitter root node, LRU-cached.
+
+    Keyed by (content, file_path, language) — same rationale as
+    ``_cached_ast_parse``. Returns None on any parse failure (unknown
+    language, grammar not installed, etc.) rather than raising, so callers
+    can use the same "skip" pattern as the Python AST mixin.
+    """
+    try:
+        from tree_sitter_language_pack import get_parser
+
+        from ..core import ts_parse, tree_root
+    except ImportError as e:
+        logger.warning(f"tree-sitter unavailable for {file_path}: {e}")
+        return None
+    try:
+        parser = get_parser(language)  # type: ignore[arg-type]
+        tree = ts_parse(parser, content)
+        return tree_root(tree)
+    except Exception as e:
+        logger.warning(f"tree-sitter parse failed for {file_path} ({language}): {e}")
+        return None
+
+
+@functools.lru_cache(maxsize=4)
 def _cached_ast_parse(content: str, file_path: str) -> Optional[ast.AST]:
     """Parse Python content into AST with LRU cache.
 
@@ -100,3 +125,60 @@ class ASTParsingMixin:
         """
         tree = self._parse_python(content, file_path)
         return tree, []
+
+
+class TreeSitterParsingMixin:
+    """Mixin for rules that need to parse non-Python content via tree-sitter.
+
+    Companion to ASTParsingMixin (which is Python/`ast`-only). A rule using
+    this mixin owns its own extension→language mapping (it already needs
+    one to set ``file_patterns``), and passes the language explicitly —
+    this mixin only owns the parse-and-cache mechanics, not language
+    detection, matching how the rest of reveal's rule layer stays
+    unopinionated about any one language.
+
+    Example:
+        class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
+            _CS_LANGUAGE = 'csharp'
+
+            def check(self, file_path, structure, content):
+                if file_path.endswith('.cs'):
+                    root, detections = self._parse_treesitter_or_skip(
+                        content, file_path, self._CS_LANGUAGE)
+                    if root is None:
+                        return detections
+                    for node in self._ts_walk(root):
+                        ...
+    """
+
+    def _parse_treesitter(self, content: str, file_path: str, language: str):
+        """Parse content with tree-sitter, returning the root node or None."""
+        return _cached_treesitter_parse(content, file_path, language)
+
+    def _parse_treesitter_or_skip(self, content: str, file_path: str, language: str) -> tuple:
+        """Parse or return empty detections list, mirroring _parse_python_or_skip.
+
+        Returns:
+            Tuple of (root_node, detections) where root_node is None on
+            parse failure and detections is an empty list (for early
+            return on parse failure).
+        """
+        return self._parse_treesitter(content, file_path, language), []
+
+    def _ts_walk(self, root) -> list:
+        """Return every node in the tree rooted at `root`, pre-order.
+
+        No node-object caching (unlike `_ast_walk`) — tree-sitter 1.x Node
+        objects don't support arbitrary attribute assignment. Fine as long
+        as only one rule per language consumes a given tree; revisit with a
+        (content, file_path, language)-keyed cache if a second consumer
+        shows up.
+        """
+        if root is None:
+            return []
+        from ..core import iter_tree
+        return list(iter_tree(root))
+
+    def _ts_node_text(self, node, content_bytes: bytes) -> str:
+        """Return the source text spanned by a tree-sitter node."""
+        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8', errors='replace')

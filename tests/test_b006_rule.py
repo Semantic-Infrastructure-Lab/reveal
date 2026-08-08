@@ -678,5 +678,134 @@ def scan_optional(path):
         self.assertEqual(len(detections), 0)
 
 
+class TestB006CSharp(unittest.TestCase):
+    """Test B006's C# port (BACK-1011): silent broad `catch` clauses."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.rule = B006()
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def create_temp_file(self, content: str, name: str = "test.cs") -> str:
+        path = os.path.join(self.temp_dir, name)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    def test_bare_catch_flagged(self):
+        content = """
+class Foo {
+    void M() {
+        try { DoWork(); }
+        catch { }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertEqual(detections[0].rule_code, 'B006')
+        self.assertEqual(detections[0].severity, Severity.MEDIUM)
+
+    def test_broad_exception_catch_flagged(self):
+        content = """
+class Foo {
+    void M() {
+        try { DoWork(); }
+        catch (Exception e) { }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_specific_exception_type_not_flagged(self):
+        content = """
+class Foo {
+    void M() {
+        try { DoWork(); }
+        catch (IOException e) { }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_rethrow_not_flagged(self):
+        content = """
+class Foo {
+    void M() {
+        try { DoWork(); }
+        catch (Exception e) { throw; }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_log_warning_not_flagged(self):
+        content = """
+class Foo {
+    void M() {
+        try { DoWork(); }
+        catch (Exception e) { _logger.LogWarning(e, "failed"); }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_log_debug_still_flagged(self):
+        """LogDebug/LogTrace are invisible by default — same rationale as
+        the Python side's logger.debug exclusion (BACK-983)."""
+        content = """
+class Foo {
+    void M() {
+        try { DoWork(); }
+        catch (Exception e) { _logger.LogDebug(e, "swallowed"); }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_explanatory_comment_not_flagged(self):
+        content = """
+class Foo {
+    void M() {
+        try { DoWork(); }
+        catch {
+            // Logged at lower levels
+        }
+    }
+}
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_python_path_unaffected(self):
+        """Guard against the .cs dispatch branch swallowing .py files."""
+        content = """
+def foo():
+    try:
+        risky_operation()
+    except Exception:
+        pass
+"""
+        path = self.create_temp_file(content, name="test.py")
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

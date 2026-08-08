@@ -21,6 +21,17 @@ inside the handler (``error = str(e)``), and that variable is read again by
 a *later* statement in the same enclosing block (``results.append({'error':
 error, ...})``) — visible to the caller, just one statement outside the
 handler body itself.
+
+BACK-1011: this rule was Python-only (`file_patterns = ['.py']`) even though
+the same bug shape — a broad ``catch`` with no visible failure signal — is
+just as real in any exception-based language. C# support was added as the
+first cross-language port (tree-sitter's `catch_clause` node, checked for a
+`throw`/re-raise or a visible logging call in the body). It's deliberately
+a simpler heuristic than the Python side: no docstring-tolerance or
+deferred-signal detection yet, just bare/`Exception`-typed catch + empty-of-
+signal body. Extending to Java/JS/TS/PHP/C++ (which share the same
+`catch_clause` node kind) or Kotlin/Swift (`catch_block`) is mechanical
+from here — see BACK-1011 for the remaining language list.
 """
 
 import ast
@@ -28,18 +39,29 @@ import re
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ..base_mixins import ASTParsingMixin
+from ..base_mixins import ASTParsingMixin, TreeSitterParsingMixin
+from ...core import node_children
 
 
-class B006(BaseRule, ASTParsingMixin):
+class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     """Detect silent broad exception handlers that swallow errors."""
 
     code = "B006"
     message = "Broad exception handler with no visible failure signal can hide bugs"
     category = RulePrefix.B
     severity = Severity.MEDIUM
-    file_patterns = ['.py']
-    version = "1.4.0"
+    file_patterns = ['.py', '.cs']
+    version = "1.5.0"
+
+    _CS_LANGUAGE = 'csharp'
+    _CS_BROAD_TYPES = frozenset({'Exception', 'System.Exception'})
+    # C#'s ILogger convention: Trace/Debug are invisible by default (same
+    # rationale as Python's logger.debug exclusion above), so only
+    # Warning/Error/Critical count as a visible signal.
+    _CS_VISIBLE_LOG_METHODS = frozenset({
+        'LogWarning', 'LogError', 'LogCritical',
+        'WriteLine', 'Write',  # Console.Error.Write(Line) / Console.Write(Line)
+    })
 
     # Logger/print calls that count as a *visible* signal. logger.debug() is
     # deliberately excluded — it's invisible in a normal run, so a handler
@@ -82,6 +104,9 @@ class B006(BaseRule, ASTParsingMixin):
         Returns:
             List of detections
         """
+        if file_path.endswith('.cs'):
+            return self._check_csharp(file_path, content)
+
         tree, detections = self._parse_python_or_skip(content, file_path)
         if tree is None:
             return detections
@@ -412,3 +437,95 @@ class B006(BaseRule, ASTParsingMixin):
                     return True
 
         return False
+
+    # ── C# (BACK-1011) ──────────────────────────────────────────────────────
+
+    def _check_csharp(self, file_path: str, content: str) -> List[Detection]:
+        """Check C# source for silent broad `catch` clauses.
+
+        Args:
+            file_path: Path to C# file
+            content: File content
+
+        Returns:
+            List of detections
+        """
+        root, detections = self._parse_treesitter_or_skip(content, file_path, self._CS_LANGUAGE)
+        if root is None:
+            return detections
+
+        content_bytes = content.encode('utf-8')
+        for node in self._ts_walk(root):
+            if node.kind() != 'catch_clause':
+                continue
+            if not self._cs_is_broad_catch(node, content_bytes):
+                continue
+            if self._cs_has_visible_signal(node, content_bytes):
+                continue
+            if self._cs_has_explanatory_comment(node):
+                continue
+
+            detections.append(self.create_detection(
+                file_path=file_path,
+                line=node.start_position().row + 1,
+                column=node.start_position().column + 1,
+                suggestion=(
+                    "Consider:\n"
+                    "  1. Catch specific exception types instead of Exception\n"
+                    "  2. Add visible logging: _logger.LogWarning(ex, \"...\") —\n"
+                    "     LogTrace/LogDebug alone are invisible by default and do not count\n"
+                    "  3. Re-throw if you can't handle it: throw;"
+                ),
+                context=self._ts_node_text(node, content_bytes).split('\n')[0],
+            ))
+
+        return detections
+
+    def _cs_is_broad_catch(self, node, content_bytes: bytes) -> bool:
+        """True for a bare `catch { }` or a `catch (Exception e) { }`.
+
+        A bare catch (no `catch_declaration` child at all) catches literally
+        everything, same as Python's bare `except:` (B001's territory in
+        Python, folded into this rule for C# since there's no separate B001
+        port yet — see BACK-1011).
+        """
+        declaration = next(
+            (c for c in node_children(node) if c.kind() == 'catch_declaration'), None
+        )
+        if declaration is None:
+            return True
+
+        type_node = next(
+            (c for c in node_children(declaration)
+             if c.kind() in ('identifier', 'qualified_name')),
+            None
+        )
+        if type_node is None:
+            return True
+        return self._ts_node_text(type_node, content_bytes) in self._CS_BROAD_TYPES
+
+    def _cs_has_visible_signal(self, node, content_bytes: bytes) -> bool:
+        """True if the catch body re-throws or calls a visible logging method."""
+        block = next((c for c in node_children(node) if c.kind() == 'block'), None)
+        if block is None:
+            return False
+
+        for descendant in self._ts_walk(block):
+            if descendant.kind() == 'throw_statement':
+                return True
+            if descendant.kind() == 'invocation_expression':
+                function = node_children(descendant)[0] if node_children(descendant) else None
+                if function is None:
+                    continue
+                name = self._ts_node_text(function, content_bytes).rsplit('.', 1)[-1]
+                if name in self._CS_VISIBLE_LOG_METHODS:
+                    return True
+        return False
+
+    def _cs_has_explanatory_comment(self, node) -> bool:
+        """True if a `// ...` or `/* ... */` comment appears anywhere inside
+        the catch clause — mirrors the Python side's comment exemption
+        (BACK-1011: real corpus check found ~1/3 of raw hits were an
+        explicitly-commented intentional swallow, e.g.
+        `catch { // Logged at lower levels }`)."""
+        return any(descendant.kind() == 'comment' for descendant in self._ts_walk(node))
