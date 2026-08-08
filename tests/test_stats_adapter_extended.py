@@ -141,3 +141,61 @@ class TestI002GraphCachePreload:
         assert occurrences == 1, (
             f"expected exactly 1 ceiling warning, got {occurrences}"
         )
+
+
+class TestStatsAdapterWorkerOverride:
+    """BACK-1004: stats/adapter.py's worker pool was the only uncapped,
+    unconfigurable parallelism reachable from `overview` — hardcoded
+    `workers = min(8, files//10)` with no way to cap it, unlike
+    adapters/imports.py's REVEAL_MAX_WORKERS. Running multiple full-repo
+    scans concurrently on one machine could blow past timeouts even though
+    each is fast in isolation."""
+
+    def test_max_workers_env_forces_serial_path(self, tmp_path, monkeypatch):
+        """REVEAL_MAX_WORKERS=1 must skip ProcessPoolExecutor entirely, even
+        with enough files that the default heuristic would use a pool."""
+        # >20 files so the default (unset) heuristic would pick workers > 1.
+        for i in range(25):
+            (tmp_path / f"mod_{i}.py").write_text(f"def f_{i}():\n    return {i}\n")
+
+        monkeypatch.setenv("REVEAL_MAX_WORKERS", "1")
+
+        with patch('concurrent.futures.ProcessPoolExecutor') as mock_pool:
+            adapter = StatsAdapter(str(tmp_path))
+            result = adapter.get_structure()
+
+        mock_pool.assert_not_called()
+        assert result['summary']['total_files'] == 25
+
+    def test_max_workers_env_overrides_default_heuristic(self, tmp_path, monkeypatch):
+        """A valid override wins even when it differs from the file-count heuristic."""
+        for i in range(25):
+            (tmp_path / f"mod_{i}.py").write_text(f"def f_{i}():\n    return {i}\n")
+
+        monkeypatch.setenv("REVEAL_MAX_WORKERS", "3")
+
+        real_executor = __import__('concurrent.futures', fromlist=['ProcessPoolExecutor']).ProcessPoolExecutor
+        captured = {}
+
+        def spy_executor(*args, **kwargs):
+            captured['max_workers'] = kwargs.get('max_workers')
+            return real_executor(*args, **kwargs)
+
+        with patch('concurrent.futures.ProcessPoolExecutor', side_effect=spy_executor):
+            adapter = StatsAdapter(str(tmp_path))
+            adapter.get_structure()
+
+        assert captured['max_workers'] == 3
+
+    def test_invalid_max_workers_env_falls_back_to_heuristic(self, tmp_path, monkeypatch):
+        """A non-numeric override must not crash — falls back to the default heuristic."""
+        for i in range(25):
+            (tmp_path / f"mod_{i}.py").write_text(f"def f_{i}():\n    return {i}\n")
+
+        monkeypatch.setenv("REVEAL_MAX_WORKERS", "not-a-number")
+
+        adapter = StatsAdapter(str(tmp_path))
+        result = adapter.get_structure()
+
+        assert result['summary']['total_files'] == 25
+

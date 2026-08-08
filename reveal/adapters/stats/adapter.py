@@ -1,5 +1,6 @@
 """Statistics adapter (stats://) for codebase metrics and hotspots."""
 
+import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 from reveal.reveal_types import CONTRACT_VERSION
@@ -257,8 +258,19 @@ class StatsAdapter(ResourceAdapter):
         args = [(str(f), quality_config, base_path_str) for f in files]
 
         # Use up to 8 workers; fall back to serial for tiny file sets to avoid
-        # process-spawn overhead.
-        workers = min(8, max(1, len(files) // 10))
+        # process-spawn overhead. BACK-1004: REVEAL_MAX_WORKERS overrides this
+        # (matches adapters/imports.py's _parallel_worker_count) — this was the
+        # only uncapped worker pool reachable from `overview`, causing
+        # concurrent full-repo scans on one machine to blow past timeouts even
+        # though each is fast in isolation.
+        override = os.environ.get('REVEAL_MAX_WORKERS')
+        if override:
+            try:
+                workers = max(1, int(override))
+            except ValueError:
+                workers = min(8, max(1, len(files) // 10))
+        else:
+            workers = min(8, max(1, len(files) // 10))
         if workers > 1:
             graph_cache = _i002_preload(self.path)
             with ProcessPoolExecutor(
