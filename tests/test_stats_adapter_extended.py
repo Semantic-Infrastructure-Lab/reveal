@@ -199,3 +199,56 @@ class TestStatsAdapterWorkerOverride:
 
         assert result['summary']['total_files'] == 25
 
+
+class TestStatsAdapterSummaryOnly:
+    """BACK-1008: an unscoped stats:// call over a large repo returns one
+    entry per file, dwarfing the aggregate 'summary' block that's usually
+    the actual signal wanted. summary_only=True (or ?summary_only=true)
+    keeps the full-corpus walk (needed for the aggregate/hotspots) but
+    drops the bulky per-file 'files' array from the output."""
+
+    def test_summary_only_drops_files_key_for_directory(self, tmp_path):
+        (tmp_path / "a.py").write_text("def f():\n    pass\n")
+        (tmp_path / "b.py").write_text("def g():\n    pass\n")
+
+        adapter = StatsAdapter(str(tmp_path))
+        result = adapter.get_structure(summary_only=True)
+
+        assert 'files' not in result
+        assert result['summary']['total_files'] == 2
+
+    def test_summary_only_false_by_default(self, tmp_path):
+        (tmp_path / "a.py").write_text("def f():\n    pass\n")
+
+        adapter = StatsAdapter(str(tmp_path))
+        result = adapter.get_structure()
+
+        assert 'files' in result
+
+    def test_summary_only_via_query_param(self, tmp_path):
+        (tmp_path / "a.py").write_text("def f():\n    pass\n")
+
+        adapter = StatsAdapter(str(tmp_path), query="summary_only=true")
+        result = adapter.get_structure()
+
+        assert 'files' not in result
+        assert result['summary']['total_files'] == 1
+
+    def test_summary_only_keeps_hotspots(self, tmp_path):
+        (tmp_path / "a.py").write_text("def f():\n    pass\n")
+
+        adapter = StatsAdapter(str(tmp_path))
+        result = adapter.get_structure(summary_only=True, hotspots=True)
+
+        assert 'files' not in result
+        assert 'hotspots' in result
+
+    def test_summary_only_drops_files_key_for_single_file(self, tmp_path):
+        f = tmp_path / "a.py"
+        f.write_text("def f():\n    pass\n")
+
+        adapter = StatsAdapter(str(f))
+        result = adapter.get_structure(summary_only=True)
+
+        assert 'files' not in result
+        assert result['summary']['total_files'] == 1

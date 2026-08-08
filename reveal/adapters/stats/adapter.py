@@ -86,6 +86,7 @@ _SCHEMA_QUERY_PARAMS = {
     'churn': {'type': 'boolean', 'description': 'Fold commit-touch counts into hotspot scoring (default: on for git repos, silently off otherwise). Set churn=false to opt out and fall back to complexity-only scoring.', 'examples': ['churn=false']},
     'since': {'type': 'string', 'description': 'Bound the churn walk to commits on/after this ISO date (default: full history). Only affects churn scoring, not the file list itself.', 'examples': ['since=2026-01-01']},
     'no_merges': {'type': 'boolean', 'description': 'Exclude merge commits from the churn tally', 'examples': ['no_merges=1']},
+    'summary_only': {'type': 'boolean', 'description': 'Omit the per-file "files" array from the result — just the aggregate summary (+ hotspots, if also requested). Use on unscoped whole-repo calls, where the per-file array can reach tens of MB and dwarfs the summary block that is usually the actual signal wanted.', 'examples': ['summary_only=true']},
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -144,6 +145,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'stats://./src?hotspots=true', 'description': 'Include hotspot analysis (files needing attention)', 'output_type': 'stats_summary'},
     {'uri': 'stats://./src?min_complexity=5.0', 'description': 'Show only files with avg complexity >= 5.0', 'output_type': 'stats_summary'},
     {'uri': 'stats://./src?code_only=true', 'description': 'Exclude data/config files', 'output_type': 'stats_summary'},
+    {'uri': 'stats://./src?summary_only=true', 'description': 'Aggregate summary only, no per-file array — for large repos where the full file list is impractical to consume directly', 'output_type': 'stats_summary'},
     {'uri': 'stats://src/core.py', 'description': 'File-level statistics', 'output_type': 'stats_file'},
     {'uri': 'stats://./src?hotspots=true', 'description': 'Ranked list of files with quality issues', 'output_type': 'stats_summary'},
 ]
@@ -153,6 +155,7 @@ _SCHEMA_NOTES = [
     'Complexity is heuristic-based (average functions per 100 lines) — not cyclomatic complexity',
     'hotspots=true adds a ranked list of files most in need of refactoring',
     'Both files and directories are supported; directories show aggregate + per-file breakdown',
+    'On large repos, an unscoped call returns one entry per file (can reach tens of MB) — use summary_only=true when only the aggregate summary/hotspots are needed',
 ]
 
 
@@ -232,7 +235,8 @@ class StatsAdapter(ResourceAdapter):
         )
 
     def _merge_query_params(self, hotspots, code_only, min_lines, max_lines,
-                           min_complexity, max_complexity, min_functions) -> tuple:
+                           min_complexity, max_complexity, min_functions,
+                           summary_only) -> tuple:
         """Merge query params with flag params (query params take precedence)."""
         return (
             self.query_params.get('hotspots', hotspots),
@@ -241,7 +245,8 @@ class StatsAdapter(ResourceAdapter):
             self.query_params.get('max_lines', max_lines),
             self.query_params.get('min_complexity', min_complexity),
             self.query_params.get('max_complexity', max_complexity),
-            self.query_params.get('min_functions', min_functions)
+            self.query_params.get('min_functions', min_functions),
+            self.query_params.get('summary_only', summary_only)
         )
 
     def _collect_filtered_stats(self, code_only, min_lines, max_lines,
@@ -394,6 +399,7 @@ class StatsAdapter(ResourceAdapter):
                      min_complexity: Optional[float] = None,
                      max_complexity: Optional[float] = None,
                      min_functions: Optional[int] = None,
+                     summary_only: bool = False,
                      **kwargs) -> Dict[str, Any]:
         """Get statistics for file or directory.
 
@@ -405,14 +411,23 @@ class StatsAdapter(ResourceAdapter):
             min_complexity: Filter files with avg complexity >= this
             max_complexity: Filter files with avg complexity <= this
             min_functions: Filter files with at least this many functions
+            summary_only: If True, omit the per-file 'files' array from the
+                result — just the aggregate summary (+ hotspots, if also
+                requested). BACK-1008: an unscoped whole-repo stats:// call
+                returns one entry per file, which dwarfs the summary block
+                that's usually the actual signal wanted (15.6MB/747K lines on
+                an 18K-file repo) and is impractical to consume directly in
+                an LLM context. The full per-file walk still runs (needed for
+                the aggregate and for hotspots) — this only trims the output.
 
         Returns:
             Dict containing statistics and optionally hotspots
         """
         # Merge query params with flag params
-        hotspots, code_only, min_lines, max_lines, min_complexity, max_complexity, min_functions = \
+        hotspots, code_only, min_lines, max_lines, min_complexity, max_complexity, min_functions, summary_only = \
             self._merge_query_params(hotspots, code_only, min_lines, max_lines,
-                                    min_complexity, max_complexity, min_functions)
+                                    min_complexity, max_complexity, min_functions,
+                                    summary_only)
 
         # Handle single file analysis
         if self.path.is_file():
@@ -429,6 +444,8 @@ class StatsAdapter(ResourceAdapter):
                 source=str(self.path),
                 source_type='file',
             )
+            if summary_only:
+                result.pop('files', None)
             return result
 
         # Collect filtered directory statistics
@@ -451,6 +468,9 @@ class StatsAdapter(ResourceAdapter):
             if self.query_params.get('churn', True) is not False:
                 churn_counts = self._compute_churn_counts(controlled_stats)
             result['hotspots'] = identify_hotspots(controlled_stats, churn_counts=churn_counts)
+
+        if summary_only:
+            result.pop('files', None)
 
         result.update(
             contract_version=CONTRACT_VERSION,
