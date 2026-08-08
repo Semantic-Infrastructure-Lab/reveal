@@ -60,8 +60,9 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         '.py', '.cs', '.java',
         '.js', '.jsx', '.mjs', '.cjs', '.ts',
         '.php', '.kt', '.kts', '.swift',
+        '.cpp', '.cc', '.cxx', '.hpp', '.hh', '.h++',
     ]
-    version = "1.7.0"
+    version = "1.8.0"
 
     _CS_LANGUAGE = 'csharp'
     _CS_BROAD_TYPES = frozenset({'Exception', 'System.Exception'})
@@ -124,6 +125,24 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         'error', 'warning', 'warn', 'critical', 'fatal', 'record',
     })
 
+    _CPP_LANGUAGE = 'cpp'
+    # No RuntimeException-style split in C++ — std::exception is the root
+    # of the standard hierarchy (the analog of Java's Throwable), so it's
+    # the only named broad type; `catch (...)` (ellipsis) is broad on its
+    # own and handled separately since it has no type node at all.
+    _CPP_BROAD_TYPES = frozenset({'exception'})
+    # Real corpus (Godot) has almost no try/catch in its own code — it uses
+    # error-return macros instead — so this is a generic heuristic rather
+    # than one calibrated against a dominant idiom: std::cerr/std::clog
+    # stream output, the C stderr functions, and the same
+    # error/warn(ing)-named-method convention (spdlog::error, logger->error)
+    # used by every other language port here.
+    _CPP_VISIBLE_STREAMS = frozenset({'cerr', 'clog', 'std::cerr', 'std::clog'})
+    _CPP_VISIBLE_FUNCTIONS = frozenset({'fprintf', 'fputs', 'perror'})
+    _CPP_VISIBLE_METHODS = frozenset({
+        'error', 'warn', 'warning', 'critical', 'fatal', 'severe',
+    })
+
     # Logger/print calls that count as a *visible* signal. logger.debug() is
     # deliberately excluded — it's invisible in a normal run, so a handler
     # that only logs at debug level is still effectively silent.
@@ -179,6 +198,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             return self._check_kotlin(file_path, content)
         if file_path.endswith('.swift'):
             return self._check_swift(file_path, content)
+        if file_path.endswith(('.cpp', '.cc', '.cxx', '.hpp', '.hh', '.h++')):
+            return self._check_cpp(file_path, content)
 
         tree, detections = self._parse_python_or_skip(content, file_path)
         if tree is None:
@@ -1004,3 +1025,107 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
                 if name_node and self._ts_node_text(name_node, content_bytes) in self._SWIFT_VISIBLE_METHODS:
                     return True
         return False
+
+    def _check_cpp(self, file_path: str, content: str) -> List[Detection]:
+        """Check C++ source for silent broad `catch` clauses."""
+        root, detections = self._parse_treesitter_or_skip(content, file_path, self._CPP_LANGUAGE)
+        if root is None:
+            return detections
+
+        content_bytes = content.encode('utf-8')
+        for node in self._ts_walk(root):
+            if node.kind() != 'catch_clause':
+                continue
+            if not self._cpp_is_broad_catch(node, content_bytes):
+                continue
+            if self._cpp_has_visible_signal(node, content_bytes):
+                continue
+            if any(d.kind() == 'comment' for d in self._ts_walk(node)):
+                continue
+
+            detections.append(self.create_detection(
+                file_path=file_path,
+                line=node.start_position().row + 1,
+                column=node.start_position().column + 1,
+                suggestion=(
+                    "Consider:\n"
+                    "  1. Catch specific exception types instead of std::exception/(...)\n"
+                    "  2. Add visible output: std::cerr << \"...\" << e.what();\n"
+                    "  3. Re-throw if you can't handle it: throw;"
+                ),
+                context=self._ts_node_text(node, content_bytes).split('\n')[0],
+            ))
+
+        return detections
+
+    def _cpp_is_broad_catch(self, node, content_bytes: bytes) -> bool:
+        """True for `catch (...)` (ellipsis, catches everything including
+        non-exception types) or `catch (const std::exception& e)`.
+
+        Ellipsis has no `parameter_declaration` child at all — just a bare
+        `...` token directly under `parameter_list`.
+        """
+        param_list = next(
+            (c for c in node_children(node) if c.kind() == 'parameter_list'), None
+        )
+        if param_list is None:
+            return False
+        if any(c.kind() == '...' for c in node_children(param_list)):
+            return True
+
+        declaration = next(
+            (c for c in node_children(param_list) if c.kind() == 'parameter_declaration'), None
+        )
+        if declaration is None:
+            return False
+        type_node = next(
+            (c for c in node_children(declaration)
+             if c.kind() in ('type_identifier', 'qualified_identifier')),
+            None
+        )
+        if type_node is None:
+            return False
+        type_name = self._ts_node_text(type_node, content_bytes).rsplit('::', 1)[-1]
+        return type_name in self._CPP_BROAD_TYPES
+
+    def _cpp_has_visible_signal(self, node, content_bytes: bytes) -> bool:
+        """True if the catch body re-throws, streams to cerr/clog, or calls
+        a visible stderr/logging function."""
+        block = next((c for c in node_children(node) if c.kind() == 'compound_statement'), None)
+        if block is None:
+            return False
+
+        for descendant in self._ts_walk(block):
+            kind = descendant.kind()
+            if kind == 'throw_statement':
+                return True
+            if kind in ('qualified_identifier', 'identifier'):
+                if self._ts_node_text(descendant, content_bytes) in self._CPP_VISIBLE_STREAMS:
+                    return True
+            if kind == 'call_expression':
+                if self._cpp_call_name(descendant, content_bytes) in (
+                    self._CPP_VISIBLE_FUNCTIONS | self._CPP_VISIBLE_METHODS
+                ):
+                    return True
+        return False
+
+    def _cpp_call_name(self, node, content_bytes: bytes) -> Optional[str]:
+        """Extract a `call_expression`'s callee name: the field/method name
+        for `obj.method()`/`obj->method()` (`field_expression`), the last
+        component for a namespaced call like `spdlog::error()`
+        (`qualified_identifier`), or the bare name for a plain function
+        call like `fprintf()`/`perror()` (`identifier`)."""
+        children = node_children(node)
+        callee = children[0] if children else None
+        if callee is None:
+            return None
+        if callee.kind() == 'field_expression':
+            field = next(
+                (c for c in node_children(callee) if c.kind() == 'field_identifier'), None
+            )
+            return self._ts_node_text(field, content_bytes) if field else None
+        if callee.kind() == 'qualified_identifier':
+            return self._ts_node_text(callee, content_bytes).rsplit('::', 1)[-1]
+        if callee.kind() == 'identifier':
+            return self._ts_node_text(callee, content_bytes)
+        return None

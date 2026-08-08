@@ -1151,5 +1151,84 @@ class TestB006Swift(unittest.TestCase):
         self.assertEqual(len(detections), 0)
 
 
+class TestB006Cpp(unittest.TestCase):
+    """Test B006's C++ port (BACK-1011)."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.rule = B006()
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def create_temp_file(self, content: str, name: str = "test.cpp") -> str:
+        path = os.path.join(self.temp_dir, name)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    def test_broad_exception_silent_flagged(self):
+        content = "void f() { try { g(); } catch (const std::exception& e) { } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_ellipsis_catch_silent_flagged(self):
+        content = "void f() { try { g(); } catch (...) { } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_specific_type_not_flagged(self):
+        content = "void f() { try { g(); } catch (const MyError& e) { } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_cerr_stream_not_flagged(self):
+        content = (
+            "void f() { try { g(); } catch (const std::exception& e) { "
+            "std::cerr << \"error: \" << e.what() << std::endl; } }"
+        )
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_fprintf_stderr_not_flagged(self):
+        content = (
+            "void f() { try { g(); } catch (const std::exception& e) { "
+            "fprintf(stderr, \"err\"); } }"
+        )
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_logger_error_not_flagged(self):
+        content = (
+            "void f() { try { g(); } catch (const std::exception& e) { "
+            "logger->error(\"oops\"); } }"
+        )
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_rethrow_not_flagged(self):
+        content = "void f() { try { g(); } catch (const std::exception& e) { throw; } }"
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_explanatory_comment_not_flagged(self):
+        content = (
+            "void f() { try { g(); } catch (const std::exception& e) {\n"
+            "// intentional\n} }"
+        )
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+
 if __name__ == '__main__':
     unittest.main()
