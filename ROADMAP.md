@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-08-07 (wiyomexi-0807 — v0.115.0 release: silent-exception-swallowing audit round 2, help-system recipe-coverage + payload-size fixes)
+> **Last updated**: 2026-08-09 (chosen-cyclops-0808 — v0.117.0 release: help://search, release-gap self-check, DD-relevant git pickaxe fix)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,12 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.117.0 — help://search, release-gap self-check, DD-relevant git pickaxe fix
+- ✅ `help://search?search=<term>` — full-text search over static guides, adapter descriptions, and `help://examples` recipes, referenced from all 4 top-level help entry points (BACK-1023).
+- ✅ `V032`, a self-check flagging when `origin/master` has run ahead of the latest PyPI release past a threshold — closes the exact blind spot that let ~19 DD-accuracy fixes sit unpublished for 36+ hours before v0.116.0 (BACK-1022).
+- ✅ `git://` pickaxe/diff search (`?content~=`) no longer silently drops non-UTF-8 commits — DD-relevant, one of the 10 DD-critical adapters (BACK-1030).
+- ✅ `help://schemas/<CLI-subcommand>` redirect + top-loaded token-cost banner correction (BACK-1027, BACK-1028); stale `INDEX.md` anchor refs in 2 adapter guides fixed, doc-hygiene baseline ratcheted 92 → 91 (BACK-1031).
 
 ### v0.116.0 — cross-language bug-rule ports, trust-envelope closure round 3, ~ expansion fix
 - ✅ B001/B003/B005/B006 ported across 7 additional languages (C#, C++, Java, JS/TS, PHP, Kotlin, Swift) via tree-sitter, verified live against real open-source corpora (Jellyfin, Elasticsearch, VS Code, WordPress, Godot, Tivi, Kickstarter iOS) (BACK-1011).

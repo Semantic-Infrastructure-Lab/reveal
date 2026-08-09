@@ -12,6 +12,23 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.117.0] - 2026-08-09 (sessions floating-trajectory-0808, chosen-cyclops-0808)
+
+### Added
+- **`help://search?search=<term>`, full-text search over the help corpus (BACK-1023)** — searches static guides, adapter descriptions, and `help://examples` recipes, returning structured JSON hits capped at 20. Token-AND matching (same convention as Beth's `explore`) with a 3-tier relevance rank (name match > description match > content-only), adapters breaking ties above guides above recipes. Referenced from all 4 top-level help entry points (bare `help://`, `--agent-help`, `reveal --help`'s epilog, `help://quick`'s `next_steps`). Param renamed from an initial `?q=` to `?search=` mid-development to join the established convention shared by `claude://`/`codex://`/`xlsx://` (unreleased rename, no deprecation shim needed).
+- **`V032`, release-gap self-check (BACK-1022)** — `reveal check --select V` now flags when `origin/master` has sat ahead of the latest PyPI-published version for longer than a threshold (default 3 days, `REVEAL_RELEASE_GAP_DAYS` to override). Closes the exact blind spot that let ~19 DD-accuracy fixes (BACK-1002-1021) sit merged but unpublished for 36+ hours before v0.116.0's release, found only by manually diffing `git log` against `pip index versions`. Best-effort: any failure (offline, missing tag, no git) yields no detections rather than a false flag.
+
+### Fixed
+- **`git://` pickaxe/diff search silently dropped non-UTF-8 commits (BACK-1030)** — `?content~=` decoded strictly and skipped any commit whose diff wasn't valid UTF-8, with no warning. DD-relevant: a secrets-in-history scan built on this adapter before the fix would silently miss matches. Now decodes leniently.
+- **`help://schemas/<CLI-subcommand>` dead-ended instead of redirecting (BACK-1028)** — `help://schemas/check` and similar CLI-only subcommands returned a generic "no adapter named X" error; now redirects to `reveal <name> --help`.
+- **A guide's own stale "Token Cost" banner corrected only in a footer read after the fact (BACK-1027)** — `_truncate_to_first_section()` now rewrites the banner in place with the accurate shown-token count, so the correction is the first thing read, not the last.
+- **Stale `INDEX.md` anchor references in 2 adapter guides (BACK-1031)** — `AUTOSSL_ADAPTER_GUIDE.md`/`LETSENCRYPT_ADAPTER_GUIDE.md`'s nav footers pointed at `#adapter-guides-19-files`/`#adapter-guides-22-files`; both now point at the current `#adapter-guides-29-files`. Doc-hygiene baseline ratcheted 92 → 91.
+
+### Changed
+- **`YamlAnalyzer`/`JsonAnalyzer.extract_element` deduped (BACK-993)** — cosmetic, no behavior change.
+
+Also adds `--perf` (per-invocation `elapsed_s`/`peak_rss_kb`/`exit_code` log, `~/.reveal/perf.jsonl` by default) and the `OUTPUT_DIAGNOSTICS_GUIDE.md` / `help://output-diagnostics` topic disambiguating `--format` vs. the meta trust envelope vs. `--provenance` vs. `--perf`.
+
 ## [0.116.0] - 2026-08-08 (sessions maroon-jewel-0808 and prior DD-dogfood sessions — see internal-docs/planning/dogfood-findings/ for individual attributions)
 
 ### Added
