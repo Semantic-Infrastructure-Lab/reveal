@@ -543,6 +543,34 @@ class TestHelpAdapter(unittest.TestCase):
         self.assertEqual(result['hits'], [])
         self.assertIn('next', result)
 
+    def test_search_tokens_match_regardless_of_word_order(self):
+        """'tests coverage' (reordered/pluralized) must match the same corpus
+        content as 'test coverage' -- phrase-only substring matching found
+        live during dogfooding returned zero hits for this exact case."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('search?q=tests coverage')
+        self.assertGreater(result['count'], 0)
+
+    def test_search_ranks_adapter_above_incidental_guide_mention(self):
+        """A broad single-word query ('complexity') must surface the adapter
+        that actually answers it (ast:// / hotspots://) ahead of guides that
+        merely mention the word in passing -- found live during dogfooding:
+        unranked results buried the adapter under alphabetically-first guides
+        like adapter-authoring's docstring example."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('search?q=complexity')
+        self.assertGreater(len(result['hits']), 0)
+        self.assertEqual(result['hits'][0]['type'], 'adapter')
+
+    def test_search_name_match_outranks_description_only_match(self):
+        """A query matching an adapter's own scheme name ranks above one that
+        only matches inside its description."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('search?q=deps')
+        schemes = [h.get('scheme') for h in result['hits'] if h['type'] == 'adapter']
+        self.assertIn('deps', schemes)
+        self.assertEqual(schemes[0], 'deps')
+
     def test_search_hits_capped_at_20(self):
         """A broad term (many matches) is capped, not an unbounded dump."""
         adapter = HelpAdapter()

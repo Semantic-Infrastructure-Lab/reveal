@@ -951,25 +951,60 @@ class HelpAdapter(ResourceAdapter):
                 ],
             }
 
-        needle = term.lower()
+        # Word-order/pluralization-tolerant matching: every query word must
+        # appear as a substring *somewhere* in the haystack, not as one
+        # contiguous phrase -- e.g. "tests coverage" and "test coverage" both
+        # match a haystack containing "test coverage" or "coverage of tests".
+        # Same convention Beth's explore already uses (see CLAUDE.md), for
+        # the same reason: an agent's phrasing rarely matches curated text
+        # word-for-word.
+        tokens = term.lower().split()
+
+        def _matches(haystack: str) -> bool:
+            h = haystack.lower()
+            return all(tok in h for tok in tokens)
+
+        # Each hit gets a strength: 2 = query matched the item's own name/id,
+        # 1 = matched its short description/metadata, 0 = matched only deep
+        # in guide content. Adapters rank above guides at equal strength --
+        # "here's the tool" is usually the more actionable answer than
+        # "here's a doc that happens to mention it".
+        _TYPE_PRIORITY = {'adapter': 0, 'guide': 1, 'recipe': 2}
         hits: List[Dict[str, Any]] = []
         docs_root = Path(__file__).parent.parent / 'docs'
 
+        # Adapters: scheme name + description.
+        for adapter in self._list_adapters():
+            scheme = adapter['scheme']
+            description = adapter.get('description', '')
+            strength = 2 if _matches(scheme) else (1 if _matches(f"{scheme} {description}") else None)
+            if strength is not None:
+                hits.append({
+                    'type': 'adapter',
+                    'scheme': scheme,
+                    'snippet': description or scheme,
+                    'command': f'reveal help://{scheme}',
+                    '_strength': strength,
+                })
+
         # Static guides: topic/description match first (cheap); fall back to
-        # a content grep for a snippet when the term isn't in the metadata.
+        # a content grep for a snippet when the terms aren't in the metadata.
         for guide in self._indexed_static_guides():
             topic = guide['topic']
             description = guide.get('description', '')
             snippet: Optional[str] = None
-            if needle in f"{topic} {description}".lower():
-                snippet = description or topic
+            strength = 0
+            if _matches(topic):
+                snippet, strength = description or topic, 2
+            elif _matches(f"{topic} {description}"):
+                snippet, strength = description or topic, 1
             else:
                 try:
                     content = (docs_root / guide['file']).read_text(encoding='utf-8')
                 except OSError:
                     content = ''
                 for line in content.splitlines():
-                    if needle in line.lower():
+                    if _matches(line):
                         snippet = line.strip()
                         break
             if snippet is not None:
@@ -978,28 +1013,22 @@ class HelpAdapter(ResourceAdapter):
                     'topic': topic,
                     'snippet': snippet[:200],
                     'command': f'reveal help://{topic}',
-                })
-
-        # Adapters: scheme name + description.
-        for adapter in self._list_adapters():
-            scheme = adapter['scheme']
-            description = adapter.get('description', '')
-            if needle in f"{scheme} {description}".lower():
-                hits.append({
-                    'type': 'adapter',
-                    'scheme': scheme,
-                    'snippet': description or scheme,
-                    'command': f'reveal help://{scheme}',
+                    '_strength': strength,
                 })
 
         # help://examples recipes: task name, task description, or any one
         # recipe's goal/description within it.
         for task, recipe_set in _EXAMPLE_RECIPES.items():
             matched_goal = None
-            if needle not in f"{task} {recipe_set.get('description', '')}".lower():
+            strength = 0
+            if _matches(task):
+                strength = 2
+            elif _matches(f"{task} {recipe_set.get('description', '')}"):
+                strength = 1
+            else:
                 for recipe in recipe_set.get('recipes', []):
-                    combined = f"{recipe.get('goal', '')} {recipe.get('description', '')}".lower()
-                    if needle in combined:
+                    combined = f"{recipe.get('goal', '')} {recipe.get('description', '')}"
+                    if _matches(combined):
                         matched_goal = recipe.get('goal')
                         break
                 if matched_goal is None:
@@ -1009,11 +1038,10 @@ class HelpAdapter(ResourceAdapter):
                 'task': task,
                 'snippet': matched_goal or recipe_set.get('description', task),
                 'command': f'reveal help://examples/{task}',
+                '_strength': strength,
             })
 
-        # Guides are the richest hits (whole-topic content already searched);
-        # keep discovery order stable within each type otherwise.
-        hits.sort(key=lambda h: h['type'] != 'guide')
+        hits.sort(key=lambda h: (-h.pop('_strength'), _TYPE_PRIORITY.get(h['type'], 9)))
         hits = hits[:20]
 
         return {

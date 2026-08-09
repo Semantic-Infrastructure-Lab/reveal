@@ -198,6 +198,7 @@ More:
   reveal help://quick            # which adapter/flag fits what you want to do
   reveal help://examples         # task-based query recipes
   reveal --agent-help            # orientation written for AI agents
+  reveal 'help://search?q=<term>' # full-text search when nothing above matches your phrasing
 '''
 
 

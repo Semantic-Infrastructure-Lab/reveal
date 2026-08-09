@@ -199,6 +199,7 @@ def _render_navigation_section() -> None:
     print("  reveal help://schemas/index  # Thin index of every adapter schema")
     print("  reveal help://schemas/all    # Full schema for every adapter, in one payload")
     print("  reveal help://examples       # Canonical query recipes by task")
+    print("  reveal 'help://search?q=<term>' # Full-text search when nothing above matches your phrasing")
     print()
     print("**What can reveal check / parse:**")
     print("  reveal help://rules          # Pattern-detection rule catalog")
