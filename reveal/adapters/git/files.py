@@ -171,7 +171,7 @@ def get_file_diff(
         cmd = ['git', '-C', repo_root, 'diff', f'-U{context}',
                empty_tree, str(commit.id), '--', subpath]
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
     diff_text = result.stdout
 
     if not diff_text:
@@ -385,7 +385,7 @@ def _commit_diff_contains(
     if subpath:
         cmd += ['--', subpath]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
         for line in result.stdout.splitlines():
             if (line and line[0] in ('+', '-')
                     and not line.startswith('+++')
