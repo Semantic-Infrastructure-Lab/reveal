@@ -28,7 +28,7 @@ Design (BACK-466 part 1):
   analyzer's structural conformance tier), so they claim their format.
 """
 
-from typing import Any, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 from ..capabilities import (
     CONFORMANCE_TIER1_VERIFIED,
@@ -118,3 +118,62 @@ def derive_verified_languages(rule_class: Any) -> List[str]:
         if lang is not None and lang in tier1:
             verified.add(lang)
     return sorted(verified)
+
+
+def _rule_targets_code(rule_class: Any) -> bool:
+    """Whether *rule_class* is scoped to source-code languages at all, as
+    opposed to a doc/config format (nginx, Dockerfile, markdown) — those
+    rules never claim a code language regardless of how well-verified they
+    are, so they would otherwise show up as a false gap for every language.
+    """
+    patterns = list(getattr(rule_class, "file_patterns", ["*"]) or ["*"])
+    if patterns == ["*"]:
+        return True
+    for pattern in patterns:
+        # A format pattern (Dockerfile, nginx .conf) can still resolve to a
+        # registered analyzer/language under the hood (e.g. "Dockerfile" has
+        # its own capability entry) — check format first, same precedence
+        # derive_verified_languages uses, so it isn't double-counted as code.
+        if _pattern_format(pattern) is not None:
+            continue
+        if _pattern_code_language(pattern) is not None:
+            return True
+    return False
+
+
+def _category_value(rule_class: Any) -> str:
+    category = getattr(rule_class, "category", None)
+    if not category:
+        return "unknown"
+    return category if isinstance(category, str) else category.value
+
+
+def unscoped_rule_categories(
+    languages: Iterable[str], rule_classes: List[Any]
+) -> List[Dict[str, Any]]:
+    """BACK-1021: which (language, rule-category) pairs among *rule_classes*
+    have zero verified coverage for a language actually present in *languages*.
+
+    A `check` run reporting "0 issues" is otherwise indistinguishable between
+    "genuinely clean" and "this category has never been correctness-verified
+    on this language" — this is the signal that tells the two apart. Doc/config
+    -format rules (nginx, Dockerfile, markdown) are excluded via
+    `_rule_targets_code` since they never claim a code language and would
+    otherwise flag as a gap for every language, every time.
+
+    Returns one dict per gap: `{"language": ..., "category": ...}`. Empty when
+    every present language has at least one verified rule per active
+    code-targeting category — the common (fully-scoped) case.
+    """
+    code_rules = [r for r in rule_classes if _rule_targets_code(r)]
+    coverage: Dict[str, Set[str]] = {}
+    for rule_class in code_rules:
+        cat = _category_value(rule_class)
+        coverage.setdefault(cat, set()).update(derive_verified_languages(rule_class))
+
+    gaps = []
+    for lang in sorted(set(languages)):
+        for cat in sorted(coverage):
+            if lang not in coverage[cat]:
+                gaps.append({"language": lang, "category": cat})
+    return gaps

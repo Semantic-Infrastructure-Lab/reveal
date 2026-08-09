@@ -20,7 +20,11 @@ set in `capabilities.py`. These tests pin the properties that make the badge
 import pytest
 
 from reveal.rules import RuleRegistry
-from reveal.rules.coverage import derive_verified_languages, _tier1_languages
+from reveal.rules.coverage import (
+    derive_verified_languages,
+    unscoped_rule_categories,
+    _tier1_languages,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -131,3 +135,69 @@ def test_list_rules_dict_exposes_verified_languages():
     for r in rules:
         assert "verified_languages" in r, f"{r['code']} dict missing verified_languages"
         assert isinstance(r["verified_languages"], list)
+
+
+# --------------------------------------------------------------------------- #
+# BACK-1021 — unscoped_rule_categories: the silent-clean vs unscoped signal
+# --------------------------------------------------------------------------- #
+
+def _fake_rule(category, patterns=("*",), verified=None):
+    class _Fake:
+        file_patterns = list(patterns)
+    _Fake.category = category
+    if verified is not None:
+        _Fake.verified_languages = verified
+    return _Fake
+
+
+def test_no_gap_when_every_present_language_is_covered():
+    rules = [_fake_rule("B", verified=["python", "go"])]
+    gaps = unscoped_rule_categories(["python", "go"], rules)
+    assert gaps == []
+
+
+def test_flags_language_with_zero_verified_rules_in_a_present_category():
+    rules = [_fake_rule("B", verified=["python"])]
+    gaps = unscoped_rule_categories(["python", "go"], rules)
+    assert gaps == [{"language": "go", "category": "B"}]
+
+
+def test_flags_per_category_independently():
+    rules = [
+        _fake_rule("B", verified=["python"]),
+        _fake_rule("D", verified=["python", "go"]),
+    ]
+    gaps = unscoped_rule_categories(["python", "go"], rules)
+    assert gaps == [{"language": "go", "category": "B"}]
+
+
+def test_format_only_rules_never_produce_a_code_language_gap():
+    """A Dockerfile/nginx-only rule should not be reported as 'unscoped for go'
+    — it was never meant to apply to arbitrary code languages, so flagging it
+    would be pure noise, not a real trust gap."""
+    rules = [_fake_rule("I", patterns=["Dockerfile"], verified=["dockerfile"])]
+    gaps = unscoped_rule_categories(["python", "go"], rules)
+    assert gaps == []
+
+
+def test_category_absent_from_active_rules_produces_no_gap():
+    """Only categories among the *currently active* rules (post --select/--ignore
+    filtering) are considered — a category nobody asked to run this time must
+    not show up as a false gap."""
+    rules = [_fake_rule("B", verified=["python"])]
+    gaps = unscoped_rule_categories(["python", "go", "rust"], rules)
+    assert all(g["category"] == "B" for g in gaps)
+    assert {g["language"] for g in gaps} == {"go", "rust"}
+
+
+def test_real_universal_rule_flags_a_non_tier1_language_but_not_python():
+    """Integration check against the live registry: a real universal rule
+    (verified on exactly the tier-1 set) must produce a gap for a genuinely
+    unverified language and none for python."""
+    RuleRegistry.discover()
+    rules = [RuleRegistry.get_rule("C901")]
+    tier1 = _tier1_languages()
+    non_tier1 = next(lang for lang in ("cobol", "prolog", "fortran") if lang not in tier1)
+    gaps = unscoped_rule_categories(["python", non_tier1], rules)
+    assert {"language": "python", "category": "C"} not in gaps
+    assert {"language": non_tier1, "category": "C"} in gaps

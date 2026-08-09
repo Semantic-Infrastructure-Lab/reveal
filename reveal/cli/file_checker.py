@@ -683,6 +683,8 @@ def _print_json_output(
     total_issues: int,
     source: Path,
     scope: Optional[ScopeCensus] = None,
+    select: Optional[List[str]] = None,
+    ignore: Optional[List[str]] = None,
 ) -> None:
     """Print JSON output with results and summary.
 
@@ -694,6 +696,10 @@ def _print_json_output(
         scope: BACK-884 census (files discovered/analyzed/skipped by reason,
             per-language capability tier) — additive top-level key, omitted
             when not supplied.
+        select: Rule select filter actually applied to this run, so
+            `scope.unscoped_categories` (BACK-1021) only reports gaps among
+            rule categories that actually ran.
+        ignore: Rule ignore filter actually applied to this run (see `select`).
         source: Directory that was checked, for the Output Contract envelope
             (BACK-962).
     """
@@ -712,9 +718,20 @@ def _print_json_output(
     }
     if scope is not None:
         from ..capabilities import capability_tiers_for
-        result["scope"] = scope.to_scope_dict(
+        from ..registry import display_name_for_extension
+        from ..rules import RuleRegistry
+        from ..rules.coverage import unscoped_rule_categories
+
+        scope_dict = scope.to_scope_dict(
             capability_tiers=capability_tiers_for(scope.language_extensions)
         )
+        active_rules = RuleRegistry.get_rules(select, ignore)
+        gaps = unscoped_rule_categories(scope.language_extensions.keys(), active_rules)
+        for gap in gaps:
+            ext = scope.language_extensions.get(gap["language"], "")
+            gap["language"] = display_name_for_extension(ext) or gap["language"]
+        scope_dict["unscoped_categories"] = gaps
+        result["scope"] = scope_dict
     print(json.dumps(
         attach_provenance(add_cli_contract_fields(result, result_type='check', source=source, source_type='directory')),
         indent=2,
@@ -807,6 +824,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         _print_json_output(
             file_results, len(files_to_check), files_with_issues, total_issues,
             scope=collection.to_scope_census(), source=directory,
+            select=select, ignore=ignore,
         )
     elif output_format == 'grep':
         # BACK-1035: this recursive/directory path only ever branched on
