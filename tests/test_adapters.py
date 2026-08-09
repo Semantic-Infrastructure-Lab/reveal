@@ -505,14 +505,14 @@ class TestHelpAdapter(unittest.TestCase):
         self.assertIn('Recipes', output)
         self.assertIn('Find', output)
 
-    # --- help://search?q=* (BACK-1023) ---
+    # --- help://search?search=* (BACK-1023) ---
 
     def test_search_finds_adapter_by_synonym_not_in_scheme_name(self):
         """'find callers' has no adapter named that, but should surface calls://
         (the motivating BACK-1023 routing miss: help://quick's table only
         matches 'find dead code', not 'find callers')."""
         adapter = HelpAdapter()
-        result = adapter.get_element("search?q=find callers")
+        result = adapter.get_element("search?search=find callers")
         self.assertIsNotNone(result)
         self.assertEqual(result['type'], 'help_search')
         self.assertEqual(result['query'], 'find callers')
@@ -537,7 +537,7 @@ class TestHelpAdapter(unittest.TestCase):
     def test_search_no_match_returns_empty_hits_not_none(self):
         """A term with no hits is a valid zero-result search, not a lookup failure."""
         adapter = HelpAdapter()
-        result = adapter.get_element('search?q=zzznonexistentqqqterm')
+        result = adapter.get_element('search?search=zzznonexistentqqqterm')
         self.assertIsNotNone(result)
         self.assertEqual(result['count'], 0)
         self.assertEqual(result['hits'], [])
@@ -548,7 +548,7 @@ class TestHelpAdapter(unittest.TestCase):
         content as 'test coverage' -- phrase-only substring matching found
         live during dogfooding returned zero hits for this exact case."""
         adapter = HelpAdapter()
-        result = adapter.get_element('search?q=tests coverage')
+        result = adapter.get_element('search?search=tests coverage')
         self.assertGreater(result['count'], 0)
 
     def test_search_ranks_adapter_above_incidental_guide_mention(self):
@@ -558,7 +558,7 @@ class TestHelpAdapter(unittest.TestCase):
         unranked results buried the adapter under alphabetically-first guides
         like adapter-authoring's docstring example."""
         adapter = HelpAdapter()
-        result = adapter.get_element('search?q=complexity')
+        result = adapter.get_element('search?search=complexity')
         self.assertGreater(len(result['hits']), 0)
         self.assertEqual(result['hits'][0]['type'], 'adapter')
 
@@ -566,7 +566,7 @@ class TestHelpAdapter(unittest.TestCase):
         """A query matching an adapter's own scheme name ranks above one that
         only matches inside its description."""
         adapter = HelpAdapter()
-        result = adapter.get_element('search?q=deps')
+        result = adapter.get_element('search?search=deps')
         schemes = [h.get('scheme') for h in result['hits'] if h['type'] == 'adapter']
         self.assertIn('deps', schemes)
         self.assertEqual(schemes[0], 'deps')
@@ -574,7 +574,7 @@ class TestHelpAdapter(unittest.TestCase):
     def test_search_hits_capped_at_20(self):
         """A broad term (many matches) is capped, not an unbounded dump."""
         adapter = HelpAdapter()
-        result = adapter.get_element('search?q=e')  # matches nearly everything
+        result = adapter.get_element('search?search=e')  # matches nearly everything
         self.assertLessEqual(len(result['hits']), 20)
 
     def test_search_rendered_text(self):
@@ -586,7 +586,7 @@ class TestHelpAdapter(unittest.TestCase):
         from reveal.rendering.adapters.help import render_help
 
         adapter = HelpAdapter()
-        result = adapter.get_element('search?q=find callers')
+        result = adapter.get_element('search?search=find callers')
         buf = io.StringIO()
         with redirect_stdout(buf):
             render_help(result, 'text')

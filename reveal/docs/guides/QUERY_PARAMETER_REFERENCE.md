@@ -24,8 +24,10 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `has_decorator`, `calls`, `callee_of`, `show`, `sort`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` | `ast://src?complexity>10` |
 | **calls://** | `target`, `callees`, `rank`, `top`, `depth`, `format`, `builtins`, `root`, `modules`, `external` | `calls://src?target=fn` |
 | **claude://** | `summary`, `errors`, `tools`, `contains`, `role`, `search`, `tail`, `last`, `tokens` | `claude://session?summary` |
+| **codex://** | `search`, `filter`, `since`, `until` | `codex://sessions/?search=auth-refactor` |
 | **depends://** | `top`, `format` | `depends://src?top=10` |
 | **xlsx://** | `sheet`, `range`, `search`, `format`, `limit`, `formulas`, `powerpivot`, `powerquery`, `names`, `connections` | `xlsx://model.xlsx?sheet=Sales` |
+| **help://** | `search` (only on `help://search`) | `help://search?search=find callers` |
 | **cpanel://** | `domain_type`, `dns-verified`, `check-live` | `cpanel://USER/ssl?domain_type=addon` |
 | **ssl://** | `expiring-within`, `summary` | `ssl://host?expiring-within=30` |
 | **diff://** | none | N/A |
@@ -207,7 +209,7 @@ reveal 'markdown://docs/?title=*api*'    # Titles containing "api"
 reveal 'markdown://docs/?body-contains=nginx'                    # Body mentions "nginx"
 reveal 'markdown://docs/?body-contains=nginx&body-contains=ssl'  # Both terms (AND)
 ```
-`body-contains=` is case-insensitive substring match. Multiple values are AND'd. Combines with frontmatter filters and result control (`sort=`, `limit=`).
+`body-contains=` is case-insensitive substring match. Multiple values are AND'd. Combines with frontmatter filters and result control (`sort=`, `limit=`) — this is why it's spelled `body-contains=` rather than `search=`: unlike `claude://`/`codex://`/`xlsx://`/`help://search`'s `?search=`, it's a structured filter, not a standalone free-text search. See [Search vs. Filter](#search-vs-filter-two-different-conventions-on-purpose) above.
 
 **Extra columns** (markdown-specific):
 ```bash
@@ -630,6 +632,38 @@ The following operators work across adapters that support field filtering (json:
 | `..` | Range (inclusive) | `lines=50..200` |
 | `!` | Field absence | `!draft` (no draft field) |
 | `*` | Wildcard | `name=*john*` |
+
+---
+
+## Search vs. Filter: Two Different Conventions, on Purpose
+
+Reveal has two unrelated "find text" mechanisms that look similar but answer
+different questions — knowing which one an adapter uses saves a round trip
+through the wrong syntax.
+
+**`?search=<term>` — free-text content search.** "Does this blob of text
+contain this term?" No other filters combine with it; it's the whole query.
+Used consistently by `claude://`, `codex://`, `xlsx://`, and `help://search`
+— all four search unstructured or semi-structured content (chat transcripts,
+spreadsheet cells, help docs) where there's no meaningful field to scope the
+match to. Matching precision varies by corpus size and is adapter-documented
+(e.g. `claude://`/`codex://` do literal substring/whole-word match, tuned for
+precision over a large transcript corpus you likely remember an exact phrase
+from; `help://search` does word-order-tolerant AND-of-terms matching, tuned
+for recall over a small curated doc corpus where an agent's phrasing rarely
+matches the docs verbatim).
+
+**`field~=value` (and `body-contains=`) — structured field filtering.** "Does
+*this specific field* contain this substring?" AND-composable with other
+filters in the same query — `type=guide&body-contains=nginx`,
+`name~=auth&complexity>10`. Used by `ast://`, `git://`, `json://`, and
+`markdown://` (whose `body-contains=` is this family, not the `?search=`
+family above, despite the name similarity — it combines with frontmatter
+filters and ranks results, which `?search=` adapters don't do).
+
+**If you're unsure which an adapter uses:** `?search=` never combines with
+other params; `~=`/`body-contains=` always can. `reveal help://<scheme>` documents
+which one a given adapter supports.
 
 ---
 

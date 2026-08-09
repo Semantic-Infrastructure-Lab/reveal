@@ -94,6 +94,7 @@ reveal help://schemas/ast/ast_query    # One output type's full JSON-Schema
 reveal help://schemas/ast/full         # Unsummarized schema payload
 reveal help://examples        # Canonical query recipes by task
 reveal help://examples/quality  # Recipes for code quality analysis
+reveal 'help://search?search=<term>'  # Full-text search across guides/adapters/examples
 ```
 
 **Audience:** Humans exploring capabilities, developers
@@ -425,7 +426,7 @@ A: Update the `help_token_estimate` field in the guide's own YAML frontmatter (r
 ## Future Enhancements
 
 **Possible improvements:**
-- Search within help (`help://search?q=complexity`)
+- ~~Search within help~~ — shipped (BACK-1023): `help://search?search=<term>`, see §3 above.
 - Version-specific help (`help://ast@v0.20`)
 - Language-specific examples (`help://ast?lang=python`)
 - Interactive examples (`help://ast --try`)

@@ -30,7 +30,7 @@ help_token_estimate: "~45,000"
 - `reveal help://tricks/full` — complete RECIPES guide
 - `reveal help://schemas/<adapter>` — machine-readable adapter schema
 - `reveal help://examples/<task>` — query recipes per task
-- `reveal 'help://search?q=<term>'` — full-text search this help corpus by your own phrasing, when nothing above matches it
+- `reveal 'help://search?search=<term>'` — full-text search this help corpus by your own phrasing, when nothing above matches it
 
 Guides >200 lines show the first section by default (progressive disclosure). Append `/full` to get the complete guide.
 

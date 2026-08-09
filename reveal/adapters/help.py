@@ -455,7 +455,7 @@ class HelpAdapter(ResourceAdapter):
                     'description': 'Cool tricks and hidden features guide'
                 },
                 {
-                    'uri': "help://search?q=<term>",
+                    'uri': "help://search?search=<term>",
                     'description': 'Full-text search over guides/adapters/examples by your own phrasing'
                 }
             ],
@@ -683,13 +683,16 @@ class HelpAdapter(ResourceAdapter):
                     'reveal help://schemas/all',
                 ],
             }
-        # Full-text search over the help corpus: help://search?q=<term>
-        # (also accepts help://search/<term> for shells that mangle '?').
+        # Full-text search over the help corpus: help://search?search=<term>
+        # (also accepts help://search/<term> for shells that mangle '?'). Param
+        # name matches the ?search= convention already used by claude://,
+        # codex://, and xlsx:// for the same "free-text content search"
+        # operation (see QUERY_PARAMETER_REFERENCE.md's Search vs Filter note).
         if topic == 'search' or topic.startswith('search?') or topic.startswith('search/'):
             if topic.startswith('search?'):
                 from urllib.parse import parse_qs
                 params = parse_qs(topic.split('?', 1)[1])
-                query_term = (params.get('q') or [''])[0]
+                query_term = (params.get('search') or [''])[0]
             elif topic.startswith('search/'):
                 query_term = topic.split('/', 1)[1]
             else:
@@ -928,7 +931,7 @@ class HelpAdapter(ResourceAdapter):
         return difflib.get_close_matches(base, sorted(universe), n=n, cutoff=0.6)
 
     def _search_help(self, query_term: str) -> Dict[str, Any]:
-        """Full-text search over reveal's own help corpus (help://search?q=<term>).
+        """Full-text search over reveal's own help corpus (help://search?search=<term>).
 
         BACK-1023: help://quick's decision_tree only routes a reader who
         already matches its curated phrasing ("find dead code" hits
@@ -944,10 +947,10 @@ class HelpAdapter(ResourceAdapter):
                 'type': 'help_search',
                 'query': '',
                 'error': 'No search term',
-                'message': "Usage: reveal 'help://search?q=<term>'",
+                'message': "Usage: reveal 'help://search?search=<term>'",
                 'examples': [
-                    "reveal 'help://search?q=find callers'",
-                    "reveal 'help://search?q=dead code'",
+                    "reveal 'help://search?search=find callers'",
+                    "reveal 'help://search?search=dead code'",
                 ],
             }
 
@@ -1342,7 +1345,7 @@ class HelpAdapter(ResourceAdapter):
                 'reveal help://rules             # pattern-detection rule catalog',
                 'reveal help://languages         # supported languages + analyzer depth',
                 'reveal help://output-diagnostics # --format vs meta trust envelope vs --provenance vs --perf',
-                "reveal 'help://search?q=<term>' # full-text search when nothing above matches your phrasing",
+                "reveal 'help://search?search=<term>' # full-text search when nothing above matches your phrasing",
             ],
         }
 
