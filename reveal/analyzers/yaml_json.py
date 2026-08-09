@@ -18,6 +18,28 @@ from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
 
+def _extract_key_pair_element(analyzer, name: str, pairs: List[Any]) -> Optional[Dict[str, Any]]:
+    """Find `name` among key-value pairs and return its source range.
+
+    Shared by YamlAnalyzer/JsonAnalyzer's extract_element -- identical
+    logic once each has produced its own list of key-value pair nodes.
+    """
+    for pair in pairs:
+        key_name, _ = analyzer._extract_key_info(pair)
+        if key_name == name:
+            start_line = pair.start_position().row + 1
+            end_line = pair.end_position().row + 1
+            source = '\n'.join(analyzer.lines[start_line-1:end_line])
+
+            return {
+                'name': name,
+                'line_start': start_line,
+                'line_end': end_line,
+                'source': source,
+            }
+    return None
+
+
 @register('.yaml', '.yml', name='YAML', icon='', category='data')
 class YamlAnalyzer(TreeSitterAnalyzer):
     """YAML file analyzer using tree-sitter for robust parsing.
@@ -116,21 +138,9 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         if not self.tree:
             return super().extract_element(element_type, name)
 
-        pairs = self._find_yaml_pairs()
-
-        for pair in pairs:
-            key_name, _ = self._extract_key_info(pair)
-            if key_name == name:
-                start_line = pair.start_position().row + 1
-                end_line = pair.end_position().row + 1
-                source = '\n'.join(self.lines[start_line-1:end_line])
-
-                return {
-                    'name': name,
-                    'line_start': start_line,
-                    'line_end': end_line,
-                    'source': source,
-                }
+        found = _extract_key_pair_element(self, name, self._find_yaml_pairs())
+        if found is not None:
+            return found
 
         # Fall back to grep-based search
         return super().extract_element(element_type, name)
@@ -216,21 +226,9 @@ class JsonAnalyzer(TreeSitterAnalyzer):
         if not self.tree:
             return super().extract_element(element_type, name)
 
-        pairs = self._find_json_pairs()
-
-        for pair in pairs:
-            key_name, _ = self._extract_key_info(pair)
-            if key_name == name:
-                start_line = pair.start_position().row + 1
-                end_line = pair.end_position().row + 1
-                source = '\n'.join(self.lines[start_line-1:end_line])
-
-                return {
-                    'name': name,
-                    'line_start': start_line,
-                    'line_end': end_line,
-                    'source': source,
-                }
+        found = _extract_key_pair_element(self, name, self._find_json_pairs())
+        if found is not None:
+            return found
 
         # Fall back to grep-based search
         return super().extract_element(element_type, name)
