@@ -1,5 +1,6 @@
 """Help adapter (help://) - Meta-adapter for exploring reveal's capabilities."""
 
+import re
 import sys
 from dataclasses import dataclass, asdict, replace
 from pathlib import Path
@@ -1195,6 +1196,7 @@ class HelpAdapter(ResourceAdapter):
                 'reveal help://schemas/all       # full machine-readable schema for every adapter (~10K tokens)',
                 'reveal help://rules             # pattern-detection rule catalog',
                 'reveal help://languages         # supported languages + analyzer depth',
+                'reveal help://output-diagnostics # --format vs meta trust envelope vs --provenance vs --perf',
             ],
         }
 
@@ -1559,11 +1561,20 @@ class HelpAdapter(ResourceAdapter):
             preview = '\n'.join(lines[:80]).rstrip()
 
         breadcrumb = ' | '.join(section_names) if section_names else '(no sections)'
-        # Guides sometimes hand-author their own full-guide token estimate near
-        # the top (e.g. AGENT_HELP.md's "Token Cost: ~40,000 tokens" banner).
-        # Read top-to-bottom, that reads as the cost of *this* truncated output,
-        # not the full guide it describes — so state the actual shown size too.
         shown_tokens = len(preview) // 4
+        # Guides sometimes hand-author their own full-guide token estimate near
+        # the top (e.g. AGENT_HELP.md's "**Token Cost:** ~40,000 tokens" banner).
+        # Read top-to-bottom, that reads as the cost of *this* truncated output,
+        # not the full guide it describes — BACK-1027: rewrite it in place so
+        # the accurate number is the first thing seen, not a footer read only
+        # after the misleading one was already paid for.
+        preview = re.sub(
+            r'\*\*Token Cost:\*\* ~[\d,]+ tokens',
+            f'**Token Cost:** ~{shown_tokens:,} tokens shown here '
+            f'(full guide: reveal help://{topic}/full)',
+            preview,
+            count=1,
+        )
         footer = (
             f"\n\n── {len(lines)} lines total (~{shown_tokens:,} tokens shown here). "
             f"Sections: {breadcrumb}\n"
@@ -1791,6 +1802,24 @@ class HelpAdapter(ResourceAdapter):
         """
         adapter_class: Optional[type[Any]] = _ADAPTER_REGISTRY.get(adapter_name)
         if not adapter_class:
+            # BACK-1028: a CLI-only subcommand (e.g. 'check', 'review') has no
+            # URI adapter and never will, so the generic "no adapter" dead end
+            # below is actively wrong for it — redirect to --help instead,
+            # mirroring main.py's _check_ghost_flags() redirect at the CLI
+            # flag-typo layer, one layer up at the help:// query layer.
+            from ..main import _SUBCOMMANDS
+            if adapter_name in _SUBCOMMANDS:
+                return {
+                    'type': 'adapter_schema',
+                    'adapter': adapter_name,
+                    'error': 'CLI-only subcommand',
+                    'message': (
+                        f"'{adapter_name}' is a CLI subcommand, not a URI adapter — "
+                        f"it has no help://schemas entry. Use 'reveal {adapter_name} --help' "
+                        f"for its flags instead."
+                    ),
+                    'next': [f'reveal {adapter_name} --help'],
+                }
             # Only advertise adapters that actually have a schema, so the
             # "did you mean" list can't point at another dead end (N1).
             available = self._adapters_with_schema()

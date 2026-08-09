@@ -4,12 +4,12 @@ category: guide
 help_topic: agent
 help_description: Complete agent guide (task-based patterns, all adapters, troubleshooting)
 help_category: ai_guides
-help_token_estimate: "~40,000"
+help_token_estimate: "~45,000"
 ---
 # Reveal - AI Agent Reference (Complete)
 **Version:** 0.116.0
 **Purpose:** Comprehensive guide for AI code assistants
-**Token Cost:** ~40,000 tokens
+**Token Cost:** ~45,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
 
 ---
@@ -56,6 +56,7 @@ Start with `reveal help://quick` (~750 tokens) — it routes you to the right ad
 | Databases / workbooks | `sqlite://` `mysql://` `xlsx://` | `reveal sqlite:///app.db` |
 | Environment / runtime | `env://` `python://` | `reveal env://` |
 | Project-specific tools | live plugins | `reveal help://adapters` |
+| Output format / `--provenance` / `--perf` — which one do I need? | `help://output-diagnostics` | `reveal help://output-diagnostics` |
 
 ---
 
@@ -2745,6 +2746,11 @@ Full guide: `reveal help://codex`
 
 ## Output Formats
 
+**This section covers `--format` itself.** For the other three ways to get
+extra context out of a call — the `meta.warnings/errors/confidence` trust
+envelope (always on), `--provenance` (reproducibility manifest), and
+`--perf` (invocation timing/RSS log) — see `reveal help://output-diagnostics`.
+
 **Choose format based on use case:**
 
 ```bash
@@ -4073,6 +4079,7 @@ server {
 **V001-V026 (mostly internal):** Validation rules for reveal's own codebase and plugin adapters
 - Most are internal self-checks used by `reveal reveal://` — ensure adapter completeness, doc/count accuracy, output-contract compliance. Hidden by default; pass `--all` to `reveal --rules`/`--explain` to see them.
 - Two are public and apply to your own plugin adapters: **V016** (adapter missing `get_help()` documentation) and **V023** (adapter output doesn't comply with the Output Contract).
+- [V026](rules/V026.md) (path-handling convention/portability) has a dedicated deep-dive doc.
 
 ---
 
@@ -4119,6 +4126,25 @@ server {
 - File structure (500 lines): ~50 tokens
 - Function extraction: ~20 tokens
 - JSON output: +30% tokens vs default
+
+**Diagnosing a slow run on your own machine/target** (the numbers above are
+representative, not a substitute for measuring the actual repo you're on):
+- `reveal <any-command> --perf` appends one JSON line (`elapsed_s`,
+  `peak_rss_kb`, `argv`, `exit_code`, `pid`, `ts`) to a perf log —
+  `~/.reveal/perf.jsonl` by default, override the path with
+  `REVEAL_PERF_LOG_PATH`, or set `REVEAL_PERF_LOG=1` to log every invocation
+  without adding the flag each time. Never fails the underlying command even
+  if the log write itself fails (permission/disk-full). Use this to see
+  which *command* in a multi-command pipeline is slow.
+- `reveal check <path> --profile-rules` gives a per-rule wall-time
+  breakdown for `check` specifically — which rule(s) dominate its cost on
+  this tree, timed in one real pass (not a diff of two runs). Use this once
+  `--perf` has told you `check` is the slow step and you need to know why.
+- Neither currently breaks down time *inside* a composite command like
+  `overview`/`architecture`/`hotspots`/`deps` (which sequentially call
+  several sub-adapters internally) — `--perf` gives you the total for the
+  whole call, not a per-sub-adapter split. If you need that level of detail
+  today, bisect manually with `--select`/scoped sub-calls.
 
 ---
 

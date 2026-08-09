@@ -37,19 +37,23 @@ category: reference
 
 ---
 
-## Adapter Guides (22 files)
+## Adapter Guides (29 files)
 
 Complete guides for all URI protocol adapters.
 
 | File | Lines | Purpose |
 |------|-------|---------|
+| [ARCHITECTURE_ADAPTER_GUIDE.md](adapters/ARCHITECTURE_ADAPTER_GUIDE.md) | 75 | Targeted architectural briefing: entry points, core abstractions, risks |
 | [AST_ADAPTER_GUIDE.md](adapters/AST_ADAPTER_GUIDE.md) | 1329 | AST-based code analysis with complexity/size filtering |
 | [AUTOSSL_ADAPTER_GUIDE.md](adapters/AUTOSSL_ADAPTER_GUIDE.md) | 255 | cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures |
 | [CALLS_ADAPTER_GUIDE.md](adapters/CALLS_ADAPTER_GUIDE.md) | 622 | Cross-file call graph queries (calls://) |
 | [CLAUDE_ADAPTER_GUIDE.md](adapters/CLAUDE_ADAPTER_GUIDE.md) | 2321 | Claude CLI session analysis and tool usage tracking |
 | [CODEX_ADAPTER_GUIDE.md](adapters/CODEX_ADAPTER_GUIDE.md) | 326 | OpenAI Codex CLI session analysis — SQLite index + per-session JSONL |
+| [CONTRACTS_ADAPTER_GUIDE.md](adapters/CONTRACTS_ADAPTER_GUIDE.md) | 91 | Contracts and architectural seams: public APIs, event buses, config surfaces |
 | [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md) | 328 | cPanel user environment: domains, SSL, ACL health |
 | [DEPENDS_ADAPTER_GUIDE.md](adapters/DEPENDS_ADAPTER_GUIDE.md) | — | Reverse module dependency graph — who imports this module? |
+| [DEPS_ADAPTER_GUIDE.md](adapters/DEPS_ADAPTER_GUIDE.md) | 65 | Dependency health dashboard: third-party package usage, circular/unused |
+| [HOTSPOTS_ADAPTER_GUIDE.md](adapters/HOTSPOTS_ADAPTER_GUIDE.md) | 73 | Files/functions most likely to need attention (complexity × churn) |
 | [DIFF_ADAPTER_GUIDE.md](adapters/DIFF_ADAPTER_GUIDE.md) | 1948 | Git diff analysis and structure comparison |
 | [DOMAIN_ADAPTER_GUIDE.md](adapters/DOMAIN_ADAPTER_GUIDE.md) | 2297 | Domain/DNS/WHOIS information analysis |
 | [ENV_ADAPTER_GUIDE.md](adapters/ENV_ADAPTER_GUIDE.md) | 1351 | Environment variable analysis and validation |
@@ -58,11 +62,14 @@ Complete guides for all URI protocol adapters.
 | [JSON_ADAPTER_GUIDE.md](adapters/JSON_ADAPTER_GUIDE.md) | 1327 | JSON/JSONL data analysis with JMESPath queries |
 | [LETSENCRYPT_ADAPTER_GUIDE.md](adapters/LETSENCRYPT_ADAPTER_GUIDE.md) | — | Let's Encrypt cert inventory — orphan/duplicate detection |
 | [MYSQL_ADAPTER_GUIDE.md](adapters/MYSQL_ADAPTER_GUIDE.md) | 2116 | MySQL database introspection and schema analysis |
+| [OVERVIEW_ADAPTER_GUIDE.md](adapters/OVERVIEW_ADAPTER_GUIDE.md) | 71 | One-glance codebase dashboard: language breakdown, quality, git |
 | [PYTHON_ADAPTER_GUIDE.md](adapters/PYTHON_ADAPTER_GUIDE.md) | 464 | Python runtime introspection (modules, objects) |
 | [REVEAL_ADAPTER_GUIDE.md](adapters/REVEAL_ADAPTER_GUIDE.md) | 536 | Reveal introspection (analyzers, adapters, config) |
 | [SQLITE_ADAPTER_GUIDE.md](adapters/SQLITE_ADAPTER_GUIDE.md) | 1161 | SQLite database introspection and schema analysis |
 | [SSL_ADAPTER_GUIDE.md](adapters/SSL_ADAPTER_GUIDE.md) | 1488 | SSL/TLS certificate analysis and validation |
 | [STATS_ADAPTER_GUIDE.md](adapters/STATS_ADAPTER_GUIDE.md) | 1874 | Codebase statistics and metrics collection |
+| [SURFACE_ADAPTER_GUIDE.md](adapters/SURFACE_ADAPTER_GUIDE.md) | 89 | External boundary map: CLI args, HTTP routes, env vars, exported symbols |
+| [TRACE_ADAPTER_GUIDE.md](adapters/TRACE_ADAPTER_GUIDE.md) | 59 | Execution narrative: BFS call-graph walk from a named entry point |
 | [XLSX_ADAPTER_GUIDE.md](adapters/XLSX_ADAPTER_GUIDE.md) | 651 | Excel/XLSX file analysis and data extraction |
 | [PATCHES_ADAPTER_GUIDE.md](adapters/PATCHES_ADAPTER_GUIDE.md) | — | Test patch pressure: repeated mocks, private patches, patch-heavy tests |
 
@@ -90,7 +97,7 @@ Language and infrastructure analyzer guides:
 
 ---
 
-## Reference Documentation (10 files)
+## Reference Documentation (11 files)
 
 Core reference and technical specifications:
 
@@ -100,7 +107,9 @@ Core reference and technical specifications:
 | [QUERY_PARAMETER_REFERENCE.md](guides/QUERY_PARAMETER_REFERENCE.md) | 363 | Query parameters for all adapters |
 | [FIELD_SELECTION_GUIDE.md](guides/FIELD_SELECTION_GUIDE.md) | 658 | Token reduction with --fields and budgets |
 | [ELEMENT_DISCOVERY_GUIDE.md](guides/ELEMENT_DISCOVERY_GUIDE.md) | 701 | Progressive disclosure with available_elements |
-| [OUTPUT_CONTRACT.md](development/OUTPUT_CONTRACT.md) | 678 | JSON output specification |
+| [OUTPUT_CONTRACT.md](development/OUTPUT_CONTRACT.md) | 678 | JSON output specification (adapter-author-facing schema) |
+| [CONTRACT_VERSIONS.md](development/CONTRACT_VERSIONS.md) | 151 | Output contract version policy — versions in use, adding a field |
+| [OUTPUT_DIAGNOSTICS_GUIDE.md](OUTPUT_DIAGNOSTICS_GUIDE.md) | 83 | `--format`/meta trust envelope/`--provenance`/`--perf` — which one do I need? (CLI-user-facing) |
 | [CONFIGURATION_GUIDE.md](guides/CONFIGURATION_GUIDE.md) | 662 | Configuration options and .reveal.yaml |
 | [CLI_INTEGRATION_GUIDE.md](development/CLI_INTEGRATION_GUIDE.md) | 281 | CLI integration patterns |
 | [HELP_SYSTEM_GUIDE.md](development/HELP_SYSTEM_GUIDE.md) | 397 | Help system internals (help:// adapter) |

@@ -116,6 +116,29 @@ from .cli import (
 )
 
 
+# Module-level (not just local to _dispatch_subcommand) so other layers —
+# e.g. help.py's help://schemas/<name> lookup, BACK-1028 — can tell a
+# CLI-only subcommand apart from an unknown name without re-deriving this
+# table. Each entry: subcommand name -> (module_path, parser_factory, runner).
+_SUBCOMMANDS = {
+    'architecture': ('reveal.cli.commands.architecture', 'create_architecture_parser', 'run_architecture'),
+    'check':        ('reveal.cli.commands.check',        'create_check_parser',        'run_check'),
+    'contracts':    ('reveal.cli.commands.contracts',    'create_contracts_parser',    'run_contracts'),
+    'deps':         ('reveal.cli.commands.deps',         'create_deps_parser',         'run_deps'),
+    'dev':          ('reveal.cli.commands.dev',          'create_dev_parser',          'run_dev'),
+    'health':       ('reveal.cli.commands.health',       'create_health_parser',       'run_health'),
+    'hotspots':     ('reveal.cli.commands.hotspots',     'create_hotspots_parser',     'run_hotspots'),
+    'offline':      ('reveal.cli.commands.offline',      'create_offline_parser',      'run_offline'),
+    'overview':     ('reveal.cli.commands.overview',     'create_overview_parser',     'run_overview'),
+    'pack':         ('reveal.cli.commands.pack',         'create_pack_parser',         'run_pack'),
+    'review':       ('reveal.cli.commands.review',       'create_review_parser',       'run_review'),
+    'scaffold':     ('reveal.cli.commands.scaffold',     'create_scaffold_parser',     'run_scaffold'),
+    'surface':      ('reveal.cli.commands.surface',      'create_surface_parser',      'run_surface'),
+    'testability':  ('reveal.cli.commands.testability',  'create_testability_parser',  'run_testability'),
+    'trace':        ('reveal.cli.commands.trace',         'create_trace_parser',         'run_trace'),
+}
+
+
 def _dispatch_subcommand() -> bool:
     """Dispatch to a named subcommand using a table-driven lookup.
 
@@ -129,26 +152,6 @@ def _dispatch_subcommand() -> bool:
         return False
 
     name = sys.argv[1]
-
-    # Import lazily so startup cost is paid only when the subcommand is used.
-    # Each entry: subcommand name -> (parser_factory, runner)
-    _SUBCOMMANDS = {
-        'architecture': ('reveal.cli.commands.architecture', 'create_architecture_parser', 'run_architecture'),
-        'check':        ('reveal.cli.commands.check',        'create_check_parser',        'run_check'),
-        'contracts':    ('reveal.cli.commands.contracts',    'create_contracts_parser',    'run_contracts'),
-        'deps':         ('reveal.cli.commands.deps',         'create_deps_parser',         'run_deps'),
-        'dev':          ('reveal.cli.commands.dev',          'create_dev_parser',          'run_dev'),
-        'health':       ('reveal.cli.commands.health',       'create_health_parser',       'run_health'),
-        'hotspots':     ('reveal.cli.commands.hotspots',     'create_hotspots_parser',     'run_hotspots'),
-        'offline':      ('reveal.cli.commands.offline',      'create_offline_parser',      'run_offline'),
-        'overview':     ('reveal.cli.commands.overview',     'create_overview_parser',     'run_overview'),
-        'pack':         ('reveal.cli.commands.pack',         'create_pack_parser',         'run_pack'),
-        'review':       ('reveal.cli.commands.review',       'create_review_parser',       'run_review'),
-        'scaffold':     ('reveal.cli.commands.scaffold',     'create_scaffold_parser',     'run_scaffold'),
-        'surface':      ('reveal.cli.commands.surface',      'create_surface_parser',      'run_surface'),
-        'testability':  ('reveal.cli.commands.testability',  'create_testability_parser',  'run_testability'),
-        'trace':        ('reveal.cli.commands.trace',         'create_trace_parser',         'run_trace'),
-    }
 
     if name not in _SUBCOMMANDS:
         return False

@@ -220,6 +220,13 @@ def _add_global_options(target) -> None:
     target.add_argument('--provenance', action='store_true',
                         help='Attach an "execution" block (reveal_version, repo commit/dirty '
                              'state, config digest, platform) to JSON adapter results')
+    target.add_argument('--perf', action='store_true',
+                        help='Append one JSON line (elapsed_s, peak_rss_kb, argv, exit_code) '
+                             'to a perf log for this invocation. Default path '
+                             '~/.reveal/perf.jsonl, override with REVEAL_PERF_LOG_PATH. Can '
+                             'also be enabled for every invocation via REVEAL_PERF_LOG=1. '
+                             'Handled before argparse (works pre-dispatch); registered here '
+                             'only so it shows up in --help.')
 
 
 def _build_global_options_parser() -> argparse.ArgumentParser:
