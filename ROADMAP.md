@@ -9,6 +9,11 @@ This document outlines reveal's development priorities and future direction. For
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
 
+### v0.118.0 — provenance fixed on every CLI subcommand, check flags unscoped rule categories
+- ✅ `--provenance` was silently a no-op on every `reveal <subcommand> <path>` invocation (12 subcommands) — chain-of-custody metadata now actually attaches (BACK-1034).
+- ✅ `check`'s JSON output flags `scope.unscoped_categories` — languages present in a scan with zero verified rule coverage for an active category, distinguishing "genuinely clean" from "never checked" (BACK-1021).
+- ✅ `pack --content`/`ast://`'s colon-syntax heuristic no longer silently drop whole languages via a hardcoded extension list (BACK-1032, BACK-1033); `check --format grep` is no longer byte-identical to `--format text` (BACK-1035).
+
 ### v0.117.0 — help://search, release-gap self-check, DD-relevant git pickaxe fix
 - ✅ `help://search?search=<term>` — full-text search over static guides, adapter descriptions, and `help://examples` recipes, referenced from all 4 top-level help entry points (BACK-1023).
 - ✅ `V032`, a self-check flagging when `origin/master` has run ahead of the latest PyPI release past a threshold — closes the exact blind spot that let ~19 DD-accuracy fixes sit unpublished for 36+ hours before v0.116.0 (BACK-1022).

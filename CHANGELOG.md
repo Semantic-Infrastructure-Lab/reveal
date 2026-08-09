@@ -12,6 +12,16 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.118.0] - 2026-08-09 (sessions wicked-yager-0809, plum-iris-0809)
+
+### Added
+- **`check`'s JSON output flags rule categories with zero verified coverage for a scanned language (BACK-1021)** — `scope.unscoped_categories` lists `{language, category}` pairs among the active (`--select`/`--ignore`-filtered) rule set with no rule verified for a language actually present in the scan, so "0 issues" on an unported language is no longer indistinguishable from a genuinely clean result. Built on the existing per-rule `verified_languages` data (BACK-466); doc/config-format rules (nginx, Dockerfile) are excluded so they don't flag as a false gap for every code language.
+
+### Fixed
+- **`--provenance` silently no-op'd on every CLI subcommand (BACK-1034)** — root cause was the subcommand dispatcher bypassing the only code path that ever enabled the flag, so `architecture`, `check`, `contracts`, `deps`, `hotspots`, `overview`, `pack`, `surface`, `testability`, `trace`, `health`, and `review` all silently produced no `execution:{...}` chain-of-custody block despite `--provenance` being passed. Fixed in the dispatcher itself, plus a new `attach_provenance()` helper wired into every CLI subcommand's raw `json.dumps()` call site.
+- **`pack --content` silently dropped whole languages (BACK-1032)** — `_walk_files()` hardcoded a 17-extension list instead of the full registry (58 extensions), so Dart/Lua/Zig/Haskell/etc. files never made it into the LLM-context snapshot. Same hardcoded-extension bug fixed in `ast://`'s colon-syntax heuristic (BACK-1033).
+- **`check <directory> --format grep` was byte-identical to `--format text` (BACK-1035)** — now genuinely grep-formatted; `--format typed`, found to be unimplemented almost everywhere (not just `overview`/`check`), now fails with a clear error instead of silently rendering the wrong format.
+
 ## [0.117.0] - 2026-08-09 (sessions floating-trajectory-0808, chosen-cyclops-0808)
 
 ### Added
