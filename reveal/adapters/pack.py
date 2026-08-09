@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 
 from reveal.reveal_types import CONTRACT_VERSION
+from reveal.registry import get_code_extensions
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import print_json_result
@@ -503,9 +504,11 @@ def _apply_budget(
 
 def _walk_files(path: Path) -> Generator[Path, None, None]:
     """Yield code/config files under *path* (respects common ignores)."""
-    _CODE_EXTENSIONS = {
-        '.py', '.js', '.ts', '.jsx', '.tsx', '.rb', '.go', '.rs', '.java',
-        '.c', '.cpp', '.h', '.cs', '.php', '.swift', '.kt', '.scala',
+    # BACK-1032: union the registry's full code-extension set (58+, all
+    # tree-sitter-backed languages) with the doc/config extras pack wants
+    # beyond "code" — a hand-maintained list silently dropped whole
+    # languages (Dart, Lua, Zig, Haskell, ...) from the LLM-context snapshot.
+    _CODE_EXTENSIONS = get_code_extensions() | {
         '.sh', '.bash', '.yaml', '.yml', '.toml', '.json', '.md',
         '.sql', '.html', '.css', '.scss',
     }

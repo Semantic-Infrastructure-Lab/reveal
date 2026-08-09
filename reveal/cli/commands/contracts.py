@@ -105,12 +105,13 @@ def run_contracts(args: Namespace) -> None:
 
     if args.format == 'json':
         from reveal.utils.results import add_cli_contract_fields
+        from reveal.utils.json_utils import attach_provenance
         report = {
             k: v for k, v in result.items()
             if k not in ('contract_version', 'type', 'source', 'source_type', 'meta')
         }
         print(json.dumps(
-            add_cli_contract_fields(report, result_type='contracts', source=path),
+            attach_provenance(add_cli_contract_fields(report, result_type='contracts', source=path)),
             indent=2, default=str,
         ))
         return

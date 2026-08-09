@@ -502,6 +502,7 @@ def _handle_no_files_found(directory: Path, output_format: str) -> None:
     """
     import json
     from reveal.utils.results import add_cli_contract_fields
+    from reveal.utils.json_utils import attach_provenance
 
     if output_format == 'json':
         result = {
@@ -514,7 +515,7 @@ def _handle_no_files_found(directory: Path, output_format: str) -> None:
             }
         }
         print(json.dumps(
-            add_cli_contract_fields(result, result_type='check', source=directory, source_type='directory'),
+            attach_provenance(add_cli_contract_fields(result, result_type='check', source=directory, source_type='directory')),
             indent=2,
         ))
     else:
@@ -698,6 +699,7 @@ def _print_json_output(
     """
     import json
     from reveal.utils.results import add_cli_contract_fields
+    from reveal.utils.json_utils import attach_provenance
 
     result = {
         "files": file_results,
@@ -714,9 +716,22 @@ def _print_json_output(
             capability_tiers=capability_tiers_for(scope.language_extensions)
         )
     print(json.dumps(
-        add_cli_contract_fields(result, result_type='check', source=source, source_type='directory'),
+        attach_provenance(add_cli_contract_fields(result, result_type='check', source=source, source_type='directory')),
         indent=2,
     ))
+
+
+def _print_grep_output(file_results: List[dict]) -> None:
+    """Print check results as grep-style lines (BACK-1035).
+
+    Mirrors checks.py's _format_detections_grep shape (file:line:col:rule:message)
+    so `reveal check <dir> --format grep` and `reveal check <file> --format grep`
+    (the pre-existing single-file path) agree on output shape.
+    """
+    for entry in file_results:
+        file_path = entry["file"]
+        for d in entry["detections"]:
+            print(f"{file_path}:{d['line']}:{d['column']}:{d['rule_code']}:{d['message']}")
 
 
 def _print_text_summary(
@@ -793,7 +808,28 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
             file_results, len(files_to_check), files_with_issues, total_issues,
             scope=collection.to_scope_census(), source=directory,
         )
+    elif output_format == 'grep':
+        # BACK-1035: this recursive/directory path only ever branched on
+        # 'json' vs everything-else-is-text, so --format grep silently
+        # rendered identical to text. Single-file `reveal check <file>`
+        # already honors grep correctly via checks.py's
+        # _format_detections_grep — reuse the same file:line:col:rule:msg
+        # shape here, built from the JSON-mode per-file detections.
+        total_issues, files_with_issues, file_results = _check_files_json(
+            files_to_check, directory, select, ignore, severity=severity
+        )
+        _print_grep_output(file_results)
     else:
+        if output_format == 'typed':
+            # Not implemented for this path (or, as of BACK-1035's
+            # follow-up audit, almost anywhere else in the CLI either) —
+            # error rather than silently rendering text as if it were typed.
+            print(
+                "Error: --format typed is not yet implemented for 'reveal check' "
+                "on a directory. Use --format json or --format grep instead.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
         total_issues, files_with_issues = _check_files_text(
             files_to_check, directory, select, ignore, no_group=no_group, severity=severity, limit=limit
         )

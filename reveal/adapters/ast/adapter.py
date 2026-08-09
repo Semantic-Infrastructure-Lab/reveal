@@ -18,7 +18,7 @@ from .help import get_help as _get_help, get_schema as _get_schema
 from .renderer import AstRenderer
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from ...core import suppress_treesitter_warnings
-from ...registry import language_for_extension
+from ...registry import language_for_extension, get_code_extensions
 from ...utils.query import (
     parse_result_control,
     apply_result_control,
@@ -82,8 +82,9 @@ class AstAdapter(ResourceAdapter):
             parts = self.path.split(':', 1)
             left, right = parts[0], parts[1]
             # Raise helpful error if either side looks like a code file path
-            if left.endswith(('.py', '.js', '.ts', '.go', '.rs', '.rb', '.java', '.cpp', '.c')) \
-                    or right.endswith(('.py', '.js', '.ts', '.go', '.rs', '.rb', '.java', '.cpp', '.c')) \
+            code_extensions = tuple(get_code_extensions())
+            if left.endswith(code_extensions) \
+                    or right.endswith(code_extensions) \
                     or os.path.exists(left) or os.path.exists(right):
                 raise ValueError(
                     f"ast:// does not support multi-file colon syntax: {path!r}\n"

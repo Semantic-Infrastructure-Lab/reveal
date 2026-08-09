@@ -35,6 +35,21 @@ def set_provenance_enabled(enabled: bool) -> None:
     _provenance_enabled = enabled
 
 
+def attach_provenance(result):
+    """Return *result* with an 'execution' provenance block attached, if
+    provenance is enabled (see set_provenance_enabled) and it doesn't
+    already carry one. No-op otherwise. BACK-1034: `cli/commands/{overview,
+    check,pack}.py` build their own Output Contract envelope and call
+    json.dumps directly rather than going through print_json_result — call
+    this before that json.dumps so --provenance isn't silently dropped on
+    those CLI subcommands.
+    """
+    if _provenance_enabled and isinstance(result, dict) and 'execution' not in result:
+        from .provenance import build_execution_provenance
+        return {**result, 'execution': build_execution_provenance()}
+    return result
+
+
 def print_json_result(result, file=None) -> None:
     """Print a reveal result dict as JSON — the single funnel for adapter/
     renderer CLI JSON output (BACK-893). Not for printing arbitrary values
@@ -44,7 +59,4 @@ def print_json_result(result, file=None) -> None:
     When provenance is enabled (see set_provenance_enabled), attaches an
     'execution' block to dict results that don't already carry one.
     """
-    if _provenance_enabled and isinstance(result, dict) and 'execution' not in result:
-        from .provenance import build_execution_provenance
-        result = {**result, 'execution': build_execution_provenance()}
-    print(safe_json_dumps(result), file=file or sys.stdout)
+    print(safe_json_dumps(attach_provenance(result)), file=file or sys.stdout)

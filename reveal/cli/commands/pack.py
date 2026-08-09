@@ -140,6 +140,7 @@ def run_pack(args: Namespace) -> None:
 
     if args.format == 'json':
         from reveal.utils.results import add_cli_contract_fields
+        from reveal.utils.json_utils import attach_provenance
         # Note: unlike other migrated commands, 'meta' is NOT stripped here —
         # PackAdapter.get_structure() never passes parse_mode/confidence/
         # warnings/errors to ResultBuilder.create(), so ResultBuilder never
@@ -151,7 +152,7 @@ def run_pack(args: Namespace) -> None:
             if k not in ('contract_version', 'type', 'source', 'source_type')
         }
         print(json.dumps(
-            add_cli_contract_fields(report, result_type='pack', source=path),
+            attach_provenance(add_cli_contract_fields(report, result_type='pack', source=path)),
             indent=2, default=str,
         ))
         return

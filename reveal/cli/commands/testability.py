@@ -106,8 +106,9 @@ def run_testability(args: Namespace) -> None:
 
     if args.format == 'json':
         from reveal.utils.results import add_cli_contract_fields
+        from reveal.utils.json_utils import attach_provenance
         print(json.dumps(
-            add_cli_contract_fields(result, result_type='testability', source=path),
+            attach_provenance(add_cli_contract_fields(result, result_type='testability', source=path)),
             indent=2, default=str,
         ))
         return

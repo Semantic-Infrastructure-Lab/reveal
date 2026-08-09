@@ -110,11 +110,12 @@ def run_health(args: Namespace) -> None:
     if args.format == 'json':
         import json
         from reveal.utils.results import add_cli_contract_fields
+        from reveal.utils.json_utils import attach_provenance
         print(json.dumps(
-            add_cli_contract_fields(
+            attach_provenance(add_cli_contract_fields(
                 {'results': results, 'overall_exit': overall_exit},
                 result_type='health', source=','.join(targets), source_type='multi',
-            ),
+            )),
             indent=2,
         ))
     else:

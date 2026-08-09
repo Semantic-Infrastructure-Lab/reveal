@@ -160,6 +160,14 @@ def _dispatch_subcommand() -> bool:
     import importlib
     mod = importlib.import_module(module_path)
     args = getattr(mod, parser_fn)().parse_args(sys.argv[2:])
+    # BACK-1034: this path bypasses _main_impl() entirely (that's the point —
+    # table-driven dispatch before argparse's positional/subparser conflicts
+    # can occur), but _main_impl() is also the only place that previously
+    # called set_provenance_enabled(). Subcommand invocations (reveal
+    # overview/check/pack ...) never set the flag, so --provenance always
+    # silently no-op'd for them regardless of downstream attach_provenance
+    # calls. Set it here too, from the subcommand's own parsed args.
+    set_provenance_enabled(getattr(args, 'provenance', False))
     getattr(mod, runner_fn)(args)
     return True
 

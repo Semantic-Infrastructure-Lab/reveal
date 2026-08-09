@@ -428,6 +428,20 @@ class OverviewRenderer:
         if format == 'json':
             print_json_result(result)
             return
+        if format in ('typed', 'grep'):
+            # BACK-1035: previously fell through to the text renderer below,
+            # silently ignoring the requested format (confirmed byte-identical
+            # to --format text via diff). overview is an aggregate dashboard,
+            # not a line-oriented findings list, so there's no faithful
+            # typed/grep rendering to fall back to — fail loud instead of
+            # lying about the output shape.
+            import sys
+            print(
+                f"Error: --format {format} is not yet implemented for overview. "
+                "Use --format json or --format text instead.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
         _render_overview(result, top)
 
     @staticmethod

@@ -95,15 +95,16 @@ def run_review(args: Namespace) -> None:
     # Render
     if args.format == 'json':
         from reveal.utils.results import add_cli_contract_fields
+        from reveal.utils.json_utils import attach_provenance
         if is_git_range:
             review_source_type = 'git_range'
         else:
             review_source_type = 'file' if path is not None and path.is_file() else 'directory'
         print(json.dumps(
-            add_cli_contract_fields(
+            attach_provenance(add_cli_contract_fields(
                 report, result_type='review', source=target,
                 source_type=review_source_type,
-            ),
+            )),
             indent=2, default=str,
         ))
     else:
