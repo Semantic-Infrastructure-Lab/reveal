@@ -252,4 +252,4 @@ AutoSSL runs every ~3 hours. Wait for the next cycle, or trigger a manual run in
 
 ---
 
-**Navigation**: [Index](../README.md) | [Adapter Guides](../INDEX.md#adapter-guides-19-files)
+**Navigation**: [Index](../README.md) | [Adapter Guides](../INDEX.md#adapter-guides-29-files)
