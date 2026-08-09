@@ -14,7 +14,7 @@ category: reference
 ## Quick Navigation
 
 - **New users** → [QUICK_START.md](QUICK_START.md) → [RECIPES.md](guides/RECIPES.md)
-- **Adapters** → See [Adapter Guides](#adapter-guides-22-files) below
+- **Adapters** → See [Adapter Guides](#adapter-guides-29-files) below
 - **nginx / cPanel operator** → [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md)
 - **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (4,233 lines)
 - **Developers** → [Development Guides](#development-guides-4-files)
@@ -183,14 +183,14 @@ Complete reference for AI agent integration:
 - "What is Reveal good for?" → [WHAT_IS_REVEAL_GOOD_FOR.md](guides/WHAT_IS_REVEAL_GOOD_FOR.md)
 - "What makes Reveal different?" → [WHY_REVEAL.md](WHY_REVEAL.md)
 - "What can Reveal do?" → [RECIPES.md](guides/RECIPES.md)
-- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-22-files)
+- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-29-files)
 - "How do queries work?" → [QUERY_SYNTAX_GUIDE.md](guides/QUERY_SYNTAX_GUIDE.md)
 - "For AI agents?" → [AGENT_HELP.md](AGENT_HELP.md)
 - "How does Reveal work internally?" → [ARCHITECTURE.md](../../ARCHITECTURE.md)
 - "Create custom adapter?" → [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md)
 
 **By Adapter**:
-Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-22-files) above.
+Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-29-files) above.
 
 ---
 

@@ -319,6 +319,7 @@ class HelpAdapter(ResourceAdapter):
         'agent': 'AGENT_HELP.md',
         'anti-patterns': 'AGENT_HELP.md',  # Merged into AGENT_HELP.md
         'benchmarks': 'BENCHMARKS.md',
+        'output-diagnostics': 'OUTPUT_DIAGNOSTICS_GUIDE.md',
         # Adapter guides (reveal/docs/adapters/)
         'architecture': 'adapters/ARCHITECTURE_ADAPTER_GUIDE.md',
         'ast': 'adapters/AST_ADAPTER_GUIDE.md',
@@ -452,6 +453,10 @@ class HelpAdapter(ResourceAdapter):
                 {
                     'uri': 'help://tricks',
                     'description': 'Cool tricks and hidden features guide'
+                },
+                {
+                    'uri': "help://search?q=<term>",
+                    'description': 'Full-text search over guides/adapters/examples by your own phrasing'
                 }
             ],
             'notes': [
@@ -678,6 +683,18 @@ class HelpAdapter(ResourceAdapter):
                     'reveal help://schemas/all',
                 ],
             }
+        # Full-text search over the help corpus: help://search?q=<term>
+        # (also accepts help://search/<term> for shells that mangle '?').
+        if topic == 'search' or topic.startswith('search?') or topic.startswith('search/'):
+            if topic.startswith('search?'):
+                from urllib.parse import parse_qs
+                params = parse_qs(topic.split('?', 1)[1])
+                query_term = (params.get('q') or [''])[0]
+            elif topic.startswith('search/'):
+                query_term = topic.split('/', 1)[1]
+            else:
+                query_term = ''
+            return self._search_help(query_term)
         if topic in ('rules', 'rules/'):
             # BACK-846: --rules was flag-only, so MCP clients (whose only
             # introspection channel is reveal_query(uri)) could not reach the
@@ -893,7 +910,7 @@ class HelpAdapter(ResourceAdapter):
     # valid help:// topics — included when suggesting fixes for a mistyped topic.
     _DISCOVERY_TOPICS = (
         'quick', 'relationships', 'anti-patterns', 'schemas', 'examples',
-        'rules', 'languages',
+        'rules', 'languages', 'search',
     )
 
     def suggest_topics(self, query: str, n: int = 3) -> List[str]:
@@ -909,6 +926,106 @@ class HelpAdapter(ResourceAdapter):
         base = query.split('/', 1)[0]
         universe = set(self._list_topics()) | set(self._DISCOVERY_TOPICS)
         return difflib.get_close_matches(base, sorted(universe), n=n, cutoff=0.6)
+
+    def _search_help(self, query_term: str) -> Dict[str, Any]:
+        """Full-text search over reveal's own help corpus (help://search?q=<term>).
+
+        BACK-1023: help://quick's decision_tree only routes a reader who
+        already matches its curated phrasing ("find dead code" hits
+        calls://, but "find callers" -- same underlying answer -- doesn't
+        match any row). This searches topic/description/content across
+        static guides, adapter descriptions, and help://examples recipes so
+        an agent can query its own intent instead of depending on a human
+        having pre-curated every phrasing.
+        """
+        term = (query_term or '').strip()
+        if not term:
+            return {
+                'type': 'help_search',
+                'query': '',
+                'error': 'No search term',
+                'message': "Usage: reveal 'help://search?q=<term>'",
+                'examples': [
+                    "reveal 'help://search?q=find callers'",
+                    "reveal 'help://search?q=dead code'",
+                ],
+            }
+
+        needle = term.lower()
+        hits: List[Dict[str, Any]] = []
+        docs_root = Path(__file__).parent.parent / 'docs'
+
+        # Static guides: topic/description match first (cheap); fall back to
+        # a content grep for a snippet when the term isn't in the metadata.
+        for guide in self._indexed_static_guides():
+            topic = guide['topic']
+            description = guide.get('description', '')
+            snippet: Optional[str] = None
+            if needle in f"{topic} {description}".lower():
+                snippet = description or topic
+            else:
+                try:
+                    content = (docs_root / guide['file']).read_text(encoding='utf-8')
+                except OSError:
+                    content = ''
+                for line in content.splitlines():
+                    if needle in line.lower():
+                        snippet = line.strip()
+                        break
+            if snippet is not None:
+                hits.append({
+                    'type': 'guide',
+                    'topic': topic,
+                    'snippet': snippet[:200],
+                    'command': f'reveal help://{topic}',
+                })
+
+        # Adapters: scheme name + description.
+        for adapter in self._list_adapters():
+            scheme = adapter['scheme']
+            description = adapter.get('description', '')
+            if needle in f"{scheme} {description}".lower():
+                hits.append({
+                    'type': 'adapter',
+                    'scheme': scheme,
+                    'snippet': description or scheme,
+                    'command': f'reveal help://{scheme}',
+                })
+
+        # help://examples recipes: task name, task description, or any one
+        # recipe's goal/description within it.
+        for task, recipe_set in _EXAMPLE_RECIPES.items():
+            matched_goal = None
+            if needle not in f"{task} {recipe_set.get('description', '')}".lower():
+                for recipe in recipe_set.get('recipes', []):
+                    combined = f"{recipe.get('goal', '')} {recipe.get('description', '')}".lower()
+                    if needle in combined:
+                        matched_goal = recipe.get('goal')
+                        break
+                if matched_goal is None:
+                    continue
+            hits.append({
+                'type': 'recipe',
+                'task': task,
+                'snippet': matched_goal or recipe_set.get('description', task),
+                'command': f'reveal help://examples/{task}',
+            })
+
+        # Guides are the richest hits (whole-topic content already searched);
+        # keep discovery order stable within each type otherwise.
+        hits.sort(key=lambda h: h['type'] != 'guide')
+        hits = hits[:20]
+
+        return {
+            'type': 'help_search',
+            'query': term,
+            'count': len(hits),
+            'hits': hits,
+            'next': (
+                [h['command'] for h in hits[:3]] if hits
+                else ['reveal help://quick', 'reveal help://adapters']
+            ),
+        }
 
     def _get_adapter_description(self, adapter_class: type[Any]) -> str:
         """Get description from adapter's help method.
@@ -1197,6 +1314,7 @@ class HelpAdapter(ResourceAdapter):
                 'reveal help://rules             # pattern-detection rule catalog',
                 'reveal help://languages         # supported languages + analyzer depth',
                 'reveal help://output-diagnostics # --format vs meta trust envelope vs --provenance vs --perf',
+                "reveal 'help://search?q=<term>' # full-text search when nothing above matches your phrasing",
             ],
         }
 

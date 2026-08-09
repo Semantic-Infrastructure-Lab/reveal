@@ -505,6 +505,67 @@ class TestHelpAdapter(unittest.TestCase):
         self.assertIn('Recipes', output)
         self.assertIn('Find', output)
 
+    # --- help://search?q=* (BACK-1023) ---
+
+    def test_search_finds_adapter_by_synonym_not_in_scheme_name(self):
+        """'find callers' has no adapter named that, but should surface calls://
+        (the motivating BACK-1023 routing miss: help://quick's table only
+        matches 'find dead code', not 'find callers')."""
+        adapter = HelpAdapter()
+        result = adapter.get_element("search?q=find callers")
+        self.assertIsNotNone(result)
+        self.assertEqual(result['type'], 'help_search')
+        self.assertEqual(result['query'], 'find callers')
+        schemes = {h.get('scheme') for h in result['hits'] if h['type'] == 'adapter'}
+        self.assertIn('calls', schemes)
+
+    def test_search_path_form_equivalent_to_query_form(self):
+        """help://search/<term> is accepted as an alias for ?q=<term>."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('search/find callers')
+        self.assertEqual(result['type'], 'help_search')
+        self.assertEqual(result['query'], 'find callers')
+
+    def test_search_empty_term_returns_usage_error(self):
+        """Bare help://search (no term) is a usage error, not a crash or empty result."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('search')
+        self.assertIsNotNone(result)
+        self.assertEqual(result['type'], 'help_search')
+        self.assertIn('error', result)
+
+    def test_search_no_match_returns_empty_hits_not_none(self):
+        """A term with no hits is a valid zero-result search, not a lookup failure."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('search?q=zzznonexistentqqqterm')
+        self.assertIsNotNone(result)
+        self.assertEqual(result['count'], 0)
+        self.assertEqual(result['hits'], [])
+        self.assertIn('next', result)
+
+    def test_search_hits_capped_at_20(self):
+        """A broad term (many matches) is capped, not an unbounded dump."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('search?q=e')  # matches nearly everything
+        self.assertLessEqual(len(result['hits']), 20)
+
+    def test_search_rendered_text(self):
+        """Rendered help://search text output shows hits and doesn't fall through
+        to the generic adapter-specific template (the bug found while manually
+        verifying this feature: JSON worked, text silently didn't)."""
+        import io
+        from contextlib import redirect_stdout
+        from reveal.rendering.adapters.help import render_help
+
+        adapter = HelpAdapter()
+        result = adapter.get_element('search?q=find callers')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            render_help(result, 'text')
+        output = buf.getvalue()
+        self.assertIn("Help Search: 'find callers'", output)
+        self.assertIn('calls', output)
+
 
 class TestPythonAdapter(unittest.TestCase):
     """Test Python runtime adapter."""

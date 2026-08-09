@@ -530,6 +530,35 @@ def _render_help_see_also(data: Dict[str, Any]) -> None:
         print()
 
 
+def _render_help_search(data: Dict[str, Any]) -> None:
+    """Render help://search?q=<term> — full-text hits across the help corpus."""
+    if 'error' in data:
+        print(f"Error: {data['message']}", file=sys.stderr)
+        for example in data.get('examples', []):
+            print(f"  {example}", file=sys.stderr)
+        sys.exit(1)
+
+    query = data.get('query', '')
+    hits = data.get('hits', [])
+    print(f"# Help Search: {query!r}")
+    print()
+    if not hits:
+        print("No matches.")
+        print()
+    else:
+        print(f"**{len(hits)} match(es):**")
+        print()
+        for hit in hits:
+            label = hit.get('topic') or hit.get('scheme') or hit.get('task') or ''
+            print(f"  [{hit.get('type', '?')}] {label}")
+            snippet = hit.get('snippet')
+            if snippet:
+                print(f"    {snippet}")
+            print(f"    -> {hit.get('command', '')}")
+            print()
+    _render_schema_next(data)
+
+
 def _render_query_recipes_index(data: Dict[str, Any]) -> None:
     """Render bare help://examples — the task-category catalog listing."""
     available = data.get('available_tasks', [])
@@ -1047,6 +1076,7 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
         'help_languages': _render_help_languages,
         'help_quick': _render_help_quick,
         'help_relationships': _render_help_relationships,
+        'help_search': _render_help_search,
     }
 
     renderer = renderers.get(help_type)
