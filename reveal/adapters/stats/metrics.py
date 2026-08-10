@@ -1,7 +1,10 @@
 """Metrics calculation functions for stats adapter."""
 
+import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def count_line_types(lines: list) -> tuple:
@@ -247,7 +250,8 @@ def _count_check_issues(
             if sev in counts:
                 counts[sev] += 1
         return counts
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Check rules failed for {file_path}, counting as 0 issues: {e}")
         return {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
 
 

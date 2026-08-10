@@ -1,7 +1,10 @@
 """Operations (check, element extraction) for reveal adapter."""
 
+import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def check(select: Optional[List[str]] = None, ignore: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -65,5 +68,6 @@ def get_element(reveal_root: Path, element_name: str, **kwargs: Any) -> Optional
         handle_file(str(file_path), element_name,
                    show_meta=False, output_format=args.format, args=args)
         return {'success': True}
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to extract {element_name!r} from {file_path}: {e}")
         return None

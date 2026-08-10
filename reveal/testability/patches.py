@@ -278,7 +278,7 @@ def _scan_file_ts(file_path: Path) -> List[PatchUse]:
         tree = ts_parse(parser, source)
         root = tree_root(tree)
     except Exception as exc:
-        logger.debug('tree-sitter parse failed for %s: %s', file_path, exc)
+        logger.warning('tree-sitter parse failed for %s: %s', file_path, exc)
         return []
 
     uses: List[PatchUse] = []
