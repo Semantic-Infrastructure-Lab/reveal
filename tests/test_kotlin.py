@@ -559,6 +559,122 @@ class ShowStore(
         finally:
             os.unlink(temp_path)
 
+    def test_composable_function_param_recovered_from_error(self):
+        """BACK-738 shape 1: `@Composable (() -> Unit)`-style parenthesized
+        annotated function-type parameters trip a fwcd/tree-sitter-kotlin
+        grammar ambiguity (confirmed via --show-ast: the ERROR node's leading
+        children are [fun, simple_identifier, ...]) that swallows the WHOLE
+        enclosing function_declaration into a top-level ERROR node — one of
+        the most common idioms in any Jetpack Compose codebase. Before the
+        BACK-738 recovery pass, `showInBottomSheet` was silently absent from
+        `structure['functions']` with zero warning; now it must be recovered
+        (flagged, not indistinguishable from a normally-parsed function) and
+        a matching parse_warnings entry must be present.
+        """
+        code = '''fun beforeFunction(): Int {
+    return 1
+}
+
+fun showInBottomSheet(
+    sheetContent: @Composable (() -> Unit)? = null
+) {
+    sheetContent?.invoke()
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.kt', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = KotlinAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            functions = {f['name']: f for f in structure['functions']}
+            self.assertIn('beforeFunction', functions)
+            self.assertIn('showInBottomSheet', functions)
+            self.assertTrue(functions['showInBottomSheet'].get('recovered_from_error'))
+            self.assertNotIn('recovered_from_error', functions['beforeFunction'])
+
+            warnings = structure['parse_warnings']['items']
+            self.assertTrue(any(
+                w['type'] == 'recovered_parse_error' and 'showInBottomSheet' in w['message']
+                for w in warnings
+            ))
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_composable_class_constructor_param_recovered_from_error(self):
+        """BACK-738 shape 1 also swallows a class_declaration when the
+        `@Composable (() -> Unit)` parameter is a constructor property
+        instead of a function parameter (e.g. Compose's own
+        BottomSheetOverlay idiom) — same ERROR-node cascade, different
+        enclosing declaration kind. Must recover into structure['classes'].
+        """
+        code = '''fun beforeFunction(): Int {
+    return 1
+}
+
+class BottomSheetOverlay(
+    private val onClose: @Composable (() -> Unit)? = null
+)
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.kt', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = KotlinAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            classes = {c['name']: c for c in structure['classes']}
+            self.assertIn('BottomSheetOverlay', classes)
+            self.assertTrue(classes['BottomSheetOverlay'].get('recovered_from_error'))
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_unrelated_parse_error_not_misrecovered(self):
+        """False-positive guard (BACK-738 note #6): an ERROR node from a
+        genuinely different, unrelated syntax error (here, a dangling binary
+        operator) must NOT be misrecovered as a fun/class declaration just
+        because an ERROR node exists somewhere in the file — recovery only
+        fires when the ERROR node itself is led by a declaration keyword.
+        Both real functions must still parse normally and only an
+        unrecovered_parse_error warning (not a fabricated function) should
+        result.
+        """
+        code = '''fun beforeFunction(): Int {
+    return 1 +
+}
+
+fun afterFunction(): Int {
+    return 42
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.kt', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = KotlinAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            func_names = [f['name'] for f in structure['functions']]
+            self.assertEqual(sorted(func_names), ['afterFunction', 'beforeFunction'])
+            for func in structure['functions']:
+                self.assertNotIn('recovered_from_error', func)
+
+            warnings = structure['parse_warnings']['items']
+            self.assertTrue(any(w['type'] == 'unrecovered_parse_error' for w in warnings))
+            self.assertFalse(any(w['type'] == 'recovered_parse_error' for w in warnings))
+
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()
