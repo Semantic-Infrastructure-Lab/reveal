@@ -12,6 +12,16 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.120.0] - 2026-08-10 (sessions lethal-echo-0810 et al.)
+
+### Fixed
+- **Kotlin `@Composable (() -> Unit)`-style parenthesized annotated function-type parameters silently dropped the entire enclosing declaration (BACK-738)** — a fwcd/tree-sitter-kotlin grammar ambiguity cascaded the malformed parameter's ERROR node up to swallow the whole top-level `fun`/`class`/`interface`/`object`, with zero warning, out of `--outline`/`architecture`/`calls://`. `KotlinAnalyzer._recover_error_declarations()` now detects and recovers outermost ERROR nodes matching this exact fingerprint, flagging recovered entries `recovered_from_error: True`; anything unrecovered surfaces via `structure['parse_warnings']` instead of vanishing silently.
+- **Silent/debug-level exception handlers bumped to visible warnings across 6 adapters (BACK-989)** — `diff/git.py`, `markdown/files.py`, `reveal/operations.py`, `stats/metrics.py`, `testability/patches.py`, and `utils/parallel.py` (the `--grep` parallel worker) each caught a crash and treated it identically to "nothing found," undercounting or silently excluding results with no signal. `adapters/git/files.py`'s element-content lookup separately conflated "not in tree" (expected) with a real decode/analyzer crash under one `except` clause.
+- **`I002` preload root resolved from a bare directory instead of the target file, misfiring on some project layouts (BACK-1041)**.
+
+### Added
+- **`check`/`overview` gained `--exclude`, `--respect-gitignore`, and `--no-gitignore` (BACK-1042)** — explicit exclude patterns and gitignore-aware scoping, previously unavailable on these two subcommands.
+
 ## [0.119.0] - 2026-08-09 (session revealed-comet-0809)
 
 ### Fixed

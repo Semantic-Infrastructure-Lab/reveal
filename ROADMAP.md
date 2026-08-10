@@ -9,6 +9,12 @@ This document outlines reveal's development priorities and future direction. For
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
 
+### v0.120.0 — Kotlin @Composable ERROR-node recovery, silent-exception visibility round, check/overview --exclude/gitignore
+
+- ✅ Kotlin `@Composable (() -> Unit)`-style parenthesized function-type parameters no longer swallow the entire enclosing declaration into a silently-dropped ERROR node — recovered with `recovered_from_error` flagging, unrecovered cases surfaced via `parse_warnings` (BACK-738).
+- ✅ Silent/debug-level exception handlers bumped to visible warnings across `diff/git.py`, `markdown/files.py`, `reveal/operations.py`, `stats/metrics.py`, `testability/patches.py`, `utils/parallel.py`, and `adapters/git/files.py`'s element-content lookup (BACK-989).
+- ✅ `check`/`overview` gained `--exclude`, `--respect-gitignore`, `--no-gitignore` (BACK-1042); `I002` preload root now resolves from the target file, not a bare directory (BACK-1041).
+
 ### v0.119.0 — overview/check census parity, check text-output dedup, deps summary-only
 
 - ✅ `overview`'s scope census silently disagreed with `check`'s on the same target — dot-directory source files and no-analyzer languages (e.g. Objective-C) could appear in one but not the other (BACK-1038).
