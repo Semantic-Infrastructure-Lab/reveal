@@ -255,16 +255,21 @@ def _display_name_for_language(lang: str) -> str:
 
 def _walk_code_files(path: Path) -> Iterator[Path]:
     """Yield every file under *path*, skip-dir-correct (BACK-887's
-    ``is_skippable_dir`` fix — shared so every census walk agrees)."""
+    ``is_skippable_dir`` fix — shared so every census walk agrees).
+
+    Does NOT blanket-skip dot-directories — only ``is_skippable_dir``
+    membership (``.git``, ``.venv``, caches, ...) excludes a directory.
+    ``collect_files_to_check`` (``check``'s own walk) never applied a
+    dot-dir filter either; before this fix the two walks silently
+    disagreed on real source living under e.g. ``.fastlane/``/``.github/``,
+    producing a language-census mismatch between ``check`` and
+    ``overview``/``architecture`` on the same target (BACK-1038)."""
     if path.is_file():
         yield path
         return
     for root, dirs, filenames in os.walk(str(path)):
         root_path = Path(root)
-        dirs[:] = [
-            d for d in dirs
-            if not is_skippable_dir(root_path, d) and not d.startswith('.')
-        ]
+        dirs[:] = [d for d in dirs if not is_skippable_dir(root_path, d)]
         for fname in filenames:
             yield root_path / fname
 

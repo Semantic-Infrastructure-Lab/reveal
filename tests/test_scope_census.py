@@ -63,6 +63,26 @@ class TestCensusForPath:
         assert census.per_language == {}
         assert census.total_code_files == 0
 
+    def test_dotdirs_not_blanket_skipped(self, tmp_path):
+        # BACK-1038: census_for_path used to hard-skip every directory
+        # starting with '.', silently dropping real source under e.g.
+        # .fastlane/ or .github/ — a divergence from check's own file
+        # collector (collect_files_to_check), which only excludes
+        # is_skippable_dir() names (.git/.venv/caches/...), not dot-dirs in
+        # general. Both walks must now agree.
+        _write(tmp_path, '.fastlane/deploy.rb')
+        _write(tmp_path, 'src/main.py')
+        census = census_for_path(tmp_path)
+        assert census.per_language == {'ruby': 1, 'python': 1}
+
+    def test_actual_dotdirs_still_skipped(self, tmp_path):
+        # Real skip-list dot-dirs (.git, caches, venvs) remain excluded —
+        # is_skippable_dir()/SKIP_DIRECTORIES still does that job.
+        _write(tmp_path, '.git/hooks/pre-commit.py')
+        _write(tmp_path, 'src/main.py')
+        census = census_for_path(tmp_path)
+        assert census.per_language == {'python': 1}
+
     def test_gitignore_and_no_analyzer_default_to_zero(self, tmp_path):
         # census_for_path walks directly — it has no gitignore/analyzer
         # visibility, unlike check's FileCollectionResult-derived census.

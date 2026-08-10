@@ -286,6 +286,26 @@ class TestFileCollectionResultToScopeCensus:
         assert census.per_language == {}
         assert census.total_code_files == 0
 
+    def test_recognized_extension_with_no_analyzer_still_in_census(self, tmp_path):
+        # BACK-1038: check's census used to silently drop any language that
+        # has a registered extension but no analyzer (e.g. Objective-C,
+        # capability_tier=unknown) — overview/architecture's census_for_path
+        # counted it (extension-registry membership alone), so the two
+        # commands disagreed on what languages a target contains. `.files`
+        # (what rules actually run against) must stay unchanged; only the
+        # reported census should now include the no-analyzer language too.
+        (tmp_path / 'a.py').write_text('# a')
+        (tmp_path / 'thing.m').write_text('// objc, no analyzer registered')
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
+            def analyzer_mock(path, allow_fallback=True):
+                return Mock() if path.endswith('.py') else None
+            mock_get_analyzer.side_effect = analyzer_mock
+            result = collect_files_to_check(tmp_path, [])
+        assert len(result.files) == 1  # only a.py — objc file never gets rule-checked
+        census = result.to_scope_census()
+        assert census.per_language == {'python': 1, 'objc': 1}
+        assert census.total_code_files == 2
+
 
 class TestAmbiguousSkipDirectories:
     """BACK-552: env/venv/build/dist are ambiguous names, not unconditional
@@ -732,6 +752,91 @@ class TestGroupedOutput:
         _print_grouped_detections(detections, "test.conf", no_group=False)
         out = capsys.readouterr().out
         assert "more N003" in out
+
+
+class TestGroupedOutputRunWideGuidanceDedup:
+    """BACK-1039: a rule firing ~1x each across many files never hit
+    _GROUP_THRESHOLD's within-file collapsing, so its full suggestion+context
+    block printed once per file, file-wide (699 lines/32KB observed for 60
+    B006 hits on one real repo). `shown_guidance`, when the caller shares one
+    set across the whole run, makes only the first occurrence of a rule code
+    ANYWHERE in the run print full guidance — later ones (same file or not)
+    print only the terse file:line line."""
+
+    def _make_detection(self, rule_code, line, message="test message",
+                         suggestion="fix it", context="the code"):
+        from unittest.mock import MagicMock
+        d = MagicMock()
+        d.rule_code = rule_code
+        d.line = line
+        d.column = 1
+        d.message = message
+        d.severity.value = "MEDIUM"
+        d.suggestion = suggestion
+        d.context = context
+        return d
+
+    def test_default_none_always_shows_guidance(self, capsys):
+        """No shared set passed (single-file check_and_report_file's case) —
+        behavior is unchanged from before BACK-1039: every occurrence shows
+        its full suggestion+context, since there's nothing to dedup against."""
+        from reveal.cli.file_checker import _print_grouped_detections
+        d1 = self._make_detection("B006", 1)
+        d2 = self._make_detection("B006", 2)
+        _print_grouped_detections([d1], "a.py")
+        _print_grouped_detections([d2], "b.py")
+        out = capsys.readouterr().out
+        assert out.count("fix it") == 2
+
+    def test_shared_set_shows_guidance_once_across_files(self, capsys):
+        from reveal.cli.file_checker import _print_grouped_detections
+        shown = set()
+        d1 = self._make_detection("B006", 1)
+        d2 = self._make_detection("B006", 2)
+        _print_grouped_detections([d1], "a.py", shown_guidance=shown)
+        _print_grouped_detections([d2], "b.py", shown_guidance=shown)
+        out = capsys.readouterr().out
+        assert out.count("fix it") == 1
+        assert out.count("💡") == 1
+        # both detection lines still printed — only guidance is deduped
+        assert out.count("B006") == 2
+        assert shown == {"B006"}
+
+    def test_different_rule_codes_each_get_guidance_once(self, capsys):
+        from reveal.cli.file_checker import _print_grouped_detections
+        shown = set()
+        d1 = self._make_detection("B006", 1, suggestion="fix B006")
+        d2 = self._make_detection("S001", 2, suggestion="fix S001")
+        _print_grouped_detections([d1], "a.py", shown_guidance=shown)
+        _print_grouped_detections([d2], "a.py", shown_guidance=shown)
+        out = capsys.readouterr().out
+        assert "fix B006" in out
+        assert "fix S001" in out
+
+    def test_no_group_bypasses_dedup(self, capsys):
+        """--no-group means "show me everything, unfiltered" — guidance dedup
+        must not silently apply even when a shared set is passed."""
+        from reveal.cli.file_checker import _print_grouped_detections
+        shown = set()
+        d1 = self._make_detection("B006", 1)
+        d2 = self._make_detection("B006", 2)
+        _print_grouped_detections([d1], "a.py", no_group=True, shown_guidance=shown)
+        _print_grouped_detections([d2], "b.py", no_group=True, shown_guidance=shown)
+        out = capsys.readouterr().out
+        assert out.count("fix it") == 2
+
+    def test_dedup_applies_to_within_file_collapsed_group_too(self, capsys):
+        """A rule that DOES hit the within-file _GROUP_THRESHOLD collapse
+        (first occurrence + "+N more") still only shows guidance once
+        run-wide, same as the non-collapsed path."""
+        from reveal.cli.file_checker import _print_grouped_detections, _GROUP_THRESHOLD
+        shown = set()
+        first_batch = [self._make_detection("N003", i) for i in range(_GROUP_THRESHOLD)]
+        second_detection = self._make_detection("N003", 100)
+        _print_grouped_detections(first_batch, "a.conf", shown_guidance=shown)
+        _print_grouped_detections([second_detection], "b.conf", shown_guidance=shown)
+        out = capsys.readouterr().out
+        assert out.count("fix it") == 1
 
 
 class TestGeneratedFileDetection:

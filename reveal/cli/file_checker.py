@@ -18,6 +18,7 @@ from typing import Optional, List, Dict, TYPE_CHECKING
 
 from ..utils.path_utils import (
     ScopeCensus,
+    _language_for_path,
     is_skippable_dir,
     tally_files_by_language,
     to_posix,
@@ -175,28 +176,53 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
                 logging.warning("check: skipped %s — %s: %s", file_path, type(e).__name__, e)
 
 
-def _print_grouped_detections(detections: list, relative: Path, no_group: bool = False) -> None:
+def _print_grouped_detections(
+    detections: list,
+    relative: Path,
+    no_group: bool = False,
+    shown_guidance: Optional[set] = None,
+) -> None:
     """Print detections for one file, collapsing rules that repeat excessively.
 
     When a rule fires >= _GROUP_THRESHOLD times in a single file the first
     occurrence is shown followed by a "+N more" note.  Keeps noisy generated
     configs (e.g. cPanel ea-nginx.conf) from burying genuine findings.
 
+    BACK-1039: that collapsing only helped WITHIN one file — a rule firing
+    once each across many files (e.g. B006 60x, one per file) never hit
+    _GROUP_THRESHOLD and printed its full suggestion+context block every
+    single time (699 lines/32KB observed on one real run vs. 80 for the
+    identical --select via --format grep). `shown_guidance`, when passed by
+    the caller and shared across the whole run (not just one file), tracks
+    which rule codes have already had their full suggestion+context shown
+    anywhere — first occurrence run-wide gets the full block, every later
+    one (same file or a different one) gets the terse file:line line only.
+    `--no-group` still bypasses this, same as the within-file collapsing.
+
     Args:
         detections: Ordered list of Detection objects for this file
         relative: CWD-relative path used as the source label
-        no_group: When True, skip collapsing entirely
+        no_group: When True, skip collapsing/guidance-dedup entirely
+        shown_guidance: Rule codes whose full guidance has already printed
+            somewhere in this run; mutated in place. None = always show
+            (matches pre-BACK-1039 per-file-only behavior, e.g. single-file
+            check_and_report_file, which has nothing else to dedup against).
     """
     severity_icons = SEVERITY_MARKERS
 
-    if no_group or len(detections) < _GROUP_THRESHOLD:
-        for d in detections:
-            icon = severity_icons.get(d.severity, "ℹ️ ")
-            print(f"{relative}:{d.line}:{d.column} {icon} {d.rule_code} {d.message}")
+    def _emit(d, icon: str) -> None:
+        print(f"{relative}:{d.line}:{d.column} {icon} {d.rule_code} {d.message}")
+        if no_group or shown_guidance is None or d.rule_code not in shown_guidance:
+            if shown_guidance is not None:
+                shown_guidance.add(d.rule_code)
             if d.suggestion:
                 print(f"  💡 {d.suggestion}")
             if d.context:
                 print(f"  📝 {d.context}")
+
+    if no_group or len(detections) < _GROUP_THRESHOLD:
+        for d in detections:
+            _emit(d, severity_icons.get(d.severity, "ℹ️ "))
         return
 
     # Identify which rule codes exceed the grouping threshold
@@ -209,17 +235,11 @@ def _print_grouped_detections(detections: list, relative: Path, no_group: bool =
     for d in detections:
         icon = severity_icons.get(d.severity, "ℹ️ ")
         if d.rule_code not in collapsed:
-            print(f"{relative}:{d.line}:{d.column} {icon} {d.rule_code} {d.message}")
-            if d.suggestion:
-                print(f"  💡 {d.suggestion}")
-            if d.context:
-                print(f"  📝 {d.context}")
+            _emit(d, icon)
         elif d.rule_code not in shown_collapsed:
             shown_collapsed.add(d.rule_code)
             total = len(by_rule[d.rule_code])
-            print(f"{relative}:{d.line}:{d.column} {icon} {d.rule_code} {d.message}")
-            if d.suggestion:
-                print(f"  💡 {d.suggestion}")
+            _emit(d, icon)
             print(f"  ↳ +{total - 1} more {d.rule_code} occurrences hidden — use --no-group to expand")
 
 
@@ -292,6 +312,12 @@ class FileCollectionResult:
     skipped_gitignore: int = 0
     skipped_no_analyzer: int = 0
     skipped_dirs: int = 0
+    # BACK-1038: files with a recognized code extension but no registered
+    # analyzer (e.g. Objective-C, capability_tier=unknown) — a subset of
+    # skipped_no_analyzer, broken out by language so to_scope_census() can
+    # surface them the same way overview's census_for_path() already does,
+    # instead of silently dropping the language from scope.languages.
+    no_analyzer_by_language: Dict[str, Dict[str, object]] = field(default_factory=dict)
 
     def to_scope_census(self) -> ScopeCensus:
         """Build the BACK-884 scope census for this collection: per-language
@@ -300,11 +326,27 @@ class FileCollectionResult:
         that builds its census from an already-collected file list rather
         than calling `census_for_path` — it has skip-reason data that a
         fresh walk wouldn't.
+
+        BACK-1038: `.files` alone under-reports scope.languages relative to
+        overview/architecture, which count any recognized code extension
+        regardless of analyzer availability — a target with e.g.
+        Objective-C source (extension recognized, no analyzer) would show
+        that language in overview's census but not check's, silently
+        implying check looked at it. Merge in no_analyzer_by_language so
+        both censuses agree on what languages are *present*, even though
+        check's `.files` (and thus what it actually ran rules against)
+        stays unchanged — capability_tiers_for() will correctly render
+        these as 'unknown' tier at the command layer, same as overview.
         """
         counts = tally_files_by_language(self.files)
+        per_language = {lang: v['count'] for lang, v in counts.items()}
+        language_extensions = {lang: v['ext'] for lang, v in counts.items()}
+        for lang, v in self.no_analyzer_by_language.items():
+            per_language[lang] = per_language.get(lang, 0) + v['count']
+            language_extensions.setdefault(lang, v['ext'])
         return ScopeCensus(
-            per_language={lang: v['count'] for lang, v in counts.items()},
-            language_extensions={lang: v['ext'] for lang, v in counts.items()},
+            per_language=per_language,
+            language_extensions=language_extensions,
             skipped_gitignore=self.skipped_gitignore,
             skipped_no_analyzer=self.skipped_no_analyzer,
             skipped_dirs=self.skipped_dirs,
@@ -321,12 +363,14 @@ def collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> Fi
     Returns:
         FileCollectionResult: survivors (`.files`) plus skip-reason counts.
     """
-    from ..registry import get_analyzer
+    from ..registry import get_analyzer, get_code_extensions
 
+    code_exts = get_code_extensions()
     files_to_check: List[Path] = []
     skipped_gitignore = 0
     skipped_no_analyzer = 0
     skipped_dirs = 0
+    no_analyzer_by_language: Dict[str, Dict[str, object]] = {}
 
     for root, dirs, files in os.walk(directory):
         # Filter out excluded directories and *.egg-info build artifacts
@@ -353,12 +397,25 @@ def collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> Fi
                 files_to_check.append(file_path)
             else:
                 skipped_no_analyzer += 1
+                # BACK-1038: a recognized code extension with no analyzer
+                # (e.g. Objective-C) is still a language *present* in the
+                # target — track it separately so to_scope_census() can
+                # report it (matching overview's un-gated census) without
+                # adding the file to files_to_check (rules still can't run
+                # on it, that part of the behavior is correct as-is).
+                ext = file_path.suffix.lower()
+                if ext in code_exts:
+                    lang = _language_for_path(file_path)
+                    if lang:
+                        entry = no_analyzer_by_language.setdefault(lang, {'count': 0, 'ext': ext})
+                        entry['count'] += 1
 
     return FileCollectionResult(
         files=files_to_check,
         skipped_gitignore=skipped_gitignore,
         skipped_no_analyzer=skipped_no_analyzer,
         skipped_dirs=skipped_dirs,
+        no_analyzer_by_language=no_analyzer_by_language,
     )
 
 
@@ -649,6 +706,9 @@ def _check_files_text(
         )
 
     cwd = Path.cwd()
+    # BACK-1039: shared run-wide (not per-file) so a rule's full guidance
+    # prints once for the whole run — see _print_grouped_detections.
+    shown_guidance: set = set()
     for file_path, issue_count, detections in result_iter:
         detections = _apply_severity_filter(detections, severity)
         issue_count = len(detections)
@@ -664,7 +724,7 @@ def _check_files_text(
             except ValueError:
                 relative = file_path.relative_to(directory)
             print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
-            _print_grouped_detections(detections, relative, no_group=no_group)
+            _print_grouped_detections(detections, relative, no_group=no_group, shown_guidance=shown_guidance)
 
     if hidden_files:
         print(
