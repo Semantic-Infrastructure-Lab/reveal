@@ -253,7 +253,11 @@ def _display_name_for_language(lang: str) -> str:
     return LANGUAGE_DISPLAY_NAMES.get(lang, lang.capitalize())
 
 
-def _walk_code_files(path: Path) -> Iterator[Path]:
+def _walk_code_files(
+    path: Path,
+    exclude_patterns: Optional[List[str]] = None,
+    respect_gitignore: bool = False,
+) -> Iterator[Path]:
     """Yield every file under *path*, skip-dir-correct (BACK-887's
     ``is_skippable_dir`` fix — shared so every census walk agrees).
 
@@ -263,15 +267,40 @@ def _walk_code_files(path: Path) -> Iterator[Path]:
     dot-dir filter either; before this fix the two walks silently
     disagreed on real source living under e.g. ``.fastlane/``/``.github/``,
     producing a language-census mismatch between ``check`` and
-    ``overview``/``architecture`` on the same target (BACK-1038)."""
+    ``overview``/``architecture`` on the same target (BACK-1038).
+
+    BACK-1042: *exclude_patterns*/*respect_gitignore* are opt-in (default:
+    no filtering beyond ``is_skippable_dir``, matching this function's
+    pre-existing behavior) — ``overview``'s ``--exclude``/``--respect-gitignore``
+    flags pass them through here; every other caller is unaffected.
+    """
     if path.is_file():
         yield path
         return
+    gitignore_patterns: List[str] = []
+    if respect_gitignore:
+        from ..cli.file_checker import load_gitignore_patterns  # deferred: cli cycle
+        gitignore_patterns = load_gitignore_patterns(path)
+    skip_patterns = list(gitignore_patterns) + list(exclude_patterns or [])
+    if skip_patterns:
+        from ..cli.file_checker import should_skip_file  # deferred: cli cycle
     for root, dirs, filenames in os.walk(str(path)):
         root_path = Path(root)
-        dirs[:] = [d for d in dirs if not is_skippable_dir(root_path, d)]
+        kept_dirs = []
+        for d in dirs:
+            if is_skippable_dir(root_path, d):
+                continue
+            if skip_patterns:
+                rel_dir = (root_path / d).relative_to(path)
+                if should_skip_file(rel_dir / '_', skip_patterns):
+                    continue
+            kept_dirs.append(d)
+        dirs[:] = kept_dirs
         for fname in filenames:
-            yield root_path / fname
+            fp = root_path / fname
+            if skip_patterns and should_skip_file(fp.relative_to(path), skip_patterns):
+                continue
+            yield fp
 
 
 def tally_files_by_language(files: Iterable[Path]) -> Dict[str, Dict[str, Any]]:
@@ -394,21 +423,29 @@ class ScopeCensus:
         }
 
 
-def census_for_path(path: Path) -> ScopeCensus:
+def census_for_path(
+    path: Path,
+    exclude_patterns: Optional[List[str]] = None,
+    respect_gitignore: bool = False,
+) -> ScopeCensus:
     """Build the unified BACK-884 scope census for *path* by walking it
     directly (skip-dir-correct per BACK-887) — the right choice for
     ``overview``/``architecture``, which have no pre-collected file list or
     supported-language restriction of their own.
 
-    This walk doesn't know about gitignore or per-file analyzer availability,
-    so ``skipped_gitignore``/``skipped_no_analyzer`` are left at 0. ``check``
-    has that data already (``FileCollectionResult``, BACK-889) and should
-    build its census via :func:`tally_files_by_language` on its own
-    already-collected file list instead of calling this function. ``surface``
-    also needs a :class:`LanguageCoverage` for the same tree — it should use
+    ``skipped_gitignore``/``skipped_no_analyzer`` are left at 0 unless
+    *respect_gitignore* is set — ``check`` has that data already
+    (``FileCollectionResult``, BACK-889) and should build its census via
+    :func:`tally_files_by_language` on its own already-collected file list
+    instead of calling this function. ``surface`` also needs a
+    :class:`LanguageCoverage` for the same tree — it should use
     :func:`census_and_coverage_for_path` instead, to avoid walking twice.
+
+    *exclude_patterns*/*respect_gitignore*: BACK-1042, see :func:`_walk_code_files`.
     """
-    counts = tally_files_by_language(_walk_code_files(path))
+    counts = tally_files_by_language(
+        _walk_code_files(path, exclude_patterns=exclude_patterns, respect_gitignore=respect_gitignore)
+    )
     return _census_from_counts(counts)
 
 

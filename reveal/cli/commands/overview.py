@@ -80,6 +80,22 @@ def create_overview_parser() -> argparse.ArgumentParser:
         default=5,
         help='Number of items to show in each section (default: 5)'
     )
+    parser.add_argument(
+        '--exclude', action='append', metavar='PATTERN',
+        help='Exclude files/directories matching pattern from analysis entirely '
+             '(e.g., --exclude "*.min.js" --exclude "wp-includes/js/dist/*"). '
+             'Repeatable. Applies to the stats/hotspots and scope sections '
+             '(BACK-1042); the architecture and complex-functions sections '
+             'do not yet honor it.',
+    )
+    parser.add_argument(
+        '--respect-gitignore', action='store_true', default=True,
+        help='Respect .gitignore rules when scanning (default: enabled)',
+    )
+    parser.add_argument(
+        '--no-gitignore', action='store_false', dest='respect_gitignore',
+        help='Ignore .gitignore rules and scan all files',
+    )
     return parser
 
 
@@ -93,11 +109,19 @@ def run_overview(args: Namespace) -> None:
     top = args.top
     no_git = getattr(args, 'no_git', False)
     no_imports = getattr(args, 'no_imports', False)
+    respect_gitignore = getattr(args, 'respect_gitignore', True)
+    exclude = getattr(args, 'exclude', None) or []
 
     query = (
         f'top={top}&no_git={"true" if no_git else "false"}'
         f'&no_imports={"true" if no_imports else "false"}'
+        f'&respect_gitignore={"true" if respect_gitignore else "false"}'
     )
+    if exclude:
+        # No URL-decoding anywhere in this query-string pipeline (matches
+        # the rest of overview's unencoded top=/no_git=-style params) — a
+        # pattern containing '&' or '=' isn't representable here.
+        query += f'&exclude={",".join(exclude)}'
     result = OverviewAdapter(str(path), query).get_structure()
 
     if args.format == 'json':

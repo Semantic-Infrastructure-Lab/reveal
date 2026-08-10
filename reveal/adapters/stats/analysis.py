@@ -30,6 +30,7 @@ def find_analyzable_files(
     directory: Path,
     code_only: bool = False,
     respect_gitignore: bool = True,
+    exclude_patterns: Optional[List[str]] = None,
 ) -> Iterator[Path]:
     """Yield files that can be analyzed.
 
@@ -37,6 +38,10 @@ def find_analyzable_files(
         directory: Directory to search
         code_only: If True, exclude data/config files
         respect_gitignore: If True, skip gitignored directories and files
+        exclude_patterns: BACK-1042 — additional user-supplied --exclude
+            patterns, matched with the same semantics as gitignore_patterns
+            (same directory-pruning behavior, so an excluded subtree is
+            never walked/analyzed at all)
 
     Yields:
         Analyzable file paths one at a time (generator — avoids materializing
@@ -52,20 +57,22 @@ def find_analyzable_files(
             # unfiltered rather than fail the whole directory walk.
             pass
 
+    skip_patterns = gitignore_patterns + list(exclude_patterns or [])
+
     for root, dirs, files in os.walk(directory):
         root_path = Path(root)
 
-        # Prune well-known and gitignored directories in-place so os.walk
-        # never descends into them.
+        # Prune well-known, gitignored, and --exclude'd directories in-place
+        # so os.walk never descends into them.
         def _keep_dir(d: str) -> bool:
             if is_skippable_dir(root_path, d):
                 return False
-            if gitignore_patterns:
+            if skip_patterns:
                 from ...cli.file_checker import should_skip_file  # deferred: cli cycle
                 try:
                     rel = (root_path / d).relative_to(directory)
                     # Append a dummy filename so should_skip_file sees parts correctly
-                    if should_skip_file(rel / '_', gitignore_patterns):
+                    if should_skip_file(rel / '_', skip_patterns):
                         return False
                 except ValueError:
                     pass
@@ -76,10 +83,10 @@ def find_analyzable_files(
         for file in files:
             file_path = root_path / file
 
-            if gitignore_patterns:
+            if skip_patterns:
                 from ...cli.file_checker import should_skip_file  # deferred: cli cycle
                 try:
-                    if should_skip_file(file_path.relative_to(directory), gitignore_patterns):
+                    if should_skip_file(file_path.relative_to(directory), skip_patterns):
                         continue
                 except ValueError:
                     pass
