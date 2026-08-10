@@ -142,6 +142,33 @@ class TestI002GraphCachePreload:
             f"expected exactly 1 ceiling warning, got {occurrences}"
         )
 
+    def test_preload_resolves_from_sample_file_not_bare_directory(self, tmp_path):
+        """BACK-1041: `overview`/`hotspots` resolved a *different*, larger
+        project root than `check` for the same target directory, because this
+        preload passed the bare scan directory to `_find_project_root` (which
+        only climbs upward) instead of a real file inside it. A directory
+        sitting above a package boundary — its `package.json`/`.git` one
+        level *inside* it — never sees that marker from the directory alone,
+        while `check`'s per-file resolution (starting from an actual file
+        path) finds it correctly. That caused `overview`/`hotspots` to
+        over-climb to a much larger, unrelated root and needlessly trip the
+        BACK-338 ceiling warning even though `check`'s equivalent scan
+        succeeded. Resolving from `files[0]` keeps this preload's guess
+        consistent with what every worker actually resolves to.
+        """
+        outer = tmp_path / "outer"
+        pkg = outer / "pkg"
+        pkg.mkdir(parents=True)
+        (pkg / "package.json").write_text("{}")
+        (pkg / "a.py").write_text("import os\n")
+
+        files = [pkg / "a.py"]
+        result = _i002_preload(outer, files=files)
+
+        assert isinstance(result, dict)
+        assert pkg in result
+        assert outer not in result
+
 
 class TestStatsAdapterWorkerOverride:
     """BACK-1004: stats/adapter.py's worker pool was the only uncapped,

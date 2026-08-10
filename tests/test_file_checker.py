@@ -618,8 +618,8 @@ class TestI002Preload:
 
         preload_calls = []
 
-        def fake_preload(directory, select, ignore):
-            preload_calls.append((directory, select, ignore))
+        def fake_preload(directory, select, ignore, files=None):
+            preload_calls.append((directory, select, ignore, files))
             return {}
 
         with patch("reveal.cli.file_checker._i002_preload", side_effect=fake_preload):
@@ -627,6 +627,39 @@ class TestI002Preload:
 
         assert len(preload_calls) == 1
         assert preload_calls[0][0] == tmp_path
+        assert preload_calls[0][3] == files
+
+    def test_preload_resolves_from_sample_file_not_bare_directory(self, tmp_path):
+        """BACK-1041: preloading from a directory that sits *above* a package
+        boundary must not over-climb past the marker that a real file inside
+        it would find.
+
+        ``_find_project_root`` only climbs upward from its starting point, so
+        asking it to resolve a bare directory with no marker of its own skips
+        right past a ``package.json`` that lives one level *inside* that
+        directory (I002's own per-file ``check()`` call starts from the
+        file's path and would find it). Passing a real file as the resolution
+        anchor keeps the preload's guess consistent with what every worker
+        actually resolves to.
+        """
+        outer = tmp_path / "outer"
+        pkg = outer / "pkg"
+        pkg.mkdir(parents=True)
+        (pkg / "package.json").write_text("{}")
+        (pkg / "a.py").write_text("import os\n")
+
+        files = [pkg / "a.py"]
+        result = _i002_preload(outer, select=["I"], ignore=None, files=files)
+
+        assert isinstance(result, dict)
+        assert pkg in result
+        assert outer not in result
+
+    def test_preload_falls_back_to_directory_when_no_files_given(self, tmp_path):
+        """Without a `files` list, preload keeps its old directory-based behavior."""
+        (tmp_path / "a.py").write_text("import os\n")
+        result = _i002_preload(tmp_path, select=["I"], ignore=None)
+        assert isinstance(result, dict)
 
 
 # ==========================================================================

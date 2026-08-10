@@ -68,7 +68,7 @@ def _i002_will_run(select, ignore) -> bool:
     return any(r.code == "I002" for r in rules)
 
 
-def _i002_preload(directory: Path, select, ignore) -> dict:
+def _i002_preload(directory: Path, select, ignore, files: Optional[List[Path]] = None) -> dict:
     """Build the I002 import graph in the main process before spawning workers.
 
     Returns a plain dict (project_root -> ImportGraph) ready to pickle into
@@ -78,14 +78,26 @@ def _i002_preload(directory: Path, select, ignore) -> dict:
     Skips the build entirely (returns {}) when I002 is not in the effective rule
     set — e.g. it is ignored, or --select asks for unrelated rules only.
 
-    Returns an empty dict on any error so the caller degrades gracefully to
-    the old per-worker build behaviour.
+    BACK-1041: root resolution must start from an actual source file, not the
+    bare scan directory. ``_find_project_root`` only climbs *upward* looking
+    for markers, so a `directory` that sits above a package boundary (e.g. the
+    CLI target is a vendored corpus's parent, with the real `package.json`/
+    `.git` one level down inside it) never sees that marker and climbs past it
+    to whatever VCS root is further up — which can be a much larger, unrelated
+    tree. Each file's own `check()` call resolves its root from the file's own
+    path and correctly stops at the nearer marker, so preloading from
+    `directory` alone can guess a different (and wrong) root than every
+    worker actually ends up using — wasting the preload and logging a
+    misleading "likely project-root mis-detection" warning even though the
+    real per-file analysis goes on to succeed. Preloading from a real file
+    under `directory` keeps the guess consistent with what workers resolve.
     """
     try:
         if not _i002_will_run(select, ignore):
             return {}
         from reveal.rules.imports.I002 import I002, _find_project_root, _graph_cache
-        root = _find_project_root(directory.resolve())
+        sample = files[0] if files else directory
+        root = _find_project_root(sample.resolve())
         I002()._build_import_graph(root)   # populates _graph_cache in main process
         return dict(_graph_cache)          # plain dict is picklable
     except Exception:
@@ -130,7 +142,7 @@ def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
     # Capping at 4 leaves remaining cores free and reduces IPC pressure.
     workers = min(4, os.cpu_count() or 4, len(files))
     args_iter = [(f, directory, select, ignore) for f in files]
-    graph_cache = _i002_preload(directory, select, ignore)
+    graph_cache = _i002_preload(directory, select, ignore, files)
     with ProcessPoolExecutor(
         max_workers=workers,
         initializer=_i002_init_worker,
@@ -161,7 +173,7 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
     from concurrent.futures import as_completed
     workers = min(4, os.cpu_count() or 4, len(files))
     args_list = [(f, directory, select, ignore) for f in files]
-    graph_cache = _i002_preload(directory, select, ignore)
+    graph_cache = _i002_preload(directory, select, ignore, files)
     with ProcessPoolExecutor(
         max_workers=workers,
         initializer=_i002_init_worker,

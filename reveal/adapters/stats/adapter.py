@@ -42,7 +42,7 @@ def _analyze_file_worker(args: tuple):
     )
 
 
-def _i002_preload(directory: Path) -> dict:
+def _i002_preload(directory: Path, files: Optional[list] = None) -> dict:
     """Build the I002 import graph once in the main process before spawning workers.
 
     Without this, each ProcessPoolExecutor worker below hits a cold I002
@@ -51,10 +51,21 @@ def _i002_preload(directory: Path) -> dict:
     worker (BACK-531). Mirrors cli/file_checker.py's `_i002_preload`/
     `_i002_init_worker` pair used by the `check` command. Returns {} on any
     error so callers degrade gracefully to the old per-worker build behavior.
+
+    BACK-1041: resolve from a real file under `directory` (`files[0]`) when
+    available, not `directory` itself — `_find_project_root` only climbs
+    upward, so a bare `directory` sitting above a package boundary (its
+    `package.json`/`.git` one level *inside* it) never sees that marker and
+    over-climbs to a larger, unrelated root, while each worker's own per-file
+    resolution correctly finds the nearer marker. Preloading from a directory
+    in that situation both wastes the preload and logs a misleading
+    "project-root mis-detection" warning for a scan that, per file, actually
+    succeeds.
     """
     try:
         from reveal.rules.imports.I002 import I002, _find_project_root, _graph_cache
-        root = _find_project_root(directory.resolve())
+        sample = files[0] if files else directory
+        root = _find_project_root(sample.resolve())
         I002()._build_import_graph(root)   # populates _graph_cache in main process
         return dict(_graph_cache)          # plain dict is picklable
     except Exception:
@@ -277,7 +288,7 @@ class StatsAdapter(ResourceAdapter):
         else:
             workers = min(8, max(1, len(files) // 10))
         if workers > 1:
-            graph_cache = _i002_preload(self.path)
+            graph_cache = _i002_preload(self.path, files)
             with ProcessPoolExecutor(
                 max_workers=workers,
                 initializer=_i002_init_worker,
