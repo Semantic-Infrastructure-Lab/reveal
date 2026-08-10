@@ -68,6 +68,18 @@ def create_deps_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='Skip the circular dependencies section'
     )
+    parser.add_argument(
+        '--summary-only',
+        action='store_true',
+        help=(
+            "JSON output only: omit base.files (the full per-file import "
+            "graph) and replace it with total_files/total_imports counts. "
+            "circular/unused are unaffected. base.files dominates deps.json "
+            "size (BACK-1040, e.g. 2.5MB of a 2.6MB file on a real repo) "
+            "and is rarely what a caller wanting the dep-health signal "
+            "(circular/unused) actually needs."
+        )
+    )
     return parser
 
 
@@ -99,6 +111,14 @@ def run_deps(args: Namespace) -> None:
             k: v for k, v in result.items()
             if k not in ('contract_version', 'type', 'source', 'source_type', 'meta')
         }
+        if getattr(args, 'summary_only', False) and isinstance(report.get('base'), dict):
+            files = report['base'].get('files')
+            if isinstance(files, dict):
+                report['base'] = {
+                    k: v for k, v in report['base'].items() if k != 'files'
+                }
+                report['base']['total_files'] = len(files)
+                report['base']['total_imports'] = sum(len(v) for v in files.values())
         print(json.dumps(
             attach_provenance(add_cli_contract_fields(report, result_type='deps', source=path)),
             indent=2, default=str,

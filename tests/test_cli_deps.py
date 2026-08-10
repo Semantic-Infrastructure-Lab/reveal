@@ -147,6 +147,16 @@ class TestCreateDepsParser(unittest.TestCase):
         args = parser.parse_args(['--no-circular'])
         self.assertTrue(args.no_circular)
 
+    def test_summary_only_flag_default_false(self):
+        parser = create_deps_parser()
+        args = parser.parse_args([])
+        self.assertFalse(args.summary_only)
+
+    def test_summary_only_flag(self):
+        parser = create_deps_parser()
+        args = parser.parse_args(['--summary-only'])
+        self.assertTrue(args.summary_only)
+
 
 # ── _local_package_names tests ─────────────────────────────────────────────────
 
@@ -517,6 +527,34 @@ class TestRunDeps(unittest.TestCase):
                 self.assertIn('base', data)
                 self.assertIn('circular', data)
                 self.assertIn('unused', data)
+
+    def test_summary_only_drops_base_files(self):
+        """BACK-1040: --summary-only strips base.files (the bulk of deps.json
+        on a real repo) but leaves circular/unused and file/import counts."""
+        import tempfile
+        p_base, p_circ, p_unused = self._patch_runners()
+        with p_base, p_circ, p_unused:
+            with tempfile.TemporaryDirectory() as tmp:
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_deps(_args(path=tmp, format='json', summary_only=True))
+                data = json.loads(buf.getvalue())
+                self.assertNotIn('files', data['base'])
+                self.assertEqual(data['base']['total_files'], len(_BASE_DATA['files']))
+                expected_imports = sum(len(v) for v in _BASE_DATA['files'].values())
+                self.assertEqual(data['base']['total_imports'], expected_imports)
+                # unaffected
+                self.assertEqual(data['circular']['count'], 2)
+
+    def test_summary_only_ignored_without_json_format(self):
+        """--summary-only only touches the JSON path; text rendering (which
+        never dumps base.files verbatim) must not change or error."""
+        import tempfile
+        p_base, p_circ, p_unused = self._patch_runners(circular={}, unused=[])
+        with p_base, p_circ, p_unused:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = _capture(run_deps, _args(path=tmp, format='text', summary_only=True))
+                self.assertIn('Dependencies:', out)
 
     def test_text_output_shows_header(self):
         import tempfile
