@@ -12,6 +12,15 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.119.0] - 2026-08-09 (session revealed-comet-0809)
+
+### Fixed
+- **`overview`'s scope census disagreed with `check`'s on the same target (BACK-1038)** — two separate root causes. First: `_walk_code_files` (shared by `overview`/`architecture`/`surface`/`contracts`) blanket-skipped every dot-directory, while `check`'s own file walk didn't — real source under e.g. `.fastlane/` was invisible to `overview`'s census but present in `check`'s. Fixed by relying solely on `is_skippable_dir()`/`SKIP_DIRECTORIES` in both walks. Second: `check` requires a working analyzer before a file enters its census, so a recognized-but-unanalyzable language (e.g. Objective-C) was silently absent from `check`'s `scope.languages` while present in `overview`'s; now merged into the reported census (`check`'s actual rule-checked file list is unchanged).
+- **`check --format text` repeated full rule-remediation guidance once per occurrence, not once per rule (BACK-1039)** — a rule firing ~1x each across many files printed full suggestion+context per file; now printed once per rule code per run (699→226 lines on reveal's own repo, same 60/60 detections).
+
+### Added
+- **`reveal deps --format json --summary-only` (BACK-1040)** — strips `base.files` (the full per-file import graph) from the JSON output, replacing it with file/import totals; `circular`/`unused` unaffected (2,646,448→1,297 bytes on reveal's own repo).
+
 ## [0.118.0] - 2026-08-09 (sessions wicked-yager-0809, plum-iris-0809)
 
 ### Added

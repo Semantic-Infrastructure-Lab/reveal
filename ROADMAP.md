@@ -9,6 +9,12 @@ This document outlines reveal's development priorities and future direction. For
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
 
+### v0.119.0 — overview/check census parity, check text-output dedup, deps summary-only
+
+- ✅ `overview`'s scope census silently disagreed with `check`'s on the same target — dot-directory source files and no-analyzer languages (e.g. Objective-C) could appear in one but not the other (BACK-1038).
+- ✅ `check --format text` no longer repeats full rule-remediation guidance per occurrence — once per rule code per run instead (BACK-1039).
+- ✅ `reveal deps --format json --summary-only` strips the full per-file import graph, keeping only totals (BACK-1040).
+
 ### v0.118.0 — provenance fixed on every CLI subcommand, check flags unscoped rule categories
 - ✅ `--provenance` was silently a no-op on every `reveal <subcommand> <path>` invocation (12 subcommands) — chain-of-custody metadata now actually attaches (BACK-1034).
 - ✅ `check`'s JSON output flags `scope.unscoped_categories` — languages present in a scan with zero verified rule coverage for an active category, distinguishing "genuinely clean" from "never checked" (BACK-1021).
