@@ -1,11 +1,14 @@
 """Git resolution methods for diff adapter."""
 
+import logging
 import os
 import tempfile
 from pathlib import Path
 from typing import Dict, Any, cast
 
 from ...registry import get_analyzer
+
+logger = logging.getLogger(__name__)
 
 
 def _open_repo():
@@ -288,7 +291,8 @@ def resolve_git_directory(git_ref: str, dir_path: str) -> Dict[str, Any]:
             continue
         try:
             struct = _fetch_and_analyze_git_file(git_ref, file_path)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Skipping {file_path}@{git_ref} in directory scan: {e}")
             continue
         if not struct:
             continue

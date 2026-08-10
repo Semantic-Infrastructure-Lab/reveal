@@ -49,7 +49,7 @@ def _scan_one(args: tuple) -> Path | None:
             data_lower = data.lower()
             return path if all(n in data_lower for n in needles) else None
     except Exception as e:
-        logger.debug("grep_file_worker failed for %s: %s", path, e)
+        logger.warning("grep_file_worker failed for %s: %s", path, e)
         return None
 
 

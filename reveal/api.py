@@ -139,7 +139,7 @@ def element(
                     if result is not None:
                         return result
     except Exception as e:
-        logger.debug("element() structure lookup failed for %s %r: %s", path, name, e)
+        logger.warning("element() structure lookup failed for %s %r: %s", path, name, e)
 
     # Last resort: try common types in order.
     for elem_type in ("function", "class", "method", "struct", "enum",
@@ -260,7 +260,7 @@ def check(
             analyzer = analyzer_class(path_str)
             structure_data = analyzer.get_structure()
         except Exception as e:
-            logger.debug("check() get_structure failed for %s: %s", path_str, e)
+            logger.warning("check() get_structure failed for %s: %s", path_str, e)
 
     return RuleRegistry.check_file(
         path_str, structure_data, content, select=select, ignore=ignore

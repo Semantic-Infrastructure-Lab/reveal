@@ -1,5 +1,6 @@
 """File operations for markdown adapter."""
 
+import logging
 import os
 import re
 import yaml
@@ -7,6 +8,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, cast
 
 from ...registry import get_markdown_extensions
+
+logger = logging.getLogger(__name__)
 
 
 def find_markdown_files(base_path: Path) -> List[Path]:
@@ -48,7 +51,8 @@ def read_body_text(path: Path) -> str:
     """
     try:
         content = path.read_text(encoding='utf-8')
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to read {path}, treating body as empty: {e}")
         return ''
 
     if not content.startswith('---'):
@@ -79,7 +83,8 @@ def extract_internal_links(path: Path, base_path: Path) -> List[str]:
     """
     try:
         content = path.read_text(encoding='utf-8')
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to read {path}, reporting no internal links: {e}")
         return []
 
     # [text](url) — grab the URL portion

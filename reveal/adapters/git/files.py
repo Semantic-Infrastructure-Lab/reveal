@@ -923,7 +923,13 @@ def _get_element_content_at_commit(
         finally:
             os.unlink(tmp_path)
 
-    except (KeyError, Exception):
+    except KeyError:
+        return None
+    except Exception as e:
+        logger.warning(
+            f"Failed to extract {element_name!r} from {filepath!r} at "
+            f"{commit.short_id}: {e}"
+        )
         return None
 
 

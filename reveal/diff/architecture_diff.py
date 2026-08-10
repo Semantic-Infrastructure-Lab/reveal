@@ -98,7 +98,7 @@ def _extract_structure(path: Path) -> Dict[str, Any]:
     try:
         return analyzer_class(str(path)).get_structure()
     except Exception as exc:
-        logger.debug("structure extraction failed for %s: %s", path, exc)
+        logger.warning("structure extraction failed for %s: %s", path, exc)
         return {}
 
 
