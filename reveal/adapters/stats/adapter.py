@@ -231,7 +231,7 @@ class StatsAdapter(ResourceAdapter):
         self._warn_unknown_query_params(
             self.query_params,
             skip_filter_keys=True,
-            extra_known_keys={'sort', 'limit', 'offset'},
+            extra_known_keys={'sort', 'limit', 'offset', 'exclude', 'respect_gitignore'},
         )
 
     def _merge_query_params(self, hotspots, code_only, min_lines, max_lines,
@@ -254,7 +254,17 @@ class StatsAdapter(ResourceAdapter):
         """Collect file stats that match the specified filters."""
         from concurrent.futures import ProcessPoolExecutor
 
-        files = list(find_analyzable_files(self.path, code_only=code_only))
+        # BACK-1042: ?exclude=pat1,pat2 / ?respect_gitignore=false, composed
+        # in by overview's --exclude/--no-gitignore flags (also usable
+        # directly on stats:// itself).
+        exclude_param = self.query_params.get('exclude')
+        exclude_patterns = [p for p in str(exclude_param).split(',') if p] if exclude_param else None
+        respect_gitignore = str(self.query_params.get('respect_gitignore', True)).lower() != 'false'
+
+        files = list(find_analyzable_files(
+            self.path, code_only=code_only,
+            respect_gitignore=respect_gitignore, exclude_patterns=exclude_patterns,
+        ))
         if not files:
             return []
 

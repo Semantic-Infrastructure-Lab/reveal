@@ -87,6 +87,20 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help='Config file (.reveal.yaml or pyproject.toml)',
     )
     parser.add_argument(
+        '--exclude', action='append', metavar='PATTERN',
+        help='Exclude files/directories matching pattern from analysis entirely '
+             '(e.g., --exclude "*.min.js" --exclude "wp-includes/js/dist/*"). '
+             'Repeatable. Excluded files are never parsed or checked (BACK-1042).',
+    )
+    parser.add_argument(
+        '--respect-gitignore', action='store_true', default=True,
+        help='Respect .gitignore rules when collecting files to check (default: enabled)',
+    )
+    parser.add_argument(
+        '--no-gitignore', action='store_false', dest='respect_gitignore',
+        help='Ignore .gitignore rules and check all files',
+    )
+    parser.add_argument(
         '--no-group', action='store_true', dest='no_group',
         help='Show every check result individually (disables collapsing repeated rules)',
     )

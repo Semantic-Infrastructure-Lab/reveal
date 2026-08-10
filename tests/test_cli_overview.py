@@ -46,6 +46,8 @@ def _args(**kwargs):
         'no_imports': False,
         'format': 'text',
         'verbose': False,
+        'exclude': None,
+        'respect_gitignore': True,
     }
     defaults.update(kwargs)
     return Namespace(**defaults)
@@ -140,6 +142,27 @@ class TestCreateOverviewParser(unittest.TestCase):
         args = parser.parse_args(['--no-git'])
         self.assertTrue(args.no_git)
 
+    def test_exclude_flag_repeatable(self):
+        """BACK-1042."""
+        parser = create_overview_parser()
+        args = parser.parse_args(['--exclude', 'dist/*', '--exclude', '*.min.js'])
+        self.assertEqual(args.exclude, ['dist/*', '*.min.js'])
+
+    def test_exclude_defaults_to_none(self):
+        parser = create_overview_parser()
+        args = parser.parse_args([])
+        self.assertIsNone(args.exclude)
+
+    def test_respect_gitignore_defaults_true(self):
+        parser = create_overview_parser()
+        args = parser.parse_args([])
+        self.assertTrue(args.respect_gitignore)
+
+    def test_no_gitignore_flag(self):
+        parser = create_overview_parser()
+        args = parser.parse_args(['--no-gitignore'])
+        self.assertFalse(args.respect_gitignore)
+
 
 # ── _language_breakdown tests ──────────────────────────────────────────────────
 
@@ -233,7 +256,21 @@ class TestRunStats(unittest.TestCase):
         result = _run_stats(self.adapter, Path('/project'))
         self.assertIn('summary', result)
         self.assertEqual(result['summary']['total_files'], 100)
-        MockAdapter.assert_called_once_with(str(Path('/project')), 'hotspots=True')
+        # BACK-1042: query is now built explicitly (not compose()'s
+        # urlencode path) so --exclude/--respect-gitignore reach
+        # find_analyzable_files undecoded/unmangled.
+        MockAdapter.assert_called_once_with(str(Path('/project')), 'hotspots=true&respect_gitignore=true')
+
+    @patch('reveal.adapters.overview.StatsAdapter')
+    def test_exclude_and_respect_gitignore_forwarded(self, MockAdapter):
+        """BACK-1042: overview's --exclude/--no-gitignore reach StatsAdapter
+        via a raw query string (not compose()'s urlencode kwargs)."""
+        MockAdapter.return_value.get_structure.return_value = json.loads(_STATS_JSON)
+        adapter = OverviewAdapter('/project', 'exclude=dist/*,*.min.js&respect_gitignore=false')
+        _run_stats(adapter, Path('/project'))
+        MockAdapter.assert_called_once_with(
+            str(Path('/project')), 'hotspots=true&exclude=dist/*,*.min.js&respect_gitignore=false'
+        )
 
     @patch('reveal.adapters.overview.StatsAdapter')
     def test_exception_returns_empty_dict(self, MockAdapter):
@@ -646,6 +683,41 @@ class TestRunOverview(unittest.TestCase):
                 data = json.loads(buf.getvalue())
                 self.assertEqual(data['scope']['total_code_files'], 1)
                 self.assertEqual(data['scope']['languages'][0]['language'], 'Python')
+
+    def test_exclude_prunes_scope_and_stats(self):
+        """BACK-1042 end-to-end: --exclude keeps an excluded subtree out of
+        the real (unmocked) scope census and stats/hotspots collection."""
+        import tempfile
+        p_stats, p_git, p_ast, p_arch = self._patch_runners()
+        with p_git, p_ast, p_arch:
+            with tempfile.TemporaryDirectory() as tmp:
+                dist = Path(tmp, 'dist')
+                dist.mkdir()
+                Path(dist, 'bundle.js').write_text('// built output\n')
+                Path(tmp, 'good.py').write_text('def add(a, b):\n    return a + b\n')
+
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_overview(_args(path=tmp, format='json', exclude=['dist/*']))
+                data = json.loads(buf.getvalue())
+                self.assertEqual(data['scope']['total_code_files'], 1)
+                self.assertEqual(data['scope']['languages'][0]['language'], 'Python')
+
+    def test_without_exclude_scope_sees_both_files(self):
+        import tempfile
+        p_stats, p_git, p_ast, p_arch = self._patch_runners()
+        with p_git, p_ast, p_arch:
+            with tempfile.TemporaryDirectory() as tmp:
+                dist = Path(tmp, 'dist')
+                dist.mkdir()
+                Path(dist, 'bundle.js').write_text('// built output\n')
+                Path(tmp, 'good.py').write_text('def add(a, b):\n    return a + b\n')
+
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_overview(_args(path=tmp, format='json'))
+                data = json.loads(buf.getvalue())
+                self.assertEqual(data['scope']['total_code_files'], 2)
 
     def test_text_output_contains_overview_header(self):
         import tempfile

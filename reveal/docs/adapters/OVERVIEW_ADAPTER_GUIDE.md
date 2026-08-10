@@ -18,10 +18,12 @@ reveal overview
 reveal overview ./src
 reveal overview . --no-git
 reveal overview . --no-imports
+reveal overview . --exclude 'dist/*' --exclude '*.min.js'
 
 reveal 'overview://src'
 reveal 'overview://.?no_git=true'
 reveal 'overview://.?top=10'
+reveal 'overview://.?exclude=dist/*,*.min.js'
 ```
 
 Use JSON when another tool or agent will consume the result:
@@ -37,6 +39,8 @@ reveal overview . --format json
 | `top` | integer (default `5`) | Number of items shown per section. |
 | `no_git` | `true`, `false` (default) | Skip the recent-git-activity section. |
 | `no_imports` | `true`, `false` (default) | Skip import graph analysis (architecture section). |
+| `exclude` | comma-separated glob patterns | Exclude matching files/directories from the `stats`/hotspots and `scope` sections (BACK-1042). Does not yet affect `architecture` or `complex_functions`. |
+| `respect_gitignore` | `true` (default), `false` | Respect `.gitignore` for the `stats`/hotspots and `scope` sections. |
 
 ## Reading The Output
 
@@ -60,6 +64,9 @@ actually came from.
   adapter's own coverage for a given language.
 - Static imports only for the architecture section — dynamically loaded
   files (plugins, registries) may appear as spurious entry points.
+- `exclude`/`respect_gitignore` (BACK-1042) only reach the `stats`/hotspots
+  and `scope` sections — `architecture` (`imports://`) and
+  `complex_functions` (`ast://`) still scan the whole tree.
 - A directory without its own `.git` inherits the enclosing repo's history
   (disclosed via `git_foreign_root`, not silently hidden).
 

@@ -1081,7 +1081,11 @@ def capability_tiers_for(language_extensions: Dict[str, str]) -> Dict[str, str]:
     return tiers
 
 
-def scope_dict_for_path(path: Path) -> Dict[str, Any]:
+def scope_dict_for_path(
+    path: Path,
+    exclude_patterns: Optional[List[str]] = None,
+    respect_gitignore: bool = False,
+) -> Dict[str, Any]:
     """The BACK-884 ``scope`` block for *path*: a fresh census
     (``path_utils.census_for_path``) with per-language capability tier
     joined in.
@@ -1091,8 +1095,11 @@ def scope_dict_for_path(path: Path) -> Dict[str, Any]:
     ``path_utils`` here rather than the reverse keeps ``path_utils.py``
     ignorant of this module (finding #6) while still giving both callers
     one function instead of a copy-pasted ``_run_scope`` each.
+
+    *exclude_patterns*/*respect_gitignore*: BACK-1042, passed through to
+    :func:`census_for_path`.
     """
     from .utils.path_utils import census_for_path
 
-    census = census_for_path(path)
+    census = census_for_path(path, exclude_patterns=exclude_patterns, respect_gitignore=respect_gitignore)
     return census.to_scope_dict(capability_tiers=capability_tiers_for(census.language_extensions))

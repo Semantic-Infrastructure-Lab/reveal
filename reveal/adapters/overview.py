@@ -46,8 +46,19 @@ _NON_CODE_EXT_LABELS: Dict[str, str] = {
 # ── Data collectors ────────────────────────────────────────────────────────────
 
 def _run_stats(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
-    """Fetch stats and hotspots via StatsAdapter."""
-    return adapter.compose(StatsAdapter, str(path), default={}, hotspots=True)
+    """Fetch stats and hotspots via StatsAdapter.
+
+    BACK-1042: forwards --exclude/--respect-gitignore as a raw query string
+    (not compose()'s **params/urlencode path — nothing downstream in
+    parse_query_params URL-decodes, so an urlencoded '*'/',' would reach
+    find_analyzable_files still percent-escaped and never match).
+    """
+    query = 'hotspots=true'
+    exclude_patterns = adapter.exclude_patterns
+    if exclude_patterns:
+        query += f'&exclude={",".join(exclude_patterns)}'
+    query += f'&respect_gitignore={"true" if adapter.respect_gitignore else "false"}'
+    return adapter.compose(StatsAdapter, str(path), default={}, query=query)
 
 
 def _run_scope(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
@@ -59,9 +70,17 @@ def _run_scope(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
     to the existing logger.warning) so a crashed census is reflected in
     meta.errors/confidence instead of silently rendering as an empty-but-
     trusted 'scope': {} — the same fix BACK-984 already gave every other
-    sibling-adapter site in this file."""
+    sibling-adapter site in this file.
+
+    BACK-1042: honors --exclude/--respect-gitignore so the scope census
+    agrees with what stats/check actually skipped.
+    """
     try:
-        return scope_dict_for_path(path)
+        return scope_dict_for_path(
+            path,
+            exclude_patterns=adapter.exclude_patterns,
+            respect_gitignore=adapter.respect_gitignore,
+        )
     except Exception as exc:
         logger.warning("scope census failed for %s: %s", path, exc)
         adapter.record_composed_error('scope_dict_for_path', path, exc)
@@ -461,6 +480,12 @@ class OverviewAdapter(ResourceAdapter):
         self.path = str(Path(resource).expanduser())
         self.query_params = parse_query_params(query or '', coerce=True)
         self._warn_unknown_query_params(self.query_params)  # BACK-507
+        # BACK-1042
+        exclude_param = self.query_params.get('exclude')
+        self.exclude_patterns: List[str] = (
+            [p for p in str(exclude_param).split(',') if p] if exclude_param else []
+        )
+        self.respect_gitignore: bool = str(self.query_params.get('respect_gitignore', True)).lower() != 'false'
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -481,6 +506,8 @@ class OverviewAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Static imports only for the architecture section — dynamically loaded files may appear as entry points.',
+                'exclude/respect_gitignore (BACK-1042) apply to the stats/hotspots and scope sections only — '
+                'the architecture (imports://) and complex_functions (ast://) sections do not yet honor them.',
             ],
             'see_also': [
                 'reveal overview <path> - CLI subcommand form',
@@ -493,11 +520,13 @@ class OverviewAdapter(ResourceAdapter):
         return {
             'adapter': 'overview',
             'description': 'One-glance codebase dashboard (languages, quality, hotspots, architecture, recent activity)',
-            'uri_syntax': 'overview://<path>?top=5&no_git=true&no_imports=true',
+            'uri_syntax': 'overview://<path>?top=5&no_git=true&no_imports=true&exclude=pat&respect_gitignore=true',
             'query_params': {
                 'top': {'type': 'integer', 'description': 'Number of items to show per section', 'examples': ['top=10']},
                 'no_git': {'type': 'boolean', 'description': 'Skip the recent git activity section', 'examples': ['no_git=true']},
                 'no_imports': {'type': 'boolean', 'description': 'Skip import graph analysis (architecture section)', 'examples': ['no_imports=true']},
+                'exclude': {'type': 'string', 'description': 'Comma-separated glob patterns to exclude from the stats/hotspots and scope sections (BACK-1042)', 'examples': ['exclude=dist/*,*.min.js']},
+                'respect_gitignore': {'type': 'boolean', 'description': 'Respect .gitignore for the stats/hotspots and scope sections (default: true)', 'examples': ['respect_gitignore=false']},
             },
             'elements': {},
             'supports_batch': False,

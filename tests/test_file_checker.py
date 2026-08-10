@@ -207,6 +207,49 @@ class TestCollectFilesToCheck:
         assert len(files) == 1
         assert files[0].name == 'included.py'
 
+    def test_exclude_patterns_prune_directory(self, tmp_path):
+        """BACK-1042: --exclude patterns skip a whole subtree, never analyzing
+        files inside it (not just filtering them from the final report)."""
+        dist = tmp_path / 'dist'
+        dist.mkdir()
+        (dist / 'bundle.js').write_text('// built output')
+        (tmp_path / 'included.py').write_text('# Should be included')
+
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+            result = collect_files_to_check(tmp_path, [], exclude_patterns=['dist/*'])
+
+        assert [f.name for f in result.files] == ['included.py']
+        assert result.skipped_dirs == 1
+        # get_analyzer must never even be asked about the excluded file —
+        # the whole point is skipping the AST/analysis work, not just
+        # filtering it out of the results afterward.
+        checked_paths = [c.args[0] for c in mock_get_analyzer.call_args_list]
+        assert not any('bundle.js' in p for p in checked_paths)
+
+    def test_exclude_patterns_match_filename_glob(self, tmp_path):
+        """A non-directory glob pattern (e.g. "*.min.js") also excludes
+        matching files anywhere under the tree."""
+        (tmp_path / 'app.min.js').write_text('// minified')
+        (tmp_path / 'app.py').write_text('# real source')
+
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+            files = collect_files_to_check(tmp_path, [], exclude_patterns=['*.min.js']).files
+
+        assert [f.name for f in files] == ['app.py']
+
+    def test_no_exclude_patterns_unaffected(self, tmp_path):
+        """exclude_patterns is optional/keyword-only — omitting it entirely
+        preserves prior behavior (positional-arg callers still work)."""
+        (tmp_path / 'a.py').write_text('# a')
+
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+            files = collect_files_to_check(tmp_path, []).files
+
+        assert len(files) == 1
+
 
 class TestFileCollectionResultCounts:
     """BACK-889: collect_files_to_check() discloses *why* files/dirs were
@@ -969,6 +1012,87 @@ class TestCheckSubcommandParser:
         parser = create_check_parser()
         args = parser.parse_args(['f.py'])
         assert args.severity is None
+
+    def test_exclude_flag_accepted_and_repeatable(self):
+        """BACK-1042: --exclude should be accepted (not 'unrecognized argument')
+        and repeatable, matching --exclude's semantics elsewhere in reveal."""
+        from reveal.cli.commands.check import create_check_parser
+        parser = create_check_parser()
+        args = parser.parse_args(['somedir', '--exclude', 'dist/*', '--exclude', '*.min.js'])
+        assert args.exclude == ['dist/*', '*.min.js']
+
+    def test_exclude_defaults_to_none(self):
+        from reveal.cli.commands.check import create_check_parser
+        parser = create_check_parser()
+        args = parser.parse_args(['f.py'])
+        assert args.exclude is None
+
+    def test_respect_gitignore_defaults_true(self):
+        from reveal.cli.commands.check import create_check_parser
+        parser = create_check_parser()
+        args = parser.parse_args(['f.py'])
+        assert args.respect_gitignore is True
+
+    def test_no_gitignore_flag_disables_it(self):
+        from reveal.cli.commands.check import create_check_parser
+        parser = create_check_parser()
+        args = parser.parse_args(['f.py', '--no-gitignore'])
+        assert args.respect_gitignore is False
+
+
+class TestCheckExcludeIntegration:
+    """BACK-1042 end-to-end: reveal check <dir> --exclude actually skips the
+    excluded files' analysis, not just their appearance in output."""
+
+    def test_check_exclude_skips_directory(self, tmp_path, capsys):
+        from reveal.cli.commands.check import run_check
+        import argparse
+
+        dist = tmp_path / 'dist'
+        dist.mkdir()
+        # Deliberately messy JS that would trip up a real JS analyzer if
+        # analyzed — the point of this test is that it never gets that far.
+        (dist / 'bundle.min.js').write_text('function(){' * 50)
+        (tmp_path / 'good.py').write_text('def add(a, b):\n    return a + b\n')
+
+        args = argparse.Namespace(
+            path=str(tmp_path), select=None, ignore=None, profile=None,
+            only_failures=False, recursive=True, advanced=False, config=None,
+            no_group=False, severity=None, limit=50, profile_rules=False,
+            rules=False, explain=None, format='json', no_fallback=False,
+            exclude=['dist/*'], respect_gitignore=True,
+        )
+        with pytest.raises(SystemExit):
+            run_check(args)
+
+        import json
+        result = json.loads(capsys.readouterr().out)
+        checked_files = [f['file'] for f in result.get('files', [])] or None
+        assert result['scope']['skipped_dirs'] >= 1
+        assert result['summary']['files_checked'] == 1
+
+    def test_check_without_exclude_analyzes_both(self, tmp_path, capsys):
+        from reveal.cli.commands.check import run_check
+        import argparse
+
+        dist = tmp_path / 'dist'
+        dist.mkdir()
+        (dist / 'bundle.js').write_text('// built output\n')
+        (tmp_path / 'good.py').write_text('def add(a, b):\n    return a + b\n')
+
+        args = argparse.Namespace(
+            path=str(tmp_path), select=None, ignore=None, profile=None,
+            only_failures=False, recursive=True, advanced=False, config=None,
+            no_group=False, severity=None, limit=50, profile_rules=False,
+            rules=False, explain=None, format='json', no_fallback=False,
+            exclude=None, respect_gitignore=True,
+        )
+        with pytest.raises(SystemExit):
+            run_check(args)
+
+        import json
+        result = json.loads(capsys.readouterr().out)
+        assert result['summary']['files_checked'] == 2
 
 
 def _make_mock_detection(severity_value: str) -> Mock:
