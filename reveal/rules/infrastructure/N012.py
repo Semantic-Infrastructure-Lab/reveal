@@ -16,7 +16,7 @@ import re
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from . import NGINX_FILE_PATTERNS
+from . import NGINX_FILE_PATTERNS, nginx_strip_comments
 
 
 class N012(BaseRule):
@@ -41,6 +41,7 @@ class N012(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         detections: List[Detection] = []
+        content = nginx_strip_comments(content)
 
         has_zone = bool(self.LIMIT_REQ_ZONE.search(content))
 

@@ -20,10 +20,11 @@ from typing import List, Dict, Any, Optional
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from . import (
     NGINX_FILE_PATTERNS,
-    NGINX_HTTP_BLOCK_PATTERN,
     NGINX_INCLUDE_PATTERN,
+    nginx_extract_http_blocks,
     nginx_find_nginx_conf,
     nginx_resolve_include,
+    nginx_strip_comments,
 )
 
 
@@ -47,6 +48,8 @@ class N009(BaseRule):
               file_path: str,
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
+        content = nginx_strip_comments(content)
+
         # Only check files that contain at least one server block
         if not self.SERVER_BLOCK_PATTERN.search(content):
             return []
@@ -84,11 +87,10 @@ class N009(BaseRule):
             return False
         try:
             with open(nginx_conf) as fh:
-                conf_content = fh.read()
+                conf_content = nginx_strip_comments(fh.read())
         except OSError:
             return False
-        for match in NGINX_HTTP_BLOCK_PATTERN.finditer(conf_content):
-            http_block = match.group(1)
+        for http_block in nginx_extract_http_blocks(conf_content):
             if self.SERVER_TOKENS_OFF.search(http_block):
                 return True
             for inc_match in NGINX_INCLUDE_PATTERN.finditer(http_block):
@@ -97,7 +99,7 @@ class N009(BaseRule):
                     continue
                 try:
                     with open(resolved) as fh:
-                        if self.SERVER_TOKENS_OFF.search(fh.read()):
+                        if self.SERVER_TOKENS_OFF.search(nginx_strip_comments(fh.read())):
                             return True
                 except OSError:
                     pass

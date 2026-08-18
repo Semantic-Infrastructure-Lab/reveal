@@ -14,7 +14,7 @@ import re
 from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from . import NGINX_FILE_PATTERNS, nginx_resolve_include
+from . import NGINX_FILE_PATTERNS, nginx_resolve_include, nginx_strip_comments
 
 
 class N003(BaseRule):
@@ -49,6 +49,7 @@ class N003(BaseRule):
               content: str) -> List[Detection]:
         """Check for proxy locations missing recommended headers."""
         detections: List[Detection] = []
+        content = nginx_strip_comments(content)
 
         for match in self.LOCATION_PATTERN.finditer(content):
             location_path = match.group(1).strip()
@@ -102,7 +103,7 @@ class N003(BaseRule):
                 continue
             try:
                 with open(resolved) as fh:
-                    inc_content = fh.read()
+                    inc_content = nginx_strip_comments(fh.read())
                 for hm in self.HEADER_PATTERN.finditer(inc_content):
                     present.add(hm.group(1))
             except OSError:

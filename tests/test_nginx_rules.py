@@ -1471,5 +1471,189 @@ server {
         self.assertEqual(self.rule.severity, Severity.LOW)
 
 
+class TestBack1102CommentedOutServerBlocks(unittest.TestCase):
+    """BACK-1102: a fully `#`-commented-out server{} (staged rollout,
+    disabled legacy vhost) must not be treated as a live server by any
+    N-rule that structurally matches server{}/directive text. Real-corpus
+    false positive: ~/src/tia/data/web/nginx/nitrogen-mytia-net.conf's
+    disabled HTTPS-redirect block previously fired N002/N003/N008/N009/N012."""
+
+    COMMENTED_SSL_SERVER = """
+server {
+    listen 80;
+    server_name example.com;
+}
+
+# Disabled - not ready yet
+# server {
+#     listen 443 ssl http2;
+#     server_name example.com;
+#     location / {
+#         proxy_pass http://backend;
+#     }
+# }
+"""
+
+    def test_n002_does_not_fire_on_commented_block(self):
+        from reveal.rules.infrastructure.N002 import N002
+        detections = N002().check("test.conf", None, self.COMMENTED_SSL_SERVER)
+        self.assertEqual(detections, [])
+
+    def test_n003_does_not_fire_on_commented_block(self):
+        from reveal.rules.infrastructure.N003 import N003
+        detections = N003().check("test.conf", None, self.COMMENTED_SSL_SERVER)
+        self.assertEqual(detections, [])
+
+    def test_n008_does_not_fire_on_commented_block(self):
+        from reveal.rules.infrastructure.N008 import N008
+        detections = N008().check("test.conf", None, self.COMMENTED_SSL_SERVER)
+        self.assertEqual(detections, [])
+
+    def test_n012_does_not_fire_for_the_commented_block(self):
+        """The live listen-80 block still legitimately fires (no rate
+        limiting at all) -- only the commented SSL block must be ignored."""
+        from reveal.rules.infrastructure.N012 import N012
+        detections = N012().check("test.conf", None, self.COMMENTED_SSL_SERVER)
+        self.assertEqual(len(detections), 1)
+        self.assertNotIn("443", detections[0].context or "")
+
+    def test_n002_commented_out_cert_line_inside_live_block_still_flagged(self):
+        """The more dangerous direction: a single commented-out
+        `# ssl_certificate ...;` inside an otherwise-live SSL block must NOT
+        count as "certificate present" (a false negative)."""
+        from reveal.rules.infrastructure.N002 import N002
+        content = """
+server {
+    listen 443 ssl;
+    server_name example.com;
+    # ssl_certificate /etc/ssl/certs/example.crt;
+    # ssl_certificate_key /etc/ssl/private/example.key;
+}
+"""
+        detections = N002().check("test.conf", None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn("ssl_certificate", detections[0].message)
+
+    def test_suppression_marker_survives_comment_stripping(self):
+        """Reveal's own `# reveal:allow-*` suppression comments are
+        directives TO reveal, not disabled nginx config -- stripping must
+        not blank them out (regression guard, all three below previously
+        broke when comment-stripping was added)."""
+        from reveal.rules.infrastructure.N008 import N008
+        from reveal.rules.infrastructure.N009 import N009
+        from reveal.rules.infrastructure.N012 import N012
+        hsts_content = """
+server {
+    listen 443 ssl;
+    # reveal:allow-no-hsts
+}
+"""
+        self.assertEqual(N008().check("test.conf", None, hsts_content), [])
+        tokens_content = """
+server {
+    listen 80;
+}
+# reveal:allow-server-tokens
+"""
+        self.assertEqual(N009().check("test.conf", None, tokens_content), [])
+        rate_content = """
+server {
+    listen 80;
+    # reveal:allow-no-rate-limit
+}
+"""
+        self.assertEqual(N012().check("test.conf", None, rate_content), [])
+
+
+class TestBack1103CertInheritedFromHttpLevel(unittest.TestCase):
+    """BACK-1103: N002 only searched the literal server{} block text for
+    ssl_certificate/ssl_certificate_key, missing the common nginx idiom of
+    setting them once at http{} level (inline or via `include`) and
+    inheriting into every server{}."""
+
+    def setUp(self):
+        from reveal.rules.infrastructure.N002 import N002
+        self.rule = N002()
+        self.tmpdir = tempfile.mkdtemp()
+
+    def _write(self, name: str, content: str) -> str:
+        path = os.path.join(self.tmpdir, name)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def test_cert_inherited_via_include_at_http_level_same_file(self):
+        """http { include ssl-common.conf; server { listen 443 ssl; ... } } --
+        cert lives in the included snippet, not inline."""
+        self._write('ssl-common.conf', (
+            'ssl_certificate /etc/ssl/certs/wild.pem;\n'
+            'ssl_certificate_key /etc/ssl/private/wild.key;\n'
+        ))
+        site = self._write('site.conf', """
+http {
+    include ssl-common.conf;
+    server {
+        listen 443 ssl;
+        server_name split-cert.example.com;
+        location / {
+            proxy_pass http://backend;
+        }
+    }
+}
+""")
+        detections = self.rule.check(site, None, open(site).read())
+        self.assertEqual(detections, [])
+
+    def test_cert_inherited_inline_at_http_level_same_file(self):
+        """http { ssl_certificate ...; server { listen 443 ssl; } } -- no
+        include at all, directive set directly at http{} level."""
+        site = self._write('inline_http.conf', """
+http {
+    ssl_certificate /etc/ssl/certs/wild.pem;
+    ssl_certificate_key /etc/ssl/private/wild.key;
+    server {
+        listen 443 ssl;
+        server_name example.com;
+    }
+}
+""")
+        detections = self.rule.check(site, None, open(site).read())
+        self.assertEqual(detections, [])
+
+    def test_true_positive_no_cert_anywhere_still_flagged(self):
+        """The fix must not blanket-suppress -- an SSL server with no cert
+        at any level (inline, http{}, or nginx.conf) still fires."""
+        site = self._write('nocert.conf', """
+http {
+    server {
+        listen 443 ssl;
+        server_name nocert.example.com;
+        location / {
+            proxy_pass http://backend;
+        }
+    }
+}
+""")
+        detections = self.rule.check(site, None, open(site).read())
+        self.assertEqual(len(detections), 1)
+        self.assertIn("nocert.example.com", detections[0].message)
+
+    def test_unresolvable_include_does_not_assume_cert_present_at_http_level(self):
+        """An include that can't be found at http{} level must not silently
+        suppress -- only a same-block include failure (N008's precedent)
+        gets the benefit of the doubt; a missing global include shouldn't."""
+        site = self._write('missing_include.conf', """
+http {
+    include /nonexistent/ssl-common.conf;
+    server {
+        listen 443 ssl;
+        server_name example.com;
+    }
+}
+""")
+        detections = self.rule.check(site, None, open(site).read())
+        self.assertEqual(len(detections), 1)
+
+
 if __name__ == '__main__':
     unittest.main()
