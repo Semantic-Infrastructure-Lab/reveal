@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from .types import ImportStatement
+from ...rules.imports import STDLIB_MODULES
 
 
 def resolve_python_import(
@@ -92,6 +93,19 @@ def _resolve_absolute(
     3. Return None for stdlib/external packages (we don't track those)
     """
     module_parts = import_stmt.module_name.split('.')
+
+    # BACK-1080: a bare absolute `import ssl` / `import json` must never
+    # resolve to a same-named LOCAL package (e.g. adapters/ssl/,
+    # adapters/json/) even when one happens to sit on a search path — Python
+    # itself always finds the real stdlib module first via sys.path
+    # ordering, so treating the local same-named package as the target
+    # fabricates a dependency edge (and, if the local package's own file
+    # imports the stdlib module too, a phantom circular-import cycle) that
+    # has no counterpart in the source. Only the top-level component can
+    # collide this way (`os.path`, not `mypackage.os`), so checking
+    # module_parts[0] alone is correct.
+    if module_parts[0] in STDLIB_MODULES:
+        return None
 
     # Build search paths: current dir + provided paths.  A Python 3 absolute
     # import never consults the importing file's own *package* directory (only

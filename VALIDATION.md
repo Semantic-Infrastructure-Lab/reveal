@@ -1465,8 +1465,13 @@ summarises their shape, and the tables above are what should be quoted.
 ### What the false positives mean
 
 Recall is this program's metric, but several loops did report false positives.
-Every one traced to one of three benign mechanisms, each documented in its own
-row — none is a case of reveal inventing an edge that is not in the source:
+Every one traced to one of four benign mechanisms, each documented in its own
+row — with one exception (mechanism 4 below, now fixed), none is a case of
+reveal inventing an edge that is not in the source. This claim's scope is the
+real-world corpora the recall loops actually scanned; it does not cover
+degenerate/adversarial inputs such as a local package deliberately named
+after a stdlib module, which mechanism 4 was found by (see the scope note
+below the list).
 
 1. **Conditional-compilation blindness (safe over-inclusion).** reveal's
    extraction is deliberately preprocessor- and build-tag-blind, so it reports
@@ -1487,6 +1492,20 @@ row — none is a case of reveal inventing an edge that is not in the source:
 3. **Directory-granularity fan-out broader than the oracle's symbol-level
    targets.** Kotlin/kotlinx.coroutines 11, from `import ...flow.internal.*`
    correctly resolving to every file declaring that package.
+4. **Bare stdlib-name shadowing by a same-named local package (fixed,
+   BACK-1080).** None of the recall-program corpora triggered this —
+   it surfaced dogfooding reveal on its own codebase: `reveal/adapters/ssl/`
+   and `reveal/adapters/json/` are local packages literally named after the
+   `ssl`/`json` stdlib modules, and a bare `import ssl` / `import json`
+   inside them (meant as the stdlib module) resolved to the sibling
+   `ssl/__init__.py` / `json/__init__.py` in the same local package instead
+   — an edge with no counterpart in the source, and the one case that *did*
+   falsify the "never invents an edge" claim as originally written. Fixed by
+   refusing to resolve a bare absolute import locally when its top-level
+   component is a known stdlib module name (`reveal/analyzers/imports/
+   resolver.py`), matching real Python `sys.path` resolution order. The
+   pre-fix false positives this caused (BACK-1070, BACK-1079) were both
+   rejected as bogus once traced back to this mechanism.
 
 The one materially different case is **TypeScript/nest**, whose 701 pre-fix /
 1,071 post-fix figures reflect an *undercount* condition rather than safe

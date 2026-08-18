@@ -906,6 +906,60 @@ class TestStdlibShadowing:
             "Self-dependency should not be added to the import graph"
         )
 
+    def test_sibling_file_in_stdlib_named_package_not_shadowed(self, tmp_path):
+        """BACK-1080: a bare `import ssl` inside a LOCAL package that is
+        itself named 'ssl' (e.g. reveal/adapters/ssl/certificate.py) must
+        resolve to the stdlib module (i.e. not resolve locally at all), not
+        to the sibling ssl/__init__.py file in the same package.
+
+        This is distinct from test_logging_py_importing_stdlib_logging
+        above: there the shadowing file and the stdlib-named module are the
+        SAME file (self-reference, already filtered). Here they are two
+        DIFFERENT files in the same local package -- the self-reference
+        filter never sees this case, so it slipped through and fabricated a
+        ssl/__init__.py <-> certificate.py cycle that did not exist in the
+        source (also broke json/__init__.py <-> introspection.py the same
+        way for a local 'json' package).
+        """
+        pkg = tmp_path / "ssl"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("from .certificate import CertificateInfo\n")
+        (pkg / "certificate.py").write_text(
+            "import ssl\n\ndef make_context():\n    return ssl.create_default_context()\n"
+        )
+
+        adapter = ImportsAdapter(str(tmp_path), 'circular')
+        result = adapter.get_structure()
+
+        assert result['type'] == 'circular_dependencies'
+        assert result['count'] == 0, (
+            "certificate.py's bare `import ssl` must not resolve to the "
+            "sibling ssl/__init__.py -- that fabricates a cycle with no "
+            "counterpart in the source (BACK-1080)"
+        )
+
+    def test_bare_stdlib_import_not_resolved_to_local_package(self, tmp_path):
+        """Lower-level check on the resolver itself: `import ssl` from a
+        file inside a local `ssl/` package must return None (unresolvable /
+        stdlib), never the sibling ssl/__init__.py path."""
+        from reveal.analyzers.imports.resolver import resolve_python_import
+
+        pkg = tmp_path / "ssl"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("")
+        stmt = ImportStatement(
+            file_path=pkg / "certificate.py",
+            line_number=1,
+            module_name='ssl',
+            imported_names=[],
+            is_relative=False,
+            import_type='import',
+        )
+        resolved = resolve_python_import(stmt, base_path=pkg, search_paths=[tmp_path])
+        assert resolved is None, (
+            f"bare `import ssl` must never resolve locally, got {resolved!r}"
+        )
+
 
 class TestResolverPureRelativeImports:
     """Regression tests for _resolve_relative with pure package-relative imports.
