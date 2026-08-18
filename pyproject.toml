@@ -65,7 +65,8 @@ treesitter = []
 html = [
     "lxml>=4.9.0",  # Fast C-based XML/HTML parser (requires system libs: libxml2-dev, libxslt1-dev)
 ]
-# Database adapter support (mysql://, postgres://, etc.)
+# Database adapter support (mysql:// only -- no postgres:// adapter exists,
+# despite what an earlier version of this comment claimed; BACK-1115)
 database = [
     "pymysql>=1.0.0",
 ]
