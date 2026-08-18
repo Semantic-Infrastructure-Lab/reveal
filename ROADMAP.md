@@ -9,6 +9,16 @@ This document outlines reveal's development priorities and future direction. For
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
 
+### v0.121.0 — parse-error/recovery disclosure round, nginx comment-awareness + cert inheritance, silent-ignore fixes (--limit, git:// inert params)
+
+- ✅ `get_structure()`/`check` no longer fabricate or silently pass on syntactically broken or rule-crashed files with no error signal — recovery artifacts and rule crashes now surface additively in the output contract (BACK-1084, BACK-1083, BACK-1082).
+- ✅ `S001` fixed on two fronts: never scanned bare `.env*` files (BACK-1104); false-positived on version-pinned deps whose name contains "token" like `tiktoken-rs` (BACK-1105).
+- ✅ nginx rules (`N002`/`N003`/`N008`/`N009`/`N012`) gained comment-awareness (commented-out `server{}` no longer reads as live) and `N002` now recognizes `http{}`-level certificate inheritance (BACK-1102, BACK-1103).
+- ✅ `imports://`/`depends://` no longer fabricate phantom circular deps from stdlib-shadowed local packages (BACK-1080); `--links` no longer silently drops valid markdown links on some documents (BACK-1119).
+- ✅ CLI `--limit` now actually applies to URI-scheme resources (`ast://`, `git://`, etc.), not just a URI's own `?limit=` (BACK-1108); `git://` now warns when a recognized param is inert on the resolved view instead of staying silent (BACK-1127).
+- ✅ `--version`/`--provenance` resolve from the real install root instead of a `sys.path` name scan that could report a different version depending on cwd (BACK-1126); `--explain-file` no longer hides known per-language conformance limits (BACK-1107).
+- ✅ Documented threat model: prompt injection via source content — no injection risk beyond any other code-reading tool (BACK-1131).
+
 ### v0.120.0 — Kotlin @Composable ERROR-node recovery, silent-exception visibility round, check/overview --exclude/gitignore
 
 - ✅ Kotlin `@Composable (() -> Unit)`-style parenthesized function-type parameters no longer swallow the entire enclosing declaration into a silently-dropped ERROR node — recovered with `recovered_from_error` flagging, unrecovered cases surfaced via `parse_warnings` (BACK-738).
