@@ -213,6 +213,9 @@ reveal help://examples/security --format=json        # Security analysis recipes
 3. **Focused** - `reveal src/main.py load_config` (specific function)
 4. **Deep** - Read tool on extracted function only (last resort)
 
+**Why this isn't just about tokens:**
+Reading structure before content isn't a savings hack — it's how you avoid a confident conclusion built on a fragment. A function read in isolation looks safe to change; the same function read after `reveal calls://` shows it's three call sites deep in a hot path. Skipping straight to content gets you an answer, but not one you can trust: it looks the same whether it's right or wrong, because you never saw the shape it sits in. Orient (what's here) → navigate (what's relevant) → focus (show me this) is the order that makes an agent's conclusions checkable — by you, and by the agent itself before it acts.
+
 ---
 
 ## Subcommands Reference
