@@ -532,7 +532,20 @@ class TreeSitterAnalyzer(FileAnalyzer):
             }
 
         # Remove empty categories
-        return {k: v for k, v in structure.items() if v}
+        result = {k: v for k, v in structure.items() if v}
+
+        # BACK-1084: tree-sitter's error-tolerant parser still fabricates
+        # plausible-looking structure from a plain syntax error (e.g. a
+        # function with a garbled signature) rather than signaling failure,
+        # so a caller has no way to tell confident structure from a guess
+        # recovered around an ERROR node. Additive, `_`-prefixed key --
+        # TypedStructure.from_analyzer_output already skips `_`-prefixed
+        # keys (reveal/structure.py), so this can't be mistaken for a real
+        # element category by anything already consuming this dict.
+        if self._has_recovery_artifacts():
+            result['_has_errors'] = True
+
+        return result
 
     def _structure_fingerprint(self) -> Optional[str]:
         """Disk-cache key for this file's built structure, or None to skip caching.
@@ -1355,11 +1368,47 @@ class TreeSitterAnalyzer(FileAnalyzer):
         self.tree` (e.g. imports/base.py's parse_failed guard) miss this —
         the tree exists, so the check passes, but structure derived from it
         (imports, symbols, usages) is incomplete or wrong for the
-        ERROR-recovered region (BACK-1082/BACK-1084). Uses the cached
+        ERROR-recovered region (BACK-1082). Uses the cached
         _find_nodes_by_type lookup, so this is near-zero marginal cost after
         the first call on a given tree.
+
+        Deliberately narrower than `_has_recovery_artifacts()` below: an
+        ERROR node means the parser genuinely lost its place, which is what
+        makes derived imports/symbols unreliable enough to skip outright.
         """
         return bool(self._find_nodes_by_type('ERROR'))
+
+    def _has_recovery_artifacts(self) -> bool:
+        """True if the parse was not fully clean: an ERROR node OR a
+        MISSING token inserted during error recovery.
+
+        Wider than `has_parse_errors()` above -- tree-sitter's own
+        recursive `has_error()` also catches a recovery shape ERROR-node
+        checking misses entirely: an unclosed construct like `def foo(:`
+        recovers as a well-typed subtree with a MISSING token spliced in
+        (`(parameters (MISSING ")"))`) and no ERROR node anywhere in the
+        tree — confirmed live investigating BACK-1084, where that exact
+        input silently produced a plausible-looking `foo` function with no
+        error signal.
+
+        NOT used for `has_parse_errors()` itself: `has_error()` also fires
+        on at least one confirmed-benign grammar quirk (a C/C++
+        translation unit consisting only of #include lines with nothing
+        after the last one trips a trailing MISSING token in
+        tree-sitter-c, with no actual problem for import extraction --
+        caught live as a regression across tests/test_imports_generic.py
+        when this was first wired into has_parse_errors() directly). That
+        makes it too trigger-happy for imports/base.py's parse_failed
+        guard, where a false positive silently drops real results. It's
+        fine as an advisory-only signal for get_structure()'s additive
+        `_has_errors` flag, where a false positive just means an
+        occasional unnecessary "the structure might be incomplete" note
+        on an actually-fine file -- a strictly better failure mode than
+        BACK-1084's original bug (fabricated structure, no signal at all).
+        """
+        if not self.tree:
+            return False
+        return bool(_zero_arg(tree_root(self.tree), 'has_error'))
 
     def _get_node_text(self, node) -> str:
         """Get the source text for a node.
