@@ -775,6 +775,94 @@ class TestMarkdownRegexFallback(unittest.TestCase):
             os.rmdir(temp_dir)
 
 
+class TestBack1119LinkExtractionGap(unittest.TestCase):
+    """BACK-1119: tree-sitter-markdown's inline grammar silently drops a real
+    link node on some real-world documents -- no minimal repro was found, so
+    this uses the actual document that reproduced it (copied verbatim as a
+    fixture). _extract_links() must cross-check against the regex extractor
+    and fill any gap, so --links never silently under-reports (a dropped
+    link is never checked for brokenness -- a false clean)."""
+
+    FIXTURE = os.path.join(
+        os.path.dirname(__file__), 'fixtures', 'markdown',
+        'back_1119_dropped_link_repro.md',
+    )
+
+    def create_temp_markdown(self, content: str) -> str:
+        """Helper: Create temp markdown file."""
+        temp_dir = tempfile.mkdtemp()
+        path = os.path.join(temp_dir, "test.md")
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    def teardown_file(self, path: str) -> None:
+        os.unlink(path)
+        os.rmdir(os.path.dirname(path))
+
+    def test_all_nine_links_extracted(self):
+        analyzer = MarkdownAnalyzer(self.FIXTURE)
+        structure = analyzer.get_structure(extract_links=True)
+        links = structure['links']
+
+        self.assertEqual(len(links), 9)
+
+        lines = {l['line'] for l in links}
+        # Line 376: the link tree-sitter's inline parser drops on this
+        # document -- lines 374/375 immediately above are structurally
+        # identical and ARE extracted, so this specifically regression-tests
+        # the gap-fill, not just "some link was found".
+        self.assertIn(376, lines)
+
+    def test_gap_filled_link_matches_regex_classification(self):
+        analyzer = MarkdownAnalyzer(self.FIXTURE)
+        structure = analyzer.get_structure(extract_links=True)
+        links = {l['line']: l for l in structure['links']}
+
+        filled = links[376]
+        self.assertEqual(
+            filled['url'],
+            'SOCIAMONIALS_AGENT_ROSTER_AND_ROLE_MAP_2026-08-12.md',
+        )
+        self.assertEqual(filled['type'], 'internal')
+
+    def test_gap_fill_ignores_link_syntax_shown_as_example_text(self):
+        """Found live: AGENT_HELP.md's own L001 rule description reads
+        'A `[text](path)` link points to a file...' -- tree-sitter correctly
+        does NOT extract this (it's an inline code span, not a link), but a
+        naive regex gap-fill would, because plain `\\[(...)\\]\\((...)\\)`
+        matches inside backticks too. The gap-fill must only trust a
+        regex-only find whose full [text](url) span isn't entirely inside
+        one inline code span."""
+        content = (
+            "# L001\n\n"
+            "A `[text](path)` link points to a file that doesn't exist.\n"
+        )
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            structure = analyzer.get_structure(extract_links=True)
+            self.assertEqual(structure['links'], [])
+        finally:
+            self.teardown_file(path)
+
+    def test_gap_fill_still_accepts_code_styled_link_text(self):
+        """A real link whose display TEXT is code-styled (backticks around
+        the text inside the brackets, not around the whole link) must still
+        be extracted -- this is the exact shape of the real BACK-1119 doc's
+        dropped link, and the false-positive fix above must not overcorrect
+        into rejecting it."""
+        content = "# Doc\n\n- [`name.md`](name.md) — a real link\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            structure = analyzer.get_structure(extract_links=True)
+            urls = {l['url'] for l in structure['links']}
+            self.assertIn('name.md', urls)
+        finally:
+            self.teardown_file(path)
+
+
 class TestMarkdownLinkHelpers(unittest.TestCase):
     """Test refactored link helper functions."""
 

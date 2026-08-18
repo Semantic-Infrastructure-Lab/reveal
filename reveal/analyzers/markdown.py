@@ -331,14 +331,42 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             url = self._extract_link_destination(node)
 
             if text and url:
-                link_info = self._build_link_info(node, text, url)
+                links.append(self._build_link_info(node, text, url))
 
-                if self._link_matches_filters(link_info, link_type, domain):
-                    if broken_only and not link_info.get('broken'):
-                        continue
-                    links.append(link_info)
+        # BACK-1119: tree-sitter-markdown's inline grammar can silently drop a
+        # real link node on some documents (root cause not yet isolated --
+        # reproduces on specific real-file content, not on any minimal
+        # repro). Cross-check against the regex extractor (proven correct on
+        # the known-failing document) and fill any gap by line+url, so
+        # --links never silently under-reports -- a dropped link here means
+        # it's never checked for brokenness at all (false clean).
+        #
+        # The regex extractor has no code-fence/inline-code awareness (a
+        # documented pre-existing limitation of _extract_links_regex, only
+        # normally used when tree-sitter fails entirely) -- only trust a
+        # regex-only find if it still looks like a link once fenced blocks
+        # and inline code spans are stripped, otherwise it's a literal
+        # `[text](url)` example inside prose (confirmed false-positive:
+        # AGENT_HELP.md's own L001 rule description uses exactly this).
+        seen = {(link['line'], link['url']) for link in links}
+        fenced_lines = self._fenced_code_line_numbers()
+        for link in self._extract_links_regex():
+            key = (link['line'], link['url'])
+            if key in seen or link['line'] in fenced_lines:
+                continue
+            if not self._line_has_link_outside_code_span(link['line'], link['url']):
+                continue
+            links.append(link)
+            seen.add(key)
 
-        return links
+        filtered = []
+        for link_info in links:
+            if self._link_matches_filters(link_info, link_type, domain):
+                if broken_only and not link_info.get('broken'):
+                    continue
+                filtered.append(link_info)
+
+        return filtered
 
     def _extract_link_text(self, node) -> Optional[str]:
         """Extract text from a link node's link_text child.
@@ -451,6 +479,44 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 links.append(link_info)
 
         return links
+
+    def _fenced_code_line_numbers(self) -> set:
+        """Return the set of 1-indexed line numbers inside ```-fenced code
+        blocks (fence marker lines included). Used to keep the BACK-1119
+        regex gap-fill in _extract_links() from treating a `[text](url)`
+        shown as example syntax inside a fence as a real link."""
+        fenced = set()
+        in_block = False
+        for i, line in enumerate(self.lines, 1):
+            if line.strip().startswith('```'):
+                fenced.add(i)
+                in_block = not in_block
+                continue
+            if in_block:
+                fenced.add(i)
+        return fenced
+
+    def _line_has_link_outside_code_span(self, line_num: int, url: str) -> bool:
+        """True if `url` appears in a real `[text](url)` link on line
+        `line_num` whose full [text](url) span is NOT entirely contained in
+        one inline `` `code span` ``. Used by the BACK-1119 regex gap-fill to
+        reject a literal link-syntax example shown inside backticks (e.g.
+        AGENT_HELP.md's `` `[text](path)` `` rule description) while still
+        accepting a real link whose display TEXT happens to be code-styled
+        (e.g. `` [`name`](name) ``, where the backticks don't cover the
+        whole link)."""
+        if not (0 <= line_num - 1 < len(self.lines)):
+            return False
+        raw_line = self.lines[line_num - 1]
+        code_spans = [(m.start(), m.end()) for m in re.finditer(r'`[^`]*`', raw_line)]
+        link_pattern = r'\[([^\]]+)\]\(([^\)]+)\)'
+        for m in re.finditer(link_pattern, raw_line):
+            if m.group(2) != url:
+                continue
+            if any(start <= m.start() and m.end() <= end for start, end in code_spans):
+                continue  # whole link literal sits inside one code span -- not a real link
+            return True
+        return False
 
     def _classify_link(self, url: str, text: str, line: int) -> Dict[str, Any]:
         """Classify a link and extract metadata.
