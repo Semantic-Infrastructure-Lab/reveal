@@ -47,12 +47,37 @@ def _language_support_line(analyzer_cls) -> str:
 
     from tree_sitter_language_pack import downloaded_languages
     if language in downloaded_languages():
-        return "   ✅ Full language-specific analysis (grammar cached locally)"
-    return (
-        "   ⚠️  Full language-specific analysis — grammar not yet downloaded; "
-        "first parse will attempt a network fetch (see "
-        "INSTALL.md#network-requirements for offline setups)"
-    )
+        base = "   ✅ Full language-specific analysis (grammar cached locally)"
+    else:
+        base = (
+            "   ⚠️  Full language-specific analysis — grammar not yet downloaded; "
+            "first parse will attempt a network fetch (see "
+            "INSTALL.md#network-requirements for offline setups)"
+        )
+    return base + _conformance_caveat(analyzer_cls)
+
+
+def _conformance_caveat(analyzer_cls) -> str:
+    """BACK-1107: --explain-file's 'Full language-specific analysis' line
+    used to claim that unconditionally even for a language whose conformance
+    tier and known limitations (capabilities.py, already surfaced by
+    --language-info's _build_full_support_info) show it's degraded. Wire the
+    same data in here rather than letting a --explain-file caller believe
+    they're getting tier1 analysis when they're not.
+    """
+    from ..capabilities import get_capability, CONFORMANCE_TIER1_VERIFIED
+    profile = get_capability(analyzer_cls)
+    if profile is None:
+        return ""
+    if profile.conformance_level == CONFORMANCE_TIER1_VERIFIED and not profile.known_limitations:
+        return ""
+    lines = [f"   ⚠️  Conformance level: {profile.conformance_level}"]
+    if profile.known_limitations:
+        lines.append("   Known limitations:")
+        for item in profile.known_limitations:
+            lines.append(f"     - {item}")
+    lines.append("   Run --language-info for full detail")
+    return "\n\n" + "\n".join(lines)
 
 
 def explain_file(path: str, verbose: bool = False) -> str:

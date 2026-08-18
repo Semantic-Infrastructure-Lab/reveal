@@ -86,6 +86,53 @@ class TestExplainFile(unittest.TestCase):
         self.assertIn("grammar not yet downloaded", result)
         self.assertIn("network fetch", result)
 
+    def test_explain_degraded_conformance_language_shows_caveat(self):
+        """BACK-1107: --explain-file claimed 'Full language-specific
+        analysis' unconditionally, even for a language whose conformance
+        tier and known limitations (capabilities.py, already surfaced by
+        --language-info) show it's degraded. A smoke-tested-tier language
+        (Scala) must show its real conformance level, not read as full."""
+        import tree_sitter_language_pack as tslp
+        from unittest.mock import patch
+
+        scala_file = Path(self.temp_dir) / "test.scala"
+        scala_file.write_text("object Hello { def main(args: Array[String]): Unit = {} }\n")
+
+        with patch.object(tslp, "downloaded_languages", return_value=["scala"]):
+            result = explain_file(str(scala_file))
+
+        self.assertIn("Conformance level: smoke-tested", result)
+        self.assertIn("Known limitations:", result)
+
+    def test_explain_tier1_language_with_known_limitations_shows_them(self):
+        """A tier1-verified language can still have documented known
+        limitations (e.g. Go) -- those must not be hidden just because the
+        conformance tier itself is the best one."""
+        import tree_sitter_language_pack as tslp
+        from unittest.mock import patch
+
+        go_file = Path(self.temp_dir) / "test.go"
+        go_file.write_text("package main\nfunc main() {}\n")
+
+        with patch.object(tslp, "downloaded_languages", return_value=["go"]):
+            result = explain_file(str(go_file))
+
+        self.assertIn("✅ Full language-specific analysis", result)
+        self.assertIn("Known limitations:", result)
+
+    def test_explain_tier1_language_no_limitations_has_no_caveat(self):
+        """BACK-1107 must not introduce a caveat for a language that
+        genuinely has none (Python: tier1-verified, no known limitations) --
+        this is the existing unqualified-success behavior from BACK-979."""
+        import tree_sitter_language_pack as tslp
+        from unittest.mock import patch
+
+        with patch.object(tslp, "downloaded_languages", return_value=["python"]):
+            result = explain_file(str(self.py_file))
+
+        self.assertNotIn("Conformance level:", result)
+        self.assertNotIn("Known limitations:", result)
+
 
 class TestShowAST(unittest.TestCase):
     """Tests for show_ast function."""
