@@ -4,6 +4,7 @@ Progressive disclosure for Git repositories with token-efficient output.
 """
 
 import os
+import sys
 
 from typing import Dict, Any, Optional
 
@@ -333,6 +334,62 @@ class GitAdapter(ResourceAdapter):
             skip_filter_keys=True,
             extra_known_keys={'sort', 'limit', 'offset'},
         )
+        self._warn_view_scoped_query_params()
+
+    # Params only meaningful when `type=` resolves to this exact value —
+    # accepted (they're in the schema) but silently inert on any other view.
+    _VIEW_SCOPED_PARAMS = {
+        'merges': 'ownership',
+        'detail': 'blame',
+        'element': 'blame',
+        'context': 'diff',
+        'ignore': 'blame',
+        'bucket': 'history',
+    }
+
+    def _warn_view_scoped_query_params(self) -> None:
+        """BACK-1127: warn when a recognized param has no effect on the
+        resolved view — same silent-failure shape as BACK-909's
+        unknown-param warning, but for a param name that IS in the schema,
+        just not for this ``type=``. Without this, a typo shouts
+        (_warn_unknown_query_params) while a semantically-wrong-but-valid
+        param says nothing — the signal is inverted relative to risk.
+        """
+        query_type = self.query.get('type')
+        resolved = query_type or 'default (log)'
+
+        for key, valid_type in self._VIEW_SCOPED_PARAMS.items():
+            if key in self.query and query_type != valid_type:
+                print(
+                    f"⚠ Query param '{key}' has no effect on git:// view "
+                    f"'{resolved}' — only applies to ?type={valid_type}. "
+                    f"Result does not reflect it.",
+                    file=sys.stderr,
+                )
+
+        if query_type == 'ownership':
+            if 'no_merges' in self.query:
+                print(
+                    "⚠ Query param 'no_merges' has no effect on git:// view "
+                    "'ownership' — ownership already excludes merge commits "
+                    "by default; use ?merges=1 to include them. Result does "
+                    "not reflect it.",
+                    file=sys.stderr,
+                )
+            # 'merges' is legitimately read from self.query directly by
+            # get_ownership() even though _separate_query_parameters()
+            # *also* routes it into query_filters (it isn't in that
+            # method's operational-key exclusion list) — exclude it here
+            # so a real ownership param doesn't get flagged as inert.
+            inert_fields = {f.field for f in self.query_filters} - {'merges'}
+            if inert_fields:
+                fields = ', '.join(sorted(inert_fields))
+                print(
+                    f"⚠ Filter param(s) [{fields}] have no effect on git:// "
+                    f"view 'ownership' — ownership aggregates commit-share "
+                    f"unfiltered. Result does not reflect them.",
+                    file=sys.stderr,
+                )
 
     @staticmethod
     def _parse_resource_string(resource: str) -> Dict[str, Any]:

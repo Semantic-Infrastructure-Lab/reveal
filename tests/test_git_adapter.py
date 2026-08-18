@@ -2640,6 +2640,65 @@ class TestOwnership:
         assert 'commit-share' in out.lower()
 
 
+class TestViewScopedParamWarnings:
+    """BACK-1127: a recognized param that's inert on the resolved view must
+    warn, same as an unrecognized param does (BACK-909) -- otherwise a
+    semantically-wrong-but-valid param produces a clean-looking result with
+    no signal that it was ignored."""
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_merges_on_default_view_warns(self, git_repo_ownership, capsys):
+        GitAdapter(path=str(git_repo_ownership), query={'merges': '1'})
+        err = capsys.readouterr().err
+        assert "'merges'" in err
+        assert 'ownership' in err
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_merges_on_ownership_view_silent(self, git_repo_ownership, capsys):
+        GitAdapter(path=str(git_repo_ownership), query={'type': 'ownership', 'merges': '1'})
+        assert capsys.readouterr().err == ''
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_element_on_default_view_warns(self, git_repo_ownership, capsys):
+        GitAdapter(path=str(git_repo_ownership), query={'element': 'foo'})
+        err = capsys.readouterr().err
+        assert "'element'" in err
+        assert 'blame' in err
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_element_on_blame_view_silent(self, git_repo_ownership, capsys):
+        GitAdapter(path=str(git_repo_ownership), subpath='src/app.py',
+                   query={'type': 'blame', 'element': 'foo'})
+        assert capsys.readouterr().err == ''
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_since_on_ownership_view_warns(self, git_repo_ownership, capsys):
+        GitAdapter(path=str(git_repo_ownership), query={'type': 'ownership', 'since': '2020-01-01'})
+        err = capsys.readouterr().err
+        assert 'ownership' in err
+        assert 'date' in err  # 'since' is rewritten to a 'date' filter
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_since_on_default_view_silent(self, git_repo_ownership, capsys):
+        GitAdapter(path=str(git_repo_ownership), query={'since': '2020-01-01'})
+        assert capsys.readouterr().err == ''
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_no_merges_on_ownership_view_warns(self, git_repo_ownership, capsys):
+        GitAdapter(path=str(git_repo_ownership), query={'type': 'ownership', 'no_merges': '1'})
+        err = capsys.readouterr().err
+        assert "'no_merges'" in err
+        assert 'ownership' in err
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_ownership_query_still_succeeds_despite_inert_params(self, git_repo_ownership):
+        adapter = GitAdapter(path=str(git_repo_ownership),
+                              query={'type': 'ownership', 'since': '2020-01-01'})
+        r = adapter.get_structure()
+        assert r['type'] == 'git_ownership'
+        assert r['total_commits'] == 5  # 'since' had no effect -- warning is additive, not an error
+
+
 @pytest.fixture
 def git_repo_timeline(tmp_path):
     """Git repo with commits spread across months/weeks for BACK-484 timeline tests.
