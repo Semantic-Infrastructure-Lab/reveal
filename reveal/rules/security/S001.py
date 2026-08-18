@@ -55,6 +55,17 @@ _URL_VALUE_RE = re.compile(r'^[a-z][a-z0-9+.-]*://', re.IGNORECASE)
 # string doesn't.
 _LABEL_VALUE_RE = re.compile(r'^[a-zA-Z_]+$')
 
+# A dependency-manifest version specifier — "0.12.0", "^1.2.3", "~=1.4",
+# ">=2.0,<3.0" (Cargo/npm/PEP 440 style). BACK-1105: a package whose name
+# happens to contain "token" (tiktoken-rs, jsonwebtoken, tokenizers) pinned
+# to a version like this is not a secret — purely numeric/comparator
+# structure with at most a short prerelease/build suffix, never real
+# credential entropy.
+_VERSION_SPEC_RE = re.compile(
+    r'^(?:[\^~]|>=|<=|==|!=|~=|[<>=])?\s*\d+(?:\.\d+){0,3}(?:[-+][0-9A-Za-z.]+)?'
+    r'(?:\s*,\s*(?:[\^~]|>=|<=|==|!=|~=|[<>=])?\s*\d+(?:\.\d+){0,3}(?:[-+][0-9A-Za-z.]+)?)*$'
+)
+
 _SAFE_VALUE_WORDS = frozenset({
     'test', 'example', 'placeholder', 'dummy', 'fake', 'sample',
     'none', 'null', 'todo', 'fixme', 'changeme', 'replace_me',
@@ -235,6 +246,10 @@ class S001(BaseRule, ASTParsingMixin):
         # secrets have structure (digits, symbols, mixed segments); dictionary
         # words and snake_case tags don't.
         if _LABEL_VALUE_RE.match(value):
+            return False
+        # A version specifier (dependency-manifest pin) is not a secret
+        # (BACK-1105).
+        if _VERSION_SPEC_RE.match(value):
             return False
         return True
 

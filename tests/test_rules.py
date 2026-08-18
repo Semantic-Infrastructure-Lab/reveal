@@ -625,6 +625,51 @@ class TestS001HardcodedSecrets(unittest.TestCase):
         self.assertEqual(len(dets), 0)
 
 
+class TestS001TomlDependencyManifest(unittest.TestCase):
+    """BACK-1105: a dependency-manifest package name containing "token" as a
+    substring (tiktoken-rs, jsonwebtoken, tokenizers, token-bucket) pinned to
+    an ordinary version specifier is not a secret -- real-corpus false
+    positive on samples/rust/crates/milli/Cargo.toml:84."""
+
+    rule = S001()
+
+    def _toml(self, content: str) -> str:
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, 'Cargo.toml')
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def _check(self, path: str, content: str):
+        return self.rule.check(path, None, content)
+
+    def test_toml_plain_version_pin_ok(self):
+        content = 'tiktoken-rs = "0.12.0"\n'
+        path = self._toml(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    def test_toml_caret_version_ok(self):
+        content = 'jsonwebtoken = "^8.5.1"\n'
+        path = self._toml(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    def test_toml_pep440_range_ok(self):
+        content = 'tokenizers = ">=0.13,<0.14"\n'
+        path = self._toml(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 0)
+
+    def test_toml_real_secret_still_flagged(self):
+        """The version-specifier allowance must not swallow genuine secrets."""
+        content = 'api_token = "ghp_realsecretvalue123"\n'
+        path = self._toml(content)
+        dets = self._check(path, content)
+        self.assertEqual(len(dets), 1)
+        self.assertEqual(dets[0].rule_code, 'S001')
+
+
 class TestS001DotenvReachability(unittest.TestCase):
     """BACK-1104: S001.check() correctly flags .env-style secrets in
     isolation (see TestS001HardcodedSecrets above), but that alone doesn't
