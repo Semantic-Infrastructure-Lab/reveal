@@ -625,6 +625,90 @@ class TestS001HardcodedSecrets(unittest.TestCase):
         self.assertEqual(len(dets), 0)
 
 
+class TestS001DotenvReachability(unittest.TestCase):
+    """BACK-1104: S001.check() correctly flags .env-style secrets in
+    isolation (see TestS001HardcodedSecrets above), but that alone doesn't
+    prove the rule ever RUNS on a real .env file -- it was unreachable via
+    both the real directory-scan and single-file CLI paths, because (1)
+    bare `.env` has an EMPTY pathlib suffix and no registered analyzer, so
+    get_analyzer() returned None and the file was silently skipped / hard
+    errored, and (2) even after registering an analyzer, S001's own
+    file_patterns=['.env', ...] only matched suffix=='.env' or an exact
+    filename match, so `.env.local`/`.env.production`-style dotenv variants
+    still never reached matches_target(). These tests exercise the real
+    dispatch path (get_analyzer + matches_target + collect_files_to_check +
+    RuleRegistry.check_file), not S001.check() directly, so a regression in
+    either the registry or the file_patterns list is caught here."""
+
+    def _write(self, dirpath: str, filename: str, content: str) -> str:
+        path = os.path.join(dirpath, filename)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def test_get_analyzer_resolves_bare_dotenv(self):
+        from reveal.registry import get_analyzer
+        d = tempfile.mkdtemp()
+        path = self._write(d, '.env', 'DATABASE_PASSWORD=s3cr3t!pass\n')
+        self.assertIsNotNone(get_analyzer(path, allow_fallback=False))
+
+    def test_get_analyzer_resolves_suffixed_dotenv(self):
+        from reveal.registry import get_analyzer
+        d = tempfile.mkdtemp()
+        path = self._write(d, 'secrets.env', 'DATABASE_PASSWORD=s3cr3t!pass\n')
+        self.assertIsNotNone(get_analyzer(path, allow_fallback=False))
+
+    def test_get_analyzer_resolves_dotenv_variant(self):
+        from reveal.registry import get_analyzer
+        d = tempfile.mkdtemp()
+        path = self._write(d, '.env.local', 'DATABASE_PASSWORD=s3cr3t!pass\n')
+        self.assertIsNotNone(get_analyzer(path, allow_fallback=False))
+
+    def test_matches_target_bare_dotenv(self):
+        self.assertTrue(S001.matches_target('.env'))
+
+    def test_matches_target_suffixed_dotenv(self):
+        self.assertTrue(S001.matches_target('secrets.env'))
+
+    def test_matches_target_dotenv_variant(self):
+        self.assertTrue(S001.matches_target('.env.local'))
+        self.assertTrue(S001.matches_target('.env.production'))
+
+    def test_matches_target_unrelated_dotfile_not_flagged(self):
+        """Sanity check the pattern isn't overbroad -- an unrelated
+        dotfile-with-suffix shouldn't be swept in."""
+        self.assertFalse(S001.matches_target('.eslintrc.json'))
+
+    def test_directory_scan_finds_dotenv_secret(self):
+        """End-to-end: a real directory scan (collect_files_to_check +
+        RuleRegistry.check_file) must surface the secret in every dotenv
+        naming variant, matching a genuinely leaked .env in a real repo."""
+        from reveal.cli.file_checker import collect_files_to_check
+        from reveal.rules import RuleRegistry
+
+        d = tempfile.mkdtemp()
+        secret_line = 'DATABASE_PASSWORD=s3cr3t!pass\n'
+        for filename in ('.env', 'secrets.env', '.env.local'):
+            self._write(d, filename, secret_line)
+
+        result = collect_files_to_check(Path(d), gitignore_patterns=[])
+        found_names = {p.name for p in result.files}
+        self.assertEqual(
+            found_names, {'.env', 'secrets.env', '.env.local'},
+            "directory scan must not silently skip any dotenv variant",
+        )
+
+        for file_path in result.files:
+            content = open(file_path).read()
+            detections = RuleRegistry.check_file(
+                str(file_path), None, content, select=['S001'],
+            )
+            self.assertEqual(
+                len(detections), 1,
+                f"{file_path.name}: expected S001 to fire via real rule dispatch",
+            )
+
+
 class TestI001UnusedImports(unittest.TestCase):
     """Test I001: Unused imports detector."""
 

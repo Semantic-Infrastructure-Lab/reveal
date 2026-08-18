@@ -201,6 +201,42 @@ def _get_nginx_analyzer_class() -> type:
     return NginxAnalyzer
 
 
+def _is_dotenv_filename(name: str) -> bool:
+    """Match the dotenv naming convention (.env, .env.local, .env.production,
+    secrets.env, ...). Mirrors S001._is_env_file's semantics — keep the two
+    in sync if either changes (BACK-1104)."""
+    name = name.lower()
+    return name == '.env' or name.startswith('.env.') or name.endswith('.env')
+
+
+def _get_dotenv_analyzer_class() -> type:
+    """Lazy-load and return IniAnalyzer for dotenv-convention files.
+
+    dotenv files are flat KEY=VALUE with no [section] header — IniAnalyzer
+    already falls back to its section-less _parse_properties() path for
+    exactly this shape, so no new analyzer class is needed.
+    """
+    from .analyzers.ini_analyzer import IniAnalyzer
+    return IniAnalyzer
+
+
+def _try_dotenv_detection(file_path: Path) -> Optional[type]:
+    """Route dotenv-convention files to an analyzer so they become eligible
+    for rule dispatch at all.
+
+    Without this, .env/.env.local/secrets.env never get a registered
+    extension analyzer (bare '.env' has an EMPTY pathlib suffix — '.env' IS
+    the filename, not an extension — and '.env.local' etc. have the wrong
+    one), so they were silently skipped by every directory scan and
+    hard-errored on direct invocation. S001 already has dedicated
+    .env-parsing logic (_check_env/_is_env_file) that was completely
+    unreachable as a result (BACK-1104).
+    """
+    if _is_dotenv_filename(file_path.name):
+        return _get_dotenv_analyzer_class()
+    return None
+
+
 def _try_conf_detection(path: str, file_path: Path, ext: str) -> Optional[type]:
     """Try to detect analyzer for .conf files (nginx vs INI)."""
     if ext != '.conf':
@@ -323,6 +359,7 @@ def get_analyzer(path: str, allow_fallback: bool = True) -> Optional[type]:
 
     # Try detection strategies in order
     strategies = [
+        lambda: _try_dotenv_detection(file_path),
         lambda: _try_conf_detection(path, file_path, ext),
         lambda: _try_c_header_detection(path, file_path, ext),
         lambda: _try_extension_lookup(ext),

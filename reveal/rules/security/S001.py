@@ -72,7 +72,11 @@ class S001(BaseRule, ASTParsingMixin):
     message = "Hardcoded secret — move to environment variable or secrets manager"
     category = RulePrefix.S
     severity = Severity.HIGH
-    file_patterns = ['.py', '.env', '.yaml', '.yml', '.toml']
+    # '.env' matches bare `.env` (exact-name match in matches_target) and
+    # `secrets.env`-style suffixes; '.env.*' additionally covers the common
+    # `.env.local`/`.env.production`/... dotenv variants, which have neither
+    # a matching pathlib suffix nor an exact name (BACK-1104).
+    file_patterns = ['.py', '.env', '.env.*', '.yaml', '.yml', '.toml']
     version = "1.0.0"
 
     def check(self,
