@@ -513,6 +513,72 @@ class TestHandleUri(unittest.TestCase):
 
         self.assertEqual(captured['resource'], 'src?complexity>10')
 
+    def test_limit_injected_when_explicitly_passed(self):
+        """BACK-1108: --limit was parsed by argparse but never reached the
+        adapter for any URI-scheme target -- only ?limit=N in the URI
+        itself worked. Explicit --limit must now be injected into the
+        query string, mirroring the existing --sort injection."""
+        captured = {}
+
+        def capture_adapter(adapter_class, scheme, resource, element, args):
+            captured['resource'] = resource
+
+        mock_args = Namespace(format='text', sort=None, desc=False, limit=5)
+        with patch('sys.argv', ['reveal', 'ast://src', '--limit', '5']), \
+             patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
+            handle_uri('ast://src', None, mock_args)
+
+        self.assertIn('limit=5', captured['resource'])
+
+    def test_limit_not_injected_when_flag_absent(self):
+        """--limit's argparse default (50, shared with the unrelated `check`
+        text-output cap) must NOT be injected just because args.limit has a
+        value -- only an explicitly-typed --limit should change URI-mode
+        behavior, or every unlimited-by-default resource query would
+        silently start capping at 50."""
+        captured = {}
+
+        def capture_adapter(adapter_class, scheme, resource, element, args):
+            captured['resource'] = resource
+
+        mock_args = Namespace(format='text', sort=None, desc=False, limit=50)
+        with patch('sys.argv', ['reveal', 'ast://src']), \
+             patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
+            handle_uri('ast://src', None, mock_args)
+
+        self.assertEqual(captured['resource'], 'src')
+
+    def test_limit_injection_skipped_when_uri_has_limit(self):
+        """URI ?limit= takes precedence -- --limit flag must NOT be injected
+        when the URI already specifies a limit."""
+        captured = {}
+
+        def capture_adapter(adapter_class, scheme, resource, element, args):
+            captured['resource'] = resource
+
+        mock_args = Namespace(format='text', sort=None, desc=False, limit=1)
+        with patch('sys.argv', ['reveal', 'ast://src?limit=3', '--limit', '1']), \
+             patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
+            handle_uri('ast://src?limit=3', None, mock_args)
+
+        self.assertIn('limit=3', captured['resource'])
+        self.assertNotIn('limit=1', captured['resource'])
+
+    def test_limit_equals_form_detected(self):
+        """--limit=N (equals form) is also recognized as explicit, not just
+        the separate-argument --limit N form."""
+        captured = {}
+
+        def capture_adapter(adapter_class, scheme, resource, element, args):
+            captured['resource'] = resource
+
+        mock_args = Namespace(format='text', sort=None, desc=False, limit=2)
+        with patch('sys.argv', ['reveal', 'ast://src', '--limit=2']), \
+             patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
+            handle_uri('ast://src', None, mock_args)
+
+        self.assertIn('limit=2', captured['resource'])
+
 
 class TestHandleAdapter(unittest.TestCase):
     """Tests for handle_adapter function."""

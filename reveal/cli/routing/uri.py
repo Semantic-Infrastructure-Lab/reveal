@@ -132,6 +132,25 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
         sep = '&' if '?' in resource else '?'
         resource = f"{resource}{sep}sort={sort_field}"
 
+    # Inject --limit into the URI query string for resource-adapter result
+    # capping (BACK-1108). Only the URI form (?limit=N) actually reached
+    # ResultControl -- the CLI flag was parsed, accepted, and silently
+    # discarded for every URI-scheme target, a real ~200-result truncation
+    # in a language-consistency study relied on the flag actually working.
+    # --limit's argparse default (50) is shared with the unrelated `check`
+    # text-output cap (file_checker.py), so a default value alone can't
+    # distinguish "user asked for a cap" from "user didn't mention it" --
+    # only inject when --limit was actually typed, detected via sys.argv
+    # (same technique used for --help-all in parser.py). Skip injection if
+    # the URI already has an explicit limit= param — URI takes precedence.
+    if 'limit=' not in resource and any(
+        a == '--limit' or a.startswith('--limit=') for a in sys.argv
+    ):
+        limit_value = getattr(args, 'limit', None)
+        if limit_value is not None:
+            sep = '&' if '?' in resource else '?'
+            resource = f"{resource}{sep}limit={limit_value}"
+
     # Look up adapter from registry
     from ...adapters.base import get_adapter_class, list_supported_schemes
     # Import adapters package to trigger all registrations (single source of truth)
