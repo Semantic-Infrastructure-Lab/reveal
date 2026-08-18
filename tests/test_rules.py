@@ -1721,7 +1721,18 @@ class TestI001EdgeCases(unittest.TestCase):
         os.rmdir(os.path.dirname(path))
 
     def test_syntax_error_handling(self):
-        """Test I001 handles syntax errors gracefully."""
+        """Test I001 handles syntax errors gracefully.
+
+        BACK-1082: this used to assert the opposite -- that a broken parse
+        should still confidently flag 'os' as unused ("better than
+        ast.parse()!"). That was the bug: tree-sitter's error-tolerant
+        parser recovers a tree even from a plain syntax error, so `os`
+        LOOKS unused only because the usage scan behind that verdict never
+        actually completed -- not because it's genuinely unused. Acting on
+        that suggestion would delete an import that may be in use elsewhere
+        in the real (unbroken) file. I001 must now skip broken files the
+        same way BACK-982 already made it skip totally-unparseable ones.
+        """
         content = """
 import os
 def broken(
@@ -1733,10 +1744,9 @@ def broken(
             rule = I001()
             detections = rule.check(path, None, content)
 
-            # Tree-sitter can extract imports from broken code (better than ast.parse()!)
-            # Should detect 'os' as unused (ast.parse() would have crashed)
-            self.assertEqual(len(detections), 1)
-            self.assertEqual(detections[0].rule_code, 'I001')
+            # No detections: an unreliable "unused" verdict must not be
+            # reported at all, let alone acted on.
+            self.assertEqual(detections, [])
 
         finally:
             self.teardown_file(path)

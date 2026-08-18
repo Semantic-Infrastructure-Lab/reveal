@@ -248,6 +248,22 @@ class LanguageExtractor(ABC):
                     path_str,
                 )
                 return None
+            # BACK-1082: tree-sitter's error-tolerant parser still returns a
+            # non-None tree for a file with a plain syntax error (recovered
+            # with ERROR nodes), so the `not analyzer.tree` check above only
+            # catches TOTAL parse failure. Without this, I001 (unused-import)
+            # would confidently suggest deleting an import that merely wasn't
+            # seen because its usage sat inside the ERROR-recovered region --
+            # worse than a silent miss, since acting on it deletes real code.
+            if hasattr(analyzer, 'has_parse_errors') and analyzer.has_parse_errors():
+                self.parse_failed = True
+                logger.warning(
+                    "Partial parse for %s -- tree-sitter recovered with ERROR "
+                    "node(s); imports/symbols for this file are incomplete, "
+                    "not confirmed empty",
+                    path_str,
+                )
+                return None
             return analyzer
         except Exception as e:
             self.parse_failed = True

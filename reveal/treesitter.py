@@ -1346,6 +1346,21 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         return (self._node_cache or {}).get(node_type, [])
 
+    def has_parse_errors(self) -> bool:
+        """True if the parsed tree contains any ERROR node.
+
+        Tree-sitter is error-tolerant: a file with a plain syntax error still
+        produces a non-empty, non-None tree (recovered with ERROR nodes)
+        rather than failing outright. Callers that only check `not
+        self.tree` (e.g. imports/base.py's parse_failed guard) miss this —
+        the tree exists, so the check passes, but structure derived from it
+        (imports, symbols, usages) is incomplete or wrong for the
+        ERROR-recovered region (BACK-1082/BACK-1084). Uses the cached
+        _find_nodes_by_type lookup, so this is near-zero marginal cost after
+        the first call on a given tree.
+        """
+        return bool(self._find_nodes_by_type('ERROR'))
+
     def _get_node_text(self, node) -> str:
         """Get the source text for a node.
 
