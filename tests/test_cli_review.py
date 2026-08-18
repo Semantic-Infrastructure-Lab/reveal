@@ -290,7 +290,7 @@ class TestRunCheck(unittest.TestCase):
             'file': 'f.py',
             'issues': 1,
             'detections': [{'rule_code': 'B001', 'severity': 'error', 'line': 5, 'message': 'bad'}],
-        }])
+        }], 0)
         result = _run_check(Path('/tmp'), 'B,S')
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]['rule'], 'B001')
@@ -299,7 +299,7 @@ class TestRunCheck(unittest.TestCase):
     @patch('reveal.cli.file_checker.collect_files_to_check', return_value=FileCollectionResult(files=[]))
     @patch('reveal.cli.file_checker.load_gitignore_patterns', return_value=[])
     def test_no_files_returns_empty_list(self, _pats, _files, mock_check):
-        mock_check.return_value = (0, 0, [])
+        mock_check.return_value = (0, 0, [], 0)
         result = _run_check(Path('/tmp'), 'B,S')
         self.assertEqual(result, [])
 
@@ -313,7 +313,7 @@ class TestRunCheck(unittest.TestCase):
         mock_check.return_value = (1, 1, [{
             'file': 'a.py',
             'detections': [{'rule_code': 'B001', 'severity': 'error', 'line': 1, 'message': 'x'}],
-        }])
+        }], 0)
         with tempfile.TemporaryDirectory() as d:
             existing = Path(d) / 'a.py'
             existing.write_text('x = 1\n')

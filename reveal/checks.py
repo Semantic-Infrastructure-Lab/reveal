@@ -30,12 +30,23 @@ def _is_generated_file(content: str) -> bool:
     return any(p.search(head) for p in _GENERATED_PATTERNS)
 
 
-def _format_detections_json(path: str, detections: List[Any]) -> None:
+def _format_detections_json(
+    path: str,
+    detections: List[Any],
+    parse_degraded: bool = False,
+    rule_errors: Optional[List[dict]] = None,
+) -> None:
     """Format detections as JSON.
 
     Args:
         path: File path
         detections: List of Detection objects
+        parse_degraded: True when the parser recovered from a syntax error
+            (BACK-1084's structure['_has_errors']) — detections/structure for
+            this file may be incomplete or wrong, not just "clean" (BACK-1083).
+        rule_errors: Rules that raised during check() ({"rule", "error"}, from
+            RuleRegistry.check_file's errors= param) — otherwise invisible on
+            stdout/JSON, visible only in the stderr log (BACK-1083).
     """
     from reveal.utils.results import add_cli_contract_fields
 
@@ -44,6 +55,12 @@ def _format_detections_json(path: str, detections: List[Any]) -> None:
         'detections': [d.to_dict() for d in detections],
         'total': len(detections)
     }
+    if parse_degraded:
+        result['warning'] = (
+            "file did not parse cleanly; results may be incomplete or incorrect"
+        )
+    if rule_errors:
+        result['errors'] = rule_errors
     print(safe_json_dumps(
         add_cli_contract_fields(result, result_type='check', source=path, source_type='file')
     ))
@@ -59,7 +76,13 @@ def _format_detections_grep(detections: List[Any]) -> None:
         print(f"{d.file_path}:{d.line}:{d.column}:{d.rule_code}:{d.message}")
 
 
-def _format_detections_text(path: str, detections: List[Any], no_group: bool = False) -> None:
+def _format_detections_text(
+    path: str,
+    detections: List[Any],
+    no_group: bool = False,
+    parse_degraded: bool = False,
+    rule_errors: Optional[List[dict]] = None,
+) -> None:
     """Format detections as human-readable text.
 
     When a rule fires >= _GROUP_THRESHOLD times, collapses to a single summary
@@ -69,12 +92,23 @@ def _format_detections_text(path: str, detections: List[Any], no_group: bool = F
         path: File path
         detections: List of Detection objects
         no_group: Disable collapsing of repeated rules
+        parse_degraded: True when the parser recovered from a syntax error —
+            see _format_detections_json (BACK-1083).
+        rule_errors: Rules that raised during check() — see _format_detections_json.
     """
+    for err in rule_errors or []:
+        print(f"{path}: ⚠️  rule {err['rule']} crashed and did not run — {err['error']}")
+
     if not detections:
-        print(f"{path}: ✅ No issues found")
+        if parse_degraded:
+            print(f"{path}: ⚠️  file did not parse cleanly — results may be incomplete or incorrect")
+        else:
+            print(f"{path}: ✅ No issues found")
         return
 
     count = len(detections)
+    if parse_degraded:
+        print(f"{path}: ⚠️  file did not parse cleanly — results below may be incomplete or incorrect")
     print(f"{path}: Found {count} issue{'s' if count != 1 else ''}\n")
 
     if no_group or count < _GROUP_THRESHOLD:
@@ -136,9 +170,14 @@ def run_pattern_detection(
               f"  💡 Add '# reveal: generated' near the top to suppress in recursive checks\n")
 
     # Run rules
+    rule_errors: List[dict] = []
     detections = RuleRegistry.check_file(
-        path, structure, content, select=select, ignore=ignore
+        path, structure, content, select=select, ignore=ignore, errors=rule_errors
     )
+    # BACK-1083: a tree-sitter recovery parse (structure['_has_errors'], set by
+    # BACK-1084) means rules ran against fabricated/partial structure — surface
+    # that instead of letting "0 detections" read as "clean file".
+    parse_degraded = isinstance(structure, dict) and bool(structure.get('_has_errors'))
 
     # Apply severity filter if requested
     if severity_arg:
@@ -154,9 +193,13 @@ def run_pattern_detection(
 
     # Format and output results
     formatters = {
-        'json': lambda: _format_detections_json(path, detections),
+        'json': lambda: _format_detections_json(
+            path, detections, parse_degraded=parse_degraded, rule_errors=rule_errors
+        ),
         'grep': lambda: _format_detections_grep(detections),
-        'text': lambda: _format_detections_text(path, detections, no_group=no_group),
+        'text': lambda: _format_detections_text(
+            path, detections, no_group=no_group, parse_degraded=parse_degraded, rule_errors=rule_errors
+        ),
     }
 
     formatter = formatters.get(output_format, formatters['text'])

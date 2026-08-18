@@ -165,7 +165,7 @@ def _run_check(path: Optional[Path], select: str,
         else:
             return []
         select_list = select.split(',') if select else None
-        _, _, file_results = _check_files_json(check_files, directory, select_list, None)
+        _, _, file_results, _ = _check_files_json(check_files, directory, select_list, None)
         violations: List[Dict[str, Any]] = []
         for fr in file_results:
             for d in fr.get('detections', []):

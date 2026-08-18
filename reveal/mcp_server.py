@@ -378,7 +378,7 @@ def reveal_check(path: str, severity: str = '') -> str:
         directory = p.parent.resolve()
         files = [p.resolve()]
 
-    total_issues, _, file_results = _check_files_json(
+    total_issues, _, file_results, _ = _check_files_json(
         files, directory, None, None, severity=severity_filter
     )
 

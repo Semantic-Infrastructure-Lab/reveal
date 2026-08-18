@@ -48,11 +48,11 @@ def _parallel_worker(packed_args: tuple) -> tuple:
         packed_args: (file_path, directory, select, ignore)
 
     Returns:
-        (file_path, issue_count, detections)
+        (file_path, issue_count, detections, status)
     """
     file_path, directory, select, ignore = packed_args
-    issue_count, detections = check_and_collect_file(file_path, directory, select, ignore)
-    return file_path, issue_count, detections
+    issue_count, detections, status = check_and_collect_file(file_path, directory, select, ignore)
+    return file_path, issue_count, detections, status
 
 
 def _i002_will_run(select, ignore) -> bool:
@@ -135,7 +135,7 @@ def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
         ignore: Rule codes to ignore
 
     Returns:
-        List of (file_path, issue_count, detections) in same order as input
+        List of (file_path, issue_count, detections, status) in same order as input
     """
     # Benchmark shows 4 workers captures ~74% of max speedup (vs 12 workers at
     # 100%). Beyond 4, marginal gain is <0.5s while fork overhead grows.
@@ -168,7 +168,7 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
         ignore: Rule codes to ignore
 
     Yields:
-        (file_path, issue_count, detections) tuples as futures complete
+        (file_path, issue_count, detections, status) tuples as futures complete
     """
     from concurrent.futures import as_completed
     workers = min(4, os.cpu_count() or 4, len(files))
@@ -516,7 +516,7 @@ def check_and_collect_file(
     select: Optional[list[str]],
     ignore: Optional[list[str]],
     profile: Optional[dict] = None,
-) -> tuple[int, list]:
+) -> tuple[int, list, dict]:
     """Check a single file and return structured results.
 
     Args:
@@ -528,7 +528,14 @@ def check_and_collect_file(
             profile[rule.code] (BACK-540). See RuleRegistry.check_file.
 
     Returns:
-        Tuple of (issue_count, detections_list)
+        Tuple of (issue_count, detections_list, status). status is a dict
+        with a "status" key ("ok" | "skipped" | "error" | "warning") and,
+        when not "ok", a "detail" string; "warning" additionally means the
+        file parsed via error-recovery (BACK-1084's structure['_has_errors'])
+        so detections may be based on fabricated/partial structure. Present
+        so callers can disclose "this file could not be fully checked"
+        instead of it reading identically to a genuinely clean file
+        (BACK-1083).
     """
     from ..registry import get_analyzer
     from ..rules import RuleRegistry
@@ -536,7 +543,7 @@ def check_and_collect_file(
     try:
         analyzer_class = get_analyzer(str(file_path), allow_fallback=False)
         if not analyzer_class:
-            return 0, []
+            return 0, [], {"status": "skipped", "detail": "no analyzer for this file type"}
 
         analyzer = analyzer_class(str(file_path))
         # Always request links so link-checking rules (L001, L002) can reuse
@@ -546,17 +553,28 @@ def check_and_collect_file(
 
         # Skip auto-generated files silently in recursive sweeps
         if _is_generated_file(content):
-            return 0, []
+            return 0, [], {"status": "skipped", "detail": "auto-generated file"}
 
+        rule_errors: list = []
         detections = RuleRegistry.check_file(
-            str(file_path), structure, content, select=select, ignore=ignore, profile=profile
+            str(file_path), structure, content, select=select, ignore=ignore,
+            profile=profile, errors=rule_errors,
         )
 
-        return len(detections), detections
+        status: dict = {"status": "ok"}
+        if isinstance(structure, dict) and structure.get('_has_errors'):
+            status = {
+                "status": "warning",
+                "detail": "file did not parse cleanly; results may be incomplete or incorrect",
+            }
+        if rule_errors:
+            status["rule_errors"] = rule_errors
+
+        return len(detections), detections, status
 
     except Exception as e:
         logging.warning("check: skipped %s — %s: %s", file_path, type(e).__name__, e)
-        return 0, []
+        return 0, [], {"status": "error", "detail": f"{type(e).__name__}: {e}"}
 
 
 def _build_cli_overrides(args: 'Namespace') -> dict:
@@ -636,10 +654,14 @@ def _check_files_json(
         severity: Minimum severity level to report (low/medium/high/critical)
 
     Returns:
-        Tuple of (total_issues, files_with_issues, file_results)
+        Tuple of (total_issues, files_with_issues, file_results, files_errored).
+        files_errored counts files whose analyzer/parse pipeline raised
+        (BACK-1083) — distinct from files simply skipped (no analyzer for the
+        file type), which are not counted as an error.
     """
     total_issues = 0
     files_with_issues = 0
+    files_errored = 0
     file_results = []
     sorted_files = sorted(files)
 
@@ -654,17 +676,21 @@ def _check_files_json(
         results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
 
     cwd = Path.cwd()
-    for file_path, issue_count, detections in results:
+    for file_path, issue_count, detections, status in results:
         detections = _apply_severity_filter(detections, severity)
         issue_count = len(detections)
+        st = status.get("status", "ok")
+        if st == "error":
+            files_errored += 1
         if issue_count > 0:
             total_issues += issue_count
             files_with_issues += 1
+        if issue_count > 0 or st != "ok":
             try:
                 rel_path = file_path.relative_to(cwd)
             except ValueError:
                 rel_path = file_path.relative_to(directory)
-            file_results.append({
+            entry = {
                 "file": to_posix(rel_path),
                 "issues": issue_count,
                 "detections": [
@@ -679,9 +705,16 @@ def _check_files_json(
                     }
                     for d in detections
                 ]
-            })
+            }
+            if st != "ok":
+                entry["status"] = st
+                if status.get("detail"):
+                    entry["detail"] = status["detail"]
+            if status.get("rule_errors"):
+                entry["rule_errors"] = status["rule_errors"]
+            file_results.append(entry)
 
-    return total_issues, files_with_issues, file_results
+    return total_issues, files_with_issues, file_results, files_errored
 
 
 def _check_files_text(
@@ -707,10 +740,14 @@ def _check_files_text(
             0 (or negative) disables the cap — print every file in full.
 
     Returns:
-        Tuple of (total_issues, files_with_issues)
+        Tuple of (total_issues, files_with_issues, files_errored, files_degraded).
+        See _check_files_json for what counts as errored vs. skipped (BACK-1083);
+        files_degraded is status == "warning" (parsed via error-recovery).
     """
     total_issues = 0
     files_with_issues = 0
+    files_errored = 0
+    files_degraded = 0
     hidden_files = 0
     hidden_issues = 0
     sorted_files = sorted(files)
@@ -738,9 +775,27 @@ def _check_files_text(
     # BACK-1039: shared run-wide (not per-file) so a rule's full guidance
     # prints once for the whole run — see _print_grouped_detections.
     shown_guidance: set = set()
-    for file_path, issue_count, detections in result_iter:
+    for file_path, issue_count, detections, status in result_iter:
         detections = _apply_severity_filter(detections, severity)
         issue_count = len(detections)
+        st = status.get("status", "ok")
+        if st == "error":
+            files_errored += 1
+        elif st == "warning":
+            files_degraded += 1
+
+        try:
+            relative = file_path.relative_to(cwd)
+        except ValueError:
+            relative = file_path.relative_to(directory)
+
+        if st == "error":
+            print(f"\n{relative}: ⚠️  could not be checked — {status.get('detail', 'error')}")
+        elif st == "warning":
+            print(f"\n{relative}: ⚠️  {status.get('detail', 'file did not parse cleanly')}")
+        for err in status.get("rule_errors", []):
+            print(f"{relative}: ⚠️  rule {err['rule']} crashed and did not run — {err['error']}")
+
         if issue_count > 0:
             total_issues += issue_count
             files_with_issues += 1
@@ -748,10 +803,6 @@ def _check_files_text(
                 hidden_files += 1
                 hidden_issues += issue_count
                 continue
-            try:
-                relative = file_path.relative_to(cwd)
-            except ValueError:
-                relative = file_path.relative_to(directory)
             print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
             _print_grouped_detections(detections, relative, no_group=no_group, shown_guidance=shown_guidance)
 
@@ -762,7 +813,7 @@ def _check_files_text(
             f"(--limit {limit}) — narrow with --select, or raise/disable with --limit N/--limit 0"
         )
 
-    return total_issues, files_with_issues
+    return total_issues, files_with_issues, files_errored, files_degraded
 
 
 def _print_json_output(
@@ -774,6 +825,7 @@ def _print_json_output(
     scope: Optional[ScopeCensus] = None,
     select: Optional[List[str]] = None,
     ignore: Optional[List[str]] = None,
+    files_errored: int = 0,
 ) -> None:
     """Print JSON output with results and summary.
 
@@ -791,16 +843,22 @@ def _print_json_output(
         ignore: Rule ignore filter actually applied to this run (see `select`).
         source: Directory that was checked, for the Output Contract envelope
             (BACK-962).
+        files_errored: Files whose analyzer/parse pipeline raised (BACK-1083)
+            — a subset of files_checked that could not be checked at all;
+            individual reasons are on each file_results entry's "detail".
     """
     import json
     from reveal.utils.results import add_cli_contract_fields
     from reveal.utils.json_utils import attach_provenance
 
+    files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
     result = {
         "files": file_results,
         "summary": {
             "files_checked": files_checked,
             "files_with_issues": files_with_issues,
+            "files_errored": files_errored,
+            "files_degraded": files_degraded,
             "total_issues": total_issues,
             "exit_code": 1 if total_issues > 0 else 0
         }
@@ -841,7 +899,8 @@ def _print_grep_output(file_results: List[dict]) -> None:
 
 
 def _print_text_summary(
-    files_checked: int, files_with_issues: int, total_issues: int, directory: Path, config
+    files_checked: int, files_with_issues: int, total_issues: int, directory: Path, config,
+    files_errored: int = 0, files_degraded: int = 0,
 ) -> None:
     """Print text summary with breadcrumbs.
 
@@ -851,9 +910,19 @@ def _print_text_summary(
         total_issues: Total issues count
         directory: Directory checked
         config: RevealConfig instance
+        files_errored: Files that could not be checked at all (BACK-1083) —
+            already individually flagged above; summarized here so the
+            "no issues" line can't be misread as "everything was checked".
+        files_degraded: Files checked via error-recovery parsing (BACK-1083)
+            — rules ran, but against fabricated/partial structure, so their
+            results (including "no issues") may be wrong, not just absent.
     """
     print(f"\n{'='*60}")
     print(f"Checked {files_checked} files")
+    if files_errored:
+        print(f"⚠️  {files_errored} file{'s' if files_errored != 1 else ''} could not be checked (see warnings above)")
+    if files_degraded:
+        print(f"⚠️  {files_degraded} file{'s' if files_degraded != 1 else ''} did not parse cleanly — results for {'it' if files_degraded == 1 else 'them'} may be incomplete or incorrect (see warnings above)")
     if total_issues > 0:
         print(f"Found {total_issues} issue{'s' if total_issues != 1 else ''} in {files_with_issues} file{'s' if files_with_issues != 1 else ''}")
     else:
@@ -909,13 +978,13 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
 
     # Check files based on output format
     if output_format == 'json':
-        total_issues, files_with_issues, file_results = _check_files_json(
+        total_issues, files_with_issues, file_results, files_errored = _check_files_json(
             files_to_check, directory, select, ignore, severity=severity
         )
         _print_json_output(
             file_results, len(files_to_check), files_with_issues, total_issues,
             scope=collection.to_scope_census(), source=directory,
-            select=select, ignore=ignore,
+            select=select, ignore=ignore, files_errored=files_errored,
         )
     elif output_format == 'grep':
         # BACK-1035: this recursive/directory path only ever branched on
@@ -924,7 +993,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         # already honors grep correctly via checks.py's
         # _format_detections_grep — reuse the same file:line:col:rule:msg
         # shape here, built from the JSON-mode per-file detections.
-        total_issues, files_with_issues, file_results = _check_files_json(
+        total_issues, files_with_issues, file_results, _files_errored = _check_files_json(
             files_to_check, directory, select, ignore, severity=severity
         )
         _print_grep_output(file_results)
@@ -939,10 +1008,13 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
                 file=sys.stderr,
             )
             sys.exit(2)
-        total_issues, files_with_issues = _check_files_text(
+        total_issues, files_with_issues, files_errored, files_degraded = _check_files_text(
             files_to_check, directory, select, ignore, no_group=no_group, severity=severity, limit=limit
         )
-        _print_text_summary(len(files_to_check), files_with_issues, total_issues, directory, config)
+        _print_text_summary(
+            len(files_to_check), files_with_issues, total_issues, directory, config,
+            files_errored=files_errored, files_degraded=files_degraded,
+        )
 
     # Exit with appropriate code
     sys.exit(1 if total_issues > 0 else 0)
@@ -990,7 +1062,7 @@ def handle_profile_rules(directory: Path, args: 'Namespace') -> None:
     total_issues = 0
     start = time.perf_counter()
     for file_path in sorted(files_to_check):
-        issue_count, _detections = check_and_collect_file(
+        issue_count, _detections, _status = check_and_collect_file(
             file_path, directory, select, ignore, profile=profile
         )
         total_issues += issue_count

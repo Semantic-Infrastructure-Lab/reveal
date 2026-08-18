@@ -648,7 +648,7 @@ class TestI002Preload:
         assert len(results) == 3
         returned_paths = {r[0] for r in results}
         assert returned_paths == set(files)
-        for file_path, issue_count, detections in results:
+        for file_path, issue_count, detections, status in results:
             assert isinstance(issue_count, int)
             assert isinstance(detections, list)
 
@@ -1236,8 +1236,8 @@ class TestCheckFilesTextSeverity:
         low = self._make_detection('low')
         high = self._make_detection('high')
 
-        with patch('reveal.cli.file_checker.check_and_collect_file', return_value=(2, [low, high])):
-            total, files_with = _check_files_text([dummy], tmp_path, None, None, severity='high')
+        with patch('reveal.cli.file_checker.check_and_collect_file', return_value=(2, [low, high], {"status": "ok"})):
+            total, files_with, _errored, _degraded = _check_files_text([dummy], tmp_path, None, None, severity='high')
 
         assert total == 1
         assert files_with == 1
@@ -1250,8 +1250,8 @@ class TestCheckFilesTextSeverity:
         low = self._make_detection('low')
         high = self._make_detection('high')
 
-        with patch('reveal.cli.file_checker.check_and_collect_file', return_value=(2, [low, high])):
-            total, files_with, _ = _check_files_json([dummy], tmp_path, None, None, severity='high')
+        with patch('reveal.cli.file_checker.check_and_collect_file', return_value=(2, [low, high], {"status": "ok"})):
+            total, files_with, _, _errored = _check_files_json([dummy], tmp_path, None, None, severity='high')
 
         assert total == 1
         assert files_with == 1
@@ -1291,8 +1291,8 @@ class TestCheckFilesTextLimit:
         det = self._make_detection()
 
         with patch('reveal.cli.file_checker._PARALLEL_THRESHOLD', 999), \
-             patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det])):
-            total, files_with = _check_files_text(files, tmp_path, None, None, limit=3)
+             patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det], {"status": "ok"})):
+            total, files_with, _errored, _degraded = _check_files_text(files, tmp_path, None, None, limit=3)
 
         # Counts reflect ALL files, not just the ones printed in full.
         assert total == 10
@@ -1308,8 +1308,8 @@ class TestCheckFilesTextLimit:
         det = self._make_detection()
 
         with patch('reveal.cli.file_checker._PARALLEL_THRESHOLD', 999), \
-             patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det])):
-            total, files_with = _check_files_text(files, tmp_path, None, None, limit=0)
+             patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det], {"status": "ok"})):
+            total, files_with, _errored, _degraded = _check_files_text(files, tmp_path, None, None, limit=0)
 
         assert total == 10
         assert files_with == 10
@@ -1323,8 +1323,8 @@ class TestCheckFilesTextLimit:
         det = self._make_detection()
 
         with patch('reveal.cli.file_checker._PARALLEL_THRESHOLD', 999), \
-             patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det])):
-            total, files_with = _check_files_text(files, tmp_path, None, None, limit=50)
+             patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det], {"status": "ok"})):
+            total, files_with, _errored, _degraded = _check_files_text(files, tmp_path, None, None, limit=50)
 
         assert total == 5
         assert files_with == 5

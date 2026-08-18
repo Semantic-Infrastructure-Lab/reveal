@@ -602,7 +602,8 @@ class RuleRegistry:
                    content: str,
                    select: Optional[List[str]] = None,
                    ignore: Optional[List[str]] = None,
-                   profile: Optional[Dict[str, float]] = None) -> List[Detection]:
+                   profile: Optional[Dict[str, float]] = None,
+                   errors: Optional[List[Dict[str, str]]] = None) -> List[Detection]:
         """
         Run all applicable rules against a file.
 
@@ -618,6 +619,11 @@ class RuleRegistry:
                 (e.g. I002 gets charged for building its import graph on the
                 file that first triggers it), so there is no cross-run cache
                 state to contaminate the comparison.
+            errors: When given, a rule that raises during check() appends
+                {"rule": code, "error": "..."} here instead of the crash being
+                visible only in the stderr log (BACK-1083) — callers that want
+                the failure surfaced in the check output contract pass a list;
+                omitting it preserves the prior log-only behavior.
 
         Returns:
             List of all detections from all rules
@@ -673,6 +679,8 @@ class RuleRegistry:
                     f"Rule {rule_class.code} failed on {file_path}: {e}",
                     exc_info=True
                 )
+                if errors is not None:
+                    errors.append({"rule": rule_class.code, "error": f"{type(e).__name__}: {e}"})
 
         return detections
 
