@@ -42,7 +42,7 @@ python3 -m venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 
 pip install -q --upgrade pip
-pip install -q -e .
+pip install -q -e ".[dev]"
 pip install -q "tree-sitter-language-pack==$LP_VERSION"
 
 echo "-- confirming the forced version is actually active --"
