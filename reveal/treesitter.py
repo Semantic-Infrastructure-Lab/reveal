@@ -680,7 +680,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # (`import_or_export` -> `library_import` | `library_export`), so
         # a plain node-kind-set entry would also capture exports as imports.
         for node in self._find_nodes_by_type('import_or_export'):
-            if any(child.kind() == 'library_import' for child in _children(node)):
+            if any(_zero_arg(child, 'kind') == 'library_import' for child in _children(node)):
                 imports.append({
                     'line': node.start_position().row + 1,
                     'content': self._get_node_text(node),
@@ -740,9 +740,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
             for field_node in self._find_nodes_by_type(field_type):
                 name_node = value_node = None
                 for ch in _children(field_node):
-                    if ch.kind() in ('property_identifier', 'private_property_identifier') and name_node is None:
+                    if _zero_arg(ch, 'kind') in ('property_identifier', 'private_property_identifier') and name_node is None:
                         name_node = ch
-                    elif ch.kind() in ('arrow_function', 'function_expression'):
+                    elif _zero_arg(ch, 'kind') in ('arrow_function', 'function_expression'):
                         value_node = ch
                 if name_node and value_node:
                     funcs.append(self._build_function_dict(
@@ -788,9 +788,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         name_node = value_node = None
         for ch in _children(variable_declarator_node):
-            if ch.kind() == 'identifier' and name_node is None:
+            if _zero_arg(ch, 'kind') == 'identifier' and name_node is None:
                 name_node = ch
-            elif ch.kind() in ('arrow_function', 'function_expression', 'generator_function'):
+            elif _zero_arg(ch, 'kind') in ('arrow_function', 'function_expression', 'generator_function'):
                 value_node = ch
             elif _zero_arg(ch, 'kind') == 'call_expression' and value_node is None:
                 value_node = self._call_wrapped_function_literal(ch)
@@ -837,7 +837,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         funcs = []
         for decl_node in self._find_nodes_by_type('lexical_declaration'):
             for child in _children(decl_node):
-                if child.kind() != 'variable_declarator':
+                if _zero_arg(child, 'kind') != 'variable_declarator':
                     continue
                 name_node, value_node = self._arrow_or_fn_value(child)
                 if name_node and value_node:
@@ -866,7 +866,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # 1. `const name = (...) => {}`, module scope or nested
         for decl_node in self._find_nodes_by_type('lexical_declaration'):
             for child in _children(decl_node):
-                if child.kind() != 'variable_declarator':
+                if _zero_arg(child, 'kind') != 'variable_declarator':
                     continue
                 name_node, value_node = self._arrow_or_fn_value(child)
                 if name_node and value_node and self._get_node_text(name_node) == name:
@@ -877,9 +877,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
             for field_node in self._find_nodes_by_type(field_type):
                 name_node = value_node = None
                 for ch in _children(field_node):
-                    if ch.kind() in ('property_identifier', 'private_property_identifier') and name_node is None:
+                    if _zero_arg(ch, 'kind') in ('property_identifier', 'private_property_identifier') and name_node is None:
                         name_node = ch
-                    elif ch.kind() in ('arrow_function', 'function_expression'):
+                    elif _zero_arg(ch, 'kind') in ('arrow_function', 'function_expression'):
                         value_node = ch
                 if name_node and value_node and self._get_node_text(name_node) == name:
                     return value_node
@@ -915,9 +915,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
             # Find function child and collect decorators
             for child in _children(decorated_node):
-                if child.kind() in function_types:
+                if _zero_arg(child, 'kind') in function_types:
                     func_node = child
-                elif child.kind() == 'decorator':
+                elif _zero_arg(child, 'kind') == 'decorator':
                     decorators.append(self._get_node_text(child))
 
             if func_node:
@@ -1140,9 +1140,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
             # Find class child and collect decorators
             for child in _children(decorated_node):
-                if child.kind() in class_types:
+                if _zero_arg(child, 'kind') in class_types:
                     class_node = child
-                elif child.kind() == 'decorator':
+                elif _zero_arg(child, 'kind') == 'decorator':
                     decorators.append(self._get_node_text(child))
 
             if class_node:
@@ -1172,9 +1172,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         line = node.start_position().row + 1
         for child in _children(node):
-            if child.kind() == 'base_clause':
+            if _zero_arg(child, 'kind') == 'base_clause':
                 for base_child in _children(child):
-                    if base_child.kind() == 'name':
+                    if _zero_arg(base_child, 'kind') == 'name':
                         base_name = self._get_node_text(base_child)
                         return f'anonymous({base_name})@L{line}'
         return f'anonymous@L{line}'
@@ -1191,7 +1191,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 if not name:
                     # PHP anonymous classes have no identifier child — generate a
                     # synthetic name from the extends clause and line number.
-                    if node.kind() == 'anonymous_class':
+                    if _zero_arg(node, 'kind') == 'anonymous_class':
                         name = self._get_anonymous_class_name(node)
                     else:
                         continue
@@ -1226,7 +1226,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # analyzers/scala.py's _extract_class_bases — kept here rather than
         # behind the JS-only mixin since scala.py calls it directly.
         for gchild in _children(generic_type):
-            if gchild.kind() == 'type_identifier':
+            if _zero_arg(gchild, 'kind') == 'type_identifier':
                 return self._get_node_text(gchild).strip() or None
         return None
 
@@ -1283,7 +1283,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # consumers (e.g. contracts command) can distinguish from concrete classes.
         # Other languages (Java, C#) share 'class_declaration' for both and mark
         # abstractness via a modifier keyword instead — see _is_abstract_class_node.
-        if node.kind() == 'abstract_class_declaration' or self._is_abstract_class_node(node):
+        if _zero_arg(node, 'kind') == 'abstract_class_declaration' or self._is_abstract_class_node(node):
             result['is_abstract'] = True
         return result
 
@@ -1339,7 +1339,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     end_node = self._function_end_node(node)
                     source = (
                         self._get_node_text(node) if end_node is node
-                        else self._get_text_span(node.start_byte(), end_node.end_byte())
+                        else self._get_text_span(_zero_arg(node, 'start_byte'), _zero_arg(end_node, 'end_byte'))
                     )
                     return {
                         'name': name,
@@ -1376,7 +1376,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             # bucket is byte-identical to the old `stack=[root]; pop; push
             # reversed(children)` walk (verified over 557K real nodes).
             for node in _iter_tree(tree_root(self.tree)):
-                cache.setdefault(node.kind(), []).append(node)
+                cache.setdefault(_zero_arg(node, 'kind'), []).append(node)
 
             # Write completed node_cache back to this thread's cache.
             parse_cache = _get_parse_cache()
@@ -1454,7 +1454,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         except AttributeError:
             content_bytes = self.content.encode('utf-8')
             self._content_bytes = content_bytes
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
 
     def _get_text_span(self, start_byte: int, end_byte: int) -> str:
         """Get source text for an arbitrary byte range spanning two nodes
@@ -1497,7 +1497,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             # level up, next to method_signature -- initializers is never
             # itself the body). Without this check, `sibling` here is
             # 'initializers' (not None), so the "sibling is None" fallback
-            # below never fired, and the final `sibling.kind() ==
+            # below never fired, and the final `_zero_arg(sibling, 'kind') ==
             # 'function_body'` check failed -- silently returning `node`
             # itself (bounds truncated to the bare signature, calls list
             # empty) for EVERY constructor with an initializer list, a
@@ -1529,7 +1529,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 # for it in practice).
                 if parent is not None and _zero_arg(parent, 'kind') in ('method_signature', 'declaration'):
                     sibling = _next_sibling(parent)
-            if sibling is not None and sibling.kind() == 'function_body':
+            if sibling is not None and _zero_arg(sibling, 'kind') == 'function_body':
                 return sibling
         return node
 
@@ -1602,7 +1602,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         parent = node.parent()
         if parent is not None:
             for sibling in _children(parent):
-                if sibling.kind() == 'type_identifier':
+                if _zero_arg(sibling, 'kind') == 'type_identifier':
                     return self._get_node_text(sibling)
         return None
 
@@ -1656,7 +1656,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # PRIORITY 1: For C/C++ functions, look inside declarators FIRST —
         # these contain the actual function/variable name, not the type.
         for child in kids:
-            if child.kind() in ('function_declarator', 'pointer_declarator', 'declarator'):
+            if _zero_arg(child, 'kind') in ('function_declarator', 'pointer_declarator', 'declarator'):
                 # Recursively search for identifier (may be nested deep)
                 name = self._find_identifier_in_tree(child)
                 if name:
@@ -1684,7 +1684,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # renamed "T"/"Task" in Jellyfin's `LibraryManager.cs`/
         # `LimitedConcurrencyLibraryScheduler.cs`.
         for i, child in enumerate(kids):
-            if child.kind() in _PARAM_LIST_KINDS and i > 0:
+            if _zero_arg(child, 'kind') in _PARAM_LIST_KINDS and i > 0:
                 prev = kids[i - 1]
                 prev_kind = _zero_arg(prev, 'kind')
                 if prev_kind in _NAME_KINDS:
@@ -1697,7 +1697,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # PRIORITY 2b: no adjacent parameter list — first identifier/name child
         # (classes, fields, variables; excludes field_identifier, see PRIORITY 4)
         for child in kids:
-            if child.kind() in ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier'):
+            if _zero_arg(child, 'kind') in ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier'):
                 return self._get_node_text(child)
         return None
 
@@ -1735,14 +1735,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # PRIORITY 3: type_identifier (fallback for structs, classes) — only
         # used if no name was found in declarators.
         for child in kids:
-            if child.kind() == 'type_identifier':
+            if _zero_arg(child, 'kind') == 'type_identifier':
                 return self._get_node_text(child)
         return None
 
     def _name_via_field_identifier(self, kids) -> Optional[str]:
         # PRIORITY 4: field_identifier (for struct fields)
         for child in kids:
-            if child.kind() == 'field_identifier':
+            if _zero_arg(child, 'kind') == 'field_identifier':
                 return self._get_node_text(child)
         return None
 
@@ -1763,7 +1763,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         match; `_struct_type_name` is a special case with no name-shaped
         descendant at all, so it's checked before any of them.
         """
-        if node.kind() == 'struct_type':
+        if _zero_arg(node, 'kind') == 'struct_type':
             return self._struct_type_name(node)
         if _zero_arg(node, 'kind') == 'operator_declaration':
             return self._operator_declaration_name(node)
@@ -1851,13 +1851,13 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return '::'.join(parts)
 
         # Check current node
-        if node.kind() in ('identifier', 'name', 'simple_identifier', 'field_identifier'):
+        if _zero_arg(node, 'kind') in ('identifier', 'name', 'simple_identifier', 'field_identifier'):
             return self._get_node_text(node)
 
         # Search children recursively
         for child in _children(node):
             # Skip pointer/reference symbols and parameter lists
-            if child.kind() in ('*', '&', 'parameter_list', 'parameters'):
+            if _zero_arg(child, 'kind') in ('*', '&', 'parameter_list', 'parameters'):
                 continue
 
             name = self._find_identifier_in_tree(child)
@@ -1883,7 +1883,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return_type = ''
 
         for i, child in enumerate(kids):
-            if child.kind() in _PARAM_LIST_KINDS and i > 0 and kids[i - 1].kind() in _NAME_KINDS:
+            if _zero_arg(child, 'kind') in _PARAM_LIST_KINDS and i > 0 and _zero_arg(kids[i - 1], 'kind') in _NAME_KINDS:
                 params_text = self._get_node_text(child)
                 break
 
@@ -1891,12 +1891,12 @@ class TreeSitterAnalyzer(FileAnalyzer):
             # No name-adjacent parameter list found (e.g. anonymous
             # functions/lambdas) — fall back to the first one present.
             for child in kids:
-                if child.kind() in _PARAM_LIST_KINDS:
+                if _zero_arg(child, 'kind') in _PARAM_LIST_KINDS:
                     params_text = self._get_node_text(child)
                     break
 
         for child in kids:
-            if child.kind() in ('return_type', 'type'):
+            if _zero_arg(child, 'kind') in ('return_type', 'type'):
                 return_type = ' -> ' + self._get_node_text(child).strip(': ')
 
         if params_text:
@@ -1957,7 +1957,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # here as genuinely shared infra rather than moving to php.py —
         # moving it would silently break Java/C# `new` extraction.
         for child in _children(call_node):
-            if child.kind() not in ('new', 'arguments'):
+            if _zero_arg(child, 'kind') not in ('new', 'arguments'):
                 return f"new {self._get_node_text(child)}"
         return None
 
@@ -2098,18 +2098,18 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # and the raw "TemperatureConverter.converter_factory(temperature_unit, ha_unit)").
         # The outer call has no nameable callee of its own -- its target is
         # a call result, not an identifier/attribute -- so return None.
-        if callee_node.kind() in CALL_NODE_TYPES:
+        if _zero_arg(callee_node, 'kind') in CALL_NODE_TYPES:
             return None
-        if callee_node.kind() == 'identifier':
+        if _zero_arg(callee_node, 'kind') == 'identifier':
             return self._get_node_text(callee_node)
-        if callee_node.kind() in CALLEE_ATTRIBUTE_TYPES:
+        if _zero_arg(callee_node, 'kind') in CALLEE_ATTRIBUTE_TYPES:
             return self._get_node_text(callee_node).lstrip('*')
         # tree-sitter parses `*foo(args)` as call(list_splat(*foo), args).
-        if callee_node.kind() == 'list_splat':
+        if _zero_arg(callee_node, 'kind') == 'list_splat':
             for child in _children(callee_node):
-                if child.kind() == 'identifier':
+                if _zero_arg(child, 'kind') == 'identifier':
                     return self._get_node_text(child)
-                if child.kind() in CALLEE_ATTRIBUTE_TYPES:
+                if _zero_arg(child, 'kind') in CALLEE_ATTRIBUTE_TYPES:
                     return self._get_node_text(child).lstrip('*')
         # Rust turbofish (`size_of::<u32>()`, `x.remap_types::<T>()`,
         # `E::error::<T>()`) parses as generic_function(path, '::',
@@ -2225,7 +2225,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         stack = _children(func_node)
         while stack:
             node = stack.pop()
-            if node.kind() in CALL_NODE_TYPES:
+            if _zero_arg(node, 'kind') in CALL_NODE_TYPES:
                 name = self._get_callee_name(node)
                 if name and name not in seen:
                     calls.append(name)
@@ -2278,7 +2278,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # `stack.extend(reversed(...))` step reverses) — preserved byte-for-byte
         # so this merged walk returns the identical `calls` list order.
         stack = [
-            (child, None, 1 if child.kind() in _NESTING_TYPES else 0)
+            (child, None, 1 if _zero_arg(child, 'kind') in _NESTING_TYPES else 0)
             for child in _children(func_node)
         ]
         while stack:
@@ -2286,7 +2286,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             if depth > max_depth:
                 max_depth = depth
 
-            kind = node.kind()
+            kind = _zero_arg(node, 'kind')
             if kind in CALL_NODE_TYPES:
                 name = self._get_callee_name(node)
                 if name and name not in seen_calls:
@@ -2332,7 +2332,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             for child in reversed(children):
                 if occluded_bodies is not None and _zero_arg(child, 'start_byte') in occluded_bodies:
                     continue
-                child_kind = child.kind()
+                child_kind = _zero_arg(child, 'kind')
                 child_depth = depth + 1 if child_kind in _NESTING_TYPES else depth
                 stack.append((child, kind, child_depth))
 
