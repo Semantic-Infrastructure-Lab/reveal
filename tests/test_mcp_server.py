@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 class TestRevealStructureTool(unittest.TestCase):
@@ -107,6 +108,14 @@ class TestRevealElementTool(unittest.TestCase):
             self.assertIsInstance(result, str)
         finally:
             os.unlink(fpath)
+
+    def test_missing_path_returns_error_string_not_raw_exception(self):
+        # Every other reveal_* tool returns "[reveal error: ...]" on a bad
+        # path instead of propagating a raw exception -- reveal_element must
+        # match, not leak an unguarded FileNotFoundError with the full path.
+        result = self.reveal_element('/nonexistent/path/xyz.py', 'foo')
+        self.assertIsInstance(result, str)
+        self.assertIn('reveal error', result)
 
 
 class TestRevealNavTool(unittest.TestCase):
@@ -312,6 +321,103 @@ class TestRevealCheckTool(unittest.TestCase):
         result = self.reveal_check('/nonexistent/path.py')
         self.assertIsInstance(result, str)
 
+    def test_select_filter_accepted(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("x = 1\n")
+            fpath = f.name
+        try:
+            result = self.reveal_check(fpath, select='B')
+            self.assertIsInstance(result, str)
+        finally:
+            os.unlink(fpath)
+
+    def test_ignore_filter_accepted(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("x = 1\n")
+            fpath = f.name
+        try:
+            result = self.reveal_check(fpath, ignore='N')
+            self.assertIsInstance(result, str)
+        finally:
+            os.unlink(fpath)
+
+    def test_select_narrows_results_vs_unfiltered(self):
+        with tempfile.TemporaryDirectory() as d:
+            fpath = Path(d) / 'app.py'
+            fpath.write_text("def f():\n    pass\n")
+            unfiltered_calls = {}
+            from reveal.cli import file_checker as fc
+
+            original = fc._check_files_json
+
+            def spy(*args, **kwargs):
+                unfiltered_calls['select'] = args[2] if len(args) > 2 else kwargs.get('select')
+                unfiltered_calls['ignore'] = args[3] if len(args) > 3 else kwargs.get('ignore')
+                return original(*args, **kwargs)
+
+            with patch.object(fc, '_check_files_json', side_effect=spy):
+                self.reveal_check(str(d), select='M', ignore='N')
+            self.assertEqual(unfiltered_calls['select'], ['M'])
+            self.assertEqual(unfiltered_calls['ignore'], ['N'])
+
+
+class TestRevealHealthTool(unittest.TestCase):
+
+    def setUp(self):
+        from reveal.mcp_server import reveal_health
+        self.reveal_health = reveal_health
+
+    def test_healthy_code_target_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'app.py').write_text("x = 1\n")
+            result = self.reveal_health(d)
+            self.assertIsInstance(result, str)
+            self.assertIn('PASS', result)
+
+    def test_select_filter_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'app.py').write_text("x = 1\n")
+            result = self.reveal_health(d, select='B,S')
+            self.assertIsInstance(result, str)
+
+    def test_missing_target_returns_error_string(self):
+        result = self.reveal_health('/nonexistent/path/xyz')
+        self.assertIsInstance(result, str)
+        self.assertIn('not found', result)
+
+    def test_uri_target_routes_to_uri_check(self):
+        """A non-code URI target (unknown scheme) should not be treated as a path."""
+        result = self.reveal_health('nosuchscheme://example.com')
+        self.assertIsInstance(result, str)
+
+
+class TestRevealReviewTool(unittest.TestCase):
+
+    def setUp(self):
+        from reveal.mcp_server import reveal_review
+        self.reveal_review = reveal_review
+
+    def test_directory_target_returns_report(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'app.py').write_text("def run():\n    pass\n")
+            result = self.reveal_review(d)
+            self.assertIsInstance(result, str)
+            self.assertIn('Review:', result)
+
+    def test_select_filter_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'app.py').write_text("def run():\n    pass\n")
+            result = self.reveal_review(d, select='B,S')
+            self.assertIsInstance(result, str)
+
+    def test_git_range_target_does_not_crash(self):
+        """A git-range target (diff-scoped review) should not raise, even on a
+        range with 0 changed files -- also exercises the argument-injection
+        fix (BACK-1141) via a target that would otherwise be a single-token
+        git-diff argv element."""
+        result = self.reveal_review('HEAD..HEAD')
+        self.assertIsInstance(result, str)
+
 
 class TestRevealGrepTool(unittest.TestCase):
 
@@ -507,10 +613,12 @@ class TestMcpServerRegistration(unittest.TestCase):
         self.assertIn('reveal_check', tool_names)
         self.assertIn('reveal_grep', tool_names)
         self.assertIn('reveal_trace', tool_names)
+        self.assertIn('reveal_health', tool_names)
+        self.assertIn('reveal_review', tool_names)
 
     def test_tool_count(self):
         from reveal.mcp_server import mcp
-        self.assertEqual(len(mcp._tool_manager._tools), 8)
+        self.assertEqual(len(mcp._tool_manager._tools), 10)
 
     def test_tool_count_matches_guide(self):
         """Validate that MCP_SETUP.md tool count matches actual registered tools."""

@@ -7,7 +7,7 @@ beth_topics:
   - claude-code
   - agent-integration
 help_topic: mcp
-help_description: "MCP server setup — 8 tools for Claude Code, Cursor, Windsurf"
+help_description: "MCP server setup — 10 tools for Claude Code, Cursor, Windsurf"
 help_category: ai_guides
 help_token_estimate: "~2,000"
 ---
@@ -115,14 +115,16 @@ With `content=True` (default):
 - Key files → reveal structure (function signatures, imports)
 - Low-priority files → names only
 
-### `reveal_check(path, severity)`
+### `reveal_check(path, severity, select, ignore)`
 
 Run quality checks. Detects complexity hotspots, maintainability issues, style
-violations, broken links.
+violations, broken links. `select`/`ignore` take comma-separated rule codes or
+series (e.g. `"M"`, `"B006,S012"`) — same as the CLI's `--select`/`--ignore`.
 
 ```
 reveal_check("src/")
 reveal_check("src/auth.py", severity="high")
+reveal_check("src/", select="M", ignore="N")
 ```
 
 ### `reveal_nav(path, element, flag)`
@@ -161,9 +163,35 @@ caller/callee queries rather than rendering a readable walk-through.
 reveal_trace("src/", "process_order", depth=2)
 ```
 
+### `reveal_health(target, select)`
+
+Unified PASS/WARN/FAIL health check for a path (code quality) or a URI
+resource (`ssl://`, `mysql://`, `domain://`) — a quicker go/no-go read than
+`reveal_check`/`reveal_query` when you just need a verdict per target.
+
+```
+reveal_health("src/")
+reveal_health("ssl://api.example.com")
+reveal_health("mysql://prod/mydb")
+```
+
+### `reveal_review(target, select)`
+
+PR-merge quality assessment: violations, hotspots, and complexity spikes in
+one report. A git range (`"main..feature"`) scopes analysis to only the
+changed files; a directory reviews the whole tree.
+
+```
+reveal_review("main..feature")
+reveal_review("src/", select="B,S")
+```
+
 ## Recommended Agent Workflow
 
 ```
+# 0. Orient in an unfamiliar codebase first
+reveal_query("overview://src/")             # quality score, hotspots, git activity, one screen
+
 # 1. Understand the shape of a codebase area
 reveal_structure("src/")                    # 50-200 tokens: what files exist
 

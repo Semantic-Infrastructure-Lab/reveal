@@ -129,8 +129,11 @@ def _run_diff(git_range: str) -> Dict[str, Any]:
     # Fallback: git for changed file list
     try:
         parts = git_range.split('..', 1)
+        # --end-of-options: git_range is caller-controlled -- without it, a part
+        # starting with '-' is parsed as a git option (e.g. '--output=/path'
+        # writes an arbitrary file) instead of a revision.
         result = subprocess.run(
-            ['git', 'diff', '--name-only', parts[0], parts[1]],
+            ['git', 'diff', '--name-only', '--end-of-options', parts[0], parts[1]],
             capture_output=True, text=True, timeout=10
         )
         files = [f for f in result.stdout.splitlines() if f.strip()]
@@ -253,8 +256,9 @@ def _changed_files(git_range: str) -> List[Path]:
     the old whole-tree `_detect_source_root()` walk (BACK-538).
     """
     try:
+        # --end-of-options: same git-argument-injection defense as _run_diff above.
         result = subprocess.run(
-            ['git', 'diff', '--name-only', git_range],
+            ['git', 'diff', '--name-only', '--end-of-options', git_range],
             capture_output=True, text=True, timeout=10,
         )
         if result.returncode != 0:

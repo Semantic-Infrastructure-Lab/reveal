@@ -42,8 +42,17 @@ mcp = MCPServer(
     "reveal",
     instructions=(
         "Reveal is a progressive disclosure tool for exploring codebases, "
-        "infrastructure, and data sources.\n\n"
+        "infrastructure, and data sources. This is 3-33x more token-efficient "
+        "than reading files directly — always prefer the narrowest tool below "
+        "over reading a whole file or dumping a whole repo.\n\n"
+        "Param convention: `path` = local filesystem path only. `uri` = a "
+        "reveal URI (scheme://...) only. `target` = either, tool-dependent "
+        "(reveal_health: path or URI; reveal_review: path or git range).\n\n"
         "Core workflow:\n"
+        "0. reveal_query('overview://<dir>') — orient in an unfamiliar "
+        "codebase first: quality score, ranked hotspots, git activity, one "
+        "screen. This is reveal's own best answer to \"what is this repo\" — "
+        "start here before structure/element/nav on unfamiliar code.\n"
         "1. reveal_structure(dir) — understand what's in a directory (50-200 tokens)\n"
         "2. reveal_structure(file) — see all functions/classes (200-500 tokens)\n"
         "3. reveal_element(file, fn) — read one function's implementation (100-300 tokens)\n"
@@ -54,15 +63,29 @@ mcp = MCPServer(
         "   sideeffects — db/http/cache/log/file/sleep/hard_stop calls\n"
         "   returns     — exit paths with gate conditions\n"
         "   varflow     — trace one variable's reads and writes\n"
-        "5. reveal_query('help://quick') — lost or need an adapter outside this "
-        "workflow (ssl, git, imports, sqlite, ...)? Start here for an orientation "
-        "map of everything else reveal://* can do.\n\n"
-        "Other tools: reveal_grep(path, pattern) — cross-file text/identifier "
-        "search grouped by enclosing function (use instead of shell grep). "
-        "reveal_trace(dir, entry_point) — depth-indented call-graph narrative "
-        "from one entry point (\"walk me through what happens when X runs\").\n\n"
-        "This is 3-33x more token-efficient than reading files directly. "
-        "Use reveal_structure before reveal_element — always progressive disclosure."
+        "5. reveal_grep(path, pattern) — \"where is X used?\" cross-file "
+        "search grouped by enclosing function (use instead of shell grep).\n"
+        "6. reveal_trace(dir, entry_point) — \"what happens when X runs?\" "
+        "depth-indented call-graph narrative from one entry point.\n"
+        "7. reveal_query('help://quick') — lost, or need an adapter outside "
+        "this workflow (git, imports, sqlite, env, infra adapters like ssl/"
+        "domain/mysql/cpanel, ...)? Start here for an orientation map of "
+        "everything else reveal://* can do — it's the full escape hatch, not "
+        "just these 10 named tools.\n\n"
+        "Quality tools — pick one, they answer different questions and CAN "
+        "DISAGREE (a coarse PASS from one and real issues from another on the "
+        "same path is expected, not a bug):\n"
+        "  reveal_health(target)  — fast go/no-go verdict; also probes "
+        "ssl:///mysql:///domain:// targets, not just code\n"
+        "  reveal_check(path)     — itemized rule violations for a file/dir, "
+        "supports select/ignore to target specific rule codes\n"
+        "  reveal_review(target)  — pre-merge assessment; pass a git range "
+        "(e.g. 'main..feature') to scope to changed files only\n\n"
+        "reveal_pack(path) — token-budgeted context snapshot, DEFAULTS TO "
+        "~8000 TOKENS OF RAW FILE CONTENT. Use only for breadth (PR review "
+        "via `since`, unfamiliar-repo handoff, one-shot context dump) — never "
+        "to answer a question about one file or function, that's "
+        "reveal_structure + reveal_element at a fraction of the cost."
     ),
 )
 
@@ -176,16 +199,24 @@ def reveal_element(path: str, element: str) -> str:
         path: File path containing the element
         element: Function or class name to extract (e.g., 'validate_token')
     """
+    from pathlib import Path
     from .registry import get_analyzer
     from .display.element import _parse_element_syntax, _extract_by_syntax
 
-    analyzer_class = get_analyzer(path, allow_fallback=True)
-    if not analyzer_class:
-        return f"[reveal error: no analyzer found for {path}]"
+    p = Path(path)
+    if not p.exists():
+        return f"[reveal error: path not found: {path}]"
 
-    analyzer = analyzer_class(path)
-    syntax = _parse_element_syntax(element)
-    result = _extract_by_syntax(analyzer, element, syntax)
+    try:
+        analyzer_class = get_analyzer(path, allow_fallback=True)
+        if not analyzer_class:
+            return f"[reveal error: no analyzer found for {path}]"
+
+        analyzer = analyzer_class(path)
+        syntax = _parse_element_syntax(element)
+        result = _extract_by_syntax(analyzer, element, syntax)
+    except Exception as exc:  # noqa: BLE001 -- match every sibling tool's error shape
+        return f"[reveal error: {exc}]"
 
     if not result:
         return f"[reveal error: element '{element}' not found in {path}]"
@@ -294,6 +325,11 @@ def reveal_pack(
 ) -> str:
     """Get a token-budgeted context snapshot of a codebase — ideal for PR review.
 
+    Use for breadth: PR review (via ``since``), an unfamiliar repo, a one-shot
+    handoff. Do NOT use to answer a question about a specific file or
+    function — that's reveal_structure + reveal_element at a fraction of the
+    cost (this defaults to ~8000 tokens of raw content with content=True).
+
     Selects the most important files within the token budget, prioritizing:
     1. Changed files (when ``since`` is set)
     2. Entry points (main.py, app.py, index.js, etc.)
@@ -345,7 +381,7 @@ def reveal_pack(
 
 
 @mcp.tool(annotations=_LOCAL_READONLY)
-def reveal_check(path: str, severity: str = '') -> str:
+def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = '') -> str:
     """Run quality checks on a file or directory.
 
     Detects: cyclomatic complexity hotspots, maintainability issues, style
@@ -358,6 +394,9 @@ def reveal_check(path: str, severity: str = '') -> str:
     Args:
         path: File or directory to check (recurses into directories)
         severity: Minimum severity to show: 'low', 'medium', 'high', or 'critical'
+        select: Comma-separated rule codes/series to run, e.g. 'M' or 'B006,S012'
+            (same as CLI --select; see reveal_query('help://rules') for the list)
+        ignore: Comma-separated rule codes/series to exclude, e.g. 'N'
     """
     from pathlib import Path
     from .cli.file_checker import collect_files_to_check, load_gitignore_patterns, _check_files_json
@@ -367,6 +406,8 @@ def reveal_check(path: str, severity: str = '') -> str:
         return f"[reveal error: {path}: no such file or directory]"
 
     severity_filter = severity or None
+    select_list = select.split(',') if select else None
+    ignore_list = ignore.split(',') if ignore else None
 
     if p.is_dir():
         directory = p.resolve()
@@ -379,7 +420,7 @@ def reveal_check(path: str, severity: str = '') -> str:
         files = [p.resolve()]
 
     total_issues, _, file_results, _ = _check_files_json(
-        files, directory, None, None, severity=severity_filter
+        files, directory, select_list, ignore_list, severity=severity_filter
     )
 
     if total_issues == 0:
@@ -399,6 +440,44 @@ def reveal_check(path: str, severity: str = '') -> str:
 
     lines.append(f"\n{total_issues} issue{'s' if total_issues != 1 else ''} found.")
     return "\n".join(lines)
+
+
+@mcp.tool(annotations=_OPEN_WORLD_READONLY)
+def reveal_health(target: str, select: str = '') -> str:
+    """Run a unified health check on a path or URI resource.
+
+    Checks code quality thresholds for a local path, or SSL/database/DNS
+    health for a URI resource (ssl://, mysql://, domain://). Returns a
+    PASS/WARN/FAIL verdict per target plus a one-line summary — narrower
+    and faster than reveal_check/reveal_query/reveal_review for a quick
+    go/no-go read. For an itemized list of issues instead of a verdict, use
+    reveal_check (a file/dir) or reveal_review (pre-merge, git-range aware).
+
+    Args:
+        target: Path or URI to check (e.g. './src', 'ssl://example.com', 'mysql://host/db')
+        select: Rule categories to check for code targets (e.g. 'B,S,I,C')
+    """
+    from .cli.commands.health import run_health
+
+    args = _default_args(targets=[target], select=select or None, health_all=False)
+    return _run_and_capture(run_health, args)
+
+
+@mcp.tool(annotations=_LOCAL_READONLY)
+def reveal_review(target: str, select: str = 'B,S,I,C,M') -> str:
+    """Assess code quality before a PR merge — violations, hotspots, complexity spikes.
+
+    For a git range (e.g. 'main..feature'), scopes analysis to only the
+    changed files. For a directory, reviews the whole tree.
+
+    Args:
+        target: Path to review, or a git range like 'main..feature'
+        select: Rule categories (default: 'B,S,I,C,M')
+    """
+    from .cli.commands.review import run_review
+
+    args = _default_args(target=target, select=select)
+    return _run_and_capture(run_review, args)
 
 
 @mcp.tool(annotations=_LOCAL_READONLY)

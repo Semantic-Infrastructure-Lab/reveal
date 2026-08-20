@@ -118,9 +118,13 @@ class V032(BaseRule):
 
         ref = 'origin/master' if self._ref_exists(project_root, 'origin/master') else 'HEAD'
 
+        # --end-of-options: same defense-in-depth as _ref_exists below -- tag/ref
+        # are resolved through this class's own validated paths, but a ref
+        # starting with '-' should still be rejected as a bad revision rather
+        # than parsed as a git option.
         log = subprocess.run(
-            ['git', 'log', f'{tag}..{ref}', '--format=%H %cI'],
-            cwd=project_root, capture_output=True, text=True
+            ['git', 'log', '--end-of-options', f'{tag}..{ref}', '--format=%H %cI'],
+            cwd=project_root, capture_output=True, text=True, timeout=10
         )
         if log.returncode != 0 or not log.stdout.strip():
             return None, 0
@@ -142,8 +146,13 @@ class V032(BaseRule):
         return None
 
     def _ref_exists(self, project_root, ref: str) -> bool:
-        result = subprocess.run(
-            ['git', 'rev-parse', '--verify', '--quiet', ref],
-            cwd=project_root, capture_output=True, text=True
-        )
+        # --end-of-options: defense-in-depth against a ref starting with '-'
+        # being parsed as a git option (see adapters/pack.py's same fix).
+        try:
+            result = subprocess.run(
+                ['git', 'rev-parse', '--verify', '--quiet', '--end-of-options', ref],
+                cwd=project_root, capture_output=True, text=True, timeout=10
+            )
+        except subprocess.TimeoutExpired:
+            return False
         return result.returncode == 0

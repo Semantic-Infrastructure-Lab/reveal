@@ -261,6 +261,22 @@ class TestCheckUri(unittest.TestCase):
         cmd = mock_run.call_args[0][0]
         self.assertIn('custom://host', cmd)
 
+    @patch('subprocess.run')
+    def test_subprocess_called_with_timeout(self, mock_run):
+        # A hung remote host (ssl://, mysql://, domain://) must not block this
+        # call forever -- matches _check_code's timeout=120 posture.
+        mock_run.return_value = MagicMock(returncode=0, stdout='', stderr='')
+        _check_uri('ssl', 'ssl://example.com', Namespace())
+        self.assertEqual(mock_run.call_args.kwargs.get('timeout'), 120)
+
+    @patch('subprocess.run')
+    def test_timeout_expired_returns_critical(self, mock_run):
+        import subprocess
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd='reveal', timeout=120)
+        code, summary = _check_uri('ssl', 'ssl://example.com', Namespace())
+        self.assertEqual(code, 2)
+        self.assertIn('timed out', summary)
+
 
 # ---------------------------------------------------------------------------
 # _check_nginx

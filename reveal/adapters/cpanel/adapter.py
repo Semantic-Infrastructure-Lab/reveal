@@ -583,6 +583,17 @@ class CpanelAdapter(ResourceAdapter):
         if not self._is_help and not self.username:
             raise ValueError("cpanel:// URI requires a username: cpanel://USERNAME")
 
+        # self.username is joined onto CPANEL_USERDATA_DIR via os.path.join
+        # (_list_user_domains and elsewhere) -- reject anything but a real
+        # cPanel-style identifier so '..' can't walk to the parent directory
+        # (path traversal is capped to one hop since `rest.split('/', 1)`
+        # above already excludes '/', but '..' alone still needs blocking).
+        if not self._is_help and not re.fullmatch(r'[A-Za-z0-9_-]+', self.username):
+            raise ValueError(
+                f"Invalid cpanel:// username {self.username!r}: "
+                "must contain only letters, digits, '_', or '-'"
+            )
+
     def _get_domains(self) -> List[Dict[str, str]]:
         return _list_user_domains(self.username)
 

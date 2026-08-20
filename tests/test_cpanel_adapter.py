@@ -405,6 +405,21 @@ class TestCpanelAdapterParsing:
         with pytest.raises(ValueError, match='username'):
             CpanelAdapter('cpanel://')
 
+    def test_dotdot_username_rejected(self):
+        """Regression: username='..' joins onto CPANEL_USERDATA_DIR's parent,
+        exposing a sibling-directory listing (path traversal, capped to one
+        hop since '/' is already excluded by the URI split)."""
+        with pytest.raises(ValueError, match='Invalid cpanel:// username'):
+            CpanelAdapter('cpanel://..')
+
+    def test_dot_username_rejected(self):
+        with pytest.raises(ValueError, match='Invalid cpanel:// username'):
+            CpanelAdapter('cpanel://.')
+
+    def test_username_with_disallowed_chars_rejected(self):
+        with pytest.raises(ValueError, match='Invalid cpanel:// username'):
+            CpanelAdapter('cpanel://my user')
+
 
 # ---------------------------------------------------------------------------
 # CpanelAdapter — get_structure

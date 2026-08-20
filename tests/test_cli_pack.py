@@ -832,6 +832,41 @@ class TestGetChangedFiles(unittest.TestCase):
         for p in changed:
             self.assertIsInstance(p, str)
 
+    def test_since_ref_starting_with_dash_is_not_parsed_as_git_option(self):
+        """A `since` value starting with '-' must not be interpreted as a git flag.
+
+        Regression test for a git argument-injection vector reachable via the
+        MCP reveal_pack tool's `since` param: an unsanitized ref embedded as
+        `f'{since_ref}...HEAD'` let a caller pass e.g. '--output=/some/path' and
+        have git write to that path instead of erroring on an unknown ref.
+        `--end-of-options` (adapters/pack.py) closes it -- confirm the injected
+        flag produces an ordinary "bad ref" error, not a git-side effect.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'should-not-be-created.txt'
+            malicious_ref = f'--output={target}'
+            changed, err = _get_changed_files(Path(__file__).parent, malicious_ref)
+            self.assertEqual(changed, set())
+            self.assertIsNotNone(err)
+            self.assertFalse(target.exists(), "git --output= injection wrote a file")
+
+    def test_diff_subprocess_called_with_timeout(self):
+        """git diff/rev-parse must not be able to hang this call forever."""
+        from unittest.mock import patch, MagicMock
+        with patch('reveal.adapters.pack.subprocess.run') as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout='/tmp/repo\n', stderr='')
+            _get_changed_files(Path(__file__).parent, 'main')
+            for call in mock_run.call_args_list:
+                self.assertEqual(call.kwargs.get('timeout'), 10)
+
+    def test_rev_parse_timeout_returns_error_not_exception(self):
+        import subprocess as sp
+        from unittest.mock import patch
+        with patch('reveal.adapters.pack.subprocess.run', side_effect=sp.TimeoutExpired(cmd='git', timeout=10)):
+            changed, err = _get_changed_files(Path(__file__).parent, 'main')
+            self.assertEqual(changed, set())
+            self.assertIn('timed out', err)
+
 
 # ---------------------------------------------------------------------------
 # _render_pack: --since display

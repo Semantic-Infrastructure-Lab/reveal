@@ -205,7 +205,15 @@ def _check_uri(scheme: str, uri: str, args: Namespace):
     flags = _URI_FLAGS.get(scheme, [])
     cmd = ['reveal', uri] + flags + ['--only-failures']
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    # Hard outer ceiling independent of what any individual adapter promises
+    # internally -- this is the one health-check path reachable straight from
+    # MCP's reveal_health(target) for network-facing targets (ssl/mysql/domain
+    # today, whatever's added tomorrow), so a hung remote host can't block the
+    # call forever. Mirrors _check_code's timeout=120 below.
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        return 2, f"{scheme}: timed out"
     combined = (result.stdout + result.stderr).strip()
 
     if result.returncode == 2:

@@ -60,24 +60,31 @@ def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[s
     try:
         root_result = subprocess.run(
             ['git', 'rev-parse', '--show-toplevel'],
-            capture_output=True, text=True, cwd=str(path),
+            capture_output=True, text=True, cwd=str(path), timeout=10,
         )
         if root_result.returncode != 0:
             return set(), "not a git repository"
         git_root = Path(root_result.stdout.strip())
     except FileNotFoundError:
         return set(), "git not found"
+    except subprocess.TimeoutExpired:
+        return set(), "git rev-parse timed out"
 
     try:
+        # --end-of-options: since_ref is caller-controlled (MCP reveal_pack's `since`
+        # param) -- without it, a ref starting with '-' is parsed as a git option
+        # (e.g. '--output=/path' writes an arbitrary file) instead of a revision.
         diff_result = subprocess.run(
-            ['git', 'diff', '--name-only', f'{since_ref}...HEAD'],
-            capture_output=True, text=True, cwd=str(git_root),
+            ['git', 'diff', '--name-only', '--end-of-options', f'{since_ref}...HEAD'],
+            capture_output=True, text=True, cwd=str(git_root), timeout=10,
         )
         if diff_result.returncode != 0:
             err = diff_result.stderr.strip().splitlines()[0] if diff_result.stderr.strip() else f"unknown ref '{since_ref}'"
             return set(), err
     except FileNotFoundError:
         return set(), "git not found"
+    except subprocess.TimeoutExpired:
+        return set(), "git diff timed out"
 
     changed: Set[str] = set()
     for rel in diff_result.stdout.splitlines():

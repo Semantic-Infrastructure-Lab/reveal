@@ -454,6 +454,27 @@ class TestAutosslAdapter:
         a = AutosslAdapter('autossl://2026-01-01T00:00:00Z')
         assert a.timestamp == '2026-01-01T00:00:00Z'
 
+    def test_dotdot_routes_to_domain_not_timestamp(self):
+        # '..' contains a '.', so today it's caught by the (incidental)
+        # domain-routing heuristic before ever reaching the timestamp
+        # validation -- domain values never touch the filesystem, so this is
+        # safe. Documented here so the "explicit allowlist" fix below doesn't
+        # look untested just because this particular payload never reaches it.
+        a = AutosslAdapter('autossl://..')
+        assert a.timestamp is None
+        assert a.domain == '..'
+
+    def test_timestamp_with_disallowed_chars_rejected(self):
+        # No '.' in this payload, so it reaches the timestamp branch, where
+        # the explicit allowlist (not the incidental dot-routing heuristic)
+        # is what rejects it.
+        with pytest.raises(ValueError, match='Invalid autossl:// timestamp'):
+            AutosslAdapter('autossl://foo;bar')
+
+    def test_slash_in_timestamp_rejected(self):
+        with pytest.raises(ValueError, match='Invalid autossl:// timestamp'):
+            AutosslAdapter('autossl://foo/bar')
+
     def test_get_structure_list_runs(self, tmp_path):
         for ts in ['2026-01-02T00:00:00Z', '2026-01-01T00:00:00Z']:
             (tmp_path / ts).mkdir()

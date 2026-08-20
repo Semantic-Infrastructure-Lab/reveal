@@ -15,6 +15,7 @@ Examples:
     reveal autossl://latest --format=json | jq '.users[0].domains[:5]'
 """
 
+import re
 from typing import Any, Dict, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -380,6 +381,21 @@ class AutosslAdapter(ResourceAdapter):
             # Domains always contain dots; timestamps (YYYY-MM-DD...) do not
             self.domain = rest
         else:
+            # self.timestamp is joined onto AUTOSSL_LOG_DIR via os.path.join in
+            # parser.py's list_runs/get_run_metadata/parse_run -- reject anything
+            # but a real AutoSSL run-directory identifier (ISO-8601-ish, e.g.
+            # '2026-03-03T23:26:01Z') so this stays safe even if the
+            # domain/timestamp disambiguation heuristic above ever changes.
+            # ':' is allowed (real timestamps use it, see module docstring);
+            # '.' is deliberately excluded -- that's what routes a '..'
+            # traversal payload to this branch as ValueError instead of a
+            # filesystem path segment. cpanel's adapter got the same fix for
+            # the same reason.
+            if not re.fullmatch(r'[A-Za-z0-9_:-]+', rest):
+                raise ValueError(
+                    f"Invalid autossl:// timestamp {rest!r}: "
+                    "must contain only letters, digits, '_', ':', or '-'"
+                )
             self.timestamp = rest
 
     def get_structure(self, only_failures: bool = False, summary: bool = False,
