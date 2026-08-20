@@ -580,8 +580,16 @@ class TestUpdateCheckSuppressed(unittest.TestCase):
     """MCP server must suppress reveal's update-check stdout injection."""
 
     def test_reveal_no_update_check_set(self):
-        """REVEAL_NO_UPDATE_CHECK must be set at import time."""
+        """REVEAL_NO_UPDATE_CHECK must be set at import time.
+
+        Must import reveal.mcp_server itself rather than relying on a sibling
+        test's setUp() having already triggered it in this worker process --
+        under xdist, a worker that only ever runs this one test item (e.g.
+        `-k TestUpdateCheckSuppressed`, or an unlucky item distribution) would
+        otherwise never see the module-level setdefault() fire. BACK-REVEAL-5.
+        """
         import os
+        import reveal.mcp_server  # noqa: F401 -- import for its setdefault() side effect
         self.assertEqual(os.environ.get('REVEAL_NO_UPDATE_CHECK'), '1')
 
     def test_reveal_check_output_has_no_update_notice(self):
