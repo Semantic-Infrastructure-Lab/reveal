@@ -291,6 +291,21 @@ class TestRevealQueryTool(unittest.TestCase):
         result = self.reveal_query('imports://reveal/utils/query.py?unused')
         self.assertIsInstance(result, str)
 
+    def test_provenance_attaches_execution_block(self):
+        result = self.reveal_query('ast://reveal/utils/query.py?show=functions', provenance=True)
+        self.assertIsInstance(result, str)
+        self.assertIn('"execution"', result)
+
+    def test_provenance_default_omits_execution_block(self):
+        result = self.reveal_query('ast://reveal/utils/query.py?show=functions')
+        self.assertIsInstance(result, str)
+        self.assertNotIn('"execution"', result)
+
+    def test_provenance_flag_does_not_leak_to_next_call(self):
+        self.reveal_query('ast://reveal/utils/query.py?show=functions', provenance=True)
+        result = self.reveal_query('ast://reveal/utils/query.py?show=functions')
+        self.assertNotIn('"execution"', result)
+
 
 class TestRevealPackTool(unittest.TestCase):
 

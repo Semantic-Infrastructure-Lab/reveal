@@ -95,7 +95,11 @@ mcp = MCPServer(
 # (serialized by construction). _run_and_capture mutates process-global
 # sys.stdout/sys.stderr, so concurrent calls must be serialized here or
 # they race and cross-attribute output between callers. BACK-898.
-_capture_lock = threading.Lock()
+# Reentrant (not plain Lock): reveal_query's provenance param (BACK-1135)
+# also mutates a process-global (utils.json_utils's provenance-enabled
+# flag) and needs to hold this same lock across its own call into
+# _run_and_capture, which re-acquires it internally.
+_capture_lock = threading.RLock()
 
 
 def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
@@ -368,7 +372,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
 
 
 @mcp_tool(annotations=_OPEN_WORLD_READONLY, title='Reveal: URI Query')
-def reveal_query(uri: str) -> str:
+def reveal_query(uri: str, provenance: bool = False) -> str:
     """Run a reveal URI query across any adapter (``scheme://resource?query`` syntax).
 
     Use for anything outside the file/nav workflow: call graphs, dead-code
@@ -379,26 +383,43 @@ def reveal_query(uri: str) -> str:
     Lost, or need an adapter you don't know the name of? Start with
     reveal_query('help://quick') — a map of every adapter and common task.
 
-    CLI-only global flags (--severity, --select, --format, --provenance) do
-    NOT pass through to this tool — there's no argv for them to come from
-    here. Exceptions: '?limit=N', '?sort=field' (or '?sort=-field' for desc),
+    CLI-only global flags (--severity, --select, --format) do NOT pass
+    through to this tool — there's no argv for them to come from here.
+    Exceptions: '?limit=N', '?sort=field' (or '?sort=-field' for desc),
     and '?offset=M' work when written directly into the URI (every adapter
     reads them straight off the query string via a shared result-control
     parser, independent of any CLI flag);
     every other per-adapter option is that adapter's own '?key=value'
     vocabulary, not a generic CLI-flag passthrough — check
     reveal_query('help://schemas/<adapter>') for what a given scheme accepts.
-    For severity/select filtering or a provenance manifest, use a dedicated
-    typed tool instead (reveal_check has severity/select/ignore; provenance
-    has no MCP-reachable path at all yet — BACK-1135).
+    For severity/select filtering, use a dedicated typed tool instead
+    (reveal_check has severity/select/ignore).
 
     Args:
         uri: Full reveal URI, e.g. 'calls://src/?target=my_fn' or 'help://quick'
+        provenance: When true, attach a '--provenance' execution manifest
+            (git state, command, timestamp) to the result, for callers that
+            need to cite evidence provenance (e.g. a DD finding contract).
+            Forces JSON output (provenance only attaches to dict results),
+            so the response shape differs from a plain-text query — only set
+            this when the caller actually needs the manifest.
     """
     from .cli.routing import handle_uri
+    from .utils.json_utils import set_provenance_enabled
 
-    args = _default_args(path=uri)
-    return _run_and_capture(handle_uri, uri, None, args)
+    args = _default_args(path=uri, provenance=provenance, format='json' if provenance else 'text')
+    # Holds _capture_lock across the whole provenance-flag lifecycle (not just
+    # inside _run_and_capture) because set_provenance_enabled is a second
+    # process-global, independent of the stdout/stderr one _run_and_capture
+    # already serializes -- a concurrent call with provenance=False must not
+    # observe this call's flag mid-flight. _capture_lock is an RLock so
+    # _run_and_capture's own internal acquisition below doesn't deadlock.
+    with _capture_lock:
+        set_provenance_enabled(provenance)
+        try:
+            return _run_and_capture(handle_uri, uri, None, args)
+        finally:
+            set_provenance_enabled(False)
 
 
 @mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Token-Budgeted Context Pack')

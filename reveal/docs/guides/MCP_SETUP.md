@@ -97,7 +97,7 @@ Extract the full implementation of a specific function or class. Use after
 reveal_element("src/auth.py", "validate_token")
 ```
 
-### `reveal_query(uri)`
+### `reveal_query(uri, provenance=False)`
 
 Run any reveal URI query across all adapters. Same syntax as the CLI.
 
@@ -110,15 +110,24 @@ reveal_query("domain://example.com")
 reveal_query("imports://src/?unused")
 reveal_query("diff://git://main/.:git://HEAD/.")
 reveal_query("xlsx://model.xlsx?powerpivot=tables")
+reveal_query("ast://src/?name=validate_token", provenance=True)
 ```
 
-CLI-only global flags (`--severity`, `--select`, `--format`, `--provenance`)
-don't pass through here — write `?limit=N`, `?sort=field`/`?sort=-field`, and
+CLI-only global flags (`--severity`, `--select`, `--format`) don't pass
+through here — write `?limit=N`, `?sort=field`/`?sort=-field`, and
 `?offset=M` directly in the URI instead (every adapter reads these off the
 query string the same way regardless of CLI vs. MCP). Everything else is each
 adapter's own `?key=value` vocabulary — check `reveal_query('help://schemas/
 <adapter>')` for what a given scheme accepts, or use a dedicated typed tool
 (`reveal_check` has `severity`/`select`/`ignore`).
+
+`--provenance` (BACK-1135, fixed): the one exception to the CLI-flag-passthrough
+rule above, exposed as a real `provenance` bool parameter rather than a URI
+query param. Set `provenance=True` to attach a `--provenance` execution
+manifest (git state, command, timestamp) to the result, e.g. for a DD finding
+contract that needs to cite evidence provenance. This forces JSON output —
+provenance only attaches to dict results — so the response shape differs from
+a plain-text query; only set it when the caller actually needs the manifest.
 
 ### `reveal_pack(path, budget, since, content, focus)`
 
