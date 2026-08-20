@@ -64,6 +64,13 @@ reveal-mcp --transport streamable-http --port 8080
 
 ## Available Tools
 
+**Error handling:** an unambiguous call failure (bad path, unresolvable element,
+unknown flag, an underlying exception) returns the call with `isError: true` in
+the MCP result — check that field rather than string-matching the response text.
+A negative *verdict* from the tool itself (e.g. `reveal_health` returning FAIL, or
+`reveal_check` finding issues) is not a call failure and always comes back with
+`isError: false` — that's real output, not an error.
+
 ### `reveal_structure(path)`
 
 Get the semantic structure of a file or directory — the first step of progressive

@@ -607,6 +607,82 @@ class TestUpdateCheckSuppressed(unittest.TestCase):
             os.unlink(fpath)
 
 
+class TestMcpToolErrorSignaling(unittest.TestCase):
+    """BACK-REVEAL-1: the registered MCP tool must raise (-> isError=True via the
+    SDK's tool.run()/_handle_call_tool()) on reveal's "[reveal error:" sentinel,
+    while the plain module-level function keeps returning the string unchanged
+    for direct Python callers (see mcp_tool() in mcp_server.py)."""
+
+    def setUp(self):
+        from reveal.mcp_server import mcp
+        self.mcp = mcp
+        self._orig_dir = os.getcwd()
+        os.chdir(Path(__file__).parent.parent)
+
+    def tearDown(self):
+        os.chdir(self._orig_dir)
+
+    def _registered_fn(self, tool_name):
+        return self.mcp._tool_manager._tools[tool_name].fn
+
+    def test_direct_call_still_returns_string(self):
+        from reveal.mcp_server import reveal_structure
+        result = reveal_structure('/nonexistent/path/xyz')
+        self.assertIsInstance(result, str)
+        self.assertIn('reveal error', result)
+
+    def test_registered_tool_raises_on_error_sentinel(self):
+        fn = self._registered_fn('reveal_structure')
+        with self.assertRaises(ValueError) as ctx:
+            fn(path='/nonexistent/path/xyz')
+        self.assertIn('path not found', str(ctx.exception))
+
+    def test_registered_tool_does_not_raise_on_success(self):
+        fn = self._registered_fn('reveal_structure')
+        result = fn(path='reveal/mcp_server.py')
+        self.assertIsInstance(result, str)
+
+    def test_registered_tool_does_not_raise_on_cli_exit_code(self):
+        # "[reveal exited with code N]" is a CLI verdict passthrough (e.g. a
+        # FAIL health check), not a call failure -- must stay non-raising.
+        from reveal.mcp_server import _run_and_capture
+
+        def fn():
+            raise SystemExit(1)
+
+        result = _run_and_capture(fn)
+        self.assertIn('[reveal exited with code', result)
+
+    def test_every_tool_raises_on_missing_path(self):
+        # Every tool that pre-checks Path.exists() before doing real work.
+        cases = {
+            'reveal_structure': {'path': '/nonexistent/path/xyz'},
+            'reveal_element': {'path': '/nonexistent/path/xyz.py', 'element': 'foo'},
+            'reveal_pack': {'path': '/nonexistent/path/xyz'},
+            'reveal_check': {'path': '/nonexistent/path/xyz'},
+            'reveal_grep': {'path': '/nonexistent/path/xyz', 'pattern': 'x'},
+            'reveal_trace': {'path': '/nonexistent/path/xyz', 'entry_point': 'main'},
+        }
+        for tool_name, kwargs in cases.items():
+            with self.subTest(tool=tool_name):
+                fn = self._registered_fn(tool_name)
+                with self.assertRaises(ValueError):
+                    fn(**kwargs)
+
+    def test_end_to_end_call_tool_sets_is_error(self):
+        import asyncio
+        from mcp.types import CallToolRequestParams
+
+        async def call(name, arguments):
+            return await self.mcp._handle_call_tool(None, CallToolRequestParams(name=name, arguments=arguments))
+
+        error_result = asyncio.run(call('reveal_structure', {'path': '/nonexistent/path/xyz'}))
+        self.assertTrue(error_result.is_error)
+
+        ok_result = asyncio.run(call('reveal_structure', {'path': 'reveal/mcp_server.py'}))
+        self.assertFalse(ok_result.is_error)
+
+
 class TestMcpServerRegistration(unittest.TestCase):
     """Verify the MCP server registers all expected tools."""
 

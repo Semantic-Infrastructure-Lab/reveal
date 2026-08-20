@@ -17,6 +17,7 @@ Configuration example (Claude Code settings.json):
     }
 """
 
+import functools
 import io
 import os
 import sys
@@ -141,8 +142,47 @@ def _run_and_capture(fn, *args, **kwargs) -> str:
     return out
 
 
+# BACK-REVEAL-1: every reveal_* implementation below returns "[reveal error: ...]"
+# as a plain string on failure rather than raising -- kept exactly as-is so direct
+# Python callers (unit tests, in-process reuse) still get a string back, never a
+# raised exception. But an MCP client can't distinguish that from a successful
+# result: both arrive as isError=False. mcp_tool() registers a thin wrapper around
+# each function that re-raises reveal's own "[reveal error:" sentinel -- the MCP
+# SDK's tool.run() converts any exception raised from a tool body into
+# CallToolResult(is_error=True), which is exactly the protocol-level signal a
+# client needs. "[reveal exited with code N]" (the CLI exit-code passthrough in
+# _run_and_capture) is deliberately NOT covered: reveal's CLI commands use nonzero
+# exit for legitimate FAIL/issues-found verdicts (e.g. reveal_health's PASS/WARN/
+# FAIL), which is real tool output, not a call failure. Only "[reveal error:" is
+# ever emitted for an unambiguous input/execution problem (confirmed: it's the
+# exact prefix for every not-found/no-analyzer/unknown-flag/exception case across
+# all 10 tools, and never appears in a verdict).
+_ERROR_SENTINEL_PREFIX = "[reveal error:"
 
-@mcp.tool(annotations=_LOCAL_READONLY)
+
+def _raise_if_error_sentinel(result: str) -> str:
+    if result.startswith(_ERROR_SENTINEL_PREFIX):
+        raise ValueError(result[1:-1] if result.endswith(']') else result)
+    return result
+
+
+def mcp_tool(*, annotations: ToolAnnotations | None = None):
+    """Like @mcp.tool(), but the registered tool re-raises reveal's error
+    sentinel (see above) while the module-level name stays the original,
+    string-returning function."""
+
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            return _raise_if_error_sentinel(fn(*args, **kwargs))
+
+        mcp.tool(annotations=annotations)(wrapper)
+        return fn
+
+    return decorator
+
+
+@mcp_tool(annotations=_LOCAL_READONLY)
 def reveal_structure(path: str) -> str:
     """Get the semantic structure of a file or directory.
 
@@ -187,7 +227,7 @@ def reveal_structure(path: str) -> str:
     return _run_and_capture(show_structure, analyzer, 'text', args)
 
 
-@mcp.tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY)
 def reveal_element(path: str, element: str) -> str:
     """Extract a specific function or class from a file.
 
@@ -246,7 +286,7 @@ _NAV_VAR_NAME_FLAGS = {
 }
 
 
-@mcp.tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY)
 def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
     """Run a nav analysis flag on a function or line range — the deep-dive layer.
 
@@ -294,7 +334,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
     return _run_and_capture(handle_file, path, element, False, 'text', args)
 
 
-@mcp.tool(annotations=_OPEN_WORLD_READONLY)
+@mcp_tool(annotations=_OPEN_WORLD_READONLY)
 def reveal_query(uri: str) -> str:
     """Run a reveal URI query across any adapter (``scheme://resource?query`` syntax).
 
@@ -315,7 +355,7 @@ def reveal_query(uri: str) -> str:
     return _run_and_capture(handle_uri, uri, None, args)
 
 
-@mcp.tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY)
 def reveal_pack(
     path: str,
     budget: int = 8000,
@@ -380,7 +420,7 @@ def reveal_pack(
     )
 
 
-@mcp.tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY)
 def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = '') -> str:
     """Run quality checks on a file or directory.
 
@@ -442,7 +482,7 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
     return "\n".join(lines)
 
 
-@mcp.tool(annotations=_OPEN_WORLD_READONLY)
+@mcp_tool(annotations=_OPEN_WORLD_READONLY)
 def reveal_health(target: str, select: str = '') -> str:
     """Run a unified health check on a path or URI resource.
 
@@ -463,7 +503,7 @@ def reveal_health(target: str, select: str = '') -> str:
     return _run_and_capture(run_health, args)
 
 
-@mcp.tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY)
 def reveal_review(target: str, select: str = 'B,S,I,C,M') -> str:
     """Assess code quality before a PR merge — violations, hotspots, complexity spikes.
 
@@ -480,7 +520,7 @@ def reveal_review(target: str, select: str = 'B,S,I,C,M') -> str:
     return _run_and_capture(run_review, args)
 
 
-@mcp.tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY)
 def reveal_grep(path: str, pattern: str, ignore_case: bool = False) -> str:
     """Search text or an identifier across a file or directory, grouped by enclosing function.
 
@@ -506,7 +546,7 @@ def reveal_grep(path: str, pattern: str, ignore_case: bool = False) -> str:
     return _run_and_capture(handle_grep, str(p), pattern, args)
 
 
-@mcp.tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY)
 def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
     """Walk the call graph from a named entry point as a depth-indented execution narrative.
 
