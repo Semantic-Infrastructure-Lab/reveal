@@ -807,6 +807,15 @@ class TestMcpServerRegistration(unittest.TestCase):
         from reveal.mcp_server import mcp
         self.assertEqual(len(mcp._tool_manager._tools), 10)
 
+    def test_every_tool_has_a_title(self):
+        # BACK-1143: purely cosmetic (client display name), but every tool
+        # should set one, not just some.
+        from reveal.mcp_server import mcp
+        for name, tool in mcp._tool_manager._tools.items():
+            with self.subTest(tool=name):
+                self.assertTrue(tool.title, f"{name} has no title annotation")
+                self.assertTrue(tool.title.startswith('Reveal:'))
+
     def test_tool_count_matches_guide(self):
         """Validate that MCP_SETUP.md tool count matches actual registered tools."""
         import re

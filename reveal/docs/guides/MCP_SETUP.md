@@ -112,6 +112,14 @@ reveal_query("diff://git://main/.:git://HEAD/.")
 reveal_query("xlsx://model.xlsx?powerpivot=tables")
 ```
 
+CLI-only global flags (`--severity`, `--select`, `--format`, `--provenance`)
+don't pass through here — write `?limit=N`, `?sort=field`/`?sort=-field`, and
+`?offset=M` directly in the URI instead (every adapter reads these off the
+query string the same way regardless of CLI vs. MCP). Everything else is each
+adapter's own `?key=value` vocabulary — check `reveal_query('help://schemas/
+<adapter>')` for what a given scheme accepts, or use a dedicated typed tool
+(`reveal_check` has `severity`/`select`/`ignore`).
+
 ### `reveal_pack(path, budget, since, content, focus)`
 
 Token-budgeted context snapshot — ideal for PR review. Selects the most important

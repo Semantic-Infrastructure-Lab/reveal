@@ -176,7 +176,7 @@ def _raise_if_error_sentinel(result: str) -> str:
     return result
 
 
-def mcp_tool(*, annotations: ToolAnnotations | None = None):
+def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = None):
     """Like @mcp.tool(), but the registered tool re-raises reveal's error
     sentinel (see above) while the module-level name stays the original,
     string-returning function."""
@@ -186,13 +186,13 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None):
         def wrapper(*args, **kwargs):
             return _raise_if_error_sentinel(fn(*args, **kwargs))
 
-        mcp.tool(annotations=annotations)(wrapper)
+        mcp.tool(annotations=annotations, title=title)(wrapper)
         return fn
 
     return decorator
 
 
-@mcp_tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: File/Directory Structure')
 def reveal_structure(path: str, depth: int = 3, ext: str = '', exclude: str = '', files: bool = False) -> str:
     """Get the semantic structure of a file or directory.
 
@@ -260,7 +260,7 @@ def reveal_structure(path: str, depth: int = 3, ext: str = '', exclude: str = ''
     return _run_and_capture(show_structure, analyzer, 'text', args)
 
 
-@mcp_tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Extract Function/Class')
 def reveal_element(path: str, element: str) -> str:
     """Extract a specific function or class from a file.
 
@@ -319,7 +319,7 @@ _NAV_VAR_NAME_FLAGS = {
 }
 
 
-@mcp_tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Deep-Dive Nav Analysis')
 def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
     """Run a nav analysis flag on a function or line range — the deep-dive layer.
 
@@ -367,7 +367,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
     return _run_and_capture(handle_file, path, element, False, 'text', args)
 
 
-@mcp_tool(annotations=_OPEN_WORLD_READONLY)
+@mcp_tool(annotations=_OPEN_WORLD_READONLY, title='Reveal: URI Query')
 def reveal_query(uri: str) -> str:
     """Run a reveal URI query across any adapter (``scheme://resource?query`` syntax).
 
@@ -379,6 +379,19 @@ def reveal_query(uri: str) -> str:
     Lost, or need an adapter you don't know the name of? Start with
     reveal_query('help://quick') — a map of every adapter and common task.
 
+    CLI-only global flags (--severity, --select, --format, --provenance) do
+    NOT pass through to this tool — there's no argv for them to come from
+    here. Exceptions: '?limit=N', '?sort=field' (or '?sort=-field' for desc),
+    and '?offset=M' work when written directly into the URI (every adapter
+    reads them straight off the query string via a shared result-control
+    parser, independent of any CLI flag);
+    every other per-adapter option is that adapter's own '?key=value'
+    vocabulary, not a generic CLI-flag passthrough — check
+    reveal_query('help://schemas/<adapter>') for what a given scheme accepts.
+    For severity/select filtering or a provenance manifest, use a dedicated
+    typed tool instead (reveal_check has severity/select/ignore; provenance
+    has no MCP-reachable path at all yet — BACK-1135).
+
     Args:
         uri: Full reveal URI, e.g. 'calls://src/?target=my_fn' or 'help://quick'
     """
@@ -388,7 +401,7 @@ def reveal_query(uri: str) -> str:
     return _run_and_capture(handle_uri, uri, None, args)
 
 
-@mcp_tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Token-Budgeted Context Pack')
 def reveal_pack(
     path: str,
     budget: int = 8000,
@@ -453,7 +466,7 @@ def reveal_pack(
     )
 
 
-@mcp_tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Quality Check')
 def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = '') -> str:
     """Run quality checks on a file or directory.
 
@@ -515,7 +528,7 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
     return "\n".join(lines)
 
 
-@mcp_tool(annotations=_OPEN_WORLD_READONLY)
+@mcp_tool(annotations=_OPEN_WORLD_READONLY, title='Reveal: Health Verdict')
 def reveal_health(target: str, select: str = '') -> str:
     """Run a unified health check on a path or URI resource.
 
@@ -536,7 +549,7 @@ def reveal_health(target: str, select: str = '') -> str:
     return _run_and_capture(run_health, args)
 
 
-@mcp_tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Pre-Merge Review')
 def reveal_review(target: str, select: str = 'B,S,I,C,M') -> str:
     """Assess code quality before a PR merge — violations, hotspots, complexity spikes.
 
@@ -556,7 +569,7 @@ def reveal_review(target: str, select: str = 'B,S,I,C,M') -> str:
     return _run_and_capture(run_review, args, capture_stderr=False)
 
 
-@mcp_tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Structural Grep')
 def reveal_grep(path: str, pattern: str, ignore_case: bool = False) -> str:
     """Search text or an identifier across a file or directory, grouped by enclosing function.
 
@@ -582,7 +595,7 @@ def reveal_grep(path: str, pattern: str, ignore_case: bool = False) -> str:
     return _run_and_capture(handle_grep, str(p), pattern, args)
 
 
-@mcp_tool(annotations=_LOCAL_READONLY)
+@mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Call-Graph Trace')
 def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
     """Walk the call graph from a named entry point as a depth-indented execution narrative.
 
