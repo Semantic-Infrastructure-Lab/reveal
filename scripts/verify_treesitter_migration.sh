@@ -77,14 +77,13 @@ for fixture_root in tests/fixtures/conformance tests/fixtures/smoke; do
         lang="$(basename "$lang_dir")"
         for f in "$lang_dir"*; do
             [ -f "$f" ] || continue
-            out="$(python3 -m reveal.main "$f" --outline 2>&1)"
-            status=$?
-            if [ "$status" -ne 0 ]; then
+            if out="$(python3 -m reveal.main "$f" --outline 2>&1)"; then
+                echo "  ok   [$lang] $f"
+            else
+                status=$?
                 echo "  FAIL [$lang] $f (exit $status)"
                 echo "$out" | sed 's/^/      /'
                 FAIL=1
-            else
-                echo "  ok   [$lang] $f"
             fi
         done
     done

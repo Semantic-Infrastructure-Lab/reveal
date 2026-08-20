@@ -48,6 +48,13 @@ What this does NOT do
   eras, needs no compat wrapper).
 - Does not touch reveal/core/treesitter_compat.py itself (the canonical
   implementation of _zero_arg -- "don't touch it again").
+- Is not tokenization-aware: this is a plain substring scan over raw file
+  text, not a parse. It excludes a receiver-less mention like the backtick-
+  wrapped ``` `.kind()` ``` in a docstring/comment (no identifier precedes
+  the dot, so ``receiver`` comes back empty and the site is dropped) -- but
+  a comment that *does* read like a call, e.g. ``# see node.kind()``, will
+  be picked up as a false-positive site. Always review ``--diff`` output by
+  eye per batch; do not trust generated diffs mechanically.
 """
 from __future__ import annotations
 

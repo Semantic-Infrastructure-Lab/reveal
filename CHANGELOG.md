@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] (sessions obsidian-twilight-0819, pouring-typhoon-0819, wovago-0819, equatorial-aurora-0820)
 
 ### Security
-- **`reveal-mcp` closed path-traversal and CLI-argument-injection gaps across all tools (BACK-1141, BACK-1137)** — path-taking tools now resolve and validate against expected roots before use; string params that could be interpreted as CLI flags are rejected rather than forwarded.
+- **`reveal-mcp` closed path-traversal and CLI-argument-injection gaps in `cpanel://`/`autossl://`/git-ref handling and the newly exposed health/review paths (BACK-1141, BACK-1137)** — string params that could be interpreted as CLI flags are rejected rather than forwarded. This closes specific traversal/injection gaps, not general root confinement — no MCP tool validates paths against a project root yet (tracked separately, `BACK-1144`).
 - **Added `reveal_health` and `reveal_review` MCP tools (BACK-1138)** — previously only reachable via the CLI, not exposed to MCP clients.
 
 ### Added
