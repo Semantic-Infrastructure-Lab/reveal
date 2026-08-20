@@ -296,6 +296,41 @@ reveal-mcp --help
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | reveal-mcp
 ```
 
+### Known limitation: the server can die under heavy concurrent tool calls
+
+If the server disappears mid-session — the client reports `Connection closed`,
+or several in-flight tool calls fail at once — this is a known upstream issue,
+not a misconfiguration.
+
+**Cause.** reveal's pinned `tree-sitter-language-pack` supplies a parser whose
+`Tree` objects carry a hard thread-affinity contract (they are pyo3
+`unsendable` types). `reveal-mcp` runs each tool call on its own worker thread,
+and Python's cyclic garbage collector can reclaim a `Tree` on a *different*
+thread than the one that built it. That violates the contract and can abort the
+process outright — an abort that cannot be caught and handled from Python.
+
+**How likely.** Uncommon in normal use. Ordinary sequential calls, and modest
+concurrent batches, are fine — the most frequent trigger was fixed by making the
+parse cache thread-local. What remains is a garbage-collection timing window,
+so it is most likely under sustained heavy parallel tool calls across many
+files.
+
+**Workarounds if you hit it.**
+
+- Restart the MCP server (most clients reconnect on the next tool call).
+- Reduce how many `reveal_*` calls your client issues in parallel.
+- Scope large scans: prefer `reveal_check`/`reveal_structure` on a subdirectory
+  over a whole large repo, and use `reveal_pack`'s `budget` for breadth.
+- For a one-off large analysis, shell out to the `reveal` CLI instead — the CLI
+  is single-threaded per process and is not affected.
+
+**Fix.** Removing the failure class entirely requires moving past the
+`tree-sitter-language-pack<1.12.5` pin in `pyproject.toml`, which hands reveal
+the core `tree-sitter` C binding (no thread-affinity constraint). That is a
+tracked migration with a substantial API-compatibility surface, not a quick
+change. See [PyO3 #3688](https://github.com/PyO3/pyo3/issues/3688) for the
+underlying upstream behavior.
+
 ---
 
 ## See Also
