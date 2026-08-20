@@ -193,7 +193,7 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None):
 
 
 @mcp_tool(annotations=_LOCAL_READONLY)
-def reveal_structure(path: str) -> str:
+def reveal_structure(path: str, depth: int = 3, ext: str = '', exclude: str = '', files: bool = False) -> str:
     """Get the semantic structure of a file or directory.
 
     For **directories**: returns the file tree with sizes and language types.
@@ -205,6 +205,14 @@ def reveal_structure(path: str) -> str:
 
     Args:
         path: File or directory path to inspect (absolute or relative to cwd)
+        depth: Directory-tree recursion depth (default 3; directories only)
+        ext: Comma-separated extensions to filter to, e.g. 'md' or 'py,md'
+            (directories only, matches the CLI's `--ext`; doc-triage pattern:
+            reveal_structure(dir, files=True, ext='md'))
+        exclude: Comma-separated glob patterns to exclude, e.g. '*.log,tmp/'
+            (directories only)
+        files: Flat mtime-sorted file list instead of a tree — matches the
+            CLI's `--files` (directories only)
     """
     from pathlib import Path
 
@@ -215,15 +223,30 @@ def reveal_structure(path: str) -> str:
     args = _default_args(path=str(p))
 
     if p.is_dir():
+        from .cli.routing.file import _parse_ext_arg
+        include_extensions = _parse_ext_arg(ext or None)
+        exclude_patterns = [e.strip() for e in exclude.split(',') if e.strip()] or None
+
+        if files:
+            from .tree_view import show_file_list
+            return show_file_list(
+                str(p),
+                respect_gitignore=args.respect_gitignore,
+                exclude_patterns=exclude_patterns,
+                include_extensions=include_extensions,
+                max_entries=args.max_entries,
+            )
+
         from .tree_view import show_directory_tree
         return show_directory_tree(
             str(p),
-            depth=args.depth,
+            depth=depth,
             max_entries=args.max_entries,
             dir_limit=args.dir_limit,
             fast=args.fast,
             respect_gitignore=args.respect_gitignore,
-            exclude_patterns=args.exclude,
+            exclude_patterns=exclude_patterns,
+            include_extensions=include_extensions,
         )
 
     from .registry import get_analyzer

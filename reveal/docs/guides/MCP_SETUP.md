@@ -71,15 +71,19 @@ A negative *verdict* from the tool itself (e.g. `reveal_health` returning FAIL, 
 `reveal_check` finding issues) is not a call failure and always comes back with
 `isError: false` — that's real output, not an error.
 
-### `reveal_structure(path)`
+### `reveal_structure(path, depth=3, ext='', exclude='', files=False)`
 
 Get the semantic structure of a file or directory — the first step of progressive
 disclosure. Returns function signatures, imports, and class definitions for files;
-file trees for directories.
+file trees for directories. `depth`/`ext`/`exclude`/`files` scope the directory
+case only, mirroring the CLI's `--depth`/`--ext`/`--exclude`/`--files`.
 
 ```
-reveal_structure("src/auth.py")          → all functions with signatures
-reveal_structure("src/")                  → directory tree
+reveal_structure("src/auth.py")                    → all functions with signatures
+reveal_structure("src/")                            → directory tree
+reveal_structure("docs/", files=True, ext="md")     → doc-triage: flat, newest-first, *.md only
+reveal_structure("src/", depth=1)                   → shallow tree on a large monorepo
+reveal_structure("src/", exclude="vendor,*.log")    → tree with noise excluded
 ```
 
 Token cost: 50–500 tokens (vs thousands for raw file content).

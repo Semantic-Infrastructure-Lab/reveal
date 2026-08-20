@@ -70,6 +70,41 @@ class TestRevealStructureTool(unittest.TestCase):
         finally:
             os.unlink(fpath)
 
+    def test_ext_filters_files_mode_to_extension(self):
+        # BACK-REVEAL-2: the CLAUDE.md doc-triage pattern is
+        # `reveal <dir> --files --ext md` -- must be reachable via MCP too.
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'app.py').write_text("x = 1\n")
+            (Path(d) / 'notes.md').write_text("# hi\n")
+            result = self.reveal_structure(d, files=True, ext='md')
+            self.assertIn('notes.md', result)
+            self.assertNotIn('app.py', result)
+
+    def test_depth_limits_tree_recursion(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'sub').mkdir()
+            (Path(d) / 'sub' / 'deep.py').write_text("y = 2\n")
+            result = self.reveal_structure(d, depth=1)
+            self.assertIn('sub/', result)
+            self.assertNotIn('deep.py', result)
+
+    def test_exclude_removes_matching_entries(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'app.py').write_text("x = 1\n")
+            (Path(d) / 'sub').mkdir()
+            (Path(d) / 'sub' / 'deep.py').write_text("y = 2\n")
+            result = self.reveal_structure(d, exclude='sub')
+            self.assertIn('app.py', result)
+            self.assertNotIn('deep.py', result)
+
+    def test_files_mode_flat_list_without_ext(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'app.py').write_text("x = 1\n")
+            (Path(d) / 'notes.md').write_text("# hi\n")
+            result = self.reveal_structure(d, files=True)
+            self.assertIn('app.py', result)
+            self.assertIn('notes.md', result)
+
 
 class TestRevealElementTool(unittest.TestCase):
 
