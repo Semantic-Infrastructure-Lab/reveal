@@ -21,9 +21,9 @@ def _isolate_cache(tmp_path, monkeypatch):
     """Point the disk cache at a throwaway dir and start every test cold."""
     monkeypatch.setenv("REVEAL_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.delenv("REVEAL_DISK_CACHE", raising=False)
-    ts_mod._parse_cache.clear()
+    ts_mod._get_parse_cache().clear()
     yield
-    ts_mod._parse_cache.clear()
+    ts_mod._get_parse_cache().clear()
 
 
 def _write_module(path):
@@ -66,7 +66,7 @@ def test_second_build_served_from_disk(tmp_path, monkeypatch):
 
     # Simulate a fresh process: new analyzer instance, in-process parse
     # cache cleared. If disk caching works, extraction never re-runs.
-    ts_mod._parse_cache.clear()
+    ts_mod._get_parse_cache().clear()
     cached_analyzer = PythonAnalyzer(str(src))
 
     def _boom(*a, **k):
@@ -126,7 +126,7 @@ def test_slicing_applies_uniformly_to_cache_hit(tmp_path):
     fresh = PythonAnalyzer(str(src))
     fresh.get_structure()  # populates disk cache
 
-    ts_mod._parse_cache.clear()
+    ts_mod._get_parse_cache().clear()
     cached = PythonAnalyzer(str(src))
     sliced = cached.get_structure(head=1)
     assert len(sliced["functions"]) == 1
@@ -139,12 +139,12 @@ def test_cache_hit_does_not_mutate_stored_entry(tmp_path):
     analyzer = PythonAnalyzer(str(src))
     analyzer._get_or_build_structure()  # populate
 
-    ts_mod._parse_cache.clear()
+    ts_mod._get_parse_cache().clear()
     first_hit = PythonAnalyzer(str(src))
     structure = first_hit._get_or_build_structure()
     structure["functions"].append({"name": "injected"})
 
-    ts_mod._parse_cache.clear()
+    ts_mod._get_parse_cache().clear()
     second_hit = PythonAnalyzer(str(src))
     fresh_again = second_hit._get_or_build_structure()
     assert [f["name"] for f in fresh_again["functions"]] == ["alpha", "beta"]

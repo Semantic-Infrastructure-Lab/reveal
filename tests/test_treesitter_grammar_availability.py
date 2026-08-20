@@ -29,7 +29,7 @@ class TestGrammarAvailabilityWarnings(unittest.TestCase):
         self.py_file2.write_text("def goodbye():\n    pass\n")
         ts._warned_uncached_languages.clear()
         ts._warned_failed_languages.clear()
-        ts._parse_cache.clear()
+        ts._get_parse_cache().clear()
 
     def test_uncached_language_warns_before_fetch(self):
         with patch.object(ts, "downloaded_languages", return_value=[]):

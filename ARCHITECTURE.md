@@ -375,9 +375,9 @@ Intentional choices that look like bugs but aren't.
 
 The base `FileAnalyzer` implementation returns `{}` (no-op). Analyzers for non-code formats (markdown, CSV, nginx config, etc.) inherit the no-op and produce no `relationships` key. Future work: import edges could be added as a second key (`imports`) for languages where `imports://` cross-file analysis is overkill.
 
-### Global parse cache in `treesitter.py`
+### Per-thread parse cache in `treesitter.py`
 
-`_parse_cache` is a module-level `OrderedDict` (max 128 entries) shared across all analyzers in a process. It is intentionally global to avoid redundant parses during multi-pass analysis (e.g., `reveal check` running multiple rules against the same file). It is **not thread-safe** — reveal is a single-threaded CLI tool and this is not expected to change.
+`_get_parse_cache()` returns a `threading.local()`-scoped `OrderedDict` (max 128 entries per thread), reachable via `_parse_cache_local`. It exists to avoid redundant parses during multi-pass analysis within one thread (e.g., `reveal check` running multiple rules against the same file). It was a single module-level dict shared across all analyzers in a process until BACK-1136: reveal-mcp dispatches each tool call onto its own `anyio` worker thread, and tree-sitter's `Tree`/`Node` objects are pyo3 types that are not `Send` — a second thread touching, overwriting, or garbage-collecting one built by a different thread panics or raises an unraisable `RuntimeError` in the Rust extension, which could kill the whole server process. Making the cache thread-local means no thread ever touches another thread's Tree/Node objects; the trade-off is that cache hits no longer cross threads (each reveal-mcp worker thread rebuilds its own cache for a file the first time it lands on that thread), which only matters for the concurrent MCP-server case — the single-threaded CLI's behavior is unchanged.
 
 ### Complexity metrics in `complexity.py`
 

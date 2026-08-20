@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import os
+import threading
 from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Set, Tuple
 from .base import FileAnalyzer
@@ -35,17 +36,39 @@ logger = logging.getLogger(__name__)
 _warned_uncached_languages: Set[str] = set()
 _warned_failed_languages: Set[str] = set()
 
-# Module-level cache: (path_str, mtime_ns) -> {'tree': ..., 'node_cache': ...}
+# Per-thread cache: (path_str, mtime_ns) -> {'tree': ..., 'node_cache': ...}
 # Eliminates redundant parses when multiple rules/callers analyze the same
 # unchanged file (e.g. extract_imports + extract_symbols + extract_exports
 # for the same .py file during `reveal --check`).
 #
-# Bounded LRU: directory scans (stats://, overview) visit each file once so
-# the cache provides no hit benefit while growing to hold every file's parse
-# tree and node cache in memory indefinitely.  128 entries covers all
-# realistic single-file multi-adapter patterns without unbounded growth.
+# Thread-local, not a single module-level dict (BACK-1136): tree-sitter's
+# Tree/Node objects are pyo3 types that are not Send — touching, overwriting,
+# or garbage-collecting one from a different OS thread than created it panics
+# or raises an unraisable RuntimeError in the Rust extension. reveal-mcp
+# dispatches each tool call onto its own anyio worker thread, so a single
+# shared cache is genuinely accessed by multiple real OS threads. A
+# threading.local() cache means no thread ever touches — or drops — another
+# thread's Tree/Node objects; each worker thread simply builds and keeps its
+# own cache. Cache-sharing across threads is lost, but the intra-thread reuse
+# this cache exists for (CLI's single-threaded multi-analyzer case) is
+# unaffected.
+#
+# Bounded LRU per thread: directory scans (stats://, overview) visit each
+# file once so the cache provides no hit benefit while growing to hold every
+# file's parse tree and node cache in memory indefinitely. 128 entries covers
+# all realistic single-file multi-adapter patterns without unbounded growth.
 _MAX_PARSE_CACHE = 128
-_parse_cache: OrderedDict[Tuple[str, int], Dict[str, Any]] = OrderedDict()
+_parse_cache_local = threading.local()
+
+
+def _get_parse_cache() -> "OrderedDict[Tuple[str, int], Dict[str, Any]]":
+    """Return this thread's parse cache, creating it on first use."""
+    cache = getattr(_parse_cache_local, 'cache', None)
+    if cache is None:
+        cache = OrderedDict()
+        _parse_cache_local.cache = cache
+    return cache
+
 
 # Cross-invocation disk cache (BACK-535) for the built structure dict
 # (imports/functions/classes/structs, pre-slicing). `_parse_cache` above only
@@ -449,18 +472,20 @@ class TreeSitterAnalyzer(FileAnalyzer):
     def _parse_tree(self) -> None:
         """Parse file with tree-sitter.
 
-        Uses a module-level cache keyed by (path, mtime_ns) to avoid
-        re-parsing the same unchanged file across multiple analyzer
-        instances (e.g. extract_imports, extract_symbols, extract_exports
-        all called on the same .py file during --check).
+        Uses a per-thread cache keyed by (path, mtime_ns) to avoid re-parsing
+        the same unchanged file across multiple analyzer instances (e.g.
+        extract_imports, extract_symbols, extract_exports all called on the
+        same .py file during --check). See _get_parse_cache() for why this is
+        thread-local rather than a single shared dict (BACK-1136).
 
         Note: Tree-sitter warnings are suppressed at module level via
         suppress_treesitter_warnings() call at top of file.
         """
-        cached = _parse_cache.get(self._cache_key)
+        parse_cache = _get_parse_cache()
+        cached = parse_cache.get(self._cache_key)
         if cached is not None:
             # Move to end (most-recently-used) on hit
-            _parse_cache.move_to_end(self._cache_key)
+            parse_cache.move_to_end(self._cache_key)
             self.tree = cached['tree']
             if 'node_cache' in cached:
                 self._node_cache = cached['node_cache']
@@ -498,9 +523,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
             self.tree = None
 
         if self.tree is not None:
-            _parse_cache[self._cache_key] = {'tree': self.tree}
-            if len(_parse_cache) > _MAX_PARSE_CACHE:
-                _parse_cache.popitem(last=False)  # evict least-recently-used
+            parse_cache[self._cache_key] = {'tree': self.tree}
+            if len(parse_cache) > _MAX_PARSE_CACHE:
+                parse_cache.popitem(last=False)  # evict least-recently-used
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
@@ -1333,9 +1358,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
         ALL node types. Subsequent calls return from cache. This is 5-6x faster
         than walking the tree separately for each node type query.
 
-        Also writes the completed node_cache back into the module-level
-        _parse_cache so subsequent analyzer instances for the same unchanged
-        file can skip the tree traversal entirely.
+        Also writes the completed node_cache back into this thread's parse
+        cache (see _get_parse_cache()) so subsequent analyzer instances on
+        this thread for the same unchanged file can skip the tree traversal
+        entirely.
         """
         if not self.tree:
             return []
@@ -1352,10 +1378,12 @@ class TreeSitterAnalyzer(FileAnalyzer):
             for node in _iter_tree(tree_root(self.tree)):
                 cache.setdefault(node.kind(), []).append(node)
 
-            # Write completed node_cache back to module-level cache
-            if hasattr(self, '_cache_key') and self._cache_key in _parse_cache:
-                _parse_cache[self._cache_key]['node_cache'] = self._node_cache
-                _parse_cache.move_to_end(self._cache_key)  # refresh LRU position
+            # Write completed node_cache back to this thread's cache.
+            parse_cache = _get_parse_cache()
+            entry = parse_cache.get(self._cache_key)
+            if entry is not None:
+                entry['node_cache'] = self._node_cache
+                parse_cache.move_to_end(self._cache_key)  # refresh LRU position
 
         return (self._node_cache or {}).get(node_type, [])
 
