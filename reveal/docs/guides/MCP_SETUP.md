@@ -155,6 +155,13 @@ reveal_check("src/auth.py", severity="high")
 reveal_check("src/", select="M", ignore="N")
 ```
 
+Directory mode has no built-in result-count cap — an unfiltered call on a large,
+issue-heavy directory can return a very large payload (measured 200K+ characters
+on reveal's own `reveal/adapters/`, unlike `reveal check`'s CLI text mode, which
+dedupes remediation guidance per rule rather than per occurrence). Always pass
+`severity` and/or `select` on large directories to keep results bounded
+(`severity="high"` reduced the same call to ~7K characters in that measurement).
+
 ### `reveal_nav(path, element, flag)`
 
 Navigate inside a function using analysis flags — the final level of progressive
