@@ -418,6 +418,38 @@ class TestRevealReviewTool(unittest.TestCase):
         result = self.reveal_review('HEAD..HEAD')
         self.assertIsInstance(result, str)
 
+    def test_target_with_violations_returns_real_report_not_exit_code_sentinel(self):
+        """Regression (found live): run_review exits nonzero whenever it finds
+        any violation -- its normal, most-common outcome. _run_and_capture used
+        to discard the real rendered report in that case and return only
+        '[reveal exited with code 1]: <stderr progress noise>'."""
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'app.py').write_text(
+                "def f(a,b,c,d,e,f,g,h):\n"
+                "    if a:\n"
+                "        if b:\n"
+                "            if c:\n"
+                "                if d:\n"
+                "                    if e:\n"
+                "                        return 1\n"
+                "    return 0\n"
+            )
+            result = self.reveal_review(d)
+            self.assertNotIn('[reveal exited with code', result)
+            self.assertIn('Review:', result)
+            self.assertIn('Recommendation', result)
+
+    def test_no_progress_noise_or_duplicate_header(self):
+        """BACK-REVEAL-3: run_review's stderr progress lines + duplicated
+        header must not leak into the MCP response."""
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'app.py').write_text("def run():\n    pass\n")
+            result = self.reveal_review(d)
+            self.assertNotIn('Checking quality rules', result)
+            self.assertNotIn('Analyzing hotspots', result)
+            self.assertNotIn('Scanning complexity', result)
+            self.assertEqual(result.count('Review:'), 1)
+
 
 class TestRevealGrepTool(unittest.TestCase):
 
@@ -540,6 +572,42 @@ class TestCaptureHelper(unittest.TestCase):
         result = self._capture(fn)
         self.assertIn("reveal error", result)
         self.assertIn("something broke", result)
+
+    def test_stdout_preserved_on_nonzero_exit_with_stderr(self):
+        """Regression: real stdout content must not be discarded just because
+        the CLI's normal FAIL/issues-found convention also exits nonzero and
+        something was printed to stderr (found live via reveal_review)."""
+        def fn():
+            print("REAL REPORT: 1 violation found")
+            print("progress noise", file=sys.stderr)
+            raise SystemExit(1)
+        result = self._capture(fn)
+        self.assertIn("REAL REPORT: 1 violation found", result)
+
+    def test_nonzero_exit_with_no_stdout_falls_back_to_exit_code_message(self):
+        def fn():
+            print("crash detail", file=sys.stderr)
+            raise SystemExit(2)
+        result = self._capture(fn)
+        self.assertIn("[reveal exited with code 2]", result)
+        self.assertIn("crash detail", result)
+
+    def test_capture_stderr_false_drops_stderr_on_success(self):
+        def fn():
+            print("real output")
+            print("noise", file=sys.stderr)
+        result = self._capture(fn, capture_stderr=False)
+        self.assertEqual(result, "real output\n")
+        self.assertNotIn("noise", result)
+
+    def test_capture_stderr_false_drops_stderr_on_nonzero_exit_with_stdout(self):
+        def fn():
+            print("real report")
+            print("progress noise", file=sys.stderr)
+            raise SystemExit(1)
+        result = self._capture(fn, capture_stderr=False)
+        self.assertEqual(result, "real report\n")
+        self.assertNotIn("progress noise", result)
 
     def test_concurrent_calls_do_not_cross_attribute_output(self):
         """BACK-898: concurrent _run_and_capture calls must not race on

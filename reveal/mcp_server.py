@@ -98,7 +98,7 @@ mcp = MCPServer(
 _capture_lock = threading.Lock()
 
 
-def _run_and_capture(fn, *args, **kwargs) -> str:
+def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
     """Run fn with stdout+stderr captured; return captured text.
 
     Used only for tools where the underlying display layer prints rather than
@@ -106,7 +106,16 @@ def _run_and_capture(fn, *args, **kwargs) -> str:
     process-global sys.stdout/sys.stderr and tool calls are not guaranteed
     sequential under sse/streamable-http transports.
     Swallows SystemExit(0) (reveal uses it for clean exit on some paths).
-    Stderr is appended so MCP clients see error messages instead of silence.
+    Stderr is appended so MCP clients see error messages instead of silence,
+    unless the caller passes capture_stderr=False (e.g. reveal_review, whose
+    stderr is pure progress/duplicate-header noise once captured to a buffer
+    instead of a live TTY -- BACK-REVEAL-3).
+
+    Nonzero exit is reveal's normal convention for "the target has a negative
+    verdict" (reveal_health FAIL, reveal_review violations found), not just a
+    crash -- real stdout content always wins over the exit-code sentinel, even
+    on nonzero exit; the sentinel is only a fallback when there is no stdout
+    at all (a genuine crash with nothing rendered).
     """
     out_buf = io.StringIO()
     err_buf = io.StringIO()
@@ -131,14 +140,15 @@ def _run_and_capture(fn, *args, **kwargs) -> str:
 
     if exc_msg is not None:
         return f"[reveal error: {exc_msg}]"
+    if out.strip():
+        if capture_stderr and err:
+            return f"{out}\n[stderr: {err}]"
+        return out
     if exit_code not in (0, None):
-        detail = err or out.strip()
         msg = f"[reveal exited with code {exit_code}]"
-        return f"{msg}: {detail}" if detail else msg
-    if err and not out.strip():
+        return f"{msg}: {err}" if err else msg
+    if capture_stderr and err:
         return f"[stderr: {err}]"
-    if err:
-        return f"{out}\n[stderr: {err}]"
     return out
 
 
@@ -517,7 +527,10 @@ def reveal_review(target: str, select: str = 'B,S,I,C,M') -> str:
     from .cli.commands.review import run_review
 
     args = _default_args(target=target, select=select)
-    return _run_and_capture(run_review, args)
+    # BACK-REVEAL-3: run_review's progress lines + a duplicated "Review: <target>"
+    # header go to stderr; captured to a buffer instead of a live TTY they're
+    # pure noise -- the real report is entirely on stdout.
+    return _run_and_capture(run_review, args, capture_stderr=False)
 
 
 @mcp_tool(annotations=_LOCAL_READONLY)
