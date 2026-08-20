@@ -12,6 +12,27 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] (sessions obsidian-twilight-0819, pouring-typhoon-0819, wovago-0819, equatorial-aurora-0820)
+
+### Security
+- **`reveal-mcp` closed path-traversal and CLI-argument-injection gaps across all tools (BACK-1141, BACK-1137)** — path-taking tools now resolve and validate against expected roots before use; string params that could be interpreted as CLI flags are rejected rather than forwarded.
+- **Added `reveal_health` and `reveal_review` MCP tools (BACK-1138)** — previously only reachable via the CLI, not exposed to MCP clients.
+
+### Added
+- **All 10 `reveal-mcp` tools now signal genuine failures via `isError=True` (BACK-REVEAL-1)** — MCP clients can distinguish a real tool failure from a normal FAIL/violations-found verdict for the first time; legitimate nonzero-exit verdicts (`reveal_health`, `reveal_review`) still return as ordinary content.
+- **`reveal_structure` gained `depth`/`ext`/`exclude`/`files` scoping params (BACK-REVEAL-2)** — brings the CLI's directory-triage pattern (`reveal <dir> --files --ext md`) to MCP clients for the first time.
+- **`reveal_query` gained a `provenance: bool` param (BACK-1135)** — the one deliberate exception to `reveal_query`'s no-CLI-flag-passthrough design; attaches an `execution:{...}` chain-of-custody block to dict-shaped results.
+- **All 10 `reveal-mcp` tools now set a human-readable client display title (BACK-1143)**.
+- **Documented which CLI flags survive as `reveal_query` URI query params (BACK-1139)** — only `?limit=`/`?sort=`/`?offset=` work over MCP; `--severity`/`--select`/`--format`/`--provenance` have no argv for an MCP call to inject them from.
+
+### Fixed
+- **`reveal-mcp`'s concurrent-tool-call crash from tree-sitter `Tree`/`Node` objects shared across `anyio` worker threads (BACK-1136)** — made the parse cache thread-local. Later found to be a mitigation, not a full fix: see "Known limitation" below.
+- **`_run_and_capture` was silently discarding `reveal_review`'s entire report on its normal FAIL/violations-found outcome (BACK-REVEAL-3)** — any nonzero-exit CLI verdict with stderr output lost its real stdout content, returning only an exit-code sentinel. Real stdout now always wins; the sentinel is a fallback only when there's no stdout at all. `capture_stderr=False` also drops `reveal_review`'s progress-noise duplication.
+- **`TestUpdateCheckSuppressed` test flake root-caused and fixed (BACK-REVEAL-5)**.
+
+### Known limitation
+- **Multi-threaded `reveal-mcp` tool calls can still hard-crash the server process (`SIGABRT`) under the pinned `tree-sitter-language-pack<1.12.5` (BACK-1146)** — its vendored pyo3 parser declares `Tree`/`Parser` objects thread-affine (`unsendable`); CPython's cyclic GC reclaiming one off its creating thread aborts the process, uncatchable from Python. BACK-1136's thread-local cache mitigates but cannot fully close this — a cache can't stop the garbage collector. Root fix is `BACK-620` (the `tree-sitter-language-pack>=1.12.5` migration, prerequisite tooling tracked as `BACK-1048`), already in progress for unrelated Python 3.14 forward-compat reasons. See `reveal/docs/guides/MCP_SETUP.md` for the user-facing caveat.
+
 ## [0.121.0] - 2026-08-18 (sessions merging-expedition-0818, godlike-phantom-0818, totuni-0818, frozen-beacon-0818, heating-snow-0818)
 
 ### Fixed
