@@ -1,7 +1,8 @@
 """Integration tests for reveal adapters.
 
-Tests adapters end-to-end using subprocess to ensure they work
-in real-world usage through the CLI interface.
+Tests adapters end-to-end via reveal.main's CLI entry point (driven
+in-process through _run_reveal_direct, not a real subprocess -- 10-20x
+faster, same code path) to ensure they work in real-world CLI usage.
 """
 
 import unittest
@@ -19,6 +20,9 @@ try:
     PYGIT2_AVAILABLE = True
 except ImportError:
     PYGIT2_AVAILABLE = False
+
+# BACK-1149: every test here shells out to the real reveal CLI via subprocess.
+pytestmark = pytest.mark.cli
 
 
 @pytest.mark.integration

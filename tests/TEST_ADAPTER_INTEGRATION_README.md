@@ -6,7 +6,7 @@
 
 ## Overview
 
-This test suite validates that reveal's adapter system works correctly through the CLI interface. It tests actual command execution using `subprocess` to ensure adapters work as users will experience them.
+This test suite validates that reveal's adapter system works correctly through the CLI interface. It drives `reveal.main`'s CLI entry point via `conftest.py`'s `_run_reveal_direct` helper (in-process, not a real `subprocess` -- 10-20x faster, same code path) to ensure adapters work as users will experience them.
 
 ## Test Coverage
 
@@ -92,9 +92,9 @@ class TestAdapterIntegration(unittest.TestCase):
     """Integration tests for adapter:// adapter."""
 
     def run_reveal_command(self, *args):
-        """Run reveal command via subprocess."""
-        # Execute reveal.main as subprocess
-        # Return CompletedProcess with stdout/stderr
+        """Run reveal command via _run_reveal_direct (in-process, not subprocess)."""
+        # Drives reveal.main.main() directly with a patched sys.argv
+        # Returns an object with .returncode/.stdout/.stderr
 
     def test_adapter_basic_functionality(self):
         """Test adapter works for basic use case."""

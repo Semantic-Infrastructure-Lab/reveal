@@ -133,6 +133,17 @@ markers = [
     "unit: fast unit tests (< 0.1s each)",
     "integration: integration tests (subprocess-based, slower)",
     "slow: tests taking > 1s each",
+    # BACK-1149: broader lane taxonomy, applied incrementally (marker-only,
+    # no file moves) starting with the files this session verified directly.
+    # Most of the suite is still unmarked -- these lanes exist so tests can
+    # be tagged as they're touched, not as a claim of full coverage yet.
+    "component: single-module behavior tests, no subprocess/CLI involved",
+    "contract: schema/shape/key-existence checks -- smoke alarms, not proof of correct behavior (see BACK-1153)",
+    "cli: exercises reveal.main's CLI entry point (in-process or subprocess)",
+    "mcp: exercises the MCP server tool surface (reveal.mcp_server)",
+    "conformance: cross-adapter or cross-language agreement/ratchet tests",
+    "compat: dependency-version compatibility tests (e.g. tree-sitter-language-pack pinning)",
+    "external_fixture: depends on real external state (a live repo, network, or another host) beyond tmp_path fixtures",
 ]
 filterwarnings = [
     # Ignore warning about TestAdapter class in adapters/test.py having __init__

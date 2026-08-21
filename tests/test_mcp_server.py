@@ -14,6 +14,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
+# BACK-1149: every test here exercises the MCP server tool surface.
+pytestmark = pytest.mark.mcp
+
 
 class TestRevealStructureTool(unittest.TestCase):
 
