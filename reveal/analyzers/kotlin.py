@@ -165,7 +165,8 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
     def _is_nested_error(node, error_starts: Set[int]) -> bool:
         ancestor = _zero_arg(node, 'parent')
         while ancestor is not None:
-            if ancestor.kind() == 'ERROR' and _zero_arg(ancestor, 'start_byte') in error_starts:
+            if (_zero_arg(ancestor, 'kind') == 'ERROR' and
+                    _zero_arg(ancestor, 'start_byte') in error_starts):
                 return True
             ancestor = _zero_arg(ancestor, 'parent')
         return False
@@ -175,13 +176,15 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
         [modifiers?, declaration-keyword, identifier] prefix, else None."""
         children = _children(error_node)
         idx = 0
-        if idx < len(children) and children[idx].kind() == 'modifiers':
+        if idx < len(children) and _zero_arg(children[idx], 'kind') == 'modifiers':
             idx += 1
-        if idx >= len(children) or children[idx].kind() not in _KOTLIN_ERROR_DECLARATION_KEYWORDS:
+        if (idx >= len(children) or
+                _zero_arg(children[idx], 'kind') not in _KOTLIN_ERROR_DECLARATION_KEYWORDS):
             return None
-        keyword = children[idx].kind()
+        keyword = _zero_arg(children[idx], 'kind')
         idx += 1
-        if idx >= len(children) or children[idx].kind() not in ('simple_identifier', 'type_identifier'):
+        if (idx >= len(children) or
+                _zero_arg(children[idx], 'kind') not in ('simple_identifier', 'type_identifier')):
             return None
         name = self._get_node_text(children[idx]).strip()
         if not name:
@@ -197,7 +200,7 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
         lines: Set[int] = set()
         for node in self._find_nodes_by_type('class_declaration'):
             for child in _children(node):
-                if child.kind() == 'interface':
+                if _zero_arg(child, 'kind') == 'interface':
                     lines.add(node.start_position().row + 1)
                     break
         return lines
@@ -230,7 +233,7 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
         # class Circle : Base(), Drawable  /  interface Drawable : Shape
         names: List[str] = []
         for child in _children(node):
-            if child.kind() != 'delegation_specifier':
+            if _zero_arg(child, 'kind') != 'delegation_specifier':
                 continue
             name = self._kotlin_delegation_name(child)
             if name:
@@ -239,12 +242,12 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
 
     def _kotlin_delegation_name(self, specifier) -> Optional[str]:
         for child in _children(specifier):
-            if child.kind() == 'constructor_invocation':
+            if _zero_arg(child, 'kind') == 'constructor_invocation':
                 # Base() — the invoked supertype is a nested user_type
                 name = self._kotlin_user_type_name(child)
                 if name:
                     return name
-            elif child.kind() == 'user_type':
+            elif _zero_arg(child, 'kind') == 'user_type':
                 return self._kotlin_first_type_identifier(child)
             elif _zero_arg(child, 'kind') == 'explicit_delegation':
                 # BACK-805: `class Foo(...) : Bar by delegateExpr` — Kotlin's
@@ -287,7 +290,7 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
 
     def _kotlin_user_type_name(self, container) -> Optional[str]:
         for child in _children(container):
-            if child.kind() == 'user_type':
+            if _zero_arg(child, 'kind') == 'user_type':
                 return self._kotlin_first_type_identifier(child)
         return None
 
@@ -295,7 +298,7 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
         # Take only the leading type_identifier (the base name); skip nested
         # type_arguments so a generic supertype List<Foo> yields 'List', not 'Foo'.
         for child in _children(user_type):
-            if child.kind() == 'type_identifier':
+            if _zero_arg(child, 'kind') == 'type_identifier':
                 text = self._get_node_text(child).strip()
                 if text:
                     return text
@@ -307,12 +310,12 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
         # 'abstract' token (verified via --show-ast). Scan the modifiers subtree
         # for the token so the exact wrapper kind doesn't have to be hard-coded.
         for child in _children(node):
-            if child.kind() != 'modifiers':
+            if _zero_arg(child, 'kind') != 'modifiers':
                 continue
             for sub in _children(child):
-                if sub.kind() == 'abstract':
+                if _zero_arg(sub, 'kind') == 'abstract':
                     return True
                 for leaf in _children(sub):
-                    if leaf.kind() == 'abstract':
+                    if _zero_arg(leaf, 'kind') == 'abstract':
                         return True
         return False

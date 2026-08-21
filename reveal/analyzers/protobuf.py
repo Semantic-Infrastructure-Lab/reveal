@@ -3,6 +3,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -68,7 +69,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
 
         for pkg_node in package_nodes:
             for child in _children(pkg_node):
-                if child.kind() == 'full_ident':
+                if _zero_arg(child, 'kind') == 'full_ident':
                     package_name = self._get_node_text(child)
                     return {
                         'line_start': pkg_node.start_position().row + 1,
@@ -99,15 +100,17 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
     def _find_identifier_in(self, node: Any, child_type: str) -> Optional[str]:
         """Find identifier text inside the first child of the given type."""
         for child in _children(node):
-            if child.kind() == child_type:
-                id_node = next((gc for gc in _children(child) if gc.kind() == 'identifier'), None)
+            if _zero_arg(child, 'kind') == child_type:
+                id_node = next(
+                    (gc for gc in _children(child) if _zero_arg(gc, 'kind') == 'identifier'), None
+                )
                 return self._get_node_text(id_node) if id_node else None
         return None
 
     def _find_identifier_text(self, node: Any) -> Optional[str]:
         """Find first identifier text among direct children of node."""
         for child in _children(node):
-            if child.kind() == 'identifier':
+            if _zero_arg(child, 'kind') == 'identifier':
                 return self._get_node_text(child)
         return None
 
@@ -156,7 +159,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
         request_type = None
         response_type = None
         for child in _children(rpc_node):
-            if child.kind() != 'message_or_enum_type':
+            if _zero_arg(child, 'kind') != 'message_or_enum_type':
                 continue
             type_text = self._find_identifier_text(child)
             if not type_text:
@@ -175,13 +178,13 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
         # Find returns position for reference
         returns_pos = None
         for child in _children(rpc_node):
-            if child.kind() == 'returns':
+            if _zero_arg(child, 'kind') == 'returns':
                 returns_pos = child.start_position().row
                 break
 
         # Check each stream keyword position
         for child in _children(rpc_node):
-            if child.kind() == 'stream':
+            if _zero_arg(child, 'kind') == 'stream':
                 stream_pos = child.start_position().row
                 if returns_pos is None or stream_pos < returns_pos:
                     is_streaming_request = True
@@ -224,11 +227,11 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
         """Build a display string for a protobuf field node, or None if unnamed."""
         field_type = field_name = field_number = None
         for child in _children(field_node):
-            if child.kind() == 'type':
+            if _zero_arg(child, 'kind') == 'type':
                 field_type = self._get_node_text(child)
-            elif child.kind() == 'identifier':
+            elif _zero_arg(child, 'kind') == 'identifier':
                 field_name = self._get_node_text(child)
-            elif child.kind() == 'field_number':
+            elif _zero_arg(child, 'kind') == 'field_number':
                 field_number = self._get_node_text(child)
         if not field_name:
             return None
@@ -246,9 +249,9 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
         value_name = None
         value_number = None
         for field_child in _children(enum_field):
-            if field_child.kind() == 'identifier':
+            if _zero_arg(field_child, 'kind') == 'identifier':
                 value_name = self._get_node_text(field_child)
-            elif field_child.kind() == 'int_lit':
+            elif _zero_arg(field_child, 'kind') == 'int_lit':
                 value_number = self._get_node_text(field_child)
         if not value_name:
             return None
@@ -280,7 +283,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
         nodes = []
 
         def walk(node):
-            if node.kind() == node_type:
+            if _zero_arg(node, 'kind') == node_type:
                 nodes.append(node)
             for child in _children(node):
                 walk(child)

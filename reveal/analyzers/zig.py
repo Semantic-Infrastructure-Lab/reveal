@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children, node_next_sibling as _next_sibling, node_prev_sibling as _prev_sibling
+from ..core.treesitter_compat import _zero_arg
 from ..core.nav_calls import range_calls
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
@@ -51,12 +52,12 @@ class ZigAnalyzer(TreeSitterAnalyzer):
     def _has_pub_visibility(self, decl_node) -> bool:
         """Check if declaration has pub keyword."""
         return bool(_prev_sibling(decl_node) and
-                    _prev_sibling(decl_node).kind() == 'pub')
+                    _zero_arg(_prev_sibling(decl_node), 'kind') == 'pub')
 
     def _find_fn_proto(self, decl_node):
         """Find FnProto child node in declaration."""
         for child in _children(decl_node):
-            if child.kind() == 'FnProto':
+            if _zero_arg(child, 'kind') == 'FnProto':
                 return child
         return None
 
@@ -69,7 +70,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         FUNCTION_NODE_TYPES search, which never matched Zig's grammar).
         A bare 'Decl' may also wrap a struct/enum/union/var — those have no
         FnProto child, so this correctly returns None and falls through."""
-        if node.kind() == 'Decl':
+        if _zero_arg(node, 'kind') == 'Decl':
             fn_proto = self._find_fn_proto(node)
             return self._extract_function_name(fn_proto) if fn_proto else None
         return super()._get_node_name(node)
@@ -77,24 +78,24 @@ class ZigAnalyzer(TreeSitterAnalyzer):
     def _extract_function_name(self, fn_proto) -> Optional[str]:
         """Extract function name from FnProto node."""
         for fn_child in _children(fn_proto):
-            if fn_child.kind() == 'fn':
+            if _zero_arg(fn_child, 'kind') == 'fn':
                 # Next sibling should be the identifier (function name)
                 next_sib = _next_sibling(fn_child)
-                if next_sib and next_sib.kind() == 'IDENTIFIER':
+                if next_sib and _zero_arg(next_sib, 'kind') == 'IDENTIFIER':
                     return self._get_node_text(next_sib)
         return None
 
     def _get_param_name(self, param_decl) -> Optional[str]:
         """Get the identifier name from a ParamDecl node, or None."""
         for p in _children(param_decl):
-            if p.kind() == 'IDENTIFIER':
+            if _zero_arg(p, 'kind') == 'IDENTIFIER':
                 return self._get_node_text(p)
         return None
 
     def _iter_param_decl_names(self, param_decl_list) -> List[str]:
         """Yield parameter names from a ParamDeclList node."""
         for param_child in _children(param_decl_list):
-            if param_child.kind() == 'ParamDecl':
+            if _zero_arg(param_child, 'kind') == 'ParamDecl':
                 name = self._get_param_name(param_child)
                 if name:
                     yield name
@@ -102,7 +103,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
     def _extract_param_names(self, fn_proto) -> List[str]:
         """Extract parameter names from FnProto node."""
         for fn_child in _children(fn_proto):
-            if fn_child.kind() == 'ParamDeclList':
+            if _zero_arg(fn_child, 'kind') == 'ParamDeclList':
                 return list(self._iter_param_decl_names(fn_child))
         return []
 
@@ -174,12 +175,12 @@ class ZigAnalyzer(TreeSitterAnalyzer):
 
     def _has_pub_keyword(self, node) -> bool:
         """Check if node has a pub keyword as previous sibling."""
-        return bool(_prev_sibling(node) and _prev_sibling(node).kind() == 'pub')
+        return bool(_prev_sibling(node) and _zero_arg(_prev_sibling(node), 'kind') == 'pub')
 
     def _find_var_decl_in_node(self, decl_node) -> Any:
         """Find VarDecl child node in a Decl node."""
         for child in _children(decl_node):
-            if child.kind() == 'VarDecl':
+            if _zero_arg(child, 'kind') == 'VarDecl':
                 return child
         return None
 
@@ -193,9 +194,9 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         container_decl = None
 
         for var_child in _children(var_decl):
-            if var_child.kind() == 'IDENTIFIER':
+            if _zero_arg(var_child, 'kind') == 'IDENTIFIER':
                 var_name = self._get_node_text(var_child)
-            elif var_child.kind() == 'ContainerDecl':
+            elif _zero_arg(var_child, 'kind') == 'ContainerDecl':
                 container_decl = var_child
 
         return var_name, container_decl
@@ -203,14 +204,14 @@ class ZigAnalyzer(TreeSitterAnalyzer):
     def _is_correct_container_type(self, container_decl, container_type: str) -> bool:
         """Check if ContainerDecl is of the specified type (struct/enum/union)."""
         for cont_child in _children(container_decl):
-            if cont_child.kind() == container_type:
+            if _zero_arg(cont_child, 'kind') == container_type:
                 return True
         return False
 
     def _extract_container_field_names(self, member) -> List[str]:
         """Extract field names from a ContainerField node."""
         for field_child in _children(member):
-            if field_child.kind() == 'IDENTIFIER':
+            if _zero_arg(field_child, 'kind') == 'IDENTIFIER':
                 return [self._get_node_text(field_child)]
         return []
 
@@ -218,7 +219,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         """Extract field names from a ContainerDeclAuto node."""
         fields = []
         for member in _children(cont_decl_auto):
-            if member.kind() == 'ContainerField':
+            if _zero_arg(member, 'kind') == 'ContainerField':
                 fields.extend(self._extract_container_field_names(member))
         return fields
 
@@ -226,7 +227,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         """Extract member field names from a ContainerDecl."""
         members = []
         for cont_child in _children(container_decl):
-            if cont_child.kind() == 'ContainerDeclAuto':
+            if _zero_arg(cont_child, 'kind') == 'ContainerDeclAuto':
                 members.extend(self._extract_fields_from_auto(cont_child))
         return members
 
@@ -288,7 +289,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         measurement, BACK-730).
         """
         for child in _children(test_node):
-            kind = child.kind()
+            kind = _zero_arg(child, 'kind')
             if kind == 'STRINGLITERALSINGLE':
                 name = self._get_node_text(child)
                 return name[1:-1] if name.startswith('"') and name.endswith('"') else name

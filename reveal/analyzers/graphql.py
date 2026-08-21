@@ -3,6 +3,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -62,7 +63,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
             Name as string, or None if no name found
         """
         for child in _children(node):
-            if child.kind() == 'name':
+            if _zero_arg(child, 'kind') == 'name':
                 return self._get_node_text(child)
         return None
 
@@ -76,7 +77,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
             fields_definition node or None
         """
         for child in _children(node):
-            if child.kind() == 'fields_definition':
+            if _zero_arg(child, 'kind') == 'fields_definition':
                 return child
         return None
 
@@ -91,7 +92,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
         """
         fields = []
         for field_child in _children(fields_def):
-            if field_child.kind() == 'field_definition':
+            if _zero_arg(field_child, 'kind') == 'field_definition':
                 field_name = self._get_name_from_node(field_child)
                 if field_name:
                     fields.append(field_name)
@@ -100,10 +101,10 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
     def _extract_implements(self, type_def: Any) -> List[str]:
         """Extract implemented interfaces from type definition."""
         for child in _children(type_def):
-            if child.kind() == 'implements_interfaces':
+            if _zero_arg(child, 'kind') == 'implements_interfaces':
                 return [
                     name for c in _children(child)
-                    if c.kind() == 'named_type'
+                    if _zero_arg(c, 'kind') == 'named_type'
                     for name in [self._get_name_from_node(c)] if name
                 ]
         return []
@@ -120,7 +121,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
         """Extract arguments from arguments_definition node."""
         return [
             fmt for child in _children(args_def_node)
-            if child.kind() == 'input_value_definition'
+            if _zero_arg(child, 'kind') == 'input_value_definition'
             for fmt in [self._format_argument(child)] if fmt is not None
         ]
 
@@ -134,7 +135,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
             Type string (e.g., "User!", "[Post!]") or None
         """
         for child in _children(field_node):
-            if child.kind() in ['type', 'non_null_type', 'list_type']:
+            if _zero_arg(child, 'kind') in ['type', 'non_null_type', 'list_type']:
                 return self._get_type_string(child)
         return None
 
@@ -152,11 +153,11 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
         return_type = None
 
         for child in _children(field_node):
-            if child.kind() == 'name':
+            if _zero_arg(child, 'kind') == 'name':
                 field_name = self._get_node_text(child)
-            elif child.kind() == 'arguments_definition':
+            elif _zero_arg(child, 'kind') == 'arguments_definition':
                 args = self._extract_arguments(child)
-            elif child.kind() in ['type', 'non_null_type', 'list_type']:
+            elif _zero_arg(child, 'kind') in ['type', 'non_null_type', 'list_type']:
                 return_type = self._get_type_string(child)
 
         return field_name, args, return_type
@@ -211,7 +212,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
             if not fields_def:
                 continue
             for field_child in _children(fields_def):
-                if field_child.kind() != 'field_definition':
+                if _zero_arg(field_child, 'kind') != 'field_definition':
                     continue
                 field_name, args, return_type = self._extract_field_info(field_child)
                 if field_name:
@@ -234,7 +235,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
 
             values = []
             for child in _children(enum_def):
-                if child.kind() == 'enum_values_definition':
+                if _zero_arg(child, 'kind') == 'enum_values_definition':
                     values = self._extract_enum_values(child)
 
             enums.append({
@@ -250,9 +251,9 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
         return [
             self._get_node_text(v)
             for val_child in _children(enum_values_def)
-            if val_child.kind() == 'enum_value_definition'
+            if _zero_arg(val_child, 'kind') == 'enum_value_definition'
             for v in _children(val_child)
-            if v.kind() == 'enum_value'
+            if _zero_arg(v, 'kind') == 'enum_value'
         ]
 
     def _extract_interfaces(self) -> List[Dict[str, Any]]:
@@ -288,7 +289,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
 
             members = []
             for child in _children(union_def):
-                if child.kind() == 'union_member_types':
+                if _zero_arg(child, 'kind') == 'union_member_types':
                     members = self._extract_union_members(child)
 
             unions.append({
@@ -310,7 +311,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
         """
         members = []
         for member_child in _children(union_member_types):
-            if member_child.kind() == 'named_type':
+            if _zero_arg(member_child, 'kind') == 'named_type':
                 member_name = self._get_name_from_node(member_child)
                 if member_name:
                     members.append(member_name)
@@ -343,7 +344,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
 
             fields = []
             for child in _children(input_def):
-                if child.kind() == 'input_fields_definition':
+                if _zero_arg(child, 'kind') == 'input_fields_definition':
                     fields = self._extract_input_field_names(child)
 
             inputs.append({
@@ -365,7 +366,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
         """
         fields = []
         for field_child in _children(input_fields_def):
-            if field_child.kind() == 'input_value_definition':
+            if _zero_arg(field_child, 'kind') == 'input_value_definition':
                 field_name = self._get_name_from_node(field_child)
                 if field_name:
                     fields.append(field_name)
@@ -374,13 +375,13 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
     def _find_child_by_types(self, node, types) -> 'Optional[Any]':
         """Return the first child whose .type is in *types*, or None."""
         for child in _children(node):
-            if child.kind() in types:
+            if _zero_arg(child, 'kind') in types:
                 return child
         return None
 
     def _get_type_string(self, type_node) -> str:
         """Convert a type node to a string representation."""
-        node_type = type_node.kind()
+        node_type = _zero_arg(type_node, 'kind')
 
         if node_type == 'non_null_type':
             inner = self._find_child_by_types(type_node, {'named_type', 'list_type'})
