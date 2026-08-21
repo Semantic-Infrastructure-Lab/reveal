@@ -76,6 +76,42 @@ def test_default_prune_cap_evicts_past_64_entries():
     assert len(list(ns_dir.glob("*.pkl"))) == 64
 
 
+def test_prune_skips_stat_when_under_cap(monkeypatch):
+    """Regression guard: BACK-1152's O(N)-per-put cliff.
+
+    ``_prune`` must not pay for a ``stat``-per-entry sort while the namespace
+    is under its cap — that per-call cost is what turned a 934-file test into
+    a 10+ minute hang against a real ~13k-entry cache namespace. Spy on
+    ``Path.stat`` to prove the cheap ``os.scandir`` count path is what runs.
+    """
+    from pathlib import Path
+
+    calls = []
+    real_stat = Path.stat
+
+    def _spy_stat(self, *a, **kw):
+        calls.append(self)
+        return real_stat(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "stat", _spy_stat)
+    for i in range(40):
+        disk_cache.put("prune_under_cap_ns", f"k{i}", i)  # default cap is 64
+    ns_dir = disk_cache._namespace_dir("prune_under_cap_ns")
+    assert len(list(ns_dir.glob("*.pkl"))) == 40
+    # mkdir(exist_ok=True)'s own is_dir() check stats the namespace dir itself
+    # (harmless, once per put) — what must never happen is a stat per *entry*.
+    entry_stats = [p for p in calls if p.suffix == ".pkl"]
+    assert entry_stats == []
+
+
+def test_prune_evicts_exactly_at_cap_boundary():
+    """The eviction path (over cap) still keeps exactly ``max_entries``."""
+    for i in range(65):
+        disk_cache.put("prune_boundary_ns", f"k{i}", i, max_entries=64)
+    ns_dir = disk_cache._namespace_dir("prune_boundary_ns")
+    assert len(list(ns_dir.glob("*.pkl"))) == 64
+
+
 def test_max_entries_override_avoids_thrashing():
     for i in range(70):
         disk_cache.put("prune_override_ns", f"k{i}", i, max_entries=1000)

@@ -135,8 +135,28 @@ def put(namespace: str, key: str, value: Any, max_entries: Optional[int] = None)
 
 
 def _prune(ns_dir: Path, max_entries: int) -> None:
-    """Best-effort LRU-ish cap: keep the newest ``max_entries``."""
+    """Best-effort LRU-ish cap: keep the newest ``max_entries``.
+
+    Cheap by default: a namespace under its cap is the overwhelmingly common
+    case (every ``put()`` call re-checks), so we count entries via
+    ``os.scandir`` (readdir only, no per-entry ``stat``) and bail out the
+    moment the running count clears ``max_entries`` — no need to finish
+    listing a namespace already known to be over cap. Only when the count
+    actually exceeds ``max_entries`` do we pay for the ``stat``-per-entry
+    sort needed to evict the oldest ones.
+    """
     try:
+        over_cap = False
+        with os.scandir(ns_dir) as it:
+            count = 0
+            for entry in it:
+                if entry.name.endswith(".pkl"):
+                    count += 1
+                    if count > max_entries:
+                        over_cap = True
+                        break
+        if not over_cap:
+            return
         entries = sorted(
             (p for p in ns_dir.glob("*.pkl")),
             key=lambda p: p.stat().st_mtime,
