@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 _NET_MODULES: frozenset = frozenset({
     'Alamofire', 'Moya', 'AsyncHTTPClient', 'NIOHTTP1', 'NIOHTTP2',
@@ -74,7 +75,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
 
         if kind == 'import_declaration':
             _process_import(node, file_path, content_bytes, surfaces)
@@ -99,7 +100,7 @@ _MODULE_TAXONOMY: tuple = (
 def _process_import(node: Any, file_path: str, content_bytes: bytes,
                     surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     for ch in _children(node):
-        if ch.kind() == 'identifier':
+        if _zero_arg(ch, 'kind') == 'identifier':
             module = _get_text(ch, content_bytes)
             _categorize_module(module, file_path, _get_line(node), surfaces)
             return
@@ -119,7 +120,7 @@ def _categorize_module(module: str, file_path: str, line: int,
 
 def _string_literal_text(node: Any, content_bytes: bytes) -> str:
     for ch in _children(node):
-        if ch.kind() == 'line_str_text':
+        if _zero_arg(ch, 'kind') == 'line_str_text':
             return _get_text(ch, content_bytes)
     return _get_text(node, content_bytes).strip('"')
 
@@ -131,29 +132,29 @@ def _navigation_receiver_and_method(nav_node: Any, content_bytes: bytes) -> tupl
         return None, None
     receiver = children[0]
     suffix = children[-1]
-    if suffix.kind() != 'navigation_suffix':
+    if _zero_arg(suffix, 'kind') != 'navigation_suffix':
         return None, None
     method = None
     for ch in _children(suffix):
-        if ch.kind() == 'simple_identifier':
+        if _zero_arg(ch, 'kind') == 'simple_identifier':
             method = _get_text(ch, content_bytes)
     return _get_text(receiver, content_bytes), method
 
 
 def _call_suffix(node: Any) -> Optional[Any]:
     for ch in _children(node):
-        if ch.kind() == 'call_suffix':
+        if _zero_arg(ch, 'kind') == 'call_suffix':
             return ch
     return None
 
 
 def _has_trailing_lambda(call_suffix_node: Any) -> bool:
-    return any(c.kind() == 'lambda_literal' for c in _children(call_suffix_node))
+    return any(_zero_arg(c, 'kind') == 'lambda_literal' for c in _children(call_suffix_node))
 
 
 def _value_arguments(call_suffix_node: Any) -> Optional[Any]:
     for ch in _children(call_suffix_node):
-        if ch.kind() == 'value_arguments':
+        if _zero_arg(ch, 'kind') == 'value_arguments':
             return ch
     return None
 
@@ -161,10 +162,10 @@ def _value_arguments(call_suffix_node: Any) -> Optional[Any]:
 def _arg_string_texts(value_arguments_node: Any, content_bytes: bytes) -> List[str]:
     out: List[str] = []
     for arg in _children(value_arguments_node):
-        if arg.kind() != 'value_argument':
+        if _zero_arg(arg, 'kind') != 'value_argument':
             continue
         for sub in _children(arg):
-            if sub.kind() == 'line_string_literal':
+            if _zero_arg(sub, 'kind') == 'line_string_literal':
                 out.append(_string_literal_text(sub, content_bytes))
     return out
 
@@ -172,9 +173,9 @@ def _arg_string_texts(value_arguments_node: Any, content_bytes: bytes) -> List[s
 def _is_subscript(value_arguments_node: Any) -> bool:
     # A subscript `x["k"]` parses to a value_arguments whose bracket token is '['.
     for ch in _children(value_arguments_node):
-        if ch.kind() == '[':
+        if _zero_arg(ch, 'kind') == '[':
             return True
-        if ch.kind() == '(':
+        if _zero_arg(ch, 'kind') == '(':
             return False
     return False
 
@@ -182,7 +183,7 @@ def _is_subscript(value_arguments_node: Any) -> bool:
 def _process_call(node: Any, file_path: str, content_bytes: bytes,
                   surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     children = _children(node)
-    if not children or children[0].kind() != 'navigation_expression':
+    if not children or _zero_arg(children[0], 'kind') != 'navigation_expression':
         return
     receiver, method = _navigation_receiver_and_method(children[0], content_bytes)
     if method is None:
@@ -231,7 +232,7 @@ def _process_attribute(node: Any, file_path: str, content_bytes: bytes,
                        surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     # @main entrypoint attribute — user_type child named 'main'.
     for ch in _children(node):
-        if ch.kind() == 'user_type' and _get_text(ch, content_bytes) == 'main':
+        if _zero_arg(ch, 'kind') == 'user_type' and _get_text(ch, content_bytes) == 'main':
             surfaces['cli'].append({
                 'type': 'main', 'name': '@main', 'file': file_path, 'line': _get_line(node),
             })

@@ -97,7 +97,7 @@ def _scan_tree(
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
 
         if kind == 'import_statement':
             _process_import(node, file_path, content_bytes, surfaces)
@@ -405,10 +405,10 @@ def _collect_express_instances(tree: Any, content_bytes: bytes) -> set:
 def _get_import_source(node, content_bytes: bytes) -> Optional[str]:
     """Extract the module path string from an import_statement node."""
     for ch in _children(node):
-        if ch.kind() == 'string':
+        if _zero_arg(ch, 'kind') == 'string':
             # string node: first string_fragment child
             for sch in _children(ch):
-                if sch.kind() == 'string_fragment':
+                if _zero_arg(sch, 'kind') == 'string_fragment':
                     return _get_text(sch, content_bytes)
             # fallback: strip quotes
             raw = _get_text(ch, content_bytes)
@@ -461,10 +461,10 @@ def _callee_obj_is_call(node: Any) -> bool:
     if not children:
         return False
     callee = children[0]
-    if callee.kind() != 'member_expression':
+    if _zero_arg(callee, 'kind') != 'member_expression':
         return False
     parts = _children(callee)
-    return bool(parts) and parts[0].kind() == 'call_expression'
+    return bool(parts) and _zero_arg(parts[0], 'kind') == 'call_expression'
 
 
 def _get_callee_parts(node: Any, content_bytes: bytes):
@@ -473,13 +473,13 @@ def _get_callee_parts(node: Any, content_bytes: bytes):
     if not children:
         return None, None
     callee = children[0]
-    if callee.kind() == 'member_expression':
+    if _zero_arg(callee, 'kind') == 'member_expression':
         parts = _children(callee)
         if len(parts) >= 3:
             obj = _get_text(parts[0], content_bytes)
             method = _get_text(parts[-1], content_bytes)
             return obj, method
-    elif callee.kind() == 'identifier':
+    elif _zero_arg(callee, 'kind') == 'identifier':
         return None, _get_text(callee, content_bytes)
     return None, None
 
@@ -488,13 +488,13 @@ def _get_call_first_arg_string(node: Any, content_bytes: bytes) -> Optional[str]
     """Extract first string argument from a call_expression."""
     children = _children(node)
     for ch in children:
-        if ch.kind() == 'arguments':
-            arg_children = [c for c in _children(ch) if c.kind() not in ('(', ')', ',')]
+        if _zero_arg(ch, 'kind') == 'arguments':
+            arg_children = [c for c in _children(ch) if _zero_arg(c, 'kind') not in ('(', ')', ',')]
             if arg_children:
                 first = arg_children[0]
-                if first.kind() == 'string':
+                if _zero_arg(first, 'kind') == 'string':
                     for sch in _children(first):
-                        if sch.kind() == 'string_fragment':
+                        if _zero_arg(sch, 'kind') == 'string_fragment':
                             return _get_text(sch, content_bytes)
                     return _get_text(first, content_bytes).strip("'\"`")
     return None
@@ -604,13 +604,13 @@ def _process_member(
     """Detect process.env.VAR_NAME and process.env['VAR_NAME'] accesses."""
     line = _get_line(node)
 
-    if node.kind() == 'member_expression':
+    if _zero_arg(node, 'kind') == 'member_expression':
         # process.env.VAR_NAME → member_expression(member_expression(process, env), VAR_NAME)
         children = _children(node)
         if len(children) >= 3:
             obj_node = children[0]
             prop_node = children[-1]
-            if obj_node.kind() == 'member_expression':
+            if _zero_arg(obj_node, 'kind') == 'member_expression':
                 obj_text = _get_text(obj_node, content_bytes)
                 if obj_text == 'process.env':
                     var_name = _get_text(prop_node, content_bytes)
@@ -619,19 +619,19 @@ def _process_member(
                         'expr': 'process.env', 'file': file_path, 'line': line,
                     })
 
-    elif node.kind() == 'subscript_expression':
+    elif _zero_arg(node, 'kind') == 'subscript_expression':
         # process.env['VAR_NAME']
         children = _children(node)
         if len(children) >= 2:
             obj_node = children[0]
-            if obj_node.kind() == 'member_expression':
+            if _zero_arg(obj_node, 'kind') == 'member_expression':
                 obj_text = _get_text(obj_node, content_bytes)
                 if obj_text == 'process.env':
                     # find string child
                     for ch in children[1:]:
-                        if ch.kind() == 'string':
+                        if _zero_arg(ch, 'kind') == 'string':
                             for sch in _children(ch):
-                                if sch.kind() == 'string_fragment':
+                                if _zero_arg(sch, 'kind') == 'string_fragment':
                                     var_name = _get_text(sch, content_bytes)
                                     _add_once(surfaces['env'], {
                                         'type': 'env_var', 'name': var_name,

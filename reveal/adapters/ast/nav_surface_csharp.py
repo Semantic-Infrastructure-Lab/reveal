@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 _NET_PACKAGES: frozenset = frozenset({'System.Net.Http', 'RestSharp'})
 
@@ -66,7 +67,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
 
         if kind == 'using_directive':
             _process_using(node, file_path, content_bytes, surfaces)
@@ -87,7 +88,7 @@ def _process_using(node: Any, file_path: str, content_bytes: bytes,
                     surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     target = None
     for ch in _children(node):
-        if ch.kind() in ('qualified_name', 'identifier'):
+        if _zero_arg(ch, 'kind') in ('qualified_name', 'identifier'):
             target = ch
     if target is None:
         return
@@ -105,26 +106,26 @@ _PACKAGE_TAXONOMY: tuple = (
 
 def _attribute_name(attribute_node: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(attribute_node):
-        if ch.kind() == 'identifier':
+        if _zero_arg(ch, 'kind') == 'identifier':
             return _get_text(ch, content_bytes)
     return None
 
 
 def _attribute_path_arg(attribute_node: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(attribute_node):
-        if ch.kind() != 'attribute_argument_list':
+        if _zero_arg(ch, 'kind') != 'attribute_argument_list':
             continue
         for arg in _children(ch):
-            if arg.kind() == 'attribute_argument':
+            if _zero_arg(arg, 'kind') == 'attribute_argument':
                 for sub in _children(arg):
-                    if sub.kind() == 'string_literal':
+                    if _zero_arg(sub, 'kind') == 'string_literal':
                         return _string_literal_text(sub, content_bytes)
     return None
 
 
 def _string_literal_text(node: Any, content_bytes: bytes) -> str:
     for ch in _children(node):
-        if ch.kind() == 'string_literal_content':
+        if _zero_arg(ch, 'kind') == 'string_literal_content':
             return _get_text(ch, content_bytes)
     return _get_text(node, content_bytes).strip('"')
 
@@ -132,8 +133,8 @@ def _string_literal_text(node: Any, content_bytes: bytes) -> str:
 def _find_method_attributes(method_node: Any) -> List[Any]:
     attrs = []
     for ch in _children(method_node):
-        if ch.kind() == 'attribute_list':
-            attrs.extend(a for a in _children(ch) if a.kind() == 'attribute')
+        if _zero_arg(ch, 'kind') == 'attribute_list':
+            attrs.extend(a for a in _children(ch) if _zero_arg(a, 'kind') == 'attribute')
     return attrs
 
 
@@ -158,14 +159,16 @@ def _method_name(method_node: Any, content_bytes: bytes) -> Optional[str]:
     # identifier as a non-direct child, so it never interferes.
     name = None
     for ch in _children(method_node):
-        if ch.kind() == 'identifier':
+        if _zero_arg(ch, 'kind') == 'identifier':
             name = _get_text(ch, content_bytes)
     return name
 
 
 def _is_static_modifier_present(method_node: Any) -> bool:
     for ch in _children(method_node):
-        if ch.kind() == 'modifier' and any(m.kind() == 'static' for m in _children(ch)):
+        if _zero_arg(ch, 'kind') == 'modifier' and any(
+            _zero_arg(m, 'kind') == 'static' for m in _children(ch)
+        ):
             return True
     return False
 
@@ -225,7 +228,7 @@ def _invocation_obj_method(node: Any, content_bytes: bytes) -> Tuple[Optional[st
     if not children:
         return None, None
     callee = children[0]
-    if callee.kind() != 'member_access_expression':
+    if _zero_arg(callee, 'kind') != 'member_access_expression':
         return None, None
     parts = _children(callee)
     if len(parts) < 3:
@@ -258,7 +261,7 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
 def _process_object_creation(node: Any, file_path: str, content_bytes: bytes,
                               surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     for ch in _children(node):
-        if ch.kind() == 'identifier':
+        if _zero_arg(ch, 'kind') == 'identifier':
             type_name = _get_text(ch, content_bytes)
             if type_name in _FS_WRITE_CONSTRUCTORS:
                 surfaces['fs'].append({
@@ -270,13 +273,13 @@ def _process_object_creation(node: Any, file_path: str, content_bytes: bytes,
 
 def _first_string_arg(call_node: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(call_node):
-        if ch.kind() != 'argument_list':
+        if _zero_arg(ch, 'kind') != 'argument_list':
             continue
         for arg in _children(ch):
-            if arg.kind() == 'argument':
+            if _zero_arg(arg, 'kind') == 'argument':
                 for sub in _children(arg):
-                    if sub.kind() == 'string_literal':
+                    if _zero_arg(sub, 'kind') == 'string_literal':
                         return _string_literal_text(sub, content_bytes)
-            elif arg.kind() == 'string_literal':
+            elif _zero_arg(arg, 'kind') == 'string_literal':
                 return _string_literal_text(arg, content_bytes)
     return None

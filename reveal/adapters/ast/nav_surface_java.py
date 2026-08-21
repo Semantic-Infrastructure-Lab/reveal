@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 _NET_PACKAGES: frozenset = frozenset({
     'java.net.http', 'okhttp3', 'org.apache.http', 'org.apache.hc', 'retrofit2',
@@ -70,7 +71,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
 
         if kind == 'import_declaration':
             _process_import(node, file_path, content_bytes, surfaces)
@@ -98,7 +99,7 @@ def _process_import(node: Any, file_path: str, content_bytes: bytes,
                      surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     target = None
     for ch in _children(node):
-        if ch.kind() in ('scoped_identifier', 'identifier'):
+        if _zero_arg(ch, 'kind') in ('scoped_identifier', 'identifier'):
             target = ch
     if target is None:
         return
@@ -116,7 +117,7 @@ _PACKAGE_TAXONOMY: tuple = (
 
 def _annotation_name(annotation_node: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(annotation_node):
-        if ch.kind() == 'identifier':
+        if _zero_arg(ch, 'kind') == 'identifier':
             return _get_text(ch, content_bytes)
     return None
 
@@ -124,47 +125,51 @@ def _annotation_name(annotation_node: Any, content_bytes: bytes) -> Optional[str
 def _annotation_path_arg(annotation_node: Any, content_bytes: bytes) -> Optional[str]:
     """First bare string_literal arg, or the 'value'/'path' element_value_pair."""
     for ch in _children(annotation_node):
-        if ch.kind() != 'annotation_argument_list':
+        if _zero_arg(ch, 'kind') != 'annotation_argument_list':
             continue
         for arg in _children(ch):
-            if arg.kind() == 'string_literal':
+            if _zero_arg(arg, 'kind') == 'string_literal':
                 return _string_literal_text(arg, content_bytes)
-            if arg.kind() == 'element_value_pair':
+            if _zero_arg(arg, 'kind') == 'element_value_pair':
                 pair_children = _children(arg)
                 if len(pair_children) < 3:
                     continue
                 key_name = _get_text(pair_children[0], content_bytes)
-                if key_name in ('value', 'path') and pair_children[2].kind() == 'string_literal':
+                if key_name in ('value', 'path') and \
+                        _zero_arg(pair_children[2], 'kind') == 'string_literal':
                     return _string_literal_text(pair_children[2], content_bytes)
     return None
 
 
 def _string_literal_text(node: Any, content_bytes: bytes) -> str:
     for ch in _children(node):
-        if ch.kind() == 'string_fragment':
+        if _zero_arg(ch, 'kind') == 'string_fragment':
             return _get_text(ch, content_bytes)
     return _get_text(node, content_bytes).strip('"')
 
 
 def _find_method_annotations(method_node: Any) -> List[Any]:
     for ch in _children(method_node):
-        if ch.kind() == 'modifiers':
-            return [m for m in _children(ch) if m.kind() in ('annotation', 'marker_annotation')]
+        if _zero_arg(ch, 'kind') == 'modifiers':
+            return [
+                m for m in _children(ch)
+                if _zero_arg(m, 'kind') in ('annotation', 'marker_annotation')
+            ]
     return []
 
 
 def _method_name(method_node: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(method_node):
-        if ch.kind() == 'identifier':
+        if _zero_arg(ch, 'kind') == 'identifier':
             return _get_text(ch, content_bytes)
     return None
 
 
 def _is_static_modifier_present(method_node: Any) -> bool:
     for ch in _children(method_node):
-        if ch.kind() != 'modifiers':
+        if _zero_arg(ch, 'kind') != 'modifiers':
             continue
-        return any(m.kind() == 'static' for m in _children(ch))
+        return any(_zero_arg(m, 'kind') == 'static' for m in _children(ch))
     return False
 
 
@@ -198,7 +203,7 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
                    surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     children = _children(node)
     # method_invocation: identifier '.' identifier argument_list  (obj.method(...))
-    idents = [c for c in children if c.kind() == 'identifier']
+    idents = [c for c in children if _zero_arg(c, 'kind') == 'identifier']
     if len(idents) < 2:
         return
     obj, method = _get_text(idents[0], content_bytes), _get_text(idents[1], content_bytes)
@@ -220,7 +225,7 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
 def _process_object_creation(node: Any, file_path: str, content_bytes: bytes,
                               surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     for ch in _children(node):
-        if ch.kind() == 'type_identifier':
+        if _zero_arg(ch, 'kind') == 'type_identifier':
             type_name = _get_text(ch, content_bytes)
             if type_name in _FS_WRITE_CONSTRUCTORS:
                 surfaces['fs'].append({
@@ -232,9 +237,9 @@ def _process_object_creation(node: Any, file_path: str, content_bytes: bytes,
 
 def _first_string_arg(call_node: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(call_node):
-        if ch.kind() != 'argument_list':
+        if _zero_arg(ch, 'kind') != 'argument_list':
             continue
         for arg in _children(ch):
-            if arg.kind() == 'string_literal':
+            if _zero_arg(arg, 'kind') == 'string_literal':
                 return _string_literal_text(arg, content_bytes)
     return None

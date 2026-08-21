@@ -30,6 +30,7 @@ from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_p
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
 
         if kind == 'namespace_use_declaration':
             _process_use(node, file_path, content_bytes, surfaces)
@@ -114,10 +115,10 @@ _PACKAGE_TAXONOMY: tuple = (
 def _process_use(node: Any, file_path: str, content_bytes: bytes,
                  surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     for clause in _children(node):
-        if clause.kind() != 'namespace_use_clause':
+        if _zero_arg(clause, 'kind') != 'namespace_use_clause':
             continue
         for ch in _children(clause):
-            if ch.kind() in ('qualified_name', 'name'):
+            if _zero_arg(ch, 'kind') in ('qualified_name', 'name'):
                 module = _get_text(ch, content_bytes)
                 categorize_by_prefix(module, file_path, _get_line(node), surfaces, _PACKAGE_TAXONOMY, '\\')
 
@@ -126,24 +127,24 @@ def _string_arg_texts(arguments_node: Any, content_bytes: bytes) -> List[str]:
     """Ordered string-literal texts among an `arguments` node's direct args."""
     out: List[str] = []
     for arg in _children(arguments_node):
-        if arg.kind() != 'argument':
+        if _zero_arg(arg, 'kind') != 'argument':
             continue
         for sub in _children(arg):
-            if sub.kind() == 'string':
+            if _zero_arg(sub, 'kind') == 'string':
                 out.append(_string_content(sub, content_bytes))
     return out
 
 
 def _string_content(string_node: Any, content_bytes: bytes) -> str:
     for ch in _children(string_node):
-        if ch.kind() == 'string_content':
+        if _zero_arg(ch, 'kind') == 'string_content':
             return _get_text(ch, content_bytes)
     return _get_text(string_node, content_bytes).strip('"\'')
 
 
 def _scoped_call_names(node: Any, content_bytes: bytes) -> tuple:
     """(receiver, method) for a scoped_call_expression `Receiver::method(...)`."""
-    names = [c for c in _children(node) if c.kind() == 'name']
+    names = [c for c in _children(node) if _zero_arg(c, 'kind') == 'name']
     if len(names) < 2:
         return None, None
     return _get_text(names[0], content_bytes), _get_text(names[1], content_bytes)
@@ -151,7 +152,7 @@ def _scoped_call_names(node: Any, content_bytes: bytes) -> tuple:
 
 def _arguments_child(node: Any) -> Optional[Any]:
     for ch in _children(node):
-        if ch.kind() == 'arguments':
+        if _zero_arg(ch, 'kind') == 'arguments':
             return ch
     return None
 
@@ -178,7 +179,7 @@ def _process_function_call(node: Any, file_path: str, content_bytes: bytes,
                            surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     name_node = None
     for ch in _children(node):
-        if ch.kind() == 'name':
+        if _zero_arg(ch, 'kind') == 'name':
             name_node = ch
             break
     if name_node is None:
@@ -207,7 +208,7 @@ def _process_attribute(node: Any, file_path: str, content_bytes: bytes,
     # Symfony #[Route('/path', methods: ['GET'])]
     name_node = None
     for ch in _children(node):
-        if ch.kind() == 'name':
+        if _zero_arg(ch, 'kind') == 'name':
             name_node = ch
             break
     if name_node is None or _get_text(name_node, content_bytes) != 'Route':
@@ -218,18 +219,18 @@ def _process_attribute(node: Any, file_path: str, content_bytes: bytes,
     path = None
     methods = 'ANY'
     for arg in _children(args):
-        if arg.kind() != 'argument':
+        if _zero_arg(arg, 'kind') != 'argument':
             continue
         arg_children = _children(arg)
         # named arg `methods: [...]` carries a leading `name` child
-        named = next((c for c in arg_children if c.kind() == 'name'), None)
+        named = next((c for c in arg_children if _zero_arg(c, 'kind') == 'name'), None)
         if named is not None and _get_text(named, content_bytes) == 'methods':
             verbs = _array_string_texts(arg, content_bytes)
             if verbs:
                 methods = '|'.join(v.upper() for v in verbs)
         elif path is None:
             for sub in arg_children:
-                if sub.kind() == 'string':
+                if _zero_arg(sub, 'kind') == 'string':
                     path = _string_content(sub, content_bytes)
     surfaces['http'].append({
         'type': 'route', 'name': 'Route', 'path': path or '?',
@@ -244,7 +245,7 @@ def _array_string_texts(node: Any, content_bytes: bytes) -> List[str]:
     out: List[str] = []
 
     def _rec(n: Any) -> None:
-        if n.kind() == 'string':
+        if _zero_arg(n, 'kind') == 'string':
             out.append(_string_content(n, content_bytes))
             return
         for c in _children(n):
@@ -259,10 +260,10 @@ def _process_subscript(node: Any, file_path: str, content_bytes: bytes,
                        surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     # $_ENV['KEY'] — subscript_expression with a $_ENV variable_name and a string key
     children = _children(node)
-    var = next((c for c in children if c.kind() == 'variable_name'), None)
+    var = next((c for c in children if _zero_arg(c, 'kind') == 'variable_name'), None)
     if var is None or _get_text(var, content_bytes) != '$_ENV':
         return
-    key = next((c for c in children if c.kind() == 'string'), None)
+    key = next((c for c in children if _zero_arg(c, 'kind') == 'string'), None)
     if key is None:
         return
     surfaces['env'].append({

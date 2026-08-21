@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 _NET_GEMS: frozenset = frozenset({
     'net/http', 'faraday', 'httparty', 'excon', 'typhoeus', 'rest-client',
@@ -96,7 +97,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
 
         if kind == 'call':
             _process_call(node, file_path, content_bytes, surfaces)
@@ -111,7 +112,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
 
 def _string_content(string_node: Any, content_bytes: bytes) -> str:
     for ch in _children(string_node):
-        if ch.kind() == 'string_content':
+        if _zero_arg(ch, 'kind') == 'string_content':
             return _get_text(ch, content_bytes)
     return _get_text(string_node, content_bytes).strip('"\'')
 
@@ -120,14 +121,14 @@ def _string_arg_texts(arg_list: Any, content_bytes: bytes) -> List[str]:
     """Ordered string-literal texts among an `argument_list`'s direct args."""
     out: List[str] = []
     for arg in _children(arg_list):
-        if arg.kind() == 'string':
+        if _zero_arg(arg, 'kind') == 'string':
             out.append(_string_content(arg, content_bytes))
     return out
 
 
 def _arg_list_child(node: Any) -> Optional[Any]:
     for ch in _children(node):
-        if ch.kind() == 'argument_list':
+        if _zero_arg(ch, 'kind') == 'argument_list':
             return ch
     return None
 
@@ -135,16 +136,16 @@ def _arg_list_child(node: Any) -> Optional[Any]:
 def _pair_string_value(arg_list: Any, key: str, content_bytes: bytes) -> Optional[str]:
     """Find `key: 'value'` among an argument_list's `pair` children."""
     for arg in _children(arg_list):
-        if arg.kind() != 'pair':
+        if _zero_arg(arg, 'kind') != 'pair':
             continue
         children = _children(arg)
-        key_node = next((c for c in children if c.kind() in ('hash_key_symbol', 'simple_symbol')), None)
+        key_node = next((c for c in children if _zero_arg(c, 'kind') in ('hash_key_symbol', 'simple_symbol')), None)
         if key_node is None:
             continue
         key_text = _get_text(key_node, content_bytes).lstrip(':')
         if key_text != key:
             continue
-        value_node = next((c for c in children if c.kind() == 'string'), None)
+        value_node = next((c for c in children if _zero_arg(c, 'kind') == 'string'), None)
         if value_node is not None:
             return _string_content(value_node, content_bytes)
     return None
@@ -153,7 +154,7 @@ def _pair_string_value(arg_list: Any, key: str, content_bytes: bytes) -> Optiona
 def _process_call(node: Any, file_path: str, content_bytes: bytes,
                    surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     children = _children(node)
-    ident = next((c for c in children if c.kind() == 'identifier'), None)
+    ident = next((c for c in children if _zero_arg(c, 'kind') == 'identifier'), None)
     if ident is None:
         return
     name = _get_text(ident, content_bytes)
@@ -163,7 +164,7 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
     # self, e.g. top-level DSL invocations like `get '/x' do ... end`) does
     # not. Checking child kinds directly (not `children[0] is ident`) matters
     # because a receiver can itself be an `identifier` (e.g. `http.get(url)`).
-    has_receiver = any(c.kind() == '.' for c in children)
+    has_receiver = any(_zero_arg(c, 'kind') == '.' for c in children)
 
     if name in ('require', 'require_relative') and not has_receiver:
         args = _arg_list_child(node)
@@ -172,7 +173,7 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
             _categorize_gem(strings[0], file_path, _get_line(node), surfaces)
         return
 
-    if name == 'fetch' and children and children[0].kind() == 'constant' and \
+    if name == 'fetch' and children and _zero_arg(children[0], 'kind') == 'constant' and \
             _get_text(children[0], content_bytes) == 'ENV':
         args = _arg_list_child(node)
         strings = _string_arg_texts(args, content_bytes) if args else []
@@ -210,10 +211,10 @@ def _process_element_reference(node: Any, file_path: str, content_bytes: bytes,
                                 surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     # ENV['KEY'] — element_reference with a leading ENV constant and a string index.
     children = _children(node)
-    if not children or children[0].kind() != 'constant' or \
+    if not children or _zero_arg(children[0], 'kind') != 'constant' or \
             _get_text(children[0], content_bytes) != 'ENV':
         return
-    key = next((c for c in children if c.kind() == 'string'), None)
+    key = next((c for c in children if _zero_arg(c, 'kind') == 'string'), None)
     if key is None:
         return
     surfaces['env'].append({

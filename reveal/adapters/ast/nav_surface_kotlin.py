@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 _NET_PACKAGES: frozenset = frozenset({
     'okhttp3', 'retrofit2', 'io.ktor.client', 'java.net.http', 'org.apache.http',
@@ -89,7 +90,8 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     # CLI entrypoint: a top-level `fun main` (direct child of the file only, so a
     # class method named main isn't misclassified as an entrypoint).
     for child in _children(root):
-        if child.kind() == 'function_declaration' and _function_name(child, content_bytes) == 'main':
+        if _zero_arg(child, 'kind') == 'function_declaration' and \
+                _function_name(child, content_bytes) == 'main':
             surfaces['cli'].append({
                 'type': 'main', 'name': 'main', 'file': file_path, 'line': _get_line(child),
             })
@@ -97,7 +99,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     stack = [root]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
 
         if kind == 'import_header':
             _process_import(node, file_path, content_bytes, surfaces)
@@ -115,9 +117,9 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
 def _function_name(func_node: Any, content_bytes: bytes) -> Optional[str]:
     # A top-level `fun main` has no receiver_type; its name is the simple_identifier.
     for ch in _children(func_node):
-        if ch.kind() == 'receiver_type':
+        if _zero_arg(ch, 'kind') == 'receiver_type':
             return None  # extension function — not the entrypoint
-        if ch.kind() == 'simple_identifier':
+        if _zero_arg(ch, 'kind') == 'simple_identifier':
             return _get_text(ch, content_bytes)
     return None
 
@@ -132,7 +134,7 @@ _PACKAGE_TAXONOMY: tuple = (
 def _process_import(node: Any, file_path: str, content_bytes: bytes,
                     surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     for ch in _children(node):
-        if ch.kind() == 'identifier':
+        if _zero_arg(ch, 'kind') == 'identifier':
             module = _get_text(ch, content_bytes)
             categorize_by_prefix(module, file_path, _get_line(node), surfaces, _PACKAGE_TAXONOMY, '.')
             return
@@ -140,35 +142,35 @@ def _process_import(node: Any, file_path: str, content_bytes: bytes,
 
 def _string_content(string_node: Any, content_bytes: bytes) -> str:
     for ch in _children(string_node):
-        if ch.kind() == 'string_content':
+        if _zero_arg(ch, 'kind') == 'string_content':
             return _get_text(ch, content_bytes)
     return _get_text(string_node, content_bytes).strip('"')
 
 
 def _call_suffix(node: Any) -> Optional[Any]:
     for ch in _children(node):
-        if ch.kind() == 'call_suffix':
+        if _zero_arg(ch, 'kind') == 'call_suffix':
             return ch
     return None
 
 
 def _has_annotated_lambda(call_suffix_node: Any) -> bool:
-    return any(c.kind() == 'annotated_lambda' for c in _children(call_suffix_node))
+    return any(_zero_arg(c, 'kind') == 'annotated_lambda' for c in _children(call_suffix_node))
 
 
 def _value_arguments(call_suffix_node: Any) -> Optional[Any]:
     for ch in _children(call_suffix_node):
-        if ch.kind() == 'value_arguments':
+        if _zero_arg(ch, 'kind') == 'value_arguments':
             return ch
     return None
 
 
 def _first_string_arg(value_arguments_node: Any, content_bytes: bytes) -> Optional[str]:
     for arg in _children(value_arguments_node):
-        if arg.kind() != 'value_argument':
+        if _zero_arg(arg, 'kind') != 'value_argument':
             continue
         for sub in _children(arg):
-            if sub.kind() == 'string_literal':
+            if _zero_arg(sub, 'kind') == 'string_literal':
                 return _string_content(sub, content_bytes)
     return None
 
@@ -179,11 +181,11 @@ def _navigation_receiver_and_method(nav_node: Any, content_bytes: bytes) -> tupl
         return None, None
     receiver = children[0]
     suffix = children[-1]
-    if suffix.kind() != 'navigation_suffix':
+    if _zero_arg(suffix, 'kind') != 'navigation_suffix':
         return None, None
     method = None
     for ch in _children(suffix):
-        if ch.kind() == 'simple_identifier':
+        if _zero_arg(ch, 'kind') == 'simple_identifier':
             method = _get_text(ch, content_bytes)
     return _get_text(receiver, content_bytes), method
 
@@ -200,7 +202,7 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
     line = _get_line(node)
 
     # Ktor route: bare verb identifier + trailing handler closure.
-    if callee.kind() == 'simple_identifier':
+    if _zero_arg(callee, 'kind') == 'simple_identifier':
         verb = _get_text(callee, content_bytes)
         if verb in _KTOR_ROUTE_VERBS and _has_annotated_lambda(suffix):
             vargs = _value_arguments(suffix)
@@ -213,7 +215,7 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
         return
 
     # env: System.getenv("KEY")
-    if callee.kind() == 'navigation_expression':
+    if _zero_arg(callee, 'kind') == 'navigation_expression':
         receiver, method = _navigation_receiver_and_method(callee, content_bytes)
         if receiver == 'System' and method == 'getenv':
             vargs = _value_arguments(suffix)
@@ -240,30 +242,30 @@ def _process_annotations(node: Any, file_path: str, content_bytes: bytes,
 
 def _plain_function_name(func_node: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(func_node):
-        if ch.kind() == 'simple_identifier':
+        if _zero_arg(ch, 'kind') == 'simple_identifier':
             return _get_text(ch, content_bytes)
     return None
 
 
 def _find_annotations(func_node: Any) -> List[Any]:
     for ch in _children(func_node):
-        if ch.kind() == 'modifiers':
-            return [m for m in _children(ch) if m.kind() == 'annotation']
+        if _zero_arg(ch, 'kind') == 'modifiers':
+            return [m for m in _children(ch) if _zero_arg(m, 'kind') == 'annotation']
     return []
 
 
 def _annotation_name_and_path(annotation_node: Any, content_bytes: bytes) -> tuple:
     """(annotation_name, first_string_arg) for @Name or @Name("/path")."""
     for ch in _children(annotation_node):
-        if ch.kind() == 'constructor_invocation':
+        if _zero_arg(ch, 'kind') == 'constructor_invocation':
             name = None
             path = None
             for sub in _children(ch):
-                if sub.kind() == 'user_type':
+                if _zero_arg(sub, 'kind') == 'user_type':
                     name = _get_text(sub, content_bytes)
-                elif sub.kind() == 'value_arguments':
+                elif _zero_arg(sub, 'kind') == 'value_arguments':
                     path = _first_string_arg(sub, content_bytes)
             return name, path
-        if ch.kind() == 'user_type':
+        if _zero_arg(ch, 'kind') == 'user_type':
             return _get_text(ch, content_bytes), None
     return None, None

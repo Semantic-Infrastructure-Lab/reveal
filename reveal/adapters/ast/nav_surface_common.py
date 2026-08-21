@@ -21,9 +21,11 @@ three separate package sets — so those two keep their own bespoke
 import re
 from typing import Any, Dict, List, Tuple
 
+from reveal.core.treesitter_compat import _zero_arg
+
 
 def _get_text(node, content_bytes: bytes) -> str:
-    return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+    return content_bytes[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
 
 
 def _get_line(node) -> int:
