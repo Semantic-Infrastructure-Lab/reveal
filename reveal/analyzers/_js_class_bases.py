@@ -24,7 +24,7 @@ class JSClassBasesMixin:
     """Mix into any JS-family `TreeSitterAnalyzer` subclass for extends/implements support."""
 
     def _extract_class_bases(self, node) -> List[str]:
-        node_type = node.kind()
+        node_type = _zero_arg(node, 'kind')
         if node_type in ('class_declaration', 'abstract_class_declaration'):
             return self._extract_ts_class_bases(node)
         if node_type == 'interface_declaration':
@@ -34,7 +34,7 @@ class JSClassBasesMixin:
     def _extract_ts_class_bases(self, node) -> List[str]:
         # class Foo extends Bar implements IBaz, IQux { ... }
         for child in _children(node):
-            if child.kind() == 'class_heritage':
+            if _zero_arg(child, 'kind') == 'class_heritage':
                 return self._extract_ts_heritage_bases(child)
         return []
 
@@ -47,9 +47,9 @@ class JSClassBasesMixin:
         # `heritage` (JS) — JS has no `implements`, so only extends applies.
         bases = []
         for heritage_child in _children(heritage):
-            if heritage_child.kind() == 'extends_clause':
+            if _zero_arg(heritage_child, 'kind') == 'extends_clause':
                 bases.extend(self._extract_ts_extends_names(heritage_child))
-            elif heritage_child.kind() == 'implements_clause':
+            elif _zero_arg(heritage_child, 'kind') == 'implements_clause':
                 bases.extend(self._extract_ts_implements_names(heritage_child))
             elif _zero_arg(heritage_child, 'kind') in ('identifier', 'type_identifier'):
                 text = self._get_node_text(heritage_child).strip()
@@ -84,12 +84,12 @@ class JSClassBasesMixin:
         # implements_clause: "implements TypeA, TypeB, ..."
         names = []
         for item in _children(implements_clause):
-            if item.kind() == 'generic_type':
+            if _zero_arg(item, 'kind') == 'generic_type':
                 # e.g. implements IFoo<T> — extract base name
                 base = self._extract_generic_type_base(item)
                 if base:
                     names.append(base)
-            elif item.kind() in ('type_identifier', 'identifier'):
+            elif _zero_arg(item, 'kind') in ('type_identifier', 'identifier'):
                 text = self._get_node_text(item).strip()
                 if text:
                     names.append(text)
@@ -98,10 +98,10 @@ class JSClassBasesMixin:
     def _extract_ts_interface_bases(self, node) -> List[str]:
         # interface IFoo extends IBar, IBaz { ... }
         for child in _children(node):
-            if child.kind() == 'extends_type_clause':
+            if _zero_arg(child, 'kind') == 'extends_type_clause':
                 bases = []
                 for item in _children(child):
-                    if item.kind() in ('type_identifier', 'identifier'):
+                    if _zero_arg(item, 'kind') in ('type_identifier', 'identifier'):
                         text = self._get_node_text(item).strip()
                         if text:
                             bases.append(text)

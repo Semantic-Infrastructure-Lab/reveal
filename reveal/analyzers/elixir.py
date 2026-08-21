@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..utils.results import ResultBuilder
@@ -121,7 +122,9 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
                 end_node = self._function_end_node(node)
                 source = (
                     self._get_node_text(node) if end_node is node
-                    else self._get_text_span(node.start_byte(), end_node.end_byte())
+                    else self._get_text_span(
+                        _zero_arg(node, 'start_byte'), _zero_arg(end_node, 'end_byte')
+                    )
                 )
                 return {
                     'name': name,
@@ -135,7 +138,7 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
         """The leading macro name of a ``call`` node (``def``, ``defmodule``, …),
         or None if the call doesn't start with a bare identifier."""
         kids = _children(call_node)
-        if kids and kids[0].kind() == 'identifier':
+        if kids and _zero_arg(kids[0], 'kind') == 'identifier':
             return self._get_node_text(kids[0])
         return None
 
@@ -150,23 +153,25 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
           * ``def f(x) when guard`` / ``defguard g(n) when …`` → a ``when``
             ``binary_operator`` whose left operand is one of the above.
         """
-        args = next((c for c in _children(call_node) if c.kind() == 'arguments'), None)
+        args = next((c for c in _children(call_node) if _zero_arg(c, 'kind') == 'arguments'), None)
         if args is None:
             return None
         target = next(iter(_children(args)), None)
         if target is None:
             return None
         # Unwrap a `head when guard` clause to its left (the head).
-        if target.kind() == 'binary_operator':
+        if _zero_arg(target, 'kind') == 'binary_operator':
             left = next(iter(_children(target)), None)
             if left is not None:
                 target = left
-        if target.kind() == 'alias':          # module name (Foo.Bar)
+        if _zero_arg(target, 'kind') == 'alias':          # module name (Foo.Bar)
             return self._get_node_text(target)
-        if target.kind() == 'identifier':     # zero-arg def
+        if _zero_arg(target, 'kind') == 'identifier':     # zero-arg def
             return self._get_node_text(target)
-        if target.kind() == 'call':           # name(args...)
-            head = next((c for c in _children(target) if c.kind() == 'identifier'), None)
+        if _zero_arg(target, 'kind') == 'call':           # name(args...)
+            head = next(
+                (c for c in _children(target) if _zero_arg(c, 'kind') == 'identifier'), None
+            )
             if head is not None:
                 return self._get_node_text(head)
         return None

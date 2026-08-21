@@ -26,6 +26,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional
 
 from ...core import node_children as _children
+from ...core.treesitter_compat import _zero_arg
 from .nav_effects import collect_effects
 from .nav_varflow import resolve_assignment_sides
 from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_NODES
@@ -93,7 +94,7 @@ def _subscript_kind(base_text: str) -> Optional[str]:
 
 def _target_kind(left: Any, get_text: Callable) -> Optional[str]:
     """Classify an assignment's left-hand target, or None if not state-relevant."""
-    ltype = left.kind()
+    ltype = _zero_arg(left, 'kind')
     if ltype == 'directly_assignable_expression':
         # BACK-478 Finding 2: Kotlin/Swift wrap every assignment target in
         # this node — a bare reassignment (`total = ...`) and a member
@@ -105,10 +106,10 @@ def _target_kind(left: Any, get_text: Callable) -> Optional[str]:
         # has neither and correctly falls through un-classified, same as
         # every other language's bare-identifier write.
         children = _children(left)
-        if any(c.kind() == 'navigation_suffix' for c in children):
+        if any(_zero_arg(c, 'kind') == 'navigation_suffix' for c in children):
             return _member_kind(get_text(left))
         for child in children:
-            if child.kind() == 'navigation_expression':
+            if _zero_arg(child, 'kind') == 'navigation_expression':
                 return _target_kind(child, get_text)
         return None
     if ltype == 'instance_variable':
@@ -137,8 +138,8 @@ def _assignment_targets(left: Any) -> List[Any]:
     --statewrites because `left.kind()` was 'expression_list', never
     matching _MEMBER_ACCESS_NODES/_SUBSCRIPT_NODES directly.
     """
-    if left.kind() == 'expression_list':
-        return [c for c in _children(left) if c.is_named()]
+    if _zero_arg(left, 'kind') == 'expression_list':
+        return [c for c in _children(left) if _zero_arg(c, 'is_named')]
     return [left]
 
 
@@ -153,12 +154,12 @@ def _walk_assignments(
     end = node.end_position().row + 1
     if start > to_line or end < from_line:
         return
-    if node.is_named() and node.kind() in _ASSIGNMENT_NODES:
+    if _zero_arg(node, 'is_named') and _zero_arg(node, 'kind') in _ASSIGNMENT_NODES:
         # BACK-478 Finding 2: was `node.child_by_field_name('left')` directly —
         # blind to Kotlin/Swift's fieldless `assignment` node (positional
         # children only, the same shape BACK-476 fixed for --varflow/--keys).
         # resolve_assignment_sides is the shared fallback (BACK-456/476).
-        left, _right = resolve_assignment_sides(node, node.kind())
+        left, _right = resolve_assignment_sides(node, _zero_arg(node, 'kind'))
         line = start
         if left is not None and from_line <= line <= to_line:
             for target in _assignment_targets(left):

@@ -14,6 +14,7 @@ from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 from ..core import tree_root
+from ..core.treesitter_compat import _zero_arg
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -29,11 +30,13 @@ class TomlAnalyzer(TreeSitterAnalyzer):
 
     def _process_toml_pair_node(self, node, keys: list) -> None:
         """Extract a top-level key-value pair node into the keys list."""
-        if _children(node) and node.child(0).kind() in ['bare_key', 'dotted_key', 'quoted_key']:
-            key_node = node.child(0)
+        key_node = node.child(0) if _children(node) else None
+        key_kind = _zero_arg(key_node, 'kind') if key_node is not None else None
+        if key_kind in ['bare_key', 'dotted_key', 'quoted_key']:
+            start, end = _zero_arg(key_node, 'start_byte'), _zero_arg(key_node, 'end_byte')
             keys.append({
                 'line_start': node.start_position().row + 1,
-                'name': self.content[key_node.start_byte():key_node.end_byte()],
+                'name': self.content[start:end],
             })
 
     def _process_toml_table_node(self, node, outline: bool, sections: list) -> None:
@@ -57,9 +60,9 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         keys: list = []
 
         for node in _children(tree_root(self.tree)):
-            if node.kind() == 'pair':
+            if _zero_arg(node, 'kind') == 'pair':
                 self._process_toml_pair_node(node, keys)
-            elif node.kind() in ('table', 'table_array_element'):
+            elif _zero_arg(node, 'kind') in ('table', 'table_array_element'):
                 self._process_toml_table_node(node, outline, sections)
 
         result = {}
@@ -83,8 +86,8 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         """Extract section name from table node."""
         # Find the key node between [ and ]
         for child in _children(node):
-            if child.kind() in ['bare_key', 'dotted_key', 'quoted_key']:
-                return self.content[child.start_byte():child.end_byte()]
+            if _zero_arg(child, 'kind') in ['bare_key', 'dotted_key', 'quoted_key']:
+                return self.content[_zero_arg(child, 'start_byte'):_zero_arg(child, 'end_byte')]
         return ''
 
     def _find_section_end_line(self, node) -> int:
@@ -93,9 +96,9 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         for sibling in _children(tree_root(self.tree)):
             if sibling.start_position().row <= node.start_position().row:
                 continue
-            if sibling.kind() in ['table', 'table_array_element']:
+            if _zero_arg(sibling, 'kind') in ['table', 'table_array_element']:
                 return sibling.start_position().row
-            if sibling.kind() == 'pair':
+            if _zero_arg(sibling, 'kind') == 'pair':
                 end_line = max(end_line, sibling.end_position().row + 1)
         return end_line
 
@@ -104,7 +107,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         if not self.tree:
             return super().extract_element(element_type, name)
         for node in _children(tree_root(self.tree)):
-            if node.kind() not in ['table', 'table_array_element']:
+            if _zero_arg(node, 'kind') not in ['table', 'table_array_element']:
                 continue
             if self._extract_table_name(node) != name:
                 continue

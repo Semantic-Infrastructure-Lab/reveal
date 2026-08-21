@@ -8,6 +8,7 @@ from reveal.treesitter import (
     ELEMENT_TYPE_MAP, PARENT_NODE_TYPES, CHILD_NODE_TYPES, ALL_ELEMENT_NODE_TYPES
 )
 from reveal.core import node_children as _children
+from reveal.core.treesitter_compat import _zero_arg
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 
 # Dominant category priority by file type
@@ -203,7 +204,9 @@ def _try_treesitter_extraction(analyzer, element: str):
                 end_node = getattr(analyzer, '_function_end_node', lambda n: n)(node)
                 source = (
                     analyzer._get_node_text(node) if end_node is node
-                    else analyzer._get_text_span(node.start_byte(), end_node.end_byte())
+                    else analyzer._get_text_span(
+                        _zero_arg(node, 'start_byte'), _zero_arg(end_node, 'end_byte')
+                    )
                 )
                 return {
                     'name': element,
@@ -391,7 +394,7 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
 def _find_child_in_subtree(analyzer, node, target_name: str):
     """Recursively search for a named child node within a subtree."""
     for child in _children(node):
-        if child.kind() in CHILD_NODE_TYPES:
+        if _zero_arg(child, 'kind') in CHILD_NODE_TYPES:
             if analyzer._get_node_name(child) == target_name:
                 return child
         result = _find_child_in_subtree(analyzer, child, target_name)
@@ -423,18 +426,18 @@ def _go_receiver_method_node(analyzer, parent_name: str, child_name: str):
 def _go_receiver_type_name(analyzer, method_node) -> Optional[str]:
     """Extract the receiver's type identifier from a Go method_declaration."""
     for child in _children(method_node):
-        if child.kind() != 'parameter_list':
+        if _zero_arg(child, 'kind') != 'parameter_list':
             continue
         for param in _children(child):
-            if param.kind() != 'parameter_declaration':
+            if _zero_arg(param, 'kind') != 'parameter_declaration':
                 continue
             for part in _children(param):
-                kind = part.kind()
+                kind = _zero_arg(part, 'kind')
                 if kind == 'type_identifier':
                     return analyzer._get_node_text(part)
                 if kind == 'pointer_type':
                     for inner in _children(part):
-                        if inner.kind() == 'type_identifier':
+                        if _zero_arg(inner, 'kind') == 'type_identifier':
                             return analyzer._get_node_text(inner)
         # Only the first parameter_list is the receiver.
         break
@@ -489,7 +492,9 @@ def _extract_hierarchical_element(analyzer, element: str):
     end_node = getattr(analyzer, '_function_end_node', lambda n: n)(child_node)
     source = (
         analyzer._get_node_text(child_node) if end_node is child_node
-        else analyzer._get_text_span(child_node.start_byte(), end_node.end_byte())
+        else analyzer._get_text_span(
+            _zero_arg(child_node, 'start_byte'), _zero_arg(end_node, 'end_byte')
+        )
     )
     return {
         'name': element,
