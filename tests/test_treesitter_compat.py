@@ -17,6 +17,7 @@ from reveal.core import (
     tree_root,
     ts_parse,
 )
+from reveal.core.treesitter_compat import _zero_arg
 
 
 def _parse(code: str, lang: str = 'python'):
@@ -184,6 +185,47 @@ class TestTreeRoot(unittest.TestCase):
         sentinel = object()
         tree = self._PropertyStyleTree(sentinel)
         self.assertIs(tree_root(tree), sentinel)
+
+
+class TestZeroArgKindFallback(unittest.TestCase):
+    """_zero_arg(x, 'kind') must resolve under both API eras.
+
+    Unlike every other zero-arg accessor this module wraps, `kind` isn't a
+    same-name method->property flip: the >=1.12.5 core `tree_sitter.Node`
+    has no `.kind` attribute at all, only `.type` (same semantic value,
+    different name) -- confirmed live in isolated venvs
+    (torrential-breeze-0821) across tree-sitter 0.23.0 through 0.26.0.
+    """
+
+    class _MethodStyleNode:
+        """Simulates <1.12.5 vendored Node: kind() is callable, no .type."""
+
+        def kind(self):
+            return 'module'
+
+    class _CoreBindingNode:
+        """Simulates >=1.12.5 core Node: no .kind, .type is the real value."""
+
+        type = 'module'
+
+    def test_method_style_kind(self):
+        self.assertEqual(_zero_arg(self._MethodStyleNode(), 'kind'), 'module')
+
+    def test_core_binding_falls_back_to_type(self):
+        self.assertEqual(_zero_arg(self._CoreBindingNode(), 'kind'), 'module')
+
+    def test_real_installed_node(self):
+        # Whatever calling convention the currently-installed pin uses,
+        # _zero_arg(node, 'kind') must resolve to the real node kind.
+        tree = ts_parse(ts.get_parser('python'), 'x = 1')
+        root = tree_root(tree)
+        self.assertEqual(_zero_arg(root, 'kind'), 'module')
+
+    def test_other_missing_attribute_still_raises(self):
+        # The 'kind'->'type' fallback must not swallow every AttributeError
+        # -- only the specific 'kind' case gets the fallback.
+        with self.assertRaises(AttributeError):
+            _zero_arg(self._MethodStyleNode(), 'nonexistent_accessor')
 
 
 class TestTsParse(unittest.TestCase):

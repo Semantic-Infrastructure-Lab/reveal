@@ -81,8 +81,24 @@ def _zero_arg(obj, name):
     `root_node`, `cursor.node`, etc. are bound methods pre-1.12.5 and plain
     properties from 1.12.5 on. `child(i)` (takes an index) is unaffected —
     it stays a real method in both — so callers use `node.child(i)` directly.
+
+    `kind` is the one accessor that doesn't just flip method→property: the
+    vendored pre-1.12.5 `builtins.Node.kind()` has no core-binding
+    equivalent by that name at all — confirmed live in isolated venvs
+    (torrential-breeze-0821, tree-sitter 0.23.0 through 0.26.0) that
+    `tree_sitter.Node` (the >=1.12.5 core binding) never exposes `.kind`,
+    only `.type` (a plain string, present in both eras, same value as
+    `.kind()` — e.g. `'module'`). So `getattr(obj, 'kind')` raises
+    AttributeError unconditionally once the ceiling lifts; fall back to
+    `.type` rather than pushing this asymmetry onto every one of the ~700
+    call sites that call `_zero_arg(x, 'kind')`.
     """
-    val = getattr(obj, name)
+    try:
+        val = getattr(obj, name)
+    except AttributeError:
+        if name == 'kind':
+            return obj.type
+        raise
     return val() if callable(val) else val
 
 
