@@ -7,6 +7,7 @@ reveal_check, reveal_grep, and reveal_trace as callable Python functions.
 """
 
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -446,6 +447,25 @@ class TestRevealReviewTool(unittest.TestCase):
     def setUp(self):
         from reveal.mcp_server import reveal_review
         self.reveal_review = reveal_review
+        # BACK-1152: isolate the structure disk cache. Without this,
+        # test_git_range_target_does_not_crash resolves 'HEAD..HEAD' as a
+        # whole-repo directory listing (~900+ files) and each file's
+        # disk_cache.put() call prunes against the real, shared
+        # ~/.reveal/cache -- which accumulates tens of thousands of entries
+        # over normal use. _prune() globs+stats the whole namespace dir on
+        # every put, so a cache-warm run of this one test took 10+ minutes;
+        # cache-cold (this fixture) it's sub-second. Matches the isolation
+        # pattern already used in test_structure_disk_cache.py etc.
+        self._cache_dir = tempfile.mkdtemp()
+        self._old_cache_dir = os.environ.get('REVEAL_CACHE_DIR')
+        os.environ['REVEAL_CACHE_DIR'] = self._cache_dir
+
+    def tearDown(self):
+        if self._old_cache_dir is None:
+            os.environ.pop('REVEAL_CACHE_DIR', None)
+        else:
+            os.environ['REVEAL_CACHE_DIR'] = self._old_cache_dir
+        shutil.rmtree(self._cache_dir, ignore_errors=True)
 
     def test_directory_target_returns_report(self):
         with tempfile.TemporaryDirectory() as d:
