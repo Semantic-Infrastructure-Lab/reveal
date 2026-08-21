@@ -11,7 +11,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from ..core.treesitter_compat import suppress_treesitter_warnings, tree_root, ts_parse
+from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root, ts_parse
 from ..utils.path_utils import is_skippable_dir
 
 suppress_treesitter_warnings()
@@ -161,7 +161,8 @@ _MOCK_MODULE_KINDS = frozenset({'jest.mock', 'vi.mock'})
 
 
 def _ts_node_text(node, src_bytes: bytes) -> str:
-    return src_bytes[node.start_byte():node.end_byte()].decode('utf-8', errors='replace')
+    start, end = _zero_arg(node, 'start_byte'), _zero_arg(node, 'end_byte')
+    return src_bytes[start:end].decode('utf-8', errors='replace')
 
 
 
@@ -172,17 +173,17 @@ def _ts_enclosing_test_name(node, src_bytes: bytes) -> str:
     """Walk up the tree via parent() to find the innermost test/it/describe label."""
     current = node.parent()
     while current is not None:
-        if current.kind() == 'call_expression':
+        if _zero_arg(current, 'kind') == 'call_expression':
             callee = current.child(0)
             if callee is not None:
                 callee_text = _ts_node_text(callee, src_bytes)
                 if callee_text in _TEST_CALLEE_NAMES:
                     for i in range(current.child_count()):
                         ch = current.child(i)
-                        if ch.kind() == 'arguments':
+                        if _zero_arg(ch, 'kind') == 'arguments':
                             for j in range(ch.child_count()):
                                 arg = ch.child(j)
-                                if arg.kind() == 'string':
+                                if _zero_arg(arg, 'kind') == 'string':
                                     val = _ts_get_string_value(arg, src_bytes)
                                     if val:
                                         return val
@@ -196,7 +197,7 @@ def _ts_get_string_value(string_node, src_bytes: bytes) -> Optional[str]:
     """Return the string content of a tree-sitter string literal node."""
     for i in range(string_node.child_count()):
         ch = string_node.child(i)
-        if ch.kind() == 'string_fragment':
+        if _zero_arg(ch, 'kind') == 'string_fragment':
             return _ts_node_text(ch, src_bytes)
     # Fallback: strip surrounding quotes from raw text
     raw = _ts_node_text(string_node, src_bytes)
@@ -209,11 +210,11 @@ def _ts_args_list(call_node) -> List[Any]:
     """Return the argument nodes of a call_expression (excluding punctuation)."""
     for i in range(call_node.child_count()):
         ch = call_node.child(i)
-        if ch.kind() == 'arguments':
+        if _zero_arg(ch, 'kind') == 'arguments':
             return [
                 ch.child(j)
                 for j in range(ch.child_count())
-                if ch.child(j).kind() not in ('(', ')', ',')
+                if _zero_arg(ch.child(j), 'kind') not in ('(', ')', ',')
             ]
     return []
 
@@ -221,15 +222,15 @@ def _ts_args_list(call_node) -> List[Any]:
 def _ts_parse_callee(call_node, src_bytes: bytes) -> Optional[tuple]:
     """Return (namespace, method) if callee is a member_expression like jest.mock."""
     callee = call_node.child(0)
-    if callee is None or callee.kind() != 'member_expression':
+    if callee is None or _zero_arg(callee, 'kind') != 'member_expression':
         return None
     # children: identifier, '.', property_identifier
     obj_node = prop_node = None
     for i in range(callee.child_count()):
         ch = callee.child(i)
-        if ch.kind() == 'identifier' and obj_node is None:
+        if _zero_arg(ch, 'kind') == 'identifier' and obj_node is None:
             obj_node = ch
-        elif ch.kind() == 'property_identifier':
+        elif _zero_arg(ch, 'kind') == 'property_identifier':
             prop_node = ch
     if obj_node is None or prop_node is None:
         return None
@@ -286,7 +287,7 @@ def _scan_file_ts(file_path: Path) -> List[PatchUse]:
     stack = [root]
     while stack:
         node = stack.pop()
-        if node.kind() == 'call_expression':
+        if _zero_arg(node, 'kind') == 'call_expression':
             callee_key = _ts_parse_callee(node, src_bytes)
             if callee_key is not None:
                 patch_kind = _TS_CALLEE_KINDS.get(callee_key)
@@ -314,7 +315,7 @@ def _ts_build_patch_use(
     target_qualname: Optional[str] = None
 
     if patch_kind in _MOCK_MODULE_KINDS:
-        if args and args[0].kind() == 'string':
+        if args and _zero_arg(args[0], 'kind') == 'string':
             mod = _ts_get_string_value(args[0], src_bytes)
             if mod:
                 target_raw = mod
@@ -326,7 +327,7 @@ def _ts_build_patch_use(
     elif patch_kind in _SPY_KINDS:
         if len(args) >= 2:
             obj_text = _ts_node_text(args[0], src_bytes)
-            if args[1].kind() == 'string':
+            if _zero_arg(args[1], 'kind') == 'string':
                 sym: Optional[str] = _ts_get_string_value(args[1], src_bytes)
             else:
                 sym = _ts_node_text(args[1], src_bytes)

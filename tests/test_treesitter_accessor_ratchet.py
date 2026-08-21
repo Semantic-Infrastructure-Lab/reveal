@@ -43,10 +43,10 @@ import reveal
 # Counts are *occurrences* (multiple per line counted) found by the regex below,
 # excluding the compat module itself. Ratchet direction: DOWN ONLY.
 BASELINE = {
-    "kind": 165,
-    "start_byte": 16,
-    "end_byte": 16,
-    "is_named": 10,
+    "kind": 130,
+    "start_byte": 8,
+    "end_byte": 8,
+    "is_named": 3,
     "root_node": 0,
 }
 

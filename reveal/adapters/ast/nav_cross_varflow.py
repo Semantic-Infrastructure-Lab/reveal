@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 
 from .nav_varflow import var_flow, render_var_flow
 from ...core import node_children as _children
+from ...core.treesitter_compat import _zero_arg
 
 _MAX_DEPTH = 3
 
@@ -138,7 +139,7 @@ def _scan_for_callouts(
     get_text: Callable,
     callouts: List[Dict[str, Any]],
 ) -> None:
-    ntype = node.kind()
+    ntype = _zero_arg(node, 'kind')
     line = node.start_position().row + 1
 
     if line > to_line or node.end_position().row + 1 < from_line:
@@ -165,10 +166,10 @@ def _scan_for_callouts(
 
 
 def _extract_callee_name(func_node: Any, get_text: Callable) -> Optional[str]:
-    if func_node.kind() == 'identifier':
+    if _zero_arg(func_node, 'kind') == 'identifier':
         name = get_text(func_node)
         return name if name else None
-    if func_node.kind() == 'attribute':
+    if _zero_arg(func_node, 'kind') == 'attribute':
         attr = func_node.child_by_field_name('attribute')
         return get_text(attr) if attr else None
     return None
@@ -184,9 +185,9 @@ def _check_args_for_var(
 ) -> None:
     arg_pos = 0
     for child in _children(args_node):
-        if child.kind() in (',', '(', ')'):
+        if _zero_arg(child, 'kind') in (',', '(', ')'):
             continue
-        if child.kind() == 'keyword_argument':
+        if _zero_arg(child, 'kind') == 'keyword_argument':
             # keyword_argument: name=value
             key_node = child.child_by_field_name('name')
             val_node = child.child_by_field_name('value')
@@ -210,7 +211,7 @@ def _check_args_for_var(
 
 
 def _node_is_var(node: Any, var_name: str, get_text: Callable) -> bool:
-    return node.kind() == 'identifier' and get_text(node) == var_name
+    return _zero_arg(node, 'kind') == 'identifier' and get_text(node) == var_name
 
 
 # ─────────────────────────── callee lookup ───────────────────────────────────
@@ -239,19 +240,21 @@ def _resolve_param_name(callee_node: Any, arg_pos: int, get_text: Callable, kw_n
         return str(arg_pos)
     pos = 0
     for child in _children(params):
-        if child.kind() in (',', '(', ')'):
+        if _zero_arg(child, 'kind') in (',', '(', ')'):
             continue
-        if child.kind() == 'identifier':
+        if _zero_arg(child, 'kind') == 'identifier':
             name = get_text(child)
             if name in ('self', 'cls'):
                 continue
             if pos == arg_pos:
                 return name
             pos += 1
-        elif child.kind() in ('typed_parameter', 'default_parameter', 'typed_default_parameter'):
+        elif _zero_arg(child, 'kind') in (
+            'typed_parameter', 'default_parameter', 'typed_default_parameter',
+        ):
             ident = None
             for sub in _children(child):
-                if sub.kind() == 'identifier':
+                if _zero_arg(sub, 'kind') == 'identifier':
                     ident = sub
                     break
             if ident:

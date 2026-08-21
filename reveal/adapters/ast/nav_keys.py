@@ -84,10 +84,10 @@ def _unwrap_indexing_suffix(key: Optional[Any]) -> Optional[Any]:
     """Kotlin's key sits one level deeper, inside a sibling `indexing_suffix`
     (`m["port"]` -> indexing_expression[simple_identifier, indexing_suffix['[', string_literal, ']']]) —
     drill in to the suffix's one named child (BACK-458 item 1 cont'd)."""
-    if key is None or key.kind() != 'indexing_suffix':
+    if key is None or _zero_arg(key, 'kind') != 'indexing_suffix':
         return key
     for child in _children(key):
-        if child.is_named():
+        if _zero_arg(child, 'is_named'):
             return child
     return None
 
@@ -111,7 +111,7 @@ def _subscript_parts(node: Any) -> tuple:
     base = children[0]
     key = None
     for child in children[1:]:
-        if child.is_named():
+        if _zero_arg(child, 'is_named'):
             key = child
             break
     return base, _unwrap_indexing_suffix(key)
@@ -128,7 +128,7 @@ def _directly_assignable_subscript_parts(node: Any) -> tuple:
     positional shape counts (BACK-458 item 1 cont'd).
     """
     children = _children(node)
-    if len(children) != 2 or children[1].kind() != 'indexing_suffix':
+    if len(children) != 2 or _zero_arg(children[1], 'kind') != 'indexing_suffix':
         return None, None
     return children[0], _unwrap_indexing_suffix(children[1])
 
@@ -144,16 +144,16 @@ def _swift_subscript_parts(node: Any) -> tuple:
     item 1 cont'd).
     """
     children = _children(node)
-    if len(children) != 2 or children[1].kind() != 'call_suffix':
+    if len(children) != 2 or _zero_arg(children[1], 'kind') != 'call_suffix':
         return None, None
     suffix_children = _children(children[1])
-    if len(suffix_children) != 1 or suffix_children[0].kind() != 'value_arguments':
+    if len(suffix_children) != 1 or _zero_arg(suffix_children[0], 'kind') != 'value_arguments':
         return None, None
     value_args = _children(suffix_children[0])
-    if not value_args or value_args[0].kind() != '[':
+    if not value_args or _zero_arg(value_args[0], 'kind') != '[':
         return None, None
     base = children[0]
-    key = next((c for c in value_args if c.is_named()), None)
+    key = next((c for c in value_args if _zero_arg(c, 'is_named')), None)
     return base, key
 
 
@@ -173,10 +173,10 @@ def _dart_assignable_subscript_parts(node: Any) -> tuple:
     for the harder read half).
     """
     children = _children(node)
-    if len(children) != 2 or children[1].kind() not in _DART_INDEX_WRAPPERS:
+    if len(children) != 2 or _zero_arg(children[1], 'kind') not in _DART_INDEX_WRAPPERS:
         return None, None
     wrapper_children = _children(children[1])
-    if len(wrapper_children) != 1 or wrapper_children[0].kind() != 'index_selector':
+    if len(wrapper_children) != 1 or _zero_arg(wrapper_children[0], 'kind') != 'index_selector':
         return None, None
     key = next((c for c in _children(wrapper_children[0]) if _zero_arg(c, 'is_named')), None)
     return children[0], key
@@ -198,10 +198,10 @@ def _dart_selector_subscript_key(selector_node: Any) -> Optional[Any]:
     predicate that scan calls (BACK-458 Dart item, the read half).
     """
     kids = _children(selector_node)
-    if len(kids) != 1 or kids[0].kind() not in _DART_INDEX_WRAPPERS:
+    if len(kids) != 1 or _zero_arg(kids[0], 'kind') not in _DART_INDEX_WRAPPERS:
         return None
     wrapper_kids = _children(kids[0])
-    if len(wrapper_kids) != 1 or wrapper_kids[0].kind() != 'index_selector':
+    if len(wrapper_kids) != 1 or _zero_arg(wrapper_kids[0], 'kind') != 'index_selector':
         return None
     return next((c for c in _children(wrapper_kids[0]) if _zero_arg(c, 'is_named')), None)
 
@@ -238,8 +238,8 @@ def _member_parts(node: Any) -> tuple:
     )
     if prop is not None:
         return obj, prop
-    obj_span = (obj.start_byte(), obj.end_byte())
-    candidates = [c for c in _children(node) if c.is_named() and (c.start_byte(), c.end_byte()) != obj_span]
+    obj_span = (_zero_arg(obj, 'start_byte'), _zero_arg(obj, 'end_byte'))
+    candidates = [c for c in _children(node) if _zero_arg(c, 'is_named') and (_zero_arg(c, 'start_byte'), _zero_arg(c, 'end_byte')) != obj_span]
     if candidates:
         return obj, candidates[-1]
     return None, None
@@ -250,7 +250,7 @@ def _first_call_arg(call_node: Any, get_text: Callable) -> Optional[Any]:
     if args is None:
         return None
     for child in _children(args):
-        if child.is_named():
+        if _zero_arg(child, 'is_named'):
             return child
     return None
 
@@ -274,7 +274,7 @@ class _KeysWalker:
         end = node.end_position().row + 1
         if end < self.from_line or start > self.to_line:
             return
-        ntype = node.kind()
+        ntype = _zero_arg(node, 'kind')
 
         if ntype in _ASSIGNMENT_NODES:
             self._walk_assignment(node, ntype, context)
@@ -313,7 +313,7 @@ class _KeysWalker:
 
         prev_identifier = None
         for child in _children(node):
-            ctype = child.kind()
+            ctype = _zero_arg(child, 'kind')
             # Dart read target (`m['host']`) — no wrapping subscript node at
             # all, just a bare `identifier` immediately followed by a
             # sibling `selector` node, both children of THIS node rather
@@ -339,13 +339,13 @@ class _KeysWalker:
         left, right = resolve_assignment_sides(node, ntype)
         processed = set()
         if left is not None:
-            processed.add((left.start_byte(), left.end_byte()))
+            processed.add((_zero_arg(left, 'start_byte'), _zero_arg(left, 'end_byte')))
             self.walk(left, 'WRITE')
         if right is not None:
-            processed.add((right.start_byte(), right.end_byte()))
+            processed.add((_zero_arg(right, 'start_byte'), _zero_arg(right, 'end_byte')))
             self.walk(right, 'READ')
         for child in _children(node):
-            if (child.start_byte(), child.end_byte()) not in processed:
+            if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                 self.walk(child, context)
 
     def _condition_of(self, node: Any, ntype: str) -> Optional[Any]:
@@ -355,30 +355,30 @@ class _KeysWalker:
         if ntype == 'conditional_expression':
             # Python's ternary (`a if cond else b`) is fieldless — the
             # condition is the middle named child.
-            named = [c for c in _children(node) if c.is_named()]
+            named = [c for c in _children(node) if _zero_arg(c, 'is_named')]
             if len(named) == 3:
                 return named[1]
         return None
 
     def _walk_condition(self, node: Any, cond: Any, context: str) -> None:
         self.walk(cond, 'COND')
-        cond_span = (cond.start_byte(), cond.end_byte())
+        cond_span = (_zero_arg(cond, 'start_byte'), _zero_arg(cond, 'end_byte'))
         for child in _children(node):
-            if (child.start_byte(), child.end_byte()) != cond_span:
+            if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) != cond_span:
                 self.walk(child, context)
 
     def _walk_call(self, node: Any, start: int, context: str) -> bool:
         func = node.child_by_field_name('function')
         if func is None:
             return False
-        if func.kind() in ('name', 'identifier') and self.get_text(func) in _ISSET_LIKE:
+        if _zero_arg(func, 'kind') in ('name', 'identifier') and self.get_text(func) in _ISSET_LIKE:
             args = node.child_by_field_name('arguments')
             if args is not None:
                 for child in _children(args):
-                    if child.is_named():
+                    if _zero_arg(child, 'is_named'):
                         self.walk(child, 'COND')
             return True
-        if func.kind() in _MEMBER_ACCESS_NODES:
+        if _zero_arg(func, 'kind') in _MEMBER_ACCESS_NODES:
             obj, prop = _member_parts(func)
             if (
                 obj is not None and prop is not None and self.get_text(prop) == 'get'
