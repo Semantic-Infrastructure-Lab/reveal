@@ -14,6 +14,7 @@ from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 from ..core import tree_root
+from ..core.treesitter_compat import _zero_arg
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -53,10 +54,10 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         """Extract block_mapping_pair nodes from a block_node child."""
         pairs: List[Any] = []
         for mapping_child in _children(block_node):
-            if mapping_child.kind() == 'block_mapping':
+            if _zero_arg(mapping_child, 'kind') == 'block_mapping':
                 pairs.extend(
                     p for p in _children(mapping_child)
-                    if p.kind() == 'block_mapping_pair'
+                    if _zero_arg(p, 'kind') == 'block_mapping_pair'
                 )
         return pairs
 
@@ -64,7 +65,7 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         """Return mapping pairs from a YAML document node."""
         pairs: List[Any] = []
         for child in _children(doc_node):
-            if child.kind() == 'block_node':
+            if _zero_arg(child, 'kind') == 'block_node':
                 pairs.extend(self._get_mapping_pairs(child))
         return pairs
 
@@ -78,7 +79,7 @@ class YamlAnalyzer(TreeSitterAnalyzer):
             return []
         pairs: List[Any] = []
         for node in _children(tree_root(self.tree)):
-            if node.kind() == 'document':
+            if _zero_arg(node, 'kind') == 'document':
                 pairs.extend(self._get_document_mapping_pairs(node))
         return pairs
 
@@ -166,8 +167,8 @@ class JsonAnalyzer(TreeSitterAnalyzer):
         if not self.tree:
             return pairs
         for node in _children(tree_root(self.tree)):
-            if node.kind() == 'object':
-                pairs.extend(c for c in _children(node) if c.kind() == 'pair')
+            if _zero_arg(node, 'kind') == 'object':
+                pairs.extend(c for c in _children(node) if _zero_arg(c, 'kind') == 'pair')
         return pairs
 
     def _extract_key_info(self, pair_node):

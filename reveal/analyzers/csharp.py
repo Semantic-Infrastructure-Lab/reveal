@@ -29,7 +29,7 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
     # now handled generically and cached in TreeSitterAnalyzer._get_or_build_structure().
 
     def _extract_class_bases(self, node) -> List[str]:
-        node_type = node.kind()
+        node_type = _zero_arg(node, 'kind')
         # BACK-797: 'record_declaration' shares the same 'base_list' heritage
         # shape as class/interface (`record Foo(...) : IBar { ... }`) — added
         # alongside CLASS_NODE_TYPES gaining 'record_declaration', otherwise
@@ -45,17 +45,17 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
         # as its own separate 'modifier' wrapper node (unlike Java's single
         # grouped 'modifiers' node), each containing one token child.
         for child in _children(node):
-            if child.kind() != 'modifier':
+            if _zero_arg(child, 'kind') != 'modifier':
                 continue
             for sub in _children(child):
-                if sub.kind() == 'abstract':
+                if _zero_arg(sub, 'kind') == 'abstract':
                     return True
         return False
 
     def _extract_csharp_base_list(self, node) -> List[str]:
         # class Dog : Animal, IAnimal { ... }  /  interface IDerived : IBase { ... }
         base_list = next(
-            (c for c in _children(node) if c.kind() == 'base_list'), None
+            (c for c in _children(node) if _zero_arg(c, 'kind') == 'base_list'), None
         )
         if base_list is None:
             return []
@@ -67,7 +67,7 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
         return names
 
     def _csharp_base_item_name(self, item) -> Optional[str]:
-        kind = item.kind()
+        kind = _zero_arg(item, 'kind')
         if kind == 'qualified_name':
             # BACK-797: a namespace-qualified base (`System.IDisposable`,
             # `MediaBrowser.Controller.Resolvers.ItemResolver<T>`) is a
@@ -90,7 +90,7 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
         if kind == 'generic_name':
             # IFoo<T> — extract the base identifier, drop the type args
             ident = next(
-                (g for g in _children(item) if g.kind() == 'identifier'), None
+                (g for g in _children(item) if _zero_arg(g, 'kind') == 'identifier'), None
             )
             return self._get_node_text(ident).strip() if ident is not None else None
         if kind in ('identifier', 'type_identifier'):

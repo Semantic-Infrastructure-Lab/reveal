@@ -3,6 +3,7 @@
 from typing import List, Optional
 
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -31,7 +32,7 @@ class PhpAnalyzer(TreeSitterAnalyzer):
     # cached in TreeSitterAnalyzer._get_or_build_structure().
 
     def _extract_class_bases(self, node) -> List[str]:
-        node_type = node.kind()
+        node_type = _zero_arg(node, 'kind')
         if node_type in ('class_declaration', 'anonymous_class'):
             # extends (base_clause) + implements (class_interface_clause).
             # BACK-801 (PHP recall oracle): 'anonymous_class' (`new class(...)
@@ -60,7 +61,7 @@ class PhpAnalyzer(TreeSitterAnalyzer):
         # abstract class Base { ... } — 'abstract' parses to its own
         # 'abstract_modifier' node child (distinct node kind, not a token).
         for child in _children(node):
-            if child.kind() == 'abstract_modifier':
+            if _zero_arg(child, 'kind') == 'abstract_modifier':
                 return True
         return False
 
@@ -73,10 +74,10 @@ class PhpAnalyzer(TreeSitterAnalyzer):
         method_name = None
         seen_arrow = False
         for child in _children(call_node):
-            if child.kind() in ('->', '?->'):
+            if _zero_arg(child, 'kind') in ('->', '?->'):
                 seen_arrow = True
                 continue
-            if child.kind() == 'arguments':
+            if _zero_arg(child, 'kind') == 'arguments':
                 break
             if not seen_arrow:
                 receiver_text = self._get_node_text(child)
@@ -107,10 +108,10 @@ class PhpAnalyzer(TreeSitterAnalyzer):
         # type references alongside the 'extends'/'implements' keyword token.
         names: List[str] = []
         for child in _children(node):
-            if child.kind() != clause_kind:
+            if _zero_arg(child, 'kind') != clause_kind:
                 continue
             for item in _children(child):
-                if item.kind() in ('name', 'qualified_name'):
+                if _zero_arg(item, 'kind') in ('name', 'qualified_name'):
                     text = self._get_node_text(item).strip()
                     if text:
                         names.append(text)

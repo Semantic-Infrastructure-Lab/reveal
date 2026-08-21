@@ -54,7 +54,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ...core.treesitter_compat import node_children, tree_root, ts_parse
+from ...core.treesitter_compat import _zero_arg, node_children, tree_root, ts_parse
 from ...utils.path_utils import to_posix
 
 logger = logging.getLogger(__name__)
@@ -226,7 +226,7 @@ class V027(BaseRule):
 
 def _find_tables(node: Any) -> Iterator[Any]:
     """Yield every pipe_table node in the tree (not descending into one already found)."""
-    if node.kind() == 'pipe_table':
+    if _zero_arg(node, 'kind') == 'pipe_table':
         yield node
         return
     for child in node_children(node):
@@ -243,16 +243,21 @@ def _iter_param_column_entries(root: Any, guide_text: str) -> Iterator[tuple]:
     content_bytes = guide_text.encode('utf-8')
 
     def cell_text(cell: Any) -> str:
-        return content_bytes[cell.start_byte():cell.end_byte()].decode('utf-8').strip()
+        start = _zero_arg(cell, 'start_byte')
+        end = _zero_arg(cell, 'end_byte')
+        return content_bytes[start:end].decode('utf-8').strip()
 
     for table in _find_tables(root):
         header = next(
-            (c for c in node_children(table) if c.kind() == 'pipe_table_header'),
+            (c for c in node_children(table) if _zero_arg(c, 'kind') == 'pipe_table_header'),
             None,
         )
         if header is None:
             continue
-        headers = [cell_text(c) for c in node_children(header) if c.kind() == 'pipe_table_cell']
+        headers = [
+            cell_text(c) for c in node_children(header)
+            if _zero_arg(c, 'kind') == 'pipe_table_cell'
+        ]
         param_col = next(
             (i for i, h in enumerate(headers) if h.lower() in ('parameter', 'param')),
             None,
@@ -261,9 +266,9 @@ def _iter_param_column_entries(root: Any, guide_text: str) -> Iterator[tuple]:
             continue
 
         for row in node_children(table):
-            if row.kind() != 'pipe_table_row':
+            if _zero_arg(row, 'kind') != 'pipe_table_row':
                 continue
-            cells = [c for c in node_children(row) if c.kind() == 'pipe_table_cell']
+            cells = [c for c in node_children(row) if _zero_arg(c, 'kind') == 'pipe_table_cell']
             if param_col >= len(cells):
                 continue
             line = row.start_position().row + 1

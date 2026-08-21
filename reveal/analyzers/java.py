@@ -30,7 +30,7 @@ class JavaAnalyzer(TreeSitterAnalyzer):
     # handled generically and cached in TreeSitterAnalyzer._get_or_build_structure().
 
     def _extract_class_bases(self, node) -> List[str]:
-        node_type = node.kind()
+        node_type = _zero_arg(node, 'kind')
         if node_type in ('class_declaration', 'record_declaration'):
             # BACK-810/811: 'record_declaration' (Java 16+ records) shares
             # 'class_declaration''s 'superclass'/'super_interfaces' child
@@ -55,12 +55,12 @@ class JavaAnalyzer(TreeSitterAnalyzer):
         # class Dog extends Animal implements Derived, Other { ... }
         bases: List[str] = []
         for child in _children(node):
-            if child.kind() == 'superclass':
+            if _zero_arg(child, 'kind') == 'superclass':
                 for c in _children(child):
                     name = self._java_simple_type_name(c)
                     if name:
                         bases.append(name)
-            elif child.kind() == 'super_interfaces':
+            elif _zero_arg(child, 'kind') == 'super_interfaces':
                 bases.extend(self._extract_java_type_list(child))
         return bases
 
@@ -110,7 +110,7 @@ class JavaAnalyzer(TreeSitterAnalyzer):
     def _extract_java_interface_bases(self, node) -> List[str]:
         # interface Derived extends Base, Other { ... }
         for child in _children(node):
-            if child.kind() == 'extends_interfaces':
+            if _zero_arg(child, 'kind') == 'extends_interfaces':
                 return self._extract_java_type_list(child)
         return []
 
@@ -118,10 +118,10 @@ class JavaAnalyzer(TreeSitterAnalyzer):
         # public abstract class Shape { ... } — 'abstract' is a token child of
         # a single grouped 'modifiers' node, not a distinct node kind.
         for child in _children(node):
-            if child.kind() != 'modifiers':
+            if _zero_arg(child, 'kind') != 'modifiers':
                 continue
             for sub in _children(child):
-                if sub.kind() == 'abstract':
+                if _zero_arg(sub, 'kind') == 'abstract':
                     return True
         return False
 
@@ -155,7 +155,7 @@ class JavaAnalyzer(TreeSitterAnalyzer):
         # `_java_simple_type_name`.
         names: List[str] = []
         for child in _children(wrapper_node):
-            if child.kind() != 'type_list':
+            if _zero_arg(child, 'kind') != 'type_list':
                 continue
             for item in _children(child):
                 name = self._java_simple_type_name(item)
