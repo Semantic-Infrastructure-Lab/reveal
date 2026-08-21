@@ -11,6 +11,15 @@ from unittest.mock import Mock, patch, MagicMock
 import sys
 import os
 
+import pytest
+
+# BACK-1153: interface/registration/error-contract tests across all adapters
+# -- some (test_all_adapters_have_get_structure etc.) are pure shape checks,
+# others (test_adapters_raise_appropriate_exceptions) exercise real behavior.
+# All are about adapter *conformance*, not adapter *correctness* -- labeled
+# contract rather than left unmarked.
+pytestmark = pytest.mark.contract
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from reveal.adapters.base import get_adapter_class, get_renderer_class, list_supported_schemes, list_renderer_schemes

@@ -19,7 +19,15 @@ import tempfile
 import os
 import unittest
 
+import pytest
+
 from reveal.adapters.base import get_adapter_class
+
+# BACK-1153: pure key-existence/type/regex checks (see _check_contract /
+# _check_schema_alignment below) -- smoke alarms for the output contract,
+# not evidence an adapter's actual content is correct. The file's own name
+# already says this honestly; this marker just makes it queryable.
+pytestmark = pytest.mark.contract
 
 
 # Required contract fields for v1.0
