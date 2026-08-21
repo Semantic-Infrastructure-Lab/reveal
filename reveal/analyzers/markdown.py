@@ -12,6 +12,7 @@ from ..treesitter import TreeSitterAnalyzer
 from ..structure_options import StructureOptions
 from ..core import node_children as _children
 from ..core import tree_root, ts_parse
+from ..core.treesitter_compat import _zero_arg
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -101,7 +102,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         results = []
 
         def _traverse(node):
-            if node.kind() == node_type:
+            if _zero_arg(node, 'kind') == node_type:
                 results.append(node)
             for child in _children(node):
                 _traverse(child)
@@ -262,10 +263,10 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             # The first child is usually the marker (atx_h1_marker, atx_h2_marker, etc.)
             # The second child is inline (heading content)
             for child in _children(node):
-                if 'marker' in child.kind():
+                if 'marker' in _zero_arg(child, 'kind'):
                     # atx_h1_marker, atx_h2_marker, etc.
-                    level = int(child.kind()[5])  # Extract number from 'atx_h1_marker'
-                elif child.kind() == 'inline':
+                    level = int(_zero_arg(child, 'kind')[5])  # Extract number from 'atx_h1_marker'
+                elif _zero_arg(child, 'kind') == 'inline':
                     title = self._get_node_text(child).strip()
 
             if level and title:
@@ -378,7 +379,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             Link text or None if not found
         """
         for child in _children(node):
-            if child.kind() == 'link_text':
+            if _zero_arg(child, 'kind') == 'link_text':
                 # In inline grammar, link_text contains the text directly
                 return cast(str, self._get_node_text(child))
         return None
@@ -393,7 +394,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             Link URL or None if not found
         """
         for child in _children(node):
-            if child.kind() == 'link_destination':
+            if _zero_arg(child, 'kind') == 'link_destination':
                 # In inline grammar, link_destination contains the URL directly
                 return cast(str, self._get_node_text(child))
         return None
@@ -645,7 +646,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             Language identifier or 'text' if not specified
         """
         for child in _children(node):
-            if child.kind() == 'info_string':
+            if _zero_arg(child, 'kind') == 'info_string':
                 # Language tag (e.g., 'python', 'javascript')
                 # In new grammar, info_string directly contains the language text
                 lang = cast(str, self._get_node_text(child).strip())
@@ -662,7 +663,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             Source code string
         """
         for child in _children(node):
-            if child.kind() == 'code_fence_content':
+            if _zero_arg(child, 'kind') == 'code_fence_content':
                 return cast(str, self._get_node_text(child))
         return ''
 

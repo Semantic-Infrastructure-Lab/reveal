@@ -27,6 +27,7 @@ from .nav_surface_common import _get_text, _get_line
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ def scan_file_contracts_ruby(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
         if kind == 'module':
             _process_module(node, file_path, content_bytes, modules)
         elif kind == 'class':
@@ -67,7 +68,7 @@ def _tail(name: str) -> str:
 
 def _const_text(node: Any, content_bytes: bytes) -> Optional[str]:
     """Text of a `constant` or `scope_resolution` node, tail-normalized."""
-    if node.kind() in ('constant', 'scope_resolution'):
+    if _zero_arg(node, 'kind') in ('constant', 'scope_resolution'):
         return _tail(_get_text(node, content_bytes))
     return None
 
@@ -101,7 +102,7 @@ def _process_module(node: Any, file_path: str, content_bytes: bytes,
 
 def _superclass_name(node: Any, content_bytes: bytes) -> Optional[str]:
     for ch in _children(node):
-        if ch.kind() != 'superclass':
+        if _zero_arg(ch, 'kind') != 'superclass':
             continue
         for inner in _children(ch):
             name = _const_text(inner, content_bytes)
@@ -126,16 +127,16 @@ def _mixin_names(node: Any, content_bytes: bytes) -> List[str]:
     """
     names: List[str] = []
     for ch in _children(node):
-        if ch.kind() != 'body_statement':
+        if _zero_arg(ch, 'kind') != 'body_statement':
             continue
         for stmt in _children(ch):
-            if stmt.kind() != 'call':
+            if _zero_arg(stmt, 'kind') != 'call':
                 continue
             stmt_children = _children(stmt)
-            ident = next((c for c in stmt_children if c.kind() == 'identifier'), None)
+            ident = next((c for c in stmt_children if _zero_arg(c, 'kind') == 'identifier'), None)
             if ident is None or _get_text(ident, content_bytes) not in ('include', 'extend', 'prepend'):
                 continue
-            args = next((c for c in stmt_children if c.kind() == 'argument_list'), None)
+            args = next((c for c in stmt_children if _zero_arg(c, 'kind') == 'argument_list'), None)
             if args is None:
                 continue
             for arg in _children(args):

@@ -25,6 +25,7 @@ from typing import Any, Callable, Dict, List, Optional
 from ...core import suppress_treesitter_warnings  # noqa: F401 — called at scan time
 from ...core import node_children as _children
 from ...core import tree_root
+from ...core.treesitter_compat import _zero_arg
 from ...utils.path_utils import is_skippable_dir
 
 
@@ -84,7 +85,7 @@ def _walk(
     evidence: List[Dict[str, Any]],
     func_stack: List[str],
 ) -> None:
-    ntype = node.kind()
+    ntype = _zero_arg(node, 'kind')
 
     if ntype in ('function_definition', 'async_function_definition'):
         name_node = node.child_by_field_name('name')
@@ -142,7 +143,7 @@ def _check_parameters(
     evidence: List[Dict[str, Any]],
 ) -> None:
     for child in _children(params_node):
-        ctype = child.kind()
+        ctype = _zero_arg(child, 'kind')
         if ctype == 'identifier':
             if get_text(child) == var_name:
                 evidence.append({
@@ -184,7 +185,7 @@ def _check_parameters(
 def _first_identifier(node: Any, get_text: Callable) -> Optional[tuple]:
     """Return (name, node) of the first identifier child, or None."""
     for child in _children(node):
-        if child.kind() == 'identifier':
+        if _zero_arg(child, 'kind') == 'identifier':
             return (get_text(child), child)
     return None
 
@@ -195,9 +196,9 @@ def _extract_annotation(typed_node: Any, get_text: Callable) -> str:
     # Children: identifier, ":", type_node
     found_colon = False
     for child in _children(typed_node):
-        if child.kind() == ':':
+        if _zero_arg(child, 'kind') == ':':
             found_colon = True
-        elif found_colon and child.kind() not in ('=', 'comment'):
+        elif found_colon and _zero_arg(child, 'kind') not in ('=', 'comment'):
             return get_text(child).strip()
     return ''
 
@@ -226,7 +227,7 @@ def _check_assignment(
 
 
 def _lhs_contains_var(node: Any, var_name: str, get_text: Callable) -> bool:
-    if node.kind() == 'identifier' and get_text(node) == var_name:
+    if _zero_arg(node, 'kind') == 'identifier' and get_text(node) == var_name:
         return True
     # tuple/list unpacking: a, b = ...
     for child in _children(node):
@@ -311,7 +312,7 @@ _FROM_TEXT_TYPES = frozenset({'identifier', 'attribute'})
 def _infer_dict_shape(node: Any, get_text: Callable) -> str:
     keys = []
     for child in _children(node):
-        if child.kind() == 'pair':
+        if _zero_arg(child, 'kind') == 'pair':
             key_node = child.child_by_field_name('key')
             if key_node:
                 k = get_text(key_node).strip('"\'')
@@ -341,7 +342,7 @@ def _infer_await_shape(node: Any, get_text: Callable) -> str:
 def _infer_shape(node: Any, get_text: Callable) -> str:
     if node is None:
         return ''
-    ntype = node.kind()
+    ntype = _zero_arg(node, 'kind')
     if ntype in _SIMPLE_SHAPES:
         return _SIMPLE_SHAPES[ntype]
     if ntype in _LITERAL_TYPES:

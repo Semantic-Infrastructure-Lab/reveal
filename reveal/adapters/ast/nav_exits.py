@@ -138,10 +138,10 @@ def collect_exits(
             continue
 
         if from_line <= line <= to_line:
-            if node.kind() in _EXIT_KIND:
-                kind = _EXIT_KIND[node.kind()]
+            if _zero_arg(node, 'kind') in _EXIT_KIND:
+                kind = _EXIT_KIND[_zero_arg(node, 'kind')]
                 text_node = node
-                if node.kind() in _BARE_THROW_KEYWORD_KINDS:
+                if _zero_arg(node, 'kind') in _BARE_THROW_KEYWORD_KINDS:
                     parent = node.parent()
                     if parent is not None:
                         text_node = parent
@@ -156,7 +156,7 @@ def collect_exits(
                     text = text[:77] + '...'
                 results.append({'kind': 'RETURN', 'line': line, 'text': text})
                 continue
-            if node.kind() in call_node_types:
+            if _zero_arg(node, 'kind') in call_node_types:
                 callee = _extract_callee(node, get_text)
                 if _is_exit_call(callee):
                     text = get_text(node).splitlines()[0].strip()
@@ -322,7 +322,7 @@ def _get_condition(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]:
     if cond is None:
         # PHP: condition is a parenthesized_expression positional child
         for child in _children(node):
-            if child.kind() == 'parenthesized_expression':
+            if _zero_arg(child, 'kind') == 'parenthesized_expression':
                 cond = child
                 break
     if cond is None:
@@ -333,7 +333,7 @@ def _get_condition(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]:
     # Ruby `unless`/`unless_modifier` invert the sense — the body runs when the
     # condition is FALSE, so a bare condition text reads backwards. Prefix
     # `unless ` so the gate line is honest (BACK-500).
-    if node.kind() in ('unless', 'unless_modifier'):
+    if _zero_arg(node, 'kind') in ('unless', 'unless_modifier'):
         text = f'unless {text}'
     if len(text) > 60:
         text = text[:57] + '...'
@@ -366,7 +366,7 @@ def collect_gate_chains(
         if node.end_position().row + 1 < from_line or line > to_line:
             return
 
-        ntype = node.kind()
+        ntype = _zero_arg(node, 'kind')
 
         if from_line <= line <= to_line:
             if ntype in _EXIT_KIND:
