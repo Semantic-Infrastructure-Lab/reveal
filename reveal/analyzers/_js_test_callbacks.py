@@ -13,6 +13,7 @@ invisible to `get_structure()`/`--outline` entirely.
 
 from typing import Any, Dict, List
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 
 TEST_FRAMEWORK_CALLEE_NAMES = frozenset({
     'describe', 'it', 'test',
@@ -41,21 +42,23 @@ class JSTestCallbackMixin:
             callee_name = self._get_callee_name(call_node)
             if callee_name not in TEST_FRAMEWORK_CALLEE_NAMES:
                 continue
-            args_nodes = [ch for ch in _children(call_node) if ch.kind() == 'arguments']
+            args_nodes = [ch for ch in _children(call_node) if _zero_arg(ch, 'kind') == 'arguments']
             if not args_nodes:
                 continue
             arg_children = [
                 ch for ch in _children(args_nodes[0])
-                if ch.kind() not in (',', '(', ')')
+                if _zero_arg(ch, 'kind') not in (',', '(', ')')
             ]
             if not arg_children:
                 continue
             last_arg = arg_children[-1]
-            if last_arg.kind() not in ('arrow_function', 'function_expression', 'function'):
+            last_arg_kind = _zero_arg(last_arg, 'kind')
+            if last_arg_kind not in ('arrow_function', 'function_expression', 'function'):
                 continue
             # Optional string label as first arg (absent for beforeEach/afterEach etc.)
             test_name = None
-            if len(arg_children) >= 2 and arg_children[0].kind() in ('string', 'template_string'):
+            first_arg_kind = _zero_arg(arg_children[0], 'kind') if len(arg_children) >= 2 else None
+            if first_arg_kind in ('string', 'template_string'):
                 raw = self._get_node_text(arg_children[0])
                 test_name = raw.strip('"\'`')
             name = f"{callee_name}({test_name})" if test_name else callee_name

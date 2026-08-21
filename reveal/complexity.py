@@ -5,6 +5,7 @@ flow can import this without pulling the full analyzer base class into scope.
 """
 
 from .core import node_children as _children
+from .core.treesitter_compat import _zero_arg
 
 
 # Cyclomatic-complexity taxonomy. This is a SEPARATE concern from the nav
@@ -118,7 +119,7 @@ def calculate_complexity_and_depth(node) -> tuple:
         if depth > max_depth:
             max_depth = depth
         for child in _children(n):
-            child_type = child.kind()
+            child_type = _zero_arg(child, 'kind')
             if child_type in decision_types and (n_type is None or (n_type, child_type) not in keyword_pairs):
                 decision_count += 1
             child_depth = depth + 1 if child_type in nesting_types else depth

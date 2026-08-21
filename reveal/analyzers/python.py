@@ -21,11 +21,11 @@ class PythonAnalyzer(TreeSitterAnalyzer):
             return super()._extract_class_bases(node)
         # class Foo(ABC, abc.Meta, metaclass=ABCMeta): ...
         for child in _children(node):
-            if child.kind() != 'argument_list':
+            if _zero_arg(child, 'kind') != 'argument_list':
                 continue
             bases = []
             for item in _children(child):
-                if item.kind() in ('identifier', 'attribute'):
+                if _zero_arg(item, 'kind') in ('identifier', 'attribute'):
                     text = self._get_node_text(item).strip()
                     if text:
                         bases.append(text)

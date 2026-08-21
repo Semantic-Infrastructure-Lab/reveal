@@ -5,6 +5,7 @@ from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 from ..core import tree_root
+from ..core.treesitter_compat import _zero_arg
 
 _MAX_VALUE_LEN = 60
 
@@ -38,7 +39,7 @@ class BashAnalyzer(TreeSitterAnalyzer):
         """
         # Look for 'word' child (bash uses this instead of 'identifier')
         for child in _children(node):
-            if child.kind() == 'word':
+            if _zero_arg(child, 'kind') == 'word':
                 return self._get_node_text(child)
 
         # Fallback to parent implementation (checks for 'identifier' or 'name')
@@ -54,7 +55,7 @@ class BashAnalyzer(TreeSitterAnalyzer):
 
         variables = []
         for child in _children(tree_root(self.tree)):
-            if child.kind() != 'variable_assignment':
+            if _zero_arg(child, 'kind') != 'variable_assignment':
                 continue
             name_node = child.child_by_field_name('name')
             value_node = child.child_by_field_name('value')

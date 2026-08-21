@@ -12,6 +12,7 @@ from typing import Optional, Dict, Any, List, Tuple
 from ..registry import get_analyzer, get_all_analyzers, get_markdown_extensions
 from ..core import node_children as _children
 from ..core import tree_root
+from ..core.treesitter_compat import _zero_arg
 from ..capabilities import get_capability
 
 _CAPABILITY_METHODS = [
@@ -223,11 +224,11 @@ def _format_ast_node(node, depth: int = 0, max_depth: Optional[int] = None, pref
 
     # Node type and text
     indent = "  " * depth
-    node_type = node.kind()
+    node_type = _zero_arg(node, 'kind')
 
     # Show text for leaf nodes
     if node.child_count() == 0:
-        text = src_bytes[node.start_byte():node.end_byte()].decode('utf-8', errors='ignore') if src_bytes else ""
+        text = src_bytes[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8', errors='ignore') if src_bytes else ""
         if len(text) > 50:
             text = text[:47] + "..."
         lines.append(f"{indent}{node_type}: \"{text}\"")

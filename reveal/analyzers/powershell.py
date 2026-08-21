@@ -4,6 +4,7 @@ from typing import Optional, List
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 
 
 @register('.ps1', name='PowerShell', icon='⚡')
@@ -59,12 +60,13 @@ class PowerShellAnalyzer(TreeSitterAnalyzer):
         """
         # Look for 'function_name' child (PowerShell functions)
         for child in _children(node):
-            if child.kind() == 'function_name' or child.kind() == 'command_name':
+            child_kind = _zero_arg(child, 'kind')
+            if child_kind in ('function_name', 'command_name'):
                 return self._get_node_text(child)
 
         # Look for 'identifier' or 'name' (generic fallback)
         for child in _children(node):
-            if child.kind() in ('identifier', 'name'):
+            if _zero_arg(child, 'kind') in ('identifier', 'name'):
                 return self._get_node_text(child)
 
         # Fallback to parent implementation
@@ -86,7 +88,7 @@ class PowerShellAnalyzer(TreeSitterAnalyzer):
     def _get_inline_params(self, node) -> Optional[str]:
         """Return inline params string if function Name($x, $y) form, else None."""
         for child in _children(node):
-            if child.kind() != 'script_block_expression':
+            if _zero_arg(child, 'kind') != 'script_block_expression':
                 continue
             text = self._get_node_text(child).strip()
             if not text.startswith('('):
@@ -99,7 +101,7 @@ class PowerShellAnalyzer(TreeSitterAnalyzer):
     def _get_param_block(self, node) -> Optional[str]:
         """Return param block string from script_block body, or None."""
         for child in _children(node):
-            if child.kind() != 'script_block':
+            if _zero_arg(child, 'kind') != 'script_block':
                 continue
             block_text = self._get_node_text(child)
             if 'param(' not in block_text.lower():

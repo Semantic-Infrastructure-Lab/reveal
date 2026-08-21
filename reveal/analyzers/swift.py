@@ -43,7 +43,7 @@ class SwiftAnalyzer(TreeSitterAnalyzer):
         return structure
 
     def _extract_class_bases(self, node) -> List[str]:
-        if node.kind() in ('class_declaration', 'protocol_declaration'):
+        if _zero_arg(node, 'kind') in ('class_declaration', 'protocol_declaration'):
             return self._extract_swift_inheritance(node)
         return super()._extract_class_bases(node)
 
@@ -104,7 +104,7 @@ class SwiftAnalyzer(TreeSitterAnalyzer):
         # 'type_identifier' in simpler grammars — both handled).
         names: List[str] = []
         for child in _children(node):
-            if child.kind() != 'inheritance_specifier':
+            if _zero_arg(child, 'kind') != 'inheritance_specifier':
                 continue
             name = self._swift_specifier_name(child)
             if name:
@@ -113,13 +113,13 @@ class SwiftAnalyzer(TreeSitterAnalyzer):
 
     def _swift_specifier_name(self, specifier) -> Optional[str]:
         for child in _children(specifier):
-            if child.kind() == 'user_type':
+            if _zero_arg(child, 'kind') == 'user_type':
                 for sub in _children(child):
-                    if sub.kind() == 'type_identifier':
+                    if _zero_arg(sub, 'kind') == 'type_identifier':
                         text = self._get_node_text(sub).strip()
                         if text:
                             return text
-            elif child.kind() == 'type_identifier':
+            elif _zero_arg(child, 'kind') == 'type_identifier':
                 text = self._get_node_text(child).strip()
                 if text:
                     return text

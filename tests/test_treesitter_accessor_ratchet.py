@@ -42,10 +42,18 @@ import reveal
 # py-tree-sitter API, plus root_node (already fully migrated -> baseline 0).
 # Counts are *occurrences* (multiple per line counted) found by the regex below,
 # excluding the compat module itself. Ratchet direction: DOWN ONLY.
+#
+# All real call sites are migrated as of BACK-620 batch 8 (torrential-breeze-0821).
+# The remaining kind=2/is_named=1 are permanent floors, not sites: this regex is a
+# plain substring scan (see codemod_treesitter_accessors.py's own docstring), so it
+# still flags 3 docstring/comment mentions the codemod itself correctly excludes --
+# adapters/ast/nav_statewrites.py (`left.kind()`, BACK-439b/c history),
+# analyzers/imports/rust.py (`` `.kind()` ``, grammar-quirk explanation), and
+# core/node_taxonomy.py (`` `if not child.is_named(): continue` ``, code example).
 BASELINE = {
-    "kind": 30,
-    "start_byte": 2,
-    "end_byte": 2,
+    "kind": 2,
+    "start_byte": 0,
+    "end_byte": 0,
     "is_named": 1,
     "root_node": 0,
 }

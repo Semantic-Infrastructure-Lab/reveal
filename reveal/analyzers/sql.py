@@ -4,6 +4,7 @@ from typing import Dict, List, Any, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
+from ..core.treesitter_compat import _zero_arg
 
 
 @register('.sql', name='SQL', icon='🗄️')
@@ -17,14 +18,16 @@ class SQLAnalyzer(TreeSitterAnalyzer):
 
     def _find_identifier_child(self, node) -> Optional[str]:
         """Find the first identifier child's text (searches recursively)."""
-        direct = next((c for c in _children(node) if c.kind() == 'identifier'), None)
+        direct = next((c for c in _children(node) if _zero_arg(c, 'kind') == 'identifier'), None)
         if direct:
             return self._get_node_text(direct)
         # In new grammar, identifier is often nested in object_reference
         for child in _children(node):
-            if child.kind() != 'object_reference':
+            if _zero_arg(child, 'kind') != 'object_reference':
                 continue
-            nested = next((gc for gc in _children(child) if gc.kind() == 'identifier'), None)
+            nested = next(
+                (gc for gc in _children(child) if _zero_arg(gc, 'kind') == 'identifier'), None
+            )
             if nested:
                 return self._get_node_text(nested)
         return None

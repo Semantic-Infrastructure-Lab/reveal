@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import List, Optional, Set
 
 from ...core import node_children as _children
+from ...core.treesitter_compat import _zero_arg
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from .types import ImportStatement
 
@@ -88,7 +89,7 @@ class ZigImportExtractor(LanguageExtractor):
 
         args_node = None
         for child in _children(parent):
-            if child.kind() == 'FnCallArguments':
+            if _zero_arg(child, 'kind') == 'FnCallArguments':
                 args_node = child
                 break
         if args_node is None:
@@ -118,7 +119,7 @@ class ZigImportExtractor(LanguageExtractor):
         stack = list(reversed(_children(node)))
         while stack:
             cur = stack.pop()
-            if cur.kind() in kinds:
+            if _zero_arg(cur, 'kind') in kinds:
                 return analyzer._get_node_text(cur)
             stack.extend(reversed(_children(cur)))
         return None

@@ -14,6 +14,7 @@ from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
 from ..core import tree_root
+from ..core.treesitter_compat import _zero_arg
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -53,8 +54,8 @@ class DockerfileAnalyzer(TreeSitterAnalyzer):
 
         # Extract all instructions
         for node in _children(tree_root(self.tree)):
-            if node.kind() in instruction_map:
-                key = instruction_map[node.kind()]
+            if _zero_arg(node, 'kind') in instruction_map:
+                key = instruction_map[_zero_arg(node, 'kind')]
                 if key not in structure:
                     structure[key] = []
 
@@ -96,10 +97,10 @@ class DockerfileAnalyzer(TreeSitterAnalyzer):
         # Get all text except the directive keyword itself
         parts = []
         for child in _children(node):
-            if child.kind() not in ['FROM', 'RUN', 'COPY', 'ADD', 'ENV', 'EXPOSE',
+            if _zero_arg(child, 'kind') not in ['FROM', 'RUN', 'COPY', 'ADD', 'ENV', 'EXPOSE',
                                   'WORKDIR', 'ENTRYPOINT', 'CMD', 'LABEL', 'ARG']:
                 # Get text content, handling line continuations
-                text = self.content[child.start_byte():child.end_byte()]
+                text = self.content[_zero_arg(child, 'start_byte'):_zero_arg(child, 'end_byte')]
                 # Normalize whitespace from line continuations
                 text = ' '.join(text.split())
                 if text.strip():
