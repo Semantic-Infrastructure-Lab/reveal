@@ -8,7 +8,31 @@
 
 ## Overview
 
-The reveal test suite contains **3,135+ tests** across **118 test files** with **68% coverage**. This document outlines patterns, fixtures, and conventions to maintain test quality and prevent common issues.
+This document outlines patterns, fixtures, and conventions to maintain test quality and prevent common issues.
+
+**Don't trust a hardcoded count here — it always rots.** Regenerate live:
+
+```bash
+# Test count
+pytest --collect-only -q | tail -1
+
+# Test file count
+find tests -name "test_*.py" | wc -l
+
+# Coverage
+pytest --cov=reveal --cov-report=term | tail -5
+```
+
+As of 2026-08-21 (BACK-1150): 12,086 tests across 292 files, 165,701 test LOC.
+The stale numbers this section previously carried (3,135 tests / 118 files,
+dated 2026-02-12) had drifted by ~4x — a live rerun of the commands above is
+the only trustworthy source, not this paragraph a session from now.
+
+**Marker taxonomy is still coarse.** Only `unit`/`integration`/`slow` exist
+today (see `pyproject.toml`). `BACK-1149` proposes a fuller lane taxonomy
+(component/contract/cli/mcp/conformance/compat/external_fixture) — not yet
+implemented, so the "Available Markers" section below reflects what's
+actually registered, not the target state.
 
 ---
 
@@ -24,7 +48,7 @@ tests/
 ├── samples/                 # Sample code files (Java, C, etc.)
 ├── adapters/                # Adapter-specific tests
 │   └── test_claude_adapter.py
-└── test_*.py                # Main test files (118 files)
+└── test_*.py                # Main test files (count drifts -- see Overview)
 ```
 
 ### Test File Naming
@@ -381,8 +405,6 @@ def test_step_2():
 
 ## Test Coverage
 
-### Current Coverage: **68%**
-
 ### Running Coverage
 
 ```bash
@@ -413,11 +435,14 @@ Focus on:
 
 ### Parallel Execution
 
-Run tests in parallel for **3.1x speedup**:
+`addopts` in `pyproject.toml` already runs `-n auto` by default (see BACK-1152's
+note on `test_mcp_server.py` for a case where a single test still dominated
+wall time despite parallelism -- xdist parallelizes across files/classes, it
+doesn't make one pathological test fast):
 
 ```bash
-pytest -n auto  # Auto-detect CPU cores
-pytest -n 4     # Use 4 workers
+pytest -n auto  # Auto-detect CPU cores (already the default)
+pytest -n 0     # Serial -- needed for --pdb / -s under xdist
 ```
 
 ### Skipping Slow Tests
@@ -537,14 +562,11 @@ pytest --trace # Drop into debugger at start of each test
 
 ## Test Quality Metrics
 
-### Current Stats (2026-02-12)
+### Current Stats
 
-- **Total tests**: 3,135
-- **Test files**: 118
-- **Pass rate**: 100% (3,135 passed, 3 skipped)
-- **Coverage**: 68%
-- **Execution time**: ~80s (full suite)
-- **Execution time**: ~26s (parallel with `-n auto`)
+Regenerate, don't read a number off this page (see Overview) -- the
+2026-02-12 figures this section carried for six months (3,135 tests/118
+files) were off by ~4x by the time anyone next checked.
 
 ### Quality Goals
 
@@ -568,6 +590,9 @@ pytest --trace # Drop into debugger at start of each test
 
 ## Revision History
 
+- **2026-08-21** (BACK-1150): Replaced hardcoded test/file/coverage counts
+  (stale by ~4x) with regenerate-live commands throughout; noted the actual
+  marker taxonomy is still unit/integration/slow pending BACK-1149.
 - **2026-02-12**: Initial documentation (cursed-prophet-0212 session)
   - Documented test pollution issue and fix
   - Created conftest.py with common fixtures

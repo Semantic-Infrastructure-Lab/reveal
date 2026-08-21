@@ -10,7 +10,28 @@ This test suite validates that reveal's adapter system works correctly through t
 
 ## Test Coverage
 
-### ✅ Fully Tested Adapters (27 passing tests, 0 skipped)
+**Counts below drift -- regenerate instead of trusting a hardcoded number**
+(BACK-1150; this doc previously said "20 tests, 6 of 13 adapters" from its
+2026-01-16 creation and was already off by 2x within the same file):
+
+```bash
+pytest tests/test_adapter_integration.py --collect-only -q | tail -1
+grep -c '^class Test' tests/test_adapter_integration.py
+python -c "from reveal.adapters import list_supported_schemes as s; print(len(s()))"
+```
+
+As of 2026-08-21: **40 tests** across **13 test classes**, covering
+**11 of 34** registered adapter schemes (`help`, `env`, `ast`, `git`, `json`,
+`markdown`, `python`, `stats`, `imports`, `diff`, `reveal`). The other 23
+schemes (`mysql`, `sqlite`, `xlsx`, `ssl`, `nginx`, `domain`, `cpanel`,
+`autossl`, `letsencrypt`, `calls`, `contracts`, `depends`, `deps`,
+`architecture`, `hotspots`, `overview`, `surface`, `testability`, `trace`,
+`patches`, `pack`, `claude`, `codex`) have no CLI-subprocess integration test
+here -- some are covered by other test files (see the file's own imports/
+adjacent `test_*.py` for adapter-specific unit coverage), this file is not
+the single source of truth for adapter coverage overall.
+
+### ✅ Adapters covered by this file
 
 #### help:// - Help System Adapter (4 tests)
 - ✅ Lists available help topics
@@ -31,7 +52,7 @@ This test suite validates that reveal's adapter system works correctly through t
 - ✅ Handles invalid Python gracefully
 - **Usage:** `reveal ast://./src`, `reveal ast://.?complexity>10`
 
-#### git:// - Git Repository Adapter (4 tests) ✨ NEW: Routing bug fixed!
+#### git:// - Git Repository Adapter (4 tests)
 - ✅ Shows repository overview (branches, tags, commits)
 - ✅ Shows branch commit history
 - ✅ Shows detailed commit history for refs
@@ -49,7 +70,7 @@ This test suite validates that reveal's adapter system works correctly through t
 - ✅ Searches directories for markdown files
 - **Usage:** `reveal markdown://./docs`
 
-#### python:// - Python Runtime Adapter (5 tests) ✨ NEW
+#### python:// - Python Runtime Adapter (5 tests)
 - ✅ Shows Python environment information
 - ✅ Shows version details
 - ✅ Lists installed packages
@@ -57,7 +78,7 @@ This test suite validates that reveal's adapter system works correctly through t
 - ✅ Handles invalid elements gracefully
 - **Usage:** `reveal python://`, `reveal python://version`, `reveal python://packages`
 
-#### stats:// - Codebase Statistics Adapter (2 tests) ✨ NEW
+#### stats:// - Codebase Statistics Adapter (2 tests)
 - ✅ Shows codebase metrics (files, lines, functions, complexity)
 - ✅ Handles nonexistent paths gracefully
 - **Usage:** `reveal stats://./src`
@@ -112,26 +133,33 @@ python -m pytest tests/test_adapter_integration.py --cov=reveal --cov-report=ter
 
 ## Coverage Impact
 
-- **Tests added:** 20 total (17 passing, 3 skipped)
-- **Overall test count:** 2154 → 2171 (+17 tests)
-- **Coverage improvement:** 73% → 74% (+1%)
-- **Adapters tested:** 6 of 13 registered adapters
+See the regenerate commands under "Test Coverage" above -- this section
+previously carried point-in-time counts from 2026-01-16 (20 tests, 6/13
+adapters) that had already drifted (actual: 40 tests, 11/34 adapters) by the
+time anyone next read it. Don't hardcode a snapshot here again.
 
 ## Future Improvements
 
+Already done since this doc's original "High Priority" list was written:
+git:// CLI routing fixed, python:// tests added, imports:// tests added
+(`TestImportsAdapterIntegration`), diff:// tests added
+(`TestDiffAdapterIntegration`), stats:// tests added
+(`TestStatsAdapterIntegration`). Still open:
+
 ### High Priority
-1. **Fix git:// CLI routing** - Enable 3 skipped tests
-2. **Add python:// adapter tests** - Runtime environment inspection
-3. **Add imports:// adapter tests** - Import graph analysis
-4. **Add diff:// adapter tests** - Semantic diff functionality
-5. **Add mysql:// adapter tests** - Database inspection (requires mock)
+1. **Add mysql:// / sqlite:// adapter tests** - Database inspection (requires mock/fixture DB)
+2. **Add xlsx:// adapter tests** - Spreadsheet inspection
 
 ### Medium Priority
-6. **Add sqlite:// adapter tests** - Database inspection
-7. **Add stats:// adapter tests** - File statistics
-8. **Test error scenarios** - Invalid inputs, edge cases
-9. **Test query parameters** - Complex query strings
-10. **Test element extraction** - Specific element queries
+3. **Test error scenarios** - Invalid inputs, edge cases
+4. **Test query parameters** - Complex query strings
+5. **Test element extraction** - Specific element queries
+6. **Add coverage for the remaining untested schemes** listed under "Test
+   Coverage" above (ssl/nginx/domain/cpanel/autossl/letsencrypt/calls/
+   contracts/depends/deps/architecture/hotspots/overview/surface/
+   testability/trace/patches/pack/claude/codex) -- audit which already have
+   adapter-specific unit coverage elsewhere before assuming a gap here means
+   a gap overall.
 
 ### Low Priority
 11. **Performance tests** - Adapter response times
