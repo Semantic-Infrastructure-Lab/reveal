@@ -34,7 +34,8 @@ def _generic_call_hits(
     # ['x.field.method']).
     line = node.start_position().row + 1
     in_range = from_line <= line <= to_line
-    if not (node.kind() in call_node_types and node.kind() != 'attribute_call' and in_range):
+    node_kind = _zero_arg(node, 'kind')
+    if not (node_kind in call_node_types and node_kind != 'attribute_call' and in_range):
         return []
     callee = _extract_callee(node, get_text, call_node_types)
     # BACK-744: 'init_declarator' is a CALL_NODE_TYPES member for C++
@@ -62,7 +63,7 @@ def _dart_selector_hits(
     # (createNewPageInSpace) — every call in the function, including
     # `find.byWidgetPredicate(...)` and 8 others, was silently invisible
     # to --calls (BACK-431 feature-breadth pass).
-    if not any(c.kind() == 'selector' for c in children):
+    if not any(_zero_arg(c, 'kind') == 'selector' for c in children):
         return []
     hits = _extract_dart_selector_calls(children, get_text)
     return [call for call in hits if from_line <= call['line'] <= to_line]
@@ -80,7 +81,7 @@ def _zig_suffix_hits(
     # cellStyle): `cell.hasStyling()` and `self.page.styles.get(...)`
     # were both silently invisible to --calls (BACK-431 feature-breadth
     # pass).
-    if node.kind() != 'SuffixExpr':
+    if _zero_arg(node, 'kind') != 'SuffixExpr':
         return []
     hits = _extract_zig_suffix_calls(children, get_text)
     return [call for call in hits if from_line <= call['line'] <= to_line]
@@ -102,7 +103,8 @@ def _gdscript_attribute_hits(
     # (ik_fabrik.gd's chain_backward): `bone_nodes[...].normalized()`
     # and 4 others were silently invisible (BACK-431 feature-breadth
     # pass).
-    if not (node.kind() == 'attribute' and any(c.kind() == 'attribute_call' for c in children)):
+    if not (_zero_arg(node, 'kind') == 'attribute' and
+            any(_zero_arg(c, 'kind') == 'attribute_call' for c in children)):
         return []
     hits = _extract_gdscript_attribute_calls(children, get_text)
     return [call for call in hits if from_line <= call['line'] <= to_line]
@@ -227,7 +229,7 @@ def _extract_dart_selector_calls(children: List[Any], get_text: Callable) -> Lis
     results: List[Dict[str, Any]] = []
     base_parts: List[str] = []
     for child in children:
-        kind = child.kind()
+        kind = _zero_arg(child, 'kind')
         if kind == 'identifier':
             base_parts = [get_text(child)]
             continue
@@ -238,7 +240,7 @@ def _extract_dart_selector_calls(children: List[Any], get_text: Callable) -> Lis
         if not sel_children:
             continue
         inner = sel_children[0]
-        inner_kind = inner.kind()
+        inner_kind = _zero_arg(inner, 'kind')
         if inner_kind == 'argument_part':
             callee = ''.join(base_parts) if base_parts else None
             line = child.start_position().row + 1
@@ -247,7 +249,7 @@ def _extract_dart_selector_calls(children: List[Any], get_text: Callable) -> Lis
             base_parts = []
         elif inner_kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
             inner_sub = _children(inner)
-            if inner_sub and inner_sub[0].kind() == 'index_selector':
+            if inner_sub and _zero_arg(inner_sub[0], 'kind') == 'index_selector':
                 base_parts = []
             else:
                 member = get_text(inner_sub[-1]).strip() if inner_sub else ''
@@ -332,7 +334,7 @@ def _extract_zig_suffix_calls(children: List[Any], get_text: Callable) -> List[D
         return results
     base_parts: List[str] = []
     rest = children[1:]
-    if children[0].kind() in ('IDENTIFIER', 'BUILTINIDENTIFIER'):
+    if _zero_arg(children[0], 'kind') in ('IDENTIFIER', 'BUILTINIDENTIFIER'):
         base_parts = [get_text(children[0])]
     elif _zero_arg(children[0], 'kind') == '.' and len(children) > 1 and _zero_arg(children[1], 'kind') == 'IDENTIFIER':
         # `.fixed(&buf)` — Zig's type-inferred enum-literal call syntax
@@ -350,7 +352,7 @@ def _extract_zig_suffix_calls(children: List[Any], get_text: Callable) -> List[D
         base_parts = [get_text(children[1])]
         rest = children[2:]
     for child in rest:
-        kind = child.kind()
+        kind = _zero_arg(child, 'kind')
         if kind == 'FnCallArguments':
             callee = ''.join(base_parts) if base_parts else None
             line = child.start_position().row + 1
@@ -359,8 +361,10 @@ def _extract_zig_suffix_calls(children: List[Any], get_text: Callable) -> List[D
             base_parts = []
         elif kind == 'FieldOrFnCall':
             seg_children = _children(child)
-            names = [c for c in seg_children if c.kind() == 'IDENTIFIER']
-            args = next((c for c in seg_children if c.kind() == 'FnCallArguments'), None)
+            names = [c for c in seg_children if _zero_arg(c, 'kind') == 'IDENTIFIER']
+            args = next(
+                (c for c in seg_children if _zero_arg(c, 'kind') == 'FnCallArguments'), None
+            )
             member = get_text(names[0]).strip() if names else ''
             if args is not None:
                 callee = (
@@ -389,17 +393,19 @@ def _extract_gdscript_attribute_calls(children: List[Any], get_text: Callable) -
     if not children:
         return results
     base_parts: List[str] = []
-    if children[0].kind() == 'identifier':
+    if _zero_arg(children[0], 'kind') == 'identifier':
         base_parts = [get_text(children[0])]
     for child in children[1:]:
-        kind = child.kind()
+        kind = _zero_arg(child, 'kind')
         if kind == 'identifier':
             member = get_text(child).strip()
             if member:
                 base_parts = base_parts + [f'.{member}'] if base_parts else [f'.{member}']
         elif kind == 'attribute_call':
             seg_children = _children(child)
-            name_node = next((c for c in seg_children if c.kind() == 'identifier'), None)
+            name_node = next(
+                (c for c in seg_children if _zero_arg(c, 'kind') == 'identifier'), None
+            )
             member = get_text(name_node).strip() if name_node else ''
             callee = (
                 ''.join(base_parts) + f'.{member}' if base_parts and member
@@ -475,7 +481,7 @@ def _extract_callee(
     # `path.resolveIndex()` → "path"). Rebuild the receiver-qualified callee so
     # the effect taxonomy and calls:// see `Files.createDirectories` /
     # `path.resolveIndex` (BACK-416).
-    if call_node.kind() == 'method_invocation':
+    if _zero_arg(call_node, 'kind') == 'method_invocation':
         return _extract_java_method_invocation_callee(call_node, get_text, call_node_types)
 
     # Ruby: `call` exposes 'receiver'/'method'/'arguments' fields directly
@@ -486,7 +492,8 @@ def _extract_callee(
     # via real Discourse source, BACK-431 feature-breadth pass). A
     # receiver-less call (`puts(x)`) has no method field to separate out,
     # so it falls through to the generic path unchanged.
-    if call_node.kind() == 'call' and call_node.child_by_field_name('receiver') is not None:
+    if (_zero_arg(call_node, 'kind') == 'call' and
+            call_node.child_by_field_name('receiver') is not None):
         return _extract_ruby_call_callee(call_node, get_text, call_node_types)
 
     callee_node = call_node.child(0)
@@ -532,7 +539,7 @@ def _extract_callee(
     # calls (`obj.method`) are left receiver-qualified — the taxonomy needs that.
     if (
         call_node_types
-        and callee_node.kind() in _MEMBER_ACCESS_KINDS
+        and _zero_arg(callee_node, 'kind') in _MEMBER_ACCESS_KINDS
         and _receiver_contains_call(callee_node, call_node_types)
     ):
         prop = _trailing_property_name(callee_node, get_text)
@@ -543,7 +550,7 @@ def _extract_callee(
         return first_line or None
 
     text = get_text(callee_node).lstrip('*').strip()
-    if callee_node.kind() == 'list_splat':
+    if _zero_arg(callee_node, 'kind') == 'list_splat':
         for child in _children(callee_node):
             t = get_text(child).lstrip('*').strip()
             if t:
@@ -557,14 +564,14 @@ def _receiver_contains_call(member_node: Any, call_node_types: frozenset) -> boo
     The trailing property child (e.g. `.catch`) is skipped — we only care whether
     the *object* being accessed is itself a call result (chained/fluent call).
     """
-    named = [c for c in _children(member_node) if c.is_named()]
+    named = [c for c in _children(member_node) if _zero_arg(c, 'is_named')]
     # The last named child is the property/field being accessed; the receiver is
     # everything before it. Only scan the receiver for nested calls.
     for child in named[:-1] if len(named) > 1 else named:
         stack = [child]
         while stack:
             node = stack.pop()
-            if node.kind() in call_node_types:
+            if _zero_arg(node, 'kind') in call_node_types:
                 return True
             stack.extend(_children(node))
     return False
@@ -572,7 +579,7 @@ def _receiver_contains_call(member_node: Any, call_node_types: frozenset) -> boo
 
 def _trailing_property_name(member_node: Any, get_text: Callable) -> Optional[str]:
     """Return the trailing property/field identifier text of a member-access node."""
-    named = [c for c in _children(member_node) if c.is_named()]
+    named = [c for c in _children(member_node) if _zero_arg(c, 'is_named')]
     if not named:
         return None
     trailing = named[-1]
@@ -582,8 +589,8 @@ def _trailing_property_name(member_node: Any, get_text: Callable) -> Optional[st
     # leading dot the caller already prepends (BACK-478 move 1 step 2: found
     # while migrating this file onto the shared MEMBER_ACCESS_NODES family,
     # which made Kotlin/Swift chains reach this function for the first time).
-    if trailing.kind() == 'navigation_suffix':
-        suffix_named = [c for c in _children(trailing) if c.is_named()]
+    if _zero_arg(trailing, 'kind') == 'navigation_suffix':
+        suffix_named = [c for c in _children(trailing) if _zero_arg(c, 'is_named')]
         if not suffix_named:
             return None
         trailing = suffix_named[-1]
@@ -601,16 +608,16 @@ def _extract_member_call_callee(node: Any, get_text: Callable) -> Optional[str]:
     method_name: Optional[str] = None
     seen_arrow = False
     for child in _children(node):
-        if child.kind() in ('->', '?->'):
+        if _zero_arg(child, 'kind') in ('->', '?->'):
             seen_arrow = True
             continue
-        if child.kind() == 'arguments':
+        if _zero_arg(child, 'kind') == 'arguments':
             break
         if not seen_arrow:
             if receiver_text is None:
                 receiver_text = get_text(child).strip()
         else:
-            if child.kind() == 'name':
+            if _zero_arg(child, 'kind') == 'name':
                 method_name = get_text(child).strip()
                 break
     if receiver_text and method_name:
@@ -631,16 +638,16 @@ def _extract_object_creation_callee(node: Any, get_text: Callable) -> Optional[s
     (`Dictionary`, not `Dictionary<K, V>`) to match plain `new Foo()`.
     """
     for child in _children(node):
-        if child.kind() in ('name', 'qualified_name'):
+        if _zero_arg(child, 'kind') in ('name', 'qualified_name'):
             class_name = get_text(child).strip()
             if class_name:
                 return f"new {class_name}"
-        if child.kind() == 'identifier':
+        if _zero_arg(child, 'kind') == 'identifier':
             class_name = get_text(child).strip()
             if class_name:
                 return f"new {class_name}"
-        if child.kind() == 'generic_name':
-            base = next((c for c in _children(child) if c.kind() == 'identifier'), None)
+        if _zero_arg(child, 'kind') == 'generic_name':
+            base = next((c for c in _children(child) if _zero_arg(c, 'kind') == 'identifier'), None)
             if base is not None:
                 class_name = get_text(base).strip()
                 if class_name:
@@ -842,7 +849,7 @@ def _extract_cpp_direct_init_callee(node: Any, get_text: Callable) -> Optional[s
     return text.split('::')[-1] if kind == 'qualified_identifier' else text
 
 
-# Pure `node.kind() -> handler(node, get_text)` dispatch for _extract_callee
+# Pure `_zero_arg(node, 'kind') -> handler(node, get_text)` dispatch for _extract_callee
 # above (BACK-918). Each handler here needs only the call node and the text
 # getter — mirrors treesitter.py:_CALLEE_NAME_DISPATCH (BACK-915 slice 4).
 # Kinds needing `call_node_types` (method_invocation, Ruby's receiver-qualified
@@ -904,7 +911,7 @@ def _extract_java_method_invocation_callee(
     """
     children = _children(node)
     arg_idx = next(
-        (i for i, c in enumerate(children) if c.kind() == 'argument_list'),
+        (i for i, c in enumerate(children) if _zero_arg(c, 'kind') == 'argument_list'),
         len(children),
     )
     pre = children[:arg_idx]
@@ -912,7 +919,7 @@ def _extract_java_method_invocation_callee(
         return None
     name = get_text(pre[-1]).strip()
     # Qualified form: [object, '.', name]
-    if len(pre) >= 3 and pre[-2].kind() in ('.', '?.'):
+    if len(pre) >= 3 and _zero_arg(pre[-2], 'kind') in ('.', '?.'):
         obj_node = pre[0]
         if call_node_types and _subtree_contains_call(obj_node, call_node_types):
             return f".{name}" if name else None
@@ -953,7 +960,7 @@ def _subtree_contains_call(node: Any, call_node_types: frozenset) -> bool:
     stack = [node]
     while stack:
         cur = stack.pop()
-        if cur.kind() in call_node_types:
+        if _zero_arg(cur, 'kind') in call_node_types:
             return True
         stack.extend(_children(cur))
     return False
@@ -965,10 +972,13 @@ def _extract_first_arg(call_node: Any, get_text: Callable) -> tuple:
         # 'token_tree': Rust macro_invocation's argument container (e.g.
         # `tracing::debug!("msg", x)`'s `("msg", x)`) -- not an
         # argument_list, but shaped the same way for this purpose.
-        if child.kind() in ('argument_list', 'arguments', 'call_arguments', 'token_tree'):
+        if _zero_arg(child, 'kind') in (
+            'argument_list', 'arguments', 'call_arguments', 'token_tree'
+        ):
             real_args = [
                 c for c in _children(child)
-                if c.kind() not in ('(', ')', ',', 'comment') and c.is_named()
+                if _zero_arg(c, 'kind') not in ('(', ')', ',', 'comment')
+                and _zero_arg(c, 'is_named')
             ]
             if not real_args:
                 return None, False

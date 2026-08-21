@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 from ...core import node_children as _children
+from ...core.treesitter_compat import _zero_arg
 from .node_taxonomy import (
     FOR_NODES, FOR_EXPRESSION_NODES, FOR_EACH_NAME_VALUE_NODES,
     FOR_RANGE_LOOP_NODES, IF_WHILE_NODES, MATCH_EXPRESSION_NODES,
@@ -89,9 +90,9 @@ def _lua_assignment_sides(n: Any) -> tuple:
     smoke-tier audit)."""
     left = right = None
     for child in _children(n):
-        if child.kind() == 'variable_list':
+        if _zero_arg(child, 'kind') == 'variable_list':
             left = child
-        elif child.kind() == 'expression_list':
+        elif _zero_arg(child, 'kind') == 'expression_list':
             right = child
     return left, right
 
@@ -103,7 +104,7 @@ def _positional_assignment_sides(n: Any) -> tuple:
     `assignment_expression` expose the fields (BACK-476). The declaration
     form (`var x = ...`) is handled separately via _DECL_SHAPES; this is only
     the bare reassignment."""
-    named = [child for child in _children(n) if child.is_named()]
+    named = [child for child in _children(n) if _zero_arg(child, 'is_named')]
     if len(named) >= 2:
         return named[0], named[-1]
     return None, None
@@ -167,7 +168,7 @@ class VarFlowWalker:
     own_name_pos: Optional[tuple] = None
 
     def walk(self, n: Any, c: str) -> None:
-        ntype = n.kind()
+        ntype = _zero_arg(n, 'kind')
         line = n.start_position().row + 1
 
         if n.end_position().row + 1 < self.from_line or line > self.to_line:
@@ -331,8 +332,8 @@ class VarFlowWalker:
         children = _children(n)
         if (
             len(children) == 3
-            and children[0].kind() in ('identifier', 'name')
-            and children[1].kind() == '='
+            and _zero_arg(children[0], 'kind') in ('identifier', 'name')
+            and _zero_arg(children[1], 'kind') == '='
         ):
             self.walk(children[2], 'READ')
             return
@@ -352,7 +353,7 @@ class VarFlowWalker:
         is a READ.
         """
         for child in _children(n):
-            if child.kind() == 'assignment_expression':
+            if _zero_arg(child, 'kind') == 'assignment_expression':
                 right = child.child_by_field_name('right')
                 if right is not None:
                     self.walk(right, 'READ')
@@ -369,7 +370,8 @@ class VarFlowWalker:
             op = n.child_by_field_name('operator')
             if op is not None:
                 is_augmented = self.get_text(op) != '='
-            elif n.child_count() == 3 and not n.child(1).is_named() and n.child(1).kind() != '=':
+            elif (n.child_count() == 3 and not _zero_arg(n.child(1), 'is_named') and
+                    _zero_arg(n.child(1), 'kind') != '='):
                 # Go's assignment_statement has no 'operator' field at all —
                 # the operator is just the unnamed middle child token.
                 is_augmented = True
@@ -380,11 +382,11 @@ class VarFlowWalker:
         if right:
             self.walk(right, 'READ')
         processed = {
-            (left.start_byte(), left.end_byte()) if left else None,
-            (right.start_byte(), right.end_byte()) if right else None,
+            (_zero_arg(left, 'start_byte'), _zero_arg(left, 'end_byte')) if left else None,
+            (_zero_arg(right, 'start_byte'), _zero_arg(right, 'end_byte')) if right else None,
         }
         for child in _children(n):
-            if (child.start_byte(), child.end_byte()) not in processed:
+            if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                 self.walk(child, c)
 
     def _walk_decl_shape(self, n: Any, shape: _DeclShape) -> None:
@@ -406,15 +408,15 @@ class VarFlowWalker:
             value = getattr(self, shape.missing_value)(n, name)
 
         processed = {
-            (name.start_byte(), name.end_byte()) if name else None,
-            (value.start_byte(), value.end_byte()) if value else None,
+            (_zero_arg(name, 'start_byte'), _zero_arg(name, 'end_byte')) if name else None,
+            (_zero_arg(value, 'start_byte'), _zero_arg(value, 'end_byte')) if value else None,
         }
         if name:
             self.walk(name, 'WRITE')
         if value:
             self.walk(value, 'READ')
         for child in _children(n):
-            if (child.start_byte(), child.end_byte()) not in processed:
+            if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                 self.walk(child, 'READ')
 
     @staticmethod
@@ -427,7 +429,7 @@ class VarFlowWalker:
         Kotlin declaration is silently mislabeled as a read instead of a
         write (BACK-431 Issue G smoke-tier audit)."""
         for child in _children(n):
-            if child.kind() == 'variable_declaration':
+            if _zero_arg(child, 'kind') == 'variable_declaration':
                 return child
         return None
 
@@ -435,12 +437,13 @@ class VarFlowWalker:
     def _csharp_missing_value(n: Any, name: Optional[Any]) -> Optional[Any]:
         """C#'s variable_declarator has no 'value' field — the initializer
         is just the last named child that isn't the name (after '=')."""
-        name_range = (name.start_byte(), name.end_byte()) if name else None
+        name_range = (_zero_arg(name, 'start_byte'), _zero_arg(name, 'end_byte')) if name else None
         value = None
         for child in _children(n):
-            if not child.is_named():
+            if not _zero_arg(child, 'is_named'):
                 continue
-            if name_range is not None and (child.start_byte(), child.end_byte()) == name_range:
+            child_range = (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte'))
+            if name_range is not None and child_range == name_range:
                 continue
             value = child
         return value
@@ -453,17 +456,19 @@ class VarFlowWalker:
         name = None
         eq_idx = None
         for i, child in enumerate(children):
-            if child.kind() == '=':
+            if _zero_arg(child, 'kind') == '=':
                 eq_idx = i
                 break
-            if child.kind() == 'identifier' and name is None:
+            if _zero_arg(child, 'kind') == 'identifier' and name is None:
                 name = child
-        processed = {(name.start_byte(), name.end_byte())} if name else set()
+        processed = (
+            {(_zero_arg(name, 'start_byte'), _zero_arg(name, 'end_byte'))} if name else set()
+        )
         if name:
             self.walk(name, 'WRITE')
         if eq_idx is not None:
             for child in children[eq_idx + 1:]:
-                if (child.start_byte(), child.end_byte()) not in processed:
+                if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                     self.walk(child, 'READ')
 
     def _walk_gdscript_var_decl(self, n: Any) -> None:
@@ -473,9 +478,9 @@ class VarFlowWalker:
         name = None
         value = None
         for child in _children(n):
-            if child.kind() == 'name':
+            if _zero_arg(child, 'kind') == 'name':
                 name = child
-            elif child.kind() not in ('var', 'const', '='):
+            elif _zero_arg(child, 'kind') not in ('var', 'const', '='):
                 value = child
         if name is not None and self.get_text(name) == self.var_name:
             line = name.start_position().row + 1
@@ -488,14 +493,16 @@ class VarFlowWalker:
         """Zig `VarDecl` — no fields; name is the first IDENTIFIER child."""
         name = None
         for child in _children(n):
-            if child.kind() == 'IDENTIFIER':
+            if _zero_arg(child, 'kind') == 'IDENTIFIER':
                 name = child
                 break
-        processed = {(name.start_byte(), name.end_byte())} if name else set()
+        processed = (
+            {(_zero_arg(name, 'start_byte'), _zero_arg(name, 'end_byte'))} if name else set()
+        )
         if name:
             self.walk(name, 'WRITE')
         for child in _children(n):
-            if (child.start_byte(), child.end_byte()) not in processed:
+            if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                 self.walk(child, 'READ')
 
     def _walk_scala_enumerator(self, n: Any) -> None:
@@ -504,26 +511,28 @@ class VarFlowWalker:
         expr` (value binding), and a bare boolean guard (`if cond`, wrapped
         in its own `guard` child) which binds nothing at all."""
         children = list(_children(n))
-        if children and children[0].kind() == 'guard':
+        if children and _zero_arg(children[0], 'kind') == 'guard':
             self.walk(children[0], 'READ')
             return
         name = None
         op_idx = None
         for i, child in enumerate(children):
-            if child.kind() in ('<-', '='):
+            if _zero_arg(child, 'kind') in ('<-', '='):
                 op_idx = i
                 break
-            if child.kind() == 'identifier' and name is None:
+            if _zero_arg(child, 'kind') == 'identifier' and name is None:
                 name = child
         if op_idx is None:
             for child in children:
                 self.walk(child, 'READ')
             return
-        processed = {(name.start_byte(), name.end_byte())} if name else set()
+        processed = (
+            {(_zero_arg(name, 'start_byte'), _zero_arg(name, 'end_byte'))} if name else set()
+        )
         if name:
             self.walk(name, 'WRITE')
         for child in children[op_idx + 1:]:
-            if (child.start_byte(), child.end_byte()) not in processed:
+            if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                 self.walk(child, 'READ')
 
     def _walk_named_expression(self, n: Any) -> None:
@@ -538,23 +547,23 @@ class VarFlowWalker:
         body = n.child_by_field_name('body')
         processed: set = set()
         if left:
-            processed.add((left.start_byte(), left.end_byte()))
+            processed.add((_zero_arg(left, 'start_byte'), _zero_arg(left, 'end_byte')))
             self.walk(left, 'WRITE')
         if right:
-            processed.add((right.start_byte(), right.end_byte()))
+            processed.add((_zero_arg(right, 'start_byte'), _zero_arg(right, 'end_byte')))
             self.walk(right, 'READ')
         if body:
-            processed.add((body.start_byte(), body.end_byte()))
+            processed.add((_zero_arg(body, 'start_byte'), _zero_arg(body, 'end_byte')))
             self.walk(body, 'READ')
         for child in _children(n):
-            if (child.start_byte(), child.end_byte()) not in processed:
+            if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                 self.walk(child, c)
 
     def _walk_with(self, n: Any, c: str) -> None:
         for child in _children(n):
-            if child.kind() == 'with_clause':
+            if _zero_arg(child, 'kind') == 'with_clause':
                 for item in _children(child):
-                    if item.kind() == 'with_item':
+                    if _zero_arg(item, 'kind') == 'with_item':
                         value = item.child_by_field_name('value')
                         alias = item.child_by_field_name('alias')
                         if value:
@@ -563,7 +572,7 @@ class VarFlowWalker:
                             self.walk(alias, 'WRITE')
                     else:
                         self.walk(item, c)
-            elif child.kind() == 'as_pattern':
+            elif _zero_arg(child, 'kind') == 'as_pattern':
                 children = _children(child)
                 if children:
                     self.walk(children[0], 'READ')
@@ -576,26 +585,26 @@ class VarFlowWalker:
         cond = n.child_by_field_name('condition')
         processed: set = set()
         if cond:
-            processed.add((cond.start_byte(), cond.end_byte()))
+            processed.add((_zero_arg(cond, 'start_byte'), _zero_arg(cond, 'end_byte')))
             self.walk(cond, 'READ/COND')
         for child in _children(n):
-            if (child.start_byte(), child.end_byte()) not in processed:
+            if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                 self.walk(child, c)
 
     def _walk_match(self, n: Any, c: str) -> None:
         value = n.child_by_field_name('value')
         processed: set = set()
         if value:
-            processed.add((value.start_byte(), value.end_byte()))
+            processed.add((_zero_arg(value, 'start_byte'), _zero_arg(value, 'end_byte')))
             self.walk(value, 'READ')
         for child in _children(n):
-            if (child.start_byte(), child.end_byte()) not in processed:
+            if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                 self.walk(child, c)
 
     def _expand_dict_writes(self, dict_node: Any, via: str) -> None:
         """Emit one WRITE event per key in a dict literal `{key: val, ...}`."""
         for pair in _children(dict_node):
-            if pair.kind() == 'pair':
+            if _zero_arg(pair, 'kind') == 'pair':
                 key_node = pair.child_by_field_name('key')
                 val_node = pair.child_by_field_name('value')
                 if key_node:
@@ -610,7 +619,7 @@ class VarFlowWalker:
                         })
                 if val_node:
                     self.walk(val_node, 'READ')
-            elif pair.kind() not in ('{', '}', ','):
+            elif _zero_arg(pair, 'kind') not in ('{', '}', ','):
                 self.walk(pair, 'READ')
 
     def _walk_call(self, n: Any, c: str) -> None:
@@ -633,7 +642,7 @@ class VarFlowWalker:
         func = n.child_by_field_name('function')
         args = n.child_by_field_name('arguments')
 
-        if func and func.kind() == 'attribute':
+        if func and _zero_arg(func, 'kind') == 'attribute':
             obj = func.child_by_field_name('object')
             attr = func.child_by_field_name('attribute')
             if obj and self.get_text(obj) == self.var_name and attr:
@@ -644,12 +653,14 @@ class VarFlowWalker:
 
                 if method == 'update' and args:
                     for arg in _children(args):
-                        if arg.kind() == 'dictionary':
+                        if _zero_arg(arg, 'kind') == 'dictionary':
                             self._expand_dict_writes(arg, 'update')
-                        elif arg.kind() not in (',', '(', ')'):
+                        elif _zero_arg(arg, 'kind') not in (',', '(', ')'):
                             self.walk(arg, 'READ')
                 elif method == 'setdefault' and args:
-                    arg_nodes = [ch for ch in _children(args) if ch.kind() not in (',', '(', ')')]
+                    arg_nodes = [
+                        ch for ch in _children(args) if _zero_arg(ch, 'kind') not in (',', '(', ')')
+                    ]
                     if arg_nodes:
                         key_node = arg_nodes[0]
                         key_text = self.get_text(key_node)
@@ -767,9 +778,9 @@ def _jsx_lowercase_tag_name_node(node: Any, get_text: Callable) -> Optional[Any]
     (Actions.tsx's SelectedShapeActions): `div`/`fieldset`/`legend` all read
     as bogus undefined variables (BACK-431 feature-breadth pass).
     """
-    if node.kind() not in _JSX_TAG_KINDS:
+    if _zero_arg(node, 'kind') not in _JSX_TAG_KINDS:
         return None
-    tag = next((c for c in _children(node) if c.kind() == 'identifier'), None)
+    tag = next((c for c in _children(node) if _zero_arg(c, 'kind') == 'identifier'), None)
     if tag is None:
         return None
     text = get_text(tag)
@@ -792,9 +803,9 @@ def _java_annotation_name_node(node: Any) -> Optional[Any]:
     its contents (rare, but possibly a real constant reference) still walk
     normally.
     """
-    if node.kind() not in _JAVA_ANNOTATION_KINDS:
+    if _zero_arg(node, 'kind') not in _JAVA_ANNOTATION_KINDS:
         return None
-    return next((c for c in _children(node) if c.kind() == 'identifier'), None)
+    return next((c for c in _children(node) if _zero_arg(c, 'kind') == 'identifier'), None)
 
 
 def _zig_suffix_expr_walkable_children(children: List[Any]) -> List[Any]:
@@ -814,11 +825,11 @@ def _zig_suffix_expr_walkable_children(children: List[Any]) -> List[Any]:
     if children:
         result.append(children[0])
     for child in children[1:]:
-        if child.kind() == 'FnCallArguments':
+        if _zero_arg(child, 'kind') == 'FnCallArguments':
             result.append(child)
-        elif child.kind() == 'FieldOrFnCall':
+        elif _zero_arg(child, 'kind') == 'FieldOrFnCall':
             for sub in _children(child):
-                if sub.kind() == 'FnCallArguments':
+                if _zero_arg(sub, 'kind') == 'FnCallArguments':
                     result.append(sub)
     return result
 
@@ -843,7 +854,9 @@ def _declared_name_node(scope_node: Any) -> Optional[Any]:
     for _ in range(10):
         if node is None:
             break
-        if node.kind() in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER'):
+        if _zero_arg(node, 'kind') in (
+            'identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER'
+        ):
             return node
         node = node.child_by_field_name('declarator') or node.child_by_field_name('name')
     # Zig wraps a function in a fieldless 'Decl' node containing 'FnProto'
@@ -853,16 +866,19 @@ def _declared_name_node(scope_node: Any) -> Optional[Any]:
     # feature-breadth pass, found via Ghostty's cellStyle), mirroring
     # ZigAnalyzer._get_node_name's '_extract_function_name' but usable here
     # without an analyzer instance.
-    if scope_node.kind() == 'Decl':
+    if _zero_arg(scope_node, 'kind') == 'Decl':
         for child in _children(scope_node):
-            if child.kind() == 'FnProto':
+            if _zero_arg(child, 'kind') == 'FnProto':
                 fn_children = _children(child)
                 for i, fc in enumerate(fn_children):
-                    if fc.kind() == 'fn' and i + 1 < len(fn_children) and fn_children[i + 1].kind() == 'IDENTIFIER':
+                    if (_zero_arg(fc, 'kind') == 'fn' and i + 1 < len(fn_children) and
+                            _zero_arg(fn_children[i + 1], 'kind') == 'IDENTIFIER'):
                         return fn_children[i + 1]
                 break
     for child in _children(scope_node):
-        if child.kind() in ('identifier', 'name', 'simple_identifier', 'property_identifier', 'IDENTIFIER'):
+        if _zero_arg(child, 'kind') in (
+            'identifier', 'name', 'simple_identifier', 'property_identifier', 'IDENTIFIER'
+        ):
             return child
     return None
 
@@ -872,7 +888,7 @@ def _register_skip_positions(node: Any, skip_positions: set, get_text: Callable)
     variables, so the terminal-identifier collector skips them: a parameter's
     Swift `external_name` (call-site argument label), a lowercase JSX tag, and a
     Java annotation's type name (BACK-431 feature-breadth pass)."""
-    if node.kind() == 'parameter':
+    if _zero_arg(node, 'kind') == 'parameter':
         external_name = node.child_by_field_name('external_name')
         if external_name is not None:
             skip_positions.add(
@@ -898,7 +914,7 @@ def _member_access_descent(node: Any) -> Optional[List[Any]]:
     --varflow queries. Every branch here was found via real-corpus dogfood
     (BACK-431 feature-breadth pass); see the original inline comments preserved
     below for the exact source each idiom came from."""
-    kind = node.kind()
+    kind = _zero_arg(node, 'kind')
     if kind in _MEMBER_ACCESS_KINDS:
         # `obj.field` / `obj:method()` — only the base object is a variable.
         children = _children(node)
@@ -910,7 +926,7 @@ def _member_access_descent(node: Any) -> Optional[List[Any]]:
         # `.`/`?.` + member-name is not a variable (real AppFlowy source,
         # `find.byWidgetPredicate(...)`).
         children = _children(node)
-        if children and children[0].kind() == 'index_selector':
+        if children and _zero_arg(children[0], 'kind') == 'index_selector':
             return [children[0]]
         return []
     if kind == 'call' and node.child_by_field_name('receiver') is not None:
@@ -946,7 +962,7 @@ def _member_access_descent(node: Any) -> Optional[List[Any]]:
         # prefix operators (`!flag`, `-x`) have a named operator kind, and
         # `.some(let y)` has >2 children — both fall through to a generic walk.
         children = _children(node)
-        if len(children) == 2 and children[0].kind() == '.':
+        if len(children) == 2 and _zero_arg(children[0], 'kind') == '.':
             return []
         return None
     if kind == 'SuffixExpr':
@@ -985,7 +1001,9 @@ def _collect_identifier_names(
         line = node.start_position().row + 1
         if node.end_position().row + 1 < from_line or line > to_line:
             continue
-        if node.kind() in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER') and from_line <= line <= to_line:
+        node_kind = _zero_arg(node, 'kind')
+        if (node_kind in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER') and
+                from_line <= line <= to_line):
             pos = (node.start_position().row, node.start_position().column)
             if pos not in skip_positions:
                 text = get_text(node)

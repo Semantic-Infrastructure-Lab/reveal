@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 from ...core import node_children as _children
+from ...core.treesitter_compat import _zero_arg
 from ...core import node_prev_sibling as _prev_sibling
 from .node_taxonomy import (  # noqa: F401 — re-exported for nav.py/back-compat
     SCOPE_NODES,
@@ -29,7 +30,7 @@ def _node_label(node: Any, get_text: Callable, keyword: Optional[str] = None) ->
     doesn't name their role (Ruby block-iterator calls — see _make_item).
     """
     if keyword is None:
-        keyword = KEYWORD_LABEL.get(node.kind(), node.kind().upper())
+        keyword = KEYWORD_LABEL.get(_zero_arg(node, 'kind'), _zero_arg(node, 'kind').upper())
     first_line = get_text(node).splitlines()[0].strip().rstrip(':').rstrip('{').strip()
     lower = first_line.lower()
     kw_lower = keyword.lower()
@@ -54,9 +55,10 @@ def _make_item(
     # keyword override: for Ruby block-iterator `call` nodes, the kind is
     # 'call' (which KEYWORD_LABEL would surface as 'CALL'); the caller passes
     # the semantic loop keyword (FOR/LOOP) it derived from the method name.
-    resolved = keyword or KEYWORD_LABEL.get(node.kind(), node.kind().upper())
+    node_kind = _zero_arg(node, 'kind')
+    resolved = keyword or KEYWORD_LABEL.get(node_kind, node_kind.upper())
     return {
-        'type': node.kind(),
+        'type': _zero_arg(node, 'kind'),
         'keyword': resolved,
         'label': _node_label(node, get_text, keyword=resolved),
         'line_start': node.start_position().row + 1,
@@ -80,10 +82,10 @@ def _block_loop_keyword(node: Any, get_text: Callable) -> Optional[str]:
     callsites of the same method names (`Model.find(id)`) carry no block so
     never match — see the taxonomy comment on RUBY_ITERATOR_METHODS.
     """
-    if node.kind() != 'call':
+    if _zero_arg(node, 'kind') != 'call':
         return None
     block = node.child_by_field_name('block')
-    if block is None or block.kind() not in RUBY_BLOCK_NODES:
+    if block is None or _zero_arg(block, 'kind') not in RUBY_BLOCK_NODES:
         return None
     method = node.child_by_field_name('method')
     if method is None:
@@ -120,8 +122,8 @@ def _collect_outline(
 ) -> None:
     """Walk node's children, appending scope/exit items at the given depth."""
     for child in _children(node):
-        ctype = child.kind()
-        if not child.is_named():
+        ctype = _zero_arg(child, 'kind')
+        if not _zero_arg(child, 'is_named'):
             continue
         if ctype in FUNCTION_TYPES:
             items.append(_make_item(child, depth, get_text))
@@ -156,8 +158,8 @@ def _collect_scope_interior(
 ) -> None:
     """Process the interior of a scope node."""
     for child in _children(scope_node):
-        ctype = child.kind()
-        if not child.is_named():
+        ctype = _zero_arg(child, 'kind')
+        if not _zero_arg(child, 'is_named'):
             continue
         if ctype in FUNCTION_TYPES:
             items.append(_make_item(child, scope_depth + 1, get_text))
@@ -217,11 +219,11 @@ def _dart_signature_for_body(body_node: Any) -> Any:
     prev = _prev_sibling(body_node)
     if prev is None:
         return None
-    if prev.kind() == 'function_signature':
+    if _zero_arg(prev, 'kind') == 'function_signature':
         return prev
-    if prev.kind() == 'method_signature':
+    if _zero_arg(prev, 'kind') == 'method_signature':
         for child in _children(prev):
-            if child.kind() == 'function_signature':
+            if _zero_arg(child, 'kind') == 'function_signature':
                 return child
     return None
 
@@ -243,7 +245,7 @@ def _find_ancestors(
     # lines, but it isn't itself a DEF node — the name lives in a disjoint
     # sibling signature. Synthesize the DEF entry from that signature, spanning
     # signature-start → body-end, before descending into the body's scopes.
-    if node.kind() == 'function_body':
+    if _zero_arg(node, 'kind') == 'function_body':
         sig = _dart_signature_for_body(node)
         # Only synthesize when the line is purely inside the body. If it falls
         # on the signature itself, the normal DEF_NODES walk already visits
@@ -263,15 +265,16 @@ def _find_ancestors(
             })
             depth += 1
 
-    if node.is_named() and (node.kind() in SCOPE_NODES or node.kind() in FUNCTION_TYPES):
+    node_kind = _zero_arg(node, 'kind')
+    if _zero_arg(node, 'is_named') and (node_kind in SCOPE_NODES or node_kind in FUNCTION_TYPES):
         condition = None
-        if node.kind() in GATE_NODES:
+        if _zero_arg(node, 'kind') in GATE_NODES:
             from .nav_exits import _get_condition  # noqa: PLC0415 — avoid import-time cost for non-JSON callers
             cond = _get_condition(node, get_text)
             condition = cond['text'] if cond else None
         chain.append({
-            'type': node.kind(),
-            'keyword': KEYWORD_LABEL.get(node.kind(), node.kind().upper()),
+            'type': _zero_arg(node, 'kind'),
+            'keyword': KEYWORD_LABEL.get(_zero_arg(node, 'kind'), _zero_arg(node, 'kind').upper()),
             'label': _node_label(node, get_text),
             'line_start': start,
             'line_end': end,
