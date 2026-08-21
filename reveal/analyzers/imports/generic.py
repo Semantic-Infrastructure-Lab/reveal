@@ -675,7 +675,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         for node_type in self.spec.package_node_types:
             for node in analyzer._find_nodes_by_type(node_type):
                 for child in _children(node):
-                    if child.kind() in self._PACKAGE_NAME_CHILD_KINDS:
+                    if _zero_arg(child, 'kind') in self._PACKAGE_NAME_CHILD_KINDS:
                         namespaces.append(analyzer._get_node_text(child))
                         break
         return namespaces
@@ -791,7 +791,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             if targets_arr is None:
                 continue
             for node in _children(targets_arr):
-                if node.kind() != 'call_expression':
+                if _zero_arg(node, 'kind') != 'call_expression':
                     continue
                 callee = self._manifest_callee_name(node, analyzer)
                 if callee not in calls:
@@ -895,7 +895,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         if args_parent is None:
             return None
         for arg in _children(args_parent):
-            if arg.kind() != 'value_argument':
+            if _zero_arg(arg, 'kind') != 'value_argument':
                 continue
             arg_label = cls._first_child_of_kind(arg, 'value_argument_label')
             if arg_label is not None and analyzer._get_node_text(arg_label) == label:
@@ -911,7 +911,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         ``simple_identifier``, so both ``.target`` and a bare ``target``
         resolve. None when no such identifier exists (a computed callee)."""
         for child in _children(call_node):
-            if child.kind() == 'call_suffix':
+            if _zero_arg(child, 'kind') == 'call_suffix':
                 break
             leaf = cls._last_identifier(child, analyzer)
             if leaf is not None:
@@ -923,7 +923,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         """Deepest-last ``simple_identifier`` text under ``node`` (its callee
         name for a dotted ``.a.b.target`` prefix), or None."""
         found: Optional[str] = None
-        if node.kind() == 'simple_identifier':
+        if _zero_arg(node, 'kind') == 'simple_identifier':
             found = analyzer._get_node_text(node)
         for child in _children(node):
             leaf = cls._last_identifier(child, analyzer)
@@ -940,7 +940,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         if args_parent is None:
             return None
         for arg in _children(args_parent):
-            if arg.kind() != 'value_argument':
+            if _zero_arg(arg, 'kind') != 'value_argument':
                 continue
             arg_label = cls._first_child_of_kind(arg, 'value_argument_label')
             if arg_label is None or analyzer._get_node_text(arg_label) != label:
@@ -980,7 +980,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         for node_type in self.spec.member_node_types:
             for node in analyzer._find_nodes_by_type(node_type):
                 parent = node.parent()
-                if parent is None or parent.kind() != 'source_file':
+                if parent is None or _zero_arg(parent, 'kind') != 'source_file':
                     continue
                 name = self._top_level_member_name(node, analyzer)
                 if name:
@@ -1002,13 +1002,13 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         ``name: Type``), so that child is checked first when present.
         """
         for child in _children(node):
-            if child.kind() == 'variable_declaration':
+            if _zero_arg(child, 'kind') == 'variable_declaration':
                 for grandchild in _children(child):
-                    if grandchild.kind() == 'simple_identifier':
+                    if _zero_arg(grandchild, 'kind') == 'simple_identifier':
                         return analyzer._get_node_text(grandchild)
                 return None
         for child in _children(node):
-            if child.kind() == 'simple_identifier':
+            if _zero_arg(child, 'kind') == 'simple_identifier':
                 return analyzer._get_node_text(child)
         return None
 
@@ -1066,7 +1066,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 if body is None:
                     continue
                 for member in _children(body):
-                    if member.kind() not in self.spec.container_member_node_types:
+                    if _zero_arg(member, 'kind') not in self.spec.container_member_node_types:
                         continue
                     member_name = self._direct_identifier_name(member, analyzer)
                     if member_name:
@@ -1082,7 +1082,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         their name as a direct child (unlike Kotlin's nested property shape,
         see :meth:`_top_level_member_name`)."""
         for child in _children(node):
-            if child.kind() in cls._IDENTIFIER_KINDS:
+            if _zero_arg(child, 'kind') in cls._IDENTIFIER_KINDS:
                 return analyzer._get_node_text(child)
         return None
 
@@ -1092,7 +1092,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         wraps an ``object_definition``'s members in a ``template_body``
         (``{ ... }``), one level below the ``extends``/name children."""
         for child in _children(node):
-            if child.kind() == 'template_body':
+            if _zero_arg(child, 'kind') == 'template_body':
                 return child
         return None
 
@@ -1231,10 +1231,10 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         refs: List[Tuple[int, str]] = []
 
         def walk(node) -> None:
-            kind = node.kind()
+            kind = _zero_arg(node, 'kind')
             if kind in self._CONSTANT_KINDS:
                 parent = node.parent()
-                if parent is not None and parent.kind() in self._CONSTANT_KINDS:
+                if parent is not None and _zero_arg(parent, 'kind') in self._CONSTANT_KINDS:
                     return  # nested fragment of an already-captured outer chain
                 text = analyzer._get_node_text(node)
                 if text:
@@ -1287,7 +1287,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 or analyzer._get_node_text(directive).strip() != '#include'
             ):
                 return None
-        if node.kind() in self.spec.concat_relative_node_types:
+        if _zero_arg(node, 'kind') in self.spec.concat_relative_node_types:
             result = self._concat_to_import(node, analyzer, file_path, constant_index)
             if result is not _NOT_CONCAT:
                 return result
@@ -1471,7 +1471,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
     def _first_child_of_kind(node, kind: str):
         """First direct child of ``node`` whose kind is exactly ``kind``."""
         for child in _children(node):
-            if child.kind() == kind:
+            if _zero_arg(child, 'kind') == kind:
                 return child
         return None
 
@@ -1512,7 +1512,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         if not children:
             return None
         last = children[-1]
-        if last.kind() != 'string':
+        if _zero_arg(last, 'kind') != 'string':
             return None
         content = _GenericTreeSitterImportExtractor._first_descendant_text(
             last, analyzer, ('string_content',)
@@ -1542,7 +1542,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         variable, a nested concatenation) returns False — the caller treats
         that as an honest skip, not a guess.
         """
-        kind = operand.kind()
+        kind = _zero_arg(operand, 'kind')
         if kind == 'name':
             return analyzer._get_node_text(operand).strip() == cls._DIR_RELATIVE_NAME
         if kind == 'function_call_expression':
@@ -1589,7 +1589,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         exactly as derivable as the single-level form, just walking that
         many extra parents.
         """
-        kind = operand.kind()
+        kind = _zero_arg(operand, 'kind')
         if kind == 'name':
             if analyzer._get_node_text(operand).strip() == cls._DIR_RELATIVE_NAME:
                 return file_path.parent
@@ -1601,7 +1601,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             args = cls._first_child_of_kind(operand, 'arguments')
             if args is None:
                 return None
-            arg_nodes = [c for c in _children(args) if c.kind() == 'argument']
+            arg_nodes = [c for c in _children(args) if _zero_arg(c, 'kind') == 'argument']
             if not arg_nodes:
                 return None
             arg_text = cls._first_descendant_text(arg_nodes[0], analyzer, ('name',))
@@ -1645,7 +1645,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         see :meth:`extract_constant_defines`) ``known_constants``: the
         caller must treat that as an honest skip of the whole statement.
         """
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
         if kind == 'string':
             content = self._first_descendant_text(node, analyzer, ('string_content',))
             if content is None:
@@ -1689,7 +1689,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         start of the chain is a shape this doesn't model (which operand
         actually applies is ambiguous) — honest skip, ``None``.
         """
-        kind = node.kind()
+        kind = _zero_arg(node, 'kind')
         if kind == 'string':
             return self._resolve_leaf_operand(node, analyzer, file_path, known_constants)
         if kind != 'binary_expression':
@@ -1778,12 +1778,12 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             args_node = self._first_child_of_kind(node, 'arguments')
             if args_node is None:
                 continue
-            arg_wrappers = [c for c in _children(args_node) if c.kind() == 'argument']
+            arg_wrappers = [c for c in _children(args_node) if _zero_arg(c, 'kind') == 'argument']
             if len(arg_wrappers) < 2:
                 continue
             name_expr = self._first_argument_value(arg_wrappers[0])
             value_expr = self._first_argument_value(arg_wrappers[1])
-            if name_expr is None or value_expr is None or name_expr.kind() != 'string':
+            if name_expr is None or value_expr is None or _zero_arg(name_expr, 'kind') != 'string':
                 continue
             const_name = self._first_descendant_text(name_expr, analyzer, ('string_content',))
             if not const_name:
@@ -1811,7 +1811,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         """
         callee = None
         for child in _children(node):
-            if child.kind() == 'identifier':
+            if _zero_arg(child, 'kind') == 'identifier':
                 callee = analyzer._get_node_text(child)
                 break
         if callee is None or callee not in self.spec.call_import_names:
@@ -1843,7 +1843,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         stack = list(reversed(_children(node)))
         while stack:
             cur = stack.pop()
-            if cur.kind() in kinds:
+            if _zero_arg(cur, 'kind') in kinds:
                 return analyzer._get_node_text(cur)
             stack.extend(reversed(_children(cur)))
         return None

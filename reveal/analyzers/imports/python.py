@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 from typing import List, Set, Optional, Dict, Tuple
 from ...core import disk_cache, node_children as _children, node_prev_sibling as _prev_sibling
+from ...core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ class PythonExtractor(LanguageExtractor):
         """
         current = node.parent()
         while current:
-            if current.kind() == 'if_statement' and current.child_count() > 1:
+            if _zero_arg(current, 'kind') == 'if_statement' and current.child_count() > 1:
                 condition_text = self._get_node_text_from_tree(current.child(1), analyzer)
                 if 'TYPE_CHECKING' in condition_text:
                     return True
@@ -166,7 +167,7 @@ class PythonExtractor(LanguageExtractor):
         """Check if import node is inside a function or method body."""
         current = node.parent()
         while current:
-            if current.kind() in ('function_definition', 'decorated_definition'):
+            if _zero_arg(current, 'kind') in ('function_definition', 'decorated_definition'):
                 return True
             current = current.parent()
         return False
@@ -238,10 +239,10 @@ class PythonExtractor(LanguageExtractor):
         level = 0
 
         for child in _children(node):
-            if child.kind() == 'relative_import':
+            if _zero_arg(child, 'kind') == 'relative_import':
                 is_relative = True
                 module_name, level = self._parse_relative_import(child, analyzer)
-            elif (child.kind() == 'dotted_name' and _prev_sibling(child) and
+            elif (_zero_arg(child, 'kind') == 'dotted_name' and _prev_sibling(child) and
                   analyzer._get_node_text(_prev_sibling(child)) == 'from'):
                 module_name = analyzer._get_node_text(child)
                 break
@@ -253,12 +254,12 @@ class PythonExtractor(LanguageExtractor):
         level = 0
         module_name = ''
         for subchild in _children(rel_node):
-            if subchild.kind() == '.':
+            if _zero_arg(subchild, 'kind') == '.':
                 level += 1
-            elif subchild.kind() == 'import_prefix':
+            elif _zero_arg(subchild, 'kind') == 'import_prefix':
                 # tree-sitter-python wraps dots in import_prefix node
-                level += sum(1 for c in _children(subchild) if c.kind() == '.')
-            elif subchild.kind() == 'dotted_name':
+                level += sum(1 for c in _children(subchild) if _zero_arg(c, 'kind') == '.')
+            elif _zero_arg(subchild, 'kind') == 'dotted_name':
                 module_name = analyzer._get_node_text(subchild)
         return module_name, level
 
@@ -274,7 +275,7 @@ class PythonExtractor(LanguageExtractor):
 
         for child in _children(node):
             # Wait until we see the 'import' keyword
-            if child.kind() == 'import':
+            if _zero_arg(child, 'kind') == 'import':
                 seen_import_keyword = True
                 continue
 
@@ -282,17 +283,18 @@ class PythonExtractor(LanguageExtractor):
                 continue
 
             # Skip commas and parentheses
-            if child.kind() in [',', '(', ')']:
+            if _zero_arg(child, 'kind') in [',', '(', ')']:
                 continue
 
             # Wildcard import: from x import *
-            if child.kind() == 'wildcard_import' or analyzer._get_node_text(child) == '*':
+            if (_zero_arg(child, 'kind') == 'wildcard_import' or
+                    analyzer._get_node_text(child) == '*'):
                 return ['*'], 'star_import'
 
             # Regular imports: from x import Name or from x import Name as Alias
-            if child.kind() == 'dotted_name':
+            if _zero_arg(child, 'kind') == 'dotted_name':
                 imported_names.append(analyzer._get_node_text(child))
-            elif child.kind() == 'aliased_import':
+            elif _zero_arg(child, 'kind') == 'aliased_import':
                 imported_names.append(analyzer._get_node_text(child))
 
         return imported_names, import_type
@@ -356,7 +358,7 @@ class PythonExtractor(LanguageExtractor):
                 symbols.add(name)
 
             # Also handle attribute access (os.path -> track 'os')
-            if node.parent() and node.parent().kind() == 'attribute':
+            if node.parent() and _zero_arg(node.parent(), 'kind') == 'attribute':
                 # Get root of attribute chain
                 root = self._get_root_identifier(node.parent(), analyzer)
                 if root:
@@ -376,7 +378,7 @@ class PythonExtractor(LanguageExtractor):
         if not node.parent():
             return True
 
-        parent_type = node.parent().kind()
+        parent_type = _zero_arg(node.parent(), 'kind')
 
         # Fast path: common definition/import contexts at immediate parent level.
         # import_from_name covers `from x import NAME` identifiers;
@@ -389,7 +391,7 @@ class PythonExtractor(LanguageExtractor):
         # 2-3 levels below their containing import_statement, so bound the walk.
         current = node.parent()
         for _ in range(3):
-            if current.kind() in ('import_statement', 'import_from_statement'):
+            if _zero_arg(current, 'kind') in ('import_statement', 'import_from_statement'):
                 return False
             current = current.parent()
             if current is None:
@@ -399,7 +401,8 @@ class PythonExtractor(LanguageExtractor):
         # not the value (right side) which is a genuine usage context.
         if parent_type in ('assignment', 'keyword_argument'):
             _p = node.parent()
-            if _p and _p.child_count() > 0 and _p.child(0).start_byte() == node.start_byte():
+            if (_p and _p.child_count() > 0 and
+                    _zero_arg(_p.child(0), 'start_byte') == _zero_arg(node, 'start_byte')):
                 return False
 
         return True
@@ -413,7 +416,7 @@ class PythonExtractor(LanguageExtractor):
         """
         # Walk up the attribute chain to find the root
         current = attribute_node
-        while current and current.kind() == 'attribute':
+        while current and _zero_arg(current, 'kind') == 'attribute':
             # Attribute nodes have structure: object.attribute
             if _children(current):
                 current = current.child(0)
@@ -421,7 +424,7 @@ class PythonExtractor(LanguageExtractor):
                 break
 
         # Current should now be an identifier
-        if current and current.kind() == 'identifier':
+        if current and _zero_arg(current, 'kind') == 'identifier':
             result = analyzer._get_node_text(current)
             return str(result) if result is not None else None
 
@@ -461,7 +464,7 @@ class PythonExtractor(LanguageExtractor):
     def _extract_string_literals(self, node, analyzer) -> List[str]:
         """Recursively extract string content from AST nodes."""
         strings = []
-        if node.kind() == 'string':
+        if _zero_arg(node, 'kind') == 'string':
             text = analyzer._get_node_text(node).strip('"\'')
             strings.append(text)
         for child in _children(node):
