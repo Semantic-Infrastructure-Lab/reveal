@@ -13,7 +13,12 @@ Tests tree-sitter-based analysis with:
 import unittest
 import tempfile
 import os
+import pytest
+
 from reveal.analyzers.c import CAnalyzer
+
+# BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestCAnalyzer(unittest.TestCase):

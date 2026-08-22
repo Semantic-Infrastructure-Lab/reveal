@@ -5,7 +5,12 @@ import tempfile
 import os
 import datetime
 from pathlib import Path
+import pytest
+
 from reveal.analyzers.markdown import MarkdownAnalyzer
+
+# BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestMarkdownAnalyzer(unittest.TestCase):

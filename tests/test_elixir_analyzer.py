@@ -4,6 +4,9 @@ import pytest
 from pathlib import Path
 from reveal.analyzers.elixir import ElixirAnalyzer
 
+# BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 class TestElixirAnalyzerInit:
     """Test analyzer initialization."""

@@ -11,7 +11,12 @@ import unittest
 import tempfile
 import os
 from pathlib import Path
+import pytest
+
 from reveal.analyzers.rust import RustAnalyzer
+
+# BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestRustAnalyzer(unittest.TestCase):

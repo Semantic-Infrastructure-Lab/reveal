@@ -3,7 +3,12 @@
 import unittest
 import tempfile
 import os
+import pytest
+
 from reveal.analyzers.lua import LuaAnalyzer
+
+# BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestLuaAnalyzer(unittest.TestCase):

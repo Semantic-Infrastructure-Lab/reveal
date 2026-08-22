@@ -4,7 +4,12 @@ import unittest
 import tempfile
 import os
 import json
+import pytest
+
 from reveal.analyzers.jsonl import JsonlAnalyzer
+
+# BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestJsonlAnalyzer(unittest.TestCase):

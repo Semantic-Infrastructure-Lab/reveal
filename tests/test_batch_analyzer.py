@@ -5,6 +5,9 @@ import tempfile
 import os
 from reveal.analyzers.batch import BatchAnalyzer
 
+# BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 @pytest.fixture
 def simple_batch():

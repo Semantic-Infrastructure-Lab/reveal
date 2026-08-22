@@ -4,7 +4,12 @@ import unittest
 import tempfile
 import os
 from pathlib import Path
+import pytest
+
 from reveal.analyzers.dockerfile import DockerfileAnalyzer
+
+# BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestDockerfileAnalyzer(unittest.TestCase):

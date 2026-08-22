@@ -14,6 +14,9 @@ from pathlib import Path
 
 from reveal.analyzers.typescript import TypeScriptAnalyzer, TSXAnalyzer
 
+# BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
