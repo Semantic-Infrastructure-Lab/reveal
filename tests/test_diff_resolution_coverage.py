@@ -13,6 +13,9 @@ from reveal.adapters.diff.resolution import (
     extract_metadata,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestFindElement:
     """Test find_element — covers lines 254–260 (class method search)."""

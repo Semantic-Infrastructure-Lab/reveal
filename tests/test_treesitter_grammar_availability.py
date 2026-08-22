@@ -13,8 +13,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 import reveal.treesitter as ts
 from reveal.analyzers.python import PythonAnalyzer
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestGrammarAvailabilityWarnings(unittest.TestCase):

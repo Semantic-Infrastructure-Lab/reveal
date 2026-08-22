@@ -9,7 +9,12 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from reveal.rules.validation.utils import find_reveal_root, is_dev_checkout
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestFindRevealRoot(unittest.TestCase):

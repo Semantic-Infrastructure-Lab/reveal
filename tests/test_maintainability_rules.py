@@ -4,6 +4,8 @@ import unittest
 import tempfile
 import os
 from pathlib import Path
+import pytest
+
 from reveal.rules.maintainability.M101 import M101
 from reveal.rules.maintainability.M102 import M102
 from reveal.rules.maintainability.M103 import M103
@@ -559,6 +561,9 @@ from reveal.rules.maintainability.M102 import (
     _add_module_and_parents,
     _extract_imports_regex,
 )
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestM102RelativeImports(unittest.TestCase):

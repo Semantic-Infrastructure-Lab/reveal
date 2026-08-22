@@ -15,6 +15,9 @@ from pathlib import Path
 
 from reveal.analyzers.imports.layers import LayerRule, LayerConfig, load_layer_config
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestLayerRuleMatchesFile:
     """Tests for LayerRule.matches_file."""

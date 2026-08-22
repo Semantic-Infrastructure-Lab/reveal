@@ -14,8 +14,13 @@ import os
 import tempfile
 import unittest
 
+import pytest
+
 from reveal.treesitter import build_callers_index
 from reveal.analyzers.python import PythonAnalyzer
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def _make_temp(code: str, suffix: str = '.py') -> str:

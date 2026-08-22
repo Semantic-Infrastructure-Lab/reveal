@@ -5,12 +5,17 @@ import textwrap
 import unittest
 from pathlib import Path
 
+import pytest
+
 from reveal.registry import (
     _ANALYZER_REGISTRY,
     _reset_plugin_discovery,
     discover_plugins,
     get_analyzer,
 )
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def _write_plugin(plugin_dir: Path, stem: str, extension: str) -> Path:

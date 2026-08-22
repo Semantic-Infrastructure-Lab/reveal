@@ -7,6 +7,9 @@ from unittest.mock import MagicMock, patch
 
 from reveal.display.metadata import _format_display_key, _print_file_header, show_metadata
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 # ============================================================================
 # _format_display_key

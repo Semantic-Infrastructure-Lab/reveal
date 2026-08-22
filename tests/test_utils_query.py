@@ -16,6 +16,9 @@ from reveal.utils.query import (
     ResultControl,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestWarnUnknownQueryParams:
     """The BACK-507 helper: warn (not error) on params an adapter doesn't know."""

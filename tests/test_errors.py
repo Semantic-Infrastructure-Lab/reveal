@@ -5,6 +5,9 @@ from reveal.errors import (
     AnalyzerNotFoundError,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestRevealError:
     """Tests for RevealError base class."""

@@ -7,10 +7,15 @@ import os
 import tempfile
 import unittest
 import unittest.mock
+import pytest
+
 from reveal.rules.infrastructure.N001 import N001
 from reveal.rules.infrastructure.N002 import N002
 from reveal.rules.infrastructure.N003 import N003
 from reveal.rules.infrastructure.N007 import N007
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestN001DuplicateBackend(unittest.TestCase):

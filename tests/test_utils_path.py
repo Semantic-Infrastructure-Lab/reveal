@@ -9,6 +9,9 @@ from reveal.utils.path_utils import (
     get_relative_to_root
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestFindFileInParents:
     """Tests for find_file_in_parents function."""

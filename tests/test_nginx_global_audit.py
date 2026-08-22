@@ -9,7 +9,12 @@ from argparse import Namespace
 from io import StringIO
 from unittest.mock import patch
 
+import pytest
+
 from reveal.analyzers.nginx import NginxAnalyzer
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def _make_config(lines):

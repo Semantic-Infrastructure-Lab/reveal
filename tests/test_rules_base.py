@@ -14,6 +14,9 @@ from reveal.rules.base import (
 )
 from reveal.rules import RuleRegistry
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestSeverity:
     """Test Severity enum."""

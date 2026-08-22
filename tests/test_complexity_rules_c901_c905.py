@@ -8,6 +8,9 @@ from reveal.rules.complexity.C901 import C901
 from reveal.rules.complexity.C902 import C902
 from reveal.rules.complexity.C905 import C905
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestC901:
     """Test C901: Cyclomatic complexity detection."""

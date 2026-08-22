@@ -10,6 +10,9 @@ import pytest
 import reveal
 from reveal.api import analyze, check, element, query
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 # ---------------------------------------------------------------------------
 # Helpers

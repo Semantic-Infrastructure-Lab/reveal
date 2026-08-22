@@ -11,9 +11,14 @@ an import-free file, but a *wrong* empty result on a file full of imports.
 import os
 import tempfile
 
+import pytest
+
 from reveal.analyzers.php import PhpAnalyzer
 from reveal.analyzers.kotlin import KotlinAnalyzer
 from reveal.analyzers.dart import DartAnalyzer
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def _get_structure(analyzer_cls, suffix, code):

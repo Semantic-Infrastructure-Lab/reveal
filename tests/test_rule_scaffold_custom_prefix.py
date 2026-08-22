@@ -16,6 +16,9 @@ from unittest.mock import patch
 
 from reveal.rules import RuleRegistry, BaseRule, Severity
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class _CustomPrefixRule(BaseRule):
     code = "Z999"

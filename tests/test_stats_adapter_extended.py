@@ -12,6 +12,9 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 from reveal.adapters.stats.adapter import StatsAdapter, _i002_preload, _i002_init_worker
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestStatsAdapterExceptionHandling:
     """Test exception handling in StatsAdapter."""

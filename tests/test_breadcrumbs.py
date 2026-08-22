@@ -20,6 +20,9 @@ from reveal.utils.breadcrumbs import (
 from reveal.utils.breadcrumbs import _load_seen_hints as _real_load_seen_hints
 from reveal.utils.breadcrumbs import _save_seen_hints as _real_save_seen_hints
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 # ==============================================================================
 # get_element_placeholder Tests

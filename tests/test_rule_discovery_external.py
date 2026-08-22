@@ -23,6 +23,9 @@ import pytest
 from reveal.rules import RuleRegistry
 from reveal.rules.base import Severity, RulePrefix
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 @pytest.fixture
 def clean_registry():

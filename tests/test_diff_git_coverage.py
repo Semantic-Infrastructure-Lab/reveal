@@ -26,6 +26,9 @@ from reveal.adapters.diff.git import (
     resolve_git_ref,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 # ─── resolve_git_adapter ─────────────────────────────────────────────────────
 # Unchanged by BACK-505 — still goes through GitAdapter directly.

@@ -1,8 +1,13 @@
 """Additional tests for reveal.elements coverage."""
 
 import unittest
+import pytest
+
 from reveal.elements import TypedElement, PythonElement, MarkdownElement
 from reveal.type_system import RevealType, EntityDef
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestTypedElementEdgeCases(unittest.TestCase):

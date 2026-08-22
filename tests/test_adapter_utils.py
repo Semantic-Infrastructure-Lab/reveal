@@ -9,6 +9,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import pytest
+
 from reveal.rules.validation.adapter_utils import (
     find_adapter_file,
     get_adapter_schemes,
@@ -19,6 +21,9 @@ from reveal.rules.validation.adapter_utils import (
     find_method_definition_line,
     find_init_definition_line,
 )
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestFindAdapterFile(unittest.TestCase):

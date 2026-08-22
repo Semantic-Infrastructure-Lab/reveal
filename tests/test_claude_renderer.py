@@ -4,6 +4,9 @@ import pytest
 import sys
 from io import StringIO
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestClaudeRenderer:
     """Tests for ClaudeRenderer class."""

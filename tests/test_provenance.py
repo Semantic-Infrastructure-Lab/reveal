@@ -2,7 +2,12 @@
 
 from pathlib import Path
 
+import pytest
+
 from reveal.utils.provenance import build_execution_provenance, _git_state, _config_digest
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestBuildExecutionProvenance:

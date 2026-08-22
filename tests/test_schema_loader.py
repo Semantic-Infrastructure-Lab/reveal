@@ -15,6 +15,9 @@ from reveal.schemas.frontmatter import (
     clear_cache
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestSchemaLoading:
     """Test schema loading from names and paths."""

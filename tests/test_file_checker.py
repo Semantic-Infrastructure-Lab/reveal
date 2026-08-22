@@ -15,6 +15,9 @@ from reveal.cli.file_checker import (
     _apply_severity_filter,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestLoadGitignorePatterns:
     """Tests for load_gitignore_patterns function."""

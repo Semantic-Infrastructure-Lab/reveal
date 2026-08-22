@@ -9,6 +9,9 @@ from reveal.display.filtering import (
     DEFAULT_NOISE_PATTERNS,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 # ============================================================================
 # GitignoreParser

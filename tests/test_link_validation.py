@@ -7,9 +7,14 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 from urllib.error import URLError
 
+import pytest
+
 from reveal.rules.links.L001 import L001
 from reveal.rules.links.L002 import L002
 from reveal.rules.links.L003 import L003
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestL001BrokenInternalLinks(unittest.TestCase):

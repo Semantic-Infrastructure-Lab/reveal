@@ -4,7 +4,12 @@ import unittest
 import tempfile
 import os
 from pathlib import Path
+import pytest
+
 from reveal.registry import get_analyzer, _detect_shebang
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestShebangDetection(unittest.TestCase):

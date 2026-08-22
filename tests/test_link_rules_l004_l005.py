@@ -12,6 +12,9 @@ from pathlib import Path
 from reveal.rules.links.L004 import L004
 from reveal.rules.links.L005 import L005
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestL004:
     """Test L004: Documentation directory missing index."""

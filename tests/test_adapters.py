@@ -8,11 +8,16 @@ from pathlib import Path
 # Add parent directory to path to import reveal
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import pytest
+
 from reveal.adapters.env import EnvAdapter
 from reveal.adapters.ast import AstAdapter
 from reveal.adapters.help import HelpAdapter
 from reveal.adapters.python import PythonAdapter
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestAdapterRegistry(unittest.TestCase):

@@ -12,6 +12,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from reveal.diff.architecture_diff import (
     StructureCache,
     diff_snapshots,
@@ -20,6 +22,9 @@ from reveal.diff.architecture_diff import (
     _diff_components,
     _diff_entry_points,
 )
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def _snapshot(

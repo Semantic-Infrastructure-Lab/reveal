@@ -12,9 +12,14 @@ import unittest
 import tempfile
 import os
 from pathlib import Path
+import pytest
+
 from reveal.analyzers.javascript import JavaScriptAnalyzer
 from reveal.analyzers.typescript import TypeScriptAnalyzer
 from reveal.analyzers.bash import BashAnalyzer
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestJavaScriptAnalyzer(unittest.TestCase):

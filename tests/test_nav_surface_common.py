@@ -5,7 +5,12 @@ _categorize_module functions (kotlin, php, csharp, java, go) — this locks
 down its prefix-match semantics independent of any one language's fixtures.
 """
 
+import pytest
+
 from reveal.adapters.ast.nav_surface_common import categorize_by_prefix
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def _taxonomy():

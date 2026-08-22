@@ -14,6 +14,9 @@ from unittest.mock import MagicMock, patch
 from reveal.analyzers.imports.javascript import JavaScriptExtractor
 from reveal.analyzers.imports.types import ImportStatement
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 def _mock_ts_node(kind='', children=None, parent_result=None, start_byte=0):
     """Create a mock tree-sitter 1.x compatible node."""

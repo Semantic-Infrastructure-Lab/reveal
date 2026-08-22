@@ -3,9 +3,14 @@
 Tests the core type system: TypeRegistry, TypedElement, TypedStructure.
 """
 
+import pytest
+
 from reveal.type_system import EntityDef, RevealType, TypeRegistry
 from reveal.elements import TypedElement, PythonElement
 from reveal.structure import TypedStructure
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestEntityDef:

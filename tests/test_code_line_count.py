@@ -7,7 +7,12 @@ import os
 import tempfile
 import unittest
 
+import pytest
+
 from reveal.analyzers.python import PythonAnalyzer
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def _structure_for(code: str):

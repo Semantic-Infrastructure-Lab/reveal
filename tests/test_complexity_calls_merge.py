@@ -18,8 +18,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 from reveal.complexity import calculate_complexity_and_depth
 from reveal.analyzers.python import PythonAnalyzer
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def _first_function_node(analyzer):

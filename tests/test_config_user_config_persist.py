@@ -9,12 +9,17 @@ from unittest.mock import patch
 
 import yaml
 
+import pytest
+
 from reveal.config import (
     RevealConfig,
     disable_breadcrumbs_permanently,
     disable_update_check_permanently,
     _read_user_config,
 )
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def _patch_user_config_path(tmp_path):

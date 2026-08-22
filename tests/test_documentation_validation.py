@@ -11,6 +11,9 @@ from pathlib import Path
 from reveal.rules.links.L001 import L001
 from reveal.registry import get_analyzer
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestDocumentationLinks:
     """Test that documentation links are valid."""

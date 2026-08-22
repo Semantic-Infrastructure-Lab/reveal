@@ -11,7 +11,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 from reveal.registry import get_analyzer, _is_cpp_header_content
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestCHeaderRouting(unittest.TestCase):

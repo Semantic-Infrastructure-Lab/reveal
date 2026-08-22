@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Dict, Any
 import yaml
 
+import pytest
+
 from reveal.config import (
     RevealConfig,
     deep_merge,
@@ -28,6 +30,9 @@ from reveal.config import (
     Override,
     CONFIG_SCHEMA
 )
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestDeepMerge(unittest.TestCase):

@@ -5,6 +5,8 @@ import io
 import sys
 from contextlib import redirect_stdout
 
+import pytest
+
 from reveal.rendering.diff import (
     render_diff,
     render_diff_text,
@@ -16,6 +18,9 @@ from reveal.rendering.diff import (
     _render_diff_summary,
     _render_diff_breadcrumbs,
 )
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def capture_stdout(func, *args, **kwargs):

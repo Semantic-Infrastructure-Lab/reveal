@@ -3,6 +3,9 @@
 import pytest
 from reveal.utils.formatting import format_size
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestFormatSize:
     """Test format_size() for human-readable file sizes."""

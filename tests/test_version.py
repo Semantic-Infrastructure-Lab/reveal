@@ -10,7 +10,12 @@ running.
 
 from pathlib import Path
 
+import pytest
+
 from reveal.version import _resolve_version
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def _write_egg_info(directory: Path, name: str, version: str) -> None:

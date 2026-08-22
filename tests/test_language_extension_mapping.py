@@ -10,9 +10,14 @@ fix BACK-403, a drift bug in an even earlier ad-hoc table).
 import unittest
 from pathlib import Path
 
+import pytest
+
 from reveal.registry import language_for_extension, display_name_for_extension
 from reveal.adapters.calls.index import _lang_family
 from reveal.utils.path_utils import detect_non_python_language
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestLanguageForExtension(unittest.TestCase):

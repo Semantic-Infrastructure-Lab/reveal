@@ -9,9 +9,14 @@ import tempfile
 import os
 from pathlib import Path
 
+import pytest
+
 from reveal.rules.urls.U501 import U501
 from reveal.rules.urls.U502 import U502
 from reveal.rules.base import Severity
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestU501InsecureGitHubURLs(unittest.TestCase):

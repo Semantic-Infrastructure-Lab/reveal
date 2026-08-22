@@ -13,6 +13,9 @@ from unittest.mock import MagicMock, patch
 from reveal.treesitter import TreeSitterAnalyzer
 from reveal.display.structure import _render_json_output
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 # ─── TreeSitterAnalyzer._extract_relationships ──────────────────────────────
 

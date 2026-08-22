@@ -7,7 +7,12 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from reveal.rules.profiles import BUILTIN_PROFILES, list_profiles, resolve_profile
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 # ---------------------------------------------------------------------------

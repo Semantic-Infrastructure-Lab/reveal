@@ -3,8 +3,13 @@
 import unittest
 import tempfile
 import os
+import pytest
+
 from reveal.rules.complexity.C902 import C902
 from reveal.rules.base import Severity
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestC902FunctionTooLong(unittest.TestCase):

@@ -7,8 +7,13 @@ import unittest
 import tempfile
 import json
 from pathlib import Path
+import pytest
+
 from reveal.analyzers.jsonl import JsonlAnalyzer
 from reveal.analyzers.markdown import MarkdownAnalyzer
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestSemanticSliceHelper(unittest.TestCase):

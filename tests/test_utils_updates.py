@@ -8,6 +8,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch, mock_open
 from reveal.utils.updates import check_for_updates, _update_check_disabled_in_config
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestUpdateCheckDisabledInConfig:
     """BACK-980: check_for_updates() also honors the persisted user-config opt-out."""

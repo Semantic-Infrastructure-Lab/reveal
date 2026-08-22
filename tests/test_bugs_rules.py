@@ -4,8 +4,13 @@ import unittest
 import tempfile
 import os
 from pathlib import Path
+import pytest
+
 from reveal.rules.bugs.B005 import B005
 from reveal.rules.base import Severity
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestB005DeadImports(unittest.TestCase):

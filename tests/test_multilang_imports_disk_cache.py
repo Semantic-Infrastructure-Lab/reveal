@@ -23,6 +23,9 @@ from reveal.analyzers.imports import rust as rust_mod
 from reveal.analyzers.imports import zig as zig_mod
 from reveal.analyzers.imports import generic as generic_mod
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 @pytest.fixture(autouse=True)
 def _isolate_cache(tmp_path, monkeypatch):

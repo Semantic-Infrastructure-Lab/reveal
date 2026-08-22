@@ -16,6 +16,9 @@ from reveal.analyzers.office import (
 )
 from reveal.analyzers.office.base import ZipXMLAnalyzer
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 # =============================================================================
 # Test Fixtures - Create minimal valid office documents

@@ -13,8 +13,13 @@ predate.
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from reveal.analyzers.imports.python import PythonExtractor
 from reveal.rules.imports.I001 import I001
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def _write_py(tmp_path: Path, name: str, code: str) -> Path:

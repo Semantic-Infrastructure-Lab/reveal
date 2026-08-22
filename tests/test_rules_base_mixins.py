@@ -9,7 +9,12 @@ study — same disease, different call site.
 
 import logging
 
+import pytest
+
 from reveal.rules.base_mixins import _cached_ast_parse, ASTParsingMixin
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestCachedAstParse:

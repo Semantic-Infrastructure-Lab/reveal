@@ -18,7 +18,12 @@ import unittest
 import tempfile
 import shutil
 from pathlib import Path
+import pytest
+
 from reveal.rules.validation.V022 import V022
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestV022Metadata(unittest.TestCase):

@@ -10,6 +10,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from reveal.rules.base import Detection, Severity
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 def _make_detection(severity: Severity, rule_code: str = 'B001') -> Detection:
     """Create a minimal Detection with the given severity."""

@@ -13,6 +13,9 @@ import pytest
 from reveal.core import disk_cache
 from reveal.rules.imports import I002 as i002_mod
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 @pytest.fixture(autouse=True)
 def _isolate_cache(tmp_path, monkeypatch):

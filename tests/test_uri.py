@@ -11,6 +11,9 @@ from reveal.utils.uri import (
     parse_sqlite_uri,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestParsedURI:
     """Tests for ParsedURI dataclass."""

@@ -512,6 +512,9 @@ from reveal.display.structure import (
     _handle_standard_output,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 def _make_typed_mock(has_elements=True, roots=None, reveal_type_name='Python', stats=None):
     """Build a mock TypedStructure."""

@@ -44,11 +44,16 @@ class _FakeHTTPError(urllib.error.HTTPError):
 # Unit tests for probe.py
 # ---------------------------------------------------------------------------
 
+import pytest
+
 from reveal.adapters.ssl.probe import (
     probe_http_redirect,
     _resolve_location,
     render_probe_text,
 )
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestResolveLocation(unittest.TestCase):

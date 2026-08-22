@@ -6,8 +6,13 @@ Tests for health.py HealthMetrics and performance.py PerformanceAnalyzer classes
 import unittest
 from unittest.mock import Mock, MagicMock
 from datetime import datetime, timezone
+import pytest
+
 from reveal.adapters.mysql.health import HealthMetrics
 from reveal.adapters.mysql.performance import PerformanceAnalyzer
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestHealthMetrics(unittest.TestCase):

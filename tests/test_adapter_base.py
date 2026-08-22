@@ -2,6 +2,8 @@
 
 import unittest
 import warnings
+import pytest
+
 from reveal.adapters.base import (
     ResourceAdapter,
     register_adapter,
@@ -12,6 +14,9 @@ from reveal.adapters.base import (
     _default_from_uri,
 )
 from reveal.adapters.factory import _legacy_init_warned
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestResourceAdapter(unittest.TestCase):

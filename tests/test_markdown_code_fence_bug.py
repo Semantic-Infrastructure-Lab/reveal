@@ -6,7 +6,12 @@ Bug: Comments inside code fences are incorrectly detected as headings.
 import unittest
 import tempfile
 from pathlib import Path
+import pytest
+
 from reveal.analyzers.markdown import MarkdownAnalyzer
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestMarkdownCodeFenceBug(unittest.TestCase):

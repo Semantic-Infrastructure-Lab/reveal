@@ -4,6 +4,8 @@ import unittest
 import tempfile
 import os
 import shutil
+import pytest
+
 from reveal.tree_view import (
     show_directory_tree,
     show_directory_tree_json,
@@ -16,6 +18,9 @@ from reveal.tree_view import (
 from reveal.utils import format_size
 from reveal.display.filtering import PathFilter
 from pathlib import Path
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestTreeView(unittest.TestCase):

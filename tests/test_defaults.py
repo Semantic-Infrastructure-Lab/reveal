@@ -11,6 +11,9 @@ from reveal.defaults import (
     ENV_OVERRIDES,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestRuleDefaults:
     """Tests for RuleDefaults class."""

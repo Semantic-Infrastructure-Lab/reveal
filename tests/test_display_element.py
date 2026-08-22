@@ -26,6 +26,9 @@ from reveal.display.element import (
     _output_result,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 # ============================================================================
 # Task #1: Test syntax parsing edge cases (lines 73-81, 90, 98)

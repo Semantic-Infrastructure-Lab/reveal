@@ -12,7 +12,12 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+import pytest
+
 from reveal.cli.routing import generic_adapter_handler, handle_uri, handle_adapter, handle_file_or_directory
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class MockRenderer:

@@ -20,6 +20,9 @@ from reveal.rules.frontmatter.F004 import F004
 from reveal.rules.frontmatter.F005 import F005
 from reveal.schemas.frontmatter import load_schema, clear_cache
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestValidationType:
     """Test validate_type function."""

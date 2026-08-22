@@ -3,7 +3,12 @@
 import gc
 import unittest
 
+import pytest
+
 from reveal.utils.threadsafe import main_thread_gc
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestMainThreadGc(unittest.TestCase):

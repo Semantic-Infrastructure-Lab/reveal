@@ -9,10 +9,15 @@ from contextlib import redirect_stdout
 # Add parent directory to path to import reveal
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import pytest
+
 from reveal.rendering.adapters.json_adapter import render_json_result
 from reveal.rendering.adapters.ast import render_ast_structure
 from reveal.rendering.adapters.env import render_env_structure, render_env_variable
 from reveal.rendering.adapters.reveal import render_reveal_structure
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def capture_stdout(func, *args, **kwargs):

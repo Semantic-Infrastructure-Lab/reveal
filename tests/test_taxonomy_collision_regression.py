@@ -22,6 +22,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import check_taxonomy_collisions as checker  # noqa: E402
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 def test_no_new_taxonomy_bare_pattern_collisions():
     if not checker.available_corpus_dirs():

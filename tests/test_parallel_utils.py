@@ -5,6 +5,9 @@ from pathlib import Path
 
 from reveal.utils.parallel import grep_files, _PARALLEL_THRESHOLD
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 # ---------------------------------------------------------------------------
 # Fixtures

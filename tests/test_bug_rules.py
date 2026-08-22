@@ -10,6 +10,9 @@ from reveal.rules.bugs.B002 import B002
 from reveal.rules.bugs.B003 import B003
 from reveal.rules.bugs.B004 import B004
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestB001:
     """Test B001: Bare except clause detection."""

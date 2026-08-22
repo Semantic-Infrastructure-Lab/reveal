@@ -21,6 +21,9 @@ import pytest
 from reveal.analyzers.imports.rust import RustExtractor
 from reveal.analyzers.imports.types import ImportStatement
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 def _write_rs(tmp_path: Path, name: str, code: str) -> Path:
     """Write a .rs file and return its path."""

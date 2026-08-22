@@ -8,6 +8,8 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from reveal.adapters.patches.adapter import PatchesAdapter
 from reveal.cli.commands.testability import create_testability_parser, run_testability
 from reveal.testability.boundaries import collect_boundary_profiles
@@ -18,6 +20,9 @@ from reveal.testability.patches import (
     scan_patches_ts,
 )
 from reveal.testability.report import build_testability_report
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 def _write(path: Path, text: str) -> Path:

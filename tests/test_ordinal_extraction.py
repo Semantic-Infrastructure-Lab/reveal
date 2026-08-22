@@ -43,6 +43,9 @@ from reveal.display.element import (
     _read_lines,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 def create_analyzer(path):
     """Create an analyzer instance for the given path."""

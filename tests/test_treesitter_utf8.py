@@ -14,7 +14,12 @@ import unittest
 import tempfile
 import os
 from pathlib import Path
+import pytest
+
 from reveal.analyzers.python import PythonAnalyzer
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
 
 
 class TestTreeSitterUTF8Handling(unittest.TestCase):

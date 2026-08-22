@@ -25,6 +25,9 @@ from reveal.analyzers.imports.base import get_all_extensions
 from reveal.core import disk_cache
 from reveal.registry import get_code_extensions
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 @pytest.fixture(autouse=True)
 def _isolate_cache(tmp_path, monkeypatch):

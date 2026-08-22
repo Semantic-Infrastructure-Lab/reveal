@@ -10,6 +10,9 @@ from reveal.utils.json_utils import (
     set_provenance_enabled,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestDateTimeEncoder:
     """Test DateTimeEncoder for datetime/date serialization."""

@@ -29,6 +29,9 @@ from reveal.utils.query import (
     _truncate_dict_strings,
 )
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
+pytestmark = pytest.mark.component
+
 
 class TestCoerceValueEdgeCases:
     """Test edge cases in coerce_value function."""
