@@ -17,6 +17,11 @@ from pathlib import Path
 
 from reveal.adapters.help import HelpAdapter, VALID_HELP_CATEGORIES, _read_help_frontmatter, _EXAMPLE_RECIPES
 
+import pytest
+
+# BACK-1149: exercises reveal.main's CLI entry point via conftest._run_reveal_direct/subprocess
+pytestmark = pytest.mark.cli
+
 # Docs that live under reveal/docs/ but are intentionally not in help://.
 # Key: path relative to reveal/docs/. Value: reason for exclusion.
 _INTENTIONALLY_EXCLUDED = {

@@ -28,6 +28,9 @@ from conftest import _run_reveal_direct
 
 from reveal.adapters.base import _ADAPTER_REGISTRY
 
+# BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
+pytestmark = pytest.mark.contract
+
 # A real, analyzed fixture to build discovered queries against. Reused from the
 # conformance matrix so this suite doesn't own a parallel fixture to maintain.
 CONFORMANCE_DIR = Path(__file__).parent / "fixtures" / "conformance" / "python"

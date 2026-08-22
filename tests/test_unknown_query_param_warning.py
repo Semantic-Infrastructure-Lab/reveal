@@ -22,6 +22,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 from conftest import _run_reveal_direct  # noqa: E402  (tests/test_at_file_syntax.py idiom)
 
+# BACK-1149: exercises reveal.main's CLI entry point via conftest._run_reveal_direct/subprocess
+pytestmark = pytest.mark.cli
+
 
 def _stderr_of(fn):
     buf = io.StringIO()

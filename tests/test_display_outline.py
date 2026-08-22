@@ -14,6 +14,9 @@ from reveal.display.outline import (
     render_outline,
 )
 
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 # ============================================================================
 # build_hierarchy

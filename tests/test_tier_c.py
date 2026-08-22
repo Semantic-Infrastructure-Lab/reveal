@@ -24,6 +24,9 @@ import pytest
 from conftest import _run_reveal_direct
 from corpus_paths import require_corpus_file
 
+# BACK-1149: exercises reveal.main's CLI entry point via conftest._run_reveal_direct/subprocess
+pytestmark = pytest.mark.cli
+
 # surface -> (corpus language, *path components under that repo's root)
 CASES = {
     "shell": ("go", "cluster", "get-kube.sh"),

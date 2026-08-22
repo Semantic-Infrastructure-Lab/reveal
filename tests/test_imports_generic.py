@@ -12,6 +12,11 @@ from tempfile import NamedTemporaryFile
 from reveal.analyzers.imports import get_extractor
 from reveal.analyzers.imports.base import get_all_extensions, get_supported_languages
 
+import pytest
+
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 def _extract(code: str, suffix: str):
     with NamedTemporaryFile(mode='w', suffix=suffix, delete=False) as f:

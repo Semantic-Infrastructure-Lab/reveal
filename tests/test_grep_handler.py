@@ -8,6 +8,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
+# BACK-1149: exercises reveal.main's CLI entry point via conftest._run_reveal_direct/subprocess
+pytestmark = pytest.mark.cli
+
 
 def run_reveal(*args):
     return subprocess.run(

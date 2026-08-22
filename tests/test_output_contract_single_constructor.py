@@ -27,6 +27,11 @@ from pathlib import Path
 from reveal.adapters.base import ResourceAdapter
 from reveal.utils.results import ResultBuilder
 
+import pytest
+
+# BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
+pytestmark = pytest.mark.contract
+
 # Files that legitimately define the contract rather than consume it.
 _CANONICAL = {
     Path("reveal/utils/results.py"),          # the sole constructor lives here

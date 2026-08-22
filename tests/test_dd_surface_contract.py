@@ -34,6 +34,9 @@ from pathlib import Path
 import pytest
 from conftest import _run_reveal_direct
 
+# BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
+pytestmark = pytest.mark.contract
+
 REPO = Path(__file__).parent / "fixtures" / "pack" / "sample_repo"
 REPO_STR = str(REPO)
 

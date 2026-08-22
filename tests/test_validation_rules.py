@@ -38,6 +38,11 @@ from reveal.rules.validation.V029 import V029
 from reveal.rules.validation.V031 import V031
 from reveal.rules.validation.utils import find_reveal_root
 
+import pytest
+
+# BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
+pytestmark = pytest.mark.contract
+
 
 class TestV001HelpDocumentation(unittest.TestCase):
     """Test V001: Help documentation completeness."""

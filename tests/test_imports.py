@@ -6,6 +6,9 @@ from reveal.analyzers.imports import ImportStatement, ImportGraph
 from reveal.analyzers.imports.python import extract_python_imports, extract_python_symbols
 from reveal.adapters.imports import ImportsAdapter
 
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 class TestIsIntraProjectImport:
     """BACK-547 honest-decline: per-language intra-project vs external classification.

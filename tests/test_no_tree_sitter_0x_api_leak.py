@@ -27,6 +27,11 @@ import re
 import unittest
 from pathlib import Path
 
+import pytest
+
+# BACK-1149: guards cross-version/cross-platform compatibility behavior
+pytestmark = pytest.mark.compat
+
 REVEAL_ROOT = Path(__file__).parent.parent / 'reveal'
 
 # Files that operate on tree-sitter nodes. These are the only files we lint

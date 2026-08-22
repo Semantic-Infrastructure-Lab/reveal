@@ -15,6 +15,9 @@ from reveal.utils.results import (
     create_meta
 )
 
+# BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
+pytestmark = pytest.mark.contract
+
 # Source files intentionally exempt from the "no raw current-version literal"
 # check below: reveal/utils/results.py's own module docstring shows
 # `contract_version='1.1'` as illustrative Usage-example text, not a real

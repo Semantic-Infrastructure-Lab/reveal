@@ -12,6 +12,11 @@ import os
 import tempfile
 from unittest.mock import patch, MagicMock
 
+import pytest
+
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 class TestCopyToClipboard(unittest.TestCase):
     """Unit tests for copy_to_clipboard function."""

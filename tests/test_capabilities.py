@@ -25,6 +25,11 @@ from reveal.capabilities import (
     CONFORMANCE_UNTESTED,
 )
 
+import pytest
+
+# BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
+pytestmark = pytest.mark.contract
+
 
 class TestEveryRegisteredAnalyzerHasAProfile(unittest.TestCase):
     """The guard test: every analyzer class actually wired into the

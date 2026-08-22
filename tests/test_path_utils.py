@@ -17,6 +17,9 @@ from reveal.utils.path_utils import (
     is_skippable_dir,
 )
 
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 class TestDetectNonPythonLanguage:
     """Test detect_non_python_language() — BACK-403 extension coverage."""

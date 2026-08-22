@@ -14,6 +14,9 @@ from unittest.mock import patch
 
 import pytest
 
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 # (module path, function name, expected empty result on parse failure)
 _SURFACE_SCANNERS = [
     ('reveal.adapters.ast.nav_surface_php', 'scan_file_surface_php',

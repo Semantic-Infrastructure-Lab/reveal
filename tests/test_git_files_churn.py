@@ -2,6 +2,9 @@
 
 import pytest
 
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 @pytest.fixture
 def churn_repo(tmp_path):

@@ -24,6 +24,9 @@ import pytest
 import yaml
 from conftest import _run_reveal_direct
 
+# BACK-1149: cross-language conformance/smoke coverage
+pytestmark = pytest.mark.conformance
+
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "conformance"
 EXPECTED = yaml.safe_load((FIXTURES_DIR / "expected.yaml").read_text())
 

@@ -28,6 +28,9 @@ from reveal.adapters.claude.analysis.tools import (
     is_tool_error,
 )
 
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 

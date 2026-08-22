@@ -15,6 +15,9 @@ from reveal.display.formatting import (
     _format_standard_items,
 )
 
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 # ============================================================================
 # Test utility functions (lines 28-32, 46-49, 62-71, 86-95, 107-109)

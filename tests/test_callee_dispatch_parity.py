@@ -48,6 +48,9 @@ from typing import Any, Callable
 import pytest
 import tree_sitter_language_pack as ts
 
+# BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
+pytestmark = pytest.mark.contract
+
 REVEAL_DIR = Path(__file__).resolve().parent.parent / "reveal"
 NAV_CALLS = REVEAL_DIR / "core" / "nav_calls.py"
 TREESITTER = REVEAL_DIR / "treesitter.py"

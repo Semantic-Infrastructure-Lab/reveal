@@ -7,6 +7,9 @@ from pathlib import Path
 import pytest
 from reveal.analyzers.nginx import NginxAnalyzer
 
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 def safe_unlink(filepath, retries=5, delay=0.5):
     """Safely remove a file, with retries for Windows file locking issues."""

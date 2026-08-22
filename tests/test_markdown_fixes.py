@@ -15,6 +15,11 @@ from pathlib import Path
 from reveal.analyzers.markdown import MarkdownAnalyzer
 from reveal.display import build_heading_hierarchy
 
+import pytest
+
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 class TestIssue1ConditionalHeadingInclusion(unittest.TestCase):
     """Tests for Issue #1: --links should show ONLY links, not headings.

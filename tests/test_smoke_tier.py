@@ -59,6 +59,9 @@ from pathlib import Path
 import pytest
 from conftest import _run_reveal_direct
 
+# BACK-1149: cross-language conformance/smoke coverage
+pytestmark = pytest.mark.conformance
+
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "smoke"
 
 # validate()/run() are named identically in every fixture; processOrder is

@@ -19,6 +19,11 @@ import shutil
 from pathlib import Path
 from reveal.rules.validation.V023 import V023
 
+import pytest
+
+# BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
+pytestmark = pytest.mark.contract
+
 
 class TestV023Metadata(unittest.TestCase):
     """Test V023 rule metadata."""

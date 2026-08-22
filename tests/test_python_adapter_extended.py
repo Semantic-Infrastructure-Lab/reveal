@@ -18,6 +18,11 @@ import sys
 import unittest
 from reveal.adapters.python import PythonAdapter
 
+import pytest
+
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 class TestGetElementRouting(unittest.TestCase):
     """Every documented element route must return a dict, not None."""

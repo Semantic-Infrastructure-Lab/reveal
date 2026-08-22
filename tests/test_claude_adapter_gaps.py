@@ -27,6 +27,9 @@ import pytest
 from reveal.adapters.claude.adapter import ClaudeAdapter
 from reveal.adapters.claude.handlers.post_process import _normalize_date
 
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 # ─── Fixtures / helpers ───────────────────────────────────────────────────────
 

@@ -18,6 +18,11 @@ from reveal.utils.path_utils import (
 )
 from reveal.capabilities import capability_tiers_for, scope_dict_for_path
 
+import pytest
+
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 SUPPORTED = {'python', 'typescript', 'tsx'}
 
 

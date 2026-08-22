@@ -13,6 +13,11 @@ from pathlib import Path
 
 from reveal.utils.path_utils import assess_language_coverage, LanguageCoverage
 
+import pytest
+
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 # surface/contracts supported registry language keys
 SUPPORTED = {'python', 'typescript', 'tsx'}
 

@@ -19,6 +19,11 @@ from reveal.core import (
 )
 from reveal.core.treesitter_compat import _zero_arg
 
+import pytest
+
+# BACK-1149: guards cross-version/cross-platform compatibility behavior
+pytestmark = pytest.mark.compat
+
 
 def _parse(code: str, lang: str = 'python'):
     parser = ts.get_parser(lang)

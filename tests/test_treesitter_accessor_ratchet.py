@@ -38,6 +38,11 @@ from pathlib import Path
 
 import reveal
 
+import pytest
+
+# BACK-1149: guards cross-version/cross-platform compatibility behavior
+pytestmark = pytest.mark.compat
+
 # Zero-argument Node/TreeCursor accessors that flip method->property in the newer
 # py-tree-sitter API, plus root_node (already fully migrated -> baseline 0).
 # Counts are *occurrences* (multiple per line counted) found by the regex below,

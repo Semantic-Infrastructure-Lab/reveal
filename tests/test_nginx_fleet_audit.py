@@ -15,6 +15,11 @@ from reveal.adapters.nginx.adapter import (
     _run_fleet_audit,
 )
 
+import pytest
+
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 # ---------------------------------------------------------------------------
 # Helpers

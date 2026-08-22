@@ -29,6 +29,9 @@ from pathlib import Path
 import pytest
 from conftest import _run_reveal_direct
 
+# BACK-1149: exercises reveal.main's CLI entry point via conftest._run_reveal_direct/subprocess
+pytestmark = pytest.mark.cli
+
 REPO = Path(__file__).parent / "fixtures" / "pack" / "sample_repo"
 
 # Every file in the fixture repo. pack must account for all of them (as selected

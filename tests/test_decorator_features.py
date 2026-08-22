@@ -6,6 +6,9 @@ import os
 from pathlib import Path
 from conftest import _run_reveal_direct
 
+# BACK-1149: exercises reveal.main's CLI entry point via conftest._run_reveal_direct/subprocess
+pytestmark = pytest.mark.cli
+
 
 class TestB002StaticmethodWithSelf:
     """Tests for B002: @staticmethod with self parameter."""

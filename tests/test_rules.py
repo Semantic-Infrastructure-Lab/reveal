@@ -12,6 +12,11 @@ from reveal.rules.security.S701 import S701
 from reveal.rules.security.S001 import S001
 from reveal.rules.imports.I001 import I001
 
+import pytest
+
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 class TestB001BareExcept(unittest.TestCase):
     """Test B001: Bare except clause detector."""

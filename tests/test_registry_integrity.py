@@ -18,6 +18,11 @@ from typing import Set, Dict
 from reveal.adapters.base import list_supported_schemes, get_adapter_class
 from reveal.registry import get_all_analyzers
 
+import pytest
+
+# BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
+pytestmark = pytest.mark.contract
+
 
 class TestAdapterRegistryIntegrity(unittest.TestCase):
     """Test that all adapters are properly registered and importable."""

@@ -4,6 +4,9 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from reveal.utils.clipboard import copy_to_clipboard
 
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 class TestCopyToClipboard:
     """Test copy_to_clipboard() for cross-platform clipboard support."""

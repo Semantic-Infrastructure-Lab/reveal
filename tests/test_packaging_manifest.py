@@ -11,6 +11,11 @@ import tempfile
 import shutil
 from pathlib import Path
 
+import pytest
+
+# BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
+pytestmark = pytest.mark.contract
+
 
 class TestPackagingManifest(unittest.TestCase):
     """Test that MANIFEST.in accurately includes all necessary files."""

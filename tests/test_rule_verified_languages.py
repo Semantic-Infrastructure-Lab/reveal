@@ -26,6 +26,9 @@ from reveal.rules.coverage import (
     _tier1_languages,
 )
 
+# BACK-1149: cross-language conformance/smoke coverage
+pytestmark = pytest.mark.conformance
+
 
 # --------------------------------------------------------------------------- #
 # Per applicability-class derivation

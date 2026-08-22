@@ -21,6 +21,11 @@ from reveal.rendering.adapters.help import (
     help_error_exit_code,
 )
 
+import pytest
+
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 def capture_stdout(func, *args, **kwargs):
     """Capture stdout from a function call."""

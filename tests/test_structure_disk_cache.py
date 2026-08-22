@@ -15,6 +15,9 @@ from reveal.core import disk_cache
 from reveal import treesitter as ts_mod
 from reveal.analyzers.python import PythonAnalyzer
 
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 @pytest.fixture(autouse=True)
 def _isolate_cache(tmp_path, monkeypatch):

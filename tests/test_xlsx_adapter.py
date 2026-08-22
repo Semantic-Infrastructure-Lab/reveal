@@ -13,6 +13,7 @@ TEST_DATA_DIR = Path(__file__).parent / "test_data"
 SAMPLE_XLSX = Path.home() / "Downloads" / "QA Items.xlsx"  # Real test file
 
 
+@pytest.mark.component
 class TestXlsxAdapterInit:
     """Tests for adapter initialization and URI parsing."""
 
@@ -69,6 +70,7 @@ class TestXlsxAdapterInit:
             assert adapter.query_params.get('format') == 'csv'
 
 
+@pytest.mark.component
 class TestXlsxAdapterSchema:
     """Tests for adapter schema."""
 
@@ -107,6 +109,7 @@ class TestXlsxAdapterSchema:
             assert 'output_type' in example
 
 
+@pytest.mark.component
 class TestXlsxAdapterHelp:
     """Tests for adapter help system."""
 
@@ -138,6 +141,7 @@ class TestXlsxAdapterHelp:
 
 
 @pytest.mark.skipif(not SAMPLE_XLSX.exists(), reason="Test file not available")
+@pytest.mark.external_fixture
 class TestXlsxAdapterWorkbookOverview:
     """Tests for workbook overview functionality."""
 
@@ -173,6 +177,7 @@ class TestXlsxAdapterWorkbookOverview:
 
 
 @pytest.mark.skipif(not SAMPLE_XLSX.exists(), reason="Test file not available")
+@pytest.mark.external_fixture
 class TestXlsxAdapterSheetExtraction:
     """Tests for sheet extraction functionality."""
 
@@ -227,6 +232,7 @@ class TestXlsxAdapterSheetExtraction:
 
 
 @pytest.mark.skipif(not SAMPLE_XLSX.exists(), reason="Test file not available")
+@pytest.mark.external_fixture
 class TestXlsxAdapterCellRanges:
     """Tests for cell range extraction (A1 notation)."""
 
@@ -268,6 +274,7 @@ class TestXlsxAdapterCellRanges:
 
 
 @pytest.mark.skipif(not SAMPLE_XLSX.exists(), reason="Test file not available")
+@pytest.mark.external_fixture
 class TestXlsxAdapterRowLimiting:
     """Tests for row limiting functionality."""
 
@@ -302,6 +309,7 @@ class TestXlsxAdapterRowLimiting:
 
 
 @pytest.mark.skipif(not SAMPLE_XLSX.exists(), reason="Test file not available")
+@pytest.mark.external_fixture
 class TestXlsxAdapterFormatParameter:
     """Tests for format query parameter."""
 
@@ -331,6 +339,7 @@ class TestXlsxAdapterFormatParameter:
         assert 'preferred_format' not in result or result.get('preferred_format') is None
 
 
+@pytest.mark.component
 class TestXlsxRenderer:
     """Tests for renderer methods."""
 
@@ -439,6 +448,7 @@ class TestXlsxRenderer:
 
 
 @pytest.mark.skipif(not SAMPLE_XLSX.exists(), reason="Test file not available")
+@pytest.mark.external_fixture
 class TestXlsxAdapterEdgeCases:
     """Tests for edge cases and error handling."""
 
@@ -470,6 +480,7 @@ class TestXlsxAdapterEdgeCases:
         assert result['type'] == 'xlsx_sheet'
 
 
+@pytest.mark.component
 class TestXlsxAdapterCrossSheetSearch:
     """Tests for cross-sheet search functionality (BACK-003)."""
 
@@ -589,6 +600,7 @@ class TestXlsxAdapterCrossSheetSearch:
         assert result['pattern'] == 'Gadget'
 
 
+@pytest.mark.component
 class TestXlsxSearchRenderer:
     """Tests for the search result renderer (BACK-003)."""
 
@@ -655,6 +667,7 @@ class TestXlsxSearchRenderer:
 
 
 @pytest.mark.skipif(not SAMPLE_XLSX.exists(), reason="Test file not available")
+@pytest.mark.external_fixture
 class TestXlsxCrossSheetSearchIntegration:
     """Integration tests against the real QA Items.xlsx file."""
 
@@ -778,6 +791,7 @@ def _make_pivot_cache_bytes(table_names):
     ).encode('utf-8')
 
 
+@pytest.mark.component
 class TestPowerPivotDetection:
     """Unit tests for _detect_powerpivot (model path detection)."""
 
@@ -813,6 +827,7 @@ class TestPowerPivotDetection:
             assert adapter._detect_powerpivot(zf) is None
 
 
+@pytest.mark.component
 class TestXmlaItemDetection:
     """Unit tests for _find_xmla_item (XMLA CDATA item location)."""
 
@@ -852,6 +867,7 @@ class TestXmlaItemDetection:
             assert adapter._find_xmla_item(zf) is None
 
 
+@pytest.mark.component
 class TestXmlaParsing:
     """Unit tests for _parse_xmla with synthetic XMLA content."""
 
@@ -920,6 +936,7 @@ class TestXmlaParsing:
         assert data['xmla_available'] is True
 
 
+@pytest.mark.component
 class TestPivotCacheFallback:
     """Unit tests for _parse_pivot_cache."""
 
@@ -963,6 +980,7 @@ class TestPivotCacheFallback:
         assert data['xmla_available'] is False
 
 
+@pytest.mark.component
 class TestPowerPivotGetStructure:
     """Unit tests for the get_structure() powerpivot dispatch and result shapes."""
 
@@ -1033,6 +1051,7 @@ class TestPowerPivotGetStructure:
         assert result['has_model'] is False
 
 
+@pytest.mark.component
 class TestPowerPivotRenderer:
     """Unit tests for XlsxRenderer._render_powerpivot output."""
 
@@ -1108,6 +1127,7 @@ class TestPowerPivotRenderer:
 
 
 @pytest.mark.skipif(not POWERPIVOT_2013.exists(), reason="Power Pivot sample files not in /tmp/powerpivot-samples/")
+@pytest.mark.external_fixture
 class TestPowerPivotIntegration2013:
     """Integration tests against the real Excel 2013 Contoso sample file."""
 
@@ -1160,6 +1180,7 @@ class TestPowerPivotIntegration2013:
 
 
 @pytest.mark.skipif(not POWERPIVOT_2010.exists(), reason="Power Pivot sample files not in /tmp/powerpivot-samples/")
+@pytest.mark.external_fixture
 class TestPowerPivotIntegration2010:
     """Integration tests against the real Excel 2010 Contoso sample file."""
 
@@ -1176,6 +1197,7 @@ class TestPowerPivotIntegration2010:
 
 
 @pytest.mark.skipif(not POWERPIVOT_MODERN.exists(), reason="Power Pivot sample files not in /tmp/powerpivot-samples/")
+@pytest.mark.external_fixture
 class TestPowerPivotIntegrationModern:
     """Integration tests against a modern Power BI xlsx file (no XMLA)."""
 
@@ -1253,6 +1275,7 @@ def _make_xmla_item_bytes_with_relationships(tables, measures=None, relationship
     return outer_xml.encode('utf-16')
 
 
+@pytest.mark.component
 class TestPowerPivotRelationships:
     """Unit tests for ?powerpivot=relationships extraction and rendering."""
 
@@ -1349,6 +1372,7 @@ class TestPowerPivotRelationships:
 
 
 @pytest.mark.skipif(not POWERPIVOT_2013.exists(), reason="Power Pivot sample files not in /tmp/powerpivot-samples/")
+@pytest.mark.external_fixture
 class TestPowerPivotRelationshipsIntegration2013:
     """Integration tests for ?powerpivot=relationships against the Contoso 2013 sample."""
 
@@ -1375,6 +1399,7 @@ class TestPowerPivotRelationshipsIntegration2013:
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "xlsx"
 
 
+@pytest.mark.component
 class TestXlsxRealWorldFixtures:
     """Tests using real-world xlsx fixtures in tests/fixtures/xlsx/."""
 
@@ -1467,6 +1492,7 @@ def _capture(fn, *args, **kwargs) -> str:
 # split_m_section unit tests (pure logic, no file I/O)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.component
 class TestSplitMSection:
     """Unit tests for the M code section splitter."""
 
@@ -1513,6 +1539,7 @@ class TestSplitMSection:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(not FIXTURE_ADV_SALES.exists(), reason="AdventureWorks_Sales.xlsx not downloaded")
+@pytest.mark.component
 class TestPowerQueryIntegration:
     """Integration tests for ?powerquery= against AdventureWorks_Sales.xlsx."""
 
@@ -1597,6 +1624,7 @@ class TestPowerQueryIntegration:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(not FIXTURE_ADV_SALES.exists(), reason="AdventureWorks_Sales.xlsx not downloaded")
+@pytest.mark.component
 class TestNamedRangesIntegration:
     """Integration tests for ?names= against AdventureWorks_Sales.xlsx."""
 
@@ -1658,6 +1686,7 @@ class TestNamedRangesIntegration:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(not FIXTURE_ADV_SALES.exists(), reason="AdventureWorks_Sales.xlsx not downloaded")
+@pytest.mark.component
 class TestConnectionsIntegration:
     """Integration tests for ?connections= against AdventureWorks_Sales.xlsx."""
 
@@ -1715,6 +1744,7 @@ class TestConnectionsIntegration:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(not FIXTURE_ADV_SALES.exists(), reason="AdventureWorks_Sales.xlsx not downloaded")
+@pytest.mark.component
 class TestWorkbookOverviewExtras:
     """Banner extras (Power Query, connections, named ranges) in workbook overview."""
 
@@ -1764,6 +1794,7 @@ class TestWorkbookOverviewExtras:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(not FIXTURE_MODERN.exists(), reason="Retail_Analysis.xlsx fixture not present")
+@pytest.mark.external_fixture
 class TestTier2Pbixray:
     """Tier 2 pbixray extraction on modern Power BI xlsx (no XMLA)."""
 
@@ -1812,6 +1843,7 @@ class TestTier2Pbixray:
 # Help content coverage tests
 # ---------------------------------------------------------------------------
 
+@pytest.mark.component
 class TestHelpContentCoverage:
     """Verify the updated get_help() documents all new features."""
 

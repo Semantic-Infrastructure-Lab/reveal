@@ -15,6 +15,11 @@ import unittest
 from pathlib import Path
 import tempfile
 
+import pytest
+
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "fetch_corpus.py"
 spec = importlib.util.spec_from_file_location("fetch_corpus", SCRIPT_PATH)
 fetch_corpus = importlib.util.module_from_spec(spec)

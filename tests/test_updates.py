@@ -8,6 +8,9 @@ from pathlib import Path
 from unittest.mock import patch, Mock, MagicMock
 from reveal.utils.updates import check_for_updates
 
+# BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
+pytestmark = pytest.mark.component
+
 
 class TestCheckForUpdates:
     """Test check_for_updates() function."""

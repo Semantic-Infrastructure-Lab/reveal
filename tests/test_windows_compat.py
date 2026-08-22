@@ -11,6 +11,11 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 from reveal.adapters.env import EnvAdapter
 
+import pytest
+
+# BACK-1149: guards cross-version/cross-platform compatibility behavior
+pytestmark = pytest.mark.compat
+
 
 class TestWindowsCompatibility(unittest.TestCase):
     """Test Windows-specific compatibility features."""
