@@ -13,7 +13,12 @@ import textwrap
 import unittest
 from pathlib import Path
 
+import pytest
+
 from reveal.adapters.ast.adapter import AstAdapter
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 # ---------------------------------------------------------------------------

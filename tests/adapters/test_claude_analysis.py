@@ -11,6 +11,8 @@ added in violet-gem-0218:
   - get_message
 """
 
+import pytest
+
 from reveal.adapters.claude.analysis.messages import (
     _extract_text,
     _content_to_blocks,
@@ -20,6 +22,9 @@ from reveal.adapters.claude.analysis.messages import (
     get_thinking_blocks,
     get_message,
 )
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 # ---------------------------------------------------------------------------

@@ -10,6 +10,9 @@ from unittest.mock import patch
 from reveal.adapters.claude.adapter import ClaudeAdapter
 from reveal.adapters.claude.render_messages import _format_tool_params, _render_raw_block
 
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # Test fixtures directory
 FIXTURES_DIR = Path(__file__).parent.parent / 'fixtures' / 'conversations'

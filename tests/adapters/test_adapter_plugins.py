@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 from reveal.adapters.base import (
     _adapter_plugins_loaded,
     _load_adapter_plugin_dir,
@@ -13,6 +15,9 @@ from reveal.adapters.base import (
     discover_adapter_plugins,
     get_adapter_class,
 )
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestDiscoverAdapterPlugins(unittest.TestCase):

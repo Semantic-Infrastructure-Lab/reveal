@@ -12,11 +12,16 @@ import unittest
 from contextlib import redirect_stdout
 from typing import Dict, Any
 
+import pytest
+
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.ast.analysis import create_element_dict
 from reveal.adapters.ast.queries import extract_show_param, extract_builtins_param
 from reveal.adapters.ast.filtering import _matches_call_list
 from reveal.rendering.adapters.ast import render_ast_structure
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 # ---------------------------------------------------------------------------

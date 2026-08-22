@@ -6,6 +6,9 @@ import sys
 import pytest
 from reveal.adapters.nginx.renderer import NginxUriRenderer
 
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # ---------------------------------------------------------------------------
 # Helpers

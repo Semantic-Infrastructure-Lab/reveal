@@ -19,6 +19,11 @@ import unittest
 
 import tree_sitter_language_pack as ts
 
+import pytest
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # ---------------------------------------------------------------------------
 # Parse helpers (shared with test_ast_nav.py pattern)

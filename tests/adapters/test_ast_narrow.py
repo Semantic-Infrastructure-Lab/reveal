@@ -5,6 +5,8 @@ import tempfile
 import unittest
 
 from conftest import _run_reveal_direct
+import pytest
+
 from reveal.analyzers.python import PythonAnalyzer
 from reveal.adapters.ast.nav_narrow import (
     collect_narrowing,
@@ -15,6 +17,9 @@ from reveal.adapters.ast.nav_narrow import (
     _block_always_exits,
     _fmt_types,
 )
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 # ─────────────────────────── helpers ─────────────────────────────────────────

@@ -9,8 +9,13 @@ import os
 import tempfile
 import unittest
 
+import pytest
+
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.ast.filtering import _has_annotations
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 # ---------------------------------------------------------------------------

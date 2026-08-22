@@ -4,6 +4,8 @@ import tempfile
 import unittest
 
 from conftest import _run_reveal_direct
+import pytest
+
 from reveal.analyzers.python import PythonAnalyzer
 from reveal.adapters.ast.nav_cross_varflow import (
     cross_var_flow,
@@ -12,6 +14,9 @@ from reveal.adapters.ast.nav_cross_varflow import (
     _resolve_param_name,
     _find_function_node,
 )
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 # ─────────────────────────── helpers ─────────────────────────────────────────

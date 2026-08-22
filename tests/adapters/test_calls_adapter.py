@@ -20,11 +20,16 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, Dict
 
+import pytest
+
 from reveal.adapters.ast.call_graph import build_symbol_map, resolve_callees, build_alias_map
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.calls.index import build_callers_index, find_callers, find_callees, rank_by_callers, _bare_callee_name
 from reveal.adapters.calls.adapter import CallsAdapter, CallsRenderer
 from reveal.adapters.calls.renderer import render_calls_structure
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 # ---------------------------------------------------------------------------

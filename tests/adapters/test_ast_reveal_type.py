@@ -3,6 +3,8 @@ import os
 import tempfile
 import unittest
 
+import pytest
+
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.ast.nav_reveal_type import (
     _infer_await_shape,
@@ -12,6 +14,9 @@ from reveal.adapters.ast.nav_reveal_type import (
     collect_type_evidence,
     render_type_evidence,
 )
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 # ─────────────────────────── helpers ─────────────────────────────────────────

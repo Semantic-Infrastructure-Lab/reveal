@@ -3,6 +3,8 @@ import os
 import tempfile
 import unittest
 
+import pytest
+
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.ast.nav_dict_heatmap import (
     collect_dict_heatmap,
@@ -10,6 +12,9 @@ from reveal.adapters.ast.nav_dict_heatmap import (
     render_dict_heatmap,
     _suggest_typeddict_name,
 )
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 def _write_py(content: str) -> str:

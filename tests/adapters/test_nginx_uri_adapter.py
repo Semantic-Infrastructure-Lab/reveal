@@ -35,6 +35,9 @@ from reveal.adapters.nginx.adapter import (
     _resolve_symlink_info,
 )
 
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # ---------------------------------------------------------------------------
 # Fixtures

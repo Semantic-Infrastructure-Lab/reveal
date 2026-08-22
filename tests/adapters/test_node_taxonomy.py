@@ -17,6 +17,8 @@ import unittest
 
 import tree_sitter_language_pack as ts
 
+import pytest
+
 from reveal import complexity, treesitter
 from reveal.adapters.ast import node_taxonomy as tax
 from reveal.adapters.ast import nav_outline
@@ -25,6 +27,9 @@ from reveal.adapters.ast.nav_outline import element_outline, scope_chain
 from reveal.adapters.ast.nav_varflow import var_flow
 from reveal.analyzers.go import GoAnalyzer
 from reveal.analyzers.rust import RustAnalyzer
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestSharedIdentity(unittest.TestCase):

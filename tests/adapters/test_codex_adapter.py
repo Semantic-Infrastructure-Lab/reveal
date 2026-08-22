@@ -12,6 +12,9 @@ import pytest
 from reveal.adapters.codex.adapter import CodexAdapter, _UUID_RE
 from reveal.adapters.agent_base import pair_tool_calls
 
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # ---------------------------------------------------------------------------
 # Synthetic JSONL fixture

@@ -12,6 +12,11 @@ import unittest
 
 import tree_sitter_language_pack as ts
 
+import pytest
+
+# BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 def _parse_python(code: str):
     """Parse Python code and return (tree, root_node, get_text_fn, content_bytes)."""
