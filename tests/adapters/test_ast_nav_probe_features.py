@@ -20,7 +20,7 @@ import unittest
 import tree_sitter_language_pack as ts
 
 import pytest
-from reveal.core.treesitter_compat import _zero_arg
+from reveal.core.treesitter_compat import _zero_arg, ts_parse
 
 # BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -35,7 +35,7 @@ def _parse_python(code: str):
     parser = ts.get_parser('python')
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
     root = tree.root_node()
 
     def get_text(node):
@@ -521,7 +521,7 @@ class TestVarFlowBack411(unittest.TestCase):
         parser = ts.get_parser(lang)
         src = textwrap.dedent(code).lstrip('\n')
         content_bytes = src.encode('utf-8')
-        tree = parser.parse(src)
+        tree = ts_parse(parser, src)
         root = tree.root_node()
 
         def get_text(node):
@@ -1023,7 +1023,7 @@ def _parse_php(code: str):
     parser = ts.get_parser('php')
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
     root = tree.root_node()
 
     def get_text(node):
@@ -1523,7 +1523,7 @@ class TestCollectEffectsCSharpBack401(unittest.TestCase):
         """
         from tree_sitter_language_pack import get_parser
         parser = get_parser('c_sharp')
-        tree = parser.parse(code)
+        tree = ts_parse(parser, code)
         self._root = tree.root_node()
         lines = code.split('\n')
 
@@ -1557,7 +1557,7 @@ class TestJavaEffectsBack416(unittest.TestCase):
         from reveal.adapters.ast.nav_effects import collect_effects
         parser = get_parser('java')
         cb = code.encode()
-        root = parser.parse(code).root_node()
+        root = ts_parse(parser, code).root_node()
 
         def get_text(node):
             return cb[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
@@ -1602,7 +1602,7 @@ class TestJavaEffectsBack416(unittest.TestCase):
         from reveal.adapters.ast.nav_calls import range_calls
         parser = get_parser('java')
         cb = self.CODE.encode()
-        root = parser.parse(self.CODE).root_node()
+        root = ts_parse(parser, self.CODE).root_node()
         gt = lambda n: cb[_zero_arg(n, 'start_byte'):_zero_arg(n, 'end_byte')].decode()
         stack = [root]
         func = None
@@ -2023,7 +2023,7 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
         }
         """).lstrip('\n')
         content_bytes = src.encode('utf-8')
-        tree = parser.parse(src)
+        tree = ts_parse(parser, src)
         root = tree.root_node()
 
         def get_text(node):
@@ -2055,7 +2055,7 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
             b = os.environ['SUBSCRIPT_FORM']
         """).lstrip('\n')
         content_bytes = src.encode('utf-8')
-        tree = parser.parse(src)
+        tree = ts_parse(parser, src)
         root = tree.root_node()
 
         def get_text(node):
@@ -2089,7 +2089,7 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
         end
         """).lstrip('\n')
         content_bytes = src.encode('utf-8')
-        tree = parser.parse(src)
+        tree = ts_parse(parser, src)
         root = tree.root_node()
 
         def get_text(node):
@@ -2119,7 +2119,7 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
         }
         """).lstrip('\n')
         content_bytes = src.encode('utf-8')
-        tree = parser.parse(src)
+        tree = ts_parse(parser, src)
         root = tree.root_node()
 
         def get_text(node):
@@ -2142,7 +2142,7 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
         }
         """).lstrip('\n')
         content_bytes = src.encode('utf-8')
-        tree = parser.parse(src)
+        tree = ts_parse(parser, src)
         root = tree.root_node()
 
         def get_text(node):
@@ -2395,7 +2395,7 @@ def _parse_swift(code: str):
     parser = ts.get_parser('swift')
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
     root = tree.root_node()
 
     def get_text(node):
@@ -2461,7 +2461,7 @@ def _parse_kotlin(code: str):
     parser = ts.get_parser('kotlin')
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
     root = tree.root_node()
 
     def get_text(node):
@@ -2576,7 +2576,7 @@ class TestVarflowExcludesOwnDeclarationSiteButKeepsRecursiveReference(unittest.T
         }
         """).lstrip('\n')
         content_bytes = src.encode('utf-8')
-        root = parser.parse(src).root_node()
+        root = ts_parse(parser, src).root_node()
         # var_flow runs against the resolved function node in production
         # (ctx.func_node), not the source_file root — descend to it here too
         # (_declared_name_node needs the function node itself to find 'name').
@@ -2602,7 +2602,7 @@ def _parse_scala(code: str):
     parser = ts.get_parser('scala')
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
     root = tree.root_node()
 
     def get_text(node):
@@ -3091,7 +3091,7 @@ def _parse_zig(code: str):
     parser = ts.get_parser('zig')
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
     root = tree.root_node()
 
     def get_text(node):
@@ -3366,7 +3366,7 @@ def _parse_lua(code: str):
     parser = ts.get_parser('lua')
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
     root = tree.root_node()
 
     def get_text(node):
@@ -3470,7 +3470,7 @@ def _parse_ruby(code: str):
     parser = ts.get_parser('ruby')
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
     root = tree.root_node()
 
     def get_text(node):
@@ -3563,7 +3563,7 @@ def _parse_tsx(code: str):
     parser = ts.get_parser('tsx')
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
     root = tree.root_node()
 
     def get_text(node):
@@ -3874,7 +3874,7 @@ class TestBack547RubyDbAndFileTaxonomy(unittest.TestCase):
         from reveal.adapters.ast.nav_effects import collect_effects
         parser = ts.get_parser('ruby')
         content_bytes = src.encode('utf-8')
-        tree = parser.parse(src)
+        tree = ts_parse(parser, src)
         root = tree.root_node()
 
         def get_text(node):
@@ -4235,7 +4235,7 @@ class TestBack547RustMacroInvocation(unittest.TestCase):
     def _parse(self, src):
         parser = ts.get_parser('rust')
         content_bytes = src.encode('utf-8')
-        tree = parser.parse(src)
+        tree = ts_parse(parser, src)
         root = tree.root_node()
 
         def get_text(node):
@@ -4439,7 +4439,7 @@ class TestBack727KotlinSixCategoryWidening(unittest.TestCase):
         fun provideApiKey(): String = BuildConfig.TMDB_API_KEY
         """).lstrip('\n')
         content_bytes = src.encode('utf-8')
-        tree = parser.parse(src)
+        tree = ts_parse(parser, src)
         root = tree.root_node()
 
         def get_text(node):
@@ -4722,7 +4722,7 @@ def _parse_swift(code: str):
     parser = ts.get_parser('swift')
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
     root = tree.root_node()
 
     def get_text(node):
@@ -4966,7 +4966,7 @@ def _parse_gdscript(code: str):
     parser = ts.get_parser('gdscript')
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
     root = tree.root_node()
 
     def get_text(node):
@@ -5504,7 +5504,7 @@ class TestBack741RustTurbofishAndParenCalleeInNavCalls(unittest.TestCase):
     def _parse(self, src):
         parser = ts.get_parser('rust')
         content_bytes = src.encode('utf-8')
-        tree = parser.parse(src)
+        tree = ts_parse(parser, src)
         root = tree.root_node()
 
         def get_text(node):

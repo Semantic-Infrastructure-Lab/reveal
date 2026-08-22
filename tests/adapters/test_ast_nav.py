@@ -13,7 +13,7 @@ import unittest
 import tree_sitter_language_pack as ts
 
 import pytest
-from reveal.core.treesitter_compat import _zero_arg
+from reveal.core.treesitter_compat import _zero_arg, ts_parse
 
 # BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -24,7 +24,7 @@ def _parse_python(code: str):
     parser = ts.get_parser('python')
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
     root = tree.root_node()
 
     def get_text(node):
@@ -360,7 +360,7 @@ class TestScopeChainDefRecognitionCrossLanguage(unittest.TestCase):
         parser = ts.get_parser(language)
         src = textwrap.dedent(code).lstrip('\n')
         content_bytes = src.encode('utf-8')
-        tree = parser.parse(src)
+        tree = ts_parse(parser, src)
         root = tree.root_node()
 
         def get_text(node):
@@ -853,7 +853,7 @@ def _parse_lang(lang: str, code: str):
     parser = ts.get_parser(lang)
     src = textwrap.dedent(code).lstrip('\n')
     content_bytes = src.encode('utf-8')
-    tree = parser.parse(src)
+    tree = ts_parse(parser, src)
 
     def get_text(node):
         return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
