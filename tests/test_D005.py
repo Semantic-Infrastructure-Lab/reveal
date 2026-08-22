@@ -7,10 +7,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from reveal.rules.duplicates.D005 import (
     D005, _clear_index, _canonical_key, _find_project_root,
     _max_project_files, _build_index, _DEFAULT_MAX_PROJECT_FILES,
 )
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 def _write(directory: str, name: str, content: str) -> str:

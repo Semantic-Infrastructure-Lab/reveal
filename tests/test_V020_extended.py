@@ -9,7 +9,12 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import pytest
+
 from reveal.rules.validation.V020 import V020
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestV020ExtendedCoverage(unittest.TestCase):

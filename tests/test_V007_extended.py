@@ -13,6 +13,9 @@ import pytest
 
 from reveal.rules.validation.V007 import V007
 
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 class TestV007NoRevealRoot(unittest.TestCase):
     """Test V007 when reveal root cannot be found."""

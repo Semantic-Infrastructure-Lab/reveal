@@ -1,8 +1,13 @@
 """Tests for C905: Nesting depth too high rule."""
 
 import unittest
+import pytest
+
 from reveal.rules.complexity.C905 import C905
 from reveal.rules.base import Severity
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestC905Basic(unittest.TestCase):

@@ -5,7 +5,12 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from reveal.rules.validation.V021 import V021
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestV021NoRevealRoot(unittest.TestCase):

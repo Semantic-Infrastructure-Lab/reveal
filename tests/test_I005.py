@@ -1,7 +1,12 @@
 """Tests for I005: Duplicate imports detector."""
 
 import unittest
+import pytest
+
 from reveal.rules.imports.I005 import I005
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 def _imp(content, line=1, statement=None):

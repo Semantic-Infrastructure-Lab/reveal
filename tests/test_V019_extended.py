@@ -7,8 +7,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from reveal.rules.validation.V019 import V019
 from reveal.rules.base import Severity
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestV019NoRevealRoot(unittest.TestCase):

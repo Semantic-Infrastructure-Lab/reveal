@@ -3,6 +3,9 @@
 import pytest
 from reveal.rules.types.T004 import T004
 
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 class TestT004Attributes:
     def test_rule_attributes(self):

@@ -8,8 +8,13 @@ import unittest
 import tempfile
 import os
 from pathlib import Path
+import pytest
+
 from reveal.rules.maintainability.M104 import M104
 from reveal.rules.base import Severity
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestM104HardcodedLists(unittest.TestCase):

@@ -3,8 +3,13 @@
 import unittest
 import tempfile
 import os
+import pytest
+
 from reveal.rules.bugs.B006 import B006
 from reveal.rules.base import Severity
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestB006SilentBroadException(unittest.TestCase):

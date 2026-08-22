@@ -3,7 +3,12 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from reveal.rules.validation.V026 import V026
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestV026Init:

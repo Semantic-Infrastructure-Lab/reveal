@@ -1,7 +1,12 @@
 """Tests for D001: Duplicate function detection rule."""
 
 import unittest
+import pytest
+
 from reveal.rules.duplicates.D001 import D001
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestD001Basic(unittest.TestCase):

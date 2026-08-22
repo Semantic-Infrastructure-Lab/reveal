@@ -9,7 +9,12 @@ import tempfile
 import shutil
 from unittest import mock
 
+import pytest
+
 from reveal.rules.validation.V006 import V006
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestV006NoRevealRoot(unittest.TestCase):

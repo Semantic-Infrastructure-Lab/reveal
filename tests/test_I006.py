@@ -1,7 +1,12 @@
 """Tests for I006: Import inside function body detector."""
 
 import unittest
+import pytest
+
 from reveal.rules.imports.I006 import I006
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 def _imp(content, line):

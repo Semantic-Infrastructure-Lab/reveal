@@ -5,6 +5,9 @@ import tempfile
 from pathlib import Path
 from reveal.rules.maintainability.M105 import M105
 
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 class TestM105Init:
     """Tests for M105 rule initialization."""

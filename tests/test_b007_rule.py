@@ -4,8 +4,13 @@ failure in the Output Contract envelope (BACK-1017)."""
 import unittest
 import tempfile
 import os
+import pytest
+
 from reveal.rules.bugs.B007 import B007
 from reveal.rules.base import Severity
+
+# BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestB007EnvelopeBlindAdapterHandler(unittest.TestCase):
