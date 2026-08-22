@@ -6,7 +6,12 @@ import tempfile
 import os
 from pathlib import Path
 
+import pytest
+
 from reveal.adapters.json import JsonAdapter
+
+# BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestJsonAdapter(unittest.TestCase):

@@ -10,7 +10,12 @@ import unittest
 import sys
 import tempfile
 from pathlib import Path
+import pytest
+
 from reveal.adapters.python import PythonAdapter
+
+# BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestPythonAdapter(unittest.TestCase):

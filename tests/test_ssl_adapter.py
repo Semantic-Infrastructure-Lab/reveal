@@ -15,9 +15,14 @@ from pathlib import Path
 # Add reveal to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import pytest
+
 from reveal.adapters.ssl import SSLAdapter, SSLFetcher, CertificateInfo
 from reveal.adapters.ssl.certificate import check_ssl_health, _check_ocsp_availability, _hostname_matches_san
 from reveal.adapters.ssl.renderer import SSLRenderer
+
+# BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestHostnameMatchesSan(unittest.TestCase):

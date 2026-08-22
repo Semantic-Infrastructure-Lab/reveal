@@ -20,7 +20,12 @@ from datetime import datetime, date, time, timedelta, timezone
 # Add parent directory to path to import reveal
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import pytest
+
 from reveal.adapters.mysql import MySQLAdapter
+
+# BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestMySQLAdapterInit(unittest.TestCase):

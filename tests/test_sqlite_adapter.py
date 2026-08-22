@@ -48,7 +48,12 @@ def safe_unlink(filepath, retries=5, delay=0.5):
 # Add parent directory to path to import reveal
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import pytest
+
 from reveal.adapters.sqlite import SQLiteAdapter
+
+# BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class TestSQLiteAdapterInit(unittest.TestCase):

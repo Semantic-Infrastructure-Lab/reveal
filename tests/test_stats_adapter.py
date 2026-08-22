@@ -4,6 +4,9 @@ import pytest
 from pathlib import Path
 from reveal.adapters.stats import StatsAdapter
 
+# BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 class TestStatsAdapterBasics:
     """Test basic stats adapter functionality."""

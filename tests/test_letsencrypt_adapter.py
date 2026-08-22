@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import pytest
+
 from reveal.adapters.letsencrypt.adapter import (
     LetsEncryptAdapter,
     _walk_live_dir,
@@ -15,6 +17,9 @@ from reveal.adapters.letsencrypt.adapter import (
     _load_cert_info,
     _check_renewal_timer,
 )
+
+# BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 # ---------------------------------------------------------------------------

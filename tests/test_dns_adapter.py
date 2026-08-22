@@ -4,6 +4,9 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 import socket
 
+# BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 class TestGetDnsRecords:
     """Tests for get_dns_records function."""

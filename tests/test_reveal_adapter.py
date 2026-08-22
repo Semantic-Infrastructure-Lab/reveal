@@ -10,6 +10,9 @@ from pathlib import Path
 from conftest import _run_reveal_direct
 from reveal.adapters.reveal import RevealAdapter
 
+# BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 class TestRevealAdapterHelp:
     """Test get_help() static method."""

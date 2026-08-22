@@ -17,6 +17,9 @@ from reveal.adapters.cpanel.adapter import (
 )
 from reveal.adapters.cpanel.renderer import CpanelRenderer
 
+# BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # ---------------------------------------------------------------------------
 # Helpers

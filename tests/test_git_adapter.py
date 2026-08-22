@@ -27,6 +27,9 @@ except ImportError:
 
 from reveal.adapters.git import GitAdapter
 
+# BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 @pytest.fixture
 def git_repo(tmp_path):

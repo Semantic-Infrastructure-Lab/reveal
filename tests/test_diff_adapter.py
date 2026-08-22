@@ -8,7 +8,12 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
+import pytest
+
 from reveal.adapters.diff import DiffAdapter
+
+# BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 def safe_rmtree(dirpath, retries=5, delay=0.5):
