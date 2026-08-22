@@ -29,7 +29,7 @@ def _get_text(node, content_bytes: bytes) -> str:
 
 
 def _get_line(node) -> int:
-    return node.start_position().row + 1
+    return _zero_arg(node, 'start_position').row + 1
 
 
 def _add_once(lst: List[Dict[str, Any]], entry: Dict[str, Any]) -> None:

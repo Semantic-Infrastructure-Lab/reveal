@@ -100,8 +100,8 @@ def _collect_frames(
         kw_name = callout['param'] if callout['arg_pos'] == -1 else ''
         mapped_param = _resolve_param_name(callee_node, callout['arg_pos'], get_text, kw_name)
         callout['param'] = mapped_param  # update so renderer sees resolved name
-        callee_start = callee_node.start_position().row + 1
-        callee_end = callee_node.end_position().row + 1
+        callee_start = _zero_arg(callee_node, 'start_position').row + 1
+        callee_end = _zero_arg(callee_node, 'end_position').row + 1
         _collect_frames(
             analyzer, callee_node, mapped_param,
             callee_start, callee_end, get_text,
@@ -140,9 +140,9 @@ def _scan_for_callouts(
     callouts: List[Dict[str, Any]],
 ) -> None:
     ntype = _zero_arg(node, 'kind')
-    line = node.start_position().row + 1
+    line = _zero_arg(node, 'start_position').row + 1
 
-    if line > to_line or node.end_position().row + 1 < from_line:
+    if line > to_line or _zero_arg(node, 'end_position').row + 1 < from_line:
         return
 
     if ntype in ('function_definition', 'async_function_definition'):

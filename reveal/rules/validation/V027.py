@@ -271,6 +271,6 @@ def _iter_param_column_entries(root: Any, guide_text: str) -> Iterator[tuple]:
             cells = [c for c in node_children(row) if _zero_arg(c, 'kind') == 'pipe_table_cell']
             if param_col >= len(cells):
                 continue
-            line = row.start_position().row + 1
+            line = _zero_arg(row, 'start_position').row + 1
             for name in re.findall(r'`([a-zA-Z][a-zA-Z0-9_-]*)`', cell_text(cells[param_col])):
                 yield name, line

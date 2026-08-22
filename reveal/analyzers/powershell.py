@@ -141,7 +141,7 @@ class PowerShellAnalyzer(TreeSitterAnalyzer):
                 if name:
                     structs.append({
                         'name': name,
-                        'line': node.start_position().row + 1,
+                        'line': _zero_arg(node, 'start_position').row + 1,
                         'type': 'class',
                     })
 

@@ -66,7 +66,7 @@ class BashAnalyzer(TreeSitterAnalyzer):
             if len(value) > _MAX_VALUE_LEN:
                 value = value[:_MAX_VALUE_LEN - 3] + '...'
             variables.append({
-                'line': child.start_position().row + 1,
+                'line': _zero_arg(child, 'start_position').row + 1,
                 'name': name,
                 'signature': f' = {value}' if value else '',
             })

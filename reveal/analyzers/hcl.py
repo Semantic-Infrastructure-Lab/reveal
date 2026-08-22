@@ -68,7 +68,7 @@ class HCLAnalyzer(TreeSitterAnalyzer):
             attributes = self._extract_block_attributes(block_node)
 
             block_info = {
-                'line': block_node.start_position().row + 1,
+                'line': _zero_arg(block_node, 'start_position').row + 1,
                 'name': name,
             }
 

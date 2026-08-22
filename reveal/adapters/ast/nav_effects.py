@@ -1735,8 +1735,8 @@ def _collect_property_effects(
     stack = [func_node]
     while stack:
         node = stack.pop()
-        line = node.start_position().row + 1
-        if node.end_position().row + 1 < from_line or line > to_line:
+        line = _zero_arg(node, 'start_position').row + 1
+        if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             continue
         kind = _zero_arg(node, 'kind')
         if kind in CALL_NODE_TYPES:
@@ -1856,9 +1856,9 @@ def _resolve_definition_node(file_path: str, name: str, analyzer_cache: Dict[str
     node = _find_element_node(analyzer, name)
     if node is None:
         return None
-    start = node.start_position().row + 1
+    start = _zero_arg(node, 'start_position').row + 1
     end_node = getattr(analyzer, '_function_end_node', lambda n: n)(node)
-    end = end_node.end_position().row + 1
+    end = _zero_arg(end_node, 'end_position').row + 1
     return end_node, start, end, analyzer._get_node_text, getattr(analyzer, 'language', None)
 
 

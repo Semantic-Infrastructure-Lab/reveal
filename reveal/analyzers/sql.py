@@ -34,8 +34,8 @@ class SQLAnalyzer(TreeSitterAnalyzer):
 
     def _node_to_function_dict(self, node, name: str) -> Dict[str, Any]:
         """Convert a tree-sitter node to a function dict."""
-        line_start = node.start_position().row + 1
-        line_end = node.end_position().row + 1
+        line_start = _zero_arg(node, 'start_position').row + 1
+        line_end = _zero_arg(node, 'end_position').row + 1
         return {
             'line': line_start,
             'line_end': line_end,
@@ -49,8 +49,8 @@ class SQLAnalyzer(TreeSitterAnalyzer):
 
     def _node_to_class_dict(self, node, name: str) -> Dict[str, Any]:
         """Convert a tree-sitter node to a class/table dict."""
-        line_start = node.start_position().row + 1
-        line_end = node.end_position().row + 1
+        line_start = _zero_arg(node, 'start_position').row + 1
+        line_end = _zero_arg(node, 'end_position').row + 1
         return {
             'line': line_start,
             'line_end': line_end,

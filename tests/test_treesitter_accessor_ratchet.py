@@ -58,19 +58,20 @@ pytestmark = pytest.mark.compat
 #
 # child_count/parent/start_position/end_position (BACK-1158, filed
 # torrential-breeze-0821): a second, unscoped migration the codemod tool
-# never covered until it was extended to find them. Baselines below are the
-# as-filed raw-site counts, not yet migrated -- ratchet only guards against
-# *growth* from here; batches lower these the same way BACK-620's did.
+# never covered until it was extended to find them. All real call sites
+# migrated as of turquoise-flash-0821's final batch -- floored at 0, same
+# as start_byte/end_byte/root_node (no docstring false-positives for any
+# of these 4, unlike kind/is_named).
 BASELINE = {
     "kind": 2,
     "start_byte": 0,
     "end_byte": 0,
     "is_named": 1,
     "root_node": 0,
-    "child_count": 1,
-    "parent": 2,
-    "start_position": 41,
-    "end_position": 16,
+    "child_count": 0,
+    "parent": 0,
+    "start_position": 0,
+    "end_position": 0,
 }
 
 _SRC_ROOT = Path(reveal.__file__).parent

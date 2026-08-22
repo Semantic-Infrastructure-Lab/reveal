@@ -227,7 +227,7 @@ def _format_ast_node(node, depth: int = 0, max_depth: Optional[int] = None, pref
     node_type = _zero_arg(node, 'kind')
 
     # Show text for leaf nodes
-    if node.child_count() == 0:
+    if _zero_arg(node, 'child_count') == 0:
         text = src_bytes[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8', errors='ignore') if src_bytes else ""
         if len(text) > 50:
             text = text[:47] + "..."

@@ -36,7 +36,7 @@ def _strip_quotes(text: str) -> str:
 
 
 def _node_line(node: Any) -> int:
-    return node.start_position().row + 1
+    return _zero_arg(node, 'start_position').row + 1
 
 
 def _kind(node: Any) -> str:

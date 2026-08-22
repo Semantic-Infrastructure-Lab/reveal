@@ -98,8 +98,8 @@ class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
             detections.append(self.create_detection(
                 file_path=file_path,
-                line=node.start_position().row + 1,
-                column=node.start_position().column + 1,
+                line=_zero_arg(node, 'start_position').row + 1,
+                column=_zero_arg(node, 'start_position').column + 1,
                 message="Bare 'catch { }' names no exception type, catching everything",
                 suggestion="Catch a specific exception type instead of a bare 'catch { }'.",
                 context=self._ts_node_text(node, content_bytes).split('\n')[0],
@@ -132,8 +132,8 @@ class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
             detections.append(self.create_detection(
                 file_path=file_path,
-                line=node.start_position().row + 1,
-                column=node.start_position().column + 1,
+                line=_zero_arg(node, 'start_position').row + 1,
+                column=_zero_arg(node, 'start_position').column + 1,
                 message="'catch (...)' catches everything, including non-exception thrown values",
                 suggestion="Catch std::exception (or a specific type) instead of 'catch (...)'.",
                 context=self._ts_node_text(node, content_bytes).split('\n')[0],

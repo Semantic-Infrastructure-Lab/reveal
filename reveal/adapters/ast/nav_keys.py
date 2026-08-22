@@ -270,8 +270,8 @@ class _KeysWalker:
     results: List[Dict[str, Any]] = field(default_factory=list)
 
     def walk(self, node: Any, context: str) -> None:
-        start = node.start_position().row + 1
-        end = node.end_position().row + 1
+        start = _zero_arg(node, 'start_position').row + 1
+        end = _zero_arg(node, 'end_position').row + 1
         if end < self.from_line or start > self.to_line:
             return
         ntype = _zero_arg(node, 'kind')
@@ -327,7 +327,7 @@ class _KeysWalker:
                     prev_identifier, self.var_name, self.get_text)
                 if base_matches:
                     key = _clean_literal(self.get_text(key_node))
-                    line = prev_identifier.start_position().row + 1
+                    line = _zero_arg(prev_identifier, 'start_position').row + 1
                     self.results.append(
                         {'key': key, 'kind': context, 'line': line, 'access': 'subscript'})
                     prev_identifier = None

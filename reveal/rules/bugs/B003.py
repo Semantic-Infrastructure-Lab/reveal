@@ -112,8 +112,8 @@ def compute_status(self) -> str:
                 if keyword != 'get' or block is None:
                     continue  # auto-property accessor (`get;`) or a `set`
 
-                line = block.start_position().row + 1
-                end_line = block.end_position().row + 1
+                line = _zero_arg(block, 'start_position').row + 1
+                end_line = _zero_arg(block, 'end_position').row + 1
                 line_count = end_line - line + 1
                 if line_count > self.MAX_PROPERTY_LINES:
                     detections.append(self.create_detection(
@@ -153,8 +153,8 @@ def compute_status(self) -> str:
                 continue  # expression-bodied `get() = expr` — nothing to measure
 
             name = self._kotlin_property_name(node, content_bytes)
-            line = function_body.start_position().row + 1
-            end_line = function_body.end_position().row + 1
+            line = _zero_arg(function_body, 'start_position').row + 1
+            end_line = _zero_arg(function_body, 'end_position').row + 1
             line_count = end_line - line + 1
             if line_count > self.MAX_PROPERTY_LINES:
                 detections.append(self.create_detection(
@@ -237,8 +237,8 @@ def compute_status(self) -> str:
                 continue  # set-only, no getter to measure (invalid Swift, but be defensive)
 
             name = self._swift_property_name(node, content_bytes)
-            line = target.start_position().row + 1
-            end_line = target.end_position().row + 1
+            line = _zero_arg(target, 'start_position').row + 1
+            end_line = _zero_arg(target, 'end_position').row + 1
             line_count = end_line - line + 1
             if line_count > self.MAX_PROPERTY_LINES:
                 detections.append(self.create_detection(

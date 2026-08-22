@@ -79,7 +79,7 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
             name = self._elixir_definition_name(node)
             if not name:
                 continue
-            key = (node.start_position().row + 1, name)
+            key = (_zero_arg(node, 'start_position').row + 1, name)
             if key in seen:
                 continue
             seen.add(key)
@@ -96,7 +96,7 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
             name = self._elixir_definition_name(node)
             if not name:
                 continue
-            key = (node.start_position().row + 1, name)
+            key = (_zero_arg(node, 'start_position').row + 1, name)
             if key in seen:
                 continue
             seen.add(key)
@@ -128,8 +128,8 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
                 )
                 return {
                     'name': name,
-                    'line_start': node.start_position().row + 1,
-                    'line_end': end_node.end_position().row + 1,
+                    'line_start': _zero_arg(node, 'start_position').row + 1,
+                    'line_end': _zero_arg(end_node, 'end_position').row + 1,
                     'source': source,
                 }
         return super().extract_element(element_type, name)

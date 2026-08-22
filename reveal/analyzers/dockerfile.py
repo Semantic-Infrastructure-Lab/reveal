@@ -60,7 +60,7 @@ class DockerfileAnalyzer(TreeSitterAnalyzer):
                     structure[key] = []
 
                 # Extract instruction content
-                line_num = node.start_position().row + 1
+                line_num = _zero_arg(node, 'start_position').row + 1
                 content = self._get_instruction_content(node)
 
                 if key == 'from':

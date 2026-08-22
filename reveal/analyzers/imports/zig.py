@@ -83,7 +83,7 @@ class ZigImportExtractor(LanguageExtractor):
         parent) holds the string-literal argument. Non-string-literal args
         (impossible in valid Zig, but be defensive) are skipped.
         """
-        parent = node.parent()
+        parent = _zero_arg(node, 'parent')
         if parent is None:
             return None
 
@@ -104,13 +104,13 @@ class ZigImportExtractor(LanguageExtractor):
 
         return ImportStatement(
             file_path=file_path,
-            line_number=node.start_position().row + 1,
+            line_number=_zero_arg(node, 'start_position').row + 1,
             module_name=module,
             imported_names=[],
             is_relative=module.startswith('.') or module.endswith('.zig'),
             import_type='import',
             alias=None,
-            source_line=_line_text(analyzer, node.start_position().row + 1),
+            source_line=_line_text(analyzer, _zero_arg(node, 'start_position').row + 1),
             skip_unused=True,
         )
 

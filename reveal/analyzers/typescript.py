@@ -1,6 +1,7 @@
 """TypeScript (.ts) and TypeScript React (.tsx) file analyzers."""
 
 from typing import Any, Dict, List, Optional
+from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ._js_callee_names import JSCalleeNameMixin
@@ -44,8 +45,8 @@ class _TypeScriptBase(
                 name = self._get_node_name(node)
                 if not name:
                     continue
-                line_start = node.start_position().row + 1
-                line_end = node.end_position().row + 1
+                line_start = _zero_arg(node, 'start_position').row + 1
+                line_end = _zero_arg(node, 'end_position').row + 1
                 entry: Dict[str, Any] = {
                     'line': line_start,
                     'line_end': line_end,

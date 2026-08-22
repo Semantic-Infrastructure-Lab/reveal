@@ -90,7 +90,7 @@ def _walk(
     if ntype in ('function_definition', 'async_function_definition'):
         name_node = node.child_by_field_name('name')
         func_name = get_text(name_node) if name_node else '?'
-        func_line = node.start_position().row + 1
+        func_line = _zero_arg(node, 'start_position').row + 1
 
         params_node = node.child_by_field_name('parameters')
         if params_node:
@@ -150,7 +150,7 @@ def _check_parameters(
                     'file': file_path,
                     'function': func_name,
                     'func_line': func_line,
-                    'line': child.start_position().row + 1,
+                    'line': _zero_arg(child, 'start_position').row + 1,
                     'kind': 'param',
                     'annotation': '',
                     'shape': '',
@@ -163,7 +163,7 @@ def _check_parameters(
                     'file': file_path,
                     'function': func_name,
                     'func_line': func_line,
-                    'line': child.start_position().row + 1,
+                    'line': _zero_arg(child, 'start_position').row + 1,
                     'kind': 'param',
                     'annotation': annotation,
                     'shape': '',
@@ -175,7 +175,7 @@ def _check_parameters(
                     'file': file_path,
                     'function': func_name,
                     'func_line': func_line,
-                    'line': child.start_position().row + 1,
+                    'line': _zero_arg(child, 'start_position').row + 1,
                     'kind': 'param',
                     'annotation': '',
                     'shape': '',
@@ -256,7 +256,7 @@ def _add_assign(
         'file': file_path,
         'function': func_stack[-1] if func_stack else '',
         'func_line': 0,
-        'line': node.start_position().row + 1,
+        'line': _zero_arg(node, 'start_position').row + 1,
         'kind': 'assign',
         'annotation': annotation,
         'shape': shape,
@@ -289,7 +289,7 @@ def _check_for(
         'file': file_path,
         'function': func_stack[-1] if func_stack else '',
         'func_line': 0,
-        'line': node.start_position().row + 1,
+        'line': _zero_arg(node, 'start_position').row + 1,
         'kind': 'for',
         'annotation': '',
         'shape': shape,

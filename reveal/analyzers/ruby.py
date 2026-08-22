@@ -70,7 +70,7 @@ class RubyAnalyzer(TreeSitterAnalyzer):
         # `+=`/`||=` (`operator_assignment`) is NOT excluded here: it reads
         # the attribute before writing it, so it's a genuine call, matching
         # real Ruby semantics.
-        parent = call_node.parent()
+        parent = _zero_arg(call_node, 'parent')
         if parent is not None and _zero_arg(parent, 'kind') == 'assignment':
             left = parent.child_by_field_name('left')
             if (left is not None

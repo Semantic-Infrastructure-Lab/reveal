@@ -150,8 +150,8 @@ def _walk_assignments(
     get_text: Callable,
     results: List[Dict[str, Any]],
 ) -> None:
-    start = node.start_position().row + 1
-    end = node.end_position().row + 1
+    start = _zero_arg(node, 'start_position').row + 1
+    end = _zero_arg(node, 'end_position').row + 1
     if start > to_line or end < from_line:
         return
     if _zero_arg(node, 'is_named') and _zero_arg(node, 'kind') in _ASSIGNMENT_NODES:

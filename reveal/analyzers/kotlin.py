@@ -99,7 +99,7 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
             if self._is_nested_error(node, error_starts):
                 continue  # a fragment of an already-handled outer ERROR
 
-            line = node.start_position().row + 1
+            line = _zero_arg(node, 'start_position').row + 1
             match = self._match_kotlin_error_declaration(node)
             if match is None:
                 parse_warnings.append({
@@ -114,7 +114,7 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
                 continue
 
             keyword, name = match
-            line_end = node.end_position().row + 1
+            line_end = _zero_arg(node, 'end_position').row + 1
             entry: Dict[str, Any] = {
                 'line': line,
                 'line_end': line_end,
@@ -201,7 +201,7 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
         for node in self._find_nodes_by_type('class_declaration'):
             for child in _children(node):
                 if _zero_arg(child, 'kind') == 'interface':
-                    lines.add(node.start_position().row + 1)
+                    lines.add(_zero_arg(node, 'start_position').row + 1)
                     break
         return lines
 

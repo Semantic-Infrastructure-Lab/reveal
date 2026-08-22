@@ -28,8 +28,8 @@ def _extract_key_pair_element(analyzer, name: str, pairs: List[Any]) -> Optional
     for pair in pairs:
         key_name, _ = analyzer._extract_key_info(pair)
         if key_name == name:
-            start_line = pair.start_position().row + 1
-            end_line = pair.end_position().row + 1
+            start_line = _zero_arg(pair, 'start_position').row + 1
+            end_line = _zero_arg(pair, 'end_position').row + 1
             source = '\n'.join(analyzer.lines[start_line-1:end_line])
 
             return {
@@ -111,7 +111,7 @@ class YamlAnalyzer(TreeSitterAnalyzer):
             key_name, _ = self._extract_key_info(pair)
             if key_name:
                 keys.append({
-                    'line_start': pair.start_position().row + 1,
+                    'line_start': _zero_arg(pair, 'start_position').row + 1,
                     'name': key_name,
                 })
 
@@ -199,7 +199,7 @@ class JsonAnalyzer(TreeSitterAnalyzer):
             key_name, _ = self._extract_key_info(pair)
             if key_name:
                 keys.append({
-                    'line_start': pair.start_position().row + 1,
+                    'line_start': _zero_arg(pair, 'start_position').row + 1,
                     'name': key_name,
                 })
 
