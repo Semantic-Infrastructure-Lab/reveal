@@ -62,10 +62,10 @@ BASELINE = {
     "end_byte": 0,
     "is_named": 1,
     "root_node": 0,
-    "child_count": 17,
-    "parent": 35,
-    "start_position": 127,
-    "end_position": 38,
+    "child_count": 11,
+    "parent": 13,
+    "start_position": 95,
+    "end_position": 31,
 }
 
 _SRC_ROOT = Path(reveal.__file__).parent

@@ -564,9 +564,12 @@ class JavaScriptExtractor(LanguageExtractor):
                 symbols.add(name)
 
             # Also handle member expression (foo.bar -> track 'foo')
-            if node.parent() and _zero_arg(node.parent(), 'kind') == 'member_expression':
+            if (
+                _zero_arg(node, 'parent')
+                and _zero_arg(_zero_arg(node, 'parent'), 'kind') == 'member_expression'
+            ):
                 # Get root of member expression chain
-                root = self._get_root_identifier(node.parent(), analyzer)
+                root = self._get_root_identifier(_zero_arg(node, 'parent'), analyzer)
                 if root:
                     symbols.add(root)
 
@@ -663,7 +666,7 @@ class JavaScriptExtractor(LanguageExtractor):
             import foo, { bar } from 'module'       # import_clause with both
             import 'module'                         # just string node (side-effect)
         """
-        line_number = node.start_position().row + 1
+        line_number = _zero_arg(node, 'start_position').row + 1
 
         # Extract module path
         module_path = self._extract_module_path_from_import(node, analyzer)
@@ -723,7 +726,7 @@ class JavaScriptExtractor(LanguageExtractor):
                         if spec_children:
                             imported_names.append(analyzer._get_node_text(spec_children[0]))
 
-        line_number = node.start_position().row + 1
+        line_number = _zero_arg(node, 'start_position').row + 1
         return ImportStatement(
             file_path=file_path,
             line_number=line_number,
@@ -805,11 +808,11 @@ class JavaScriptExtractor(LanguageExtractor):
             const foo = require('module')           -> ['foo']
             const { foo, bar } = require('module')  -> ['foo', 'bar']
         """
-        parent = node.parent()
+        parent = _zero_arg(node, 'parent')
         if not parent or _zero_arg(parent, 'kind') != 'variable_declarator':
             return []
 
-        if not parent.child_count():
+        if not _zero_arg(parent, 'child_count'):
             return []
 
         left_side = analyzer._get_node_text(parent.child(0))
@@ -857,7 +860,7 @@ class JavaScriptExtractor(LanguageExtractor):
         if not module_path:
             return None
 
-        line_number = node.start_position().row + 1
+        line_number = _zero_arg(node, 'start_position').row + 1
 
         # Handle dynamic import
         if func_name == 'import':
@@ -877,10 +880,10 @@ class JavaScriptExtractor(LanguageExtractor):
         - Import names
         - Object property keys
         """
-        if not node.parent():
+        if not _zero_arg(node, 'parent'):
             return True
 
-        parent_type = _zero_arg(node.parent(), 'kind')
+        parent_type = _zero_arg(_zero_arg(node, 'parent'), 'kind')
 
         # Skip definition contexts
         if parent_type in ('function_declaration', 'class_declaration', 'method_definition',
@@ -891,16 +894,16 @@ class JavaScriptExtractor(LanguageExtractor):
         # For variable declarations, check if this is the identifier being declared
         if parent_type == 'variable_declarator':
             # First child is the name being declared
-            _p = node.parent()
-            if (_p and _p.child_count() > 0 and
+            _p = _zero_arg(node, 'parent')
+            if (_p and _zero_arg(_p, 'child_count') > 0 and
                     _zero_arg(_p.child(0), 'start_byte') == _zero_arg(node, 'start_byte')):
                 return False
 
         # For member expressions like { key: value }, skip keys
         if parent_type == 'pair':
             # First child is the key
-            _p = node.parent()
-            if (_p and _p.child_count() > 0 and
+            _p = _zero_arg(node, 'parent')
+            if (_p and _zero_arg(_p, 'child_count') > 0 and
                     _zero_arg(_p.child(0), 'start_byte') == _zero_arg(node, 'start_byte')):
                 return False
 

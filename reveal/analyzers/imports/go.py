@@ -126,8 +126,11 @@ class GoExtractor(LanguageExtractor):
                 symbols.add(name)
 
             # Handle selector expressions (pkg.Function -> track 'pkg')
-            if node.parent() and _zero_arg(node.parent(), 'kind') == 'selector_expression':
-                root = self._get_root_identifier(node.parent(), analyzer)
+            if (
+                _zero_arg(node, 'parent')
+                and _zero_arg(_zero_arg(node, 'parent'), 'kind') == 'selector_expression'
+            ):
+                root = self._get_root_identifier(_zero_arg(node, 'parent'), analyzer)
                 if root:
                     symbols.add(root)
 
@@ -138,7 +141,10 @@ class GoExtractor(LanguageExtractor):
         # node — so the identifier walk above never sees it and a package used
         # only for a type is falsely reported unused (BACK-420).
         for qt in analyzer._find_nodes_by_type('qualified_type'):
-            if qt.child_count() > 0 and _zero_arg(qt.child(0), 'kind') == 'package_identifier':
+            if (
+                _zero_arg(qt, 'child_count') > 0
+                and _zero_arg(qt.child(0), 'kind') == 'package_identifier'
+            ):
                 symbols.add(analyzer._get_node_text(qt.child(0)))
 
         return symbols
@@ -152,7 +158,7 @@ class GoExtractor(LanguageExtractor):
             . "fmt"                         # dot + interpreted_string_literal
             _ "database/sql/driver"         # blank_identifier + interpreted_string_literal
         """
-        line_number = spec_node.start_position().row + 1
+        line_number = _zero_arg(spec_node, 'start_position').row + 1
 
         # Extract components from AST
         package_path = None
@@ -251,7 +257,7 @@ class GoExtractor(LanguageExtractor):
         - Variable declarations (left side of :=)
         - Import names
         """
-        if not node.parent():
+        if not _zero_arg(node, 'parent'):
             return True
 
         # Walk up to check if inside import
@@ -259,9 +265,9 @@ class GoExtractor(LanguageExtractor):
         while current:
             if _zero_arg(current, 'kind') in ('import_declaration', 'import_spec'):
                 return False
-            current = current.parent()
+            current = _zero_arg(current, 'parent')
 
-        parent_type = _zero_arg(node.parent(), 'kind')
+        parent_type = _zero_arg(_zero_arg(node, 'parent'), 'kind')
 
         # Skip definition contexts
         if parent_type in ('function_declaration', 'method_declaration',
@@ -273,16 +279,16 @@ class GoExtractor(LanguageExtractor):
         # For short variable declarations (x := 5), check if left side
         if parent_type == 'short_var_declaration':
             # First child (or part of expression_list) is being declared
-            _p = node.parent()
-            if (_p and _p.child_count() > 0 and
+            _p = _zero_arg(node, 'parent')
+            if (_p and _zero_arg(_p, 'child_count') > 0 and
                     _zero_arg(_p.child(0), 'start_byte') == _zero_arg(node, 'start_byte')):
                 return False
 
         # For var declarations
         if parent_type == 'var_spec':
             # Name is first child
-            _p = node.parent()
-            if (_p and _p.child_count() > 0 and
+            _p = _zero_arg(node, 'parent')
+            if (_p and _zero_arg(_p, 'child_count') > 0 and
                     _zero_arg(_p.child(0), 'start_byte') == _zero_arg(node, 'start_byte')):
                 return False
 

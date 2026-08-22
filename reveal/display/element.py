@@ -210,8 +210,8 @@ def _try_treesitter_extraction(analyzer, element: str):
                 )
                 return {
                     'name': element,
-                    'line_start': node.start_position().row + 1,
-                    'line_end': end_node.end_position().row + 1,
+                    'line_start': _zero_arg(node, 'start_position').row + 1,
+                    'line_end': _zero_arg(end_node, 'end_position').row + 1,
                     'source': source,
                 }
 
@@ -223,8 +223,8 @@ def _try_treesitter_extraction(analyzer, element: str):
         if node is not None:
             return {
                 'name': element,
-                'line_start': node.start_position().row + 1,
-                'line_end': node.end_position().row + 1,
+                'line_start': _zero_arg(node, 'start_position').row + 1,
+                'line_end': _zero_arg(node, 'end_position').row + 1,
                 'source': analyzer._get_node_text(node),
             }
 
@@ -237,8 +237,8 @@ def _try_treesitter_extraction(analyzer, element: str):
         if node is not None:
             return {
                 'name': element,
-                'line_start': node.start_position().row + 1,
-                'line_end': node.end_position().row + 1,
+                'line_start': _zero_arg(node, 'start_position').row + 1,
+                'line_end': _zero_arg(node, 'end_position').row + 1,
                 'source': analyzer._get_node_text(node),
             }
     return None
@@ -476,8 +476,8 @@ def _extract_hierarchical_element(analyzer, element: str):
             if child_node:
                 return {
                     'name': element,
-                    'line_start': child_node.start_position().row + 1,
-                    'line_end': child_node.end_position().row + 1,
+                    'line_start': _zero_arg(child_node, 'start_position').row + 1,
+                    'line_end': _zero_arg(child_node, 'end_position').row + 1,
                     'source': analyzer._get_node_text(child_node),
                 }
         return None
@@ -498,8 +498,8 @@ def _extract_hierarchical_element(analyzer, element: str):
     )
     return {
         'name': element,
-        'line_start': child_node.start_position().row + 1,
-        'line_end': end_node.end_position().row + 1,
+        'line_start': _zero_arg(child_node, 'start_position').row + 1,
+        'line_end': _zero_arg(end_node, 'end_position').row + 1,
         'source': source,
     }
 
@@ -533,8 +533,8 @@ def _extract_element_at_line(analyzer, target_line: int):
 
     for node_type in ALL_ELEMENT_NODE_TYPES:
         for node in analyzer._find_nodes_by_type(node_type):
-            start = node.start_position().row + 1  # 1-indexed
-            end = node.end_position().row + 1
+            start = _zero_arg(node, 'start_position').row + 1  # 1-indexed
+            end = _zero_arg(node, 'end_position').row + 1
             if not (start <= target_line <= end):
                 continue
             span = end - start
@@ -548,8 +548,8 @@ def _extract_element_at_line(analyzer, target_line: int):
     name = analyzer._get_node_name(best_match) or f"element@{target_line}"
     return {
         'name': name,
-        'line_start': best_match.start_position().row + 1,
-        'line_end': best_match.end_position().row + 1,
+        'line_start': _zero_arg(best_match, 'start_position').row + 1,
+        'line_end': _zero_arg(best_match, 'end_position').row + 1,
         'source': analyzer._get_node_text(best_match),
     }
 
@@ -793,7 +793,7 @@ def _get_source_for_item(analyzer, item, line_start, line_end):
     for node_type in ALL_ELEMENT_NODE_TYPES:
         nodes = analyzer._find_nodes_by_type(node_type)
         for node in nodes:
-            start = node.start_position().row + 1
+            start = _zero_arg(node, 'start_position').row + 1
             if start == line_start:
                 return analyzer._get_node_text(node)
 

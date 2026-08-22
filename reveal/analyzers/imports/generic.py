@@ -979,7 +979,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         names: List[str] = []
         for node_type in self.spec.member_node_types:
             for node in analyzer._find_nodes_by_type(node_type):
-                parent = node.parent()
+                parent = _zero_arg(node, 'parent')
                 if parent is None or _zero_arg(parent, 'kind') != 'source_file':
                     continue
                 name = self._top_level_member_name(node, analyzer)
@@ -1056,8 +1056,8 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         pairs: List[Tuple[str, str]] = []
         for container_type in self.spec.member_container_node_types:
             for container in analyzer._find_nodes_by_type(container_type):
-                parent = container.parent()
-                if parent is None or parent.parent() is not None:
+                parent = _zero_arg(container, 'parent')
+                if parent is None or _zero_arg(parent, 'parent') is not None:
                     continue
                 container_name = self._direct_identifier_name(container, analyzer)
                 if not container_name:
@@ -1143,13 +1143,13 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         """True when *node* (a type declaration) sits directly under the
         compilation unit or a namespace body — not nested inside another
         type's own body. See :meth:`extract_namespaced_type_names`."""
-        parent = node.parent()
+        parent = _zero_arg(node, 'parent')
         if parent is None:
             return False
         if _zero_arg(parent, 'kind') == 'compilation_unit':
             return True
         if _zero_arg(parent, 'kind') == 'declaration_list':
-            grandparent = parent.parent()
+            grandparent = _zero_arg(parent, 'parent')
             return grandparent is not None and _zero_arg(grandparent, 'kind') in cls._NAMESPACE_BODY_KINDS
         return False
 
@@ -1233,7 +1233,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         def walk(node) -> None:
             kind = _zero_arg(node, 'kind')
             if kind in self._CONSTANT_KINDS:
-                parent = node.parent()
+                parent = _zero_arg(node, 'parent')
                 if parent is not None and _zero_arg(parent, 'kind') in self._CONSTANT_KINDS:
                     return  # nested fragment of an already-captured outer chain
                 text = analyzer._get_node_text(node)
@@ -1248,7 +1248,9 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                     # — zeitwerk_index keys are never prefixed with `::` (built
                     # from path segments, not source text), and without this the
                     # exact-match lookup silently misses every absolute reference.
-                    refs.append((node.start_position().row + 1, text.removeprefix('::')))
+                    refs.append(
+                        (_zero_arg(node, 'start_position').row + 1, text.removeprefix('::'))
+                    )
                 return  # don't descend into a captured chain's own fragments
             for child in _children(node):
                 walk(child)
@@ -1388,7 +1390,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 return None
             return ImportStatement(
                 file_path=file_path,
-                line_number=node.start_position().row + 1,
+                line_number=_zero_arg(node, 'start_position').row + 1,
                 module_name=module_name,
                 imported_names=[],
                 is_relative=True,
@@ -1421,7 +1423,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 return None
             return ImportStatement(
                 file_path=file_path,
-                line_number=node.start_position().row + 1,
+                line_number=_zero_arg(node, 'start_position').row + 1,
                 module_name=module_name,
                 imported_names=[],
                 is_relative=True,
@@ -1457,7 +1459,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
         return ImportStatement(
             file_path=file_path,
-            line_number=node.start_position().row + 1,
+            line_number=_zero_arg(node, 'start_position').row + 1,
             module_name=module_name,
             imported_names=[],
             is_relative=False,
@@ -1827,7 +1829,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
         return ImportStatement(
             file_path=file_path,
-            line_number=node.start_position().row + 1,
+            line_number=_zero_arg(node, 'start_position').row + 1,
             module_name=module,
             imported_names=[],
             is_relative=module.startswith('.'),
@@ -1954,7 +1956,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
         return ImportStatement(
             file_path=file_path,
-            line_number=node.start_position().row + 1,
+            line_number=_zero_arg(node, 'start_position').row + 1,
             module_name=module_name,
             imported_names=[],
             is_relative=is_relative,

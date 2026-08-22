@@ -561,8 +561,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
             detections.append(self.create_detection(
                 file_path=file_path,
-                line=node.start_position().row + 1,
-                column=node.start_position().column + 1,
+                line=_zero_arg(node, 'start_position').row + 1,
+                column=_zero_arg(node, 'start_position').column + 1,
                 suggestion=(
                     "Consider:\n"
                     "  1. Catch specific exception types instead of Exception\n"
@@ -645,8 +645,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
             detections.append(self.create_detection(
                 file_path=file_path,
-                line=node.start_position().row + 1,
-                column=node.start_position().column + 1,
+                line=_zero_arg(node, 'start_position').row + 1,
+                column=_zero_arg(node, 'start_position').column + 1,
                 suggestion=(
                     "Consider:\n"
                     "  1. Catch specific exception types instead of Exception/Throwable\n"
@@ -732,8 +732,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
             detections.append(self.create_detection(
                 file_path=file_path,
-                line=node.start_position().row + 1,
-                column=node.start_position().column + 1,
+                line=_zero_arg(node, 'start_position').row + 1,
+                column=_zero_arg(node, 'start_position').column + 1,
                 suggestion=(
                     "Consider:\n"
                     "  1. Add visible logging: console.error(err) — any console.* call counts\n"
@@ -796,8 +796,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
             detections.append(self.create_detection(
                 file_path=file_path,
-                line=node.start_position().row + 1,
-                column=node.start_position().column + 1,
+                line=_zero_arg(node, 'start_position').row + 1,
+                column=_zero_arg(node, 'start_position').column + 1,
                 suggestion=(
                     "Consider:\n"
                     "  1. Catch specific exception types instead of Exception/Throwable\n"
@@ -879,8 +879,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
             detections.append(self.create_detection(
                 file_path=file_path,
-                line=node.start_position().row + 1,
-                column=node.start_position().column + 1,
+                line=_zero_arg(node, 'start_position').row + 1,
+                column=_zero_arg(node, 'start_position').column + 1,
                 suggestion=(
                     "Consider:\n"
                     "  1. Catch specific exception types instead of Exception/Throwable\n"
@@ -964,8 +964,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
             detections.append(self.create_detection(
                 file_path=file_path,
-                line=node.start_position().row + 1,
-                column=node.start_position().column + 1,
+                line=_zero_arg(node, 'start_position').row + 1,
+                column=_zero_arg(node, 'start_position').column + 1,
                 suggestion=(
                     "Consider:\n"
                     "  1. Catch a specific error type: catch let e as SomeError\n"
@@ -1045,8 +1045,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
             detections.append(self.create_detection(
                 file_path=file_path,
-                line=node.start_position().row + 1,
-                column=node.start_position().column + 1,
+                line=_zero_arg(node, 'start_position').row + 1,
+                column=_zero_arg(node, 'start_position').column + 1,
                 suggestion=(
                     "Consider:\n"
                     "  1. Catch specific exception types instead of std::exception/(...)\n"
