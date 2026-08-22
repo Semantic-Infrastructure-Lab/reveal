@@ -14,6 +14,7 @@ from reveal.adapters.ast.nav_cross_varflow import (
     _resolve_param_name,
     _find_function_node,
 )
+from reveal.core.treesitter_compat import _zero_arg
 
 # BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -38,8 +39,8 @@ def _cross(path: str, func_name: str, var_name: str, max_depth: int = 3):
     a = _analyzer(path)
     func_node = _find_function_node(a, func_name)
     get_text = a._get_node_text
-    from_line = func_node.start_position().row + 1
-    to_line = func_node.end_position().row + 1
+    from_line = _zero_arg(func_node, 'start_position').row + 1
+    to_line = _zero_arg(func_node, 'end_position').row + 1
     return cross_var_flow(a, func_node, var_name, from_line, to_line, get_text, max_depth)
 
 
@@ -310,8 +311,8 @@ def validate(val):
         a = _analyzer(self.path)
         func_node = _find_function_node(a, 'process')
         get_text = a._get_node_text
-        from_line = func_node.start_position().row + 1
-        to_line = func_node.end_position().row + 1
+        from_line = _zero_arg(func_node, 'start_position').row + 1
+        to_line = _zero_arg(func_node, 'end_position').row + 1
         frames = cross_var_flow(a, func_node, 'data', from_line, to_line, get_text)
         content_lines = a.content.splitlines()
         return render_cross_var_flow('data', frames, content_lines)

@@ -27,6 +27,7 @@ from reveal.adapters.ast.nav_outline import element_outline, scope_chain
 from reveal.adapters.ast.nav_varflow import var_flow
 from reveal.analyzers.go import GoAnalyzer
 from reveal.analyzers.rust import RustAnalyzer
+from reveal.core.treesitter_compat import _zero_arg
 
 # BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -140,13 +141,15 @@ def _first_function(lang, code, fn_kinds):
     """Parse and return the first function-like node + a get_text closure."""
     content_bytes = code.encode('utf-8')
     root = ts.get_parser(lang).parse(code).root_node()
-    get_text = lambda n: content_bytes[n.start_byte():n.end_byte()].decode('utf-8', 'replace')
+    get_text = lambda n: content_bytes[
+        _zero_arg(n, 'start_byte') : _zero_arg(n, 'end_byte')
+    ].decode('utf-8', 'replace')
     stack = [root]
     while stack:
         n = stack.pop()
-        if n.kind() in fn_kinds:
+        if _zero_arg(n, 'kind') in fn_kinds:
             return n, get_text
-        for i in range(n.child_count()):
+        for i in range(_zero_arg(n, 'child_count')):
             stack.append(n.child(i))
     raise AssertionError(f'no function node found in {lang} sample')
 
@@ -174,8 +177,8 @@ class TestForEachVisibility(unittest.TestCase):
 
     def test_java_enhanced_for_loop_var_is_written(self):
         node, get_text = _first_function('java', self.JAVA, {'method_declaration'})
-        events = var_flow(node, 'x', node.start_position().row + 1,
-                          node.end_position().row + 1, get_text)
+        events = var_flow(node, 'x', _zero_arg(node, 'start_position').row + 1,
+                          _zero_arg(node, 'end_position').row + 1, get_text)
         self.assertTrue(
             any(e['kind'] == 'WRITE' for e in events),
             'Java enhanced-for loop variable never recorded as WRITE',
@@ -183,8 +186,8 @@ class TestForEachVisibility(unittest.TestCase):
 
     def test_js_for_of_loop_var_is_written(self):
         node, get_text = _first_function('javascript', self.JS, {'function_declaration'})
-        events = var_flow(node, 'x', node.start_position().row + 1,
-                          node.end_position().row + 1, get_text)
+        events = var_flow(node, 'x', _zero_arg(node, 'start_position').row + 1,
+                          _zero_arg(node, 'end_position').row + 1, get_text)
         self.assertTrue(
             any(e['kind'] == 'WRITE' for e in events),
             'JS for-of loop variable never recorded as WRITE',
@@ -211,7 +214,9 @@ class TestClassScopeVisibility(unittest.TestCase):
     def _chain_keywords(self, lang, code, marker):
         """Parse code and return scope_chain keywords for the line containing marker."""
         content_bytes = code.encode('utf-8')
-        get_text = lambda n: content_bytes[n.start_byte():n.end_byte()].decode('utf-8', 'replace')
+        get_text = lambda n: content_bytes[
+            _zero_arg(n, 'start_byte') : _zero_arg(n, 'end_byte')
+        ].decode('utf-8', 'replace')
         root = ts.get_parser(lang).parse(code).root_node()
         line_no = code[:code.index(marker)].count('\n') + 1
         chain = scope_chain(root, line_no, get_text)

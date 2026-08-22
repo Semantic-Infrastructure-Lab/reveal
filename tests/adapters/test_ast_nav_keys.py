@@ -24,6 +24,7 @@ from reveal.analyzers.swift import SwiftAnalyzer
 from reveal.analyzers.dart import DartAnalyzer
 from reveal.adapters.ast.nav_keys import collect_keys, render_keys
 from reveal.adapters.ast.nav_cross_varflow import _find_function_node
+from reveal.core.treesitter_compat import _zero_arg
 
 # BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -42,14 +43,14 @@ def _keys(analyzer_cls, path: str, func_name: str, var_name: str):
     func_node = _find_function_node(a, func_name)
     assert func_node is not None, f'{func_name} not found'
     get_text = a._get_node_text
-    from_line = func_node.start_position().row + 1
+    from_line = _zero_arg(func_node, 'start_position').row + 1
     # Dart's grammar splits a function into disjoint SIBLING
     # function_signature + function_body nodes rather than nesting the body
     # inside one function node — without this swap (same one file_handler.py's
     # CLI dispatch already applies), func_node would be the 1-line signature
     # only and every subscript inside the real body would be invisible.
     end_node = getattr(a, '_function_end_node', lambda n: n)(func_node)
-    to_line = end_node.end_position().row + 1
+    to_line = _zero_arg(end_node, 'end_position').row + 1
     if end_node is not func_node:
         func_node = end_node
     return collect_keys(func_node, var_name, from_line, to_line, get_text)
