@@ -20,6 +20,7 @@ import unittest
 import tree_sitter_language_pack as ts
 
 import pytest
+from reveal.core.treesitter_compat import _zero_arg
 
 # BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -38,21 +39,23 @@ def _parse_python(code: str):
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree, root, get_text, content_bytes
 
 
 def _find_func(root, get_text, name: str):
     """Find a function_definition node by name."""
-    stack = [root.child(i) for i in range(root.child_count())]
+    stack = [root.child(i) for i in range(_zero_arg(root, 'child_count'))]
     while stack:
         node = stack.pop()
-        if node.kind() == 'function_definition':
-            for child in [node.child(i) for i in range(node.child_count())]:
-                if child.kind() == 'identifier' and get_text(child) == name:
+        if _zero_arg(node, 'kind') == 'function_definition':
+            for child in [node.child(i) for i in range(_zero_arg(node, 'child_count'))]:
+                if _zero_arg(child, 'kind') == 'identifier' and get_text(child) == name:
                     return node
-        stack.extend(reversed([node.child(i) for i in range(node.child_count())]))
+        stack.extend(reversed([node.child(i) for i in range(_zero_arg(node, 'child_count'))]))
     return None
 
 
@@ -522,7 +525,9 @@ class TestVarFlowBack411(unittest.TestCase):
         root = tree.root_node()
 
         def get_text(node):
-            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
 
         return root, get_text
 
@@ -882,8 +887,8 @@ class TestIfmapCatchmapFiltering(unittest.TestCase):
         items = element_outline(self._func, self._get_text, max_depth=5)
         IF_KEYWORDS = frozenset({'IF', 'ELIF', 'ELSE', 'SWITCH', 'CASE', 'DEFAULT'})
         filtered = [i for i in items if i['keyword'] in IF_KEYWORDS]
-        func_start = self._func.start_position().row + 1
-        func_end = self._func.end_position().row + 1
+        func_start = _zero_arg(self._func, 'start_position').row + 1
+        func_end = _zero_arg(self._func, 'end_position').row + 1
         result = render_branchmap(filtered, func_start, func_end)
         self.assertIn('IF', result)
 
@@ -1022,7 +1027,9 @@ def _parse_php(code: str):
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree, root, get_text, content_bytes
 
@@ -1521,8 +1528,8 @@ class TestCollectEffectsCSharpBack401(unittest.TestCase):
         lines = code.split('\n')
 
         def get_text(node):
-            sr, sc = node.start_position().row, node.start_position().column
-            er, ec = node.end_position().row, node.end_position().column
+            sr, sc = _zero_arg(node, 'start_position').row, _zero_arg(node, 'start_position').column
+            er, ec = _zero_arg(node, 'end_position').row, _zero_arg(node, 'end_position').column
             if sr == er:
                 return lines[sr][sc:ec]
             parts = [lines[sr][sc:]]
@@ -1553,16 +1560,16 @@ class TestJavaEffectsBack416(unittest.TestCase):
         root = parser.parse(code).root_node()
 
         def get_text(node):
-            return cb[node.start_byte():node.end_byte()].decode('utf-8')
+            return cb[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
 
         stack = [root]
         func = None
         while stack:
             n = stack.pop()
-            if n.kind() == 'method_declaration' and fname in get_text(n):
+            if _zero_arg(n, 'kind') == 'method_declaration' and fname in get_text(n):
                 func = n
                 break
-            stack.extend(n.child(i) for i in range(n.child_count()))
+            stack.extend(n.child(i) for i in range(_zero_arg(n, 'child_count')))
         return collect_effects(func, 1, 999, get_text)
 
     CODE = (
@@ -1596,15 +1603,15 @@ class TestJavaEffectsBack416(unittest.TestCase):
         parser = get_parser('java')
         cb = self.CODE.encode()
         root = parser.parse(self.CODE).root_node()
-        gt = lambda n: cb[n.start_byte():n.end_byte()].decode()
+        gt = lambda n: cb[_zero_arg(n, 'start_byte'):_zero_arg(n, 'end_byte')].decode()
         stack = [root]
         func = None
         while stack:
             n = stack.pop()
-            if n.kind() == 'method_declaration':
+            if _zero_arg(n, 'kind') == 'method_declaration':
                 func = n
                 break
-            stack.extend(n.child(i) for i in range(n.child_count()))
+            stack.extend(n.child(i) for i in range(_zero_arg(n, 'child_count')))
         callees = [c['callee'] for c in range_calls(func, 1, 999, gt)]
         self.assertIn('Files.createDirectories', callees)
         self.assertIn('path.resolveIndex', callees)
@@ -2020,7 +2027,9 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
         root = tree.root_node()
 
         def get_text(node):
-            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
 
         effects = collect_effects(root, 1, 999, get_text, language='typescript')
         self.assertEqual(
@@ -2050,7 +2059,9 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
         root = tree.root_node()
 
         def get_text(node):
-            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
 
         effects = collect_effects(root, 1, 999, get_text, language='python')
         self.assertEqual(
@@ -2082,7 +2093,9 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
         root = tree.root_node()
 
         def get_text(node):
-            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
 
         effects = collect_effects(root, 1, 999, get_text, language='ruby')
         self.assertEqual(
@@ -2110,7 +2123,9 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
         root = tree.root_node()
 
         def get_text(node):
-            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
 
         effects = collect_effects(root, 1, 999, get_text, language='typescript')
         self.assertEqual([e for e in effects if e['kind'] == 'env'], [])
@@ -2131,7 +2146,9 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
         root = tree.root_node()
 
         def get_text(node):
-            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
 
         effects = collect_effects(root, 1, 999, get_text, language='typescript')
         self.assertEqual(
@@ -2382,7 +2399,9 @@ def _parse_swift(code: str):
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree, root, get_text, content_bytes
 
@@ -2446,7 +2465,9 @@ def _parse_kotlin(code: str):
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree, root, get_text, content_bytes
 
@@ -2562,7 +2583,9 @@ class TestVarflowExcludesOwnDeclarationSiteButKeepsRecursiveReference(unittest.T
         func = node_children(root)[0]
 
         def get_text(node):
-            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
 
         events = var_flow(func, 'checkThing', 1, 999, get_text)
         read_lines = [e['line'] for e in events if e['kind'] == 'READ']
@@ -2583,7 +2606,9 @@ def _parse_scala(code: str):
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree, root, get_text, content_bytes
 
@@ -2900,8 +2925,8 @@ def process(data, user_id):
         self._tree, self._root, self._get_text, _ = _parse_python(code)
         func = _find_func(self._root, self._get_text, 'process')
         self._func = func
-        self._start = func.start_position().row + 1
-        self._end = func.end_position().row + 1
+        self._start = _zero_arg(func, 'start_position').row + 1
+        self._end = _zero_arg(func, 'end_position').row + 1
 
     def _boundary(self):
         from reveal.adapters.ast.nav_boundary import collect_boundary
@@ -3070,7 +3095,9 @@ def _parse_zig(code: str):
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree, root, get_text, content_bytes
 
@@ -3343,7 +3370,9 @@ def _parse_lua(code: str):
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree, root, get_text, content_bytes
 
@@ -3445,7 +3474,9 @@ def _parse_ruby(code: str):
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree, root, get_text, content_bytes
 
@@ -3536,7 +3567,9 @@ def _parse_tsx(code: str):
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree, root, get_text, content_bytes
 
@@ -3845,7 +3878,9 @@ class TestBack547RubyDbAndFileTaxonomy(unittest.TestCase):
         root = tree.root_node()
 
         def get_text(node):
-            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
 
         effects = collect_effects(root, 1, 999, get_text, language='ruby')
         return {e['kind'] for e in effects}
@@ -4047,7 +4082,7 @@ class TestBack650OverloadDisambiguation(unittest.TestCase):
             # Regression: pre-fix, this returned the abstract (bodyless)
             # declaration at line 3, a 1-line no-op range that hides the
             # override's entire body including the LogError call.
-            self.assertGreater(node.end_position().row, 4)
+            self.assertGreater(_zero_arg(node, 'end_position').row, 4)
 
     def test_expression_bodied_and_block_bodied_overload_resolves_to_block(self):
         import pathlib
@@ -4079,7 +4114,7 @@ class TestBack650OverloadDisambiguation(unittest.TestCase):
             # Regression: pre-fix, this returned the expression-bodied
             # wrapper at line 3-4, silently hiding the Thread.Sleep effect
             # in the real block-bodied overload below it.
-            self.assertGreater(node.end_position().row, 5)
+            self.assertGreater(_zero_arg(node, 'end_position').row, 5)
 
     def test_true_overload_with_no_disambiguating_signal_falls_back_to_first(self):
         # Both candidates are equally block-bodied (real overloads, no
@@ -4108,7 +4143,9 @@ class TestBack650OverloadDisambiguation(unittest.TestCase):
             analyzer = CSharpAnalyzer(str(f))
             node = _find_element_node(analyzer, 'Write')
             self.assertIsNotNone(node)
-            self.assertEqual(node.start_position().row, 2)  # first Write(string s), line 3
+            self.assertEqual(
+                _zero_arg(node, 'start_position').row, 2
+            )  # first Write(string s), line 3
 
     def test_pick_best_candidate_single_candidate_returned_directly(self):
         from reveal.file_handler import _pick_best_candidate
@@ -4146,7 +4183,7 @@ class TestBack650OverloadDisambiguation(unittest.TestCase):
             # Regression: pre-fix, this returned the abstract signature at
             # line 2 (a 1-line node with no sibling body), not the real
             # implementation at line 7-9.
-            self.assertEqual(node.start_position().row, 6)  # 0-indexed: line 7
+            self.assertEqual(_zero_arg(node, 'start_position').row, 6)  # 0-indexed: line 7
 
     def test_dart_abstract_and_override_same_name_bare_extraction_resolves_to_override(self):
         # BACK-771: display.element._find_named_node (the bare `reveal
@@ -4178,7 +4215,7 @@ class TestBack650OverloadDisambiguation(unittest.TestCase):
             # Regression: pre-fix, this returned the abstract signature at
             # line 2 (a 1-line node with no sibling body), not the real
             # implementation at line 7-9.
-            self.assertEqual(node.start_position().row, 6)  # 0-indexed: line 7
+            self.assertEqual(_zero_arg(node, 'start_position').row, 6)  # 0-indexed: line 7
 
 
 # ─── BACK-547 ninth loop (Rust sideeffects-recall-oracle, real-corpus
@@ -4202,7 +4239,9 @@ class TestBack547RustMacroInvocation(unittest.TestCase):
         root = tree.root_node()
 
         def get_text(node):
-            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
         return root, get_text
 
     def test_scoped_macro_call_visible_to_range_calls(self):
@@ -4404,7 +4443,9 @@ class TestBack727KotlinSixCategoryWidening(unittest.TestCase):
         root = tree.root_node()
 
         def get_text(node):
-            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
 
         effects = collect_effects(root, 1, 999, get_text, language='kotlin')
         self.assertEqual(
@@ -4685,7 +4726,9 @@ def _parse_swift(code: str):
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree, root, get_text, content_bytes
 
@@ -4927,7 +4970,9 @@ def _parse_gdscript(code: str):
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree, root, get_text, content_bytes
 
@@ -5463,7 +5508,9 @@ class TestBack741RustTurbofishAndParenCalleeInNavCalls(unittest.TestCase):
         root = tree.root_node()
 
         def get_text(node):
-            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
         return root, get_text
 
     def test_turbofish_call_strips_generic_suffix(self):
