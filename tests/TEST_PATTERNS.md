@@ -29,12 +29,20 @@ dated 2026-02-12) had drifted by ~4x — a live rerun of the commands above is
 the only trustworthy source, not this paragraph a session from now.
 
 **Marker taxonomy: `BACK-1149`'s fuller lane taxonomy is registered and
-partially applied.** Beyond `unit`/`integration`/`slow`, `pyproject.toml`
-now also registers `component`/`contract`/`cli`/`mcp`/`conformance`/`compat`/
-`external_fixture`. As of 2026-08-21, 236 of ~293 files carry one of these
-new lane markers (regenerate live: `grep -lE "pytest\.mark\.(component|contract|cli|mcp|conformance|compat|external_fixture)" tests/*.py tests/adapters/*.py | wc -l`)
-— the remaining files are unmarked, not miscategorized, so don't treat an
-unmarked file as "not one of these lanes," and don't trust this count past
+file-level classification is complete.** Beyond `unit`/`integration`/`slow`,
+`pyproject.toml` now also registers `component`/`contract`/`cli`/`mcp`/
+`conformance`/`compat`/`external_fixture`. As of 2026-08-21, 291 of 293 test
+files carry one of these new lane markers (regenerate live: `grep -lE
+"pytest\.mark\.(component|contract|cli|mcp|conformance|compat|external_fixture)"
+tests/*.py tests/adapters/*.py | wc -l`) — the remaining 2
+(`conftest.py`, `corpus_paths.py`) are shared fixtures/helpers, not test
+files, and correctly carry no marker. `test_xlsx_adapter.py` is marked at
+class granularity rather than file level (`component` vs `external_fixture`
+per class) since it genuinely mixes committed-fixture and manually-placed-file
+tests — see the file itself for the per-class breakdown. Marker
+*classification* is done; BACK-1149's remaining scope is wiring the
+fast/PR/full-conformance CI/local run lanes on top of these markers and
+documenting when to run each — don't trust this paragraph's numbers past
 this session either. See the "Available Markers" section below for what
 each lane means.
 
