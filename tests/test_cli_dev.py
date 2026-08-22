@@ -6,12 +6,17 @@ from argparse import Namespace
 from contextlib import redirect_stdout
 from unittest.mock import patch, MagicMock
 
+import pytest
+
 from reveal.cli.commands.dev import (
     create_dev_parser,
     add_arguments,
     run_dev,
     _run_inspect_config,
 )
+
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
 
 
 # ---------------------------------------------------------------------------

@@ -10,6 +10,8 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from reveal.adapters.ast.nav_surface import (
     _get_open_mode,
     _is_env_access,
@@ -26,6 +28,9 @@ from reveal.cli.commands.surface import (
     run_surface,
 )
 from reveal.registry import language_for_extension
+
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
 
 
 def _write(directory: str, filename: str, content: str) -> str:

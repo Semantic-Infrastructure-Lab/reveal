@@ -10,6 +10,8 @@ from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from reveal.cli.file_checker import FileCollectionResult
 from reveal.cli.commands.health import (
     _detect_targets,
@@ -21,6 +23,9 @@ from reveal.cli.commands.health import (
     _print_usage_and_exit,
     run_health,
 )
+
+# BACK-1149: exercises reveal.main's CLI entry point via conftest's _run_reveal_direct/subprocess
+pytestmark = pytest.mark.cli
 
 
 # ---------------------------------------------------------------------------

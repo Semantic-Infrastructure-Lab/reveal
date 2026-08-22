@@ -13,6 +13,11 @@ import os
 from pathlib import Path
 from conftest import _run_reveal_direct
 
+import pytest
+
+# BACK-1149: exercises reveal.main's CLI entry point via conftest's _run_reveal_direct/subprocess
+pytestmark = pytest.mark.cli
+
 
 class TestCLIFlagsIntegration(unittest.TestCase):
     """Test CLI flags work with different file types."""

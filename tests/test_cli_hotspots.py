@@ -8,6 +8,8 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from reveal.adapters.hotspots import (
     HotspotsAdapter,
     _build_test_name_index,
@@ -23,6 +25,9 @@ from reveal.cli.commands.hotspots import (
     create_hotspots_parser,
     run_hotspots,
 )
+
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
 
 
 def _args(**kwargs):

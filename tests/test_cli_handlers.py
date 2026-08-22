@@ -11,6 +11,8 @@ from io import StringIO
 
 import json
 
+import pytest
+
 from reveal.cli.handlers import (
     handle_rules_list,
     handle_explain_rule,
@@ -35,6 +37,9 @@ from reveal.cli.handlers import (
     _process_stdin_file,
 )
 from reveal.rules import RuleRegistry
+
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
 
 
 class TestHandleRulesList(unittest.TestCase):

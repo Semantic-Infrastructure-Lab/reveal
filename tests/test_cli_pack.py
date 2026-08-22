@@ -10,6 +10,8 @@ import tempfile
 from pathlib import Path
 from argparse import Namespace
 
+import pytest
+
 from reveal.cli.commands.pack import (
     _parse_budget,
     _compute_priority,
@@ -26,6 +28,9 @@ from reveal.cli.commands.pack import (
     _print_file_line,
     run_pack,
 )
+
+# BACK-1149: exercises reveal.main's CLI entry point via conftest's _run_reveal_direct/subprocess
+pytestmark = pytest.mark.cli
 
 
 # ---------------------------------------------------------------------------

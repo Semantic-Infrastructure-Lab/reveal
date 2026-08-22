@@ -8,6 +8,8 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from reveal.adapters.deps import (
     DepsAdapter,
     _analyse_imports,
@@ -27,6 +29,9 @@ from reveal.cli.commands.deps import (
     create_deps_parser,
     run_deps,
 )
+
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

@@ -32,6 +32,9 @@ from reveal.cli.commands.architecture import (
     run_architecture,
 )
 
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
+
 try:
     import pygit2
     PYGIT2_AVAILABLE = True

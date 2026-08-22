@@ -13,6 +13,9 @@ import pytest
 
 from reveal.cli.commands.scaffold import create_scaffold_parser, run_scaffold
 
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
+
 
 # ─── create_scaffold_parser ───────────────────────────────────────────────────
 

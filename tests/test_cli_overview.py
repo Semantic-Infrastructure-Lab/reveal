@@ -9,6 +9,8 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
+import pytest
+
 from reveal.adapters.overview import (
     OverviewAdapter,
     _age_label,
@@ -34,6 +36,9 @@ from reveal.cli.commands.overview import (
     create_overview_parser,
     run_overview,
 )
+
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

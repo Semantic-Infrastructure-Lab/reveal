@@ -12,6 +12,11 @@ import re
 import unittest
 from pathlib import Path
 
+import pytest
+
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
+
 _COMMANDS_DIR = Path(__file__).parent.parent / 'reveal' / 'cli' / 'commands'
 
 # file -> number of --format json print sites that must be enveloped.

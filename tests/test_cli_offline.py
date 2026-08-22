@@ -13,6 +13,9 @@ import pytest
 
 from reveal.cli.commands.offline import create_offline_parser, run_offline
 
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
+
 
 class TestCreateOfflineParser:
     def test_returns_argument_parser(self):

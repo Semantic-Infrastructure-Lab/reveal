@@ -4,12 +4,17 @@ import unittest
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from reveal.cli.introspection import (
     explain_file,
     show_ast,
     get_language_info_detailed,
     _format_ast_node,
 )
+
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
 
 
 class TestExplainFile(unittest.TestCase):

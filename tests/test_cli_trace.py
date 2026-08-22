@@ -11,6 +11,8 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from reveal.cli.commands.trace import (
     _bfs_depth,
     _build_trace,
@@ -22,6 +24,9 @@ from reveal.cli.commands.trace import (
     create_trace_parser,
     run_trace,
 )
+
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
 
 
 def _write(directory: str, filename: str, content: str) -> str:

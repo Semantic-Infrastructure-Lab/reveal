@@ -36,6 +36,9 @@ from reveal.cli.routing import (
     _handle_file_path,
 )
 
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
+
 
 def _args(**kwargs):
     defaults = {

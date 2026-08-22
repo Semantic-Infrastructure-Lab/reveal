@@ -2,12 +2,17 @@
 
 import unittest
 
+import pytest
+
 from reveal.cli.languages import (
     list_supported_languages,
     get_language_info,
     _get_fallback_languages,
     _get_analyzer_features,
 )
+
+# BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
+pytestmark = pytest.mark.component
 
 
 class TestListSupportedLanguages(unittest.TestCase):
