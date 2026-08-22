@@ -16,6 +16,9 @@ from unittest.mock import patch
 from reveal.adapters.markdown.adapter import _extract_aggregate, MarkdownQueryAdapter
 from reveal.adapters.markdown.operations import aggregate_field_values
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 def _write_md(path: Path, content: str):
     path.write_text(content, encoding='utf-8')

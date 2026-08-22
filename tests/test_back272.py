@@ -14,6 +14,9 @@ from unittest.mock import patch, MagicMock
 from reveal.adapters.claude.adapter import ClaudeAdapter
 from reveal.cli.routing.uri import generic_adapter_handler
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 

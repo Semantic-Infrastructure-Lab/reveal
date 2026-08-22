@@ -29,7 +29,12 @@ false positive means dropping real results.
 
 from pathlib import Path
 
+import pytest
+
 from reveal.analyzers.python import PythonAnalyzer
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 def _write_py(tmp_path: Path, name: str, code: str) -> Path:

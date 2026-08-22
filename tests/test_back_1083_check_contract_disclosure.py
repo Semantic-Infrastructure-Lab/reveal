@@ -22,7 +22,12 @@ for this file type -- not an error at all, e.g. a binary asset).
 
 from pathlib import Path
 
+import pytest
+
 from reveal.cli.file_checker import check_and_collect_file
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 def _write_py(tmp_path: Path, name: str, code: str) -> Path:

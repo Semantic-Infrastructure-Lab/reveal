@@ -16,6 +16,9 @@ import pytest
 
 from reveal.cli.parser import create_argument_parser
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 def _capture_error_exit(parser, argv):
     """Run parse_args expecting SystemExit(2); return captured stderr."""

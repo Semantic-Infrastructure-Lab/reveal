@@ -8,6 +8,9 @@ from unittest.mock import patch
 from reveal.adapters.claude.adapter import ClaudeAdapter
 from reveal.adapters.claude.analysis.tools import get_tool_calls
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -16,6 +16,9 @@ from reveal.adapters.markdown.files import extract_internal_links
 from reveal.adapters.markdown.operations import build_link_graph
 from reveal.rendering.adapters.markdown_query import render_markdown_query
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 

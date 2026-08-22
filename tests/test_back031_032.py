@@ -21,6 +21,9 @@ from reveal.adapters.claude.analysis.tools import (
 )
 from reveal.adapters.claude.renderer import ClaudeRenderer
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 def _capture_render(fn, *args, **kwargs):
     from unittest.mock import patch

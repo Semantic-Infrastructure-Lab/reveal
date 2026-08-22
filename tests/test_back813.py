@@ -9,9 +9,14 @@ Architecture:
 from io import StringIO
 from pathlib import Path
 
+import pytest
+
 from reveal.adapters.markdown.adapter import MarkdownQueryAdapter
 from reveal.adapters.markdown.operations import get_backlinks
 from reveal.rendering.adapters.markdown_query import render_markdown_query
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────

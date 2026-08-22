@@ -5,6 +5,9 @@ from unittest.mock import patch, MagicMock
 
 from reveal.adapters.claude.analysis.messages import get_messages, get_message
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 

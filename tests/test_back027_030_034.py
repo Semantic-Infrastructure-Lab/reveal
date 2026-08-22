@@ -12,6 +12,9 @@ from reveal.adapters.claude.analysis.overview import (
 )
 from reveal.adapters.claude.renderer import ClaudeRenderer
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 

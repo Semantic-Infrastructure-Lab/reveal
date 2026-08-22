@@ -21,6 +21,9 @@ import pytest
 from reveal.registry import get_analyzer
 from reveal.display.element import _parse_element_syntax, _extract_by_syntax
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 FIXTURES = Path(__file__).parent / "fixtures"
 
 

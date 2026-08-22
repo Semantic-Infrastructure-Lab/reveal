@@ -16,6 +16,9 @@ from unittest.mock import patch
 from reveal.adapters.claude.adapter import ClaudeAdapter
 from reveal.adapters.claude.renderer import ClaudeRenderer
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 # ─── BACK-036: _extract_project_from_dir ──────────────────────────────────────
 

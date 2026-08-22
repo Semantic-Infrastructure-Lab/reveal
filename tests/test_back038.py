@@ -19,6 +19,9 @@ from reveal.adapters.json.adapter import JsonAdapter
 from reveal.adapters.json.introspection import get_flatten_result
 from reveal.rendering.adapters.json_adapter import render_json_result
 
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
+
 
 def _capture(fn, *args, **kwargs):
     buf = StringIO()

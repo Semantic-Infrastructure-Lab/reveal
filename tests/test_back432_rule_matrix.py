@@ -24,6 +24,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 from reveal.registry import get_analyzer
 from reveal.rules.bugs.B001 import B001
 from reveal.rules.bugs.B002 import B002
@@ -62,6 +64,9 @@ from reveal.rules.validation.V017 import V017
 from reveal.rules.validation.V021 import V021
 from reveal.rules.validation.V022 import V022
 from reveal.rules.links.L001 import L001
+
+# BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
+pytestmark = pytest.mark.component
 
 
 class _TempDirMixin:
