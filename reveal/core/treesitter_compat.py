@@ -82,22 +82,30 @@ def _zero_arg(obj, name):
     properties from 1.12.5 on. `child(i)` (takes an index) is unaffected —
     it stays a real method in both — so callers use `node.child(i)` directly.
 
-    `kind` is the one accessor that doesn't just flip method→property: the
-    vendored pre-1.12.5 `builtins.Node.kind()` has no core-binding
-    equivalent by that name at all — confirmed live in isolated venvs
-    (torrential-breeze-0821, tree-sitter 0.23.0 through 0.26.0) that
-    `tree_sitter.Node` (the >=1.12.5 core binding) never exposes `.kind`,
-    only `.type` (a plain string, present in both eras, same value as
-    `.kind()` — e.g. `'module'`). So `getattr(obj, 'kind')` raises
-    AttributeError unconditionally once the ceiling lifts; fall back to
-    `.type` rather than pushing this asymmetry onto every one of the ~700
-    call sites that call `_zero_arg(x, 'kind')`.
+    `kind`, `start_position`, and `end_position` don't just flip
+    method→property: they're Rust `tree_sitter::Node` method names that the
+    pre-1.12.5 vendored `builtins.Node` leaked straight into Python, but the
+    real core `tree_sitter.Node` binding (>=1.12.5) has never exposed by
+    those names at all — confirmed live in isolated venvs
+    (torrential-breeze-0821, tree-sitter 0.23.0 through 0.26.0) and via
+    upstream release notes (BACK-1158's root-cause note: this is a naming
+    seam between two independently-named official tree-sitter APIs, not a
+    deprecation). The core binding's real Python-side names are `.type`,
+    `.start_point`, and `.end_point` (same values, different names, present
+    in both eras). So `getattr(obj, name)` raises AttributeError
+    unconditionally once the ceiling lifts for these three; fall back to the
+    renamed equivalent rather than pushing this asymmetry onto every call
+    site.
     """
     try:
         val = getattr(obj, name)
     except AttributeError:
         if name == 'kind':
             return obj.type
+        if name == 'start_position':
+            return obj.start_point
+        if name == 'end_position':
+            return obj.end_point
         raise
     return val() if callable(val) else val
 

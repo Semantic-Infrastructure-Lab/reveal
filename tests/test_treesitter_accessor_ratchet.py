@@ -43,19 +43,29 @@ import reveal
 # Counts are *occurrences* (multiple per line counted) found by the regex below,
 # excluding the compat module itself. Ratchet direction: DOWN ONLY.
 #
-# All real call sites are migrated as of BACK-620 batch 8 (torrential-breeze-0821).
+# All real BACK-620 call sites are migrated as of batch 8 (torrential-breeze-0821).
 # The remaining kind=2/is_named=1 are permanent floors, not sites: this regex is a
 # plain substring scan (see codemod_treesitter_accessors.py's own docstring), so it
 # still flags 3 docstring/comment mentions the codemod itself correctly excludes --
 # adapters/ast/nav_statewrites.py (`left.kind()`, BACK-439b/c history),
 # analyzers/imports/rust.py (`` `.kind()` ``, grammar-quirk explanation), and
 # core/node_taxonomy.py (`` `if not child.is_named(): continue` ``, code example).
+#
+# child_count/parent/start_position/end_position (BACK-1158, filed
+# torrential-breeze-0821): a second, unscoped migration the codemod tool
+# never covered until it was extended to find them. Baselines below are the
+# as-filed raw-site counts, not yet migrated -- ratchet only guards against
+# *growth* from here; batches lower these the same way BACK-620's did.
 BASELINE = {
     "kind": 2,
     "start_byte": 0,
     "end_byte": 0,
     "is_named": 1,
     "root_node": 0,
+    "child_count": 21,
+    "parent": 49,
+    "start_position": 175,
+    "end_position": 46,
 }
 
 _SRC_ROOT = Path(reveal.__file__).parent

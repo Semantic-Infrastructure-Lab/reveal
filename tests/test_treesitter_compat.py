@@ -228,6 +228,59 @@ class TestZeroArgKindFallback(unittest.TestCase):
             _zero_arg(self._MethodStyleNode(), 'nonexistent_accessor')
 
 
+class TestZeroArgPositionFallback(unittest.TestCase):
+    """_zero_arg(x, 'start_position'/'end_position') must resolve under both
+    API eras (BACK-1158).
+
+    Same root cause as `kind`/`type` (torrential-breeze-0821 root-cause
+    note): Rust's `tree_sitter::Node` names these `.start_position()`/
+    `.end_position()`; the >=1.12.5 core `tree_sitter.Node` binding has
+    never used those names, only `.start_point`/`.end_point` (same
+    semantic value, different name).
+    """
+
+    class _MethodStyleNode:
+        """Simulates <1.12.5 vendored Node: *_position() callable, no *_point."""
+
+        def start_position(self):
+            return (0, 0)
+
+        def end_position(self):
+            return (0, 5)
+
+    class _CoreBindingNode:
+        """Simulates >=1.12.5 core Node: no *_position, *_point is the real value."""
+
+        start_point = (0, 0)
+        end_point = (0, 5)
+
+    def test_method_style_start_position(self):
+        self.assertEqual(_zero_arg(self._MethodStyleNode(), 'start_position'), (0, 0))
+
+    def test_method_style_end_position(self):
+        self.assertEqual(_zero_arg(self._MethodStyleNode(), 'end_position'), (0, 5))
+
+    def test_core_binding_falls_back_to_start_point(self):
+        self.assertEqual(_zero_arg(self._CoreBindingNode(), 'start_position'), (0, 0))
+
+    def test_core_binding_falls_back_to_end_point(self):
+        self.assertEqual(_zero_arg(self._CoreBindingNode(), 'end_position'), (0, 5))
+
+    def test_real_installed_node(self):
+        tree = ts_parse(ts.get_parser('python'), 'x = 1')
+        root = tree_root(tree)
+        # The vendored (<1.12.5) Point isn't a plain tuple -- compare via
+        # .row/.column, present on both eras' Point type.
+        start = _zero_arg(root, 'start_position')
+        end = _zero_arg(root, 'end_position')
+        self.assertEqual((start.row, start.column), (0, 0))
+        self.assertEqual((end.row, end.column), (0, 5))
+
+    def test_other_missing_attribute_still_raises(self):
+        with self.assertRaises(AttributeError):
+            _zero_arg(self._MethodStyleNode(), 'nonexistent_accessor')
+
+
 class TestTsParse(unittest.TestCase):
     """ts_parse() must work across the 1.12.5 str→bytes change in Parser.parse()."""
 

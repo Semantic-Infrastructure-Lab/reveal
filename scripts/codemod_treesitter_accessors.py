@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""BACK-1048 prerequisite tool #1: dry-run codemod for BACK-620/BACK-573.
+"""BACK-1048 prerequisite tool #1: dry-run codemod for BACK-620/BACK-573/BACK-1158.
 
-Rewrites raw zero-arg tree-sitter accessor calls --
-``X.kind()`` / ``X.start_byte()`` / ``X.end_byte()`` / ``X.is_named()`` --
-to route through ``reveal.core.treesitter_compat._zero_arg(X, 'name')``,
-matching the pattern already used by the ~421 sites migrated so far (see
+Rewrites raw zero-arg tree-sitter accessor calls -- ``X.kind()`` /
+``X.start_byte()`` / ``X.end_byte()`` / ``X.is_named()`` (BACK-620, complete)
+and ``X.child_count()`` / ``X.parent()`` / ``X.start_position()`` /
+``X.end_position()`` (BACK-1158) -- to route through
+``reveal.core.treesitter_compat._zero_arg(X, 'name')``, matching the pattern
+already used by the ~700 BACK-620 sites migrated (see
 ``reveal/analyzers/kotlin.py`` for a live example) and counted by
 ``tests/test_treesitter_accessor_ratchet.py``.
 
@@ -63,7 +65,13 @@ import difflib
 import sys
 from pathlib import Path
 
-ACCESSORS = ("kind", "start_byte", "end_byte", "is_named")
+ACCESSORS = (
+    "kind", "start_byte", "end_byte", "is_named",
+    # BACK-1158: child_count/parent are same-name method->property flips
+    # _zero_arg already handles correctly; start_position/end_position need
+    # its start_point/end_point name-remap fallback (mirrors kind->type).
+    "child_count", "parent", "start_position", "end_position",
+)
 _SKIP_PATH_PARTS = {"core"}  # reveal/core/treesitter_compat.py is the impl, not a call site
 _COMPAT_MODULE_NAME = "treesitter_compat.py"
 
