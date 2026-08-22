@@ -17,6 +17,7 @@ from reveal.adapters.ast.nav_narrow import (
     _block_always_exits,
     _fmt_types,
 )
+from reveal.core.treesitter_compat import _zero_arg
 
 # BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -38,9 +39,19 @@ def _analyzer(path: str) -> PythonAnalyzer:
 
 
 def _find_func(analyzer: PythonAnalyzer, name: str):
-    for n in [analyzer.tree.root_node().child(i) for i in range(analyzer.tree.root_node().child_count())]:
-        if n.kind() == 'function_definition':
-            ident = next((c for c in [n.child(i) for i in range(n.child_count())] if c.kind() == 'identifier'), None)
+    for n in [
+        analyzer.tree.root_node().child(i)
+        for i in range(_zero_arg(analyzer.tree.root_node(), 'child_count'))
+    ]:
+        if _zero_arg(n, 'kind') == 'function_definition':
+            ident = next(
+                (
+                    c
+                    for c in [n.child(i) for i in range(_zero_arg(n, 'child_count'))]
+                    if _zero_arg(c, 'kind') == 'identifier'
+                ),
+                None,
+            )
             if ident and analyzer._get_node_text(ident) == name:
                 return n
     return None
@@ -128,12 +139,23 @@ def f(x: Optional[str]) -> None:
 
     def _conditions(self):
         fn = _find_func(self.a, 'f')
-        body = next(c for c in [fn.child(i) for i in range(fn.child_count())] if c.kind() == 'block')
+        body = next(
+            c
+            for c in [fn.child(i) for i in range(_zero_arg(fn, 'child_count'))]
+            if _zero_arg(c, 'kind') == 'block'
+        )
         conds = []
-        for stmt in [body.child(i) for i in range(body.child_count())]:
-            if stmt.kind() == 'if_statement':
+        for stmt in [body.child(i) for i in range(_zero_arg(body, 'child_count'))]:
+            if _zero_arg(stmt, 'kind') == 'if_statement':
                 skip = {'if', ':', 'block', 'elif_clause', 'else_clause', 'comment'}
-                cond = next((c for c in [stmt.child(i) for i in range(stmt.child_count())] if c.kind() not in skip), None)
+                cond = next(
+                    (
+                        c
+                        for c in [stmt.child(i) for i in range(_zero_arg(stmt, 'child_count'))]
+                        if _zero_arg(c, 'kind') not in skip
+                    ),
+                    None,
+                )
                 conds.append(cond)
         return conds
 

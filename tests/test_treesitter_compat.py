@@ -39,21 +39,21 @@ class TestNodeChildren(unittest.TestCase):
     def test_count_matches_child_count(self):
         root = _parse('x = 1\ny = 2\nz = 3')
         children = node_children(root)
-        self.assertEqual(len(children), root.child_count())
+        self.assertEqual(len(children), _zero_arg(root, 'child_count'))
 
     def test_order_matches_indexed_access(self):
         root = _parse('x = 1\ny = 2\nz = 3')
         children = node_children(root)
         for i, c in enumerate(children):
-            self.assertEqual(c.kind(), root.child(i).kind())
-            self.assertEqual(c.start_byte(), root.child(i).start_byte())
+            self.assertEqual(_zero_arg(c, 'kind'), _zero_arg(root.child(i), 'kind'))
+            self.assertEqual(_zero_arg(c, 'start_byte'), _zero_arg(root.child(i), 'start_byte'))
 
     def test_empty_for_leaf(self):
         # A leaf-ish node (an identifier inside an assignment)
         root = _parse('x = 1')
         # Walk down to find a leaf
         node = root
-        while node.child_count() > 0:
+        while _zero_arg(node, 'child_count') > 0:
             node = node.child(0)
         self.assertEqual(node_children(node), [])
 
@@ -61,8 +61,8 @@ class TestNodeChildren(unittest.TestCase):
         # Should be iterable multiple times (it's a real list, not a generator)
         root = _parse('x = 1\ny = 2')
         children = node_children(root)
-        kinds_first = [c.kind() for c in children]
-        kinds_second = [c.kind() for c in children]
+        kinds_first = [_zero_arg(c, 'kind') for c in children]
+        kinds_second = [_zero_arg(c, 'kind') for c in children]
         self.assertEqual(kinds_first, kinds_second)
 
 
@@ -75,11 +75,11 @@ class TestPrevSibling(unittest.TestCase):
     def test_middle_child_returns_previous(self):
         root = _parse('x = 1\ny = 2\nz = 3')
         # Three top-level expression_statements
-        self.assertGreaterEqual(root.child_count(), 3)
+        self.assertGreaterEqual(_zero_arg(root, 'child_count'), 3)
         second = root.child(1)
         prev = node_prev_sibling(second)
         self.assertIsNotNone(prev)
-        self.assertEqual(prev.start_byte(), root.child(0).start_byte())
+        self.assertEqual(_zero_arg(prev, 'start_byte'), _zero_arg(root.child(0), 'start_byte'))
 
     def test_root_node_returns_none(self):
         root = _parse('x = 1')
@@ -91,9 +91,9 @@ class TestPrevSibling(unittest.TestCase):
         root = _parse('def f(a, b):\n    pass\n')
         # Walk to find the parameters node
         def find_kind(node, target):
-            if node.kind() == target:
+            if _zero_arg(node, 'kind') == target:
                 return node
-            for i in range(node.child_count()):
+            for i in range(_zero_arg(node, 'child_count')):
                 found = find_kind(node.child(i), target)
                 if found is not None:
                     return found
@@ -103,8 +103,16 @@ class TestPrevSibling(unittest.TestCase):
         self.assertIsNotNone(params)
         # parameters has children: '(', 'a', ',', 'b', ')'
         # 'b' should have a previous sibling (',')
-        named_kids = [params.child(i) for i in range(params.child_count())]
-        b_node = next((c for c in named_kids if c.kind() == 'identifier' and c.start_byte() > named_kids[0].start_byte() + 1), None)
+        named_kids = [params.child(i) for i in range(_zero_arg(params, 'child_count'))]
+        b_node = next(
+            (
+                c
+                for c in named_kids
+                if _zero_arg(c, 'kind') == 'identifier'
+                and _zero_arg(c, 'start_byte') > _zero_arg(named_kids[0], 'start_byte') + 1
+            ),
+            None,
+        )
         if b_node is not None:
             prev = node_prev_sibling(b_node)
             self.assertIsNotNone(prev)
@@ -114,16 +122,16 @@ class TestNextSibling(unittest.TestCase):
     def test_last_child_returns_none(self):
         root = _parse('x = 1')
         # Find the last top-level child
-        last = root.child(root.child_count() - 1)
+        last = root.child(_zero_arg(root, 'child_count') - 1)
         self.assertIsNone(node_next_sibling(last))
 
     def test_middle_child_returns_following(self):
         root = _parse('x = 1\ny = 2\nz = 3')
-        self.assertGreaterEqual(root.child_count(), 3)
+        self.assertGreaterEqual(_zero_arg(root, 'child_count'), 3)
         first = root.child(0)
         nxt = node_next_sibling(first)
         self.assertIsNotNone(nxt)
-        self.assertEqual(nxt.start_byte(), root.child(1).start_byte())
+        self.assertEqual(_zero_arg(nxt, 'start_byte'), _zero_arg(root.child(1), 'start_byte'))
 
     def test_root_node_returns_none(self):
         root = _parse('x = 1')
@@ -140,7 +148,7 @@ class TestRoundTripWithCheckpoints(unittest.TestCase):
         if nxt is not None:
             back = node_prev_sibling(nxt)
             self.assertIsNotNone(back)
-            self.assertEqual(back.start_byte(), mid.start_byte())
+            self.assertEqual(_zero_arg(back, 'start_byte'), _zero_arg(mid, 'start_byte'))
 
     def test_prev_then_next(self):
         root = _parse('x = 1\ny = 2\nz = 3')
@@ -149,7 +157,7 @@ class TestRoundTripWithCheckpoints(unittest.TestCase):
         if prv is not None:
             forward = node_next_sibling(prv)
             self.assertIsNotNone(forward)
-            self.assertEqual(forward.start_byte(), mid.start_byte())
+            self.assertEqual(_zero_arg(forward, 'start_byte'), _zero_arg(mid, 'start_byte'))
 
 
 class TestTreeRoot(unittest.TestCase):
@@ -179,7 +187,7 @@ class TestTreeRoot(unittest.TestCase):
         # tree_root() must resolve to the real root node either way.
         tree = ts.get_parser('python').parse('x = 1')
         root = tree_root(tree)
-        self.assertEqual(root.kind(), 'module')
+        self.assertEqual(_zero_arg(root, 'kind'), 'module')
 
     def test_method_style_root_node(self):
         sentinel = object()
@@ -308,7 +316,7 @@ class TestTsParse(unittest.TestCase):
     def test_real_installed_parser(self):
         parser = ts.get_parser('python')
         tree = ts_parse(parser, 'x = 1')
-        self.assertEqual(tree_root(tree).kind(), 'module')
+        self.assertEqual(_zero_arg(tree_root(tree), 'kind'), 'module')
 
     def test_str_only_parser_gets_str(self):
         result = ts_parse(self._StrOnlyParser(), 'hello')
