@@ -38,3 +38,12 @@ class Batch:
             self.total = self.total + item
             cache.set(item)
         return self.total
+
+
+# Deep-conformance additions (BACK-1106): a subclass + a decorated method,
+# added standalone (not touching Batch's line-numbered asserts above), same
+# precedent as the language-specific edge-case fixtures further down.
+class Reporter(Batch):
+    @staticmethod
+    def summarize():
+        return "done"

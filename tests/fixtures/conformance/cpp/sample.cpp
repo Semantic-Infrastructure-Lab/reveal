@@ -45,3 +45,11 @@ public:
         }
     }
 };
+
+// Deep-conformance addition (BACK-1106): struct-based inheritance (D6 --
+// `struct X : Base` drops bases while `class X : public Base` works).
+// C++ has no user-facing decorator/annotation construct, so decorators is
+// genuinely not_supported here.
+struct Reporter : Batch {
+    void summarize() {}
+};

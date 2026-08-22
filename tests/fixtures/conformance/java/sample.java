@@ -43,3 +43,10 @@ class Batch {
         }
     }
 }
+
+// Deep-conformance addition (BACK-1106): a subclass + a decorated class,
+// added standalone (not touching Batch's line-numbered asserts above).
+@Deprecated
+class Reporter extends Batch {
+    void summarize() {}
+}

@@ -41,3 +41,7 @@ void batch_run(struct Batch *b, int *items, int n) {
         cache.set(items[i]);
     }
 }
+
+/* Deep-conformance addition (BACK-1106): C has neither inheritance nor a
+   decorator/annotation construct, so both fields are genuinely not_supported
+   for this language -- no fixture code needed to prove that. */

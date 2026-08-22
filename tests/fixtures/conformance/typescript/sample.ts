@@ -39,4 +39,17 @@ class Batch {
     }
 }
 
-export { run, Batch };
+// Deep-conformance addition (BACK-1106): a decorated subclass, added
+// standalone (not touching Batch's line-numbered asserts above). The
+// decorator identifier doesn't need to resolve -- tree-sitter parses the
+// syntax regardless of type-checking.
+declare function Component(target: any): any;
+
+@Component
+class Reporter extends Batch {
+    summarize(): number {
+        return this.total;
+    }
+}
+
+export { run, Batch, Reporter };

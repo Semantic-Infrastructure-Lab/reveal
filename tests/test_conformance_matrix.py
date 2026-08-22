@@ -114,6 +114,75 @@ def test_imports_unused_detection(lang):
         assert unused_names == expected, f"{lang}: imports unused mismatch"
 
 
+def _ast_record(lang, name, category):
+    """Fetch a single ast:// record by name+category from the fixture file."""
+    out = _run(f"ast://{_sample_path(lang)}?limit=500", "--format", "json")
+    data = json.loads(out)
+    for record in data["results"]:
+        if record["name"] == name and record["category"] == category:
+            return record
+    raise AssertionError(f"{lang}: no {category} record named {name!r} in ast:// output")
+
+
+def test_decorators_extracted_for_annotated_construct(lang):
+    """ast://'s `decorators` field must reflect real source annotations for
+    every language that has annotation syntax, not just Python's -- or, where
+    the language genuinely has no such construct, assert the documented
+    not-supported shape (empty) rather than silently passing for the wrong
+    reason (BACK-398 precedent, same as imports_unused above).
+
+    Matrix finding D1 (internal-docs/research/
+    REVEAL_LANGUAGE_CONSISTENCY_MATRIX_2026-08-10.md): `ast://` emits a
+    `decorators` field for every language but only Python's analyzer
+    populates it. Confirmed-broken languages are xfail'd with a BACK-1087
+    pointer rather than encoded as `not_supported` -- the construct is real
+    in the source, reveal's extraction is what's missing, and xfail turns
+    into a live regression check the moment each per-language fix lands."""
+    spec = EXPECTED[lang]["decorators"]
+    record = _ast_record(lang, spec["target"], spec["category"])
+    if spec.get("not_supported"):
+        assert record["decorators"] == [], (
+            f"{lang}: expected no decorators (no such construct), got {record['decorators']}"
+        )
+        return
+    if "xfail" in spec:
+        if record["decorators"] == spec["expected"]:
+            pytest.fail(
+                f"{lang}: {spec['xfail']} appears resolved -- drop the xfail key "
+                f"in expected.yaml and assert for real"
+            )
+        pytest.xfail(spec["xfail"])
+    assert record["decorators"] == spec["expected"], f"{lang}: decorators mismatch"
+
+
+def test_bases_reflects_real_inheritance(lang):
+    """ast://'s `bases` field must reflect real inheritance/mixins for every
+    language, not just the `class X extends/inherits Y` forms that happen to
+    already work -- or, where the language genuinely has no such construct,
+    assert the documented not-supported shape.
+
+    Matrix findings D2/D3/D6/D7 (same doc as above): Rust trait impls, Go
+    struct embedding, C++ struct-based inheritance, and Ruby mixins are all
+    silently dropped from `bases` even though the same field works for
+    ordinary class inheritance. Confirmed-broken languages are xfail'd with
+    a BACK-1088/BACK-1091 pointer for the same reason as decorators above."""
+    spec = EXPECTED[lang]["bases"]
+    record = _ast_record(lang, spec["target"], spec["category"])
+    if spec.get("not_supported"):
+        assert record["bases"] == [], (
+            f"{lang}: expected no bases (no such construct), got {record['bases']}"
+        )
+        return
+    if "xfail" in spec:
+        if record["bases"] == spec["expected"]:
+            pytest.fail(
+                f"{lang}: {spec['xfail']} appears resolved -- drop the xfail key "
+                f"in expected.yaml and assert for real"
+            )
+        pytest.xfail(spec["xfail"])
+    assert record["bases"] == spec["expected"], f"{lang}: bases mismatch"
+
+
 # ──────────────────────── reveal architecture (fan-in/out) ─────────────────────
 #
 # BACK-487/488: the high-level DD command `reveal architecture` depends on

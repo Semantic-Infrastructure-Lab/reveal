@@ -53,6 +53,11 @@ python:
   statewrites:
   - {kind: field, line: 38}
   - {kind: cache, line: 39}
+  # BACK-1106 (D1/D2/D3/D6/D7): decorators/bases parity coverage. python is
+  # the one language with correctly-working decorator extraction (see
+  # test_decorators_extracted_for_annotated_construct).
+  decorators: {target: summarize, category: functions, expected: ["@staticmethod"]}
+  bases: {target: Reporter, category: classes, expected: ["Batch"]}
 
 c:
   entry_function: process_order
@@ -93,6 +98,10 @@ c:
   statewrites:
   - {kind: field, line: 40}
   - {kind: cache, line: 41}
+  # BACK-1106: C has neither a decorator/annotation construct nor
+  # inheritance -- both genuinely not_supported.
+  decorators: {target: Batch, category: structs, not_supported: true}
+  bases: {target: Batch, category: structs, not_supported: true}
 
 cpp:
   entry_function: process_order
@@ -147,6 +156,11 @@ cpp:
   statewrites:
   - {kind: field, line: 43}
   - {kind: cache, line: 44}
+  # BACK-1106: C++ has no decorator/annotation construct (not_supported).
+  # bases is xfail'd (D6) -- `struct X : Base` drops bases while
+  # `class X : public Base` (Batch above) works.
+  decorators: {target: Reporter, category: structs, not_supported: true}
+  bases: {target: Reporter, category: structs, expected: ["Batch"], xfail: "BACK-1091 (D6): cpp bases dropped for struct-based inheritance"}
 
 csharp:
   entry_function: ProcessOrder
@@ -184,6 +198,10 @@ csharp:
   statewrites:
   - {kind: field, line: 51}
   - {kind: cache, line: 52}
+  # BACK-1106: decorators (D1) xfail'd -- [Obsolete] on Reporter isn't
+  # extracted yet. bases already works for ordinary class inheritance.
+  decorators: {target: Reporter, category: classes, expected: ["[Obsolete]"], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  bases: {target: Reporter, category: classes, expected: ["Batch"]}
 
 java:
   entry_function: processOrder
@@ -227,6 +245,10 @@ java:
   statewrites:
   - {kind: field, line: 41}
   - {kind: cache, line: 42}
+  # BACK-1106: decorators (D1) xfail'd -- @Deprecated on Reporter isn't
+  # extracted yet. bases already works for ordinary class inheritance.
+  decorators: {target: Reporter, category: classes, expected: ["@Deprecated"], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  bases: {target: Reporter, category: classes, expected: ["Batch"]}
 
 javascript:
   entry_function: processOrder
@@ -262,6 +284,10 @@ javascript:
   statewrites:
   - {kind: field, line: 37}
   - {kind: cache, line: 38}
+  # BACK-1106: vanilla JS has no decorator syntax (not_supported). bases
+  # already works for ordinary class inheritance.
+  decorators: {target: Reporter, category: classes, not_supported: true}
+  bases: {target: Reporter, category: classes, expected: ["Batch"]}
 
 rust:
   entry_function: process_order
@@ -310,6 +336,11 @@ rust:
   statewrites:
   - {kind: field, line: 54}
   - {kind: cache, line: 55}
+  # BACK-1106: both xfail'd. decorators (D1) -- #[derive(Debug)] on Reporter
+  # isn't extracted yet. bases (D2) -- `impl Trait for T` doesn't populate
+  # bases, so Reporter's Summary impl is invisible.
+  decorators: {target: Reporter, category: structs, expected: ["#[derive(Debug)]"], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  bases: {target: Reporter, category: structs, expected: ["Summary"], xfail: "BACK-1088 (D2): Rust trait impls (`impl Trait for T`) don't populate bases"}
 
 typescript:
   entry_function: processOrder
@@ -345,6 +376,10 @@ typescript:
   statewrites:
   - {kind: field, line: 35}
   - {kind: cache, line: 36}
+  # BACK-1106: decorators (D1) xfail'd -- @Component on Reporter isn't
+  # extracted yet. bases already works for ordinary class inheritance.
+  decorators: {target: Reporter, category: classes, expected: ["@Component"], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  bases: {target: Reporter, category: classes, expected: ["Batch"]}
 
 go:
   entry_function: processOrder
@@ -385,6 +420,11 @@ go:
   statewrites:
   - {kind: field, line: 47}
   - {kind: cache, line: 48}
+  # BACK-1106: Go has no decorator/annotation construct (not_supported).
+  # bases is xfail'd (D3) -- struct embedding (Reporter embeds Batch)
+  # doesn't populate bases.
+  decorators: {target: Reporter, category: structs, not_supported: true}
+  bases: {target: Reporter, category: structs, expected: ["Batch"], xfail: "BACK-1088 (D3): Go struct embedding doesn't populate bases"}
 
 kotlin:
   entry_function: processOrder
@@ -418,6 +458,10 @@ kotlin:
   statewrites:
   - {kind: field, line: 37}
   - {kind: cache, line: 38}
+  # BACK-1106: decorators (D1) xfail'd -- @Deprecated("old") on Reporter
+  # isn't extracted yet. bases already works for ordinary class inheritance.
+  decorators: {target: Reporter, category: classes, expected: ['@Deprecated("old")'], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  bases: {target: Reporter, category: classes, expected: ["Batch"]}
 
 swift:
   entry_function: processOrder
@@ -453,6 +497,10 @@ swift:
   statewrites:
   - {kind: field, line: 38}
   - {kind: cache, line: 39}
+  # BACK-1106: decorators (D1) xfail'd -- @objc on Reporter isn't extracted
+  # yet. bases already works for ordinary class inheritance.
+  decorators: {target: Reporter, category: classes, expected: ["@objc"], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  bases: {target: Reporter, category: classes, expected: ["Batch"]}
 
 ruby:
   entry_function: process_order
@@ -494,6 +542,11 @@ ruby:
   statewrites:
   - {kind: field, line: 34}
   - {kind: cache, line: 35}
+  # BACK-1106: Ruby has no decorator syntax (not_supported). bases is
+  # xfail'd (D7) -- `include`/`extend` mixins never appear in bases, so
+  # Reporter's Summarizable include is invisible.
+  decorators: {target: Reporter, category: classes, not_supported: true}
+  bases: {target: Reporter, category: classes, expected: ["Summarizable"], xfail: "BACK-1091 (D7): Ruby mixins (include/extend) never appear in bases"}
 
 php:
   entry_function: processOrder
@@ -530,3 +583,7 @@ php:
   statewrites:
   - {kind: field, line: 38}
   - {kind: cache, line: 39}
+  # BACK-1106: decorators (D1) xfail'd -- #[Deprecated] on Reporter isn't
+  # extracted yet. bases already works for ordinary class inheritance.
+  decorators: {target: Reporter, category: classes, expected: ["#[Deprecated]"], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  bases: {target: Reporter, category: classes, expected: ["Batch"]}

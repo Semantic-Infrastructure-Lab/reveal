@@ -40,3 +40,10 @@ class Batch {
         }
     }
 }
+
+// Deep-conformance addition (BACK-1106): a decorated subclass, added
+// standalone (not touching Batch's line-numbered asserts above).
+@objc
+class Reporter: Batch {
+    func summarize() -> Int { return total }
+}

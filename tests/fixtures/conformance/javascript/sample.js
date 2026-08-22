@@ -41,4 +41,13 @@ class Batch {
     }
 }
 
-module.exports = { run, Batch };
+// Deep-conformance addition (BACK-1106): a subclass, added standalone (not
+// touching Batch's line-numbered asserts above). Vanilla JS has no
+// decorator syntax, so decorators is genuinely not_supported here.
+class Reporter extends Batch {
+    summarize() {
+        return this.total;
+    }
+}
+
+module.exports = { run, Batch, Reporter };

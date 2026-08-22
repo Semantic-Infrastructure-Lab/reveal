@@ -54,3 +54,16 @@ class Accumulator
     @sum += x
   end
 end
+
+# Deep-conformance addition (BACK-1106): a mixin (bases, D7 -- include/
+# extend never appear in `bases`). Ruby has no decorator syntax, so
+# decorators is genuinely not_supported here.
+module Summarizable
+  def summarize
+    @total
+  end
+end
+
+class Reporter
+  include Summarizable
+end

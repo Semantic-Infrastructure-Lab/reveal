@@ -48,3 +48,19 @@ func (b *Batch) Run(items []int) {
 		cache.Set(item)
 	}
 }
+
+// Deep-conformance addition (BACK-1106): struct embedding (bases, D3 --
+// Go interface declarations and struct embedding are invisible to ast://).
+// Go has no decorator/annotation construct, so decorators is genuinely
+// not_supported here.
+type Summarizer interface {
+	Summarize() int
+}
+
+type Reporter struct {
+	Batch
+}
+
+func (r *Reporter) Summarize() int {
+	return r.Total
+}

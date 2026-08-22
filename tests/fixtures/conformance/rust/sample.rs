@@ -56,3 +56,20 @@ impl Batch {
         }
     }
 }
+
+// Deep-conformance addition (BACK-1106): a derive attribute (decorators,
+// D1) + a trait impl (bases, D2 -- `impl Trait for T` yields no bases).
+#[derive(Debug)]
+struct Reporter {
+    total: i32,
+}
+
+trait Summary {
+    fn summarize(&self) -> i32;
+}
+
+impl Summary for Reporter {
+    fn summarize(&self) -> i32 {
+        self.total
+    }
+}

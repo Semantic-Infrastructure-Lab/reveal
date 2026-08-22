@@ -40,3 +40,12 @@ class Batch {
         }
     }
 }
+
+// Deep-conformance addition (BACK-1106): a decorated subclass, added
+// standalone (not touching Batch's line-numbered asserts above).
+#[Deprecated]
+class Reporter extends Batch {
+    public function summarize() {
+        return $this->total;
+    }
+}

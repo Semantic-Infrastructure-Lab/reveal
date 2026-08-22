@@ -53,4 +53,12 @@ namespace Sample
             }
         }
     }
+
+    // Deep-conformance addition (BACK-1106): a subclass + a decorated class,
+    // added standalone (not touching Batch's line-numbered asserts above).
+    [Obsolete]
+    public class Reporter : Batch
+    {
+        public void Summarize() { }
+    }
 }
