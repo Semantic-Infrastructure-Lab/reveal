@@ -113,8 +113,8 @@ class ZigAnalyzer(TreeSitterAnalyzer):
 
     def _build_function_info(self, decl_node, fn_name: str, signature: str, has_pub: bool) -> Dict[str, Any]:
         """Build function information dictionary."""
-        line_start = decl_node.start_position().row + 1
-        line_end = decl_node.end_position().row + 1
+        line_start = _zero_arg(decl_node, 'start_position').row + 1
+        line_end = _zero_arg(decl_node, 'end_position').row + 1
         func_info = {
             'line': line_start,
             'line_end': line_end,
@@ -236,7 +236,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
     ) -> Dict[str, Any]:
         """Build container information dictionary."""
         container_info = {
-            'line': decl_node.start_position().row + 1,
+            'line': _zero_arg(decl_node, 'start_position').row + 1,
             'name': var_name,
             'members': members,
         }
@@ -307,8 +307,8 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                     if fn_name == name:
                         return {
                             'name': name,
-                            'line_start': decl_node.start_position().row + 1,
-                            'line_end': decl_node.end_position().row + 1,
+                            'line_start': _zero_arg(decl_node, 'start_position').row + 1,
+                            'line_end': _zero_arg(decl_node, 'end_position').row + 1,
                             'source': self._get_node_text(decl_node),
                         }
         if element_type == 'test' and self.tree:
@@ -316,8 +316,8 @@ class ZigAnalyzer(TreeSitterAnalyzer):
             if test_node is not None:
                 return {
                     'name': name,
-                    'line_start': test_node.start_position().row + 1,
-                    'line_end': test_node.end_position().row + 1,
+                    'line_start': _zero_arg(test_node, 'start_position').row + 1,
+                    'line_end': _zero_arg(test_node, 'end_position').row + 1,
                     'source': self._get_node_text(test_node),
                 }
         return super().extract_element(element_type, name)
@@ -334,8 +334,8 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         for test_node in self._find_nodes_by_type('TestDecl'):
             test_name = self._get_test_name(test_node)
             if test_name:
-                line_start = test_node.start_position().row + 1
-                line_end = test_node.end_position().row + 1
+                line_start = _zero_arg(test_node, 'start_position').row + 1
+                line_end = _zero_arg(test_node, 'end_position').row + 1
                 tests.append({
                     'line': line_start,
                     'line_end': line_end,

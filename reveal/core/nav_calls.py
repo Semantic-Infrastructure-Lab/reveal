@@ -32,7 +32,7 @@ def _generic_call_hits(
     # (caught by test_calls_ignores_bare_property_access_in_chain
     # regressing to ['x.field.method', 'method'] instead of
     # ['x.field.method']).
-    line = node.start_position().row + 1
+    line = _zero_arg(node, 'start_position').row + 1
     in_range = from_line <= line <= to_line
     node_kind = _zero_arg(node, 'kind')
     if not (node_kind in call_node_types and node_kind != 'attribute_call' and in_range):
@@ -151,7 +151,7 @@ def _decorator_arg_hits(
     # convention as the Dart signature-adjacent extras above -- a
     # decorator belongs to the whole function regardless of which
     # --calls sub-range was requested.
-    parent = func_node.parent()
+    parent = _zero_arg(func_node, 'parent')
     if parent is None or _zero_arg(parent, 'kind') != 'decorated_definition':
         return []
     hits: List[Dict[str, Any]] = []
@@ -164,7 +164,7 @@ def _decorator_arg_hits(
             if _zero_arg(dnode, 'kind') in call_node_types:
                 callee = _extract_callee(dnode, get_text, call_node_types)
                 if callee and callee not in seen_callees:
-                    dline = dnode.start_position().row + 1
+                    dline = _zero_arg(dnode, 'start_position').row + 1
                     first_arg, has_more = _extract_first_arg(dnode, get_text)
                     hits.append({
                         'line': dline, 'callee': callee,
@@ -197,8 +197,8 @@ def range_calls(
     stack = list(reversed(_children(func_node)))
     while stack:
         node = stack.pop()
-        line = node.start_position().row + 1
-        if node.end_position().row + 1 < from_line or line > to_line:
+        line = _zero_arg(node, 'start_position').row + 1
+        if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             continue
         children = _children(node)
         results.extend(_generic_call_hits(node, call_node_types, get_text, from_line, to_line))
@@ -243,7 +243,7 @@ def _extract_dart_selector_calls(children: List[Any], get_text: Callable) -> Lis
         inner_kind = _zero_arg(inner, 'kind')
         if inner_kind == 'argument_part':
             callee = ''.join(base_parts) if base_parts else None
-            line = child.start_position().row + 1
+            line = _zero_arg(child, 'start_position').row + 1
             first_arg, has_more = _extract_first_arg(inner, get_text)
             results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
             base_parts = []
@@ -289,7 +289,7 @@ def _extract_dart_cascade_calls(node: Any, get_text: Callable) -> List[Dict[str,
             base_parts = [f'.{member}'] if member else []
         elif kind == 'argument_part':
             callee = ''.join(base_parts) if base_parts else None
-            line = child.start_position().row + 1
+            line = _zero_arg(child, 'start_position').row + 1
             first_arg, has_more = _extract_first_arg(child, get_text)
             results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
             base_parts = []
@@ -355,7 +355,7 @@ def _extract_zig_suffix_calls(children: List[Any], get_text: Callable) -> List[D
         kind = _zero_arg(child, 'kind')
         if kind == 'FnCallArguments':
             callee = ''.join(base_parts) if base_parts else None
-            line = child.start_position().row + 1
+            line = _zero_arg(child, 'start_position').row + 1
             first_arg, has_more = _extract_first_arg(child, get_text)
             results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
             base_parts = []
@@ -371,7 +371,7 @@ def _extract_zig_suffix_calls(children: List[Any], get_text: Callable) -> List[D
                     ''.join(base_parts) + f'.{member}' if base_parts and member
                     else (f'.{member}' if member else None)
                 )
-                line = child.start_position().row + 1
+                line = _zero_arg(child, 'start_position').row + 1
                 first_arg, has_more = _extract_first_arg(args, get_text)
                 results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
                 base_parts = []
@@ -411,7 +411,7 @@ def _extract_gdscript_attribute_calls(children: List[Any], get_text: Callable) -
                 ''.join(base_parts) + f'.{member}' if base_parts and member
                 else (f'.{member}' if member else None)
             )
-            line = child.start_position().row + 1
+            line = _zero_arg(child, 'start_position').row + 1
             first_arg, has_more = _extract_first_arg(child, get_text)
             results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
             base_parts = []
@@ -443,7 +443,7 @@ def _extract_callee(
     call_node_types: Optional[frozenset] = None,
 ) -> Optional[str]:
     """Extract callee name from a call expression node."""
-    if not call_node.child_count():
+    if not _zero_arg(call_node, 'child_count'):
         return None
 
     # C++ member-function-pointer declaration misparse (BACK-745): mirrors

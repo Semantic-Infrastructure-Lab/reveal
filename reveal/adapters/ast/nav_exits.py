@@ -133,8 +133,8 @@ def collect_exits(
     stack = list(reversed(_children(scope_node)))
     while stack:
         node = stack.pop()
-        line = node.start_position().row + 1
-        if node.end_position().row + 1 < from_line or line > to_line:
+        line = _zero_arg(node, 'start_position').row + 1
+        if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             continue
 
         if from_line <= line <= to_line:
@@ -142,7 +142,7 @@ def collect_exits(
                 kind = _EXIT_KIND[_zero_arg(node, 'kind')]
                 text_node = node
                 if _zero_arg(node, 'kind') in _BARE_THROW_KEYWORD_KINDS:
-                    parent = node.parent()
+                    parent = _zero_arg(node, 'parent')
                     if parent is not None:
                         text_node = parent
                 text = get_text(text_node).splitlines()[0].strip()
@@ -169,7 +169,7 @@ def collect_exits(
     if _zero_arg(scope_node, 'kind') == 'function_item':
         tail = _find_rust_tail_expression(scope_node)
         if tail is not None:
-            tail_line = tail.start_position().row + 1
+            tail_line = _zero_arg(tail, 'start_position').row + 1
             if from_line <= tail_line <= to_line:
                 text = get_text(tail).splitlines()[0].strip()
                 if len(text) > 80:
@@ -245,7 +245,7 @@ def collect_mutations(
     get_text: Callable,
 ) -> List[Dict[str, Any]]:
     """Identify variables written in a range that are read after it (potential returns)."""
-    full_to = scope_node.end_position().row + 1
+    full_to = _zero_arg(scope_node, 'end_position').row + 1
     all_events = all_var_flow(
         scope_node, from_line, to_line, get_text, full_to=full_to
     )
@@ -337,7 +337,7 @@ def _get_condition(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]:
         text = f'unless {text}'
     if len(text) > 60:
         text = text[:57] + '...'
-    return {'line': cond.start_position().row + 1, 'text': text}
+    return {'line': _zero_arg(cond, 'start_position').row + 1, 'text': text}
 
 
 def collect_gate_chains(
@@ -362,8 +362,8 @@ def collect_gate_chains(
     results: List[Dict[str, Any]] = []
 
     def walk(node: Any, gates: List[Dict[str, Any]]) -> None:
-        line = node.start_position().row + 1
-        if node.end_position().row + 1 < from_line or line > to_line:
+        line = _zero_arg(node, 'start_position').row + 1
+        if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             return
 
         ntype = _zero_arg(node, 'kind')
@@ -372,7 +372,7 @@ def collect_gate_chains(
             if ntype in _EXIT_KIND:
                 text_node = node
                 if ntype in _BARE_THROW_KEYWORD_KINDS:
-                    parent = node.parent()
+                    parent = _zero_arg(node, 'parent')
                     if parent is not None:
                         text_node = parent
                 text = get_text(text_node).splitlines()[0].strip()
@@ -408,7 +408,7 @@ def collect_gate_chains(
     if _zero_arg(scope_node, 'kind') == 'function_item':
         tail = _find_rust_tail_expression(scope_node)
         if tail is not None:
-            tail_line = tail.start_position().row + 1
+            tail_line = _zero_arg(tail, 'start_position').row + 1
             if from_line <= tail_line <= to_line:
                 text = get_text(tail).splitlines()[0].strip()
                 if len(text) > 80:

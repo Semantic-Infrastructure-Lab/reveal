@@ -35,7 +35,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         if key_kind in ['bare_key', 'dotted_key', 'quoted_key']:
             start, end = _zero_arg(key_node, 'start_byte'), _zero_arg(key_node, 'end_byte')
             keys.append({
-                'line_start': node.start_position().row + 1,
+                'line_start': _zero_arg(node, 'start_position').row + 1,
                 'name': self.content[start:end],
             })
 
@@ -43,7 +43,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         """Extract a table/table_array node into the sections list."""
         section_name = self._extract_table_name(node)
         section_info: Dict[str, Any] = {
-            'line_start': node.start_position().row + 1,
+            'line_start': _zero_arg(node, 'start_position').row + 1,
             'name': section_name,
         }
         if outline:
@@ -92,14 +92,14 @@ class TomlAnalyzer(TreeSitterAnalyzer):
 
     def _find_section_end_line(self, node) -> int:
         """Return end line for a section node (stops at next table or EOF)."""
-        end_line = node.end_position().row + 1
+        end_line = _zero_arg(node, 'end_position').row + 1
         for sibling in _children(tree_root(self.tree)):
-            if sibling.start_position().row <= node.start_position().row:
+            if _zero_arg(sibling, 'start_position').row <= _zero_arg(node, 'start_position').row:
                 continue
             if _zero_arg(sibling, 'kind') in ['table', 'table_array_element']:
-                return sibling.start_position().row
+                return _zero_arg(sibling, 'start_position').row
             if _zero_arg(sibling, 'kind') == 'pair':
-                end_line = max(end_line, sibling.end_position().row + 1)
+                end_line = max(end_line, _zero_arg(sibling, 'end_position').row + 1)
         return end_line
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
@@ -111,7 +111,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
                 continue
             if self._extract_table_name(node) != name:
                 continue
-            start_line = node.start_position().row + 1
+            start_line = _zero_arg(node, 'start_position').row + 1
             end_line = self._find_section_end_line(node)
             source = '\n'.join(self.lines[start_line - 1:end_line])
             return {'name': name, 'line_start': start_line, 'line_end': end_line, 'source': source}

@@ -171,31 +171,31 @@ _TEST_CALLEE_NAMES = frozenset({'describe', 'it', 'test', 'fit', 'xit', 'xtest'}
 
 def _ts_enclosing_test_name(node, src_bytes: bytes) -> str:
     """Walk up the tree via parent() to find the innermost test/it/describe label."""
-    current = node.parent()
+    current = _zero_arg(node, 'parent')
     while current is not None:
         if _zero_arg(current, 'kind') == 'call_expression':
             callee = current.child(0)
             if callee is not None:
                 callee_text = _ts_node_text(callee, src_bytes)
                 if callee_text in _TEST_CALLEE_NAMES:
-                    for i in range(current.child_count()):
+                    for i in range(_zero_arg(current, 'child_count')):
                         ch = current.child(i)
                         if _zero_arg(ch, 'kind') == 'arguments':
-                            for j in range(ch.child_count()):
+                            for j in range(_zero_arg(ch, 'child_count')):
                                 arg = ch.child(j)
                                 if _zero_arg(arg, 'kind') == 'string':
                                     val = _ts_get_string_value(arg, src_bytes)
                                     if val:
                                         return val
                             break
-        current = current.parent()
+        current = _zero_arg(current, 'parent')
     return '<module>'
 
 
 
 def _ts_get_string_value(string_node, src_bytes: bytes) -> Optional[str]:
     """Return the string content of a tree-sitter string literal node."""
-    for i in range(string_node.child_count()):
+    for i in range(_zero_arg(string_node, 'child_count')):
         ch = string_node.child(i)
         if _zero_arg(ch, 'kind') == 'string_fragment':
             return _ts_node_text(ch, src_bytes)
@@ -208,12 +208,12 @@ def _ts_get_string_value(string_node, src_bytes: bytes) -> Optional[str]:
 
 def _ts_args_list(call_node) -> List[Any]:
     """Return the argument nodes of a call_expression (excluding punctuation)."""
-    for i in range(call_node.child_count()):
+    for i in range(_zero_arg(call_node, 'child_count')):
         ch = call_node.child(i)
         if _zero_arg(ch, 'kind') == 'arguments':
             return [
                 ch.child(j)
-                for j in range(ch.child_count())
+                for j in range(_zero_arg(ch, 'child_count'))
                 if _zero_arg(ch.child(j), 'kind') not in ('(', ')', ',')
             ]
     return []
@@ -226,7 +226,7 @@ def _ts_parse_callee(call_node, src_bytes: bytes) -> Optional[tuple]:
         return None
     # children: identifier, '.', property_identifier
     obj_node = prop_node = None
-    for i in range(callee.child_count()):
+    for i in range(_zero_arg(callee, 'child_count')):
         ch = callee.child(i)
         if _zero_arg(ch, 'kind') == 'identifier' and obj_node is None:
             obj_node = ch
@@ -296,7 +296,7 @@ def _scan_file_ts(file_path: Path) -> List[PatchUse]:
                     if use is not None:
                         uses.append(use)
         # Push children in reverse order to maintain document order
-        for i in range(node.child_count() - 1, -1, -1):
+        for i in range(_zero_arg(node, 'child_count') - 1, -1, -1):
             stack.append(node.child(i))
     return uses
 
@@ -344,7 +344,7 @@ def _ts_build_patch_use(
     # jest.fn() / vi.fn() — no meaningful target; target_raw stays '<unknown>'
 
     test_name = _ts_enclosing_test_name(node, src_bytes)
-    line = node.start_position().row + 1  # rows are 0-indexed
+    line = _zero_arg(node, 'start_position').row + 1  # rows are 0-indexed
 
     return PatchUse(
         test_file=file_path,
