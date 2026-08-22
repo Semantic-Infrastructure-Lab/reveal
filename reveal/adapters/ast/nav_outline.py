@@ -61,8 +61,8 @@ def _make_item(
         'type': _zero_arg(node, 'kind'),
         'keyword': resolved,
         'label': _node_label(node, get_text, keyword=resolved),
-        'line_start': node.start_position().row + 1,
-        'line_end': node.end_position().row + 1,
+        'line_start': _zero_arg(node, 'start_position').row + 1,
+        'line_end': _zero_arg(node, 'end_position').row + 1,
         'depth': depth,
         'is_exit': is_exit,
     }
@@ -236,8 +236,8 @@ def _find_ancestors(
     depth: int,
 ) -> None:
     """Recursively find scope nodes that contain line_no."""
-    start = node.start_position().row + 1
-    end = node.end_position().row + 1
+    start = _zero_arg(node, 'start_position').row + 1
+    end = _zero_arg(node, 'end_position').row + 1
     if not (start <= line_no <= end):
         return
 
@@ -252,13 +252,15 @@ def _find_ancestors(
         # function_signature (a sibling subtree) and adds the DEF — synthesizing
         # too would double it.
         if sig is not None and not (
-            sig.start_position().row + 1 <= line_no <= sig.end_position().row + 1
+            _zero_arg(sig, 'start_position').row + 1
+            <= line_no
+            <= _zero_arg(sig, 'end_position').row + 1
         ):
             chain.append({
                 'type': 'function_signature',
                 'keyword': KEYWORD_LABEL.get('function_signature', 'DEF'),
                 'label': _node_label(sig, get_text),
-                'line_start': sig.start_position().row + 1,
+                'line_start': _zero_arg(sig, 'start_position').row + 1,
                 'line_end': end,
                 'depth': depth,
                 'condition': None,

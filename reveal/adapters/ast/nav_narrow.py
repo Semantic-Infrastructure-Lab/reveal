@@ -32,7 +32,7 @@ def collect_narrowing(
     if body is None:
         return events
 
-    entry_line = func_node.start_position().row + 1
+    entry_line = _zero_arg(func_node, 'start_position').row + 1
     events.append({
         'line': entry_line,
         'kind': 'ENTRY',
@@ -112,14 +112,14 @@ def _extract_param_types(
             )
             if type_node is None:
                 return None
-            inner = type_node.child(0) if type_node.child_count() == 1 else type_node
+            inner = type_node.child(0) if _zero_arg(type_node, 'child_count') == 1 else type_node
             return _parse_type_node(inner, get_text)
     return None
 
 
 def _parse_type_node(node: Any, get_text: Callable) -> FrozenSet[str]:
     if _zero_arg(node, 'kind') == 'type':
-        inner = node.child(0) if node.child_count() == 1 else node
+        inner = node.child(0) if _zero_arg(node, 'child_count') == 1 else node
         return _parse_type_node(inner, get_text)
 
     if _zero_arg(node, 'kind') in ('identifier',):
@@ -286,7 +286,7 @@ def _handle_if(
         return type_set
 
     if_types, else_types = _apply_guard(guard, type_set)
-    if_line = if_node.start_position().row + 1
+    if_line = _zero_arg(if_node, 'start_position').row + 1
 
     events.append({
         'line': if_line,
@@ -310,7 +310,7 @@ def _handle_if(
         if if_exits:
             after = else_types
             events.append({
-                'line': if_node.end_position().row + 2,
+                'line': _zero_arg(if_node, 'end_position').row + 2,
                 'kind': 'NARROW',
                 'label': '',
                 'type_set': after,
@@ -341,7 +341,7 @@ def _walk_alternatives(
     after = type_set
 
     for alt in alternatives:
-        alt_line = alt.start_position().row + 1
+        alt_line = _zero_arg(alt, 'start_position').row + 1
         alt_body = next((c for c in _children(alt) if _zero_arg(c, 'kind') == 'block'), None)
 
         if _zero_arg(alt, 'kind') == 'else_clause':
@@ -417,7 +417,7 @@ def _handle_assert(
 
     if_types, _ = _apply_guard(guard, type_set)
     events.append({
-        'line': assert_node.start_position().row + 1,
+        'line': _zero_arg(assert_node, 'start_position').row + 1,
         'kind': 'ASSERT',
         'label': get_text(assert_node),
         'type_set': if_types,

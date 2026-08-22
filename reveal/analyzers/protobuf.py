@@ -72,7 +72,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
                 if _zero_arg(child, 'kind') == 'full_ident':
                     package_name = self._get_node_text(child)
                     return {
-                        'line_start': pkg_node.start_position().row + 1,
+                        'line_start': _zero_arg(pkg_node, 'start_position').row + 1,
                         'name': package_name,
                     }
 
@@ -90,7 +90,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
 
             rpcs = self._extract_service_rpcs(service_node)
             services.append({
-                'line_start': service_node.start_position().row + 1,
+                'line_start': _zero_arg(service_node, 'start_position').row + 1,
                 'name': service_name,
                 'rpcs': rpcs,
             })
@@ -147,7 +147,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
         return {
             'name': rpc_name,
             'signature': signature,
-            'line_start': rpc_node.start_position().row + 1,
+            'line_start': _zero_arg(rpc_node, 'start_position').row + 1,
         }
 
     def _get_rpc_name(self, rpc_node: Any) -> Optional[str]:
@@ -179,13 +179,13 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
         returns_pos = None
         for child in _children(rpc_node):
             if _zero_arg(child, 'kind') == 'returns':
-                returns_pos = child.start_position().row
+                returns_pos = _zero_arg(child, 'start_position').row
                 break
 
         # Check each stream keyword position
         for child in _children(rpc_node):
             if _zero_arg(child, 'kind') == 'stream':
-                stream_pos = child.start_position().row
+                stream_pos = _zero_arg(child, 'start_position').row
                 if returns_pos is None or stream_pos < returns_pos:
                     is_streaming_request = True
                 else:
@@ -213,7 +213,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
                 if (info := self._format_field_info(field_node)) is not None
             ]
             messages.append({
-                'line_start': msg_node.start_position().row + 1,
+                'line_start': _zero_arg(msg_node, 'start_position').row + 1,
                 'name': message_name,
                 'fields': fields,
             })
@@ -272,7 +272,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
             if not enum_name:
                 continue
             enums.append({
-                'line_start': enum_node.start_position().row + 1,
+                'line_start': _zero_arg(enum_node, 'start_position').row + 1,
                 'name': enum_name,
                 'values': self._get_enum_body_values(enum_node),
             })

@@ -116,8 +116,11 @@ class RustExtractor(LanguageExtractor):
                 symbols.add(name)
 
             # Handle field expressions (foo.bar -> track 'foo')
-            if node.parent() and _zero_arg(node.parent(), 'kind') == 'field_expression':
-                root = self._get_root_identifier(node.parent(), analyzer)
+            if (
+                _zero_arg(node, 'parent')
+                and _zero_arg(_zero_arg(node, 'parent'), 'kind') == 'field_expression'
+            ):
+                root = self._get_root_identifier(_zero_arg(node, 'parent'), analyzer)
                 if root:
                     symbols.add(root)
 
@@ -132,7 +135,7 @@ class RustExtractor(LanguageExtractor):
             use std::io::Result as IoResult;     # use_as_clause
             use std::collections::*;              # use_wildcard
         """
-        line_number = node.start_position().row + 1
+        line_number = _zero_arg(node, 'start_position').row + 1
 
         # `pub use foo::Bar;` re-exports Bar as part of this module's public
         # API for OTHER files to consume — it's never "locally unused" by
@@ -387,7 +390,7 @@ class RustExtractor(LanguageExtractor):
         - Variable bindings (let statements)
         - Use statement names
         """
-        if not node.parent():
+        if not _zero_arg(node, 'parent'):
             return True
 
         # Walk up to check if inside use declaration
@@ -395,9 +398,9 @@ class RustExtractor(LanguageExtractor):
         while current:
             if _zero_arg(current, 'kind') == 'use_declaration':
                 return False
-            current = current.parent()
+            current = _zero_arg(current, 'parent')
 
-        parent_type = _zero_arg(node.parent(), 'kind')
+        parent_type = _zero_arg(_zero_arg(node, 'parent'), 'kind')
 
         # Skip definition contexts
         # Note: 'function_signature_item' removed - it was filtering return types as definitions

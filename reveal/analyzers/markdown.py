@@ -271,7 +271,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
             if level and title:
                 headings.append({
-                    'line': node.start_position().row + 1,  # tree-sitter uses 0-indexed
+                    'line': _zero_arg(node, 'start_position').row + 1,  # tree-sitter uses 0-indexed
                     'level': level,
                     'name': title,
                 })
@@ -410,8 +410,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         Returns:
             Dict with link metadata
         """
-        line = node.start_position().row + 1
-        column = node.start_position().column + 1
+        line = _zero_arg(node, 'start_position').row + 1
+        column = _zero_arg(node, 'start_position').column + 1
 
         link_info = self._classify_link(url, text, line)
         link_info['column'] = column
@@ -679,8 +679,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             Dict with line_start, line_end, language, source, etc.
         """
         # Get position (tree-sitter is 0-indexed)
-        line_start = node.start_position().row + 1
-        line_end = node.end_position().row + 1
+        line_start = _zero_arg(node, 'start_position').row + 1
+        line_end = _zero_arg(node, 'end_position').row + 1
         line_count = source.count('\n') + 1 if source else 0
 
         return {
@@ -801,8 +801,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
             if source:
                 # Get position (tree-sitter is 0-indexed)
-                line = node.start_position().row + 1
-                column = node.start_position().column + 1
+                line = _zero_arg(node, 'start_position').row + 1
+                column = _zero_arg(node, 'start_position').column + 1
 
                 inline_blocks.append({
                     'line': line,
