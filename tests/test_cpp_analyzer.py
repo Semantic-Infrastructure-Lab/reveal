@@ -16,6 +16,7 @@ import os
 import pytest
 
 from reveal.analyzers.cpp import CppAnalyzer
+from reveal.core.treesitter_compat import _zero_arg
 
 # BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -723,7 +724,7 @@ public:
             node = _find_element_node(analyzer, 'Batch.run')
             self.assertIsNotNone(node, "Batch.run should resolve to the member method")
             # Must be the member method (inside the class), not the free run()
-            self.assertGreater(node.start_position().row + 1, 6,
+            self.assertGreater(_zero_arg(node, 'start_position').row + 1, 6,
                                "resolved node should be the member method, not free run()")
 
         finally:

@@ -17,6 +17,7 @@ import pytest
 from reveal.analyzers.javascript import JavaScriptAnalyzer
 from reveal.analyzers.typescript import TypeScriptAnalyzer
 from reveal.analyzers.bash import BashAnalyzer
+from reveal.core.treesitter_compat import _zero_arg
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
 pytestmark = pytest.mark.component
@@ -598,7 +599,7 @@ class TestArrowFunctionConstNavResolution(unittest.TestCase):
             analyzer = JavaScriptAnalyzer(path)
             node = _find_element_node(analyzer, 'add')
             self.assertIsNotNone(node)
-            self.assertEqual(node.kind(), 'arrow_function')
+            self.assertEqual(_zero_arg(node, 'kind'), 'arrow_function')
         finally:
             os.unlink(path)
 
@@ -612,8 +613,8 @@ class TestArrowFunctionConstNavResolution(unittest.TestCase):
             analyzer = TypeScriptAnalyzer(path)
             node = _find_element_node(analyzer, 'add')
             self.assertIsNotNone(node)
-            self.assertEqual(node.start_position().row + 1, 1)
-            self.assertEqual(node.end_position().row + 1, 3)
+            self.assertEqual(_zero_arg(node, 'start_position').row + 1, 1)
+            self.assertEqual(_zero_arg(node, 'end_position').row + 1, 3)
         finally:
             os.unlink(path)
 

@@ -47,6 +47,7 @@ from typing import Any, Callable
 
 import pytest
 import tree_sitter_language_pack as ts
+from reveal.core.treesitter_compat import _zero_arg
 
 # BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
 pytestmark = pytest.mark.contract
@@ -136,7 +137,9 @@ def _nav_calls_callees(language: str, code: str) -> list:
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode("utf-8")
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            "utf-8"
+        )
 
     calls = range_calls(root, 1, 999, get_text)
     return [c["callee"] for c in calls]

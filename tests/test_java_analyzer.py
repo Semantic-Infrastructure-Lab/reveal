@@ -6,6 +6,7 @@ import os
 import pytest
 
 from reveal.analyzers.java import JavaAnalyzer
+from reveal.core.treesitter_compat import _zero_arg
 
 # BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -417,7 +418,7 @@ def _resolve_java_func(path, element='run'):
     content_bytes = analyzer.content.encode('utf-8')
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
 
     return func_node, get_text
 
