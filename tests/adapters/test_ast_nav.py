@@ -13,6 +13,7 @@ import unittest
 import tree_sitter_language_pack as ts
 
 import pytest
+from reveal.core.treesitter_compat import _zero_arg
 
 # BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -27,22 +28,23 @@ def _parse_python(code: str):
     root = tree.root_node()
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree, root, get_text, content_bytes
 
 
-
 def _find_func_with_text(root, get_text, name: str):
     """Find a function_definition node whose identifier matches name."""
-    stack = [root.child(i) for i in range(root.child_count())]
+    stack = [root.child(i) for i in range(_zero_arg(root, 'child_count'))]
     while stack:
         node = stack.pop()
-        if node.kind() == 'function_definition':
-            for child in [node.child(i) for i in range(node.child_count())]:
-                if child.kind() == 'identifier' and get_text(child) == name:
+        if _zero_arg(node, 'kind') == 'function_definition':
+            for child in [node.child(i) for i in range(_zero_arg(node, 'child_count'))]:
+                if _zero_arg(child, 'kind') == 'identifier' and get_text(child) == name:
                     return node
-        stack.extend(reversed([node.child(i) for i in range(node.child_count())]))
+        stack.extend(reversed([node.child(i) for i in range(_zero_arg(node, 'child_count'))]))
     return None
 
 
@@ -362,7 +364,9 @@ class TestScopeChainDefRecognitionCrossLanguage(unittest.TestCase):
         root = tree.root_node()
 
         def get_text(node):
-            return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
 
         return scope_chain(root, line_no, get_text)
 
@@ -655,7 +659,7 @@ class TestVarFlow(unittest.TestCase):
 
     def test_no_duplicate_events(self):
         events = self._flow('result')
-        positions = [(e['line'], e['node'].start_position().column) for e in events]
+        positions = [(e['line'], _zero_arg(e['node'], 'start_position').column) for e in events]
         self.assertEqual(len(positions), len(set(positions)))
 
 
@@ -852,18 +856,22 @@ def _parse_lang(lang: str, code: str):
     tree = parser.parse(src)
 
     def get_text(node):
-        return content_bytes[node.start_byte():node.end_byte()].decode('utf-8')
+        return content_bytes[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode(
+            'utf-8'
+        )
 
     return tree.root_node(), get_text
 
 
 def _find_any_func(root, get_text, name: str):
-    stack = [root.child(i) for i in range(root.child_count())]
+    stack = [root.child(i) for i in range(_zero_arg(root, 'child_count'))]
     while stack:
         node = stack.pop()
-        if ('function' in node.kind() or 'method' in node.kind()) and name in get_text(node):
+        if (
+            'function' in _zero_arg(node, 'kind') or 'method' in _zero_arg(node, 'kind')
+        ) and name in get_text(node):
             return node
-        stack.extend(node.child(i) for i in range(node.child_count()))
+        stack.extend(node.child(i) for i in range(_zero_arg(node, 'child_count')))
     return None
 
 
