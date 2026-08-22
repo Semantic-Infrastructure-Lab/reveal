@@ -28,11 +28,15 @@ The stale numbers this section previously carried (3,135 tests / 118 files,
 dated 2026-02-12) had drifted by ~4x — a live rerun of the commands above is
 the only trustworthy source, not this paragraph a session from now.
 
-**Marker taxonomy is still coarse.** Only `unit`/`integration`/`slow` exist
-today (see `pyproject.toml`). `BACK-1149` proposes a fuller lane taxonomy
-(component/contract/cli/mcp/conformance/compat/external_fixture) — not yet
-implemented, so the "Available Markers" section below reflects what's
-actually registered, not the target state.
+**Marker taxonomy: `BACK-1149`'s fuller lane taxonomy is registered and
+partially applied.** Beyond `unit`/`integration`/`slow`, `pyproject.toml`
+now also registers `component`/`contract`/`cli`/`mcp`/`conformance`/`compat`/
+`external_fixture`. As of 2026-08-21, 236 of ~293 files carry one of these
+new lane markers (regenerate live: `grep -lE "pytest\.mark\.(component|contract|cli|mcp|conformance|compat|external_fixture)" tests/*.py tests/adapters/*.py | wc -l`)
+— the remaining files are unmarked, not miscategorized, so don't treat an
+unmarked file as "not one of these lanes," and don't trust this count past
+this session either. See the "Available Markers" section below for what
+each lane means.
 
 ---
 
@@ -290,6 +294,25 @@ Use pytest markers to categorize tests:
 @pytest.mark.integration # Integration tests (slower)
 @pytest.mark.slow        # Tests taking > 1s
 ```
+
+`BACK-1149`'s broader lane taxonomy (applied incrementally, file by file, as
+a module-level `pytestmark = pytest.mark.<lane>` rather than per-test):
+
+```python
+@pytest.mark.component        # single-module behavior, no subprocess/CLI involved
+@pytest.mark.contract         # schema/shape/key-existence checks -- smoke alarms, not proof of correctness (BACK-1153)
+@pytest.mark.cli              # exercises reveal.main's CLI entry point (in-process or subprocess)
+@pytest.mark.mcp              # exercises the MCP server tool surface (reveal.mcp_server)
+@pytest.mark.conformance      # cross-adapter or cross-language agreement/ratchet tests
+@pytest.mark.compat           # dependency-version compatibility tests (e.g. tree-sitter-language-pack pinning)
+@pytest.mark.external_fixture # depends on real external state (a live repo, network, or another host) beyond tmp_path fixtures
+```
+
+A file's marker was verified before applying it, not inferred from its
+name — several `test_cli_*.py` files turned out to call `reveal.cli.*`
+handler functions directly rather than going through `reveal.main`, so they
+carry `component`, not `cli` (see git history for `BACK-1149` around
+2026-08-21 for the reasoning).
 
 ### Usage
 
