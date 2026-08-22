@@ -154,22 +154,23 @@ class PythonExtractor(LanguageExtractor):
         Returns:
             True if import is inside TYPE_CHECKING block
         """
-        current = node.parent()
+        current = _zero_arg(node, 'parent')
         while current:
-            if _zero_arg(current, 'kind') == 'if_statement' and current.child_count() > 1:
+            is_if = _zero_arg(current, 'kind') == 'if_statement'
+            if is_if and _zero_arg(current, 'child_count') > 1:
                 condition_text = self._get_node_text_from_tree(current.child(1), analyzer)
                 if 'TYPE_CHECKING' in condition_text:
                     return True
-            current = current.parent()
+            current = _zero_arg(current, 'parent')
         return False
 
     def _is_inside_function(self, node) -> bool:
         """Check if import node is inside a function or method body."""
-        current = node.parent()
+        current = _zero_arg(node, 'parent')
         while current:
             if _zero_arg(current, 'kind') in ('function_definition', 'decorated_definition'):
                 return True
-            current = current.parent()
+            current = _zero_arg(current, 'parent')
         return False
 
     def _get_node_text_from_tree(self, node, analyzer_or_tree) -> str:
@@ -187,8 +188,9 @@ class PythonExtractor(LanguageExtractor):
         is_in_function = self._is_inside_function(node)
 
         # Get source line (0-indexed -> 1-indexed)
-        line_number = node.start_position().row + 1
-        source_line = source_lines[node.start_position().row].rstrip() if node.start_position().row < len(source_lines) else ""
+        start_row = _zero_arg(node, 'start_position').row
+        line_number = start_row + 1
+        source_line = source_lines[start_row].rstrip() if start_row < len(source_lines) else ""
 
         # Get full import text for parsing
         import_text = analyzer._get_node_text(node)
@@ -306,8 +308,9 @@ class PythonExtractor(LanguageExtractor):
         is_in_function = self._is_inside_function(node)
 
         # Get source line (0-indexed -> 1-indexed)
-        line_number = node.start_position().row + 1
-        source_line = source_lines[node.start_position().row].rstrip() if node.start_position().row < len(source_lines) else ""
+        start_row = _zero_arg(node, 'start_position').row
+        line_number = start_row + 1
+        source_line = source_lines[start_row].rstrip() if start_row < len(source_lines) else ""
 
         # Extract module name and imported names
         module_name, is_relative, level = self._extract_from_module_name(node, analyzer)
@@ -358,9 +361,10 @@ class PythonExtractor(LanguageExtractor):
                 symbols.add(name)
 
             # Also handle attribute access (os.path -> track 'os')
-            if node.parent() and _zero_arg(node.parent(), 'kind') == 'attribute':
+            parent = _zero_arg(node, 'parent')
+            if parent and _zero_arg(parent, 'kind') == 'attribute':
                 # Get root of attribute chain
-                root = self._get_root_identifier(node.parent(), analyzer)
+                root = self._get_root_identifier(parent, analyzer)
                 if root:
                     symbols.add(root)
 
@@ -375,10 +379,10 @@ class PythonExtractor(LanguageExtractor):
         - Assignment targets
         - Import names
         """
-        if not node.parent():
+        if not _zero_arg(node, 'parent'):
             return True
 
-        parent_type = _zero_arg(node.parent(), 'kind')
+        parent_type = _zero_arg(_zero_arg(node, 'parent'), 'kind')
 
         # Fast path: common definition/import contexts at immediate parent level.
         # import_from_name covers `from x import NAME` identifiers;
@@ -389,19 +393,19 @@ class PythonExtractor(LanguageExtractor):
 
         # Check for import statement ancestor. Import identifiers are at most
         # 2-3 levels below their containing import_statement, so bound the walk.
-        current = node.parent()
+        current = _zero_arg(node, 'parent')
         for _ in range(3):
             if _zero_arg(current, 'kind') in ('import_statement', 'import_from_statement'):
                 return False
-            current = current.parent()
+            current = _zero_arg(current, 'parent')
             if current is None:
                 break
 
         # For assignments and keyword args, only filter the target/key (left side),
         # not the value (right side) which is a genuine usage context.
         if parent_type in ('assignment', 'keyword_argument'):
-            _p = node.parent()
-            if (_p and _p.child_count() > 0 and
+            _p = _zero_arg(node, 'parent')
+            if (_p and _zero_arg(_p, 'child_count') > 0 and
                     _zero_arg(_p.child(0), 'start_byte') == _zero_arg(node, 'start_byte')):
                 return False
 

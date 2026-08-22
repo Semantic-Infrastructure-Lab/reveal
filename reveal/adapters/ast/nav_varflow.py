@@ -169,9 +169,9 @@ class VarFlowWalker:
 
     def walk(self, n: Any, c: str) -> None:
         ntype = _zero_arg(n, 'kind')
-        line = n.start_position().row + 1
+        line = _zero_arg(n, 'start_position').row + 1
 
-        if n.end_position().row + 1 < self.from_line or line > self.to_line:
+        if _zero_arg(n, 'end_position').row + 1 < self.from_line or line > self.to_line:
             return
 
         # Terminal-identifier matches and per-language "this name is not a
@@ -191,7 +191,7 @@ class VarFlowWalker:
         without going through that candidate pass, so the same "not a variable"
         knowledge has to be applied here too (BACK-431 feature-breadth pass)."""
         if ntype in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER') and self.get_text(n) == self.var_name:
-            pos = (n.start_position().row, n.start_position().column)
+            pos = (_zero_arg(n, 'start_position').row, _zero_arg(n, 'start_position').column)
             if pos == self.own_name_pos:
                 return True
             if self.from_line <= line <= self.to_line:
@@ -234,9 +234,11 @@ class VarFlowWalker:
             # direct queries (BACK-431 feature-breadth pass). Compare by
             # position, not object identity — tree-sitter node wrappers are
             # not guaranteed stable across separate _children() calls.
-            tag_pos = (jsx_tag.start_position().row, jsx_tag.start_position().column)
+            tag_point = _zero_arg(jsx_tag, 'start_position')
+            tag_pos = (tag_point.row, tag_point.column)
             for child in _children(n):
-                pos = (child.start_position().row, child.start_position().column)
+                child_point = _zero_arg(child, 'start_position')
+                pos = (child_point.row, child_point.column)
                 if pos != tag_pos:
                     self.walk(child, c)
             return True
@@ -247,9 +249,11 @@ class VarFlowWalker:
             # any `annotation_argument_list` (`@SuppressWarnings("x")`) must
             # still be walked. Mirrors the JSX-tag exclusion just above
             # (BACK-431 feature-breadth pass).
-            name_pos = (java_annotation_name.start_position().row, java_annotation_name.start_position().column)
+            name_point = _zero_arg(java_annotation_name, 'start_position')
+            name_pos = (name_point.row, name_point.column)
             for child in _children(n):
-                pos = (child.start_position().row, child.start_position().column)
+                child_point = _zero_arg(child, 'start_position')
+                pos = (child_point.row, child_point.column)
                 if pos != name_pos:
                     self.walk(child, c)
             return True
@@ -370,7 +374,7 @@ class VarFlowWalker:
             op = n.child_by_field_name('operator')
             if op is not None:
                 is_augmented = self.get_text(op) != '='
-            elif (n.child_count() == 3 and not _zero_arg(n.child(1), 'is_named') and
+            elif (_zero_arg(n, 'child_count') == 3 and not _zero_arg(n.child(1), 'is_named') and
                     _zero_arg(n.child(1), 'kind') != '='):
                 # Go's assignment_statement has no 'operator' field at all —
                 # the operator is just the unnamed middle child token.
@@ -483,7 +487,7 @@ class VarFlowWalker:
             elif _zero_arg(child, 'kind') not in ('var', 'const', '='):
                 value = child
         if name is not None and self.get_text(name) == self.var_name:
-            line = name.start_position().row + 1
+            line = _zero_arg(name, 'start_position').row + 1
             if self.from_line <= line <= self.to_line:
                 self.events.append({'kind': 'WRITE', 'line': line, 'node': name})
         if value is not None:
@@ -609,7 +613,7 @@ class VarFlowWalker:
                 val_node = pair.child_by_field_name('value')
                 if key_node:
                     key_text = self.get_text(key_node)
-                    kline = key_node.start_position().row + 1
+                    kline = _zero_arg(key_node, 'start_position').row + 1
                     if self.from_line <= kline <= self.to_line:
                         self.events.append({
                             'kind': 'WRITE',
@@ -647,7 +651,7 @@ class VarFlowWalker:
             attr = func.child_by_field_name('attribute')
             if obj and self.get_text(obj) == self.var_name and attr:
                 method = self.get_text(attr)
-                obj_line = obj.start_position().row + 1
+                obj_line = _zero_arg(obj, 'start_position').row + 1
                 if self.from_line <= obj_line <= self.to_line:
                     self.events.append({'kind': 'READ', 'line': obj_line, 'node': obj})
 
@@ -664,7 +668,7 @@ class VarFlowWalker:
                     if arg_nodes:
                         key_node = arg_nodes[0]
                         key_text = self.get_text(key_node)
-                        kline = key_node.start_position().row + 1
+                        kline = _zero_arg(key_node, 'start_position').row + 1
                         if self.from_line <= kline <= self.to_line:
                             self.events.append({
                                 'kind': 'WRITE',
@@ -709,7 +713,7 @@ def var_flow(
     # WebGLRenderer.checkMaterialsReady).
     name_node = _declared_name_node(func_node)
     own_name_pos = (
-        (name_node.start_position().row, name_node.start_position().column)
+        (_zero_arg(name_node, 'start_position').row, _zero_arg(name_node, 'start_position').column)
         if name_node is not None and get_text(name_node) == var_name
         else None
     )
@@ -719,11 +723,11 @@ def var_flow(
     )
     walker.walk(func_node, 'READ')
     events = walker.events
-    events.sort(key=lambda e: (e['line'], e['node'].start_position().column))
+    events.sort(key=lambda e: (e['line'], _zero_arg(e['node'], 'start_position').column))
     seen: set = set()
     unique = []
     for ev in events:
-        key = (ev['line'], ev['node'].start_position().column, ev['kind'])
+        key = (ev['line'], _zero_arg(ev['node'], 'start_position').column, ev['kind'])
         if key not in seen:
             seen.add(key)
             unique.append(ev)
@@ -891,17 +895,16 @@ def _register_skip_positions(node: Any, skip_positions: set, get_text: Callable)
     if _zero_arg(node, 'kind') == 'parameter':
         external_name = node.child_by_field_name('external_name')
         if external_name is not None:
-            skip_positions.add(
-                (external_name.start_position().row, external_name.start_position().column)
-            )
+            point = _zero_arg(external_name, 'start_position')
+            skip_positions.add((point.row, point.column))
     jsx_tag = _jsx_lowercase_tag_name_node(node, get_text)
     if jsx_tag is not None:
-        skip_positions.add((jsx_tag.start_position().row, jsx_tag.start_position().column))
+        point = _zero_arg(jsx_tag, 'start_position')
+        skip_positions.add((point.row, point.column))
     java_annotation_name = _java_annotation_name_node(node)
     if java_annotation_name is not None:
-        skip_positions.add(
-            (java_annotation_name.start_position().row, java_annotation_name.start_position().column)
-        )
+        point = _zero_arg(java_annotation_name, 'start_position')
+        skip_positions.add((point.row, point.column))
 
 
 def _member_access_descent(node: Any) -> Optional[List[Any]]:
@@ -994,17 +997,18 @@ def _collect_identifier_names(
     name_node = _declared_name_node(scope_node)
     skip_positions: set = set()
     if name_node is not None:
-        skip_positions.add((name_node.start_position().row, name_node.start_position().column))
+        point = _zero_arg(name_node, 'start_position')
+        skip_positions.add((point.row, point.column))
     stack = list(reversed(_children(scope_node)))
     while stack:
         node = stack.pop()
-        line = node.start_position().row + 1
-        if node.end_position().row + 1 < from_line or line > to_line:
+        line = _zero_arg(node, 'start_position').row + 1
+        if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             continue
         node_kind = _zero_arg(node, 'kind')
         if (node_kind in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER') and
                 from_line <= line <= to_line):
-            pos = (node.start_position().row, node.start_position().column)
+            pos = (_zero_arg(node, 'start_position').row, _zero_arg(node, 'start_position').column)
             if pos not in skip_positions:
                 text = get_text(node)
                 if text:
@@ -1028,7 +1032,7 @@ def all_var_flow(
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Collect var_flow events for every identifier that appears in a line range."""
     if full_to is None:
-        full_to = scope_node.end_position().row + 1
+        full_to = _zero_arg(scope_node, 'end_position').row + 1
 
     names = _collect_identifier_names(scope_node, from_line, to_line, get_text)
     result: Dict[str, List[Dict[str, Any]]] = {}

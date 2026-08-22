@@ -672,7 +672,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             nodes = self._find_nodes_by_type(import_type)
             for node in nodes:
                 imports.append({
-                    'line': node.start_position().row + 1,
+                    'line': _zero_arg(node, 'start_position').row + 1,
                     'content': self._get_node_text(node),
                 })
 
@@ -682,7 +682,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         for node in self._find_nodes_by_type('import_or_export'):
             if any(_zero_arg(child, 'kind') == 'library_import' for child in _children(node)):
                 imports.append({
-                    'line': node.start_position().row + 1,
+                    'line': _zero_arg(node, 'start_position').row + 1,
                     'content': self._get_node_text(node),
                 })
 
@@ -931,7 +931,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     )
                     functions.append(func_dict)
                     # Track by func_node line (not decorated_node line) for matching
-                    func_line = func_node.start_position().row + 1
+                    func_line = _zero_arg(func_node, 'start_position').row + 1
                     tracking_lines.add((func_line, name))
 
         return functions, tracking_lines
@@ -948,7 +948,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 if not name:
                     continue
 
-                line_start = node.start_position().row + 1
+                line_start = _zero_arg(node, 'start_position').row + 1
                 if (line_start, name) in processed_funcs:
                     continue  # Already processed as decorated
 
@@ -972,9 +972,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         # Use decorated_node bounds if available (includes decorators)
         bounds_node = decorated_node if decorated_node else node
-        line_start = bounds_node.start_position().row + 1
+        line_start = _zero_arg(bounds_node, 'start_position').row + 1
         end_node = self._function_end_node(bounds_node)
-        line_end = end_node.end_position().row + 1
+        line_end = _zero_arg(end_node, 'end_position').row + 1
         # For Dart, end_node is the sibling function_body — walk that for
         # complexity/calls too, or both metrics silently see an empty body
         # (same blindness _function_end_node's docstring describes).
@@ -1156,7 +1156,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     )
                     classes.append(class_dict)
                     # Track by class_node line (not decorated_node line) for matching
-                    class_line = class_node.start_position().row + 1
+                    class_line = _zero_arg(class_node, 'start_position').row + 1
                     tracking_lines.add((class_line, name))
 
         return classes, tracking_lines
@@ -1170,7 +1170,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         Falls back to 'anonymous@L{line}' when no base class is present.
         """
-        line = node.start_position().row + 1
+        line = _zero_arg(node, 'start_position').row + 1
         for child in _children(node):
             if _zero_arg(child, 'kind') == 'base_clause':
                 for base_child in _children(child):
@@ -1196,7 +1196,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     else:
                         continue
 
-                line_start = node.start_position().row + 1
+                line_start = _zero_arg(node, 'start_position').row + 1
                 if (line_start, name) in processed_classes:
                     continue  # Already processed as decorated
 
@@ -1245,8 +1245,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             name = self._get_node_name(node)
             if not name:
                 continue
-            line_start = node.start_position().row + 1
-            line_end = node.end_position().row + 1
+            line_start = _zero_arg(node, 'start_position').row + 1
+            line_end = _zero_arg(node, 'end_position').row + 1
             entries.append({
                 'line': line_start,
                 'line_end': line_end,
@@ -1269,8 +1269,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         # Use decorated_node bounds if available (includes decorators)
         bounds_node = decorated_node if decorated_node else node
-        line_start = bounds_node.start_position().row + 1
-        line_end = bounds_node.end_position().row + 1
+        line_start = _zero_arg(bounds_node, 'start_position').row + 1
+        line_end = _zero_arg(bounds_node, 'end_position').row + 1
 
         result: Dict[str, Any] = {
             'line': line_start,
@@ -1305,8 +1305,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             for node in nodes:
                 name = self._get_node_name(node)
                 if name:
-                    line_start = node.start_position().row + 1
-                    line_end = node.end_position().row + 1
+                    line_start = _zero_arg(node, 'start_position').row + 1
+                    line_end = _zero_arg(node, 'end_position').row + 1
                     structs.append({
                         'line': line_start,
                         'line_end': line_end,
@@ -1343,8 +1343,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     )
                     return {
                         'name': name,
-                        'line_start': node.start_position().row + 1,
-                        'line_end': end_node.end_position().row + 1,
+                        'line_start': _zero_arg(node, 'start_position').row + 1,
+                        'line_end': _zero_arg(end_node, 'end_position').row + 1,
                         'source': source,
                     }
 
@@ -1520,7 +1520,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 # (BACK-760) wrap the same way: `method_signature(constructor_
                 # signature)` / `method_signature(factory_constructor_signature)`,
                 # optionally followed by `initializers` (handled above).
-                parent = node.parent()
+                parent = _zero_arg(node, 'parent')
                 # 'constant_constructor_signature' wraps in 'declaration',
                 # not 'method_signature' -- checked defensively even though
                 # a real `const` constructor can't carry an imperative body
@@ -1599,7 +1599,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         lookup before the generic child-scanning (which would find nothing
         and return None).
         """
-        parent = node.parent()
+        parent = _zero_arg(node, 'parent')
         if parent is not None:
             for sibling in _children(parent):
                 if _zero_arg(sibling, 'kind') == 'type_identifier':
@@ -2193,7 +2193,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         `self.language`), and `call` collides between Python and Ruby
         (BACK-734, same disambiguation).
         """
-        if not call_node.child_count():
+        if not _zero_arg(call_node, 'child_count'):
             return None
         kind = _zero_arg(call_node, 'kind')
         if (
