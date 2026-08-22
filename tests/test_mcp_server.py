@@ -489,8 +489,35 @@ class TestRevealReviewTool(unittest.TestCase):
         """A git-range target (diff-scoped review) should not raise, even on a
         range with 0 changed files -- also exercises the argument-injection
         fix (BACK-1141) via a target that would otherwise be a single-token
-        git-diff argv element."""
-        result = self.reveal_review('HEAD..HEAD')
+        git-diff argv element.
+
+        BACK-1152: 'HEAD..HEAD' resolves as a whole-directory listing (not
+        "0 changed files"), so this used to run against whatever the test
+        process's cwd happened to be -- the real reveal checkout (~934
+        files), turning one assertion into a full-tree parse (~29s cache-cold,
+        10+ min cache-warm before the isolation fix in setUp). A one-file
+        synthetic repo exercises the identical code path for a fraction of
+        the cost.
+        """
+        import pygit2
+
+        with tempfile.TemporaryDirectory() as d:
+            repo = pygit2.init_repository(d)
+            (Path(d) / 'app.py').write_text("def run():\n    pass\n")
+            author = pygit2.Signature("Test", "test@example.com")
+            index = repo.index
+            index.add_all()
+            index.write()
+            tree_oid = index.write_tree()
+            repo.create_commit("HEAD", author, author, "initial", tree_oid, [])
+
+            orig_dir = os.getcwd()
+            os.chdir(d)
+            try:
+                result = self.reveal_review('HEAD..HEAD')
+            finally:
+                os.chdir(orig_dir)
+
         self.assertIsInstance(result, str)
 
     def test_target_with_violations_returns_real_report_not_exit_code_sentinel(self):
