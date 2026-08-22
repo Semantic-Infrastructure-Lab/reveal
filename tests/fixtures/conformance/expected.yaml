@@ -200,7 +200,7 @@ csharp:
   - {kind: cache, line: 52}
   # BACK-1106: decorators (D1) xfail'd -- [Obsolete] on Reporter isn't
   # extracted yet. bases already works for ordinary class inheritance.
-  decorators: {target: Reporter, category: classes, expected: ["[Obsolete]"], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  decorators: {target: Reporter, category: classes, expected: ["[Obsolete]"]}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
 
 java:
@@ -247,7 +247,7 @@ java:
   - {kind: cache, line: 42}
   # BACK-1106: decorators (D1) xfail'd -- @Deprecated on Reporter isn't
   # extracted yet. bases already works for ordinary class inheritance.
-  decorators: {target: Reporter, category: classes, expected: ["@Deprecated"], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  decorators: {target: Reporter, category: classes, expected: ["@Deprecated"]}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
 
 javascript:
@@ -378,7 +378,7 @@ typescript:
   - {kind: cache, line: 36}
   # BACK-1106: decorators (D1) xfail'd -- @Component on Reporter isn't
   # extracted yet. bases already works for ordinary class inheritance.
-  decorators: {target: Reporter, category: classes, expected: ["@Component"], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  decorators: {target: Reporter, category: classes, expected: ["@Component"]}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
 
 go:

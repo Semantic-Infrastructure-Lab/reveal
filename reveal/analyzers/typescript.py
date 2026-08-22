@@ -1,6 +1,7 @@
 """TypeScript (.ts) and TypeScript React (.tsx) file analyzers."""
 
 from typing import Any, Dict, List, Optional
+from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
@@ -27,6 +28,24 @@ class _TypeScriptBase(
         funcs = super()._extract_functions()
         funcs.extend(self._extract_test_callbacks())
         return funcs
+
+    def _extract_decorators(self, node) -> List[str]:
+        """TypeScript decorators (BACK-1087, D1): a class-level '@Foo'/'@Foo(...)'
+        is a direct 'decorator' child of the class_declaration node itself --
+        verified via direct tree-sitter parse of `@Component class Foo {}`.
+
+        Method-level decorators (`class Foo { @Input() bar() {} }`) are NOT
+        covered here: tree-sitter emits those as a PRECEDING SIBLING of the
+        method_definition node inside class_body, not a child of the method
+        node — a different shape this node-local hook can't see without
+        parent/sibling context. Left for a follow-up (BACK-1087 Phase-2b);
+        the conformance suite only asserts class-level decorators currently.
+        """
+        return [
+            self._get_node_text(child)
+            for child in _children(node)
+            if _zero_arg(child, 'kind') == 'decorator'
+        ]
 
     # ── TypeScript type declarations ──────────────────────────────────────────
 

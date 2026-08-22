@@ -52,6 +52,19 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
                     return True
         return False
 
+    def _extract_decorators(self, node) -> List[str]:
+        """C# attributes (BACK-1087, D1): each '[Foo]'/'[Foo(...)]' is its own
+        'attribute_list' node, a direct child of the class/method node itself
+        (one attribute_list per bracket group, unlike Java's single grouped
+        'modifiers' wrapper) -- verified via direct tree-sitter parse of
+        `[HttpGet] [Authorize] public void Bar() {}`.
+        """
+        return [
+            self._get_node_text(child)
+            for child in _children(node)
+            if _zero_arg(child, 'kind') == 'attribute_list'
+        ]
+
     def _extract_csharp_base_list(self, node) -> List[str]:
         # class Dog : Animal, IAnimal { ... }  /  interface IDerived : IBase { ... }
         base_list = next(

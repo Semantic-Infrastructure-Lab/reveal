@@ -955,7 +955,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 functions.append(self._build_function_dict(
                     node=node,
                     name=name,
-                    decorators=[]
+                    decorators=self._extract_decorators(node)
                 ))
 
         return functions
@@ -1203,7 +1203,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 classes.append(self._build_class_dict(
                     node=node,
                     name=name,
-                    decorators=[]
+                    decorators=self._extract_decorators(node)
                 ))
 
         return classes
@@ -1218,6 +1218,22 @@ class TreeSitterAnalyzer(FileAnalyzer):
         analyzers/_js_class_bases.py's JSClassBasesMixin, and most other
         languages override this directly (kotlin.py/scala.py/dart.py/etc.),
         falling back to super() for node kinds they don't handle.
+        """
+        return []
+
+    def _extract_decorators(self, node) -> List[str]:
+        """Extract decorator/annotation strings attached directly to a node.
+
+        Base default: none. Mirrors _extract_class_bases's per-language
+        override pattern (BACK-1087) -- Python's real decorators are already
+        collected upstream by _extract_decorated_functions/_extract_decorated_classes
+        (walking the 'decorated_definition' wrapper), so this hook only
+        matters for languages whose annotation syntax attaches directly to
+        the function/class node itself (Java's 'modifiers' child, C#'s
+        'attribute_list' children, TypeScript's leading 'decorator' child)
+        rather than via a Python-style wrapper node. Called from
+        _extract_undecorated_functions/_extract_undecorated_classes, which
+        previously hardcoded decorators=[] for every non-Python language.
         """
         return []
 

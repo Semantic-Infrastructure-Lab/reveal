@@ -64,6 +64,21 @@ class JavaAnalyzer(TreeSitterAnalyzer):
                 bases.extend(self._extract_java_type_list(child))
         return bases
 
+    def _extract_decorators(self, node) -> List[str]:
+        """Java annotations (BACK-1087, D1): live in a 'modifiers' child of
+        the class/method node itself, as 'marker_annotation' (@Foo) or
+        'annotation' (@Foo(...)) child nodes -- verified via direct
+        tree-sitter parse of `@Override @Deprecated public void bar() {}`.
+        """
+        decorators: List[str] = []
+        for child in _children(node):
+            if _zero_arg(child, 'kind') != 'modifiers':
+                continue
+            for modifier in _children(child):
+                if _zero_arg(modifier, 'kind') in ('marker_annotation', 'annotation'):
+                    decorators.append(self._get_node_text(modifier))
+        return decorators
+
     def _java_simple_type_name(self, node) -> Optional[str]:
         """Peel a Java heritage-clause type node down to its simple name.
 
