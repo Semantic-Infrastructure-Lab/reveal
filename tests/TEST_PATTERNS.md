@@ -40,11 +40,12 @@ files, and correctly carry no marker. `test_xlsx_adapter.py` is marked at
 class granularity rather than file level (`component` vs `external_fixture`
 per class) since it genuinely mixes committed-fixture and manually-placed-file
 tests — see the file itself for the per-class breakdown. Marker
-*classification* is done; BACK-1149's remaining scope is wiring the
-fast/PR/full-conformance CI/local run lanes on top of these markers and
-documenting when to run each — don't trust this paragraph's numbers past
-this session either. See the "Available Markers" section below for what
-each lane means.
+classification is done, and the fast/PR/full-conformance run lanes are now
+documented (see "Run Lanes" under "Available Markers" below) — BACK-1149 is
+complete. CI itself still runs the full unfiltered suite on every push/PR by
+design (the lane split is for local iteration, not a CI change — see "Run
+Lanes" for why). Don't trust this paragraph's numbers past the session that
+wrote them; regenerate live via the commands cited above and in "Run Lanes".
 
 ---
 
@@ -321,6 +322,39 @@ name — several `test_cli_*.py` files turned out to call `reveal.cli.*`
 handler functions directly rather than going through `reveal.main`, so they
 carry `component`, not `cli` (see git history for `BACK-1149` around
 2026-08-21 for the reasoning).
+
+### Run Lanes
+
+`BACK-1149`'s three target lanes, layered on the markers above via
+`pytest -m`. CI (`.github/workflows/test.yml`) still runs the full
+unfiltered suite on every push/PR (~180s, not a real bottleneck given the
+current test count) — these are for local iteration, not a CI change.
+Counts below are a snapshot (2026-08-22); regenerate with
+`pytest tests/ -m "<expr>" --collect-only -q | tail -1`.
+
+```bash
+# Fast local loop -- skip subprocess/CLI/MCP + cross-language/dependency/
+# external-fixture lanes. ~10,849 tests, ~100s. Use this while iterating.
+pytest tests/ -m "not (cli or mcp or conformance or compat or external_fixture)"
+
+# PR lane -- everything except the lanes that need a controlled environment
+# or are meant as periodic ratchets rather than per-change checks.
+# ~11,707 tests.
+pytest tests/ -m "not (conformance or compat or external_fixture)"
+
+# Full/release lane -- the whole suite, no filter. What CI runs today.
+# ~12,098 tests, ~180s.
+pytest tests/
+```
+
+`conformance`, `compat`, and `external_fixture` are the three lanes worth
+running deliberately rather than every loop: `conformance` cross-checks
+adapters/languages against each other (only moves when adapter behavior
+changes), `compat` pins against specific dependency versions (only moves on
+a dependency bump), and `external_fixture` needs real external state that
+usually isn't present locally anyway (skipif handles that gracefully). Run
+the full/release lane before a release or after touching any of those three
+areas; the fast lane is the everyday default.
 
 ### Usage
 
