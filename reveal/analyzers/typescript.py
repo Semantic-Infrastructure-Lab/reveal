@@ -2,6 +2,7 @@
 
 from typing import Any, Dict, List, Optional
 from ..core import node_children as _children
+from ..core import node_prev_sibling as _prev_sibling
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
@@ -34,13 +35,20 @@ class _TypeScriptBase(
         is a direct 'decorator' child of the class_declaration node itself --
         verified via direct tree-sitter parse of `@Component class Foo {}`.
 
-        Method-level decorators (`class Foo { @Input() bar() {} }`) are NOT
-        covered here: tree-sitter emits those as a PRECEDING SIBLING of the
-        method_definition node inside class_body, not a child of the method
-        node — a different shape this node-local hook can't see without
-        parent/sibling context. Left for a follow-up (BACK-1087 Phase-2b);
-        the conformance suite only asserts class-level decorators currently.
+        Method-level decorators (`class Foo { @Input() bar() {} }`) are a
+        PRECEDING SIBLING of the method_definition node inside class_body,
+        not a child of the method node -- same shape class as Rust's
+        attribute_item (BACK-1087 Phase-2b), verified via direct tree-sitter
+        parse of `class Foo { @Input() bar() {} }`. Walk backward through
+        preceding siblings collecting consecutive 'decorator' nodes.
         """
+        if _zero_arg(node, 'kind') == 'method_definition':
+            decorators: List[str] = []
+            sib = _prev_sibling(node)
+            while sib is not None and _zero_arg(sib, 'kind') == 'decorator':
+                decorators.insert(0, self._get_node_text(sib))
+                sib = _prev_sibling(sib)
+            return decorators
         return [
             self._get_node_text(child)
             for child in _children(node)

@@ -155,6 +155,23 @@ def test_decorators_extracted_for_annotated_construct(lang):
     assert record["decorators"] == spec["expected"], f"{lang}: decorators mismatch"
 
 
+def test_typescript_method_decorator_is_extracted():
+    """ast://'s `decorators` field must also cover TypeScript method-level
+    decorators (`class Foo { @Input() bar() {} }`), not just class-level ones.
+
+    BACK-1087 Phase-2b remainder: tree-sitter emits a method decorator as a
+    PRECEDING SIBLING of the method_definition node inside class_body, not a
+    child of the method node -- a different shape from the class-level
+    'decorator' child TypeScriptAnalyzer._extract_decorators already handled.
+    Verified live via tree-sitter --show-ast before encoding. Reporter's
+    `summarize` method carries `@Input()` in the fixture; the parametrized
+    test above already pins Reporter's own class-level `@Component`."""
+    record = _ast_record("typescript", "summarize", "functions")
+    assert record["decorators"] == ["@Input()"], (
+        f"typescript: method-level decorators mismatch, got {record['decorators']}"
+    )
+
+
 def test_bases_reflects_real_inheritance(lang):
     """ast://'s `bases` field must reflect real inheritance/mixins for every
     language, not just the `class X extends/inherits Y` forms that happen to

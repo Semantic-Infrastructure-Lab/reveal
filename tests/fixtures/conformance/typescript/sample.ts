@@ -44,9 +44,11 @@ class Batch {
 // decorator identifier doesn't need to resolve -- tree-sitter parses the
 // syntax regardless of type-checking.
 declare function Component(target: any): any;
+declare function Input(): (target: any, key: string, descriptor: PropertyDescriptor) => void;
 
 @Component
 class Reporter extends Batch {
+    @Input()
     summarize(): number {
         return this.total;
     }
