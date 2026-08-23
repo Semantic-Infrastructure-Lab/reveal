@@ -54,7 +54,7 @@ class B003(BaseRule, TreeSitterParsingMixin):
     version = "1.2.0"
 
     # Properties over this line count are flagged
-    MAX_PROPERTY_LINES = 15
+    MAX_PROPERTY_LINES = 8  # BACK-1063: was 15, drifted from RuleDefaults.MAX_PROPERTY_LINES
 
     _CS_LANGUAGE = 'csharp'
     _KOTLIN_LANGUAGE = 'kotlin'

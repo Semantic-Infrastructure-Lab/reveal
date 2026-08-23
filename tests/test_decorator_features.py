@@ -227,7 +227,7 @@ class TestB003ComplexProperty:
                     'name': 'complex_prop',
                     'decorators': ['@property'],
                     'line': 1,
-                    'line_count': 16  # Over threshold (max is 15)
+                    'line_count': 16  # Over threshold (max is 8)
                 }
             ]
         }
