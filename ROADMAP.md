@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-08-09 (chosen-cyclops-0808 — v0.117.0 release: help://search, release-gap self-check, DD-relevant git pickaxe fix)
+> **Last updated**: 2026-08-23 (uncharted-telescope-0822 — v0.122.0 release: Python 3.14 support restored, exit-code contract, MCP hardening, disclosure-surface sweep)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,15 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.122.0 — Python 3.14 support restored, exit-code contract, MCP hardening + tool parity, disclosure-surface sweep
+
+- ✅ Python 3.14 support restored (GitHub #23) — `requires-python` cap lifted now that ~750 tree-sitter call sites are migrated onto the core accessor API; verified clean against both ends of the supported `tree-sitter-language-pack` range, CI compat-matrix promoted to a real merge gate (BACK-573/620/1158/1125).
+- ✅ `reveal check` exit-code contract: new exit `3` for a scan that couldn't parse/check a file, no longer indistinguishable from a genuinely clean `0` — full audit of ~130 `sys.exit()` sites documented (BACK-1099).
+- ✅ `reveal-mcp` hardened: closed path-traversal/CLI-argument-injection gaps across `cpanel://`/`autossl://`/git-ref handling (BACK-1141, BACK-1137); fixed a concurrent-tool-call crash from tree-sitter objects shared across threads (BACK-1136, BACK-1146); all 10 tools now signal real failures via `isError` (BACK-REVEAL-1) and gained `reveal_health`/`reveal_review` (BACK-1138).
+- ✅ `ast://` decorator/annotation extraction, previously Python-only, now also covers Java, C#, TypeScript, Kotlin, PHP, Rust, and Swift (BACK-1087, partial); degraded per-language conformance now disclosed instead of a uniform `confidence:1.0` (BACK-1086).
+- ✅ Disclosure-surface sweep: `git://`/`stats://` no longer silently degrade when git/pygit2 are unavailable (BACK-1166); a corrupt `.xlsx` sheet no longer renders byte-identical to a genuinely empty one (BACK-1167); `ast://`/`markdown://`/`json://` disclose unknown filter keys instead of a silent empty result (BACK-1111, BACK-1165).
+- ✅ `B003`'s documented threshold no longer drifts from what it enforces (BACK-1063); `StatsAdapter.get_structure()` no longer false-positives `V023` (BACK-1064); `help://quick`'s top command block no longer silently drops ranked-but-overflow adapters (BACK-1155).
 
 ### v0.121.0 — parse-error/recovery disclosure round, nginx comment-awareness + cert inheritance, silent-ignore fixes (--limit, git:// inert params)
 

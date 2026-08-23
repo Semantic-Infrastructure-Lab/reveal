@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] (sessions obsidian-twilight-0819, pouring-typhoon-0819, wovago-0819, equatorial-aurora-0820, sparkling-beam-0822, acidic-zeppelin-0822)
+## [0.122.0] - 2026-08-23 (sessions obsidian-twilight-0819, pouring-typhoon-0819, wovago-0819, equatorial-aurora-0820, sparkling-beam-0822, acidic-zeppelin-0822, zepeni-0822, uncharted-telescope-0822)
 
 ### Security
 - **`reveal-mcp` closed path-traversal and CLI-argument-injection gaps in `cpanel://`/`autossl://`/git-ref handling and the newly exposed health/review paths (BACK-1141, BACK-1137)** — string params that could be interpreted as CLI flags are rejected rather than forwarded. This closes specific traversal/injection gaps, not general root confinement — no MCP tool validates paths against a project root yet (tracked separately, `BACK-1144`).
@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`B003`'s `MAX_PROPERTY_LINES` threshold had drifted from its documented value (8 vs. 15) (BACK-1063)** — added a `RuleDefaults`-consistency test so a rule's enforced threshold and its documented one can't silently diverge again.
 - **`StatsAdapter.get_structure()` was missing the `type` field required by the output contract, causing false-positive `V023` violations (BACK-1064)**.
 - **`reveal check <file-with-a-syntax-error>` exited `0` — byte-identical at the shell level to a genuinely clean file (BACK-1099)** — BACK-1083 had already added `warning`/`status`/`files_degraded` fields to the check output contract, but nothing threaded that signal through to the actual process exit code, so a script or CI step checking only the exit code couldn't tell a degraded scan from a clean one. `reveal check` now documents and enforces a real exit-code contract: `0`=clean, `1`=issues found, `2`=usage error, new `3`=scan incomplete (a file couldn't be parsed/checked, or a rule raised — takes priority over `1` since a degraded scan's issue count itself may be wrong). Full audit of all ~130 `sys.exit()` call sites documented in `internal-docs/design/EXIT_CODE_CONTRACT.md`; `--stdin --check`'s aggregate exit code has the same gap and is a tracked follow-up, not yet fixed.
+- **`help://quick`'s top command block silently dropped ranked-but-overflow adapters (BACK-1155)** — `_QUICK_COMMAND_COUNT` was hardcoded to `10` while `_QUICK_RANK` already listed 10 adapters, so the 3 lowest-ranked (`nginx`, `sqlite`, `cpanel`) were ranked yet never rendered, contradicting the surrounding comment's own claim that this couldn't happen. Count now derives from `len(_QUICK_RANK)` so it can't silently fall behind again.
 
 ## [0.121.0] - 2026-08-18 (sessions merging-expedition-0818, godlike-phantom-0818, totuni-0818, frozen-beacon-0818, heating-snow-0818)
 
