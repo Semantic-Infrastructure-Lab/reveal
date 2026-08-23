@@ -763,6 +763,11 @@ class XlsxAdapter(ResourceAdapter):
             )
         structure = self.analyzer.get_structure()
         sheets_data = structure.get('sheets', [])
+        # BACK-1166: fold the analyzer's own meta (e.g. a sheet_parse_failed
+        # warning for a corrupt internal XML part) into this adapter's
+        # composed meta -- previously discarded, so a corrupt sheet and a
+        # genuinely empty sheet both rendered as a clean confidence:1.0 result.
+        self.fold_meta(structure.get('meta'))
 
         # Enhance with sheet metadata
         enhanced_sheets = []

@@ -1466,6 +1466,81 @@ class TestXlsxRealWorldFixtures:
         assert da_sheet.get('dimension') == 'A1:P11'
 
 
+def _make_xlsx_with_corrupt_sheet(tmp_path):
+    """A syntactically-valid zip whose sheet1.xml is malformed (not truncated
+    or missing) -- distinct fault shape from the too-large / missing-part
+    cases already covered above."""
+    import zipfile
+    p = tmp_path / "corrupt.xlsx"
+    with zipfile.ZipFile(p, 'w') as zf:
+        zf.writestr('[Content_Types].xml', (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            '</Types>'
+        ))
+        zf.writestr('_rels/.rels', (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            '</Relationships>'
+        ))
+        zf.writestr('xl/workbook.xml', (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+            ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            '<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>'
+            '</workbook>'
+        ))
+        zf.writestr('xl/_rels/workbook.xml.rels', (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            '</Relationships>'
+        ))
+        # Malformed on purpose: unclosed tag, stray '&'.
+        zf.writestr('xl/worksheets/sheet1.xml', '<worksheet><sheetData><row & broken')
+    return p
+
+
+class TestXlsxCorruptInternalXml:
+    """BACK-1166: a valid-zip-but-corrupt-internal-XML sheet used to render
+    as {rows: 0, cols: 0} -- byte-identical to a genuinely empty sheet."""
+
+    def test_corrupt_sheet_flagged_not_silently_empty(self, tmp_path):
+        path = _make_xlsx_with_corrupt_sheet(tmp_path)
+        adapter = XlsxAdapter(f"xlsx://{path}")
+        result = adapter.get_structure()
+
+        sheets = result.get('sheets', [])
+        assert sheets, "expected one sheet entry"
+        assert 'could not parse' in sheets[0]['name']
+        assert '0 rows, 0 cols' not in sheets[0]['name']
+
+    def test_corrupt_sheet_lowers_confidence_and_warns(self, tmp_path):
+        path = _make_xlsx_with_corrupt_sheet(tmp_path)
+        adapter = XlsxAdapter(f"xlsx://{path}")
+        result = adapter.get_structure()
+
+        meta = result.get('meta', {})
+        assert meta.get('confidence') == 0.0
+        warning_types = [w['type'] for w in meta.get('warnings', [])]
+        assert 'sheet_parse_failed' in warning_types
+
+    def test_clean_sheet_has_full_confidence_no_warning(self, tmp_path):
+        path = _make_minimal_xlsx(tmp_path)
+        adapter = XlsxAdapter(f"xlsx://{path}")
+        result = adapter.get_structure()
+
+        meta = result.get('meta', {})
+        assert meta.get('confidence') != 0.0
+        warning_types = [w['type'] for w in meta.get('warnings', [])]
+        assert 'sheet_parse_failed' not in warning_types
+
+
 # ---------------------------------------------------------------------------
 # Fixtures for new feature tests
 # ---------------------------------------------------------------------------

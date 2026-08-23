@@ -282,12 +282,23 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
 
         data: Dict[str, Any] = {}
 
+        warnings: List[Dict[str, str]] = []
         if sheets:
             # Format sheets with details in name
             formatted_sheets = []
             for s in sheets:
                 if s.get('too_large'):
                     label = f"{s['name']} - too large to parse ({s['size_mb']} MB)"
+                elif s.get('parse_failed'):
+                    label = f"{s['name']} - could not parse (corrupt or malformed XML)"
+                    warnings.append({
+                        'type': 'sheet_parse_failed',
+                        'message': (
+                            f"Sheet '{s['name']}' has corrupt or malformed internal XML "
+                            f"and could not be parsed -- its 0 rows/cols is not confirmed "
+                            f"empty, it's unreadable."
+                        ),
+                    })
                 else:
                     dim = f" ({s['dimension']})" if s.get('dimension') else ''
                     formulas = f", {s['formulas']} formulas" if s.get('formulas') else ''
@@ -304,7 +315,8 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             source=self.path,
             data=data,
             contract_version=CONTRACT_VERSION,
-            confidence=1.0,
+            confidence=0.0 if warnings else 1.0,
+            warnings=warnings or None,
         )
 
     @staticmethod
@@ -348,7 +360,13 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
 
         sheet_tree = self._read_xml(sheet_path)
         if sheet_tree is None:
-            return {'name': sheet_name, 'rows': 0, 'cols': 0}
+            # BACK-1166: a valid zip with a corrupt/malformed internal XML
+            # part (as opposed to a genuinely empty sheet) used to produce
+            # the exact same {rows: 0, cols: 0} shape -- indistinguishable
+            # from real emptiness. _read_xml already logs the parse
+            # exception; disclose it here too, matching the too_large flag
+            # this same function already uses for the size-cap case.
+            return {'name': sheet_name, 'rows': 0, 'cols': 0, 'parse_failed': True}
 
         xl = self.NAMESPACES['xl']
 

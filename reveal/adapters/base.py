@@ -296,17 +296,28 @@ class ResourceAdapter(ABC):
             return default
 
         if isinstance(result, dict):
-            child_meta = result.get('meta')
-            if child_meta:
-                self.__dict__.setdefault('_composed_warnings', []).extend(
-                    child_meta.get('warnings', []))
-                self.__dict__.setdefault('_composed_errors', []).extend(
-                    child_meta.get('errors', []))
-                confidence = child_meta.get('confidence')
-                if confidence is not None:
-                    self.__dict__.setdefault('_composed_confidences', []).append(confidence)
+            self.fold_meta(result.get('meta'))
 
         return result
+
+    def fold_meta(self, meta: Optional[RevealMeta]) -> None:
+        """Fold a raw ``meta`` dict (as returned in a result's ``meta`` key)
+        into this adapter's own composed accumulators, same as ``compose()``
+        does for a sibling adapter's result. Use this directly (BACK-1166)
+        when a get_structure() calls an *analyzer* rather than a sibling
+        adapter (e.g. xlsx.py's XlsxAdapter delegating to XlsxAnalyzer) --
+        compose() only knows how to construct+call adapters, not fold an
+        already-built meta dict a caller obtained some other way.
+        """
+        if not meta:
+            return
+        self.__dict__.setdefault('_composed_warnings', []).extend(
+            meta.get('warnings', []))
+        self.__dict__.setdefault('_composed_errors', []).extend(
+            meta.get('errors', []))
+        confidence = meta.get('confidence')
+        if confidence is not None:
+            self.__dict__.setdefault('_composed_confidences', []).append(confidence)
 
     def record_composed_error(self, source_name: str, resource: Any, exc: Exception) -> None:
         """Record an attributed sub-scan failure that didn't go through
