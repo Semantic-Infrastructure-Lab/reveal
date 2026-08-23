@@ -44,6 +44,7 @@ source "$VENV_DIR/bin/activate"
 pip install -q --upgrade pip
 pip install -q -e ".[dev]"
 pip install -q "tree-sitter-language-pack==$LP_VERSION"
+pip install -q build  # tests/test_packaging_manifest.py shells out to `python -m build` (BACK-1160)
 
 echo "-- confirming the forced version is actually active --"
 python3 -c "
