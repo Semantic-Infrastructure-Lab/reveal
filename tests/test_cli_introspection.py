@@ -12,6 +12,7 @@ from reveal.cli.introspection import (
     get_language_info_detailed,
     _format_ast_node,
 )
+from reveal.core.treesitter_compat import tree_root
 
 # BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
 pytestmark = pytest.mark.component
@@ -202,7 +203,7 @@ class TestFormatASTNode(unittest.TestCase):
         if not self.has_tree:
             self.skipTest("No tree-sitter parser available")
 
-        node = self.analyzer.tree.root_node()
+        node = tree_root(self.analyzer.tree)
         result = _format_ast_node(node, depth=0)
 
         self.assertIsInstance(result, str)
@@ -213,7 +214,7 @@ class TestFormatASTNode(unittest.TestCase):
         if not self.has_tree:
             self.skipTest("No tree-sitter parser available")
 
-        node = self.analyzer.tree.root_node()
+        node = tree_root(self.analyzer.tree)
         result = _format_ast_node(node, depth=2, prefix="  ")
 
         self.assertIsInstance(result, str)
@@ -225,7 +226,7 @@ class TestFormatASTNode(unittest.TestCase):
         if not self.has_tree:
             self.skipTest("No tree-sitter parser available")
 
-        node = self.analyzer.tree.root_node()
+        node = tree_root(self.analyzer.tree)
         result = _format_ast_node(node, depth=0, max_depth=1)
 
         self.assertIsInstance(result, str)

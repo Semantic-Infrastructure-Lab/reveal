@@ -17,7 +17,7 @@ from reveal.adapters.ast.nav_narrow import (
     _block_always_exits,
     _fmt_types,
 )
-from reveal.core.treesitter_compat import _zero_arg
+from reveal.core.treesitter_compat import _zero_arg, tree_root
 
 # BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -40,8 +40,8 @@ def _analyzer(path: str) -> PythonAnalyzer:
 
 def _find_func(analyzer: PythonAnalyzer, name: str):
     for n in [
-        analyzer.tree.root_node().child(i)
-        for i in range(_zero_arg(analyzer.tree.root_node(), 'child_count'))
+        tree_root(analyzer.tree).child(i)
+        for i in range(_zero_arg(tree_root(analyzer.tree), 'child_count'))
     ]:
         if _zero_arg(n, 'kind') == 'function_definition':
             ident = next(

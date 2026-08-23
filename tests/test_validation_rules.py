@@ -8,6 +8,7 @@ import unittest
 import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+from reveal.core.treesitter_compat import ts_parse, tree_root
 from reveal.rules.validation.V001 import V001
 from reveal.rules.validation.V002 import V002
 from reveal.rules.validation.V003 import V003
@@ -2552,8 +2553,8 @@ class TestV027AdapterGuideSchemaCoherence(unittest.TestCase):
             "| `>` | Greater than | `lines>50` |\n"
         )
         parser = get_parser('markdown')
-        tree = parser.parse(markdown)
-        entries = list(_iter_param_column_entries(tree.root_node(), markdown))
+        tree = ts_parse(parser, markdown)
+        entries = list(_iter_param_column_entries(tree_root(tree), markdown))
         names = {name for name, _line in entries}
         self.assertEqual(names, {'foo', 'bar'})
         self.assertNotIn('>', names)
@@ -2571,9 +2572,9 @@ class TestV027AdapterGuideSchemaCoherence(unittest.TestCase):
             "| `beta` | second |\n"
         )
         parser = get_parser('markdown')
-        tree = parser.parse(markdown)
+        tree = ts_parse(parser, markdown)
         entries = dict(
-            (name, line) for name, line in _iter_param_column_entries(tree.root_node(), markdown)
+            (name, line) for name, line in _iter_param_column_entries(tree_root(tree), markdown)
         )
         self.assertEqual(entries['alpha'], 4)
         self.assertEqual(entries['beta'], 5)

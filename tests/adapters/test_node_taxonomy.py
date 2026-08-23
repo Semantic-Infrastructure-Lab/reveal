@@ -27,7 +27,7 @@ from reveal.adapters.ast.nav_outline import element_outline, scope_chain
 from reveal.adapters.ast.nav_varflow import var_flow
 from reveal.analyzers.go import GoAnalyzer
 from reveal.analyzers.rust import RustAnalyzer
-from reveal.core.treesitter_compat import _zero_arg
+from reveal.core.treesitter_compat import _zero_arg, ts_parse, tree_root
 
 # BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -140,7 +140,7 @@ class TestComplexityCoversFamilies(unittest.TestCase):
 def _first_function(lang, code, fn_kinds):
     """Parse and return the first function-like node + a get_text closure."""
     content_bytes = code.encode('utf-8')
-    root = ts.get_parser(lang).parse(code).root_node()
+    root = tree_root(ts_parse(ts.get_parser(lang), code))
     get_text = lambda n: content_bytes[
         _zero_arg(n, 'start_byte') : _zero_arg(n, 'end_byte')
     ].decode('utf-8', 'replace')
@@ -217,7 +217,7 @@ class TestClassScopeVisibility(unittest.TestCase):
         get_text = lambda n: content_bytes[
             _zero_arg(n, 'start_byte') : _zero_arg(n, 'end_byte')
         ].decode('utf-8', 'replace')
-        root = ts.get_parser(lang).parse(code).root_node()
+        root = tree_root(ts_parse(ts.get_parser(lang), code))
         line_no = code[:code.index(marker)].count('\n') + 1
         chain = scope_chain(root, line_no, get_text)
         return [item['keyword'] for item in chain]

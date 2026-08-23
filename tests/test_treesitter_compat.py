@@ -185,7 +185,7 @@ class TestTreeRoot(unittest.TestCase):
     def test_real_installed_tree(self):
         # Whatever calling convention the currently-installed pin uses,
         # tree_root() must resolve to the real root node either way.
-        tree = ts.get_parser('python').parse('x = 1')
+        tree = ts_parse(ts.get_parser('python'), 'x = 1')
         root = tree_root(tree)
         self.assertEqual(_zero_arg(root, 'kind'), 'module')
 

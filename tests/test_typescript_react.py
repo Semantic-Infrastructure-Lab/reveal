@@ -13,6 +13,7 @@ import pytest
 from pathlib import Path
 
 from reveal.analyzers.typescript import TypeScriptAnalyzer, TSXAnalyzer
+from reveal.core.treesitter_compat import _zero_arg, tree_root
 
 # BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -137,8 +138,8 @@ class TestTSXGrammar:
         f.write_text(REACT_COMPONENT)
         analyzer = TSXAnalyzer(str(f))
         assert analyzer.tree is not None
-        root = analyzer.tree.root_node()
-        assert not root.has_error()
+        root = tree_root(analyzer.tree)
+        assert not _zero_arg(root, 'has_error')
 
     def test_tsx_finds_exported_function_component(self, tmp_path):
         f = tmp_path / 'Game.tsx'
