@@ -226,6 +226,24 @@ class TestRenderReport(unittest.TestCase):
         out = self._capture(report)
         self.assertIn("./src", out)
 
+    def test_scan_disclosures_rendered(self):
+        """BACK-1051: `review` is a composite wrapper around `check` -- a
+        capped-scan disclosure (e.g. I002 skipping a 20,000+ file tree) must
+        reach the rendered report, not be swallowed by the composite layer."""
+        report = {
+            'target': './src', 'sections': {'violations': [], 'hotspots': [], 'complexity': []},
+            'scan_disclosures': ['I002: import-graph scan of ./src exceeded 20000 source files'],
+        }
+        out = self._capture(report)
+        self.assertIn('I002: import-graph scan', out)
+
+    def test_no_scan_disclosures_key_does_not_crash(self):
+        """scan_disclosures is only added to the report when non-empty -- the
+        renderer must tolerate its absence."""
+        report = {'target': './src', 'sections': {'violations': [], 'hotspots': [], 'complexity': []}}
+        out = self._capture(report)
+        self.assertIn("./src", out)
+
 
 # ---------------------------------------------------------------------------
 # _changed_files (BACK-538: diff-scoped review)

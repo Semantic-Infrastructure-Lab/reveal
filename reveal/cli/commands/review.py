@@ -81,6 +81,14 @@ def run_review(args: Namespace) -> None:
     print("  Checking quality rules…", file=sys.stderr)
     violations = _run_check(path, args.select, files=changed_files)
     report['sections']['violations'] = violations
+    # BACK-1051: `review` is a composite command wrapping `check` — it must
+    # propagate a capped-scan disclosure (I002/D005) rather than swallowing
+    # it, the concrete symptom that motivated this ticket ("reveal review ."
+    # on 20,000+ files produced a silent I002 skip").
+    from reveal.cli.file_checker import _get_scan_disclosures
+    scan_disclosures = _get_scan_disclosures()
+    if scan_disclosures:
+        report['scan_disclosures'] = scan_disclosures
 
     # Step 4: Hotspots
     print("  Analyzing hotspots…", file=sys.stderr)
@@ -399,4 +407,6 @@ def _render_report(report: Dict[str, Any], verbose: bool) -> None:
     _render_violations_section(violations, verbose)
     _render_hotspots_section(sections.get('hotspots', []))
     _render_complexity_section(sections.get('complexity', []))
+    for reason in report.get('scan_disclosures', []):
+        print(f"⚠️  {reason}")
     _render_recommendation(violations)

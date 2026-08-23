@@ -121,12 +121,109 @@ def _i002_init_worker(graph_cache: dict) -> None:
         pass
 
 
+def _d005_will_run(select, ignore) -> bool:
+    """Return True if D005 is in the effective rule set for the given filters.
+    Mirrors _i002_will_run's reasoning exactly."""
+    from reveal.rules import RuleRegistry
+    rules = RuleRegistry.get_rules(select=select, ignore=ignore)
+    return any(r.code == "D005" for r in rules)
+
+
+def _d005_preload(directory: Path, select, ignore, files: Optional[List[Path]] = None) -> dict:
+    """Build the D005 cross-file literal index in the main process before
+    spawning workers. Mirrors _i002_preload:
+
+    1. Without this, each worker builds its own copy of the index
+       independently on first use (no cross-worker sharing) instead of once.
+    2. BACK-1051: a capped scan records its skip reason on
+       ``reveal.rules.duplicates.D005._project_skip_reasons``, a process-local
+       dict. A worker-process build is invisible to the main process that
+       renders the final summary, so the disclosure would silently vanish
+       under the (default, >=4 files) parallel path — the exact case
+       BACK-1051 exists to fix. Building here, in the main process, is what
+       makes ``D005.get_scan_disclosures()`` reliable regardless of whether
+       the run went parallel or serial.
+
+    Returns a plain dict (project_root -> {canonical_key -> occurrences}) —
+    D005's index values are plain dicts/lists/tuples/strings, so this is
+    picklable without any extra work, same as I002's ImportGraph return.
+    """
+    try:
+        if not _d005_will_run(select, ignore):
+            return {}
+        from reveal.rules.duplicates.D005 import D005, _build_index, _find_project_root, _project_index
+        sample = files[0] if files else directory
+        root = _find_project_root(sample.resolve())
+        if root not in _project_index:
+            _project_index[root] = _build_index(root, D005())
+        return dict(_project_index)
+    except Exception:
+        # Documented fallback (see docstring): caller degrades to the old
+        # per-worker build behaviour when the shared cache can't be built.
+        return {}
+
+
+def _d005_init_worker(project_index: dict) -> None:
+    """ProcessPoolExecutor initializer: seed each worker's D005 index cache.
+    Mirrors _i002_init_worker."""
+    if not project_index:
+        return
+    try:
+        from reveal.rules.duplicates.D005 import _project_index
+        _project_index.update(project_index)
+    except Exception:  # D005 module unavailable in some configs; worker continues without cache
+        pass
+
+
+def _preload_scan_caches(files: List[Path], directory: Path, select, ignore) -> dict:
+    """Preload every scan-capped rule's shared index/graph in the main
+    process, returning a dict of {rule_code: cache} for the pool initializer.
+    Single call site so a future rule with the same shape (BACK-1051's
+    "shared result-envelope contract" direction, see BACK-1093/1086) has one
+    place to register, not one more copy-pasted preload/init pair wired by
+    hand into every parallel entry point.
+    """
+    return {
+        'I002': _i002_preload(directory, select, ignore, files),
+        'D005': _d005_preload(directory, select, ignore, files),
+    }
+
+
+def _init_scan_caches(caches: dict) -> None:
+    """ProcessPoolExecutor initializer counterpart to _preload_scan_caches."""
+    _i002_init_worker(caches.get('I002', {}))
+    _d005_init_worker(caches.get('D005', {}))
+
+
+def _get_scan_disclosures() -> List[str]:
+    """BACK-1051: collect every capped-scan disclosure recorded in this
+    process by rules with a shared-index/graph scan ceiling (I002, D005).
+    Call only after the check run has completed (serial or parallel) —
+    _preload_scan_caches guarantees the main process sees a worker's cap
+    hit, not just a serial in-process one. Returns [] when nothing was
+    capped, which callers must treat as "confirmed complete", not "unknown".
+    """
+    disclosures: List[str] = []
+    try:
+        from reveal.rules.imports.I002 import get_scan_disclosures as i002_disclosures
+        disclosures.extend(i002_disclosures())
+    except Exception:
+        pass
+    try:
+        from reveal.rules.duplicates.D005 import get_scan_disclosures as d005_disclosures
+        disclosures.extend(d005_disclosures())
+    except Exception:
+        pass
+    return disclosures
+
+
 def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
     """Run file checks in parallel, preserving input order in results.
 
-    The I002 import graph is built once in the main process and injected into
-    each worker via the initializer so workers get a cache hit instead of
-    rebuilding the graph themselves (was: 4 builds for 4 workers → now: 1).
+    The I002 import graph and D005 literal index are each built once in the
+    main process and injected into every worker via the initializer, so
+    workers get a cache hit instead of rebuilding independently (was: 4
+    builds for 4 workers → now: 1; see _preload_scan_caches).
 
     Args:
         files: Already-sorted list of files to check
@@ -142,11 +239,11 @@ def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
     # Capping at 4 leaves remaining cores free and reduces IPC pressure.
     workers = min(4, os.cpu_count() or 4, len(files))
     args_iter = [(f, directory, select, ignore) for f in files]
-    graph_cache = _i002_preload(directory, select, ignore, files)
+    caches = _preload_scan_caches(files, directory, select, ignore)
     with ProcessPoolExecutor(
         max_workers=workers,
-        initializer=_i002_init_worker,
-        initargs=(graph_cache,),
+        initializer=_init_scan_caches,
+        initargs=(caches,),
     ) as pool:
         return list(pool.map(_parallel_worker, args_iter))
 
@@ -173,11 +270,11 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
     from concurrent.futures import as_completed
     workers = min(4, os.cpu_count() or 4, len(files))
     args_list = [(f, directory, select, ignore) for f in files]
-    graph_cache = _i002_preload(directory, select, ignore, files)
+    caches = _preload_scan_caches(files, directory, select, ignore)
     with ProcessPoolExecutor(
         max_workers=workers,
-        initializer=_i002_init_worker,
-        initargs=(graph_cache,),
+        initializer=_init_scan_caches,
+        initargs=(caches,),
     ) as pool:
         futures = {pool.submit(_parallel_worker, args): args[0] for args in args_list}
         for future in as_completed(futures):
@@ -826,6 +923,7 @@ def _print_json_output(
     select: Optional[List[str]] = None,
     ignore: Optional[List[str]] = None,
     files_errored: int = 0,
+    scan_disclosures: Optional[List[str]] = None,
 ) -> None:
     """Print JSON output with results and summary.
 
@@ -846,6 +944,12 @@ def _print_json_output(
         files_errored: Files whose analyzer/parse pipeline raised (BACK-1083)
             — a subset of files_checked that could not be checked at all;
             individual reasons are on each file_results entry's "detail".
+        scan_disclosures: BACK-1051 — one-line skip reasons from any
+            scan-capped rule (I002, D005) whose own project/directory-wide
+            index build was truncated by a safety ceiling. Distinct from
+            files_errored/files_degraded (those are per-file); this is
+            rule-wide — e.g. "I002 skipped, tree too large" doesn't map to
+            any single file. [] means confirmed complete, not omitted.
     """
     import json
     from reveal.utils.results import add_cli_contract_fields
@@ -860,7 +964,8 @@ def _print_json_output(
             "files_errored": files_errored,
             "files_degraded": files_degraded,
             "total_issues": total_issues,
-            "exit_code": 1 if total_issues > 0 else 0
+            "exit_code": 1 if total_issues > 0 else 0,
+            "scan_disclosures": scan_disclosures or [],
         }
     }
     if scope is not None:
@@ -900,7 +1005,7 @@ def _print_grep_output(file_results: List[dict]) -> None:
 
 def _print_text_summary(
     files_checked: int, files_with_issues: int, total_issues: int, directory: Path, config,
-    files_errored: int = 0, files_degraded: int = 0,
+    files_errored: int = 0, files_degraded: int = 0, scan_disclosures: Optional[List[str]] = None,
 ) -> None:
     """Print text summary with breadcrumbs.
 
@@ -916,6 +1021,9 @@ def _print_text_summary(
         files_degraded: Files checked via error-recovery parsing (BACK-1083)
             — rules ran, but against fabricated/partial structure, so their
             results (including "no issues") may be wrong, not just absent.
+        scan_disclosures: BACK-1051 — one-line skip reasons from any
+            scan-capped rule (I002, D005) whose project-wide index build was
+            truncated. See _print_json_output's matching parameter.
     """
     print(f"\n{'='*60}")
     print(f"Checked {files_checked} files")
@@ -923,6 +1031,8 @@ def _print_text_summary(
         print(f"⚠️  {files_errored} file{'s' if files_errored != 1 else ''} could not be checked (see warnings above)")
     if files_degraded:
         print(f"⚠️  {files_degraded} file{'s' if files_degraded != 1 else ''} did not parse cleanly — results for {'it' if files_degraded == 1 else 'them'} may be incomplete or incorrect (see warnings above)")
+    for reason in (scan_disclosures or []):
+        print(f"⚠️  {reason}")
     if total_issues > 0:
         print(f"Found {total_issues} issue{'s' if total_issues != 1 else ''} in {files_with_issues} file{'s' if files_with_issues != 1 else ''}")
     else:
@@ -985,6 +1095,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
             file_results, len(files_to_check), files_with_issues, total_issues,
             scope=collection.to_scope_census(), source=directory,
             select=select, ignore=ignore, files_errored=files_errored,
+            scan_disclosures=_get_scan_disclosures(),
         )
     elif output_format == 'grep':
         # BACK-1035: this recursive/directory path only ever branched on
@@ -997,6 +1108,11 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
             files_to_check, directory, select, ignore, severity=severity
         )
         _print_grep_output(file_results)
+        for reason in _get_scan_disclosures():
+            # BACK-1051: grep output is meant to stay machine-parseable
+            # (file:line:col:rule:message only) — disclose to stderr rather
+            # than polluting stdout with a non-conforming line.
+            print(f"⚠️  {reason}", file=sys.stderr)
     else:
         if output_format == 'typed':
             # Not implemented for this path (or, as of BACK-1035's
@@ -1014,6 +1130,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         _print_text_summary(
             len(files_to_check), files_with_issues, total_issues, directory, config,
             files_errored=files_errored, files_degraded=files_degraded,
+            scan_disclosures=_get_scan_disclosures(),
         )
 
     # Exit with appropriate code

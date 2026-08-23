@@ -38,6 +38,13 @@ logger = logging.getLogger(__name__)
 # project_root → {canonical_key → [(abs_file_path, lineno, var_name), ...]}
 _project_index: Dict[Path, Dict[str, List[Tuple[str, int, str]]]] = {}
 
+# BACK-1051: project_root → one-line reason, set whenever _build_index bailed
+# on the file-count ceiling instead of scanning. Mirrors I002's
+# ImportGraph.scan_skipped_reason -- carried alongside the (empty) index so a
+# directory-level check/review run can disclose the skip instead of letting
+# an empty index present itself as "no duplicate literal clusters found".
+_project_skip_reasons: Dict[Path, str] = {}
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 _COLLECTION_BUILTINS = {'frozenset', 'set', 'tuple', 'list'}
 
@@ -141,6 +148,14 @@ def _is_stable_name(name: str) -> bool:
 def _clear_index() -> None:
     """Clear the project index cache (for tests)."""
     _project_index.clear()
+    _project_skip_reasons.clear()
+
+
+def get_scan_disclosures() -> List[str]:
+    """BACK-1051: one-line skip reasons for every project root whose D005
+    cross-file scan was skipped by the file-count ceiling. Mirrors
+    I002.get_scan_disclosures()."""
+    return list(_project_skip_reasons.values())
 
 
 # ── Rule ──────────────────────────────────────────────────────────────────────
@@ -263,11 +278,13 @@ def _build_index(
             continue
         py_files.append(p)
         if len(py_files) > ceiling:
-            logger.warning(
-                "D005: project root %s exceeds %d .py files; skipping cross-file "
-                "scan (set REVEAL_D005_MAX_FILES to raise the ceiling)",
-                project_root, ceiling,
+            reason = (
+                f"D005: project root {project_root} exceeds {ceiling} .py files; "
+                "skipping cross-file scan (set REVEAL_D005_MAX_FILES to raise "
+                "the ceiling)"
             )
+            logger.warning(reason)
+            _project_skip_reasons[project_root] = reason
             return {}
 
     index: Dict[str, List[Tuple[str, int, str]]] = {}

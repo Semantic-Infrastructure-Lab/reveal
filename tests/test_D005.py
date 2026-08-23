@@ -280,6 +280,21 @@ class TestD005Ceiling(unittest.TestCase):
             index = _build_index(Path(self._tmpdir), self.rule)
         self.assertEqual(index, {})
 
+    def test_ceiling_records_disclosure(self):
+        """BACK-1051: a capped scan must record a skip reason, not just
+        return an empty index -- an empty result must never be mistaken for
+        a clean 'no duplicate literal clusters found'."""
+        from reveal.rules.duplicates.D005 import get_scan_disclosures
+        code = "EXTS = ['.py', '.js', '.ts', '.rs', '.go']\n"
+        for i in range(6):
+            _write(self._tmpdir, f'mod{i}.py', code)
+        self.assertEqual(get_scan_disclosures(), [])
+        with mock.patch.dict(os.environ, {'REVEAL_D005_MAX_FILES': '3'}):
+            _build_index(Path(self._tmpdir), self.rule)
+        disclosures = get_scan_disclosures()
+        self.assertEqual(len(disclosures), 1)
+        self.assertIn('exceeds 3 .py files', disclosures[0])
+
     def test_under_ceiling_scans_normally(self):
         """Below the ceiling, the index is built as usual."""
         code = "EXTS = ['.py', '.js', '.ts', '.rs', '.go']\n"

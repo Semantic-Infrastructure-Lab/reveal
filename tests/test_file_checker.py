@@ -12,6 +12,9 @@ from reveal.cli.file_checker import (
     check_and_report_file,
     _i002_preload,
     _i002_init_worker,
+    _d005_preload,
+    _d005_init_worker,
+    _get_scan_disclosures,
     _apply_severity_filter,
 )
 
@@ -706,6 +709,95 @@ class TestI002Preload:
         (tmp_path / "a.py").write_text("import os\n")
         result = _i002_preload(tmp_path, select=["I"], ignore=None)
         assert isinstance(result, dict)
+
+
+class TestD005Preload:
+    """Tests for _d005_preload and _d005_init_worker (shared index cache).
+
+    Mirrors TestI002Preload -- D005 got the same main-process-build treatment
+    for the same two reasons: one build instead of N-workers-each-building,
+    and (BACK-1051) so a capped scan's skip reason is visible to the main
+    process that renders the final summary rather than trapped in a worker.
+    """
+
+    def test_preload_skipped_when_d005_ignored(self, tmp_path):
+        result = _d005_preload(tmp_path, select=None, ignore=["D005"])
+        assert result == {}
+
+    def test_preload_skipped_when_select_excludes_d005(self, tmp_path):
+        (tmp_path / "a.py").write_text("x = 1\n")
+        result = _d005_preload(tmp_path, select=["C901"], ignore=None)
+        assert result == {}
+
+    def test_preload_runs_when_select_includes_d_category(self, tmp_path):
+        (tmp_path / "a.py").write_text("x = 1\n")
+        result = _d005_preload(tmp_path, select=["D"], ignore=None)
+        assert isinstance(result, dict)
+
+    def test_init_worker_populates_cache(self, tmp_path):
+        from reveal.rules.duplicates.D005 import _project_index
+
+        fake_root = tmp_path / "fake_root"
+        fake_index = {"somekey": [("a.py", 1, "X")]}
+        try:
+            _d005_init_worker({fake_root: fake_index})
+            assert _project_index.get(fake_root) is fake_index
+        finally:
+            _project_index.pop(fake_root, None)
+
+    def test_init_worker_noop_on_empty_cache(self):
+        from reveal.rules.duplicates.D005 import _project_index
+        before = dict(_project_index)
+        _d005_init_worker({})
+        assert dict(_project_index) == before
+
+
+class TestScanDisclosures:
+    """BACK-1051: _get_scan_disclosures() aggregates I002/D005 skip reasons."""
+
+    def test_no_disclosures_when_nothing_capped(self, tmp_path):
+        from reveal.rules.imports.I002 import _graph_cache
+        from reveal.rules.duplicates.D005 import _clear_index
+        _graph_cache.clear()
+        _clear_index()
+        assert _get_scan_disclosures() == []
+
+    def test_reports_i002_cap(self, tmp_path):
+        import os
+        from unittest import mock
+        from reveal.rules.imports.I002 import I002, _graph_cache
+        from reveal.rules.duplicates.D005 import _clear_index
+        _graph_cache.clear()
+        _clear_index()
+        for i in range(6):
+            (tmp_path / f"m{i}.py").write_text("import os\n")
+        with mock.patch.dict(os.environ, {"REVEAL_I002_CYCLE_LIMIT": "3"}):
+            I002()._build_import_graph(tmp_path)
+        disclosures = _get_scan_disclosures()
+        assert len(disclosures) == 1
+        assert "cycle-detection" in disclosures[0]
+        _graph_cache.clear()
+
+    def test_json_output_includes_scan_disclosures_field(self):
+        """_print_json_output always emits scan_disclosures (empty list when
+        nothing capped), not an omitted key -- [] must mean 'confirmed
+        complete', not 'this run predates the field'."""
+        import json
+        import io
+        import contextlib
+        from reveal.cli.file_checker import _print_json_output
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            _print_json_output([], 0, 0, 0, source=Path("."))
+        data = json.loads(buf.getvalue())
+        assert data["summary"]["scan_disclosures"] == []
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            _print_json_output([], 0, 0, 0, source=Path("."), scan_disclosures=["I002: capped"])
+        data = json.loads(buf.getvalue())
+        assert data["summary"]["scan_disclosures"] == ["I002: capped"]
 
 
 # ==========================================================================

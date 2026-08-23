@@ -66,6 +66,14 @@ class ImportGraph:
     # build time) so it survives the disk/in-process graph cache and callers
     # can tell a clean "no cycles" apart from "couldn't see everything".
     failed_files: List[Path] = field(default_factory=list)
+    # BACK-1051: set (a one-line human-readable reason) when the scan that
+    # produced this graph was skipped/truncated by a safety ceiling — e.g.
+    # I002's _DEFAULT_MAX_GRAPH_FILES or _DEFAULT_CYCLE_DETECTION_MAX_FILES.
+    # None means "the scan ran to completion", not "no cap exists". Carried
+    # on the graph (like failed_files) so it survives the module-level cache
+    # and callers can disclose a silent skip instead of presenting an empty
+    # cycle list as a clean "no circular dependencies found".
+    scan_skipped_reason: Optional[str] = None
 
     @classmethod
     def from_imports(cls, imports: List[ImportStatement]) -> 'ImportGraph':

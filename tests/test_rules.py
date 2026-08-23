@@ -1543,7 +1543,7 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
             (self.tmp / f'm{i}.py').write_text('import os\n')
         _graph_cache.clear()
         with mock.patch.dict(os.environ, {'REVEAL_I002_MAX_FILES': '3'}):
-            imports, failed = I002()._collect_raw_imports(self.tmp)
+            imports, failed, _skip_reason = I002()._collect_raw_imports(self.tmp)
         self.assertEqual(imports, [],
                          "scan should abort to empty list when ceiling exceeded")
 
@@ -1572,7 +1572,7 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
 
         with mock.patch.dict(os.environ, {'REVEAL_I002_MAX_FILES': '3'}), \
                 mock.patch.object(i002_mod, 'get_extractor', _tracking_get_extractor):
-            imports, failed = I002()._collect_raw_imports(self.tmp)
+            imports, failed, _skip_reason = I002()._collect_raw_imports(self.tmp)
         self.assertEqual(imports, [], "over-ceiling scan should return empty")
         self.assertEqual(parsed, [],
                          "no file should be parsed once the ceiling is exceeded")
@@ -1617,9 +1617,29 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
             (self.tmp / f'm{i}.py').write_text('import os\n')
         _graph_cache.clear()
         with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '3'}):
-            imports, failed = I002()._collect_raw_imports(self.tmp)
+            imports, failed, skip_reason = I002()._collect_raw_imports(self.tmp)
         self.assertEqual(imports, [],
                          "scan should skip to empty list past the cycle-detection threshold")
+        self.assertIsNotNone(skip_reason,
+                             "BACK-1051: a capped scan must disclose why, not just return empty")
+        self.assertIn('cycle-detection', skip_reason)
+
+    def test_scan_disclosures_reports_capped_graph(self):
+        """BACK-1051: get_scan_disclosures() surfaces the skip reason for any
+        graph in _graph_cache whose scan was capped -- the aggregation point
+        file_checker._get_scan_disclosures() relies on."""
+        import os
+        from unittest import mock
+        from reveal.rules.imports.I002 import I002, _graph_cache, get_scan_disclosures
+        for i in range(6):
+            (self.tmp / f'm{i}.py').write_text('import os\n')
+        _graph_cache.clear()
+        self.assertEqual(get_scan_disclosures(), [])
+        with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '3'}):
+            I002()._build_import_graph(self.tmp)
+        disclosures = get_scan_disclosures()
+        self.assertEqual(len(disclosures), 1)
+        self.assertIn('cycle-detection', disclosures[0])
 
     def test_cycle_detection_threshold_override_forces_full_scan(self):
         """REVEAL_I002_CYCLE_LIMIT=0 disables the auto-skip entirely."""
@@ -1630,7 +1650,7 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
             (self.tmp / f'm{i}.py').write_text('import os\n')
         _graph_cache.clear()
         with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '0'}):
-            imports, failed = I002()._collect_raw_imports(self.tmp)
+            imports, failed, _skip_reason = I002()._collect_raw_imports(self.tmp)
         self.assertEqual(len(imports), 6,
                          "REVEAL_I002_CYCLE_LIMIT=0 must disable the auto-skip")
 
@@ -1644,7 +1664,7 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
             (self.tmp / f'm{i}.py').write_text('import os\n')
         _graph_cache.clear()
         with mock.patch.dict(os.environ, {'REVEAL_I002_CYCLE_LIMIT': '10'}):
-            imports, failed = I002()._collect_raw_imports(self.tmp)
+            imports, failed, _skip_reason = I002()._collect_raw_imports(self.tmp)
         self.assertEqual(len(imports), 3)
 
     def test_cycle_detection_skip_is_not_cached(self):

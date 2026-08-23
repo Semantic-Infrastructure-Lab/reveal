@@ -225,6 +225,22 @@ def _find_project_root(path: Path) -> Path:
     return root if root is not None else path.parent
 
 
+def get_scan_disclosures() -> List[str]:
+    """BACK-1051: one-line skip reasons for every capped/truncated graph
+    currently in ``_graph_cache`` (the same process-local cache
+    ``_build_import_graph`` populates and ``file_checker._i002_preload``
+    fills in the main process before workers spawn). A directory-level
+    ``check``/``review`` run must surface these instead of letting a capped
+    scan present its empty cycle list as a clean "no circular dependencies
+    found" -- the exact silent-skip symptom that motivated this ticket.
+    """
+    return [
+        graph.scan_skipped_reason
+        for graph in _graph_cache.values()
+        if graph.scan_skipped_reason
+    ]
+
+
 # Initialize file patterns from all registered extractors at module load time
 def _initialize_file_patterns():
     """Get all supported file extensions from registered extractors."""
@@ -339,9 +355,10 @@ class I002(BaseRule):
                 _graph_cache[directory] = cached
                 return cached
 
-        all_imports, failed_files = self._collect_raw_imports(directory)
+        all_imports, failed_files, skipped_reason = self._collect_raw_imports(directory)
         graph = ImportGraph.from_imports(all_imports)
         graph.failed_files = failed_files
+        graph.scan_skipped_reason = skipped_reason
         self._resolve_graph_dependencies(graph)
 
         if failed_files:
@@ -363,13 +380,16 @@ class I002(BaseRule):
     def _collect_raw_imports(self, directory: Path) -> tuple:
         """Phase 1: Walk directory and extract raw import statements from all files.
 
-        Returns ``(all_imports, failed_files)`` -- ``failed_files`` (BACK-982)
-        are source files whose language IS supported but that tree-sitter
-        could not parse, so they contribute no edges to the graph at all; a
-        real cycle running through one becomes structurally invisible to
-        find_cycles(). Empty in the two early-abort paths below (the scan
-        never reached Pass B, so failure status is simply unknown, not "none
-        failed").
+        Returns ``(all_imports, failed_files, skipped_reason)`` -- ``failed_files``
+        (BACK-982) are source files whose language IS supported but that
+        tree-sitter could not parse, so they contribute no edges to the graph at
+        all; a real cycle running through one becomes structurally invisible to
+        find_cycles(). Empty in the two early-abort paths below (the scan never
+        reached Pass B, so failure status is simply unknown, not "none failed").
+        ``skipped_reason`` (BACK-1051) is None when the scan ran to completion,
+        or a one-line human-readable string naming which ceiling tripped --
+        callers must disclose this rather than presenting the resulting empty
+        graph as a clean "no circular dependencies found".
 
         Two passes on purpose. Pass A only *counts* supported source files (a
         cheap directory walk, no parsing); if the count exceeds the configured
@@ -403,24 +423,26 @@ class I002(BaseRule):
                 continue
             source_files.append(file_path)
             if len(source_files) > max_files:
-                logger.warning(
-                    "I002: import-graph scan of %s exceeded %d source files; "
-                    "skipping circular-dependency analysis (likely a project-root "
-                    "mis-detection — set REVEAL_I002_MAX_FILES to raise the limit)",
-                    directory, max_files,
+                reason = (
+                    f"I002: import-graph scan of {directory} exceeded {max_files} "
+                    "source files; skipping circular-dependency analysis (likely a "
+                    "project-root mis-detection — set REVEAL_I002_MAX_FILES to "
+                    "raise the limit)"
                 )
-                return [], []
+                logger.warning(reason)
+                return [], [], reason
 
         cycle_limit = _cycle_detection_max_files()
         if cycle_limit and len(source_files) > cycle_limit:
-            logger.warning(
-                "I002: import-graph scan of %s found %d source files (over the "
-                "%d-file cycle-detection threshold); skipping circular-dependency "
-                "analysis to avoid a multi-minute whole-project parse — set "
-                "REVEAL_I002_CYCLE_LIMIT to raise the limit or 0 to disable it",
-                directory, len(source_files), cycle_limit,
+            reason = (
+                f"I002: import-graph scan of {directory} found {len(source_files)} "
+                f"source files (over the {cycle_limit}-file cycle-detection "
+                "threshold); skipping circular-dependency analysis to avoid a "
+                "multi-minute whole-project parse — set REVEAL_I002_CYCLE_LIMIT to "
+                "raise the limit or 0 to disable it"
             )
-            return [], []
+            logger.warning(reason)
+            return [], [], reason
 
         # Pass B: parse the (now bounded) set of files. Independent per file, so
         # fan out across processes on large trees (BACK-536). map() preserves
@@ -436,7 +458,7 @@ class I002(BaseRule):
                 all_imports.extend(imports)
                 if failed:
                     failed_files.append(Path(fp_str))
-            return all_imports, failed_files
+            return all_imports, failed_files, None
 
         try:
             from concurrent.futures import ProcessPoolExecutor
@@ -449,7 +471,7 @@ class I002(BaseRule):
                     all_imports.extend(imports)
                     if failed:
                         failed_files.append(Path(fp_str))
-            return all_imports, failed_files
+            return all_imports, failed_files, None
         except Exception as e:
             # Degrade to serial on any pool failure (restricted/forbidden-fork
             # environments) rather than losing the analysis entirely.
@@ -461,7 +483,7 @@ class I002(BaseRule):
                 all_imports.extend(imports)
                 if failed:
                     failed_files.append(Path(fp_str))
-            return all_imports, failed_files
+            return all_imports, failed_files, None
 
     def _resolve_graph_dependencies(self, graph: ImportGraph) -> None:
         """Phase 2: Resolve import statements to actual file paths and add edges."""
