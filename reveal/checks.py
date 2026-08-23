@@ -142,7 +142,7 @@ def run_pattern_detection(
     output_format: str,
     args: Any,
     config: Optional[Any] = None
-) -> None:
+) -> int:
     """Run pattern detection rules on a file.
 
     Args:
@@ -151,6 +151,14 @@ def run_pattern_detection(
         output_format: Output format ('text', 'json', 'grep')
         args: CLI arguments (for --select, --ignore)
         config: Optional RevealConfig for breadcrumb settings
+
+    Returns:
+        (detection_count, degraded) tuple. `degraded` is True when the file
+        did not parse cleanly (BACK-1083's parse_degraded, tree-sitter
+        error-recovery) or a rule raised (rule_errors) -- meaning
+        `detection_count` may be incomplete/wrong, not a trustworthy
+        "clean" signal. Added for BACK-1099's exit-code contract: a caller
+        that only wants the old int should unpack `count, _ = run_pattern_detection(...)`.
     """
     from .rules import RuleRegistry
 
@@ -211,7 +219,8 @@ def run_pattern_detection(
         print_breadcrumbs('quality-check', path, file_type=file_type, config=config,
                          detections=detections)
 
-    return len(detections)
+    degraded = parse_degraded or bool(rule_errors)
+    return len(detections), degraded
 
 
 def run_schema_validation(

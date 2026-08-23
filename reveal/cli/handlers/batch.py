@@ -93,7 +93,16 @@ def _process_stdin_file(target: str, args: 'Namespace', handle_file_func, is_che
         analyzer = _get_analyzer_or_exit(str(path), allow_fallback)
         cli_overrides = _build_file_cli_overrides(args)
         config = RevealConfig.get(start_path=path.parent, cli_overrides=cli_overrides or None)
-        return run_pattern_detection(analyzer, str(path), getattr(args, 'format', 'text'), args, config=config)
+        # BACK-1099: `degraded` (file didn't parse cleanly / a rule raised)
+        # is intentionally dropped here -- --stdin --check's aggregate exit
+        # code (_calculate_batch_exit_code) doesn't yet have a distinct
+        # "degraded" tier, same gap as `reveal check`'s directory-mode text
+        # summary before this fix. Not addressed in this pass (see
+        # internal-docs/design/EXIT_CODE_CONTRACT.md's "not yet fixed" list).
+        violations, _degraded = run_pattern_detection(
+            analyzer, str(path), getattr(args, 'format', 'text'), args, config=config
+        )
+        return violations
 
     handle_file_func(str(path), None, args.meta, args.format, args)
     return 0

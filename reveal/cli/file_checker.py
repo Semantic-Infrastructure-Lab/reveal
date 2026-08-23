@@ -737,6 +737,30 @@ def _apply_severity_filter(detections: list, severity: Optional[str]) -> list:
     return [d for d in detections if _SEVERITY_ORDER.index(d.severity.value.lower()) >= min_idx]
 
 
+def check_exit_code(total_issues: int, files_errored: int = 0, files_degraded: int = 0) -> int:
+    """Compute `reveal check`'s process exit code (BACK-1099's contract).
+
+    0 = clean: ran to completion, zero issues, every file parsed and every
+        rule ran without raising.
+    1 = issues found: ran to completion, no degraded/errored files, but at
+        least one rule violation was reported.
+    3 = incomplete scan: one or more files could not be checked at all
+        (files_errored -- analyzer/parse pipeline raised) or were checked
+        against a degraded/error-recovery parse (files_degraded) or a rule
+        itself raised. Takes priority over 1 even when issues were also
+        found, because a degraded scan means the issue *count* itself may
+        be wrong or incomplete -- see
+        internal-docs/design/EXIT_CODE_CONTRACT.md.
+
+    (2 is reserved for usage/invocation errors -- bad args, unsupported
+    path -- raised directly by the CLI layer before a scan starts, not
+    computed here.)
+    """
+    if files_errored or files_degraded:
+        return 3
+    return 1 if total_issues > 0 else 0
+
+
 def _check_files_json(
     files: List[Path], directory: Path, select: Optional[List[str]], ignore: Optional[List[str]],
     severity: Optional[str] = None,
@@ -964,7 +988,7 @@ def _print_json_output(
             "files_errored": files_errored,
             "files_degraded": files_degraded,
             "total_issues": total_issues,
-            "exit_code": 1 if total_issues > 0 else 0,
+            "exit_code": check_exit_code(total_issues, files_errored, files_degraded),
             "scan_disclosures": scan_disclosures or [],
         }
     }
@@ -1087,10 +1111,12 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     limit = getattr(args, 'limit', 50)
 
     # Check files based on output format
+    files_degraded = 0
     if output_format == 'json':
         total_issues, files_with_issues, file_results, files_errored = _check_files_json(
             files_to_check, directory, select, ignore, severity=severity
         )
+        files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
         _print_json_output(
             file_results, len(files_to_check), files_with_issues, total_issues,
             scope=collection.to_scope_census(), source=directory,
@@ -1104,9 +1130,10 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         # already honors grep correctly via checks.py's
         # _format_detections_grep — reuse the same file:line:col:rule:msg
         # shape here, built from the JSON-mode per-file detections.
-        total_issues, files_with_issues, file_results, _files_errored = _check_files_json(
+        total_issues, files_with_issues, file_results, files_errored = _check_files_json(
             files_to_check, directory, select, ignore, severity=severity
         )
+        files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
         _print_grep_output(file_results)
         for reason in _get_scan_disclosures():
             # BACK-1051: grep output is meant to stay machine-parseable
@@ -1133,8 +1160,12 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
             scan_disclosures=_get_scan_disclosures(),
         )
 
-    # Exit with appropriate code
-    sys.exit(1 if total_issues > 0 else 0)
+    # Exit with appropriate code (BACK-1099: distinguish "clean" from
+    # "issues found" from "scan incomplete" -- files_errored/files_degraded
+    # previously fed only the disclosure text/JSON summary, never the
+    # actual process exit code, so a directory containing an unparseable
+    # file exited 0 identically to an all-clean directory).
+    sys.exit(check_exit_code(total_issues, files_errored, files_degraded))
 
 
 def handle_profile_rules(directory: Path, args: 'Namespace') -> None:

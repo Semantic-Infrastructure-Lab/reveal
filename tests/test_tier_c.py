@@ -47,8 +47,8 @@ def _run(*args: str):
     return _run_reveal_direct(*args)
 
 
-def _assert_sane(result, desc: str) -> None:
-    assert result.returncode in (0, 1), (
+def _assert_sane(result, desc: str, ok_codes=(0, 1)) -> None:
+    assert result.returncode in ok_codes, (
         f"{desc}: unexpected crash (rc={result.returncode}): {result.stderr}"
     )
     assert "Traceback (most recent call last)" not in result.stderr, (
@@ -74,4 +74,9 @@ def test_structure_non_crash(case):
 def test_check_non_crash(case):
     lang, path = case
     result = _run(str(path), "--check")
-    _assert_sane(result, f"{lang} --check")
+    # BACK-1099: 3 = "scan incomplete" (file didn't parse cleanly / a rule
+    # raised) is a legitimate, intentional non-crash exit code alongside
+    # 0 (clean) and 1 (issues found) -- some tier C corpus files (real,
+    # messy shell/PowerShell/etc. scripts) legitimately hit tree-sitter's
+    # error-recovery path and should NOT read as "check crashed."
+    _assert_sane(result, f"{lang} --check", ok_codes=(0, 1, 3))

@@ -30,7 +30,8 @@ def create_check_parser() -> argparse.ArgumentParser:
         description=(
             'Run reveal quality rules on a file or directory.\n\n'
             'Checks for bugs, security issues, complexity problems, and more.\n'
-            'Exit code 0 = no issues, 1 = issues found.'
+            'Exit code 0 = no issues, 1 = issues found, 2 = usage error, '
+            '3 = scan incomplete (a file could not be parsed/checked).'
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -210,7 +211,14 @@ def run_check(args: Namespace) -> None:
         analyzer = _get_analyzer_or_exit(str(path), allow_fallback)
         cli_overrides = _build_file_cli_overrides(args)
         config = RevealConfig.get(start_path=path.parent, cli_overrides=cli_overrides or None)
-        violations = run_pattern_detection(
+        violations, degraded = run_pattern_detection(
             analyzer, str(path), getattr(args, 'format', 'text'), args, config=config
         )
+        # BACK-1099: a file that didn't parse cleanly (or a rule that raised)
+        # means `violations` isn't a trustworthy signal -- "0 issues" here
+        # can mean "clean" or "couldn't actually check it". Exit 3 makes
+        # that distinguishable from clean (0) and from real issues (1) at
+        # the shell level; see internal-docs/design/EXIT_CODE_CONTRACT.md.
+        if degraded:
+            sys.exit(3)
         sys.exit(1 if violations else 0)
