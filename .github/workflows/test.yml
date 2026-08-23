@@ -109,3 +109,42 @@ jobs:
             echo "✅ B006 count decreased ($BASELINE -> $COUNT) — update .github/b006_baseline.txt to $COUNT to lock in the improvement."
           fi
 
+  compat-matrix:
+    # BACK-1125: forced-dependency-version + Python-version-boundary visibility
+    # job. This is the gap that let BACK-574 (a tree-sitter-language-pack bump
+    # silently flipping accessor method->property semantics, swallowed by a
+    # broad except Exception) reach production undetected -- the main `test`
+    # job above never installs a forced third-party version, so nothing here
+    # caught it before a live user did. Allowed to fail initially (visibility,
+    # not a merge gate) per BACK-1125's scope -- flip continue-on-error to
+    # false once this has run clean for a while.
+    name: Compat matrix (Python ${{ matrix.python-version }}, tree-sitter-language-pack ${{ matrix.lp-version }})
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.14']
+        lp-version: ['1.12.5', '1.14.3']  # 1.12.5: first post-vendored-parser release; 1.14.3: current upstream
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies (forcing tree-sitter-language-pack==${{ matrix.lp-version }})
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install "tree-sitter-language-pack==${{ matrix.lp-version }}"
+          pip install build  # tests/test_packaging_manifest.py shells out to `python -m build`
+
+      - name: Run tests
+        env:
+          PYTHONIOENCODING: utf-8
+        run: pytest tests/
+
