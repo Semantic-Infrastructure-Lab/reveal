@@ -462,6 +462,7 @@ class StatsAdapter(ResourceAdapter):
             result = aggregate_stats([file_stats] if file_stats else [], self.path)
             result.update(
                 contract_version=CONTRACT_VERSION,
+                type='stats_file',
                 source=str(self.path),
                 source_type='file',
             )
@@ -495,6 +496,7 @@ class StatsAdapter(ResourceAdapter):
 
         result.update(
             contract_version=CONTRACT_VERSION,
+            type='stats_summary',
             source=str(self.path),
             source_type='directory' if self.path.is_dir() else 'file',
         )

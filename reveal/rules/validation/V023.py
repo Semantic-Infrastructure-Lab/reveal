@@ -233,6 +233,17 @@ class V023(BaseRule):
         if delegated_returns and not direct_dict_returns:
             return []
 
+        # Assign-then-return delegation: result = helper.build_x(...); ...;
+        # return result -- same "fields live in the callee" shape as the
+        # direct `return helper.build_x(...)` case above, just with the
+        # helper's dict bound to a local name first (optionally mutated with
+        # an extra key, e.g. an informational note) before being returned.
+        assigned_from_call_names = _re.findall(r'\b(\w+)\s*=\s*\w+(?:\.\w+)?\(', method_body)
+        if not direct_dict_returns and any(
+            _re.search(rf'\breturn {name}\b', method_body) for name in assigned_from_call_names
+        ):
+            return []
+
         # ResultBuilder pattern: fields are passed as kwargs, not dict literals.
         # ResultBuilder.create(contract_version=..., source=..., ...) satisfies the contract.
         if 'ResultBuilder.create(' in method_body:
@@ -242,6 +253,10 @@ class V023(BaseRule):
         missing_fields = [
             f for f in required_fields
             if not any(p in method_body for p in [f"'{f}':", f'"{f}":', f"'{f}' :", f'"{f}" :'])
+            # kwarg-style assignment: dict(...)/.update(field=value, ...) -- same
+            # contract satisfaction as a 'field': value dict-literal key, just
+            # passed positionally-as-keyword instead of quoted.
+            and not _re.search(rf'\b{f}\s*=(?!=)', method_body)
         ]
         if not missing_fields:
             return []

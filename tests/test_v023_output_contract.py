@@ -259,6 +259,52 @@ class TestAnalyzer(TreeSitterAnalyzer):
         )
         self.assertEqual(len(detections), 0)
 
+    def test_kwarg_style_field_assignment_not_flagged(self):
+        """BACK-1064: dict.update(field=value, ...) satisfies the contract the
+        same as a 'field': value literal key -- it's a real value assignment,
+        just passed as a keyword argument instead of a quoted dict key
+        (stats/adapter.py's actual pattern)."""
+        content = """
+class TestAdapter(ResourceAdapter):
+    def get_structure(self, path, config):
+        result = {'data': []}
+        result.update(
+            contract_version=CONTRACT_VERSION,
+            type='test_adapter',
+            source=str(self.path),
+            source_type='file',
+        )
+        return result
+"""
+        detections = self.rule._check_output_code_patterns(
+            file_path="/adapters/test.py",
+            content=content,
+            method_name="get_structure"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_assign_then_return_delegation_not_flagged(self):
+        """BACK-1064: a module-level helper's dict result bound to a local
+        name (optionally mutated with an extra key), then returned as-is, is
+        the same 'fields live in the callee' shape as a direct
+        `return helper.build_x(...)` -- just with the call's result held in a
+        variable first (testability.py's actual pattern, calling a bare
+        imported function rather than a dotted one)."""
+        content = """
+class TestAdapter(ResourceAdapter):
+    def get_structure(self, **kwargs):
+        report = build_testability_report(str(self.path))
+        if report.get('summary', {}).get('total', 0) == 0:
+            report['_note'] = 'no data'
+        return report
+"""
+        detections = self.rule._check_output_code_patterns(
+            file_path="/adapters/test.py",
+            content=content,
+            method_name="get_structure"
+        )
+        self.assertEqual(len(detections), 0)
+
     def test_missing_source_type_detected(self):
         """Missing source_type field should trigger detection."""
         content = """
