@@ -369,6 +369,8 @@ class ClaudeAdapter(ResourceAdapter):
     - Error detection
     - Token usage estimates
     """
+    HELP_CLUSTER = 'Sessions & Docs'
+    QUICK_RANK = 3
 
     STABILITY = Stability.PROJECT
     BUDGET_LIST_FIELD = 'results'

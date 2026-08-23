@@ -1015,9 +1015,14 @@ class TestHelpQuick(unittest.TestCase):
 
 
 class TestHelpQuickRegistryDriven(unittest.TestCase):
-    """BACK-390 M4: help://quick commands are derived from the adapter registry,
-    not hand-maintained, so they can't drift and never omit registered adapters
-    (including project-local plugins)."""
+    """BACK-390 M4 / BACK-1156: help://quick's top command block is derived
+    from each adapter class's own QUICK_RANK attribute (adapters/base.py),
+    not a standalone dict in help.py — so it can't drift. QUICK_RANK is now
+    an explicit opt-in for the small top-N cheat-sheet (BACK-1156 superseded
+    M4's original "unranked defaults to visible" rule); the completeness
+    guarantee for adapters with no QUICK_RANK moved to help://quick's
+    decision_tree cluster-coverage lines instead — see
+    TestDecisionTreeClusterCoverage below."""
 
     def _get_quick(self):
         from reveal.adapters.help import HelpAdapter
@@ -1025,7 +1030,7 @@ class TestHelpQuickRegistryDriven(unittest.TestCase):
         return a.get_element('quick')
 
     def test_commands_include_a_ranked_adapter(self):
-        # 'ast' is top-ranked in _QUICK_RANK and always registered — its
+        # 'ast' has QUICK_RANK = 0 and is always registered — its
         # get_help()-derived command must appear, proving derivation happened.
         result = self._get_quick()
         cmds = [c['cmd'] for c in result['commands']]
@@ -1046,27 +1051,65 @@ class TestHelpQuickRegistryDriven(unittest.TestCase):
         cmds = ' '.join(c['cmd'] for c in result['commands'])
         self.assertNotIn('postgres://', cmds)
 
-    def test_new_adapter_appears_without_rank_hint(self):
-        # An adapter with no _QUICK_RANK entry should still be eligible
-        # (sorts after ranked ones) rather than silently excluded — this is
-        # the plugin-visibility guarantee M4 asked for.
+    def test_unranked_adapter_absent_from_top_commands(self):
+        # QUICK_RANK = None is a deliberate "not in the small ranked
+        # cheat-sheet" choice (adapters/base.py), not an omission — confirm
+        # it's actually excluded rather than silently falling back to a
+        # default rank.
+        from reveal.adapters.registry import _ADAPTER_REGISTRY
+        json_cls = _ADAPTER_REGISTRY['json']
+        self.assertIsNone(json_cls.QUICK_RANK)
+        result = self._get_quick()
+        cmds = ' '.join(c['cmd'] for c in result['commands'])
+        self.assertNotIn('json://', cmds)
+
+
+class TestDecisionTreeClusterCoverage(unittest.TestCase):
+    """BACK-1154/1156: every non-internal registered adapter must be
+    reachable from help://quick — either in the top-N commands (QUICK_RANK
+    set) or via a decision_tree cluster-coverage line (HELP_CLUSTER set).
+    This is the completeness guarantee that replaces M4's old "unranked
+    still shows in top-N" rule now that the top-N is a deliberate opt-in."""
+
+    def _reachable_schemes(self):
+        import re
         from reveal.adapters.help import HelpAdapter
-        adapter = HelpAdapter()
-        original_rank = dict(adapter._QUICK_RANK)
-        original_count = adapter._QUICK_COMMAND_COUNT
-        try:
-            # Give every real ranked scheme a rank so far back that our
-            # fake unranked one (default rank 100) would win a slot.
-            adapter._QUICK_RANK = {k: 1000 for k in original_rank}
-            adapter._QUICK_COMMAND_COUNT = len(original_rank) + 3
-            commands = adapter._get_quick_commands()
-        finally:
-            adapter._QUICK_RANK = original_rank
-            adapter._QUICK_COMMAND_COUNT = original_count
-        cmds = ' '.join(c['cmd'] for c in commands)
-        # Unranked real adapters (e.g. env, json, sqlite) should now be pulled
-        # in ahead of nothing, proving unranked entries aren't dropped.
-        self.assertTrue(any(s in cmds for s in ('env://', 'json://', 'sqlite://')))
+        from reveal.adapters.registry import _ADAPTER_REGISTRY
+        a = HelpAdapter('help://quick')
+        result = a.get_element('quick')
+        text = ' '.join(c['cmd'] for c in result['commands'])
+        text += ' ' + ' '.join(
+            entry['want'] + ' ' + entry['use'] + ' ' + entry['example']
+            for entry in result['decision_tree']
+        )
+        # decision_tree's cluster-coverage lines name adapters as bare,
+        # comma-separated scheme words ("...not named above: json, reveal"),
+        # not scheme:// URIs — match against real registered scheme names
+        # rather than requiring the "://" suffix every mention has to use.
+        words = set(re.findall(r'[a-zA-Z_]+', text))
+        return words & set(_ADAPTER_REGISTRY.keys())
+
+    def test_every_registered_adapter_is_reachable(self):
+        from reveal.adapters.help import HelpAdapter
+        from reveal.adapters.registry import _ADAPTER_REGISTRY
+        reachable = self._reachable_schemes()
+        missing = [
+            scheme for scheme in _ADAPTER_REGISTRY
+            if scheme not in HelpAdapter._INTERNAL_ADAPTERS
+            and scheme not in reachable
+            and scheme != 'help'  # the page being viewed; always implicitly reachable
+        ]
+        self.assertEqual(missing, [], f"adapters unreachable from help://quick: {missing}")
+
+    def test_previously_missing_adapters_now_covered(self):
+        # BACK-1154's originally-diagnosed gap — regression guard.
+        reachable = self._reachable_schemes()
+        previously_missing = {
+            'architecture', 'overview', 'pack', 'hotspots', 'contracts',
+            'depends', 'surface', 'testability', 'patches', 'trace', 'deps',
+            'autossl', 'letsencrypt', 'json', 'reveal',
+        }
+        self.assertTrue(previously_missing.issubset(reachable), reachable)
 
 
 class TestRenderHelpRelationships(unittest.TestCase):

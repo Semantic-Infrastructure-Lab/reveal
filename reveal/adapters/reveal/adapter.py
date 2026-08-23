@@ -26,6 +26,7 @@ class RevealAdapter(ResourceAdapter):
         reveal reveal:// --check --select V  # Only validation rules
         reveal help://reveal                 # Learn about reveal://
     """
+    HELP_CLUSTER = 'Self-Describing'
 
     internal = True
     STABILITY = Stability.STABLE

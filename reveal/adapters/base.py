@@ -138,6 +138,22 @@ class ResourceAdapter(ABC):
     # substituting '.' would misread it as a literal host/path instead.
     CANONICAL_EMPTY_RESOURCE: str = '.'
 
+    # help://relationships cluster membership, declared at the adapter
+    # definition site so it can't drift from help.py's hand-maintained
+    # dicts (BACK-1156). None = not shown in any cluster. Most adapters
+    # belong to exactly one cluster (a plain str); a few genuinely span two
+    # (e.g. ast:// is core to both "Code Analysis" and "Self-Describing") —
+    # a tuple covers that without forcing a false single choice.
+    HELP_CLUSTER: Optional['str | Tuple[str, ...]'] = None
+
+    # Rank hint for help://quick's top command block (lower sorts first).
+    # None = not part of the small ranked cheat-sheet — still fully
+    # discoverable via help://relationships and help://adapters, just not
+    # in the top-N. Declared here (not a satellite dict in help.py) so a
+    # new adapter's absence from the cheat-sheet is a deliberate choice,
+    # not a silent omission (BACK-1154/1155).
+    QUICK_RANK: Optional[int] = None
+
     def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any) -> None:
         """Canonical constructor matching the signature LEGACY_INIT already
         documents (BACK-1020). Establishes the instance state int_param()/

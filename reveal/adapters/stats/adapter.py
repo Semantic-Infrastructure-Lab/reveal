@@ -174,6 +174,8 @@ _SCHEMA_NOTES = [
 @register_renderer(StatsRenderer)
 class StatsAdapter(ResourceAdapter):
     """Adapter for analyzing codebase statistics and identifying hotspots."""
+    HELP_CLUSTER = 'Code Analysis'
+    QUICK_RANK = 2
 
     BUDGET_LIST_FIELD = 'files'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907

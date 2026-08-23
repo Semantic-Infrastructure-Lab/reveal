@@ -127,6 +127,7 @@ _SCHEMA_NOTES = [
 @register_renderer(PythonRenderer)
 class PythonAdapter(ResourceAdapter):
     """Adapter for Python runtime inspection via python:// URIs."""
+    HELP_CLUSTER = 'Self-Describing'
 
     STABILITY = Stability.STABLE
     ELEMENT_NAMESPACE_ADAPTER = True

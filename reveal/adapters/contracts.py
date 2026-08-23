@@ -1015,6 +1015,7 @@ class ContractsRenderer:
 class ContractsAdapter(ResourceAdapter):
     """Adapter for finding contracts and architectural seams: ABCs, Protocols,
     TypedDicts, dataclasses, BaseModels, and their per-language equivalents."""
+    HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 

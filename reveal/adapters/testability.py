@@ -127,6 +127,7 @@ class TestabilityAdapter(ResourceAdapter):
     """Adapter correlating test-suite patch/mock pressure with production
     boundary fan-out — where tests over-mock vs. where risky boundary code
     has no patch coverage at all."""
+    HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 

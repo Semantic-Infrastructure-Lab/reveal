@@ -87,6 +87,8 @@ class AstAdapter(ResourceAdapter):
         ast://.?lines=50..200            # Range filter (NEW: .. operator)
         ast://.?complexity>10&sort=-complexity&limit=10  # Top 10 most complex (NEW: sort, limit)
     """
+    HELP_CLUSTER = ('Code Analysis', 'Self-Describing')
+    QUICK_RANK = 0
 
     STABILITY = Stability.STABLE
     BUDGET_LIST_FIELD = 'results'

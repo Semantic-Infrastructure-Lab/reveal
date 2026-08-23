@@ -189,6 +189,7 @@ class LetsEncryptAdapter(ResourceAdapter):
         reveal letsencrypt:// --check-orphans   # Certs not used by any nginx vhost
         reveal letsencrypt:// --check-duplicates # Certs with identical SANs
     """
+    HELP_CLUSTER = 'Infrastructure'
 
     ELEMENT_NAMESPACE_ADAPTER: bool = False
 

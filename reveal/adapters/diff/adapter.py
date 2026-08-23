@@ -25,6 +25,7 @@ class DiffAdapter(ResourceAdapter):
         diff://mysql://prod/db:mysql://staging/db # Database schema drift
         diff://app.py:old.py/handle_request       # Element-specific diff
     """
+    HELP_CLUSTER = 'Code Analysis'
 
     left_uri: str
     right_uri: str

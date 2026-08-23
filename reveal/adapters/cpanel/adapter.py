@@ -523,6 +523,8 @@ class CpanelAdapter(ResourceAdapter):
         reveal cpanel://USERNAME/ssl          # Disk cert health per domain
         reveal cpanel://USERNAME/acl-check    # nobody ACL on all docroots
     """
+    HELP_CLUSTER = 'Infrastructure'
+    QUICK_RANK = 9
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     CANONICAL_EMPTY_RESOURCE = ''  # bare cpanel:// must raise TypeError, not silently become "."

@@ -268,6 +268,7 @@ class DepsRenderer:
 class DepsAdapter(ResourceAdapter):
     """Adapter for the dependency health dashboard: external packages,
     circular deps, unused imports — composed from imports://."""
+    HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 

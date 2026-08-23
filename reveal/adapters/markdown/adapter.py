@@ -171,6 +171,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
     Enables finding markdown files based on frontmatter field values,
     missing fields, or wildcards. Works on local directory trees.
     """
+    HELP_CLUSTER = 'Sessions & Docs'
 
     BUDGET_LIST_FIELD = 'results'
     LEGACY_INIT = False

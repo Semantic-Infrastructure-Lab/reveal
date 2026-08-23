@@ -60,6 +60,7 @@ class CodexAdapter(ResourceAdapter):
     Reads from ~/.codex/state_5.sqlite (session index) and
     ~/.codex/sessions/**/*.jsonl (per-session JSONL files).
     """
+    HELP_CLUSTER = 'Sessions & Docs'
 
     # Base paths — override with env vars for testing / SSH
     CODEX_HOME: Path = (

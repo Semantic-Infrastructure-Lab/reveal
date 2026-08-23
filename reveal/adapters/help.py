@@ -302,6 +302,7 @@ class HelpAdapter(ResourceAdapter):
         help://examples/security   # Query recipes for security analysis
         help://examples/codebase   # Query recipes for codebase exploration
     """
+    HELP_CLUSTER = 'Self-Describing'
 
     STABILITY = Stability.STABLE
     ELEMENT_NAMESPACE_ADAPTER = True
@@ -1225,37 +1226,39 @@ class HelpAdapter(ResourceAdapter):
         if see_also:
             data['see_also'] = see_also
 
-    # Rank hints for help://quick's top command block. Lower sorts first;
-    # unranked adapters (including project-local plugins) default to 100 and
-    # sort alphabetically after every ranked one. This is the "intent contract"
-    # M4 in AGENT_CLI_ONBOARDING_STRATEGY_2026-07-01.md asked for: adapters
-    # already carry a one-line description + starter query via get_help(),
-    # this dict only decides *priority*, not content — so the command list
-    # can't drift from the registry, and new adapters are never missing.
-    _QUICK_RANK: Dict[str, int] = {
-        'ast': 0,
-        'calls': 1,
-        'stats': 2,
-        'claude': 3,
-        'git': 4,
-        'ssl': 5,
-        'domain': 6,
-        'nginx': 7,
-        'sqlite': 8,
-        'cpanel': 9,
-    }
-    # 2 synthetic file-nav entries + one slot per _QUICK_RANK entry + 1
-    # trailing help://adapters pointer. Keep in sync with len(_QUICK_RANK) —
-    # BACK-1155: a stale lower count here silently drops the lowest-ranked
-    # entries (nginx/sqlite/cpanel) even though _QUICK_RANK still lists them.
-    _QUICK_COMMAND_COUNT = 2 + len(_QUICK_RANK) + 1
+    # BACK-1156: rank + cluster membership used to live here as standalone
+    # dicts (_QUICK_RANK, cluster lists in _get_adapter_relationships) that
+    # could silently drift from the adapter registry (BACK-1155's bug was
+    # exactly that: a stale count, not a stale dict, but the risk is the
+    # same shape). Both now read off each adapter class's own HELP_CLUSTER /
+    # QUICK_RANK attributes (declared in adapters/base.py) — one source of
+    # truth at the definition site, can't go stale.
+
+    @staticmethod
+    def _cluster_membership() -> Dict[str, List[str]]:
+        """cluster name -> sorted schemes whose HELP_CLUSTER names it."""
+        membership: Dict[str, List[str]] = {}
+        for scheme, adapter_class in _ADAPTER_REGISTRY.items():
+            if scheme in HelpAdapter._INTERNAL_ADAPTERS:
+                continue
+            clusters = getattr(adapter_class, 'HELP_CLUSTER', None)
+            if clusters is None:
+                continue
+            if isinstance(clusters, str):
+                clusters = (clusters,)
+            for cluster in clusters:
+                membership.setdefault(cluster, []).append(scheme)
+        for schemes in membership.values():
+            schemes.sort()
+        return membership
 
     def _get_quick_commands(self) -> List[Dict[str, str]]:
         """Derive the top command block from the adapter registry.
 
         Two synthetic file-navigation entries lead (reveal isn't only URI
-        adapters) followed by the highest-ranked registered adapters, each
-        represented by its own get_help() description + first example.
+        adapters) followed by the highest-ranked registered adapters (those
+        with a QUICK_RANK class attribute), each represented by its own
+        get_help() description + first example.
         """
         commands = [
             {
@@ -1272,6 +1275,9 @@ class HelpAdapter(ResourceAdapter):
         for scheme, adapter_class in _ADAPTER_REGISTRY.items():
             if scheme in self._INTERNAL_ADAPTERS or scheme == 'help':
                 continue
+            rank = getattr(adapter_class, 'QUICK_RANK', None)
+            if rank is None:
+                continue
             help_data = self._get_adapter_help(scheme)
             if not help_data or 'error' in help_data:
                 continue
@@ -1280,13 +1286,10 @@ class HelpAdapter(ResourceAdapter):
             description = help_data.get('description', '')
             if not uri or not description:
                 continue
-            rank = self._QUICK_RANK.get(scheme, 100)
             candidates.append((rank, scheme, uri, description))
 
         candidates.sort(key=lambda c: (c[0], c[1]))
-        # -1 reserves a slot for the trailing help://adapters pointer below.
-        slots = max(self._QUICK_COMMAND_COUNT - len(commands) - 1, 0)
-        for _rank, _scheme, uri, description in candidates[:slots]:
+        for _rank, _scheme, uri, description in candidates:
             commands.append({'cmd': f'reveal {uri}', 'description': description})
 
         commands.append({
@@ -1295,48 +1298,77 @@ class HelpAdapter(ResourceAdapter):
         })
         return commands
 
+    # BACK-1156: curated, hand-written "if you want X, use Y" entries for the
+    # most common intents. Kept as prose because the value here is the
+    # *phrasing* of the intent, not the adapter list — that part can't be
+    # mechanically derived. Completeness (every adapter reachable from
+    # help://quick) is guaranteed separately, by _get_quick_help() appending
+    # one cluster-coverage line per cluster for whatever isn't already named
+    # here — see BACK-1154's original complaint (15 of 33 adapters absent).
+    _CURATED_DECISION_TREE: List[Dict[str, str]] = [
+        {'want': 'understand code structure (functions, classes, complexity)',
+         'use': 'ast://', 'example': "reveal ast://src/?complexity>10"},
+        {'want': 'know who calls what / find dead code',
+         'use': 'calls://', 'example': "reveal 'calls://src/?target=my_fn'"},
+        {'want': 'search text or an identifier across many files (with enclosing-function context)',
+         'use': '--grep', 'example': "reveal src/ --grep 'API_TIMEOUT'"},
+        {'want': 'check import health / circular deps',
+         'use': 'imports://', 'example': "reveal imports://src/"},
+        {'want': 'compare files or git revisions',
+         'use': 'diff://', 'example': "reveal diff://git://HEAD~1/.:git://HEAD/."},
+        {'want': 'SSL/TLS certificate status',
+         'use': 'ssl://', 'example': "reveal ssl://example.com --check"},
+        {'want': 'full server audit (SSL + ACL + nginx)',
+         'use': 'cpanel://', 'example': "reveal cpanel://USER/full-audit"},
+        {'want': 'nginx vhost config and health',
+         'use': 'nginx://', 'example': "reveal nginx://example.com"},
+        {'want': 'domain DNS / WHOIS / email health',
+         'use': 'domain://', 'example': "reveal domain://example.com"},
+        {'want': 'search git commit history by message, author, or date',
+         'use': 'git://', 'example': "reveal 'git://.?message~=fix'"},
+        {'want': 'search markdown docs or notes by content',
+         'use': 'markdown://', 'example': "reveal docs/ --grep 'keyword'"},
+        {'want': 'inspect a SQLite, MySQL database, or Excel workbook',
+         'use': 'sqlite:// / mysql:// / xlsx://', 'example': "reveal sqlite:///path/to/app.db"},
+        {'want': 'inspect environment variables or Python runtime',
+         'use': 'env:// / python://', 'example': "reveal env://"},
+        {'want': 'search prior Claude sessions by topic or project',
+         'use': 'claude://', 'example': "reveal 'claude://sessions/?search=auth-refactor' --format=json"},
+        {'want': 'review a session as prompt/answer pairs, not raw messages',
+         'use': 'claude://.../exchanges', 'example': "reveal claude://session/my-session/exchanges"},
+        {'want': 'search OpenAI Codex CLI sessions by content (or ?filter= by title)',
+         'use': 'codex://', 'example': "reveal 'codex://sessions/?search=auth-refactor'"},
+        {'want': 'discover live project-specific adapters',
+         'use': 'help://adapters', 'example': "reveal help://adapters"},
+    ]
+
+    def _decision_tree_coverage_gaps(self) -> List[Dict[str, str]]:
+        """One line per cluster for adapters the curated entries above never
+        name — the mechanical completeness guarantee BACK-1154 asked for."""
+        mentioned = set()
+        for entry in self._CURATED_DECISION_TREE:
+            mentioned.update(re.findall(r'([a-zA-Z_]+)://', entry['use']))
+        mentioned.discard('help')
+
+        gaps = []
+        for cluster, schemes in sorted(self._cluster_membership().items()):
+            missing = [s for s in schemes if s not in mentioned]
+            if not missing:
+                continue
+            gaps.append({
+                'want': f'other {cluster} tooling not named above: {", ".join(missing)}',
+                'use': 'help://relationships',
+                'example': 'reveal help://relationships',
+            })
+        return gaps
+
     def _get_quick_help(self) -> Dict[str, Any]:
         """Return a concise orientation cheat-sheet (help://quick)."""
         return {
             'type': 'help_quick',
             'title': 'Reveal — Quick Reference',
             'commands': self._get_quick_commands(),
-            'decision_tree': [
-                {'want': 'understand code structure (functions, classes, complexity)',
-                 'use': 'ast://', 'example': "reveal ast://src/?complexity>10"},
-                {'want': 'know who calls what / find dead code',
-                 'use': 'calls://', 'example': "reveal 'calls://src/?target=my_fn'"},
-                {'want': 'search text or an identifier across many files (with enclosing-function context)',
-                 'use': '--grep', 'example': "reveal src/ --grep 'API_TIMEOUT'"},
-                {'want': 'check import health / circular deps',
-                 'use': 'imports://', 'example': "reveal imports://src/"},
-                {'want': 'compare files or git revisions',
-                 'use': 'diff://', 'example': "reveal diff://git://HEAD~1/.:git://HEAD/."},
-                {'want': 'SSL/TLS certificate status',
-                 'use': 'ssl://', 'example': "reveal ssl://example.com --check"},
-                {'want': 'full server audit (SSL + ACL + nginx)',
-                 'use': 'cpanel://', 'example': "reveal cpanel://USER/full-audit"},
-                {'want': 'nginx vhost config and health',
-                 'use': 'nginx://', 'example': "reveal nginx://example.com"},
-                {'want': 'domain DNS / WHOIS / email health',
-                 'use': 'domain://', 'example': "reveal domain://example.com"},
-                {'want': 'search git commit history by message, author, or date',
-                 'use': 'git://', 'example': "reveal 'git://.?message~=fix'"},
-                {'want': 'search markdown docs or notes by content',
-                 'use': 'markdown://', 'example': "reveal docs/ --grep 'keyword'"},
-                {'want': 'inspect a SQLite, MySQL database, or Excel workbook',
-                 'use': 'sqlite:// / mysql:// / xlsx://', 'example': "reveal sqlite:///path/to/app.db"},
-                {'want': 'inspect environment variables or Python runtime',
-                 'use': 'env:// / python://', 'example': "reveal env://"},
-                {'want': 'search prior Claude sessions by topic or project',
-                 'use': 'claude://', 'example': "reveal 'claude://sessions/?search=auth-refactor' --format=json"},
-                {'want': 'review a session as prompt/answer pairs, not raw messages',
-                 'use': 'claude://.../exchanges', 'example': "reveal claude://session/my-session/exchanges"},
-                {'want': 'search OpenAI Codex CLI sessions by content (or ?filter= by title)',
-                 'use': 'codex://', 'example': "reveal 'codex://sessions/?search=auth-refactor'"},
-                {'want': 'discover live project-specific adapters',
-                 'use': 'help://adapters', 'example': "reveal help://adapters"},
-            ],
+            'decision_tree': self._CURATED_DECISION_TREE + self._decision_tree_coverage_gaps(),
             'next_steps': [
                 'reveal help://adapters          # full adapter list',
                 'reveal help://ast               # Python/JS/Go AST queries',
@@ -1361,7 +1393,7 @@ class HelpAdapter(ResourceAdapter):
             'clusters': [
                 {
                     'name': 'Code Analysis',
-                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git', 'patches', 'surface', 'contracts', 'hotspots', 'deps', 'architecture', 'overview', 'testability', 'trace', 'pack'],
+                    'adapters': self._cluster_membership().get('Code Analysis', []),
                     'pairs': [
                         ('ast', 'calls', 'structure feeds call-graph queries'),
                         ('ast', 'diff', 'compare element complexity across versions'),
@@ -1391,7 +1423,7 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'name': 'Infrastructure',
-                    'adapters': ['nginx', 'ssl', 'letsencrypt', 'domain', 'cpanel', 'autossl'],
+                    'adapters': self._cluster_membership().get('Infrastructure', []),
                     'pairs': [
                         ('nginx', 'ssl', 'validate certs referenced in nginx configs'),
                         ('nginx', 'domain', 'DNS health for domains in nginx configs'),
@@ -1405,7 +1437,7 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'name': 'Data & Config',
-                    'adapters': ['sqlite', 'mysql', 'json', 'env', 'xlsx'],
+                    'adapters': self._cluster_membership().get('Data & Config', []),
                     'pairs': [
                         ('sqlite', 'mysql', 'same query API, two database backends'),
                         ('json', 'sqlite', 'inspect app state: exported JSON or live DB'),
@@ -1416,7 +1448,7 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'name': 'Sessions & Docs',
-                    'adapters': ['claude', 'codex', 'git', 'markdown'],
+                    'adapters': self._cluster_membership().get('Sessions & Docs', []),
                     'pairs': [
                         ('claude', 'git', 'cross-reference session work with code changes'),
                         ('codex', 'claude', 'OpenAI Codex vs Claude Code session analysis'),
@@ -1426,7 +1458,7 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'name': 'Self-Describing',
-                    'adapters': ['help', 'reveal', 'python', 'ast'],
+                    'adapters': self._cluster_membership().get('Self-Describing', []),
                     'pairs': [
                         ('help', 'reveal', 'help:// documents it; reveal:// introspects it'),
                         ('reveal', 'ast', 'reveal uses ast:// to analyze itself'),

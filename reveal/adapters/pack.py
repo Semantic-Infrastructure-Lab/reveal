@@ -789,6 +789,7 @@ class PackAdapter(ResourceAdapter):
     """Adapter curating a token-budgeted context snapshot for LLM consumption:
     ranks candidate files by priority (entry points, fan-in, focus/graph
     relevance, changed-since-ref) and selects as many as fit the budget."""
+    HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 

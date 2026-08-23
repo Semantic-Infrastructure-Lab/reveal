@@ -376,6 +376,7 @@ class ArchitectureRenderer:
 class ArchitectureAdapter(ResourceAdapter):
     """Adapter for a targeted architectural brief: entry points, core
     abstractions, risks, and suggested next commands for a directory."""
+    HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 

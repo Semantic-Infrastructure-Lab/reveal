@@ -780,6 +780,7 @@ def _extract_one_file(fp_str: str, want_structure: bool):
 @register_renderer(ImportsRenderer)
 class ImportsAdapter(ResourceAdapter):
     """Analyze import relationships in codebases."""
+    HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 

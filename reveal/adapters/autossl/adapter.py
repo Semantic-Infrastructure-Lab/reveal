@@ -331,6 +331,7 @@ class AutosslAdapter(ResourceAdapter):
         reveal autossl://latest         # Parse most recent run
         reveal autossl://TIMESTAMP      # Parse a specific run
     """
+    HELP_CLUSTER = 'Infrastructure'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     CANONICAL_EMPTY_RESOURCE = ''  # bare autossl:// means "list runs", not "."

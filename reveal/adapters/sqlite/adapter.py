@@ -119,6 +119,8 @@ class SQLiteAdapter(ResourceAdapter):
         reveal sqlite:///path/to/db.db/users     # Table structure
         reveal sqlite:///path/to/db.db --check   # Database health
     """
+    HELP_CLUSTER = 'Data & Config'
+    QUICK_RANK = 8
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     CANONICAL_EMPTY_RESOURCE = ''  # bare sqlite:// must stay empty, not '.'

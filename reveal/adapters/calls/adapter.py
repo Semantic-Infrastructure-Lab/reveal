@@ -281,6 +281,8 @@ class CallsAdapter(ResourceAdapter):
         calls://src/?target=process_batch&depth=2
         calls://src/?target=main&format=dot
     """
+    HELP_CLUSTER = 'Code Analysis'
+    QUICK_RANK = 1
 
     BUDGET_LIST_FIELD = 'levels'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907

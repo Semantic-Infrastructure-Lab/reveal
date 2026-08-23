@@ -608,6 +608,7 @@ class XlsxAdapter(ResourceAdapter):
         xlsx:///path/to/file.xlsx?sheet=Sales&format=csv  # Export as CSV
         xlsx:///path/to/file.xlsx?sheet=Sales&limit=50    # Limit rows
     """
+    HELP_CLUSTER = 'Data & Config'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 

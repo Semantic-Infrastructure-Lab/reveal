@@ -332,6 +332,7 @@ class SurfaceRenderer:
 class SurfaceAdapter(ResourceAdapter):
     """Adapter for mapping every external surface a codebase touches: CLI,
     HTTP routes, env vars, network, filesystem writes, subprocess calls."""
+    HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 

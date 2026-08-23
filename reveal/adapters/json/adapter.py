@@ -47,6 +47,7 @@ from .introspection import (
 @register_renderer(JsonRenderer)
 class JsonAdapter(ResourceAdapter):
     """Adapter for navigating and querying JSON files."""
+    HELP_CLUSTER = 'Data & Config'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 

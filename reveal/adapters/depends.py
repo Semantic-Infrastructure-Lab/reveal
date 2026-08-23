@@ -371,6 +371,7 @@ class DependsAdapter(ResourceAdapter):
     given a target module (or directory), returns the set of files that
     depend on it.
     """
+    HELP_CLUSTER = 'Code Analysis'
 
     # BACK-524: bound the tree-sitter-parsed file set so a scan_root that
     # resolves to a genuinely huge (but marker-legit) ancestor repo degrades

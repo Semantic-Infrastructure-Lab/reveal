@@ -207,6 +207,7 @@ class HotspotsRenderer:
 @register_renderer(HotspotsRenderer)
 class HotspotsAdapter(ResourceAdapter):
     """Adapter for identifying high-complexity, low-quality files and functions."""
+    HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 

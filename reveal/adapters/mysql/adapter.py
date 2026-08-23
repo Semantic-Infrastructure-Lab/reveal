@@ -158,6 +158,7 @@ class MySQLAdapter(ResourceAdapter):
         reveal mysql://localhost/innodb           # InnoDB status
         reveal mysql://localhost --check          # Health checks
     """
+    HELP_CLUSTER = 'Data & Config'
 
     BUDGET_LIST_FIELD = 'checks'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907

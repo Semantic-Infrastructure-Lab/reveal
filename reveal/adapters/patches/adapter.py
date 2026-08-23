@@ -18,6 +18,7 @@ from .renderer import PatchesRenderer
 @register_renderer(PatchesRenderer)
 class PatchesAdapter(ResourceAdapter):
     """Adapter for exploring patch pressure in Python and TypeScript tests."""
+    HELP_CLUSTER = 'Code Analysis'
 
     BUDGET_LIST_FIELD = 'groups'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907

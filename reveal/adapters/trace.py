@@ -279,6 +279,7 @@ class TraceRenderer:
 class TraceAdapter(ResourceAdapter):
     """Adapter walking the call graph from a named entry point and building
     a depth-indented execution narrative (BFS via calls:// machinery)."""
+    HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 

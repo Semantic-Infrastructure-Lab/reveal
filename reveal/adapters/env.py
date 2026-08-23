@@ -143,6 +143,7 @@ class EnvRenderer:
 @register_renderer(EnvRenderer)
 class EnvAdapter(ResourceAdapter):
     """Adapter for exploring environment variables via env:// URIs."""
+    HELP_CLUSTER = 'Data & Config'
 
     STABILITY = Stability.STABLE
     ELEMENT_NAMESPACE_ADAPTER = True

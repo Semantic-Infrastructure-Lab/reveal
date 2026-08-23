@@ -140,6 +140,8 @@ class GitAdapter(ResourceAdapter):
 
     Requires: pip install reveal-cli[git]
     """
+    HELP_CLUSTER = ('Code Analysis', 'Sessions & Docs')
+    QUICK_RANK = 4
 
     BUDGET_LIST_FIELD = 'commits'
     LEGACY_INIT = False

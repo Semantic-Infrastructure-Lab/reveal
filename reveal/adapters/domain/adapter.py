@@ -508,6 +508,8 @@ class DomainAdapter(ResourceAdapter):
         ssl: SSL certificate status (delegates to ssl:// adapter)
         registrar: Registrar and nameserver information
     """
+    HELP_CLUSTER = 'Infrastructure'
+    QUICK_RANK = 6
 
     BUDGET_LIST_FIELD = 'checks'
 

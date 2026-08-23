@@ -473,6 +473,7 @@ class OverviewRenderer:
 class OverviewAdapter(ResourceAdapter):
     """Adapter for the one-glance codebase dashboard: languages, quality,
     hotspots, architecture, recent activity."""
+    HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
 
