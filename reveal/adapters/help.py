@@ -1244,7 +1244,11 @@ class HelpAdapter(ResourceAdapter):
         'sqlite': 8,
         'cpanel': 9,
     }
-    _QUICK_COMMAND_COUNT = 10
+    # 2 synthetic file-nav entries + one slot per _QUICK_RANK entry + 1
+    # trailing help://adapters pointer. Keep in sync with len(_QUICK_RANK) —
+    # BACK-1155: a stale lower count here silently drops the lowest-ranked
+    # entries (nginx/sqlite/cpanel) even though _QUICK_RANK still lists them.
+    _QUICK_COMMAND_COUNT = 2 + len(_QUICK_RANK) + 1
 
     def _get_quick_commands(self) -> List[Dict[str, str]]:
         """Derive the top command block from the adapter registry.
