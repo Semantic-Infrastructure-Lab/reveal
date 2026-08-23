@@ -332,10 +332,14 @@ files.
   is single-threaded per process and is not affected.
 
 **Fix.** Removing the failure class entirely requires moving past the
-`tree-sitter-language-pack<1.12.5` pin in `pyproject.toml`, which hands reveal
-the core `tree-sitter` C binding (no thread-affinity constraint). That is a
-tracked migration with a substantial API-compatibility surface, not a quick
-change. See [PyO3 #3688](https://github.com/PyO3/pyo3/issues/3688) for the
+`tree-sitter-language-pack<1.12.5` pin, which hands reveal the core
+`tree-sitter` C binding (no thread-affinity constraint) instead of the
+vendored pyo3 parser this bug depends on. As of `BACK-1161`,
+`pyproject.toml` has dropped that ceiling (`tree-sitter-language-pack>=1.8.1`,
+no upper bound), so a fresh install should no longer hit this class of
+crash — but it is not yet independently re-verified against this specific
+failure mode (`BACK-1146` note #6), so this caveat stays until confirmed.
+See [PyO3 #3688](https://github.com/PyO3/pyo3/issues/3688) for the
 underlying upstream behavior.
 
 ---
