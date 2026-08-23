@@ -22,7 +22,7 @@ class TestRuleDefaults:
         """Should have reasonable complexity threshold values."""
         assert RuleDefaults.CYCLOMATIC_COMPLEXITY == 10
         assert RuleDefaults.NESTING_DEPTH_MAX == 4
-        assert RuleDefaults.FUNCTION_LENGTH_WARN == 50
+        assert RuleDefaults.FUNCTION_LENGTH_WARN == 75
         assert RuleDefaults.FUNCTION_LENGTH_ERROR == 100
 
     def test_file_quality_defaults_values(self):

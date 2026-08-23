@@ -79,7 +79,7 @@ class RuleDefaults:
     # Complexity Rules
     CYCLOMATIC_COMPLEXITY = 10           # C901: Cyclomatic complexity threshold
     NESTING_DEPTH_MAX = 4                # C905: Maximum nesting depth
-    FUNCTION_LENGTH_WARN = 50            # C902: Function length warning
+    FUNCTION_LENGTH_WARN = 75            # C902: Function length warning
     FUNCTION_LENGTH_ERROR = 100          # C902: Function length error (god function)
 
     # File Quality Rules

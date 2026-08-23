@@ -34,12 +34,7 @@ pytestmark = pytest.mark.component
 CASES = [
     (C901, "DEFAULT_THRESHOLD", "CYCLOMATIC_COMPLEXITY", None),
     (C905, "MAX_DEPTH", "NESTING_DEPTH_MAX", None),
-    (
-        C902, "THRESHOLD_WARN", "FUNCTION_LENGTH_WARN",
-        "BACK-1050: C902 warn tier hardcodes 75, defaults.py declares 50 -- "
-        "confirmed drift, fix is a separate ticket (changes rule-firing "
-        "behavior, not just a constant).",
-    ),
+    (C902, "THRESHOLD_WARN", "FUNCTION_LENGTH_WARN", None),
     (C902, "THRESHOLD_ERROR", "FUNCTION_LENGTH_ERROR", None),
     (M101, "THRESHOLD_WARN", "FILE_LENGTH_WARN", None),
     (M101, "THRESHOLD_ERROR", "FILE_LENGTH_ERROR", None),
