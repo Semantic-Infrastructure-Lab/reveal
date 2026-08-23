@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.10', '3.12']
+        python-version: ['3.10', '3.12', '3.14']
 
     steps:
       - name: Checkout code
@@ -115,12 +115,14 @@ jobs:
     # silently flipping accessor method->property semantics, swallowed by a
     # broad except Exception) reach production undetected -- the main `test`
     # job above never installs a forced third-party version, so nothing here
-    # caught it before a live user did. Allowed to fail initially (visibility,
-    # not a merge gate) per BACK-1125's scope -- flip continue-on-error to
-    # false once this has run clean for a while.
+    # caught it before a live user did. Promoted to a real merge gate
+    # (continue-on-error: false) once BACK-1161's requires-python<3.14 cap
+    # lifted and both matrix legs (lp 1.12.5 and 1.14.3) verified clean on
+    # Python 3.14 -- 12,138 passed / 0 failed each, locally reproduced ahead
+    # of this flip.
     name: Compat matrix (Python ${{ matrix.python-version }}, tree-sitter-language-pack ${{ matrix.lp-version }})
     runs-on: ubuntu-latest
-    continue-on-error: true
+    continue-on-error: false
     strategy:
       fail-fast: false
       matrix:

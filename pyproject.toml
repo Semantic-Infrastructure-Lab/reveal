@@ -7,11 +7,7 @@ name = "reveal-cli"
 version = "0.121.0"
 description = "How AI agents understand codebases without wasting tokens — local-first, adapter-driven, progressive disclosure enforced by design"
 readme = "README.md"
-# Upper bound: on Python 3.14 the language-pack version reveal is pinned to (<=1.12.2, vendored
-# parser) produces unusable trees (no type/children). Capping at <3.14 makes pip refuse the install
-# with a clear message rather than installing something broken at runtime. Lift only once BACK-573's
-# core-tree-sitter API migration lands and the language-pack pin moves to >=1.12.5.
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Progressive Reveal Contributors", email = "scottsen@users.noreply.github.com"}
@@ -29,6 +25,8 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Code Generators",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Text Processing :: Markup",

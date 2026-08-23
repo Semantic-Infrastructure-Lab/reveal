@@ -702,7 +702,11 @@ class TestCliHelpOutput(unittest.TestCase):
     def test_name_flag_shown_as_primary_in_help(self):
         """--help must show --name as the primary flag, with --search as alias."""
         output = self._get_help_output()
-        self.assertIn('--name PATTERN, --search PATTERN', output,
+        # argparse's rendering of grouped aliases changed in Python 3.13: pre-3.13
+        # repeats the metavar after each alias ("--name PATTERN, --search PATTERN"),
+        # 3.13+ shows it once at the end ("--name, --search PATTERN"). Accept either
+        # so this test isn't tied to one interpreter's formatting.
+        self.assertRegex(output, r'--name(?: PATTERN)?, --search PATTERN',
                       '--help must show --name as primary with --search as alias')
 
     def test_grep_flag_in_help(self):
