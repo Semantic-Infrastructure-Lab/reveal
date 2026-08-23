@@ -2,8 +2,49 @@
 
 import re
 from fnmatch import fnmatch
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Set
 from ...utils.query import compare_values
+
+# Filter keys `matches_filters` special-cases (mapped to a differently-named
+# or derived element field, not a literal dict key) — always valid filter
+# vocabulary regardless of what's present on any scanned element. Keep in
+# sync with the elif chain in matches_filters() below (BACK-1111).
+SPECIAL_FILTER_KEYS = {
+    'type', 'lines', 'decorator', 'calls', 'callee_of',
+    'param_type', 'return_type', 'has_annotations', 'callers',
+}
+
+
+def find_unknown_filter_keys(structures: List[Dict[str, Any]], query: Dict[str, Any]) -> List[str]:
+    """Identify query filter keys that are neither special-cased nor present
+    as a literal field on any scanned element — the typo-vs-genuine-zero
+    disclosure for ast:// (BACK-1111).
+
+    Only meaningful to call when a query produced zero results: a key that's
+    never present anywhere is why nothing matched, distinguishing a typo'd
+    filter key from a genuine "0 elements have this value" answer.
+
+    Args:
+        structures: File structures scanned by this query
+        query: Query dict with filter conditions
+
+    Returns:
+        Sorted list of query keys never seen as a literal element field.
+    """
+    passthrough_keys = [k for k in query if k not in SPECIAL_FILTER_KEYS]
+    if not passthrough_keys:
+        return []
+
+    seen: Set[str] = set()
+    remaining = set(passthrough_keys)
+    for structure in structures:
+        for element in structure.get('elements', []):
+            seen.update(element.keys())
+            remaining -= seen
+            if not remaining:
+                return []
+
+    return sorted(remaining)
 
 
 def apply_filters(structures: List[Dict[str, Any]], query: Dict[str, Any]) -> List[Dict[str, Any]]:

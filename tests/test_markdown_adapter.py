@@ -395,6 +395,55 @@ class TestEdgeCases:
         assert len(result['results']) == 0
 
 
+class TestUnknownFilterFieldDisclosure:
+    """BACK-1111: a typo'd filter field and a genuine zero-match both render
+    as 'matched_files: 0' with no other signal -- disclosure must
+    distinguish them by checking whether the field ever appears in the
+    scanned corpus's front matter at all."""
+
+    def test_unknown_field_legacy_syntax_warns(self, sample_docs):
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='bogusparam=5')
+        result = adapter.get_structure()
+        assert result['matched_files'] == 0
+        hint_types = [h['type'] for h in result.get('hints', [])]
+        assert 'unknown_filter_field' in hint_types
+        message = next(h['message'] for h in result['hints']
+                        if h['type'] == 'unknown_filter_field')
+        assert 'bogusparam' in message
+
+    def test_unknown_field_new_syntax_warns(self, sample_docs):
+        # '>' routes through the new-syntax query_filters path, not legacy
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='nonexistent>10')
+        result = adapter.get_structure()
+        assert result['matched_files'] == 0
+        hint_types = [h['type'] for h in result.get('hints', [])]
+        assert 'unknown_filter_field' in hint_types
+
+    def test_genuine_zero_on_real_field_no_warning(self, sample_docs):
+        # 'status' is a real front-matter field on several files -- a value
+        # that matches none of them is a genuine answer, not a typo.
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='status=archived')
+        result = adapter.get_structure()
+        assert result['matched_files'] == 0
+        hint_types = [h['type'] for h in result.get('hints', [])]
+        assert 'unknown_filter_field' not in hint_types
+
+    def test_missing_field_operator_no_false_positive(self, sample_docs):
+        # '!field' (missing-field filter) matching 0 files means the field
+        # was present everywhere -- unrelated to the unknown-field case.
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='!title')
+        result = adapter.get_structure()
+        hint_types = [h['type'] for h in result.get('hints', [])]
+        assert 'unknown_filter_field' not in hint_types
+
+    def test_nonzero_results_no_warning(self, sample_docs):
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='status=active')
+        result = adapter.get_structure()
+        assert result['matched_files'] > 0
+        hint_types = [h['type'] for h in result.get('hints', [])]
+        assert 'unknown_filter_field' not in hint_types
+
+
 class TestBodyContainsFilter:
     """Tests for ?body-contains= body text search."""
 

@@ -13,7 +13,7 @@ from .queries import (
     extract_reveal_type_param as _extract_reveal_type_param,
 )
 from .analysis import collect_structures, PYTHON_BUILTINS
-from .filtering import apply_filters, matches_decorator
+from .filtering import apply_filters, matches_decorator, find_unknown_filter_keys
 from .help import get_help as _get_help, get_schema as _get_schema
 from .renderer import AstRenderer
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
@@ -214,6 +214,21 @@ class AstAdapter(ResourceAdapter):
 
         if not meta.get('warnings'):
             meta['warnings'] = []
+
+        # Disclose when a zero-result query traces to a filter key that never
+        # appeared on any scanned element — typo vs. genuine zero (BACK-1111)
+        if not filtered and self.query:
+            unknown_keys = find_unknown_filter_keys(structures, self.query)
+            if unknown_keys:
+                keys_str = ', '.join(f"'{k}'" for k in unknown_keys)
+                meta['warnings'].append({
+                    'type': 'unknown_filter_key',
+                    'message': (
+                        f"Filter key(s) {keys_str} never appear on any scanned element — "
+                        f"this may be a typo rather than a genuine zero-match. "
+                        f"See: reveal help://ast"
+                    )
+                })
 
         # Add truncation metadata if results were limited
         if self.result_control.limit or self.result_control.offset:

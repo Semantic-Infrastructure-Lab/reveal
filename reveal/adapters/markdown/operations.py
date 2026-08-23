@@ -51,10 +51,13 @@ def get_structure(
     candidates = grep_files(all_files, body_contains) if body_contains else all_files
 
     matched_results = []
+    seen_fields = set()
 
     # Build results for matching files
     for path in candidates:
         frontmatter = files.extract_frontmatter(path)
+        if frontmatter:
+            seen_fields.update(frontmatter.keys())
         if not filtering.matches_all_filters(frontmatter, filters, query_filters):
             continue
         if body_contains and not filtering.matches_body_contains(path, body_contains):
@@ -106,6 +109,10 @@ def get_structure(
 
     # Add hint when filter matches very few files (likely front matter mismatch)
     results.add_low_match_rate_hint(response, len(all_files), total_matches, filters)
+
+    # Disclose when a zero-match result traces to a filter field that never
+    # appeared in any scanned file's frontmatter — typo vs. genuine zero (BACK-1111)
+    results.add_unknown_filter_field_hint(response, total_matches, seen_fields, filters, query_filters)
 
     return response
 

@@ -256,5 +256,71 @@ class TestCallersFilter(unittest.TestCase):
         self.assertIsInstance(fns, dict)
 
 
+# ---------------------------------------------------------------------------
+# BACK-1111: unknown filter key disclosure on zero-match results
+# ---------------------------------------------------------------------------
+
+SIMPLE_CODE = '''
+def foo():
+    pass
+
+
+def bar():
+    pass
+'''
+
+
+class TestUnknownFilterKeyDisclosure(unittest.TestCase):
+    """A typo'd filter key must be distinguishable from a genuine zero-match:
+    both silently return "Results: 0" without disclosure, which is exactly
+    the failure class this ticket targets."""
+
+    def setUp(self):
+        self.path = _write_temp(SIMPLE_CODE)
+
+    def tearDown(self):
+        os.unlink(self.path)
+
+    def _structure(self, query_string: str):
+        return AstAdapter(self.path, query_string).get_structure()
+
+    def test_unknown_key_zero_match_warns(self):
+        s = self._structure('bogusparam=5')
+        self.assertEqual(s['total_results'], 0)
+        warning_types = [w['type'] for w in s['meta']['warnings']]
+        self.assertIn('unknown_filter_key', warning_types)
+        message = next(w['message'] for w in s['meta']['warnings']
+                        if w['type'] == 'unknown_filter_key')
+        self.assertIn('bogusparam', message)
+
+    def test_known_passthrough_field_genuine_zero_no_warning(self):
+        # 'name' is a real, always-present field -- a genuine zero-match
+        # (no function named this) must NOT be flagged as unknown.
+        s = self._structure('name=zzz_nonexistent_zzz')
+        self.assertEqual(s['total_results'], 0)
+        self.assertEqual(s['meta']['warnings'], [])
+
+    def test_special_cased_key_genuine_zero_no_warning(self):
+        # 'lines' is mapped via the special-case elif chain, not a literal
+        # dict key -- a genuine zero-match must NOT be flagged as unknown.
+        s = self._structure('lines>99999')
+        self.assertEqual(s['total_results'], 0)
+        self.assertEqual(s['meta']['warnings'], [])
+
+    def test_unknown_key_nonzero_results_no_warning(self):
+        # Disclosure only applies to zero-match results.
+        s = self._structure('type=function')
+        self.assertGreater(s['total_results'], 0)
+        self.assertEqual(s['meta']['warnings'], [])
+
+    def test_mixed_known_and_unknown_keys_warns_only_unknown(self):
+        s = self._structure('type=function&bogusparam=5')
+        self.assertEqual(s['total_results'], 0)
+        message = next(w['message'] for w in s['meta']['warnings']
+                        if w['type'] == 'unknown_filter_key')
+        self.assertIn('bogusparam', message)
+        self.assertNotIn("'type'", message)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -218,3 +218,52 @@ def add_low_match_rate_hint(
         if 'hints' not in response:
             response['hints'] = []
         response['hints'].append({'type': 'low_match_rate', 'message': hint})
+
+
+def add_unknown_filter_field_hint(
+    response: Dict[str, Any],
+    total_matches: int,
+    seen_fields: set,
+    filters: List[tuple],
+    query_filters: list,
+) -> None:
+    """Disclose when a zero-match result is caused by a filter field that
+    never appeared in any scanned file's frontmatter — distinguishing a
+    typo'd field name from a genuine "0 of N files have this value" answer
+    (BACK-1111).
+
+    The '!' (missing-field) operator is excluded: for that operator, zero
+    matches means the field WAS present everywhere, which is unrelated to
+    this disclosure.
+
+    Args:
+        response: Response dict to modify
+        total_matches: Number of files that matched
+        seen_fields: Union of frontmatter keys observed across scanned files
+        filters: Legacy (field, operator, value) filter tuples
+        query_filters: New-syntax QueryFilter objects (field/op/value)
+
+    Modifies response in place.
+    """
+    if total_matches != 0:
+        return
+
+    unknown_fields = sorted({
+        field for field, op, _value in filters
+        if op != '!' and field not in seen_fields
+    } | {
+        qf.field for qf in query_filters
+        if qf.op != '!' and qf.field not in seen_fields
+    })
+    if not unknown_fields:
+        return
+
+    fields_str = ', '.join(f"'{f}'" for f in unknown_fields)
+    hint = (
+        f"Filter field(s) {fields_str} never appear in any scanned file's "
+        f"front matter — this may be a typo rather than a genuine zero-match. "
+        f"See: reveal help://markdown"
+    )
+    if 'hints' not in response:
+        response['hints'] = []
+    response['hints'].append({'type': 'unknown_filter_field', 'message': hint})
