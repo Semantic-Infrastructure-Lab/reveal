@@ -214,6 +214,7 @@ class StatsAdapter(ResourceAdapter):
         """
         path, query_string = resource, query
         self.path = require_path_exists(Path(path).resolve())
+        self._churn_disclosure: Optional[str] = None  # BACK-1166: set by _compute_churn_counts
 
         # Parse query string with type coercion (for legacy params)
         self.query_params = parse_query_params(query_string or '', coerce=True)
@@ -363,10 +364,20 @@ class StatsAdapter(ResourceAdapter):
         churn is an optional scoring signal, not a hard requirement, so any
         error here degrades to today's complexity-only hotspot behavior
         rather than breaking `stats://`/`reveal hotspots`.
+
+        BACK-1166: "not a git repo" is a legitimate, silent None (nothing to
+        disclose). An actual failure (pygit2 missing, walk error) instead
+        records a reason in self._churn_disclosure for get_structure() to
+        surface — previously indistinguishable from "no churn requested".
         """
+        self._churn_disclosure: Optional[str] = None
         try:
             import pygit2
         except ImportError:
+            self._churn_disclosure = (
+                "churn scoring unavailable: pygit2 not installed "
+                "(hotspot ranking used complexity/size only)"
+            )
             return None
 
         try:
@@ -409,7 +420,11 @@ class StatsAdapter(ResourceAdapter):
                 for display, repo_rel in display_to_repo_rel.items()
                 if repo_rel in counts_by_repo_rel
             }
-        except Exception:
+        except Exception as e:
+            self._churn_disclosure = (
+                f"churn scoring failed: {e} "
+                "(hotspot ranking used complexity/size only)"
+            )
             return None
 
     def get_structure(self,
@@ -489,6 +504,11 @@ class StatsAdapter(ResourceAdapter):
             churn_counts = None
             if self.query_params.get('churn', True) is not False:
                 churn_counts = self._compute_churn_counts(controlled_stats)
+                if self._churn_disclosure:
+                    result.setdefault('warnings', []).append({
+                        'type': 'churn_unavailable',
+                        'message': self._churn_disclosure,
+                    })
             result['hotspots'] = identify_hotspots(controlled_stats, churn_counts=churn_counts)
 
         if summary_only:

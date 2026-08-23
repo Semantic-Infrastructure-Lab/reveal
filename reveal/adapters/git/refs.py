@@ -39,7 +39,7 @@ def get_ref_structure(
             limit = int(query.get('limit', 20))
             commits = get_commit_history_func(repo, commit_obj, limit=limit)
 
-            return ResultBuilder.create(
+            result = ResultBuilder.create(
                 result_type='git_ref',
                 source=f"{repo.workdir or repo.path}@{ref}",
                 source_type='directory',
@@ -49,6 +49,17 @@ def get_ref_structure(
                 history=commits,
                 filter_applied=bool(query_filters),
             )
+            # BACK-1166: surface a content-pattern search degradation, if the
+            # caller requested one (get_commit_history_func resets this
+            # before running).
+            from .files import get_content_search_disclosure
+            disclosure = get_content_search_disclosure()
+            if disclosure:
+                result.setdefault('warnings', []).append({
+                    'type': 'content_search_unavailable',
+                    'message': disclosure,
+                })
+            return result
         else:
             raise ValueError(f"Cannot resolve ref to commit: {ref}")
 

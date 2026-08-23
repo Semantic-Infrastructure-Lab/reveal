@@ -544,6 +544,36 @@ class TestStatsAdapterChurnIntegration:
         if result['hotspots']:
             assert 'commit_count' not in result['hotspots'][0]['details']
 
+    def test_non_git_directory_has_no_churn_warning(self, tmp_path):
+        """BACK-1166: 'not a git repo' is legitimate — must not be disclosed
+        as a churn failure (distinct from an actual pygit2/scan error)."""
+        (tmp_path / "core.py").write_text(TestHotspotsChurn.COMPLEX_CODE)
+
+        adapter = StatsAdapter(str(tmp_path))
+        result = adapter.get_structure(hotspots=True)
+
+        assert not any(w.get('type') == 'churn_unavailable' for w in result.get('warnings', []))
+
+    def test_pygit2_missing_discloses_churn_unavailable(self, churn_dir, monkeypatch):
+        """BACK-1166: when pygit2 can't be imported, hotspots must disclose
+        that churn scoring was skipped rather than silently omitting it —
+        confirmed live to previously produce byte-identical output either way."""
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == 'pygit2':
+                raise ImportError("simulated: pygit2 not installed")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', fake_import)
+
+        adapter = StatsAdapter(str(churn_dir))
+        result = adapter.get_structure(hotspots=True, summary_only=True)
+
+        warnings = result.get('warnings', [])
+        assert any(w.get('type') == 'churn_unavailable' for w in warnings)
+
 
 class TestQualityMetrics:
     """Test quality score and complexity calculations."""

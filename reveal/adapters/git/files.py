@@ -171,7 +171,16 @@ def get_file_diff(
         cmd = ['git', '-C', repo_root, 'diff', f'-U{context}',
                empty_tree, str(commit.id), '--', subpath]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
+    except FileNotFoundError as e:
+        # BACK-1166: match _check_pygit2()'s style of actionable guidance
+        # instead of letting a raw errno bubble up through main.py's
+        # generic handler.
+        raise ValueError(
+            "git:// diff requires the 'git' binary on PATH\n\n"
+            "Install git: https://git-scm.com/downloads"
+        ) from e
     diff_text = result.stdout
 
     if not diff_text:
@@ -257,6 +266,8 @@ def get_file_history(
 
         no_merges = query.get('no_merges') in ('1', 'true', 'yes')
         content_pattern: Optional[str] = query.get('content~') or query.get('content') or None
+        if content_pattern:
+            _reset_content_search_error()
 
         # Walk commit history
         walker = repo.walk(commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
@@ -280,7 +291,7 @@ def get_file_history(
         total_matches = len(commits)
         controlled_commits = apply_result_control(commits, result_control)
 
-        return ResultBuilder.create(
+        result = ResultBuilder.create(
             result_type='git_file_history',
             source=f"{subpath}@{ref}",
             source_type='file',
@@ -291,6 +302,14 @@ def get_file_history(
             count=len(controlled_commits),
             total_matches=total_matches if total_matches != len(controlled_commits) else None,
         )
+        if content_pattern:
+            disclosure = get_content_search_disclosure()
+            if disclosure:
+                result.setdefault('warnings', []).append({
+                    'type': 'content_search_unavailable',
+                    'message': disclosure,
+                })
+        return result
 
     except (KeyError, pygit2.GitError) as e:
         raise ValueError(f"Failed to get file history: {subpath}") from e
@@ -363,6 +382,27 @@ def get_file_timeline(
         raise ValueError(f"Failed to get file timeline: {subpath}") from e
 
 
+# BACK-1166: most recent content-pattern search failure, if any. Reset by
+# each of the three entry points that use _commit_diff_contains
+# (get_recent_commits, get_commit_history, get_file_history) so a caller can
+# tell "pattern genuinely not found" from "search silently degraded" instead
+# of both reading as zero matches.
+_content_search_error: Optional[str] = None
+
+
+def get_content_search_disclosure() -> Optional[str]:
+    """BACK-1166: one-line reason the content-pattern search degraded during
+    the most recent call, or None if it completed cleanly (or wasn't used).
+    Callers must reset via _reset_content_search_error() before a new search.
+    """
+    return _content_search_error
+
+
+def _reset_content_search_error() -> None:
+    global _content_search_error
+    _content_search_error = None
+
+
 def _commit_diff_contains(
     repo: 'pygit2.Repository',
     commit: 'pygit2.Commit',
@@ -373,7 +413,13 @@ def _commit_diff_contains(
 
     Searches the raw unified diff text, so it matches both added and removed
     lines (classic pickaxe behaviour). Pass subpath='' to search all files.
+
+    BACK-1166: on failure (e.g. the git binary is missing from PATH), records
+    the reason via _content_search_error rather than only logging it — used
+    as a match filter, so a silent failure here previously made every commit
+    fail the check, indistinguishable from a genuine "pattern not found".
     """
+    global _content_search_error
     import subprocess
     repo_root = repo.workdir.rstrip('/\\') if repo.workdir else '.'
     if commit.parents:
@@ -395,6 +441,10 @@ def _commit_diff_contains(
         return False
     except Exception as e:
         logger.warning("pattern search failed for commit %s: %s", commit.id, e)
+        _content_search_error = (
+            f"content-pattern search degraded: {e} "
+            "(results may be missing matches, not confirmed absent)"
+        )
         return False
 
 

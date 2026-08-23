@@ -24,7 +24,7 @@ def get_repository_overview(
     tags = list_tags_func(repo)
     recent_commits = get_recent_commits_func(repo, limit=10)
 
-    return ResultBuilder.create(
+    result = ResultBuilder.create(
         result_type='git_repository',
         source=repo.workdir or repo.path,
         source_type='directory',
@@ -48,6 +48,16 @@ def get_repository_overview(
             'head_detached': repo.head_is_detached if not repo.is_empty else False,
         }
     )
+    # BACK-1166: surface a content-pattern search degradation, if the caller
+    # requested one (get_recent_commits_func resets this before running).
+    from .files import get_content_search_disclosure
+    disclosure = get_content_search_disclosure()
+    if disclosure:
+        result.setdefault('warnings', []).append({
+            'type': 'content_search_unavailable',
+            'message': disclosure,
+        })
+    return result
 
 
 def get_recent_commits(
@@ -64,7 +74,8 @@ def get_recent_commits(
     import pygit2
 
     if content_pattern:
-        from .files import _commit_diff_contains
+        from .files import _commit_diff_contains, _reset_content_search_error
+        _reset_content_search_error()
 
     commits: List[Dict[str, Any]] = []
 
@@ -110,7 +121,8 @@ def get_commit_history(
     import pygit2
 
     if content_pattern:
-        from .files import _commit_diff_contains
+        from .files import _commit_diff_contains, _reset_content_search_error
+        _reset_content_search_error()
 
     commits = []
 

@@ -1766,6 +1766,78 @@ class TestContentPatternFilter:
         # If content~ were treated as a commit-dict filter, count would be 0.
         assert result['count'] >= 1
 
+    def test_clean_content_search_has_no_warnings(self, git_repo):
+        """BACK-1166: a content~= search that completes normally (git present,
+        no subprocess errors) must not carry a content_search_unavailable warning."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'history', 'content~': 'Updated content'},
+        )
+        result = adapter.get_structure()
+        assert not any(w.get('type') == 'content_search_unavailable' for w in result.get('warnings', []))
+
+    def test_missing_git_binary_discloses_content_search_unavailable(self, git_repo, monkeypatch):
+        """BACK-1166: when the git binary is absent, _commit_diff_contains used
+        to silently fail every commit's match check — a zero-result content~=
+        search was indistinguishable from 'pattern genuinely not found'. Now
+        it must carry a content_search_unavailable warning instead."""
+        import subprocess as subprocess_module
+        real_run = subprocess_module.run
+
+        def fake_run(cmd, *args, **kwargs):
+            if cmd and cmd[0] == 'git':
+                raise FileNotFoundError("simulated: git binary not found")
+            return real_run(cmd, *args, **kwargs)
+
+        monkeypatch.setattr(subprocess_module, 'run', fake_run)
+
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'history', 'content~': 'Updated content'},
+        )
+        result = adapter.get_structure()
+        assert result['count'] == 0
+        assert any(w.get('type') == 'content_search_unavailable' for w in result.get('warnings', []))
+
+    def test_missing_git_binary_discloses_on_repo_wide_search(self, git_repo, monkeypatch):
+        """Same disclosure, but through the repo-overview (no-subpath) path,
+        which threads through get_recent_commits/get_repository_overview
+        instead of get_file_history."""
+        import subprocess as subprocess_module
+        real_run = subprocess_module.run
+
+        def fake_run(cmd, *args, **kwargs):
+            if cmd and cmd[0] == 'git':
+                raise FileNotFoundError("simulated: git binary not found")
+            return real_run(cmd, *args, **kwargs)
+
+        monkeypatch.setattr(subprocess_module, 'run', fake_run)
+
+        adapter = GitAdapter(path=str(git_repo), query={'content~': 'Hello, World!'})
+        result = adapter.get_structure()
+        assert any(w.get('type') == 'content_search_unavailable' for w in result.get('warnings', []))
+
+
+class TestGetFileDiffMissingGitBinary:
+    """BACK-1166: get_file_diff must raise a clear, actionable error when the
+    git binary is absent — previously an uncaught FileNotFoundError."""
+
+    def test_raises_clear_valueerror(self, git_repo, monkeypatch):
+        import subprocess as subprocess_module
+        from reveal.adapters.git.files import get_file_diff
+        import pygit2
+
+        def fake_run(cmd, *args, **kwargs):
+            raise FileNotFoundError("simulated: git binary not found")
+
+        monkeypatch.setattr(subprocess_module, 'run', fake_run)
+
+        repo = pygit2.Repository(pygit2.discover_repository(str(git_repo)))
+        with pytest.raises(ValueError, match="git.*binary"):
+            get_file_diff(repo, 'HEAD', 'README.md', {})
+
 
 @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
 class TestNoMergesFilter:
