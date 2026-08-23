@@ -19,7 +19,9 @@ to the actual process exit code. `check_exit_code()`
 See internal-docs/design/EXIT_CODE_CONTRACT.md for the full contract.
 """
 
+from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -113,3 +115,51 @@ class TestDirectoryCheckExitCode:
         result = _run_reveal_direct("check", str(tmp_path), "--format", "json")
         assert result.returncode == 0
         assert '"exit_code": 0' in result.stdout
+
+
+class TestStdinCheckExitCode:
+    """`reveal --stdin --check` -- BACK-1099's originally-deferred follow-up
+    (documented in EXIT_CODE_CONTRACT.md's "not yet fixed" section): the
+    stdin file-list path dropped run_pattern_detection()'s `degraded` signal
+    entirely, so a piped-in file with a syntax error exited identically to
+    an all-clean run. Same fix pattern as TestDirectoryCheckExitCode above,
+    applied to reveal/cli/handlers/batch.py's handle_stdin_mode()."""
+
+    def _run_stdin_check(self, *paths):
+        with patch("sys.stdin", StringIO("\n".join(str(p) for p in paths) + "\n")):
+            return _run_reveal_direct("--stdin", "--check", "--format", "json")
+
+    def test_clean_file_exits_0(self, tmp_path):
+        f = _write_py(tmp_path, "clean.py", "def f():\n    return 1\n")
+        result = self._run_stdin_check(f)
+        assert result.returncode == 0
+
+    def test_syntax_error_file_exits_3_not_0(self, tmp_path):
+        f = _write_py(tmp_path, "broken.py", "def foo(:\n    pass\n")
+        result = self._run_stdin_check(f)
+        assert result.returncode == 3, (
+            f"Expected exit 3 (scan incomplete), got {result.returncode}:\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+    def test_mixed_clean_and_broken_exits_3(self, tmp_path):
+        broken = _write_py(tmp_path, "broken.py", "def foo(:\n    pass\n")
+        clean = _write_py(tmp_path, "clean.py", "def f():\n    return 1\n")
+        result = self._run_stdin_check(clean, broken)
+        assert result.returncode == 3
+
+    def test_syntax_error_and_clean_file_are_no_longer_indistinguishable(self, tmp_path):
+        broken = _write_py(tmp_path, "broken.py", "def foo(:\n    pass\n")
+        clean = _write_py(tmp_path, "clean.py", "def f():\n    return 1\n")
+        broken_result = self._run_stdin_check(broken)
+        clean_result = self._run_stdin_check(clean)
+        assert broken_result.returncode != clean_result.returncode
+
+    def test_plain_stdin_mode_unaffected(self, tmp_path):
+        """Non---check --stdin (just routing files through, no quality
+        check) must keep exiting 0 -- this fix only touches the --check
+        aggregation path, not stdin mode in general."""
+        f = _write_py(tmp_path, "clean.py", "def f():\n    return 1\n")
+        with patch("sys.stdin", StringIO(f"{f}\n")):
+            result = _run_reveal_direct("--stdin")
+        assert result.returncode == 0

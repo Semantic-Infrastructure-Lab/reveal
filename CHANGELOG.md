@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`reveal --stdin --check` now exits `3` (not `0`) when a piped-in file didn't parse cleanly (BACK-1099 follow-up)** — the file-list-via-stdin path dropped `run_pattern_detection()`'s `degraded` signal entirely, so a syntax-error file exited identically to an all-clean run. Now reuses `reveal check`'s own `check_exit_code()` contract, same as the directory-mode fix in `[0.122.0]`.
+
 ### Changed
 - **`help://quick`'s decision tree and `help://relationships`'s cluster membership now derive from each adapter class's own `HELP_CLUSTER`/`QUICK_RANK` attributes (`adapters/base.py`), not standalone dicts in `help.py` (BACK-1156)** — one source of truth at the adapter definition site, can't drift as adapters are added. Fixes the underlying gap `BACK-1154` diagnosed: 15 of 33 registered adapters (`architecture`, `overview`, `pack`, `hotspots`, `contracts`, `depends`, `surface`, `testability`, `patches`, `trace`, `deps`, `autossl`, `letsencrypt`, `json`, `reveal` self-adapter) were unreachable from `help://quick` even though they were already correctly listed in `help://relationships`. `help://quick`'s decision tree now appends one line per cluster naming whatever isn't already covered by its curated intent-based entries, so nothing is silently omitted (BACK-1157's completeness guarantee — a regression test asserts every non-internal registered adapter is reachable from `help://quick`, superseding the need for a separate CI self-check).
 

@@ -6,7 +6,7 @@ and multi-URI result rendering.
 
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Dict, List, Any
+from typing import TYPE_CHECKING, Optional, Dict, List, Any, Tuple
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -57,7 +57,9 @@ def _process_stdin_uri(target: str, args: 'Namespace', is_batch_mode: bool,
             print(f"Warning: {target} failed, skipping", file=sys.stderr)
 
 
-def _process_stdin_file(target: str, args: 'Namespace', handle_file_func, is_check_mode: bool = False) -> int:
+def _process_stdin_file(
+    target: str, args: 'Namespace', handle_file_func, is_check_mode: bool = False
+) -> Tuple[int, bool]:
     """Process a file path from stdin.
 
     Args:
@@ -67,23 +69,26 @@ def _process_stdin_file(target: str, args: 'Namespace', handle_file_func, is_che
         is_check_mode: When True, run quality check and return violation count
 
     Returns:
-        Violation count when is_check_mode is True, else 0.
+        (violation count, degraded) when is_check_mode is True, else (0, False).
+        degraded mirrors run_pattern_detection()'s BACK-1099 signal: the file
+        didn't parse cleanly or a rule raised, so `violations` on its own
+        isn't a trustworthy signal for this file.
     """
     path = Path(target)
 
     # Skip if path doesn't exist (graceful degradation)
     if not path.exists():
         print(f"Warning: {target} not found, skipping", file=sys.stderr)
-        return 0
+        return 0, False
 
     # Skip directories (only process files)
     if path.is_dir():
         print(f"Warning: {target} is a directory, skipping (use reveal {target}/ directly)", file=sys.stderr)
-        return 0
+        return 0, False
 
     # Process the file
     if not path.is_file():
-        return 0
+        return 0, False
 
     if is_check_mode:
         from reveal.file_handler import _get_analyzer_or_exit, _build_file_cli_overrides
@@ -93,19 +98,13 @@ def _process_stdin_file(target: str, args: 'Namespace', handle_file_func, is_che
         analyzer = _get_analyzer_or_exit(str(path), allow_fallback)
         cli_overrides = _build_file_cli_overrides(args)
         config = RevealConfig.get(start_path=path.parent, cli_overrides=cli_overrides or None)
-        # BACK-1099: `degraded` (file didn't parse cleanly / a rule raised)
-        # is intentionally dropped here -- --stdin --check's aggregate exit
-        # code (_calculate_batch_exit_code) doesn't yet have a distinct
-        # "degraded" tier, same gap as `reveal check`'s directory-mode text
-        # summary before this fix. Not addressed in this pass (see
-        # internal-docs/design/EXIT_CODE_CONTRACT.md's "not yet fixed" list).
-        violations, _degraded = run_pattern_detection(
+        violations, degraded = run_pattern_detection(
             analyzer, str(path), getattr(args, 'format', 'text'), args, config=config
         )
-        return violations
+        return violations, degraded
 
     handle_file_func(str(path), None, args.meta, args.format, args)
-    return 0
+    return 0, False
 
 
 def handle_stdin_mode(args: 'Namespace', handle_file_func):
@@ -135,6 +134,11 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     ssl_check_results: List[Dict[str, Any]] = []
     batch_results: List[dict] = []
     total_file_violations = 0
+    # BACK-1099: at least one --check'd file didn't parse cleanly / a rule
+    # raised. total_file_violations alone isn't a trustworthy signal when
+    # this is True — same shape as the directory-mode bug already fixed in
+    # reveal/cli/file_checker.py; see internal-docs/design/EXIT_CODE_CONTRACT.md.
+    any_file_degraded = False
 
     # Read paths/URIs from stdin (one per line)
     first_line_checked = False
@@ -162,9 +166,11 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
         else:
             # Apply --ext filter for file paths
             if _passes_ext_filter(target, getattr(args, 'ext', None)):
-                total_file_violations += _process_stdin_file(
+                violations, degraded = _process_stdin_file(
                     target, args, handle_file_func, is_check_mode=is_check_mode
                 )
+                total_file_violations += violations
+                any_file_degraded = any_file_degraded or degraded
 
     # Render aggregated batch results
     if batch_results:
@@ -175,6 +181,15 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     # Render aggregated SSL batch results if we collected any (legacy path)
     if ssl_check_results:
         _render_ssl_batch_results(ssl_check_results, args)
+
+    if is_check_mode:
+        # BACK-1099: reuse `reveal check`'s own 0/1/3 contract instead of
+        # this path's previous 0/1-only exit, so a degraded/unparseable
+        # file piped through --stdin --check is distinguishable from a
+        # clean run at the shell level, same as the directory-mode fix.
+        from reveal.cli.file_checker import check_exit_code
+        degraded_count = 1 if any_file_degraded else 0
+        sys.exit(check_exit_code(total_file_violations, files_degraded=degraded_count))
 
     sys.exit(1 if total_file_violations > 0 else 0)
 
