@@ -19,6 +19,7 @@ from .queries import (
     get_field_value,
     compare,
     filter_array,
+    find_unknown_filter_fields,
     apply_result_control,
     navigate_to_path
 )
@@ -295,11 +296,33 @@ class JsonAdapter(ResourceAdapter):
 
         # Apply filters
         if self.query_filters:
+            original = value
             value = filter_array(value, self.query_filters, get_field_value, compare)
+
+            # Disclose when a zero-match result traces to a filter field that
+            # never resolves on any scanned item -- typo vs. genuine zero
+            # (BACK-1165, same disclosure pattern as ast:///markdown:// in BACK-1111)
+            if not value:
+                unknown_fields = find_unknown_filter_fields(
+                    original, self.query_filters, get_field_value
+                )
+                if unknown_fields:
+                    fields_str = ', '.join(f"'{f}'" for f in unknown_fields)
+                    metadata['warnings'] = [{
+                        'type': 'unknown_filter_field',
+                        'message': (
+                            f"Filter field(s) {fields_str} never appear on any scanned item — "
+                            f"this may be a typo rather than a genuine zero-match. "
+                            f"See: reveal help://json"
+                        )
+                    }]
 
         # Apply result control (sort, limit, offset)
         if has_result_control:
-            value, metadata = apply_result_control(value, self.result_control, get_field_value)
+            value, rc_metadata = apply_result_control(value, self.result_control, get_field_value)
+            if 'warnings' in rc_metadata and 'warnings' in metadata:
+                metadata['warnings'].extend(rc_metadata.pop('warnings'))
+            metadata.update(rc_metadata)
 
         return value, metadata
 

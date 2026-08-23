@@ -503,6 +503,45 @@ class TestJsonAdapterFiltering(unittest.TestCase):
         users = result['value']
         self.assertEqual(len(users), 0)  # No users have this field
 
+    def test_unknown_filter_field_discloses_on_zero_match(self):
+        """BACK-1165: a typo'd filter field on a zero-match query should be
+        disclosed as a warning, distinguishing it from a genuine zero."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'statuz=active')
+        result = adapter.get_structure()
+
+        self.assertEqual(result['value'], [])
+        warnings = result.get('warnings', [])
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0]['type'], 'unknown_filter_field')
+        self.assertIn("'statuz'", warnings[0]['message'])
+
+    def test_known_filter_field_zero_match_no_warning(self):
+        """A genuine zero-match on a real field must NOT be flagged as unknown."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'status=nonexistent_value')
+        result = adapter.get_structure()
+
+        self.assertEqual(result['value'], [])
+        self.assertNotIn('warnings', result)
+
+    def test_unknown_filter_field_nested_path(self):
+        """Nested dot-path fields should be checked for literal presence too."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'profile.nickname=Al')
+        result = adapter.get_structure()
+
+        self.assertEqual(result['value'], [])
+        warnings = result.get('warnings', [])
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("'profile.nickname'", warnings[0]['message'])
+
+    def test_missing_field_negation_no_unknown_warning(self):
+        """The '!' negation operator means 'field WAS present everywhere' on
+        zero matches -- unrelated to the unknown-filter-field disclosure."""
+        adapter = JsonAdapter(f'{self.users_json}/users', '!status')
+        result = adapter.get_structure()
+
+        self.assertEqual(result['value'], [])  # every user has 'status'
+        self.assertNotIn('warnings', result)
+
     def test_sort_missing_field(self):
         """Should handle sorting by missing field."""
         # Add a user without score field
