@@ -70,7 +70,7 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures" / "smoke"
 # rather than forcing one naming scheme). `var` is the name --varflow should
 # track inside the process function — PHP requires its `$` sigil (BACK-203,
 # a deliberate, tested convention — see TestPhpVarflow in
-# tests/adapters/test_ast_nav_probe_features.py).
+# tests/adapters/test_ast_nav_deps_varflow.py).
 LANGUAGES = {
     # Tier A's kotlin/swift/ruby/php were promoted to tier-1 (BACK-477,
     # resoyere-0707) — they now carry full expected.yaml ground truth in
