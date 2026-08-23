@@ -229,6 +229,21 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
             return self._extract_kotlin_delegation(node)
         return super()._extract_class_bases(node)
 
+    def _extract_decorators(self, node) -> List[str]:
+        """Kotlin annotations (BACK-1087, D1 Phase-2b): same shape as Java --
+        live in a 'modifiers' child of the class/method node itself, as an
+        'annotation' child node (`@Deprecated("old")`) -- verified via direct
+        tree-sitter parse of `@Deprecated("old")\nclass Reporter : Batch() {}`.
+        """
+        decorators: List[str] = []
+        for child in _children(node):
+            if _zero_arg(child, 'kind') != 'modifiers':
+                continue
+            for modifier in _children(child):
+                if _zero_arg(modifier, 'kind') == 'annotation':
+                    decorators.append(self._get_node_text(modifier))
+        return decorators
+
     def _extract_kotlin_delegation(self, node) -> List[str]:
         # class Circle : Base(), Drawable  /  interface Drawable : Shape
         names: List[str] = []

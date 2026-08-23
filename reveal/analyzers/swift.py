@@ -47,6 +47,21 @@ class SwiftAnalyzer(TreeSitterAnalyzer):
             return self._extract_swift_inheritance(node)
         return super()._extract_class_bases(node)
 
+    def _extract_decorators(self, node) -> List[str]:
+        """Swift attributes (BACK-1087, D1 Phase-2b): same shape as Java/Kotlin
+        -- live in a 'modifiers' child of the class/method node itself, as an
+        'attribute' child node (`@objc`, `@discardableResult`) -- verified via
+        direct tree-sitter parse of `@objc\nclass Reporter: Batch {}`.
+        """
+        decorators: List[str] = []
+        for child in _children(node):
+            if _zero_arg(child, 'kind') != 'modifiers':
+                continue
+            for modifier in _children(child):
+                if _zero_arg(modifier, 'kind') == 'attribute':
+                    decorators.append(self._get_node_text(modifier))
+        return decorators
+
     # ── extension declarations (BACK-8xx) ───────────────────────────────────
     # tree-sitter-swift parses `extension Foo: Protocol { ... }` as a
     # 'class_declaration' node (same kind as class/struct/enum, distinguished

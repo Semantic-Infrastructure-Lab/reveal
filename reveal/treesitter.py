@@ -1327,6 +1327,17 @@ class TreeSitterAnalyzer(FileAnalyzer):
                         'line': line_start,
                         'line_end': line_end,
                         'name': name,
+                        # BACK-1087 (D1 Phase-2b): structs are a separate
+                        # extraction path from _build_class_dict's classes,
+                        # so they never picked up the polymorphic
+                        # _extract_decorators(node) hook -- Rust's
+                        # `#[derive(Debug)]\nstruct Reporter { ... }` read
+                        # decorators: [] even after the Rust override shipped,
+                        # because struct_item goes through here, not
+                        # _extract_undecorated_classes. Default no-op for
+                        # every other struct-bearing language (C/C++/Go),
+                        # same as _extract_decorators's own default.
+                        'decorators': self._extract_decorators(node),
                     })
 
         return structs

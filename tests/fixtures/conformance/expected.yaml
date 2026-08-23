@@ -339,7 +339,7 @@ rust:
   # BACK-1106: both xfail'd. decorators (D1) -- #[derive(Debug)] on Reporter
   # isn't extracted yet. bases (D2) -- `impl Trait for T` doesn't populate
   # bases, so Reporter's Summary impl is invisible.
-  decorators: {target: Reporter, category: structs, expected: ["#[derive(Debug)]"], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  decorators: {target: Reporter, category: structs, expected: ["#[derive(Debug)]"]}
   bases: {target: Reporter, category: structs, expected: ["Summary"], xfail: "BACK-1088 (D2): Rust trait impls (`impl Trait for T`) don't populate bases"}
 
 typescript:
@@ -460,7 +460,7 @@ kotlin:
   - {kind: cache, line: 38}
   # BACK-1106: decorators (D1) xfail'd -- @Deprecated("old") on Reporter
   # isn't extracted yet. bases already works for ordinary class inheritance.
-  decorators: {target: Reporter, category: classes, expected: ['@Deprecated("old")'], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  decorators: {target: Reporter, category: classes, expected: ['@Deprecated("old")']}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
 
 swift:
@@ -499,7 +499,7 @@ swift:
   - {kind: cache, line: 39}
   # BACK-1106: decorators (D1) xfail'd -- @objc on Reporter isn't extracted
   # yet. bases already works for ordinary class inheritance.
-  decorators: {target: Reporter, category: classes, expected: ["@objc"], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  decorators: {target: Reporter, category: classes, expected: ["@objc"]}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
 
 ruby:
@@ -585,5 +585,5 @@ php:
   - {kind: cache, line: 39}
   # BACK-1106: decorators (D1) xfail'd -- #[Deprecated] on Reporter isn't
   # extracted yet. bases already works for ordinary class inheritance.
-  decorators: {target: Reporter, category: classes, expected: ["#[Deprecated]"], xfail: "BACK-1087 (D1): decorators only extracted for Python"}
+  decorators: {target: Reporter, category: classes, expected: ["#[Deprecated]"]}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}

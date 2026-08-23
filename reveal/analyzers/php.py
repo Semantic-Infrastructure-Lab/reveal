@@ -57,6 +57,18 @@ class PhpAnalyzer(TreeSitterAnalyzer):
             return self._extract_php_clause_names(node, 'base_clause')
         return super()._extract_class_bases(node)
 
+    def _extract_decorators(self, node) -> List[str]:
+        """PHP attributes (BACK-1087, D1 Phase-2b): same shape as C# -- each
+        '#[Foo]'/'#[Foo(...)]' is its own 'attribute_list' node, a direct
+        child of the class/method node itself -- verified via direct
+        tree-sitter parse of `#[Deprecated]\nclass Reporter extends Batch {}`.
+        """
+        return [
+            self._get_node_text(child)
+            for child in _children(node)
+            if _zero_arg(child, 'kind') == 'attribute_list'
+        ]
+
     def _is_abstract_class_node(self, node) -> bool:
         # abstract class Base { ... } — 'abstract' parses to its own
         # 'abstract_modifier' node child (distinct node kind, not a token).
