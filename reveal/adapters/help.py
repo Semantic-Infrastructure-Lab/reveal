@@ -1343,12 +1343,22 @@ class HelpAdapter(ResourceAdapter):
     ]
 
     def _decision_tree_coverage_gaps(self) -> List[Dict[str, str]]:
-        """One line per cluster for adapters the curated entries above never
-        name — the mechanical completeness guarantee BACK-1154 asked for."""
+        """One line per cluster for adapters not already reachable via the
+        curated entries above or the top-N commands block — the mechanical
+        completeness guarantee BACK-1154 asked for, without repeating an
+        adapter that's already visible elsewhere on the same page."""
         mentioned = set()
         for entry in self._CURATED_DECISION_TREE:
             mentioned.update(re.findall(r'([a-zA-Z_]+)://', entry['use']))
-        mentioned.discard('help')
+        # Already shown with a concrete example in the top-N commands block
+        # (QUICK_RANK is set) — repeating it here as a bare name would be
+        # noise, not new information.
+        for scheme, adapter_class in _ADAPTER_REGISTRY.items():
+            if getattr(adapter_class, 'QUICK_RANK', None) is not None:
+                mentioned.add(scheme)
+        # 'help' is the page being read — pointing help://quick at itself
+        # via help://relationships is circular, not a useful discovery path.
+        mentioned.add('help')
 
         gaps = []
         for cluster, schemes in sorted(self._cluster_membership().items()):

@@ -1111,6 +1111,41 @@ class TestDecisionTreeClusterCoverage(unittest.TestCase):
         }
         self.assertTrue(previously_missing.issubset(reachable), reachable)
 
+    def test_decision_tree_gaps_dont_repeat_ranked_commands(self):
+        # A scheme already shown with a concrete example in the top-N
+        # commands block shouldn't also show up as a bare name in a
+        # decision_tree cluster-coverage line — that's noise, not new
+        # information (caught live: 'stats' had QUICK_RANK=2 but was
+        # missing from the curated decision_tree entries, so it got a
+        # redundant "other Code Analysis tooling: ..., stats, ..." line).
+        import re
+        from reveal.adapters.help import HelpAdapter
+        a = HelpAdapter('help://quick')
+        result = a.get_element('quick')
+        ranked_schemes = set(
+            scheme for cmd in result['commands']
+            for scheme in re.findall(r'([a-zA-Z_]+)://', cmd['cmd'])
+        )
+        gap_schemes = set()
+        for entry in result['decision_tree']:
+            if entry['use'] != 'help://relationships':
+                continue
+            gap_schemes.update(entry['want'].rsplit(':', 1)[-1].replace(' ', '').split(','))
+        overlap = ranked_schemes & gap_schemes
+        self.assertEqual(overlap, set(), f"schemes shown in both commands and gap lines: {overlap}")
+
+    def test_help_never_points_at_itself_in_decision_tree(self):
+        # 'help' is the page being read — a "go see help://relationships for
+        # more help adapters" pointer is circular, not a discovery path.
+        from reveal.adapters.help import HelpAdapter
+        a = HelpAdapter('help://quick')
+        result = a.get_element('quick')
+        for entry in result['decision_tree']:
+            if entry['use'] != 'help://relationships':
+                continue
+            names = entry['want'].rsplit(':', 1)[-1].replace(' ', '').split(',')
+            self.assertNotIn('help', names, entry['want'])
+
 
 class TestRenderHelpRelationships(unittest.TestCase):
     """Tests for help://relationships renderer."""
