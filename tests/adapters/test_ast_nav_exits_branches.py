@@ -237,12 +237,11 @@ class TestCollectExits(unittest.TestCase):
         func = _find_func(root, get_text, 'f')
         from reveal.adapters.ast.nav import collect_exits
         exits = collect_exits(func, 1, 999, get_text)
-        # 'return x' is RETURN; die(x) should be EXIT
-        kinds = {e['kind'] for e in exits}
-        self.assertIn('RETURN', kinds)
-        # die() may or may not be detected depending on tree-sitter Python grammar
-        # (it's not a keyword in Python, just a bare call).  The important thing
-        # is no crash and at least RETURN is found.
+        # die() is callee-name detected (nav_exits._EXIT_CALL_NAMES), not
+        # grammar-dependent, so it's EXIT regardless of language.
+        kinds_by_text = {e['text']: e['kind'] for e in exits}
+        self.assertEqual(kinds_by_text.get('die(x)'), 'EXIT')
+        self.assertEqual(kinds_by_text.get('return x'), 'RETURN')
 
     def test_no_exits_in_trivial_function(self):
         code = """
