@@ -30,6 +30,47 @@ from ...utils.results import ResultBuilder
 suppress_treesitter_warnings()
 
 
+def _degraded_conformance_warning(elements: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """BACK-1086: ast:// hardcodes confidence=1.0 for any non-empty result,
+    regardless of how much the scanned language's analyzer actually
+    extracts — a caller sees the same confidence:1.0 for a Python scan
+    (tier1-verified) as for a language with only smoke-tested or
+    structure-only support. Surface which languages among the *returned*
+    elements are below tier1-verified so that gap is disclosed instead of
+    silently uniform, matching the warnings-array pattern already used for
+    truncation/auto-cap in get_structure() below.
+
+    Deliberately does not touch the numeric `confidence` field itself —
+    deriving one scalar confidence for a directory scan spanning multiple
+    languages of different conformance tiers is a separate design question
+    (see BACK-1086's notes), not resolved by this disclosure.
+    """
+    from ...capabilities import get_capability_for_extension, CONFORMANCE_TIER1_VERIFIED
+
+    degraded: Dict[str, str] = {}
+    seen_exts = set()
+    for elem in elements:
+        ext = os.path.splitext(elem.get('file', ''))[1].lower()
+        if not ext or ext in seen_exts:
+            continue
+        seen_exts.add(ext)
+        profile = get_capability_for_extension(ext)
+        if profile is not None and profile.conformance_level != CONFORMANCE_TIER1_VERIFIED:
+            degraded[profile.language] = profile.conformance_level
+
+    if not degraded:
+        return None
+    languages = ', '.join(f"{lang} ({level})" for lang, level in sorted(degraded.items()))
+    return {
+        'type': 'degraded_language_conformance',
+        'message': (
+            f"Results include language(s) below tier1-verified conformance: "
+            f"{languages}. Structure extraction may be incomplete for these "
+            f"files — see reveal --language-info <ext> for details."
+        ),
+    }
+
+
 @register_adapter('ast')
 @register_renderer(AstRenderer)
 class AstAdapter(ResourceAdapter):
@@ -214,6 +255,10 @@ class AstAdapter(ResourceAdapter):
 
         if not meta.get('warnings'):
             meta['warnings'] = []
+
+        degraded_warning = _degraded_conformance_warning(controlled)
+        if degraded_warning:
+            meta['warnings'].append(degraded_warning)
 
         # Disclose when a zero-result query traces to a filter key that never
         # appeared on any scanned element — typo vs. genuine zero (BACK-1111)

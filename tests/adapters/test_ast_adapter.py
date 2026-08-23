@@ -279,6 +279,48 @@ class TestAstAdapterAutoCap(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# get_structure: degraded-conformance disclosure (BACK-1086)
+# ---------------------------------------------------------------------------
+
+class TestAstAdapterDegradedConformanceWarning(unittest.TestCase):
+    """meta.confidence was uniformly 1.0/0.0 regardless of how much a
+    scanned language's analyzer actually extracts -- a caller could not
+    tell 'full tier1 extraction' from 'best-effort structure-only'. This
+    disclosure surfaces that gap via meta.warnings without changing the
+    confidence field itself (BACK-1086)."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_structure_only_language_warns(self):
+        _write(self.tmpdir, 'script.sh', '#!/bin/bash\nfoo() {\n  echo hi\n}\n')
+        adapter = AstAdapter(self.tmpdir)
+        result = adapter.get_structure()
+        warning_types = [w['type'] for w in result['meta']['warnings']]
+        self.assertIn('degraded_language_conformance', warning_types)
+
+    def test_tier1_language_has_no_warning(self):
+        _write(self.tmpdir, 'foo.py', 'def foo():\n    return 1\n')
+        adapter = AstAdapter(self.tmpdir)
+        result = adapter.get_structure()
+        warning_types = [w['type'] for w in result['meta']['warnings']]
+        self.assertNotIn('degraded_language_conformance', warning_types)
+
+    def test_confidence_field_unchanged_by_degraded_language(self):
+        """Deliberate: this disclosure does not touch confidence (see
+        BACK-1086 notes on why a single scalar for mixed-language scans is
+        a separate design question)."""
+        _write(self.tmpdir, 'script.sh', '#!/bin/bash\nfoo() {\n  echo hi\n}\n')
+        adapter = AstAdapter(self.tmpdir)
+        result = adapter.get_structure()
+        self.assertEqual(result['meta']['confidence'], 1.0)
+
+
+# ---------------------------------------------------------------------------
 # get_structure: builtin filtering
 # ---------------------------------------------------------------------------
 
