@@ -655,6 +655,14 @@ files) were off by ~4x by the time anyone next checked.
 
 ## Revision History
 
+- **2026-08-22** (BACK-1148, all children done): Test suite architecture
+  effort complete — BACK-1149 (marker taxonomy + run lanes, documented
+  above), BACK-1150, BACK-1151 (`test_ast_nav_probe_features.py` monolith
+  split into 6 files by feature area), BACK-1152 (MCP lane perf fix), and
+  BACK-1153 (theater-test audit of all 3 named candidate files — found and
+  fixed exactly one overclaiming test, `test_die_exit_call_detected`;
+  everything else audited was solid-semantic, not theater). See `tt show
+  BACK-1148` for the full history across sessions.
 - **2026-08-21** (BACK-1150): Replaced hardcoded test/file/coverage counts
   (stale by ~4x) with regenerate-live commands throughout; noted the actual
   marker taxonomy is still unit/integration/slow pending BACK-1149.
