@@ -303,44 +303,32 @@ reveal-mcp --help
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | reveal-mcp
 ```
 
-### Known limitation: the server can die under heavy concurrent tool calls
+### Resolved: the server used to die under heavy concurrent tool calls
 
-If the server disappears mid-session — the client reports `Connection closed`,
-or several in-flight tool calls fail at once — this is a known upstream issue,
-not a misconfiguration.
+Earlier releases could hit a server crash — the client reporting
+`Connection closed`, or several in-flight tool calls failing at once — under
+sustained heavy parallel `reveal_*` calls. This is fixed as of the
+`tree-sitter-language-pack>=1.8.1` / `tree-sitter<0.26.0` pins (`BACK-1161`)
+and no longer needs a workaround; kept here for anyone debugging an older
+install.
 
-**Cause.** reveal's pinned `tree-sitter-language-pack` supplies a parser whose
-`Tree` objects carry a hard thread-affinity contract (they are pyo3
-`unsendable` types). `reveal-mcp` runs each tool call on its own worker thread,
-and Python's cyclic garbage collector can reclaim a `Tree` on a *different*
-thread than the one that built it. That violates the contract and can abort the
-process outright — an abort that cannot be caught and handled from Python.
+**Cause.** reveal's previously-pinned `tree-sitter-language-pack<1.12.5`
+supplied a parser whose `Tree` objects carried a hard thread-affinity
+contract (they are pyo3 `unsendable` types). `reveal-mcp` runs each tool call
+on its own worker thread, and Python's cyclic garbage collector could reclaim
+a `Tree` on a *different* thread than the one that built it. That violated the
+contract and could abort the process outright — an abort that cannot be caught
+and handled from Python.
 
-**How likely.** Uncommon in normal use. Ordinary sequential calls, and modest
-concurrent batches, are fine — the most frequent trigger was fixed by making the
-parse cache thread-local. What remains is a garbage-collection timing window,
-so it is most likely under sustained heavy parallel tool calls across many
-files.
-
-**Workarounds if you hit it.**
-
-- Restart the MCP server (most clients reconnect on the next tool call).
-- Reduce how many `reveal_*` calls your client issues in parallel.
-- Scope large scans: prefer `reveal_check`/`reveal_structure` on a subdirectory
-  over a whole large repo, and use `reveal_pack`'s `budget` for breadth.
-- For a one-off large analysis, shell out to the `reveal` CLI instead — the CLI
-  is single-threaded per process and is not affected.
-
-**Fix.** Removing the failure class entirely requires moving past the
-`tree-sitter-language-pack<1.12.5` pin, which hands reveal the core
-`tree-sitter` C binding (no thread-affinity constraint) instead of the
-vendored pyo3 parser this bug depends on. As of `BACK-1161`,
-`pyproject.toml` has dropped that ceiling (`tree-sitter-language-pack>=1.8.1`,
-no upper bound), so a fresh install should no longer hit this class of
-crash — but it is not yet independently re-verified against this specific
-failure mode (`BACK-1146` note #6), so this caveat stays until confirmed.
-See [PyO3 #3688](https://github.com/PyO3/pyo3/issues/3688) for the
-underlying upstream behavior.
+**Fix.** Moving past the `tree-sitter-language-pack<1.12.5` pin hands reveal
+the core `tree-sitter` C binding (no thread-affinity constraint) instead of
+the vendored pyo3 parser this bug depended on. `pyproject.toml` now requires
+`tree-sitter-language-pack>=1.8.1` (no upper bound) — verified fixed
+(`BACK-1146` note #7): fresh venv, `tree-sitter-language-pack==1.14.3`, the
+original concurrent-GC repro (previously ~4,900 errors + `SIGABRT`) now exits
+clean. If you still hit a crash on a current install, restart the MCP server
+and file an issue — see [PyO3 #3688](https://github.com/PyO3/pyo3/issues/3688)
+for the underlying upstream behavior.
 
 ---
 
