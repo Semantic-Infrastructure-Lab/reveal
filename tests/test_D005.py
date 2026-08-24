@@ -308,5 +308,80 @@ class TestD005Ceiling(unittest.TestCase):
         self.assertEqual(len({fp for fp, _, _ in only}), 4)
 
 
+class TestD005VanishingDirectory(unittest.TestCase):
+    """Regression for the CI failure where D005 crashed with WinError 3 /
+    FileNotFoundError when a directory it queued for traversal was deleted
+    before it descended into it -- a real TOCTOU race against concurrent
+    deletion, not hypothetical: it hit every Windows CI run because
+    ``_find_project_root`` falls back to a bare file's own parent (no
+    project marker above a throwaway temp file), landing D005 on the
+    shared, high-churn OS temp directory."""
+
+    def setUp(self):
+        _clear_index()
+        self.rule = D005()
+        self._tmpdir = tempfile.mkdtemp()
+        Path(self._tmpdir, 'pyproject.toml').write_text('[project]\nname="t"')
+
+    def tearDown(self):
+        _clear_index()
+
+    def test_directory_deleted_between_scandir_calls_does_not_crash(self):
+        """A subdirectory that vanishes after being listed by its parent but
+        before being scanned itself must be skipped, not crash the scan."""
+        code = "EXTS = ['.py', '.js', '.ts', '.rs', '.go']\n"
+        _write(self._tmpdir, 'stable.py', code)
+        vanishing = Path(self._tmpdir, 'vanishing_subdir')
+        vanishing.mkdir()
+        _write(str(vanishing), 'also.py', code)
+
+        real_scandir = os.scandir
+
+        def flaky_scandir(path='.'):
+            # Simulates the directory having been deleted by another process
+            # between its parent listing it and this call descending into
+            # it -- no real deletion needed, just the OS-level error a real
+            # race would raise (errno 2 on POSIX / WinError 3 on Windows).
+            if Path(path) == vanishing:
+                raise FileNotFoundError(2, "No such file or directory")
+            return real_scandir(path)
+
+        with mock.patch('os.scandir', side_effect=flaky_scandir):
+            index = _build_index(Path(self._tmpdir), self.rule)
+
+        # The vanished subdirectory contributes nothing, but the scan
+        # completes and still indexes the sibling file that survived.
+        self.assertEqual(len(index), 1)
+        only = next(iter(index.values()))
+        self.assertEqual([Path(fp).name for fp, _, _ in only], ['stable.py'])
+
+    def test_file_deleted_before_is_dir_check_does_not_crash(self):
+        """An entry that vanishes between being listed and its is_dir() check
+        (e.g. another process deletes it concurrently) must be skipped."""
+        code = "EXTS = ['.py', '.js', '.ts', '.rs', '.go']\n"
+        _write(self._tmpdir, 'stable.py', code)
+
+        class _FlakyEntry:
+            name = 'ghost.py'
+            path = str(Path(self._tmpdir, 'ghost.py'))
+
+            def is_dir(self, follow_symlinks=False):
+                raise FileNotFoundError(2, "No such file or directory")
+
+        real_scandir = os.scandir
+
+        def scandir_with_ghost(path='.'):
+            if Path(path) == Path(self._tmpdir):
+                return list(real_scandir(path)) + [_FlakyEntry()]
+            return real_scandir(path)
+
+        with mock.patch('os.scandir', side_effect=scandir_with_ghost):
+            index = _build_index(Path(self._tmpdir), self.rule)
+
+        self.assertEqual(len(index), 1)
+        only = next(iter(index.values()))
+        self.assertEqual([Path(fp).name for fp, _, _ in only], ['stable.py'])
+
+
 if __name__ == '__main__':
     unittest.main()

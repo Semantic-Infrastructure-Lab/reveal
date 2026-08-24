@@ -26,7 +26,7 @@ import hashlib
 import logging
 import os
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, Iterator, List, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
@@ -261,6 +261,38 @@ class D005(BaseRule, ASTParsingMixin):
 
 # ── Index builder ─────────────────────────────────────────────────────────────
 
+def _iter_py_files(root: Path) -> Iterator[Path]:
+    """Yield .py files under root, tolerating a directory that vanishes mid-scan.
+
+    ``Path.rglob`` raises ``FileNotFoundError`` (Windows: WinError 3) if a
+    subdirectory it queued for traversal is deleted between when its parent
+    was listed and when rglob descends into it -- a real TOCTOU race, not a
+    hypothetical one: when ``_find_project_root`` falls back to a file's own
+    parent (no ``.reveal.yaml``/VCS marker found -- e.g. a throwaway file
+    outside any project), that parent can be a shared, high-churn directory
+    like the OS temp dir, where sibling entries are actively created/deleted
+    by unrelated processes. Manual stack-based walk so one vanished directory
+    is skipped instead of aborting the whole scan (mirrors the per-file
+    ``except OSError: continue`` a few lines below, for the same reason).
+    """
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        try:
+            entries = list(os.scandir(current))
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                is_dir = entry.is_dir(follow_symlinks=False)
+            except OSError:
+                continue
+            if is_dir:
+                stack.append(Path(entry.path))
+            elif entry.name.endswith('.py'):
+                yield Path(entry.path)
+
+
 def _build_index(
     project_root: Path, rule: D005
 ) -> Dict[str, List[Tuple[str, int, str]]]:
@@ -273,7 +305,7 @@ def _build_index(
     """
     ceiling = _max_project_files()
     py_files: List[Path] = []
-    for p in project_root.rglob('*.py'):
+    for p in _iter_py_files(project_root):
         if _should_skip_path(p):
             continue
         py_files.append(p)
