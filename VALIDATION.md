@@ -1511,6 +1511,75 @@ The one materially different case is **TypeScript/nest**, whose 701 pre-fix /
 1,071 post-fix figures reflect an *undercount* condition rather than safe
 over-inclusion — see that row and BACK-694/BACK-698.
 
+### Precision, computed [BACK-1094]
+
+The paragraphs above triage false positives narratively; this table turns
+that into a tracked number. Precision = hit / (hit + extra), computed
+per-(language, signal) from the `extra_fp`/`extra_examples` fields every
+`diff_recall*.py` script in `dogfood-findings/` already emits, or from a
+recall-oracle's own already-published precision column where the oracle
+computes it directly (`surface`/`contracts`/`cli`/`http`/`env` families).
+No oracle was re-run to build this table — it is arithmetic over runs that
+already exist, per the Layer 0 charge in
+[PRECISION_MEASUREMENT_STRATEGY.md](../internal-docs/planning/PRECISION_MEASUREMENT_STRATEGY.md).
+Full per-oracle numbers, including every file this table's rows were pulled
+from, are in
+[BACK-1094-precision-computation-notes.md](../internal-docs/planning/BACK-1094-precision-computation-notes.md).
+
+| Language / corpus | Signal | Sampled hits | Extras (FP) | Precision | Mechanism | Notes |
+|---|---|---|---|---|---|---|
+| C++ (Assimp) | `calls://` | 5,055 | 1,015 | **83.28%** | 5 (new, see below) | Lowest precision figure in this sweep. Bare-name fan-out across unrelated classes' `size`/`string`/`push_back`/`begin`/`Create`/`Read` — real call sites, wrong declaration attributed. |
+| C (Redis) | `calls://` | 4,022 | 50 | 98.77% | 1 + 5 | 2 event-loop-backend files (`ae_kqueue.c`/`ae_evport.c`, platform-conditional) plus libc-name fan-out. Corpus no longer on disk; pattern-classified, not re-read. |
+| Lua (Kong) | `calls://` | 4,971 | 31 | 99.38% | 5 | Stdlib-shaped names (`find`/`type`/`sub`/`ipairs`) called pervasively. Corpus no longer on disk; pattern-classified. |
+| Ruby | `calls://` | 7,196 | 1 | 99.99% | — | Single extra, too small to chase. |
+| Go, Java, JS×2, Kotlin, PHP, Rust, C#, Dart, Scala, Swift, TS, Zig | `calls://` | — | 0 | 100.00% | — | No extras in any sampled run. |
+| Go / client_golang | `depends://` | 2,837 | 133 | 95.52% | 1 | Matches this doc's existing Go/client_golang row exactly — corroboration, not new data. |
+| Go / Kubernetes | `depends://` | 822 | 8 | 99.03% | 1 | Matches this doc's existing Go/Kubernetes row exactly (`*_windows.go` files confirmed via `extra_examples`). |
+| Kotlin / kotlinx.coroutines | member-import | 50 | 11 | 81.97% | 3 | Matches this doc's existing Kotlin row exactly. |
+| Python | `depends://` | 790 / 460 | 0 / 0 | 100.00% | — | Final (`result_full.json`/`result_postfix3.json`); superseded historical runs had non-zero FP, already fixed. |
+| Rust | `contracts` implementers | 534 | 24 (pre-fix) | 95.51% → **100.00%** post-fix | fixed (BACK-794) | Same-name-across-files collision, already fixed; post-fix re-measurement is 640/640 exact. |
+| Python | sideeffects categories | 137 pos / 60 neg | 16 funcs w/ extra category (0 after re-check) | ~88% pre-fix → **100%** current | fixed (BACK-594) | `session.get()`/`dict.update()`/`.copy()` misclassified as `db`/`file`; live-verified against current reveal source — already fixed, saved run is stale. |
+| C#, PHP, Ruby, Lua, TypeScript, others | sideeffects categories | 38–148 pos / 20–60 neg each | 0–26 funcs w/ extra category | not a single precision % (see notes) | 2-like | Nearly all sampled "extras" are genuine additional categories the function really has that the oracle's per-function label didn't record (oracle under-labeling), not invented sideeffects. |
+| 11 `surface`/`contracts`/`cli`/`http`/`env`/`member-import` oracle families (Go, C++, Java, Kotlin, PHP, Ruby, C#, plus http-routes/cli-mcp/contracts pilots) | surface/contracts/cli/http | ~50 category rows | 0 in 49 of 50 rows | 100.00% (49/50 rows) | — | Only the already-fixed Rust row (above) deviates. |
+
+**Mechanism taxonomy, extended.** The four mechanisms above account for
+every `depends://` (imports) false positive found in this sweep — "all
+benign" still holds for that signal specifically, with no new open
+(unfixed) defect. Sweeping `calls://` for the first time surfaced a fifth,
+previously-undocumented mechanism:
+
+5. **Bare-name call-target fan-out (`calls://`-specific).** `calls://`
+   resolves "who calls X" by X's literal name, with no type or overload
+   resolution — a deliberate property of a buildless call graph, the same
+   trade-off already accepted for imports (mechanism 3). On a large,
+   many-classes corpus this means a common method/constructor name (C++'s
+   `size`, `string`, `push_back`, `begin`, `Create`) picks up callers of
+   *every* same-named declaration across unrelated classes, not just the
+   oracle's specific target. Every sampled instance was a real call site to
+   a real function of that name — reveal invents nothing — but the
+   resulting precision (83.28% for C++/Assimp) is a real, measurable
+   magnitude worth tracking on its own rather than folding silently into
+   "all benign." Whether this is worth a follow-up ticket (e.g. scoping
+   fan-out to files sharing an already-detected receiver type) is a human
+   call, not decided here.
+
+**Two more saved-run defects were found and confirmed already fixed**,
+joining BACK-1080 as documented counterexamples to "reveal never invents an
+edge": **BACK-794** (Rust `contracts` implementers — same bare type name
+across files conflated into one entry, keyed by name only; fixed by keying
+`type_traits` on `(type, file)`; post-fix 640/640 exact) and **BACK-594**
+(Python sideeffects — `session.get()`/`dict.update()`/`.copy()` misread as
+`db`/`file` sideeffects via an unscoped receiver-name heuristic; fixed by
+replacing it with an explicit `session.<sqlalchemy-orm-verb>` allowlist;
+live-verified against current source, not just read from a changelog).
+
+**Bottom line: this wider sweep found no new *open* non-benign false
+positive.** Every non-benign case uncovered while computing this table
+(Rust/BACK-794, Python-sideeffects/BACK-594) was already fixed before this
+sweep ran. The one new thing this sweep adds to the record is mechanism 5
+and its magnitude on C++ `calls://` — real, benign by the same logic as
+mechanism 3, but large enough to name and watch rather than average away.
+
 ### Open residual gaps
 
 Three measured languages sit below 100% with a gap that is real, still open,
