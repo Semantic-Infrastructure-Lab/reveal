@@ -483,6 +483,66 @@ def complex1(x):
         assert result[0]['details']['commit_count'] == 0
 
 
+class TestIdentifyHotspotsLimit:
+    """BACK-1179: identify_hotspots() hardcoded [:10] regardless of caller
+    intent — hotspots://?top=N reached function_hotspots but silently had
+    no effect on file_hotspots."""
+
+    def _stats(self, n):
+        from reveal.adapters.stats.aggregation import identify_hotspots
+        stats = [{
+            'file': f'f{i}.py',
+            'lines': {'total': 10},
+            'elements': {'functions': 1},
+            'complexity': {'average': 15.0},
+            'quality': {'score': 50.0, 'long_functions': 0, 'deep_nesting': 0},
+        } for i in range(n)]
+        return identify_hotspots, stats
+
+    def test_default_limit_is_ten(self):
+        identify_hotspots, stats = self._stats(20)
+        result = identify_hotspots(stats)
+        assert len(result) == 10
+
+    def test_explicit_limit_expands_past_ten(self):
+        identify_hotspots, stats = self._stats(20)
+        result = identify_hotspots(stats, limit=20)
+        assert len(result) == 20
+
+    def test_explicit_limit_below_ten_still_caps(self):
+        identify_hotspots, stats = self._stats(20)
+        result = identify_hotspots(stats, limit=3)
+        assert len(result) == 3
+
+
+class TestStatsAdapterHotspotsTop:
+    """BACK-1179: StatsAdapter(hotspots=true) must honor ?top=N — it used
+    to always hand identify_hotspots a hardcoded 10 regardless of the
+    query param, matching int_param's BACK-985 0-is-not-falsy convention."""
+
+    # 16 levels of nesting -> deep_nesting flags well past the >4 threshold,
+    # unlike TestHotspotsChurn.COMPLEX_CODE (needs churn to score as a hotspot).
+    _DEEPLY_NESTED_CODE = "def f(x):\n" + "".join(
+        "    " * (i + 1) + f"if x > {i}:\n" for i in range(15)
+    ) + "    " * 16 + "return x\n    return 0\n"
+
+    @pytest.fixture
+    def many_hotspot_files(self, tmp_path):
+        for i in range(15):
+            (tmp_path / f"f{i}.py").write_text(self._DEEPLY_NESTED_CODE)
+        return tmp_path
+
+    def test_default_top_caps_at_ten(self, many_hotspot_files):
+        adapter = StatsAdapter(str(many_hotspot_files))
+        result = adapter.get_structure(hotspots=True)
+        assert len(result['hotspots']) == 10
+
+    def test_top_query_param_expands_past_ten(self, many_hotspot_files):
+        adapter = StatsAdapter(str(many_hotspot_files), 'hotspots=true&top=15')
+        result = adapter.get_structure()
+        assert len(result['hotspots']) == 15
+
+
 class TestStatsAdapterChurnIntegration:
     """End-to-end StatsAdapter(hotspots=true) churn wiring against a real git repo."""
 

@@ -88,6 +88,7 @@ def _i002_init_worker(graph_cache: dict) -> None:
 
 _SCHEMA_QUERY_PARAMS = {
     'hotspots': {'type': 'boolean', 'description': 'Include hotspot analysis (files needing attention)', 'examples': ['hotspots=true']},
+    'top': {'type': 'integer', 'description': 'Max number of hotspot files to return when hotspots=true (default: 10)', 'examples': ['top=25']},
     'code_only': {'type': 'boolean', 'description': 'Exclude data/config files from analysis', 'examples': ['code_only=true']},
     'min_lines': {'type': 'integer', 'description': 'Filter files with at least this many lines', 'examples': ['min_lines=50']},
     'max_lines': {'type': 'integer', 'description': 'Filter files with at most this many lines', 'examples': ['max_lines=500']},
@@ -511,7 +512,10 @@ class StatsAdapter(ResourceAdapter):
                         'type': 'churn_unavailable',
                         'message': self._churn_disclosure,
                     })
-            result['hotspots'] = identify_hotspots(controlled_stats, churn_counts=churn_counts)
+            # BACK-1179: honor ?top=N (as hotspots:// itself does for
+            # function_hotspots) instead of a hardcoded top-10.
+            top = self.int_param('top', 10)
+            result['hotspots'] = identify_hotspots(controlled_stats, churn_counts=churn_counts, limit=top)
 
         if summary_only:
             result.pop('files', None)

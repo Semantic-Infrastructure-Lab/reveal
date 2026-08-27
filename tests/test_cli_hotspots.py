@@ -601,6 +601,35 @@ class TestRunHotspotsTestCoverage(unittest.TestCase):
                     mock_idx.assert_not_called()
 
 
+class TestHotspotsTopAppliesToFileHotspots:
+    """BACK-1179 end-to-end: hotspots://?top=N reached function_hotspots
+    (via AstAdapter's own limit) but silently had no effect on
+    file_hotspots — StatsAdapter's identify_hotspots() hardcoded a top-10
+    cap regardless of what HotspotsAdapter asked for."""
+
+    # 16 levels of nesting -> deep_nesting flags well past identify_hotspots'
+    # >4 threshold, so each file scores as a genuine hotspot on its own.
+    DEEPLY_NESTED_CODE = "def f(x):\n" + "".join(
+        "    " * (i + 1) + f"if x > {i}:\n" for i in range(15)
+    ) + "    " * 16 + "return x\n    return 0\n"
+
+    @pytest.fixture
+    def fifteen_hotspot_files(self, tmp_path):
+        for i in range(15):
+            (tmp_path / f"m{i}.py").write_text(self.DEEPLY_NESTED_CODE)
+        return tmp_path
+
+    def test_default_top_caps_file_hotspots_at_ten(self, fifteen_hotspot_files):
+        adapter = HotspotsAdapter(str(fifteen_hotspot_files))
+        result = adapter.get_structure()
+        assert len(result['file_hotspots']) == 10
+
+    def test_top_query_param_expands_file_hotspots_past_ten(self, fifteen_hotspot_files):
+        adapter = HotspotsAdapter(str(fifteen_hotspot_files), 'top=15')
+        result = adapter.get_structure()
+        assert len(result['file_hotspots']) == 15
+
+
 class TestIsCovered(unittest.TestCase):
     """Unit tests for _is_covered coverage heuristic."""
 

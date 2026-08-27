@@ -28,7 +28,7 @@ _TEST_DIR_CANDIDATES = tuple(sorted(TEST_DIR_NAMES))
 def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List[Dict[str, Any]]:
     """Fetch file-level hotspots via StatsAdapter."""
     from reveal.adapters.stats import StatsAdapter
-    data = adapter.compose(StatsAdapter, str(path), default={}, hotspots=True)
+    data = adapter.compose(StatsAdapter, str(path), default={}, hotspots=True, top=top)
     hotspots = data.get('hotspots', [])
     return cast(List[Dict[str, Any]], hotspots[:top])
 
