@@ -337,6 +337,30 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   not queued work, revisit only if a corpus shows either shape is commoner
   than measured.
 
+- **Trust beyond extraction — the second axis (new, 2026-08-26).** The oracle
+  program above validates one thing: *did we extract the right edges*. It
+  cannot catch a wrong answer produced **downstream** of correct extraction.
+  Proof that this is a real gap rather than a theoretical one: Ruby `calls://`
+  is measured at **100.00% recall / 0 FPs** (VALIDATION.md fn39) and the same
+  adapter on the same corpus reports **37.3% of the codebase as dead code** —
+  because `.new` → `initialize` is not a source-level edge, the confidence
+  label is a hardcoded constant identical to Python's 7.2% run, and the printed
+  disclaimer lists Python's exclusions on a Ruby scan. Extraction was perfect;
+  the derived signal, the confidence, and the presentation were all wrong.
+  Four uncovered axes: **scope honesty** (did the caller's flag actually
+  apply — BACK-1187, BACK-1192), **derived signals** (BACK-1193, BACK-1197,
+  BACK-1198), **presentation** (BACK-1194, BACK-1198), and **selection** (is
+  the ranked/packed code the code they care about — BACK-1195, BACK-1196).
+  Root cause under four of five: **per-language correctness was pursued in the
+  extractors and assumed everywhere else** — `deps.py`, `calls/renderer.py`,
+  `calls/adapter.py`, and `M102.py` each hardcode a Python assumption reached
+  from language-generic code paths. Fix direction: a per-language capability
+  table derived from VALIDATION.md's own measured figures, plus a ratchet guard
+  per BACK-620's precedent. Track extension, not a new program — same premise
+  (a wrong answer that looks like a checked one is the intolerable failure),
+  different entry point. Full synthesis and recommended sequence:
+  `internal-docs/design/TRUST_BEYOND_EXTRACTION_2026-08-26.md`.
+
 ---
 
 ## Architecture Hardening Track — ✅ Complete (cukite-0512)
