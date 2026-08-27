@@ -192,6 +192,13 @@ CONFIG_SCHEMA = {
             },
             "additionalProperties": False
         },
+        "network": {
+            "type": "object",
+            "properties": {
+                "no_update_check": {"type": "boolean"}
+            },
+            "additionalProperties": False
+        },
         "profiles": {
             "type": "object",
             "additionalProperties": {

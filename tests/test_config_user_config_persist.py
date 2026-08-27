@@ -10,9 +10,11 @@ from unittest.mock import patch
 import yaml
 
 import pytest
+import jsonschema
 
 from reveal.config import (
     RevealConfig,
+    CONFIG_SCHEMA,
     disable_breadcrumbs_permanently,
     disable_update_check_permanently,
     _read_user_config,
@@ -58,6 +60,18 @@ class TestDisableUpdateCheckPermanently:
             with patch('builtins.open', side_effect=OSError('disk full')):
                 result = disable_update_check_permanently()
         assert result is False
+
+    def test_written_config_passes_schema_validation(self, tmp_path):
+        """BACK-1185: the 'network' key this function writes must be a declared
+        CONFIG_SCHEMA property, or every subsequent `reveal` invocation logs a
+        spurious 'Invalid config' warning for a file the CLI's own offline
+        machinery produced."""
+        patcher, config_path = _patch_user_config_path(tmp_path)
+        with patcher:
+            disable_update_check_permanently()
+
+        written = yaml.safe_load(config_path.read_text(encoding='utf-8'))
+        jsonschema.validate(written, CONFIG_SCHEMA)  # raises on failure
 
 
 class TestDisableBreadcrumbsPermanently:
