@@ -621,7 +621,8 @@ def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[
 
 def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]],
                             output_format: str, is_fallback: bool, fallback_lang: str, config=None,
-                            heading_depth: Optional[int] = None) -> None:
+                            heading_depth: Optional[int] = None,
+                            no_raw_fallback: bool = False) -> None:
     """Handle standard JSON or text output.
 
     Args:
@@ -631,6 +632,11 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
         is_fallback: Whether using fallback analyzer
         fallback_lang: Fallback language if applicable
         heading_depth: Explicit --depth override for markdown heading collapse (BACK-387)
+        no_raw_fallback: Suppress the <=50-line raw-source dump for a
+            structure-less file (BACK-1183) -- callers that must stay
+            strictly structural (pack --content, on a confidentiality-
+            sensitive target) pass this instead of risking a small file's
+            full content leaking into packed output.
     """
     path = analyzer.path
 
@@ -656,7 +662,9 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
             print("   See INSTALL.md#network-requirements")
             return
         line_count = len(analyzer.lines)
-        if line_count <= 50:
+        if no_raw_fallback:
+            print(f"(no extractable structure — {line_count} lines)")
+        elif line_count <= 50:
             print()
             print(analyzer.format_with_lines(analyzer.content, 1))
         else:
@@ -743,5 +751,6 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
 
     # Handle standard output (JSON or text)
     heading_depth = getattr(args, 'depth', None) if args else None
+    no_raw_fallback = bool(getattr(args, 'no_raw_fallback', False)) if args else False
     _handle_standard_output(analyzer, structure, output_format, is_fallback, fallback_lang, config=config,  # type: ignore[arg-type]
-                            heading_depth=heading_depth)
+                            heading_depth=heading_depth, no_raw_fallback=no_raw_fallback)

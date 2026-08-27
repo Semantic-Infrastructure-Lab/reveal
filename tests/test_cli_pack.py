@@ -1167,6 +1167,20 @@ class TestGetFileStructure(unittest.TestCase):
         result = _get_file_structure(fpath)
         self.assertIsInstance(result, str)
 
+    def test_small_structureless_file_gets_placeholder_not_raw_dump(self):
+        """BACK-1183: a file too small to have extractable structure must
+        never leak its full raw content through pack --content -- that
+        defeats --content's confidentiality-sensitive DD use case. The
+        shared show_structure() pipeline's <=50-line convenience dump (fine
+        for interactive `reveal file.py`) must be suppressed here."""
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("x = 1\ny = 2\n")  # top-level only, no function/class
+            fpath = f.name
+        result = _get_file_structure(fpath)
+        self.assertIn('no extractable structure', result)
+        self.assertNotIn('x = 1', result)
+        self.assertNotIn('y = 2', result)
+
 
 class TestGetFileRawContent(unittest.TestCase):
 

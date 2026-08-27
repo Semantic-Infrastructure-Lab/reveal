@@ -224,7 +224,8 @@ def _get_file_structure(file_path: str) -> str:
     Uses reveal's own progressive-disclosure analysis — same output as `reveal file.py`.
     Returns empty string if no analyzer is available or analysis fails.
     """
-    from reveal.registry import get_analyzer  # noqa: I006 — avoid circular import at module level
+    from types import SimpleNamespace  # noqa: I006 — avoid circular import at module level
+    from reveal.registry import get_analyzer  # noqa: I006
     from reveal.display.structure import show_structure  # noqa: I006
 
     try:
@@ -239,7 +240,13 @@ def _get_file_structure(file_path: str) -> str:
     old_stdout = sys.stdout
     sys.stdout = buffer
     try:
-        show_structure(analyzer, 'text')
+        # BACK-1183: pack --content must stay strictly structural even for a
+        # file too small to have extractable structure -- the shared
+        # show_structure() pipeline's <=50-line raw-source fallback (a
+        # helpful default for interactive `reveal file.py`) would otherwise
+        # leak a small file's full content into a confidentiality-sensitive
+        # DD pack.
+        show_structure(analyzer, 'text', args=SimpleNamespace(no_raw_fallback=True))
     except Exception:
         # The text-mode caller renders '' as '[no structure analysis available]'.
         return ''
