@@ -812,6 +812,42 @@ class TestRunOverview(unittest.TestCase):
                 run_overview(_args(path=tmp))
                 mock_resolve.assert_not_called()
 
+    def test_json_format_does_not_leak_absolute_paths(self):
+        """BACK-1194 follow-up: get_structure()'s JSON path never routed
+        complex_functions/architecture through _relpath (only the text
+        renderer did) -- absolute host paths (analyst's filesystem
+        layout/username) leaked straight into --format json output whenever
+        the scan root was absolute, which subcommand-form always is
+        (run_overview resolves args.path before constructing the adapter)."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            ast_data = [{
+                'file': str(tmp_path / 'src' / 'hot.py'), 'name': 'f',
+                'complexity': 20, 'line': 1, 'line_count': 5,
+            }]
+            arch_data = {
+                'fan_in': [{'file': str(tmp_path / 'src' / 'base.py'), 'fan_in': 3, 'fan_out': 1}],
+                'entrypoints': [{'file': str(tmp_path / 'src' / 'main.py'), 'fan_out': 2}],
+                'components': [{
+                    'component': str(tmp_path / 'src'), 'files': 2, 'internal': 1,
+                    'outgoing': 1, 'incoming': 0, 'cohesion': 0.5,
+                    'top_bridge': str(tmp_path / 'src' / 'main.py'),
+                }],
+                'circular_count': 0,
+            }
+            p_stats, p_git, p_ast, p_arch = self._patch_runners(ast=ast_data, arch=arch_data)
+            with p_stats, p_git, p_ast, p_arch:
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_overview(_args(path=str(tmp_path), format='json'))
+                data = json.loads(buf.getvalue())
+                self.assertEqual(data['complex_functions'][0]['file'], 'src/hot.py')
+                self.assertEqual(data['architecture']['fan_in'][0]['file'], 'src/base.py')
+                self.assertEqual(data['architecture']['entrypoints'][0]['file'], 'src/main.py')
+                self.assertEqual(data['architecture']['components'][0]['component'], 'src')
+                self.assertEqual(data['architecture']['components'][0]['top_bridge'], 'src/main.py')
+
 
 class TestIsTestFile(unittest.TestCase):
 

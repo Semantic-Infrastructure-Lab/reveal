@@ -47,6 +47,40 @@ def _run_unused(adapter: 'DepsAdapter', path: Path) -> List[Dict[str, Any]]:
     return data.get('unused', [])
 
 
+def _relativize_deps_paths(
+    base: Dict[str, Any],
+    circular: Dict[str, Any],
+    unused: List[Dict[str, Any]],
+    base_path: Path,
+) -> None:
+    """Relativize the file-path fields the text renderer already relativizes
+    (`_render_circular`/`_render_unused`/`_analyse_imports`'s `to_relative_display`
+    calls), but in the raw structures get_structure() serializes directly to
+    JSON — those never routed through the text renderer, so `--format json`
+    leaked absolute host paths (analyst's filesystem layout/username), same
+    gap as overview.py's `_relativize_paths` fixes (BACK-1194 follow-up).
+    Mutates in place.
+    """
+    from ..utils.path_utils import to_relative_display
+
+    files = base.get('files')
+    if isinstance(files, dict):
+        base['files'] = {
+            to_relative_display(fp, base_path): imports
+            for fp, imports in files.items()
+        }
+    for key in ('cycles', 'cycle_paths'):
+        groups = circular.get(key)
+        if groups:
+            circular[key] = [
+                [to_relative_display(fp, base_path) for fp in group]
+                for group in groups
+            ]
+    for imp in unused:
+        if imp.get('file'):
+            imp['file'] = to_relative_display(imp['file'], base_path)
+
+
 def _tally_import(
     imp: Dict[str, Any], is_python_file: bool, local_names: frozenset,
     external_counts: Counter, stdlib_counts: Counter,
@@ -344,6 +378,7 @@ class DepsAdapter(ResourceAdapter):
         base = _run_base(self, path)
         circular = {} if no_circular else _run_circular(self, path)
         unused = [] if no_unused else _run_unused(self, path)
+        _relativize_deps_paths(base, circular, unused, path)
 
         report = {
             'path': str(path),

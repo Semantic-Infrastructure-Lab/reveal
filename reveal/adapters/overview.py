@@ -321,6 +321,32 @@ def _relpath(file_str: str, base_path: Optional[Path]) -> str:
     return to_relative_display(file_str, base_path)
 
 
+def _relativize_paths(
+    complex_fns: List[Dict[str, Any]],
+    architecture: Dict[str, Any],
+    base_path: Path,
+) -> None:
+    """Relativize the same file-path fields the text renderer already
+    relativizes (via `_relpath`), but in the raw structures the JSON
+    output serializes directly — get_structure() never routed through
+    the text renderer, so `--format json` leaked absolute host paths
+    (analyst's filesystem layout/username) even after BACK-1194 fixed
+    the text path. Mutates in place.
+    """
+    for fn in complex_fns:
+        if fn.get('file'):
+            fn['file'] = _relpath(fn['file'], base_path)
+    for section in ('fan_in', 'entrypoints'):
+        for entry in architecture.get(section, []):
+            if entry.get('file'):
+                entry['file'] = _relpath(entry['file'], base_path)
+    for component in architecture.get('components', []):
+        if component.get('component'):
+            component['component'] = _relpath(component['component'], base_path)
+        if component.get('top_bridge'):
+            component['top_bridge'] = _relpath(component['top_bridge'], base_path)
+
+
 def _render_architecture(
     arch: Dict[str, Any],
     complex_fns: List[Dict[str, Any]],
@@ -567,6 +593,7 @@ class OverviewAdapter(ResourceAdapter):
                 git_foreign_root = git_root
         complex_fns = _run_complex_functions(self, path, top)
         architecture = {} if no_imports else _run_imports_analysis(self, path)
+        _relativize_paths(complex_fns, architecture, path)
 
         report = {
             'path': str(path),

@@ -597,6 +597,46 @@ class TestRunDeps(unittest.TestCase):
                 self.assertIn('circular', data)
                 self.assertIn('unused', data)
 
+    def test_json_format_does_not_leak_absolute_paths(self):
+        """BACK-1194 follow-up: get_structure()'s JSON path never routed
+        base.files/circular.cycles/unused through to_relative_display (only
+        the text renderer did, via _analyse_imports/_render_circular/
+        _render_unused) -- absolute host paths (analyst's filesystem
+        layout/username) leaked straight into --format json output whenever
+        the scan root was absolute, which subcommand-form always is
+        (run_deps resolves args.path before constructing the adapter)."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp).resolve()
+            main_py = str(tmp_path / 'src' / 'main.py')
+            utils_py = str(tmp_path / 'src' / 'utils.py')
+            base = {
+                'contract_version': '1.0', 'type': 'imports', 'source': str(tmp_path),
+                'source_type': 'directory',
+                'files': {main_py: [_make_import('os')]},
+                'metadata': {},
+            }
+            circular = {
+                'contract_version': '1.0', 'type': 'imports_circular', 'source': str(tmp_path),
+                'source_type': 'directory',
+                'cycles': [[main_py, utils_py, main_py]],
+                'cycle_paths': [[main_py, utils_py]],
+                'count': 1, 'metadata': {},
+            }
+            unused_imp = _make_import('os', names=['path'], line=5)
+            unused_imp['file'] = main_py
+            unused = [unused_imp]
+            p_base, p_circ, p_unused = self._patch_runners(base=base, circular=circular, unused=unused)
+            with p_base, p_circ, p_unused:
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_deps(_args(path=str(tmp_path), format='json'))
+                data = json.loads(buf.getvalue())
+                self.assertEqual(list(data['base']['files'].keys()), ['src/main.py'])
+                self.assertEqual(data['circular']['cycles'], [['src/main.py', 'src/utils.py', 'src/main.py']])
+                self.assertEqual(data['circular']['cycle_paths'], [['src/main.py', 'src/utils.py']])
+                self.assertEqual(data['unused'][0]['file'], 'src/main.py')
+
     def test_summary_only_drops_base_files(self):
         """BACK-1040: --summary-only strips base.files (the bulk of deps.json
         on a real repo) but leaves circular/unused and file/import counts."""
