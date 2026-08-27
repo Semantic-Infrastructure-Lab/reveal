@@ -203,6 +203,8 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
 
     resource = _inject_exclude_flag(resource, scheme, args)
     resource = _inject_since_until_flags(resource, scheme, args)
+    resource = _inject_respect_gitignore_flag(resource, scheme, args)
+    _warn_unsupported_structural_flags(resource, scheme, args)
 
     # Look up adapter from registry
     from ...adapters.base import get_adapter_class, list_supported_schemes
@@ -280,6 +282,81 @@ def _inject_since_until_flags(resource: str, scheme: str, args: 'Namespace') -> 
             file=sys.stderr,
         )
     return resource
+
+
+def _inject_respect_gitignore_flag(resource: str, scheme: str, args: 'Namespace') -> str:
+    """Inject --no-gitignore into the URI query string for overview://stats://
+    (BACK-1202): both already read ?respect_gitignore=false (BACK-1042,
+    composed in by the CLI *subcommand* form's own --exclude/--no-gitignore
+    handling), but nothing forwarded the flag into the query string for the
+    URI-scheme form -- `reveal 'overview://.' --no-gitignore` silently
+    returned the gitignore-respecting file list. --respect-gitignore's
+    argparse default is True, indistinguishable from a user explicitly
+    passing it, so only the True->False transition (--no-gitignore) is a
+    real, injectable signal; the default case already matches these
+    adapters' own default and needs no injection. Skip injection if the URI
+    already has an explicit respect_gitignore= param -- URI takes
+    precedence, same as --sort/--limit/--exclude/--since/--until.
+    """
+    _GITIGNORE_AWARE_SCHEMES = {'overview', 'stats'}
+    if getattr(args, 'respect_gitignore', True) is not False:
+        return resource
+    if scheme in _GITIGNORE_AWARE_SCHEMES:
+        if 'respect_gitignore=' not in resource:
+            sep = '&' if '?' in resource else '?'
+            resource = f"{resource}{sep}respect_gitignore=false"
+    else:
+        aware = '/'.join(f'{s}://' for s in sorted(_GITIGNORE_AWARE_SCHEMES))
+        print(
+            f"Note: --no-gitignore has no effect on {scheme}:// -- only {aware} "
+            f"support it.",
+            file=sys.stderr,
+        )
+    return resource
+
+
+# BACK-1202: --depth/--ext/--type/--fast have real, documented semantics for
+# bare path scans (routing/file.py) but no URI adapter's get_structure()
+# declares a matching parameter and none reads the matching query_params key
+# either -- unlike --exclude/--since/--until/--respect-gitignore above, there
+# is no adapter-side support to inject into, so the honest fix is a warning
+# (same convention as the --grep/BACK-351 and markdown --links/BACK-357 notes
+# in handle_uri()) rather than a silent drop or a guessed semantic.
+# Each flag's argparse default, so "was this actually typed" can be told
+# apart from "left at default" (--depth 0 must count as set, not falsy).
+_STRUCTURAL_FLAG_DEFAULTS = {'depth': None, 'ext': None, 'type': None, 'fast': False}
+
+
+def _warn_unsupported_structural_flags(resource: str, scheme: str, args: 'Namespace') -> None:
+    """Warn when --depth/--ext/--type/--fast were explicitly set but this
+    scheme's adapter has no way to honor them (BACK-1202)."""
+    ignored = [
+        f'--{flag_name}' for flag_name, default in _STRUCTURAL_FLAG_DEFAULTS.items()
+        if getattr(args, flag_name, default) != default
+    ]
+    if not ignored:
+        return
+    from ...adapters.base import get_adapter_class
+    adapter_class = get_adapter_class(scheme)
+    get_structure = getattr(adapter_class, 'get_structure', None) if adapter_class else None
+    if get_structure is None:
+        return
+    import inspect
+    try:
+        params = inspect.signature(get_structure).parameters
+    except (TypeError, ValueError):
+        return
+    still_ignored = [
+        flag for flag in ignored
+        if flag.lstrip('-') not in params
+    ]
+    if still_ignored:
+        print(
+            f"Note: {', '.join(still_ignored)} has no effect on {scheme}:// "
+            f"queries -- not supported by this adapter. Use a bare path scan "
+            f"(reveal <path> {' '.join(still_ignored)}) instead.",
+            file=sys.stderr,
+        )
 
 
 def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],

@@ -236,6 +236,136 @@ class TestHandleUriSinceUntil:
         captured = capsys.readouterr()
         assert '--since has no effect on ast://' in captured.err
 
+
+# ─── handle_uri — BACK-1202: --no-gitignore on URI-scheme targets ────────────
+
+class TestHandleUriRespectGitignore:
+    """overview:// and stats:// already read ?respect_gitignore=false
+    (BACK-1042) but nothing forwarded --no-gitignore into the query string
+    for the URI-scheme form -- same silent-drop shape as --exclude."""
+
+    def test_no_gitignore_injected_for_overview_scheme(self):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, respect_gitignore=False, base_path=None)
+                    handle_uri('overview://src', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert 'respect_gitignore=false' in resource_arg
+
+    def test_default_respect_gitignore_true_is_not_injected(self):
+        """Default True is indistinguishable from 'not typed' -- must not inject."""
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, respect_gitignore=True, base_path=None)
+                    handle_uri('overview://src', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert 'respect_gitignore=' not in resource_arg
+
+    def test_uri_respect_gitignore_takes_precedence_over_flag(self):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, respect_gitignore=False, base_path=None)
+                    handle_uri('overview://src?respect_gitignore=true', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert resource_arg.count('respect_gitignore=') == 1
+        assert 'respect_gitignore=true' in resource_arg
+
+    def test_no_gitignore_warns_on_non_supporting_scheme(self, capsys):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, respect_gitignore=False, base_path=None)
+                    handle_uri('ast://.', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert 'respect_gitignore=' not in resource_arg
+        captured = capsys.readouterr()
+        assert '--no-gitignore has no effect on ast://' in captured.err
+
+
+# ─── handle_uri — BACK-1202: --depth/--ext/--type/--fast are honest no-ops ───
+
+class _StubAdapterNoStructuralParams:
+    """Real callable get_structure() with a bare **kwargs signature, like
+    OverviewAdapter/StatsAdapter/AstAdapter -- lets inspect.signature() run
+    for real instead of on a MagicMock."""
+    def get_structure(self, **kwargs):
+        return {}
+
+
+class _StubAdapterWithDepthParam:
+    def get_structure(self, depth=None, **kwargs):
+        return {}
+
+
+class TestHandleUriStructuralFlagsWarning:
+    """--depth/--ext/--type/--fast are accepted by argparse and silently
+    dropped for adapters whose get_structure() has no matching parameter and
+    no query_params handling either -- there's nothing to inject into, so the
+    honest fix is a warning (BACK-1202)."""
+
+    def test_depth_warns_when_adapter_has_no_matching_param(self, capsys):
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=_StubAdapterNoStructuralParams):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter'):
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, respect_gitignore=True,
+                                 depth=1, ext=None, type=None, fast=False, base_path=None)
+                    handle_uri('overview://.', None, args)
+        captured = capsys.readouterr()
+        assert '--depth has no effect on overview://' in captured.err
+
+    def test_no_warning_when_adapter_declares_matching_param(self, capsys):
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=_StubAdapterWithDepthParam):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter'):
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, respect_gitignore=True,
+                                 depth=1, ext=None, type=None, fast=False, base_path=None)
+                    handle_uri('overview://.', None, args)
+        captured = capsys.readouterr()
+        assert '--depth' not in captured.err
+
+    def test_no_warning_when_flags_left_at_default(self, capsys):
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=_StubAdapterNoStructuralParams):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter'):
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, respect_gitignore=True, base_path=None)
+                    handle_uri('overview://.', None, args)
+        captured = capsys.readouterr()
+        assert captured.err == ''
+
+    def test_multiple_ignored_flags_named_together(self, capsys):
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=_StubAdapterNoStructuralParams):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter'):
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, respect_gitignore=True,
+                                 depth=1, ext='py', type=None, fast=False, base_path=None)
+                    handle_uri('overview://.', None, args)
+        captured = capsys.readouterr()
+        assert '--depth' in captured.err
+        assert '--ext' in captured.err
+
     def test_no_since_until_flags_no_injection_no_warning(self, capsys):
         mock_adapter_cls = MagicMock()
         mock_renderer_cls = MagicMock()
