@@ -337,7 +337,14 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   not queued work, revisit only if a corpus shows either shape is commoner
   than measured.
 
-- **Trust beyond extraction — the second axis (new, 2026-08-26).** The oracle
+- **Trust beyond extraction — the second axis (BACK-1093's program; nine more
+  instances added 2026-08-26).** This is not a new track: **BACK-1093** (filed
+  2026-08-10, unstarted) already names it from the validation methodology's
+  pillar 3 — *"the output either carries a validated answer or an explicit
+  not-fully-covered-here marker… a reviewer cannot work with a wrong 'nothing
+  here'"* — and proposes the right fix, lifting `depends://`'s
+  `True`/`False`/`None` containment pattern into a shared result-envelope
+  contract. The oracle
   program above validates one thing: *did we extract the right edges*. It
   cannot catch a wrong answer produced **downstream** of correct extraction.
   Proof that this is a real gap rather than a theoretical one: Ruby `calls://`
@@ -356,7 +363,11 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   `calls/adapter.py`, and `M102.py` each hardcode a Python assumption reached
   from language-generic code paths. Fix direction: a per-language capability
   table derived from VALIDATION.md's own measured figures, plus a ratchet guard
-  per BACK-620's precedent. Track extension, not a new program — same premise
+  per BACK-620's precedent — neither of which a containment envelope alone
+  provides, which is what BACK-1093's scope does not yet cover. Note BACK-1188
+  is a containment failure **inside `depends://`**, the one adapter where
+  BACK-1093 records the invariant as shipped: the design is right, one branch
+  was never wired to it. Track extension, not a new program — same premise
   (a wrong answer that looks like a checked one is the intolerable failure),
   different entry point. Full synthesis and recommended sequence:
   `internal-docs/design/TRUST_BEYOND_EXTRACTION_2026-08-26.md`.
