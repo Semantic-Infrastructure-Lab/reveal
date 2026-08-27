@@ -18,6 +18,28 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _emit_adapter_error_envelope(scheme: str, resource: str, error_msg: str, args: 'Namespace') -> None:
+    """Emit a valid Output Contract envelope for an adapter-error path instead
+    of leaving stdout empty (BACK-1209). Adapters that raise instead of
+    returning ResultBuilder.create_error() themselves (e.g. testability://,
+    git://, diff://) previously left stdout at 0 bytes in both --format json
+    and --format text, indistinguishable from a crashed/hung process to a
+    scripted consumer globbing artifacts.
+    """
+    from ...utils.results import ResultBuilder
+
+    result = ResultBuilder.create_error(
+        result_type=scheme,
+        source=resource,
+        error=error_msg,
+    )
+    result['meta'] = ResultBuilder.create_meta(errors=[{'code': 'adapter_error', 'message': error_msg}])
+    if getattr(args, 'format', 'text') == 'json':
+        print_json_result(result)
+    else:
+        print(f"Error ({scheme}://): {error_msg} — adapter produced no result")
+
+
 def _parse_text_headings(text: str) -> List[dict]:
     """Extract ATX headings from a markdown text string."""
     headings = []
@@ -258,9 +280,11 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
             adapter = _default_from_uri(adapter_class, scheme, resource, element)
     except ImportError as e:
         renderer_class.render_error(e)
+        _emit_adapter_error_envelope(scheme, resource, str(e), args)
         sys.exit(1)
     except Exception as e:
         print(f"Error initializing {scheme}:// adapter: {e}", file=sys.stderr)
+        _emit_adapter_error_envelope(scheme, resource, f"initializing {scheme}:// adapter: {e}", args)
         sys.exit(1)
 
     # Apply --base-path override for adapters that support it (e.g., claude://)
@@ -721,6 +745,7 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
         else:
             scheme_hint = f" ({scheme}://)" if scheme else ""
             print(f"Error{scheme_hint}: {error_msg}", file=sys.stderr)
+        _emit_adapter_error_envelope(scheme or 'unknown', resource or '', error_msg, args)
         sys.exit(1)
 
     # Apply post-processing
@@ -737,6 +762,7 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
             else:
                 scheme_hint = f" ({scheme}://)" if scheme else ""
                 print(f"Error{scheme_hint}: {error_msg}", file=sys.stderr)
+            _emit_adapter_error_envelope(scheme or 'unknown', resource or '', error_msg, args)
             sys.exit(1)
 
     # Add available elements if adapter supports discovery

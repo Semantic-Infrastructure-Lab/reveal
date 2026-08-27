@@ -4,7 +4,10 @@ These tests verify the CLI routing logic, particularly the generic_adapter_handl
 which tries multiple initialization patterns for adapters.
 """
 
+import io
+import json
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import Mock, MagicMock, patch
 from argparse import Namespace
 
@@ -15,6 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import pytest
 
 from reveal.cli.routing import generic_adapter_handler, handle_uri, handle_adapter, handle_file_or_directory
+from reveal.cli.routing import _render_structure
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
 pytestmark = pytest.mark.component
@@ -1471,6 +1475,71 @@ class TestRoutingEdgeCases(unittest.TestCase):
     def test_very_long_resource(self):
         """Verify very long resource strings don't cause issues."""
         # Test with 10KB+ resource string
+
+
+class TestAdapterErrorEnvelope(unittest.TestCase):
+    """BACK-1209: adapter errors must still emit a valid, non-empty envelope
+    on stdout (in both --format json and text), not leave it at 0 bytes.
+    """
+
+    def test_construction_error_emits_json_envelope(self):
+        """generic_adapter_handler: adapter __init__ raising must not leave
+        stdout empty -- covers diff://'s 'Error initializing ... adapter' path.
+        """
+        class BrokenAdapter:
+            def __init__(self, *args, **kwargs):
+                raise ValueError("left:right format required")
+
+        mock_args = Namespace(format='json', check=False)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            with self.assertRaises(SystemExit):
+                generic_adapter_handler(
+                    BrokenAdapter, MockRenderer, 'diff', 'src', None, mock_args
+                )
+
+        stdout = buf.getvalue()
+        self.assertTrue(stdout.strip(), "stdout must not be empty on adapter construction error")
+        envelope = json.loads(stdout)
+        self.assertEqual(envelope['type'], 'diff')
+        self.assertIn('left:right format required', envelope['meta']['errors'][0]['message'])
+
+    def test_get_structure_error_emits_json_envelope(self):
+        """_render_structure: get_structure() raising must not leave stdout
+        empty -- covers testability://'s 'no tests found' / git://'s 'Not a
+        git repository' paths.
+        """
+        class RaisingAdapter:
+            def get_structure(self, **kwargs):
+                raise ValueError("no tests found for src")
+
+        mock_args = Namespace(format='json')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            with self.assertRaises(SystemExit):
+                _render_structure(RaisingAdapter(), MockRenderer, mock_args, scheme='testability', resource='src')
+
+        stdout = buf.getvalue()
+        self.assertTrue(stdout.strip(), "stdout must not be empty on get_structure() error")
+        envelope = json.loads(stdout)
+        self.assertEqual(envelope['type'], 'testability')
+        self.assertEqual(envelope['meta']['errors'][0]['message'], 'no tests found for src')
+
+    def test_get_structure_error_emits_text_line(self):
+        """--format text must also print at least one line, not stay silent."""
+        class RaisingAdapter:
+            def get_structure(self, **kwargs):
+                raise ValueError("Not a git repository: .")
+
+        mock_args = Namespace(format='text')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            with self.assertRaises(SystemExit):
+                _render_structure(RaisingAdapter(), MockRenderer, mock_args, scheme='git', resource='src')
+
+        stdout = buf.getvalue()
+        self.assertTrue(stdout.strip(), "stdout must not be empty on get_structure() error (text format)")
+        self.assertIn('Not a git repository', stdout)
 
 
 if __name__ == '__main__':
