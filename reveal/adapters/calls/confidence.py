@@ -14,8 +14,8 @@ numbers come from (reveal's own VALIDATION.md oracle recall figures).
 from pathlib import Path
 from typing import Any, Dict
 
+from ...analyzers.capability_table import calls_extraction_confidence
 from ...defaults import (
-    CALL_GRAPH_EXTRACTION_CONFIDENCE,
     CALL_GRAPH_DEFAULT_CONFIDENCE,
     CALL_GRAPH_DYNAMIC_DISPATCH_VOCAB,
     CALL_GRAPH_DEFAULT_DISPATCH_VOCAB,
@@ -86,7 +86,7 @@ def build_meta(path: str, *, uncalled: bool = False) -> Dict[str, Any]:
     if total:
         confidence = round(
             sum(
-                CALL_GRAPH_EXTRACTION_CONFIDENCE.get(lang, CALL_GRAPH_DEFAULT_CONFIDENCE) * count
+                calls_extraction_confidence(lang) * count
                 for lang, count in per_language.items()
             ) / total,
             4,

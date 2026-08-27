@@ -290,6 +290,34 @@ class TestDependsAdapterHonestDecline:
         assert r['undercount_possible'] is False
         assert r['_meta']['confidence'] == 'high'
 
+    def test_ruby_unresolved_import_discloses_unclassifiable_language(self, tmp_path):
+        """BACK-1093: Ruby's extractor always returns None from
+        is_intra_project_import (no real True/False signal, unlike Python/
+        C#/Swift) -- an unresolved require() is invisible to
+        _unresolved_intra, so 'confidence: high' alone would misleadingly
+        suggest the same guarantee a genuinely-classified language gets.
+        Must be disclosed in known_limits rather than silently absent."""
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'a.rb', "require 'missing_intra_module'\ndef foo; end\n")
+        _write(tmp_path / 'b.rb', "def bar; end\n")
+        r = DependsAdapter(str(tmp_path / 'b.rb')).get_structure()
+        limits = r['_meta']['known_limits']
+        assert any('Ruby' in l and 'BACK-1093' in l for l in limits)
+        # Deliberately NOT folded into the binary confidence value (see
+        # _build_meta's comment) -- still 'high' since _unresolved_intra
+        # itself is 0 here.
+        assert r['_meta']['confidence'] == 'high'
+
+    def test_python_unresolved_import_does_not_trigger_unclassifiable_note(self, tmp_path):
+        """Python has real classification support -- must never appear in
+        the BACK-1093 known_limits note."""
+        from reveal.adapters.depends import DependsAdapter
+        _write(tmp_path / 'a.py', "import missing_intra_module\n")
+        _write(tmp_path / 'pyproject.toml', '[project]\nname = "t"\n')
+        r = DependsAdapter(str(tmp_path / 'a.py')).get_structure()
+        limits = r['_meta']['known_limits']
+        assert not any('BACK-1093' in l for l in limits)
+
     def test_csharp_intra_project_namespace_miss_is_caveated(self, tmp_path):
         """C#: a `using` into a sub-namespace of a declared namespace that
         doesn't resolve is an intra-project miss (BACK-547 via BACK-544 index);

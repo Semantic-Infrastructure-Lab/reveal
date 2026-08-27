@@ -17,6 +17,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import print_json_result
+from ..analyzers.capability_table import depends_intra_project_classification_supported
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
 from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor
@@ -211,6 +212,11 @@ _SCHEMA_NOTES = [
     'Not deps:// (one character apart) — depends:// answers "who imports this '
     'one module" for a single target; deps:// is a whole-tree dependency dashboard',
     'Scan root: ?root=DIR > .reveal.yaml root:true > package marker > VCS root > inferred subtree',
+    "BACK-1093: some languages (Ruby, Rust, Zig, Dart, GDScript, Lua) have no real "
+    "True/False intra-project classification at all -- an unresolved import from one "
+    "of them never trips the BACK-547 honest-decline caveat, so 'high' confidence on "
+    "a scan dominated by them is disclosed via a dedicated known_limits entry rather "
+    "than silently absent.",
 ]
 
 
@@ -427,6 +433,12 @@ class DependsAdapter(ResourceAdapter):
         # negative must disclose rather than assert a confident "nothing here".
         self._unresolved_intra = 0
         self._unresolved_examples: List[tuple] = []
+        # BACK-1093: languages seen among unresolved imports whose extractor
+        # has no real True/False intra-project classification at all (always
+        # None) — for these, `_unresolved_intra` staying low/zero says
+        # nothing about actual undercount risk, unlike a language with real
+        # classification support where it's a genuine measured count.
+        self._unclassifiable_languages: Set[str] = set()
         # BACK-557: per-scan require-statement coverage for the dominant
         # convention-autoloaded language (Ruby). total = files of that language
         # scanned; with_imports = those declaring ≥1 import/require.
@@ -1161,6 +1173,17 @@ class DependsAdapter(ResourceAdapter):
             self._unresolved_intra += 1
             if len(self._unresolved_examples) < 5:
                 self._unresolved_examples.append((file_path, stmt))
+        elif verdict is None and not depends_intra_project_classification_supported(
+            extractor.language_name
+        ):
+            # BACK-1093: this extractor can never return True/False for any
+            # import shape (always None) — this unresolved import is
+            # invisible to _unresolved_intra not because it was verified
+            # external, but because the language has no honest-decline
+            # signal at all. Disclosed once per language in _build_meta,
+            # not per-import (that would be per-file noise, same reasoning
+            # as _unresolved_examples' 5-item cap).
+            self._unclassifiable_languages.add(extractor.language_name)
 
     def _build_zeitwerk_edges(
         self, files: List[Path], zeitwerk_index: Dict[str, Path],
@@ -1310,10 +1333,23 @@ class DependsAdapter(ResourceAdapter):
                 f'{self._autoload_with_imports}/{self._autoload_total} Ruby files declare any '
                 'require — BACK-557, convention-based autoloading (Zeitwerk) suspected, '
                 'require-based dependents may significantly undercount (positive results too)')
+        if self._unclassifiable_languages:
+            langs = ', '.join(sorted(self._unclassifiable_languages))
+            known_limits.append(
+                f'no intra-project import classification for: {langs} — BACK-1093, '
+                "depends:// cannot distinguish an unresolved import that points inside "
+                "this project from one that's correctly external for these languages, "
+                "so 'high' confidence here does not cover them"
+            )
         return {
             'analysis_kind': 'import-graph',
             # BACK-547: a graph with unresolved intra-project imports is not a
-            # high-confidence source for a blast-radius negative.
+            # high-confidence source for a blast-radius negative. BACK-1093:
+            # unclassifiable-language imports are a distinct, disclosed-but-
+            # not-scored risk (see known_limits above) — deliberately not
+            # folded into this binary confidence value, since "how much
+            # residual risk" for a whole language is a bigger judgment call
+            # than this per-scan flag should make unilaterally.
             'confidence': 'reduced' if self._unresolved_intra > 0 else 'high',
             'known_limits': known_limits,
         }
