@@ -69,6 +69,45 @@ class TestParseBudget(unittest.TestCase):
         self.assertEqual(_parse_budget("0-lines"), (None, 0))
 
 
+class TestPackAdapterBudgetQueryParam(unittest.TestCase):
+    """BACK-1180: `reveal pack . --budget 0` silently produced the SAME
+    output as no --budget at all (2000-token default). Two compounding
+    bugs, both invisible to TestParseBudget above since it calls
+    _parse_budget() directly with a plain string, bypassing both:
+
+    1. query_parser.coerce_value() coerces the literal strings '0'/'1' to
+       bool False/True regardless of the field's real type, so ?budget=0
+       arrives at PackAdapter as `False`, not `0`.
+    2. get_structure() used `self.query_params.get('budget') or '2000'` —
+       a falsy coerced value (False, or plain int 0) reads as "absent" and
+       silently substitutes the default (BACK-985 shape).
+    """
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmpdir.name)
+        (self.path / "a.py").write_text("def f():\n    return 1\n" * 20)
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def test_budget_zero_selects_nothing_not_the_default(self):
+        from reveal.adapters.pack import PackAdapter
+        result = PackAdapter(str(self.path), "budget=0").get_structure()
+        self.assertEqual(result['meta']['budget_tokens'], 0)
+        self.assertEqual(result['meta']['selected'], 0)
+
+    def test_budget_one_is_honored_not_coerced_to_bool(self):
+        from reveal.adapters.pack import PackAdapter
+        result = PackAdapter(str(self.path), "budget=1").get_structure()
+        self.assertEqual(result['meta']['budget_tokens'], 1)
+
+    def test_no_budget_param_still_defaults_to_2000(self):
+        from reveal.adapters.pack import PackAdapter
+        result = PackAdapter(str(self.path), "").get_structure()
+        self.assertEqual(result['meta']['budget_tokens'], 2000)
+
+
 # ---------------------------------------------------------------------------
 # _count_lines
 # ---------------------------------------------------------------------------

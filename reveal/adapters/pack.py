@@ -922,7 +922,20 @@ class PackAdapter(ResourceAdapter):
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         path = Path(self.path)
-        budget_str = str(self.query_params.get('budget') or '2000')
+        # BACK-1180: two compounding bugs made ?budget=0 silently fall back
+        # to the 2000 default instead of being honored (0 = select nothing).
+        # 1. 'or' treats a falsy coerced value as absent (BACK-985 shape).
+        # 2. query_parser.coerce_value() coerces the literal strings '0'/'1'
+        #    to bool False/True regardless of the field's real type — so
+        #    budget=0 arrives here as `False`, and str(False) == 'False'
+        #    fails _parse_budget's int() and falls back to 2000 too.
+        _budget_param = self.query_params.get('budget')
+        if _budget_param is None:
+            budget_str = '2000'
+        elif isinstance(_budget_param, bool):
+            budget_str = str(int(_budget_param))
+        else:
+            budget_str = str(_budget_param)
         focus = self.query_params.get('focus') or None
         since = self.query_params.get('since') or None
         emit_content = str(self.query_params.get('content', False)).lower() == 'true'
