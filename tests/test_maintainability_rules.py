@@ -212,6 +212,50 @@ class TestM102OrphanFile(unittest.TestCase):
             finally:
                 self.teardown_directory(temp_dir)
 
+    def test_spec_dir_files_ok(self):
+        """BACK-1199: files under spec/ (RSpec convention) are recognized as
+        test files, not just tests/ — previously M102's own vocabulary
+        ('tests' in parts or 'test' in parts) didn't know about spec/, so
+        every spec file was eligible to be reported as orphaned."""
+        files = {
+            "pyproject.toml": "[project]\nname = 'testpkg'\n",
+            "testpkg/__init__.py": "",
+            "testpkg/main.py": "print('hello')\n",
+            "testpkg/spec/orphan_spec.py": "def test_something():\n    pass\n",
+        }
+        temp_dir = self.create_temp_directory_structure(files)
+        try:
+            rule = M102()
+            spec_path = str(temp_dir / "testpkg" / "spec" / "orphan_spec.py")
+            spec_content = files["testpkg/spec/orphan_spec.py"]
+            detections = rule.check(spec_path, None, spec_content)
+            self.assertEqual(len(detections), 0)
+        finally:
+            self.teardown_directory(temp_dir)
+
+    def test_package_name_prefixed_with_test_not_flagged_as_test_dir(self):
+        """BACK-1199 regression: a real package directory named `testpkg`
+        must NOT be treated as a test directory (a bare prefix match on
+        `test` would false-positive on it) — only exact test/tests/spec/
+        specs/__tests__ names count."""
+        files = {
+            "pyproject.toml": "[project]\nname = 'testpkg'\n",
+            "testpkg/__init__.py": "",
+            "testpkg/main.py": "print('hello')\n",
+            "testpkg/orphan.py": "def unused():\n    pass\n",
+        }
+        temp_dir = self.create_temp_directory_structure(files)
+        try:
+            rule = M102()
+            orphan_path = str(temp_dir / "testpkg" / "orphan.py")
+            orphan_content = files["testpkg/orphan.py"]
+            detections = rule.check(orphan_path, None, orphan_content)
+            # Must still be flagged as orphaned — proves testpkg/ wasn't
+            # silently skipped as a "test directory".
+            self.assertEqual(len(detections), 1)
+        finally:
+            self.teardown_directory(temp_dir)
+
     def test_cache_populated_and_reused(self):
         """Cache is built on first check and reused for subsequent checks in same package."""
         import reveal.rules.maintainability.M102 as m

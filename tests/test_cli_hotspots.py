@@ -495,6 +495,19 @@ class TestBuildTestNameIndex(unittest.TestCase):
             index = _build_test_name_index(Path(d))
             self.assertNotIn('conftest', index)
 
+    def test_finds_test_functions_in_spec_dir(self):
+        # BACK-1199: spec/ (RSpec/Jest convention) is part of the shared
+        # canonical vocabulary, same as tests/ and test/.
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            spec_dir = os.path.join(d, 'spec')
+            os.makedirs(spec_dir)
+            Path(os.path.join(spec_dir, 'test_baz.py')).write_text(
+                'def test_validate_input():\n    pass\n'
+            )
+            index = _build_test_name_index(Path(d))
+            self.assertIn('validate_input', index)
+
 
 class TestRenderFunctionHotspotsWithCoverage(unittest.TestCase):
     """_render_function_hotspots with test_index coverage overlay."""

@@ -69,6 +69,24 @@ SKIP_DIRECTORIES = frozenset({
 # (no source-code files at its own top level).
 AMBIGUOUS_SKIP_DIRECTORIES = frozenset({'env', 'venv', 'build', 'dist'})
 
+# Canonical test-directory vocabulary (BACK-1199).
+#
+# Single source of truth: previously three call sites each redefined this
+# with drifting contents — surface.py and hotspots.py knew about `spec`,
+# but rules/maintainability/M102.py did not, so on any Ruby/RSpec codebase
+# (spec/ instead of tests/) M102 treated every spec file as regular source
+# and flagged it as "orphaned" (not imported anywhere) when in fact it was
+# never expected to be imported at all.
+#
+# TEST_DIR_NAMES is exact-match — the canonical set every consumer agrees
+# on. TEST_DIR_PREFIX is a *broader*, opt-in generalization (also matches
+# `testing/`, `test-fixtures/`, etc.) — surface.py's `--source-only` alone
+# layers it on top; a bare prefix match is too loose for M102/hotspots,
+# which walk real package directories and would false-positive on names
+# like `testpkg` (BACK-1199 regression caught during consolidation).
+TEST_DIR_PREFIX = 'test'
+TEST_DIR_NAMES = frozenset({'test', 'tests', '__tests__', 'spec', 'specs'})
+
 
 class RuleDefaults:
     """Default thresholds for quality rules.

@@ -10,7 +10,11 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePath
 from typing import Any, Callable, Dict, Iterable, Iterator, Optional, List, Set, Union
 
-from ..defaults import SKIP_DIRECTORIES, AMBIGUOUS_SKIP_DIRECTORIES
+from ..defaults import (
+    SKIP_DIRECTORIES,
+    AMBIGUOUS_SKIP_DIRECTORIES,
+    TEST_DIR_NAMES,
+)
 from ..registry import _is_cpp_header_content, language_for_extension, LANGUAGE_DISPLAY_NAMES
 
 
@@ -62,6 +66,35 @@ def is_skippable_dir(parent: Path, name: str) -> bool:
     except OSError:
         return True
     return True
+
+
+def is_test_dir(name: str) -> bool:
+    """True if directory *name* is exactly a conventional test/spec
+    directory name (BACK-1199) — the shared classifier that replaces three
+    independent, drifting copies of this check (surface.py, hotspots.py,
+    rules/maintainability/M102.py).
+
+    Exact-match against ``TEST_DIR_NAMES`` deliberately, not a prefix
+    match — a prefix match on ``test`` also matches real package names
+    like ``testpkg``. Callers that want the broader, opt-in prefix
+    generalization (``testing/``, ``test-fixtures/``, ...) combine this
+    with their own ``name.startswith(TEST_DIR_PREFIX)`` check — see
+    ``adapters/surface.py::_is_test_dir``.
+    """
+    return name in TEST_DIR_NAMES
+
+
+def is_test_filename(stem: str) -> bool:
+    """True if *stem* (filename without extension) follows the generic,
+    language-agnostic ``test_``/``_test`` naming convention, or is itself
+    one of the canonical test-directory names used as a bare filename
+    (e.g. a top-level ``tests.py``) (BACK-1199).
+
+    Callers needing per-language precision (e.g. Ruby's ``_spec`` suffix,
+    Java's ``Test``/``Tests`` suffix) layer their own extension-specific
+    checks on top of this — see ``adapters/surface.py::_is_test_file``.
+    """
+    return stem.startswith('test_') or stem.endswith('_test') or stem in TEST_DIR_NAMES
 
 
 def to_posix(path: Union[str, PurePath]) -> str:

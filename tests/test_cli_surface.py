@@ -1364,6 +1364,16 @@ class TestSourceOnly(unittest.TestCase):
         self.assertIn('CORE_KEY', env_names)
         self.assertNotIn('NESTED_TEST_KEY', env_names)
 
+    def test_source_only_excludes_spec_dir(self):
+        # BACK-1199: spec/ (RSpec/Jest convention) is part of the shared
+        # canonical test-directory vocabulary, same as tests/.
+        _write(self.tmp, 'app.py', 'import os\nDB = os.getenv("PROD_KEY")\n')
+        _write(self.tmp, 'spec/app_spec.py', 'import os\nX = os.getenv("SPEC_KEY")\n')
+        report = _scan_surface(Path(self.tmp), source_only=True)
+        env_names = [e['name'] for e in report['surfaces']['env']]
+        self.assertIn('PROD_KEY', env_names)
+        self.assertNotIn('SPEC_KEY', env_names)
+
 
 class TestNavSurfaceJava(unittest.TestCase):
     """Unit tests for the Java surface scanner (nav_surface_java, BACK-403 pt 2)."""

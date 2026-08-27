@@ -23,13 +23,12 @@ from ..utils.path_utils import (
     census_and_coverage_for_path,
     detect_non_python_language,
     is_skippable_dir,
+    is_test_dir,
+    is_test_filename,
 )
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
-
-# Test directory names pruned by --source-only (prefix-match covers tests/, testing/, etc.)
-_TEST_DIR_PREFIX = 'test'
-_TEST_DIR_NAMES: frozenset = frozenset({'__tests__', 'spec', 'specs'})
+from ..defaults import TEST_DIR_PREFIX as _TEST_DIR_PREFIX
 
 # Test file patterns pruned by --source-only
 _TEST_FILE_PY_NAMES: frozenset = frozenset({'conftest.py'})
@@ -49,7 +48,10 @@ _SURFACE_LABELS = {
 
 
 def _is_test_dir(name: str) -> bool:
-    return name.startswith(_TEST_DIR_PREFIX) or name in _TEST_DIR_NAMES
+    # Broader than the canonical is_test_dir() by design — also matches
+    # `testing/`, `test-fixtures/`, etc. (prefix-match covers tests/,
+    # testing/, etc.); see defaults.TEST_DIR_PREFIX docstring.
+    return name.startswith(_TEST_DIR_PREFIX) or is_test_dir(name)
 
 
 def _is_test_file(fpath: Path) -> bool:
@@ -57,7 +59,7 @@ def _is_test_file(fpath: Path) -> bool:
     stem = fpath.stem
     suffix = fpath.suffix
     if suffix == '.py':
-        return name.startswith('test_') or stem.endswith('_test') or name in _TEST_FILE_PY_NAMES
+        return is_test_filename(stem) or name in _TEST_FILE_PY_NAMES
     if suffix in ('.ts', '.tsx', '.js', '.jsx'):
         return any(infix in name for infix in _TEST_FILE_TS_INFIX)
     if suffix in ('.java', '.cs'):

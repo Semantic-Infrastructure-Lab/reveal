@@ -15,9 +15,14 @@ from typing import Any, Dict, List, Optional, Set, cast
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..defaults import TEST_DIR_NAMES
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
+
+# Top-level test-directory candidates to scan (BACK-1199: canonical
+# vocabulary, shared with surface.py/M102 via defaults.TEST_DIR_NAMES).
+_TEST_DIR_CANDIDATES = tuple(sorted(TEST_DIR_NAMES))
 
 
 def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List[Dict[str, Any]]:
@@ -48,7 +53,7 @@ def _build_test_name_index(path: Path) -> Set[str]:
     names: Set[str] = set()
     fn_pattern = re.compile(r'^\s*def\s+test_(\w+)', re.MULTILINE)
     cls_pattern = re.compile(r'^\s*class\s+Test(\w+)', re.MULTILINE)
-    for candidate in ('tests', 'test', 'spec'):
+    for candidate in _TEST_DIR_CANDIDATES:
         test_dir = path / candidate
         if not test_dir.is_dir():
             continue

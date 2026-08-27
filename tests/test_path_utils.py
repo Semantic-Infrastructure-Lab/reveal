@@ -15,6 +15,8 @@ from reveal.utils.path_utils import (
     to_posix,
     is_unsafe_scan_root,
     is_skippable_dir,
+    is_test_dir,
+    is_test_filename,
 )
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
@@ -894,3 +896,39 @@ class TestIsSkippableDir:
         (d / 'package-1.0.whl').write_bytes(b'')
         (d / 'pyvenv.cfg').write_text('')
         assert is_skippable_dir(tmp_path, 'dist') is True
+
+
+class TestIsTestDir:
+    """BACK-1199: canonical test-directory vocabulary, shared by
+    surface.py, hotspots.py, and rules/maintainability/M102.py — previously
+    each redefined this independently, and M102's copy didn't know about
+    spec/specs/__tests__ (RSpec/Jest conventions), so on any non-Python
+    test suite M102 could report test files as orphaned source."""
+
+    def test_canonical_names_recognized(self):
+        for name in ('test', 'tests', 'spec', 'specs', '__tests__'):
+            assert is_test_dir(name) is True, name
+
+    def test_exact_match_only_not_prefix(self):
+        # A real package directory named e.g. `testpkg` must NOT match —
+        # this is exact-set membership, not a `startswith('test')` prefix
+        # check (that broader match is surface.py's own opt-in layer).
+        for name in ('testpkg', 'testing', 'contests', 'attestation'):
+            assert is_test_dir(name) is False, name
+
+
+class TestIsTestFilename:
+    """BACK-1199: canonical test_/_test filename vocabulary."""
+
+    def test_generic_prefix_and_suffix_match(self):
+        assert is_test_filename('test_foo') is True
+        assert is_test_filename('foo_test') is True
+
+    def test_bare_canonical_name_matches(self):
+        # A top-level `tests.py`/`spec.py` is itself a test file.
+        assert is_test_filename('tests') is True
+        assert is_test_filename('spec') is True
+
+    def test_unrelated_name_does_not_match(self):
+        assert is_test_filename('main') is False
+        assert is_test_filename('testpkg') is False

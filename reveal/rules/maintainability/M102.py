@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ...utils.path_utils import is_test_dir, is_test_filename
 
 logger = logging.getLogger(__name__)
 
@@ -163,9 +164,6 @@ class M102(BaseRule):
     # imported — so static import analysis cannot detect their usage.
     _RULE_CODE_RE = re.compile(r'^[A-Z][0-9]+$')
 
-    # Test file patterns
-    TEST_PATTERNS = {'test_', '_test', 'tests'}
-
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
@@ -243,20 +241,17 @@ class M102(BaseRule):
         return False
 
     def _is_test_file(self, path: Path) -> bool:
-        """Check if file is a test file."""
+        """Check if file is a test file (BACK-1199: shared classifier —
+        previously this rule's own `'tests' in parts or 'test' in parts`
+        check didn't know about `spec`/`specs`/`__tests__`, so every RSpec
+        file on a Ruby codebase was treated as regular source and could be
+        flagged as orphaned."""
         stem = path.stem.lower()
-        parts = [p.lower() for p in path.parts]
-
-        # Check filename
-        for pattern in self.TEST_PATTERNS:
-            if pattern in stem:
-                return True
-
-        # Check directory
-        if 'tests' in parts or 'test' in parts:
+        if is_test_filename(stem):
             return True
 
-        return False
+        parts = [p.lower() for p in path.parts]
+        return any(is_test_dir(p) for p in parts)
 
     def _find_package_root(self, path: Path) -> Optional[Path]:
         """Find the root of the Python package.
