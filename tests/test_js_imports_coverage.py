@@ -680,6 +680,44 @@ class TestTsconfigPathsResolution:
         assert e.resolve_import(stmt, src_dir, search_paths=[tmp_path]) is None
         assert e.is_intra_project_import(stmt, src_dir, search_paths=[tmp_path]) is False
 
+    def _write_tsconfig_baseurl_only(self, root: Path, base_url: str = '.') -> None:
+        """BACK-1188: baseUrl with NO `paths` key at all -- the missing 6th
+        case from BACK-694's own regression suite."""
+        root.mkdir(parents=True, exist_ok=True)
+        (root / 'tsconfig.json').write_text(
+            '{\n  "compilerOptions": {\n'
+            f'    "baseUrl": "{base_url}"\n'
+            '  }\n}\n')
+
+    def test_baseurl_only_resolves_without_paths(self, tmp_path):
+        """BACK-1188: `baseUrl` alone (no `paths`) must still resolve a bare
+        specifier against baseUrl -- previously this returned None
+        immediately whenever `paths` was empty/absent, reporting a
+        confident zero for a specifier that DOES resolve on disk."""
+        self._write_tsconfig_baseurl_only(tmp_path)
+        target = tmp_path / 'src' / 'util.ts'
+        target.parent.mkdir(parents=True)
+        target.write_text('export const helper = 1;')
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('src/util', tmp_path)
+        assert e.resolve_import(stmt, tmp_path, search_paths=[tmp_path]) == target.resolve()
+        assert e.is_intra_project_import(stmt, tmp_path, search_paths=[tmp_path]) is True
+
+    def test_baseurl_only_unresolved_specifier_is_ambiguous_not_external(self, tmp_path):
+        """BACK-1188: when baseUrl is set but the specifier resolves neither
+        via baseUrl nor anywhere else, reveal can't rule out an unresolved
+        local file the way it can with no baseUrl at all -- the honest
+        answer is None (ambiguous), not a confident False (definitely
+        external)."""
+        self._write_tsconfig_baseurl_only(tmp_path)
+        (tmp_path / 'src').mkdir(parents=True)
+
+        e = JavaScriptExtractor()
+        stmt = self._stmt('src/does_not_exist', tmp_path)
+        assert e.resolve_import(stmt, tmp_path, search_paths=[tmp_path]) is None
+        assert e.is_intra_project_import(stmt, tmp_path, search_paths=[tmp_path]) is None
+
     def test_longest_wildcard_prefix_wins(self, tmp_path):
         """tsc resolution order: among overlapping wildcard keys, the
         longest matching prefix wins ('@app/utils/*' over '@app/*')."""

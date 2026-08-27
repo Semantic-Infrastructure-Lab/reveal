@@ -286,6 +286,25 @@ def _match_tsconfig_path(module_path: str, base_url: Path, paths: Dict[str, List
     return [base_url / target.replace('*', matched) for target in paths[key]]
 
 
+def _tsconfig_candidate_bases(
+    module_path: str, base_url: Path, paths: Dict[str, List[str]],
+) -> List[Path]:
+    """Candidate absolute targets for module_path under a tsconfig
+    baseUrl/paths configuration (BACK-1188).
+
+    An explicit `paths` alias, when present, is the only mapping tsc
+    consults (see `_match_tsconfig_path`). When `paths` is empty, `baseUrl`
+    ALONE still makes every bare specifier a same-directory resolution
+    candidate under tsc's classic module resolution -- `baseUrl='.'` plus
+    `import 'src/util'` resolves against `<baseUrl>/src/util`, no `paths`
+    entry required. Previously reveal treated "no `paths`" as "no tsconfig
+    alias applies at all" and never even tried this candidate.
+    """
+    if paths:
+        return _match_tsconfig_path(module_path, base_url, paths)
+    return [base_url / module_path]
+
+
 def _load_workspace_package_globs(workspace_root: Path) -> List[str]:
     """The workspace-member glob list declared at *workspace_root* — npm/yarn
     `package.json` `"workspaces"` (array, or `{"packages": [...]}`), else
@@ -1001,26 +1020,40 @@ class JavaScriptExtractor(LanguageExtractor):
         module_path = stmt.module_name
         if module_path.startswith('.'):
             return True
-        if self._tsconfig_alias_matches(module_path, base_path, search_paths):
+        alias_verdict = self._tsconfig_alias_matches(module_path, base_path, search_paths)
+        if alias_verdict:
             return True
         workspace_root = search_paths[0] if search_paths else None
         if workspace_root is not None:
             packages = _find_workspace_packages(workspace_root)
             if _match_workspace_package(module_path, packages):
                 return True
+        # BACK-1188: a baseUrl-only tsconfig (no `paths`) leaves genuine
+        # ambiguity when neither check above resolves -- reveal can't fully
+        # replicate tsc's module resolution, so don't claim a confident
+        # "definitely external" the way we do with no baseUrl at all.
+        if alias_verdict is None:
+            return None
         return False
 
     def _resolve_via_tsconfig(
         self, module_path: str, base_path: Path, search_paths: Optional[List[Path]],
     ) -> Optional[Path]:
         """Resolve a bare specifier via the nearest tsconfig.json's
-        `paths`/`baseUrl` alias map. Returns None if no tsconfig is found,
-        it declares no `paths`, or no alias matches -- all of which mean
-        "genuine external dependency", not a resolution failure."""
+        `paths`/`baseUrl` alias map. Returns None if no tsconfig is found or
+        no alias/baseUrl candidate resolves -- which means "genuine external
+        dependency", not a resolution failure.
+
+        BACK-1188: `baseUrl` alone (no `paths`) still makes every bare
+        specifier a same-directory candidate under tsc's own resolution --
+        previously this returned None immediately whenever `paths` was
+        empty, so a specifier that resolved via `baseUrl` alone was silently
+        declined and reported as a confident zero (BACK-694 shipped the
+        `paths` branch but not this one)."""
         base_url, paths = self._tsconfig_aliases_for(base_path, search_paths)
-        if base_url is None or not paths:
+        if base_url is None:
             return None
-        for candidate_base in _match_tsconfig_path(module_path, base_url, paths):
+        for candidate_base in _tsconfig_candidate_bases(module_path, base_url, paths):
             resolved = self._resolve_target_path(candidate_base)
             if resolved:
                 return resolved
@@ -1060,14 +1093,23 @@ class JavaScriptExtractor(LanguageExtractor):
 
     def _tsconfig_alias_matches(
         self, module_path: str, base_path: Path, search_paths: Optional[List[Path]],
-    ) -> bool:
-        """Whether module_path matches a tsconfig `paths` alias pattern,
-        independent of whether the aliased target actually resolves to a
-        file on disk."""
+    ) -> Optional[bool]:
+        """Whether module_path matches a tsconfig `paths` alias pattern
+        (True, independent of whether the aliased target actually resolves
+        to a file on disk -- BACK-694), or resolves via `baseUrl` alone when
+        no `paths` is declared (True if a baseUrl-relative candidate exists
+        on disk; None -- ambiguous, not "definitely external" -- if it
+        doesn't, since baseUrl means reveal can't rule out an unresolved
+        local file the way it can with no baseUrl at all) (BACK-1188).
+        False only when no tsconfig/baseUrl applies at all."""
         base_url, paths = self._tsconfig_aliases_for(base_path, search_paths)
-        if base_url is None or not paths:
+        if base_url is None:
             return False
-        return bool(_match_tsconfig_path(module_path, base_url, paths))
+        if paths:
+            return bool(_match_tsconfig_path(module_path, base_url, paths))
+        if self._resolve_target_path(base_url / module_path):
+            return True
+        return None
 
     @staticmethod
     def _tsconfig_aliases_for(
