@@ -12,7 +12,21 @@ _FILTER_OP_CHARS = frozenset('<>~!')
 
 
 def coerce_value(value: str) -> Union[bool, int, float, str]:
-    """Coerce a string value to its appropriate type."""
+    """Coerce a string value to its appropriate type.
+
+    BACK-1211: the literal strings '0'/'1' are coerced to bool here
+    regardless of the field's real declared type (int/float/enum/string) --
+    this function has no schema to consult, only the string shape. Harmless
+    for int_param()-style consumers (bool is an int subclass), but a call
+    site that does ``str(query_params.get(x) or default)`` expecting the
+    original numeric/string representation gets ``str(False) == 'False'``
+    instead of ``'0'`` -- confirmed live in pack's ?budget=0 (BACK-1180).
+    A call site whose values could legitimately BE '0'/'1' (a numeric
+    field, or an enum with those literal members) must special-case
+    ``isinstance(value, bool)`` and recover via ``str(int(value))`` the way
+    ``PackAdapter.get_structure()`` does for ?budget= -- see that call site
+    for the exact pattern.
+    """
     if not isinstance(value, str):
         return value
 

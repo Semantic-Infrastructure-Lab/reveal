@@ -107,6 +107,13 @@ class PatchesAdapter(ResourceAdapter):
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         patches = scan_patches([self.path])
+        # BACK-1211: query_parser.coerce_value() turns a literal '0'/'1'
+        # value into bool regardless of field type -- str(True/False) would
+        # silently corrupt group_by/target_filter if either were ever
+        # literally '0' or '1'. Not a live bug (group is a fixed enum,
+        # target is a mock-target name), but if that ever changes, follow
+        # PackAdapter.get_structure()'s isinstance(value, bool) recovery
+        # pattern for ?budget= (BACK-1180).
         group_by = str(self.query_params.get('group') or 'target')
         if group_by not in {'target', 'test', 'file'}:
             group_by = 'target'

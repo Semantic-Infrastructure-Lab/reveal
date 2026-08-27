@@ -405,6 +405,12 @@ class SurfaceAdapter(ResourceAdapter):
         }
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+        # BACK-1211: query_parser.coerce_value() turns a literal '0'/'1'
+        # value into bool regardless of field type -- str(True/False) would
+        # silently corrupt type_filter if a surface type were ever literally
+        # named '0' or '1'. Not a live bug (taxonomy names never are), but
+        # if that ever changes, follow PackAdapter.get_structure()'s
+        # isinstance(value, bool) recovery pattern for ?budget= (BACK-1180).
         type_filter = str(self.query_params.get('type') or '')
         _source_only_raw = self.query_params.get('source_only')
         source_only = str(_source_only_raw).lower() == 'true' if _source_only_raw is not None else False
