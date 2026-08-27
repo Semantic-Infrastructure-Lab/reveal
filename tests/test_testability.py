@@ -557,3 +557,19 @@ vi.fn();
     targets = {g['key'] for g in result['groups']}
     assert './auth' in targets
     assert 'AuthService.login' in targets
+
+
+class TestNoTestsIsNotApplicable:
+    """BACK-1210: 'no tests found' is a not-applicable result (a real DD
+    finding about the target), not an adapter failure -- must raise
+    NotApplicableError, not a bare ValueError indistinguishable from a
+    genuine bug."""
+
+    def test_no_tests_found_raises_not_applicable_error(self, tmp_path):
+        from reveal.adapters.testability import TestabilityAdapter
+        from reveal.errors import NotApplicableError
+
+        (tmp_path / "a.py").write_text("def f(): pass\n")
+        adapter = TestabilityAdapter(str(tmp_path))
+        with pytest.raises(NotApplicableError, match="no tests found"):
+            adapter.get_structure()

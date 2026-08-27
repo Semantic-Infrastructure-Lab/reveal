@@ -183,12 +183,27 @@ class TestGitAdapterBasics:
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_adapter_with_invalid_path(self):
-        """Test error handling for invalid repository path."""
+        """Test error handling for invalid repository path.
+
+        BACK-1210: 'not a git repository' is a NotApplicableError (a fact
+        about the target, not a failure) -- distinct from ValueError,
+        which 'Failed to open' (a genuine corrupt-repo error) still is.
+        """
+        from reveal.errors import NotApplicableError
         adapter = GitAdapter(path='/nonexistent/path')
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises((ValueError, NotApplicableError)) as exc_info:
             adapter.get_structure()
 
         assert "Not a git repository" in str(exc_info.value) or "Failed to open" in str(exc_info.value)
+
+    def test_not_a_git_repo_raises_not_applicable_error(self, tmp_path):
+        """BACK-1210: a plain (non-git) directory is a not-applicable
+        target -- a DD finding, not a crash -- so it must raise
+        NotApplicableError specifically, not a bare ValueError."""
+        from reveal.errors import NotApplicableError
+        adapter = GitAdapter(path=str(tmp_path))
+        with pytest.raises(NotApplicableError, match="Not a git repository"):
+            adapter.get_structure()
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_adapter_registration(self):

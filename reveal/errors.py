@@ -54,6 +54,27 @@ class RevealError(Exception):
         return "\n".join(parts)
 
 
+class NotApplicableError(RevealError):
+    """Raised by an adapter when its query genuinely does not apply to the
+    target — not a failure, a fact about the target (BACK-1210).
+
+    E.g. testability:// on a repo with no test directory, or git:// on an
+    extracted source dump with no .git — the target really has no tests /
+    isn't a git repo, which is itself a legitimate DD finding, not a
+    crash. Distinct from every other exception an adapter can raise
+    (a real bug, a permissions error, a corrupt file): those still mean
+    "this broke" and keep exiting 1. Caught specially by
+    cli/routing/uri.py's _render_structure() to emit a valid envelope
+    with meta.applicable=False and exit 0, instead of the two being
+    indistinguishable (both exit 1, empty stdout) to a scripted batch
+    consumer.
+    """
+
+    def __init__(self, message: str, reason: Optional[str] = None):
+        self.reason = reason or message
+        super().__init__(message=message)
+
+
 class AnalyzerNotFoundError(RevealError):
     """Error raised when no analyzer is found for a file type."""
 

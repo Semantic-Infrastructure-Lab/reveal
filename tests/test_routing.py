@@ -1542,5 +1542,97 @@ class TestAdapterErrorEnvelope(unittest.TestCase):
         self.assertIn('Not a git repository', stdout)
 
 
+class TestNotApplicableEnvelope(unittest.TestCase):
+    """BACK-1210: an adapter query that genuinely does not apply to the
+    target (no tests, not a git repo) must be distinguishable from a
+    genuine adapter failure -- exit 0 with meta.applicable=False, not the
+    same exit 1 + empty-ish output a real crash produces."""
+
+    def test_not_applicable_exits_zero_not_one(self):
+        from reveal.errors import NotApplicableError
+
+        class RaisingAdapter:
+            def get_structure(self, **kwargs):
+                raise NotApplicableError("no tests found for src")
+
+        mock_args = Namespace(format='json')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            # Must NOT raise SystemExit -- distinguishes it from a real failure.
+            _render_structure(RaisingAdapter(), MockRenderer, mock_args, scheme='testability', resource='src')
+
+        envelope = json.loads(buf.getvalue())
+        self.assertEqual(envelope['applicable'], False)
+        self.assertEqual(envelope['reason'], 'no tests found for src')
+        self.assertEqual(envelope['meta']['warnings'][0]['code'], 'not_applicable')
+
+    def test_not_applicable_json_envelope_not_empty(self):
+        from reveal.errors import NotApplicableError
+
+        class RaisingAdapter:
+            def get_structure(self, **kwargs):
+                raise NotApplicableError("Not a git repository: .")
+
+        mock_args = Namespace(format='json')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _render_structure(RaisingAdapter(), MockRenderer, mock_args, scheme='git', resource='.')
+
+        stdout = buf.getvalue()
+        self.assertTrue(stdout.strip(), "stdout must not be empty for a not-applicable result")
+        envelope = json.loads(stdout)
+        self.assertEqual(envelope['type'], 'git')
+
+    def test_not_applicable_text_line_not_empty(self):
+        from reveal.errors import NotApplicableError
+
+        class RaisingAdapter:
+            def get_structure(self, **kwargs):
+                raise NotApplicableError("no tests found for src")
+
+        mock_args = Namespace(format='text')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _render_structure(RaisingAdapter(), MockRenderer, mock_args, scheme='testability', resource='src')
+
+        stdout = buf.getvalue()
+        self.assertTrue(stdout.strip())
+        self.assertIn('not applicable', stdout)
+        self.assertIn('no tests found', stdout)
+
+    def test_generic_error_still_exits_one_unaffected(self):
+        """Sanity check: a real (non-NotApplicableError) exception must
+        keep exiting 1 -- this fix is additive, not a behavior change for
+        genuine failures."""
+        class RaisingAdapter:
+            def get_structure(self, **kwargs):
+                raise ValueError("something genuinely broke")
+
+        mock_args = Namespace(format='json')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            with self.assertRaises(SystemExit) as ctx:
+                _render_structure(RaisingAdapter(), MockRenderer, mock_args, scheme='stats', resource='src')
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_not_applicable_in_post_process_also_exits_zero(self):
+        from reveal.errors import NotApplicableError
+
+        class OkAdapter:
+            def get_structure(self, **kwargs):
+                return {'type': 'x'}
+
+            def post_process(self, result, args):
+                raise NotApplicableError("nothing to post-process")
+
+        mock_args = Namespace(format='json')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _render_structure(OkAdapter(), MockRenderer, mock_args, scheme='testability', resource='src')
+
+        envelope = json.loads(buf.getvalue())
+        self.assertEqual(envelope['applicable'], False)
+
+
 if __name__ == '__main__':
     unittest.main()

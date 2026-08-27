@@ -10,12 +10,40 @@ import re
 import sys
 from typing import Any, List, Optional, TYPE_CHECKING
 
+from ...errors import NotApplicableError
 from ...utils import print_json_result
 
 if TYPE_CHECKING:
     from argparse import Namespace
 
 logger = logging.getLogger(__name__)
+
+
+def _emit_not_applicable_envelope(scheme: str, resource: str, reason: str, args: 'Namespace') -> None:
+    """Emit a valid envelope for a query that genuinely does not apply to
+    the target (BACK-1210) — e.g. testability:// with no tests, git://
+    on a non-repo — exiting 0, not 1. This is a recorded result ("ran,
+    nothing applicable, here's why"), not a failure to work around; a
+    scripted batch consumer can no longer confuse it with a genuine
+    adapter crash (which still exits 1 via _emit_adapter_error_envelope).
+    Composes with BACK-1209's envelope fix: same shape, meta.applicable
+    added.
+    """
+    from ...reveal_types import CONTRACT_VERSION
+    from ...utils.results import ResultBuilder
+
+    result = ResultBuilder.create(
+        result_type=scheme,
+        source=resource,
+        contract_version=CONTRACT_VERSION,
+        warnings=[{'code': 'not_applicable', 'message': reason}],
+        applicable=False,
+        reason=reason,
+    )
+    if getattr(args, 'format', 'text') == 'json':
+        print_json_result(result)
+    else:
+        print(f"({scheme}://) not applicable: {reason}")
 
 
 def _emit_adapter_error_envelope(scheme: str, resource: str, error_msg: str, args: 'Namespace') -> None:
@@ -738,6 +766,11 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
     # Get structure from adapter
     try:
         result = adapter.get_structure(**structure_kwargs)
+    except NotApplicableError as e:
+        # BACK-1210: the query genuinely doesn't apply to this target (no
+        # tests, not a git repo) -- a recorded result, not a failure.
+        _emit_not_applicable_envelope(scheme or 'unknown', resource or '', e.reason, args)
+        return
     except Exception as e:
         error_msg = str(e)
         if '\n' in error_msg:
@@ -755,6 +788,9 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
     if post_process is not None:
         try:
             result = adapter.post_process(result, args)
+        except NotApplicableError as e:
+            _emit_not_applicable_envelope(scheme or 'unknown', resource or '', e.reason, args)
+            return
         except Exception as e:
             error_msg = str(e)
             if '\n' in error_msg:

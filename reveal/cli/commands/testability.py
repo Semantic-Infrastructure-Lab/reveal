@@ -23,6 +23,7 @@ from reveal.adapters.testability import (  # noqa: F401 - re-exported for back-c
     _render_report,
     _resolve_test_paths,
 )
+from reveal.errors import NotApplicableError
 
 
 def create_testability_parser() -> argparse.ArgumentParser:
@@ -97,7 +98,7 @@ def run_testability(args: Namespace) -> None:
 
     try:
         result = TestabilityAdapter(str(path), query).get_structure()
-    except ValueError:
+    except (ValueError, NotApplicableError):
         print(
             "reveal testability: no tests found. Pass --tests <path>.",
             file=sys.stderr,

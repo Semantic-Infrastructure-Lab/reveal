@@ -9,6 +9,7 @@ import sys
 from typing import Dict, Any, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
+from ...errors import NotApplicableError
 from ...utils.query import (
     parse_query_filters,
     parse_query_params,
@@ -488,7 +489,7 @@ class GitAdapter(ResourceAdapter):
                 # Discover repository from path
                 repo_path = pygit2.discover_repository(self.path)
                 if not repo_path:
-                    raise ValueError(f"Not a git repository: {self.path}")
+                    raise NotApplicableError(f"Not a git repository: {self.path}")
                 self.repo = pygit2.Repository(repo_path)
             except (pygit2.GitError, KeyError) as e:
                 raise ValueError(f"Failed to open repository: {self.path}") from e

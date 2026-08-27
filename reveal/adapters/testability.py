@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..errors import NotApplicableError
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
 
@@ -214,7 +215,9 @@ class TestabilityAdapter(ResourceAdapter):
 
         test_paths = _resolve_test_paths(path, tests)
         if not test_paths:
-            raise ValueError(f"no tests found for {path} — pass tests=<path> or add tests/, test/, or spec/")
+            raise NotApplicableError(
+                f"no tests found for {path} — pass tests=<path> or add tests/, test/, or spec/"
+            )
 
         report = build_testability_report(
             str(path),
