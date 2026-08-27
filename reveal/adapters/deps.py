@@ -327,6 +327,13 @@ class DepsAdapter(ResourceAdapter):
                 'Not depends:// (one character apart) — deps:// is a dashboard '
                 'over the whole tree; depends:// answers "who imports this one '
                 'module" for a single target.',
+                'BACK-1178: the CLI subcommand form (`reveal deps <path> --format '
+                'json`) and this URI form intentionally carry different '
+                'contract_version/meta envelopes — subcommand-form is frozen at '
+                'v1.0 with no meta block (BACK-906, backward-compat guarantee for '
+                'existing --format json consumers), URI-form is on v1.1 with a '
+                'meta block (confidence/warnings/errors, BACK-885/891). The '
+                'underlying data fields are otherwise the same.',
             ],
             'see_also': [
                 'reveal deps <path> - CLI subcommand form',

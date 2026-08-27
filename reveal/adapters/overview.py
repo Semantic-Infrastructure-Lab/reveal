@@ -533,6 +533,13 @@ class OverviewAdapter(ResourceAdapter):
                 'Static imports only for the architecture section — dynamically loaded files may appear as entry points.',
                 'exclude/respect_gitignore (BACK-1042) apply to the stats/hotspots and scope sections only — '
                 'the architecture (imports://) and complex_functions (ast://) sections do not yet honor them.',
+                'BACK-1178: the CLI subcommand form (`reveal overview <path> --format '
+                'json`) and this URI form intentionally carry different '
+                'contract_version/meta envelopes — subcommand-form is frozen at '
+                'v1.0 with no meta block (BACK-906, backward-compat guarantee for '
+                'existing --format json consumers), URI-form is on v1.1 with a '
+                'meta block (confidence/warnings/errors, BACK-885/891). The '
+                'underlying data fields are otherwise the same.',
             ],
             'see_also': [
                 'reveal overview <path> - CLI subcommand form',
