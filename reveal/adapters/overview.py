@@ -295,10 +295,7 @@ def _render_complex_functions(fns: List[Dict[str, Any]], base_path: Optional[Pat
 
         # Show relative path if possible
         if loc and base_path:
-            try:
-                loc = Path(loc).relative_to(base_path).as_posix()
-            except ValueError:
-                pass
+            loc = _relpath(loc, base_path)
 
         icon = '❌' if isinstance(cx, int) and cx >= 20 else '⚠️ '
         lc_str = f"  {lc}L" if lc else ''
@@ -314,13 +311,14 @@ def _is_test_file(file_str: str) -> bool:
 
 
 def _relpath(file_str: str, base_path: Optional[Path]) -> str:
-    """Return path relative to base_path if possible, else the original string."""
-    if base_path:
-        try:
-            return Path(file_str).relative_to(base_path).as_posix()
-        except ValueError:
-            pass
-    return file_str
+    """Return path relative to base_path if possible, else the original string.
+
+    BACK-1194: delegates to the shared, resolve()-aware helper — see
+    to_relative_display()'s docstring for why the old lexical-only
+    relative_to() let absolute paths leak through on relative CLI targets.
+    """
+    from ..utils.path_utils import to_relative_display
+    return to_relative_display(file_str, base_path)
 
 
 def _render_architecture(

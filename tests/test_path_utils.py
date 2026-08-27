@@ -13,6 +13,7 @@ from reveal.utils.path_utils import (
     get_relative_to_root,
     detect_non_python_language,
     to_posix,
+    to_relative_display,
     is_unsafe_scan_root,
     is_skippable_dir,
     is_test_dir,
@@ -808,6 +809,46 @@ class TestToPosix:
     def test_output_never_contains_backslash(self):
         # The core contract: output is portable regardless of input separator.
         assert "\\" not in to_posix("a\\b\\c\\d.py")
+
+
+class TestToRelativeDisplay:
+    """to_relative_display() (BACK-1194) — the shared helper replacing
+    overview.py/deps.py/imports.py/architecture.py's duplicated
+    relative_to()-then-except-ValueError idiom.
+
+    The bug: Path.relative_to() is lexical, not filesystem-aware. When a
+    CLI target is given as a relative path (e.g. `.` from inside the
+    project dir) while the file being displayed arrives already absolute
+    (typical of a separate file-walk subsystem), relative_to() raises and
+    the caller's fallback returns the raw absolute path -- leaking the
+    analyst's local filesystem layout/username into a DD deliverable.
+    """
+
+    def test_relative_base_absolute_file_still_relativizes(self, tmp_path, monkeypatch):
+        """The exact repro shape: base_path relative (unresolved), file
+        already absolute -- this is what silently leaked before the fix."""
+        (tmp_path / "sub").mkdir()
+        abs_file = str((tmp_path / "sub" / "mod.py").resolve())
+        monkeypatch.chdir(tmp_path)
+        assert to_relative_display(abs_file, Path(".")) == "sub/mod.py"
+
+    def test_both_already_absolute_still_works(self, tmp_path):
+        (tmp_path / "sub").mkdir()
+        abs_file = tmp_path / "sub" / "mod.py"
+        assert to_relative_display(str(abs_file), tmp_path) == "sub/mod.py"
+
+    def test_genuinely_outside_base_falls_back_to_original(self, tmp_path):
+        outside = tmp_path.parent / "elsewhere.py"
+        assert to_relative_display(str(outside), tmp_path) == to_posix(str(outside))
+
+    def test_no_base_path_returns_original(self):
+        assert to_relative_display("/abs/file.py", None) == "/abs/file.py"
+
+    def test_windows_style_result_normalized_to_posix(self, tmp_path, monkeypatch):
+        (tmp_path / "sub").mkdir()
+        abs_file = str((tmp_path / "sub" / "mod.py").resolve())
+        monkeypatch.chdir(tmp_path)
+        assert "\\" not in to_relative_display(abs_file, Path("."))
 
 
 class TestIsUnsafeScanRoot:

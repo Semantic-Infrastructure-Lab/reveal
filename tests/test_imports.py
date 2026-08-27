@@ -1754,3 +1754,33 @@ class TestCoverageWarningLine:
         line = coverage_warning_line({'.rb': 2, '.ex': 5})
         assert line.index('.ex') < line.index('.rb')
         assert '7 code file(s)' in line
+
+
+class TestFanInEntrypointsRelativeDisplay:
+    """BACK-1194: _render_fan_in/_render_entrypoints (and _render_components's
+    `rel()`) shared overview.py/deps.py's expanduser()-without-resolve() bug
+    -- a relative `resource` left source_path unresolved, so an already-
+    absolute file path (typical of a separate file-walk subsystem) raised
+    ValueError on relative_to() and leaked straight through as absolute."""
+
+    def test_fan_in_relativizes_when_resource_is_unresolved(self, tmp_path, monkeypatch, capsys):
+        from reveal.adapters.imports import ImportsRenderer
+        (tmp_path / "sub").mkdir()
+        abs_file = str((tmp_path / "sub" / "mod.py").resolve())
+        monkeypatch.chdir(tmp_path)
+        result = {'entries': [{'file': abs_file, 'fan_in': 3, 'fan_out': 1}], 'total': 1}
+        ImportsRenderer._render_fan_in(result, ".")
+        out = capsys.readouterr().out
+        assert "sub/mod.py" in out
+        assert abs_file not in out
+
+    def test_entrypoints_relativizes_when_resource_is_unresolved(self, tmp_path, monkeypatch, capsys):
+        from reveal.adapters.imports import ImportsRenderer
+        (tmp_path / "sub").mkdir()
+        abs_file = str((tmp_path / "sub" / "mod.py").resolve())
+        monkeypatch.chdir(tmp_path)
+        result = {'entries': [{'file': abs_file, 'fan_out': 2}], 'total_scanned': 1}
+        ImportsRenderer._render_entrypoints(result, ".")
+        out = capsys.readouterr().out
+        assert "sub/mod.py" in out
+        assert abs_file not in out

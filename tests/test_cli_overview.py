@@ -847,6 +847,28 @@ class TestRelpath(unittest.TestCase):
         result = _relpath('/proj/src/main.py', None)
         self.assertEqual(result, '/proj/src/main.py')
 
+    def test_relative_base_absolute_file_still_relativizes(self):
+        """BACK-1194: the live-reproduced repro shape -- overview's own
+        base_path is unresolved (str(Path(resource).expanduser())), while
+        data from a composed sub-adapter (e.g. ImportsAdapter, which does
+        resolve()) arrives already absolute. This used to leak the
+        absolute path straight into 'Core abstractions' while 'Entry
+        points' (computed from a different code path) stayed relative --
+        two path conventions mixed within one output."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            (tmp / "sub").mkdir()
+            abs_file = str((tmp / "sub" / "mod.py").resolve())
+            import os
+            old_cwd = os.getcwd()
+            os.chdir(tmp)
+            try:
+                result = _relpath(abs_file, Path("."))
+            finally:
+                os.chdir(old_cwd)
+        self.assertEqual(result, "sub/mod.py")
+
 
 class TestRunImportsAnalysis(unittest.TestCase):
 

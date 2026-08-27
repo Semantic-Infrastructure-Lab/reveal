@@ -147,13 +147,14 @@ def _analyse_imports(files: Dict[str, List[Dict[str, Any]]], base_path: Path) ->
             if _tally_import(imp, is_python_file, local_names, external_counts, stdlib_counts):
                 relative_count += 1
 
-    # Top importers as relative paths
+    # Top importers as relative paths (BACK-1194: shared resolve()-aware
+    # helper — see to_relative_display()'s docstring for why the old
+    # lexical-only relative_to() let absolute paths leak through on
+    # relative CLI targets)
+    from ..utils.path_utils import to_relative_display
     top_importers = []
     for fp, count in importer_counts.most_common():
-        try:
-            rel = str(Path(fp).relative_to(base_path))
-        except ValueError:
-            rel = fp
+        rel = to_relative_display(fp, base_path)
         top_importers.append({'file': rel, 'count': count})
 
     return {
@@ -213,15 +214,11 @@ def _render_external_packages(analysis: Dict[str, Any], top: int) -> None:
 def _render_circular(cycles: List, cycle_count: int, base_path: Path, top: int) -> None:
     if cycle_count == 0:
         return
+    from ..utils.path_utils import to_relative_display
     print(f"\nCircular dependencies  ({cycle_count} cycle(s))")
     for cycle in cycles[:top]:
         # Shorten paths to relative
-        parts = []
-        for fp in cycle:
-            try:
-                parts.append(Path(fp).relative_to(base_path).as_posix())
-            except ValueError:
-                parts.append(fp)
+        parts = [to_relative_display(fp, base_path) for fp in cycle]
         print(f"  ❌ {' → '.join(parts)}")
     if cycle_count > top:
         print(f"  ... and {cycle_count - top} more  (run: reveal 'imports://. ?circular')")
@@ -230,6 +227,7 @@ def _render_circular(cycles: List, cycle_count: int, base_path: Path, top: int) 
 def _render_unused(unused: List[Dict[str, Any]], base_path: Path, top: int) -> None:
     if not unused:
         return
+    from ..utils.path_utils import to_relative_display
     count = len(unused)
     print(f"\nUnused imports  ({count} found)")
     for imp in unused[:top]:
@@ -237,10 +235,7 @@ def _render_unused(unused: List[Dict[str, Any]], base_path: Path, top: int) -> N
         line = imp.get('line', '?')
         module = imp.get('module', '?')
         names = imp.get('names', [])
-        try:
-            rel = Path(filepath).relative_to(base_path).as_posix()
-        except ValueError:
-            rel = filepath
+        rel = to_relative_display(filepath, base_path)
         name_str = f".{', '.join(names)}" if names else ''
         print(f"  ⚠️  {rel}:{line}  {module}{name_str}")
     if count > top:

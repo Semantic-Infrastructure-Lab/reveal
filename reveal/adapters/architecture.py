@@ -347,12 +347,14 @@ def _is_test_file(file_str: str) -> bool:
 
 
 def _relpath(file_str: str, base_path: Optional[Path]) -> str:
-    if not base_path:
-        return file_str
-    try:
-        return Path(file_str).relative_to(base_path).as_posix()
-    except ValueError:
-        return file_str
+    """Return path relative to base_path if possible, else the original string.
+
+    BACK-1194: delegates to the shared, resolve()-aware helper — see
+    to_relative_display()'s docstring for why the old lexical-only
+    relative_to() let absolute paths leak through on relative CLI targets.
+    """
+    from ..utils.path_utils import to_relative_display
+    return to_relative_display(file_str, base_path)
 
 
 class ArchitectureRenderer:

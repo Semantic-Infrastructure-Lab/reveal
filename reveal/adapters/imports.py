@@ -28,7 +28,7 @@ from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..registry import get_code_extensions
-from ..utils.path_utils import is_skippable_dir, to_posix
+from ..utils.path_utils import is_skippable_dir, to_posix, to_relative_display
 from ..utils.results import ResultBuilder
 
 # Disk-cache namespace for this adapter's resolved import graph (BACK-834).
@@ -549,12 +549,7 @@ class ImportsRenderer:
         print(f"  {'FILE':<{col_w}}  {'FAN-IN':>7}  {'FAN-OUT':>8}")
         print(f"  {'-'*col_w}  {'-'*7}  {'-'*8}")
         for e in entries:
-            fpath = e['file']
-            if source_path:
-                try:
-                    fpath = str(Path(fpath).relative_to(source_path))
-                except ValueError:
-                    pass
+            fpath = to_relative_display(e['file'], source_path) if source_path else e['file']
             print(f"  {fpath:<{col_w}}  {e['fan_in']:>7}  {e['fan_out']:>8}")
         print()
         print("  Note: static imports only — files loaded via dynamic dispatch")
@@ -583,12 +578,7 @@ class ImportsRenderer:
         print(f"  {'FILE':<{col_w}}  {'FAN-OUT':>8}")
         print(f"  {'-'*col_w}  {'-'*8}")
         for e in entries:
-            fpath = e['file']
-            if source_path:
-                try:
-                    fpath = str(Path(fpath).relative_to(source_path))
-                except ValueError:
-                    pass
+            fpath = to_relative_display(e['file'], source_path) if source_path else e['file']
             print(f"  {fpath:<{col_w}}  {e['fan_out']:>8}")
         print()
         print("  Note: static imports only — files loaded via dynamic dispatch")
@@ -612,12 +602,7 @@ class ImportsRenderer:
         source_path = Path(source) if source else None
 
         def rel(p: str) -> str:
-            if source_path:
-                try:
-                    return str(Path(p).relative_to(source_path))
-                except ValueError:
-                    pass
-            return p
+            return to_relative_display(p, source_path) if source_path else p
 
         col_w = max(max(len(rel(c['component'])) for c in components) + 2, 20)
         col_w = min(col_w, 55)

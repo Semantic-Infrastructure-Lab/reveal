@@ -253,6 +253,27 @@ class TestAnalyseImports(unittest.TestCase):
         result = _analyse_imports(files, Path('/proj'))
         self.assertEqual(result['top_importers'][0]['count'], 3)
 
+    def test_top_importers_relative_when_base_path_is_unresolved(self):
+        """BACK-1194: deps:// shared overview.py's expanduser()-without-
+        resolve() bug -- a relative base_path (e.g. deps://. from inside
+        the project dir) left the comparison lexical-only, so an already-
+        absolute file path (typical of a separate file-walk subsystem)
+        raised ValueError on relative_to() and leaked straight through."""
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            (tmp / "sub").mkdir()
+            abs_file = str((tmp / "sub" / "heavy.py").resolve())
+            files = {abs_file: [_make_import('os')]}
+            old_cwd = os.getcwd()
+            os.chdir(tmp)
+            try:
+                result = _analyse_imports(files, Path("."))
+            finally:
+                os.chdir(old_cwd)
+        self.assertEqual(result['top_importers'][0]['file'], 'sub/heavy.py')
+
     def test_external_packages_sorted_by_usage(self):
         files = {
             '/proj/a.py': [_make_import('requests'), _make_import('requests'), _make_import('yaml')],

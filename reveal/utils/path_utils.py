@@ -97,6 +97,38 @@ def is_test_filename(stem: str) -> bool:
     return stem.startswith('test_') or stem.endswith('_test') or stem in TEST_DIR_NAMES
 
 
+def to_relative_display(file_str: Union[str, PurePath], base_path: Union[str, Path, None]) -> str:
+    """Render `file_str` relative to `base_path` for display/JSON output,
+    falling back to the original string when that's not possible.
+
+    BACK-1194: `Path.relative_to()` is lexical, not filesystem-aware — if
+    `base_path` is a relative path (e.g. the CLI target was given as
+    `./src`, not `/abs/path/src`) while `file_str` arrives already
+    absolute (as most file-walk sources do), a bare `relative_to()` raises
+    ValueError and the caller's usual `except: return file_str` fallback
+    silently lets the absolute path straight through — while a sibling
+    section computed from an already-relative source stays relative,
+    producing two path conventions mixed within one output object. Always
+    resolve both sides to a common absolute form first so the comparison
+    can actually succeed. Absolute paths in output leak the analyst's
+    local filesystem layout/username into DD deliverables that get shared.
+
+    Was duplicated as overview.py's `_relpath()` and inline in deps.py's
+    `_analyse_imports()` — same bug, same fix, now one shared helper.
+    """
+    if not base_path:
+        return to_posix(file_str)
+    try:
+        resolved_base = Path(base_path).expanduser().resolve()
+        resolved_file = Path(file_str).expanduser()
+        if not resolved_file.is_absolute():
+            resolved_file = (resolved_base / resolved_file)
+        resolved_file = resolved_file.resolve()
+        return to_posix(resolved_file.relative_to(resolved_base))
+    except ValueError:
+        return to_posix(file_str)
+
+
 def to_posix(path: Union[str, PurePath]) -> str:
     """Serialize a path with forward slashes on every OS.
 
