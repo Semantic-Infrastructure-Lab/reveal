@@ -25,6 +25,7 @@ from .help_data import load_help_data
 from ..core import disk_cache
 from ..utils import print_json_result
 from ..analyzers.imports import ImportGraph, ImportStatement
+from ..analyzers.imports.classify import classify_import, local_package_names
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..registry import get_code_extensions
@@ -794,6 +795,7 @@ class ImportsAdapter(ResourceAdapter):
         self._target_path: Optional[Path] = Path(path).resolve() if path else None
         self._query_params = parse_query_params(query or '')
         self._warn_unknown_query_params(self._query_params)  # BACK-507
+        self._local_names_cache: Optional[frozenset] = None  # BACK-1190, lazy
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Analyze imports in directory or file.
@@ -1431,9 +1433,15 @@ class ImportsAdapter(ResourceAdapter):
             count=len(violations),
         )
 
-    @staticmethod
-    def _format_import(stmt: ImportStatement) -> Dict[str, Any]:
+    def _get_local_names(self) -> frozenset:
+        """Local package names for the scanned root, computed once (BACK-1190)."""
+        if self._local_names_cache is None:
+            self._local_names_cache = local_package_names(self._target_path or Path('.'))
+        return self._local_names_cache
+
+    def _format_import(self, stmt: ImportStatement) -> Dict[str, Any]:
         """Format single import statement for output."""
+        resolved = str(stmt.resolved_path) if stmt.resolved_path else None
         return {
             'file': str(stmt.file_path),
             'line': stmt.line_number,
@@ -1446,7 +1454,15 @@ class ImportsAdapter(ResourceAdapter):
             # to, or None if it did not resolve. None is NOT a claim the module
             # is external/stdlib — it may also be an unresolved local (missing
             # file_index coverage, monorepo/load-path boundary).
-            'resolved': str(stmt.resolved_path) if stmt.resolved_path else None,
+            'resolved': resolved,
+            # BACK-1190: 'intra_project' | 'stdlib' | 'unresolved' | 'unknown'.
+            # Classified on resolution truth (above) first; a 'stdlib' verdict
+            # requires a language-appropriate list -- Python's list is never
+            # used as a fallback classifier for another language (BACK-1193).
+            'classification': classify_import(
+                stmt.module_name, stmt.is_relative, resolved,
+                str(stmt.file_path).endswith('.py'), self._get_local_names(),
+            ),
         }
 
 

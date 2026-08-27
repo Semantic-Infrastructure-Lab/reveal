@@ -7,7 +7,6 @@ other capability follows.
 
 from __future__ import annotations
 
-import sys as _sys
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,29 +15,18 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .imports import ImportsAdapter
+from ..analyzers.imports.classify import (
+    classify_module as _classify_module,
+    local_package_names as _local_package_names,
+)
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
-# Python stdlib module names (Python 3.10+, with fallback set for older versions)
-try:
-    _STDLIB: frozenset = getattr(_sys, 'stdlib_module_names', frozenset())
-except Exception:
-    _STDLIB = frozenset()
-
-# Common stdlib top-level names as fallback
-_STDLIB_FALLBACK = frozenset({
-    'abc', 'ast', 'asyncio', 'builtins', 'collections', 'contextlib',
-    'copy', 'dataclasses', 'datetime', 'enum', 'functools', 'gc',
-    'glob', 'hashlib', 'http', 'importlib', 'inspect', 'io', 'itertools',
-    'json', 'logging', 'math', 'multiprocessing', 'operator', 'os',
-    'pathlib', 'pickle', 'platform', 're', 'shutil', 'signal', 'socket',
-    'sqlite3', 'string', 'struct', 'subprocess', 'sys', 'tempfile',
-    'threading', 'time', 'traceback', 'typing', 'unittest', 'urllib',
-    'uuid', 'warnings', 'weakref', 'zipfile', 'zlib',
-})
-
-_KNOWN_STDLIB = _STDLIB | _STDLIB_FALLBACK
+# BACK-1190: the stdlib list, local-package heuristic, and classifier itself
+# now live in reveal/analyzers/imports/classify.py -- shared with
+# imports://'s own 'classification' field so the two adapters can't drift
+# apart the way BACK-1193 found them having already done.
 
 
 # ── Data collectors ────────────────────────────────────────────────────────────
@@ -57,42 +45,6 @@ def _run_unused(adapter: 'DepsAdapter', path: Path) -> List[Dict[str, Any]]:
     """Fetch unused imports via ImportsAdapter."""
     data = adapter.compose(ImportsAdapter, str(path), default={}, query='unused')
     return data.get('unused', [])
-
-
-def _local_package_names(base_path: Path) -> frozenset:
-    """Return top-level package names local to the scanned directory.
-
-    Includes the directory's own name (for absolute self-imports like
-    `from reveal.cli import ...` when scanning the reveal/ dir) and any
-    immediate subdirectory that is a Python package (has __init__.py).
-    """
-    names = {base_path.name}
-    try:
-        for child in base_path.iterdir():
-            if child.is_dir() and (child / '__init__.py').exists():
-                names.add(child.name)
-    except OSError:
-        pass
-    return frozenset(names)
-
-
-def _classify_module(raw_module: str, is_python_file: bool, local_names: frozenset) -> tuple:
-    """Classify one non-relative, unresolved import (BACK-1193).
-
-    Returns ``(bucket, key)`` where bucket is 'internal', 'stdlib',
-    'external', or 'skip' (empty module string — nothing to count), and key
-    is the counted name (None for 'internal'/'skip').
-    """
-    if raw_module.startswith('dart:'):
-        return ('stdlib', raw_module)  # syntactic marker, no list needed
-    module = raw_module.split('.')[0]
-    if not module:
-        return ('skip', None)  # nothing to classify
-    if module in local_names:
-        return ('internal', None)
-    if is_python_file and module in _KNOWN_STDLIB:
-        return ('stdlib', module)
-    return ('external', module)
 
 
 def _tally_import(

@@ -642,6 +642,35 @@ class TestImportsAdapter:
         # never a fabricated path.
         assert by_module['os']['resolved'] is None
 
+    def test_classification_field_present(self, tmp_path):
+        """BACK-1190: imports:// must surface a 'classification' field derived
+        from resolution truth (BACK-1193), not a name-based guess, so
+        consumers don't have to re-implement deps://'s classifier."""
+        (tmp_path / "helper.py").write_text("VALUE = 1\n")
+        (tmp_path / "main.py").write_text("import helper\nimport os\nimport requests\n")
+
+        adapter = ImportsAdapter(str(tmp_path))
+        result = adapter.get_structure()
+
+        main_imports = result['files'][str(tmp_path / "main.py")]
+        by_module = {imp['module']: imp for imp in main_imports}
+        assert by_module['helper']['classification'] == 'intra_project'
+        assert by_module['os']['classification'] == 'stdlib'
+        assert by_module['requests']['classification'] == 'unresolved'
+
+    def test_classification_never_falls_back_to_python_stdlib_for_other_languages(self, tmp_path):
+        """BACK-1193's confident-wrong failure, re-checked at the imports://
+        substrate: a Ruby 'json' require must NOT be classified 'stdlib' just
+        because it collides with Python's stdlib name."""
+        (tmp_path / "main.rb").write_text("require 'json'\n")
+
+        adapter = ImportsAdapter(str(tmp_path))
+        result = adapter.get_structure()
+
+        rb_imports = result['files'][str(tmp_path / "main.rb")]
+        by_module = {imp['module']: imp for imp in rb_imports}
+        assert by_module['json']['classification'] == 'unresolved'
+
     def test_query_params_flag_style(self, tmp_path):
         """Test flag-style query params (?circular vs ?circular=true)."""
         # Create test files with circular dependency

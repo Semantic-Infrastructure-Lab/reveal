@@ -62,6 +62,7 @@ features:
   - 'Multi-language support (Python, JS/TS, Go, Rust, Java, C++, etc.)'
   - 'JSON output for CI/CD integration and tooling'
   - 'Progressive disclosure (summary → detail → violations)'
+  - "Per-import 'classification' field (intra_project/stdlib/unresolved/unknown, BACK-1190) — resolution truth first (BACK-1193), stdlib only where a language-appropriate list exists"
 
 workflows:
   - name: 'Architectural Orientation (fan-in ranking)'
