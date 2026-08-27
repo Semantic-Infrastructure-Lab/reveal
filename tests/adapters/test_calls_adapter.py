@@ -1575,6 +1575,59 @@ class TestFindUncalled(unittest.TestCase):
         names = [e['name'] for e in result['entries']]
         self.assertNotIn('constructor', names)
 
+    def test_ruby_initialize_excluded(self):
+        """BACK-1197: Ruby's 'initialize' (invoked by .new, never a source-
+        level call) accounted for 365 of 2,235 uncalled entries (16.3%) on
+        one real corpus before this exclusion existed."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('c.rb', '''\
+            class Foo
+              def initialize
+              end
+              def genuinely_dead
+              end
+            end
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        self.assertNotIn('initialize', names)
+        self.assertIn('genuinely_dead', names)
+
+    def test_ruby_metaprogramming_hooks_excluded(self):
+        """Ruby's module/metaprogramming callback hooks — invoked by the
+        runtime (e.g. Module#included), never a source-level call."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('c.rb', '''\
+            module Concern
+              def self.included(base)
+              end
+              def self.extended(base)
+              end
+              def method_missing(name, *args)
+              end
+              def respond_to_missing?(name, priv)
+              end
+            end
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        for hook in ('included', 'extended', 'method_missing', 'respond_to_missing?'):
+            self.assertNotIn(hook, names)
+
+    def test_ruby_exclusion_scoped_to_ruby_only(self):
+        """A Python file with a method literally named 'initialize' must
+        NOT be excluded -- the exclusion is language-scoped, not a bare
+        global name match, to avoid false-negating real dead code."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('d.py', '''\
+            class Foo:
+                def initialize(self):
+                    pass
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        self.assertIn('initialize', names)
+
     def test_property_decorator_excluded(self):
         """@property methods are excluded (called implicitly by attribute access)."""
         from reveal.adapters.calls.index import find_uncalled
@@ -2610,6 +2663,62 @@ class TestCallGraphMeta(unittest.TestCase):
         os.makedirs(empty_dir)
         meta = build_meta(empty_dir)
         self.assertEqual(meta['confidence'], 0.85)
+
+    def test_ruby_uncalled_exclusion_vocab_names_ruby_not_python(self):
+        """BACK-1197: the ?uncalled exclusion-vocab warning (W-CALLS-6)
+        previously printed Python's __dunder__/@property vocabulary
+        unconditionally, on every language."""
+        from reveal.adapters.calls.confidence import build_meta
+
+        rb_dir = os.path.join(self.tmpdir, 'rb')
+        os.makedirs(rb_dir)
+        _write(rb_dir, 'main.rb', 'def f\nend\n')
+
+        meta = build_meta(rb_dir, uncalled=True)
+        vocab_warning = next(w['message'] for w in meta['warnings'] if w['code'] == 'W-CALLS-6')
+        self.assertIn('initialize', vocab_warning)
+        self.assertNotIn('__dunder__', vocab_warning)
+
+    def test_python_uncalled_exclusion_vocab_still_names_dunder(self):
+        from reveal.adapters.calls.confidence import build_meta
+
+        py_dir = os.path.join(self.tmpdir, 'py')
+        os.makedirs(py_dir)
+        _write(py_dir, 'main.py', 'def f():\n    pass\n')
+
+        meta = build_meta(py_dir, uncalled=True)
+        vocab_warning = next(w['message'] for w in meta['warnings'] if w['code'] == 'W-CALLS-6')
+        self.assertIn('__dunder__', vocab_warning)
+
+    def test_exclusion_vocab_absent_when_not_uncalled_query(self):
+        from reveal.adapters.calls.confidence import build_meta
+
+        py_dir = os.path.join(self.tmpdir, 'py')
+        os.makedirs(py_dir)
+        _write(py_dir, 'main.py', 'def f():\n    pass\n')
+
+        meta = build_meta(py_dir)
+        codes = {w['code'] for w in meta['warnings']}
+        self.assertNotIn('W-CALLS-6', codes)
+
+    def test_renderer_no_longer_hardcodes_python_vocab(self):
+        """The old bare `print(f"Note: excludes __dunder__ ...")` line must
+        be gone -- the disclaimer now comes entirely from meta.warnings, so
+        a Ruby result's rendered text must not mention __dunder__ at all."""
+        data = {
+            'query': 'uncalled',
+            'path': '/tmp/src',
+            'total_defined': 1,
+            'total_uncalled': 0,
+            'entries': [],
+            'meta': {'warnings': [{
+                'code': 'W-CALLS-6',
+                'message': "Excludes initialize (invoked by .new) (implicitly invoked, not statically reachable).",
+            }]},
+        }
+        out = _capture_renderer(render_calls_structure, data, 'text')
+        self.assertNotIn('__dunder__', out)
+        self.assertIn('initialize', out)
 
     def test_uncalled_renderer_prints_warnings_near_header(self):
         """BACK-1198: the dynamic-dispatch/derived-signal caveats render near

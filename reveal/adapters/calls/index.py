@@ -31,6 +31,18 @@ _INDEX_CACHE_MAX = 8
 # never appear as explicit call expressions in source code.
 _IMPLICIT_DECORATORS: frozenset = frozenset({'property', 'classmethod', 'staticmethod'})
 
+# BACK-1197: Ruby's own equivalent of Python's __dunder__ exclusion — method
+# names invoked by the language/framework runtime, never a source-level call
+# expression. 'initialize' alone accounted for 365 of 2,235 uncalled entries
+# (16.3%) on one real Ruby corpus before this was added. Scoped to Ruby files
+# only (via _lang_family) so these common-enough names don't false-negative
+# a genuinely-dead function of the same name in another language.
+_RUBY_IMPLICIT_NAMES: frozenset = frozenset({
+    'initialize',              # invoked by .new, never a call expression
+    'included', 'extended', 'inherited',  # Module/Class hook callbacks
+    'method_missing', 'respond_to_missing?',  # metaprogramming dispatch hooks
+})
+
 # BACK-446: test methods are invoked by a test runner via reflection/collection,
 # not by an explicit call expression — so they always show up as "uncalled" and
 # swamp the dead-code signal (1,577 false positives on Jellyfin/C#, nearly all
@@ -119,6 +131,7 @@ def _is_implicit_element(
     decorator_names: Set[str],
     only_functions: bool,
     extra_implicit_decorators: FrozenSet[str] = frozenset(),
+    lang_family: str = '',
 ) -> bool:
     """Return True if element is implicitly invoked and should never be flagged as dead code.
 
@@ -145,6 +158,8 @@ def _is_implicit_element(
     if name.startswith('__') and name.endswith('__'):
         return True
     if name == 'constructor':
+        return True
+    if lang_family == 'ruby' and name in _RUBY_IMPLICIT_NAMES:
         return True
     return bool(decorator_names & (_IMPLICIT_DECORATORS | extra_implicit_decorators))
 
@@ -847,7 +862,8 @@ def find_uncalled(
 
             line_no = elem.get('line', 0)
             if _is_implicit_element(
-                name, is_method, decorator_names, only_functions, extra_implicit_decorators
+                name, is_method, decorator_names, only_functions, extra_implicit_decorators,
+                lang_family=_lang_family(file_path),
             ):
                 continue
             if name in called_names:

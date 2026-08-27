@@ -19,6 +19,8 @@ from ...defaults import (
     CALL_GRAPH_DEFAULT_CONFIDENCE,
     CALL_GRAPH_DYNAMIC_DISPATCH_VOCAB,
     CALL_GRAPH_DEFAULT_DISPATCH_VOCAB,
+    CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB,
+    CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB,
 )
 from ...utils.path_utils import census_for_path
 
@@ -91,14 +93,24 @@ def build_meta(path: str, *, uncalled: bool = False) -> Dict[str, Any]:
         )
         dominant = max(per_language.items(), key=lambda kv: kv[1])[0]
         vocab = CALL_GRAPH_DYNAMIC_DISPATCH_VOCAB.get(dominant, CALL_GRAPH_DEFAULT_DISPATCH_VOCAB)
+        implicit_vocab = CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB.get(
+            dominant, CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB
+        )
     else:
         confidence = CALL_GRAPH_DEFAULT_CONFIDENCE
         vocab = CALL_GRAPH_DEFAULT_DISPATCH_VOCAB
+        implicit_vocab = CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB
 
     warnings = list(_CALL_GRAPH_WARNINGS)
     warnings[0] = {'code': 'W-CALLS-1', 'message': f'Dynamic dispatch ({vocab}) is not resolved.'}
     if uncalled:
         warnings.append(_UNCALLED_DERIVED_SIGNAL_WARNING)
+        # BACK-1197: name what was ACTUALLY excluded for the language being
+        # scanned, replacing the renderer's old hardcoded Python-only line.
+        warnings.append({
+            'code': 'W-CALLS-6',
+            'message': f'Excludes {implicit_vocab} (implicitly invoked, not statically reachable).',
+        })
 
     return {
         'parse_mode': 'tree_sitter_full',

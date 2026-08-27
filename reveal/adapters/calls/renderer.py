@@ -175,7 +175,6 @@ def _render_uncalled_text(data: Dict[str, Any]) -> None:
         print(f"Uncalled:             {total_uncalled}  (showing top {len(entries)})")
     else:
         print(f"Uncalled:             {total_uncalled}")
-    print(f"Note: excludes __dunder__ methods and @property/@classmethod/@staticmethod")
     if test_excluded:
         print(f"Note: excluded {test_excluded} test-runner entrypoint(s) "
               f"([Fact]/@Test/test_*, etc.) — add ?test-framework=true to include")

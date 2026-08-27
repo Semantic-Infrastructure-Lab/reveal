@@ -223,6 +223,28 @@ CALL_GRAPH_DYNAMIC_DISPATCH_VOCAB: Dict[str, str] = {
 }
 CALL_GRAPH_DEFAULT_DISPATCH_VOCAB = 'runtime dispatch mechanisms specific to this language'
 
+# Per-language description of what calls://?uncalled actually excludes as
+# "implicitly invoked, not statically reachable" (BACK-1197). Previously the
+# renderer printed Python's own exclusion vocabulary ("__dunder__ methods and
+# @property/@classmethod/@staticmethod") unconditionally on every language,
+# reading as a completeness caveat while describing exclusions that don't
+# apply -- and worse, Ruby's real equivalent (initialize, invoked by .new,
+# never a source-level call edge) was not actually excluded at all: 365 of
+# 2,235 uncalled entries (16.3%) on one real corpus. See
+# adapters/calls/index.py's _RUBY_IMPLICIT_NAMES for the matching exclusion
+# logic -- this dict is the disclosure half, that's the enforcement half.
+CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB: Dict[str, str] = {
+    'python': '__dunder__ methods and @property/@classmethod/@staticmethod',
+    'ruby': "initialize (invoked by .new), included/extended/inherited/method_missing/"
+            "respond_to_missing? (Ruby's module/metaprogramming callback hooks)",
+    'javascript': 'constructor methods (invoked by `new`, never a call expression)',
+    'typescript': 'constructor methods (invoked by `new`, never a call expression)',
+    'tsx': 'constructor methods (invoked by `new`, never a call expression)',
+}
+CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB = (
+    "constructors and language-runtime-invoked lifecycle hooks specific to this language"
+)
+
 
 # Environment variable overrides
 # Maps env var names to (class_name, attribute_name)
