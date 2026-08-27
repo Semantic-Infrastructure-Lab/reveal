@@ -30,10 +30,19 @@ _ENTRY_POINT_PATTERNS = {
     'main.js', 'index.js', 'app.js', 'server.js',
     'main.ts', 'index.ts', 'app.ts',
     'main.go', 'main.rb', 'main.rs',
-    'Makefile', 'Dockerfile', 'pyproject.toml', 'package.json', 'Cargo.toml',
 }
 # __init__.py excluded from unconditional entry points — most are near-empty;
 # only promote them if they have substantial content (scored by size below)
+
+# BACK-1196: config/build files are ONE PER PROJECT, not a resolution/routing
+# convention repeated across a tree the way 'index.js'/'main.py' are (a
+# monorepo can have hundreds of near-empty index.js barrel files — Discourse
+# scored 27 of them into an 8K-budget pack, ZERO substantive application
+# code). These always keep the full entry-point bonus regardless of size —
+# a small package.json/Cargo.toml is still a unique, legitimate signal.
+_ENTRY_POINT_CONFIG_FILES = {
+    'Makefile', 'Dockerfile', 'pyproject.toml', 'package.json', 'Cargo.toml',
+}
 
 _APPROX_CHARS_PER_TOKEN = 4
 
@@ -339,11 +348,12 @@ def _collect_candidates(
     changed_files: Optional[Set[str]] = None,
     fan_in_scores: Optional[Dict[str, int]] = None,
     graph_relevance_scores: Optional[Dict[str, float]] = None,
+    exclude_patterns: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Collect and score candidate files for the pack."""
     candidates: List[Dict[str, Any]] = []
 
-    for f in _walk_files(path):
+    for f in _walk_files(path, exclude_patterns=exclude_patterns):
         # Skip near-empty __init__.py files — they're almost always re-export
         # stubs and waste token budget without adding understanding
         if f.name == '__init__.py' and f.stat().st_size < 500:
@@ -401,9 +411,28 @@ def _compute_priority(
     if is_changed:
         score += 20.0
 
-    # Entry points: highest priority
-    if name in _ENTRY_POINT_PATTERNS:
+    # Entry points: highest priority. BACK-1196: gate the bonus on content
+    # for the convention-based names (_ENTRY_POINT_PATTERNS) the same way
+    # __init__.py already is below — 'index.js'/'main.py'/etc. are
+    # resolution/routing CONVENTIONS, not guaranteed real entry points. A
+    # flat basename match previously scored these 10.0 (5x a real logic
+    # module's 2.0) with no size/content check at all, so a tree of
+    # near-empty barrel files could dominate a budget-constrained selection.
+    # Config/build files (Makefile, package.json, ...) are one-per-project,
+    # not a repeated convention, so they keep the full bonus unconditionally.
+    if name in _ENTRY_POINT_CONFIG_FILES:
         score += 10.0
+    elif name in _ENTRY_POINT_PATTERNS:
+        file_size = path.stat().st_size
+        if file_size > 2000:
+            score += 10.0
+        elif file_size >= 500:
+            # Below a real logic module's 2.0 — same tier discipline as the
+            # __init__.py bonus below, so a thin-but-real entry point still
+            # lands in "Other files", not "Key modules".
+            score += 1.0
+        # < 500 bytes: no bonus — indistinguishable from a near-empty
+        # re-export/routing stub without deeper content analysis.
 
     # __init__.py: modest bonus only for substantial ones (re-export stubs
     # < 500 bytes are already excluded by _collect_candidates). Score below
@@ -460,6 +489,7 @@ def _compute_priority(
         path.suffix.lower() in _DATA_MARKUP_EXTENSIONS
         and fan_in == 0
         and name not in _ENTRY_POINT_PATTERNS
+        and name not in _ENTRY_POINT_CONFIG_FILES
     ):
         score -= 2.0
 
@@ -509,8 +539,18 @@ def _apply_budget(
     return selected, meta
 
 
-def _walk_files(path: Path) -> Generator[Path, None, None]:
-    """Yield code/config files under *path* (respects common ignores)."""
+def _walk_files(
+    path: Path, exclude_patterns: Optional[List[str]] = None,
+) -> Generator[Path, None, None]:
+    """Yield code/config files under *path* (respects common ignores).
+
+    BACK-1196: *exclude_patterns* (from ?exclude=, the inverse of ?focus=)
+    lets a caller drop a whole area (fixtures, generated code, a vendored
+    subtree) from candidacy entirely, rather than only being able to boost
+    relevance elsewhere. Matched via the same should_skip_file() mechanism
+    overview://'s ?exclude= already uses (BACK-1042), for consistent
+    pattern semantics across adapters.
+    """
     # BACK-1032: union the registry's full code-extension set (58+, all
     # tree-sitter-backed languages) with the doc/config extras pack wants
     # beyond "code" — a hand-maintained list silently dropped whole
@@ -521,6 +561,10 @@ def _walk_files(path: Path) -> Generator[Path, None, None]:
     }
     _ROOT_FILES = {'Makefile', 'Dockerfile', 'pyproject.toml', 'package.json',
                    'Cargo.toml', 'go.mod', 'requirements.txt', 'setup.py'}
+
+    should_skip_file = None
+    if exclude_patterns:
+        from ..cli.file_checker import should_skip_file  # deferred: cli cycle
 
     if path.is_file():
         yield path
@@ -539,6 +583,9 @@ def _walk_files(path: Path) -> Generator[Path, None, None]:
                 break
             accumulated = accumulated / part
         if skip:
+            continue
+        rel = item.relative_to(path)
+        if should_skip_file is not None and should_skip_file(rel, exclude_patterns):
             continue
         # Include root config files
         if item.parent == path and item.name in _ROOT_FILES:
@@ -844,6 +891,7 @@ class PackAdapter(ResourceAdapter):
             'query_params': {
                 'budget': {'type': 'string', 'description': 'Token or line budget (e.g. 2000, 500-lines)', 'examples': ['budget=4000', 'budget=500-lines']},
                 'focus': {'type': 'string', 'description': 'Emphasize files matching this name pattern', 'examples': ['focus=auth']},
+                'exclude': {'type': 'string', 'description': 'Comma-separated patterns to drop from candidacy entirely (inverse of focus=)', 'examples': ['exclude=spec/*,vendor/*']},
                 'since': {'type': 'string', 'description': 'Git ref to diff against; changed files boosted to top priority', 'examples': ['since=main']},
                 'content': {'type': 'boolean', 'description': 'Include tiered file content (full/structure/name_only)', 'examples': ['content=true']},
                 'architecture': {'type': 'boolean', 'description': 'Boost high fan-in files; include an architecture hint', 'examples': ['architecture=true']},
@@ -879,6 +927,13 @@ class PackAdapter(ResourceAdapter):
         since = self.query_params.get('since') or None
         emit_content = str(self.query_params.get('content', False)).lower() == 'true'
         architecture = str(self.query_params.get('architecture', False)).lower() == 'true'
+        # BACK-1196: ?exclude= is the inverse of ?focus= — drop a whole area
+        # (fixtures, generated code, a vendored subtree) from candidacy
+        # entirely, comma-separated, same format as overview://'s ?exclude=.
+        exclude_param = self.query_params.get('exclude')
+        exclude_patterns = (
+            [p for p in str(exclude_param).split(',') if p] if exclude_param else None
+        )
 
         budget_tokens, budget_lines = _parse_budget(budget_str)
 
@@ -899,6 +954,7 @@ class PackAdapter(ResourceAdapter):
         candidates = _collect_candidates(
             path, focus, changed_files, fan_in_scores=fan_in_scores,
             graph_relevance_scores=graph_relevance_scores,
+            exclude_patterns=exclude_patterns,
         )
         selected, meta = _apply_budget(candidates, budget_tokens, budget_lines, path)
         if since:

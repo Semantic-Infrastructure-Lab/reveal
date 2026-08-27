@@ -111,8 +111,33 @@ class TestComputePriority(unittest.TestCase):
         return full, Path(rel)
 
     def test_entry_point_gets_high_score(self):
+        # BACK-1196: the entry-point bonus is now gated on content (a
+        # near-empty file, tested below, no longer qualifies) — a
+        # substantial entry point still gets the full bonus.
         with tempfile.TemporaryDirectory() as d:
-            path, rel = self._make_file(Path(d), "main.py")
+            path, rel = self._make_file(Path(d), "main.py", content="x" * 2500)
+            score = _compute_priority(path, rel, focus=None)
+            self.assertGreaterEqual(score, 10.0)
+
+    def test_near_empty_entry_point_does_not_get_inflated_score(self):
+        """BACK-1196: a near-empty file matching an entry-point BASENAME
+        (e.g. a barrel/re-export index.js) previously scored 10.0 regardless
+        of content -- 5x a real logic module's 2.0. Discourse's index.js
+        barrels dominated an 8K-budget pack selection (27 of 32 files) with
+        zero substantive application code. Uses index.js, not main.py --
+        'main' is also a _KEY_DIR_SEGMENTS stem match, a separate +2.0
+        signal this test isn't isolating."""
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "index.js", content="x")
+            score = _compute_priority(path, rel, focus=None)
+            self.assertEqual(score, 0.0)
+
+    def test_config_file_entry_point_unaffected_by_size_gate(self):
+        """BACK-1196: config/build files (package.json, Cargo.toml, ...) are
+        one-per-project, not a repeated routing/barrel convention -- they
+        keep the full bonus regardless of size, unlike main.py/index.js."""
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "package.json", content="{}")
             score = _compute_priority(path, rel, focus=None)
             self.assertGreaterEqual(score, 10.0)
 
@@ -331,6 +356,22 @@ class TestWalkFiles(unittest.TestCase):
         self._make(".hidden/secret.py")
         files = _walk_files(self.base)
         self.assertFalse(any(".hidden" in str(f) for f in files))
+
+    def test_exclude_patterns_drops_matching_files(self):
+        """BACK-1196: ?exclude= (inverse of ?focus=) drops a whole area from
+        candidacy entirely."""
+        self._make("spec/widget_spec.rb")
+        self._make("src/widget.rb")
+        files = list(_walk_files(self.base, exclude_patterns=['spec/*']))
+        names = {str(f.relative_to(self.base)) for f in files}
+        self.assertNotIn("spec/widget_spec.rb", names)
+        self.assertIn("src/widget.rb", names)
+
+    def test_no_exclude_patterns_unaffected(self):
+        self._make("spec/widget_spec.rb")
+        files = list(_walk_files(self.base, exclude_patterns=None))
+        names = {str(f.relative_to(self.base)) for f in files}
+        self.assertIn("spec/widget_spec.rb", names)
 
 
 # ---------------------------------------------------------------------------

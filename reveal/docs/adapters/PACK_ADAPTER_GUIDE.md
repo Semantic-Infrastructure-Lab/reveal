@@ -15,5 +15,5 @@ see `internal-docs/DOCS.md`'s "one home per fact" rule.
 All query params, for V027 coherence (full docs in the guide linked above):
 
 ```
-reveal 'pack://src?budget=4000&focus=auth&since=main&content=true&architecture=true'
+reveal 'pack://src?budget=4000&focus=auth&exclude=spec/*,vendor/*&since=main&content=true&architecture=true'
 ```
