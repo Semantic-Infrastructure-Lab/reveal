@@ -264,6 +264,7 @@ Default penalties:
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
 | `hotspots` | boolean | Include hotspot analysis | `?hotspots=true` |
+| `top` | integer | Max number of hotspot files to return when `hotspots=true` (default: 10) | `?hotspots=true&top=25` |
 | `code_only` | boolean | Exclude data/config files | `?code_only=true` |
 | `min_lines` | integer | Filter files with ≥ N lines | `?min_lines=50` |
 | `max_lines` | integer | Filter files with ≤ N lines | `?max_lines=500` |
