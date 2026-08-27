@@ -737,7 +737,10 @@ def _apply_severity_filter(detections: list, severity: Optional[str]) -> list:
     return [d for d in detections if _SEVERITY_ORDER.index(d.severity.value.lower()) >= min_idx]
 
 
-def check_exit_code(total_issues: int, files_errored: int = 0, files_degraded: int = 0) -> int:
+def check_exit_code(
+    total_issues: int, files_errored: int = 0, files_degraded: int = 0,
+    exit_zero: bool = False,
+) -> int:
     """Compute `reveal check`'s process exit code (BACK-1099's contract).
 
     0 = clean: ran to completion, zero issues, every file parsed and every
@@ -755,7 +758,18 @@ def check_exit_code(total_issues: int, files_errored: int = 0, files_degraded: i
     (2 is reserved for usage/invocation errors -- bad args, unsupported
     path -- raised directly by the CLI layer before a scan starts, not
     computed here.)
+
+    exit_zero (BACK-1186): once the scan itself completed (this function
+    was reached at all -- a real usage error still exits 2 upstream of
+    here), always return 0 regardless of findings or degraded files. "Were
+    there issues" stays fully recorded in the JSON/text summary; this only
+    changes the process exit code, matching how every other reveal adapter
+    (overview://, hotspots://, ...) already behaves -- makes `check` safe
+    to drop into a `set -e` / CI pipeline without the caller needing to
+    know this one adapter's special exit-code convention.
     """
+    if exit_zero:
+        return 0
     if files_errored or files_degraded:
         return 3
     return 1 if total_issues > 0 else 0
@@ -948,6 +962,7 @@ def _print_json_output(
     ignore: Optional[List[str]] = None,
     files_errored: int = 0,
     scan_disclosures: Optional[List[str]] = None,
+    exit_zero: bool = False,
 ) -> None:
     """Print JSON output with results and summary.
 
@@ -988,7 +1003,7 @@ def _print_json_output(
             "files_errored": files_errored,
             "files_degraded": files_degraded,
             "total_issues": total_issues,
-            "exit_code": check_exit_code(total_issues, files_errored, files_degraded),
+            "exit_code": check_exit_code(total_issues, files_errored, files_degraded, exit_zero=exit_zero),
             "scan_disclosures": scan_disclosures or [],
         }
     }
@@ -1122,6 +1137,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
             scope=collection.to_scope_census(), source=directory,
             select=select, ignore=ignore, files_errored=files_errored,
             scan_disclosures=_get_scan_disclosures(),
+            exit_zero=getattr(args, 'exit_zero', False),
         )
     elif output_format == 'grep':
         # BACK-1035: this recursive/directory path only ever branched on
@@ -1165,7 +1181,10 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     # previously fed only the disclosure text/JSON summary, never the
     # actual process exit code, so a directory containing an unparseable
     # file exited 0 identically to an all-clean directory).
-    sys.exit(check_exit_code(total_issues, files_errored, files_degraded))
+    sys.exit(check_exit_code(
+        total_issues, files_errored, files_degraded,
+        exit_zero=getattr(args, 'exit_zero', False),
+    ))
 
 
 def handle_profile_rules(directory: Path, args: 'Namespace') -> None:

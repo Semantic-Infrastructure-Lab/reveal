@@ -59,6 +59,19 @@ class TestCheckExitCodeFunction:
         assert check_exit_code(total_issues=2, files_errored=0, files_degraded=1) == 3
         assert check_exit_code(total_issues=2, files_errored=1, files_degraded=0) == 3
 
+    def test_exit_zero_overrides_issues_found(self):
+        assert check_exit_code(total_issues=3, exit_zero=True) == 0
+
+    def test_exit_zero_overrides_errored(self):
+        assert check_exit_code(total_issues=0, files_errored=1, exit_zero=True) == 0
+
+    def test_exit_zero_overrides_degraded(self):
+        assert check_exit_code(total_issues=0, files_degraded=1, exit_zero=True) == 0
+
+    def test_exit_zero_false_is_unaffected(self):
+        """Default (exit_zero=False) must not change any prior contract case."""
+        assert check_exit_code(total_issues=2, files_degraded=1, exit_zero=False) == 3
+
 
 class TestSingleFileCheckExitCode:
     """`reveal check <file>` -- the exact command from BACK-1099's repro."""
@@ -115,6 +128,47 @@ class TestDirectoryCheckExitCode:
         result = _run_reveal_direct("check", str(tmp_path), "--format", "json")
         assert result.returncode == 0
         assert '"exit_code": 0' in result.stdout
+
+
+class TestExitZeroFlag:
+    """BACK-1186: --exit-zero makes `reveal check` safe to drop into a
+    `set -e`/CI pipeline -- the process always exits 0 once the scan
+    itself completed, regardless of findings or degraded files. "Were
+    there issues" stays fully visible in the JSON summary/text output;
+    only the process exit code changes."""
+
+    def _make_mixed_dir(self, tmp_path):
+        _write_py(tmp_path, "broken.py", "def foo(:\n    pass\n")
+        _write_py(tmp_path, "clean.py", "def f():\n    return 1\n")
+        return tmp_path
+
+    def test_degraded_directory_exits_0_with_flag(self, tmp_path):
+        d = self._make_mixed_dir(tmp_path)
+        result = _run_reveal_direct("check", str(d), "--format", "json", "--exit-zero")
+        assert result.returncode == 0
+
+    def test_degraded_directory_json_summary_still_reports_degradation(self, tmp_path):
+        """The process exit is 0, but the finding itself must not be masked."""
+        d = self._make_mixed_dir(tmp_path)
+        result = _run_reveal_direct("check", str(d), "--format", "json", "--exit-zero")
+        assert '"files_degraded": 1' in result.stdout
+        assert '"exit_code": 0' in result.stdout
+
+    def test_degraded_single_file_exits_0_with_flag(self, tmp_path):
+        f = _write_py(tmp_path, "broken.py", "def foo(:\n    pass\n")
+        result = _run_reveal_direct("check", str(f), "--format", "json", "--exit-zero")
+        assert result.returncode == 0
+
+    def test_issues_found_exits_0_with_flag(self, tmp_path):
+        f = _write_py(tmp_path, "issues.py", "eval('1')\n")
+        result = _run_reveal_direct("check", str(f), "--format", "json", "--exit-zero")
+        assert result.returncode == 0
+
+    def test_without_flag_still_exits_3(self, tmp_path):
+        """Sanity check that --exit-zero is opt-in, not a behavior change."""
+        d = self._make_mixed_dir(tmp_path)
+        result = _run_reveal_direct("check", str(d), "--format", "json")
+        assert result.returncode == 3
 
 
 class TestStdinCheckExitCode:

@@ -129,6 +129,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         '--explain', type=str, metavar='CODE',
         help='Explain a specific rule (e.g., "B001")',
     )
+    parser.add_argument(
+        '--exit-zero', action='store_true', dest='exit_zero',
+        help='Always exit 0 once the scan itself completed, regardless of findings or '
+             'degraded/unparseable files -- moves "were there issues" into the JSON/text '
+             'output only (meta/summary), matching how every other reveal adapter behaves. '
+             'A genuine usage error (exit 2, e.g. bad arguments) still exits nonzero. '
+             'Makes check safe to drop into a set -e / CI pipeline (BACK-1186).',
+    )
 
 
 def run_check(args: Namespace) -> None:
@@ -219,6 +227,9 @@ def run_check(args: Namespace) -> None:
         # can mean "clean" or "couldn't actually check it". Exit 3 makes
         # that distinguishable from clean (0) and from real issues (1) at
         # the shell level; see internal-docs/design/EXIT_CODE_CONTRACT.md.
-        if degraded:
-            sys.exit(3)
-        sys.exit(1 if violations else 0)
+        from reveal.cli.file_checker import check_exit_code
+        sys.exit(check_exit_code(
+            len(violations) if violations else 0,
+            files_degraded=1 if degraded else 0,
+            exit_zero=getattr(args, 'exit_zero', False),
+        ))

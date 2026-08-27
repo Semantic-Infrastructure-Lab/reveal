@@ -189,7 +189,10 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
         # clean run at the shell level, same as the directory-mode fix.
         from reveal.cli.file_checker import check_exit_code
         degraded_count = 1 if any_file_degraded else 0
-        sys.exit(check_exit_code(total_file_violations, files_degraded=degraded_count))
+        sys.exit(check_exit_code(
+            total_file_violations, files_degraded=degraded_count,
+            exit_zero=getattr(args, 'exit_zero', False),
+        ))
 
     sys.exit(1 if total_file_violations > 0 else 0)
 
