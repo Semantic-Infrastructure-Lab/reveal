@@ -217,6 +217,68 @@ class TestDocumentationConsistency:
             )
             # Don't fail, just log for information
 
+    def test_adapter_consistency_flag_taxonomy_matches_parser(self, docs_dir):
+        """ADAPTER_CONSISTENCY.md's flag taxonomy must match cli/parser.py's
+        actual argument groups — the doc drifted from the code once (BACK-1200:
+        claimed --max-items/--max-snippet-chars were universal when the check
+        subcommand rejects them, and omitted --exclude entirely). Regenerating
+        the group membership from create_argument_parser() at test time, rather
+        than hardcoding a snapshot here, means this guard can't itself go stale.
+        """
+        from reveal.cli.parser import create_argument_parser
+
+        doc_path = docs_dir / "development" / "ADAPTER_CONSISTENCY.md"
+        if not doc_path.exists():
+            pytest.skip("ADAPTER_CONSISTENCY.md not found")
+        doc_text = doc_path.read_text(encoding="utf-8")
+
+        parser = create_argument_parser(version="0.0.0-test", full_help=True)
+        flag_to_group: dict[str, str] = {}
+        for group in parser._action_groups:
+            for action in group._group_actions:
+                for option in action.option_strings:
+                    flag_to_group[option] = group.title or ""
+
+        universal_adapter_title = "Universal adapter options  [work with any URI adapter]"
+        quality_checks_title = "Quality checks  [--check universal; rules/config are file-specific]"
+        global_titles = {
+            "Output  [global — work with every target]",
+            "Discovery  [global — introspection, agent helpers]",
+            "Navigation  [global — browse, filter, sort]",
+            "Display  [global — tree depth, filtering, layout]",
+        }
+
+        # --max-items/--max-snippet-chars belong to the URI-adapter-only group,
+        # not the file-target --check group — the doc must not re-claim them as
+        # universal-across-everything (the exact BACK-1200 regression).
+        for flag in ("--max-items", "--max-snippet-chars"):
+            assert flag_to_group.get(flag) == universal_adapter_title, (
+                f"{flag} moved out of '{universal_adapter_title}' in cli/parser.py "
+                f"(now in {flag_to_group.get(flag)!r}) — update ADAPTER_CONSISTENCY.md's "
+                f"Flag Taxonomy to match."
+            )
+            assert flag not in doc_text.split("Quality checks")[0] or quality_checks_title not in doc_text, (
+                f"ADAPTER_CONSISTENCY.md must not present {flag} as part of the "
+                f"universal --check surface — it errors on `reveal check <path> {flag} ...`"
+            )
+
+        # --exclude is a real global flag (Display group) — BACK-1200 found it
+        # missing from the taxonomy entirely.
+        assert flag_to_group.get("--exclude") in global_titles
+        assert "--exclude" in doc_text.split("## Tier 3")[0], (
+            "ADAPTER_CONSISTENCY.md's Flag Taxonomy (Tier 2) must document "
+            "--exclude — it's a global flag, not adapter-specific."
+        )
+
+        # The doc must not re-legitimize silent-ignore as a design goal (the
+        # BACK-1200 root-cause finding) — it may only describe it as a current,
+        # tracked gap.
+        assert "anti-pattern" in doc_text or "not a design goal" in doc_text, (
+            "ADAPTER_CONSISTENCY.md's Flag Taxonomy note must frame "
+            "silently-ignored adapter-specific flags as a bug to fix, not "
+            "normal documented behavior (BACK-1200)."
+        )
+
 
 class TestDocumentationCompleteness:
     """Test that documentation covers all major features."""

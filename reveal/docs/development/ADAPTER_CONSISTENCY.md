@@ -68,30 +68,59 @@ Operations are **what you do** with the resource.
 
 ### Flag Taxonomy
 
-Not all flags in `reveal --help` are universal. There are three distinct categories:
+Not all flags in `reveal --help` are universal. **Ground truth for scope is the
+argument-group titles `reveal --help`/`--help-all` already print** — they come
+straight from `cli/parser.py::create_argument_parser()`'s `add_argument_group()`
+calls, so they can't drift from the CLI the way a hand-copied list can. This
+table mirrors those groups; verified live against reveal-cli 0.122.0.
 
-**Global flags** — work everywhere, inherited by all subcommands:
+**Global — work with every target** (`Output`, `Discovery`, `Navigation`,
+`Display` groups):
 ```bash
 --format {text,json,typed,grep}   # Output format
 --copy                             # Copy to clipboard
 --verbose                          # Detailed output
 --no-breadcrumbs                   # Scripting mode
+--head N / --tail N / --range      # Semantic slicing
+--sort FIELD / --desc / --asc      # Sort results
+--since DATE / --until DATE        # Date filter
+--depth / --max-entries / --dir-limit / --fast   # Tree layout & perf
+--respect-gitignore / --no-gitignore
+--exclude PATTERN    # Exclude files/dirs matching pattern — works everywhere,
+                      # including URI-adapter targets (confirmed live)
+--ext EXTS / --files / --hotspots / --code-only
 ```
+> `--format typed` is *accepted* on every target, but its `typed` value is not
+> yet fully implemented for every result shape — confirmed byte-identical to
+> `--format text` on several adapters (BACK-1037). Accepted everywhere ≠
+> functional everywhere; don't cite this flag as proof a value fully renders.
 
-**Universal operation flags** — apply across all adapters and file targets:
+**`--check` is universal; its own options are file-target-scoped** (`Quality
+checks` group):
 ```bash
---check              # Health/validation check
+--check / --lint              # Universal — run pattern detectors on any file/dir
+--select / --ignore / --severity / --limit / --config / --explain / --rules
+                               # Scoped to --check on a file/directory target
+```
+`--max-items` and `--max-snippet-chars` are **not** part of this group —
+`reveal check <file> --max-snippet-chars 50` fails with `unrecognized
+arguments` (confirmed live). Don't assume a flag that works with `--check` on
+one target works with `--check` everywhere; see the next group.
+
+**Universal adapter options** — work with any URI adapter (`ssl://`,
+`git://`, `ast://`, ...), not with bare file/subcommand targets:
+```bash
 --advanced           # Advanced mode (requires --check)
 --only-failures      # Show only failures (requires --check)
 --batch              # Batch mode (process multiple URIs from stdin)
 --fields FIELDS      # Select specific output fields (token efficiency)
 --max-items N        # Budget: stop after N results
 --max-snippet-chars N # Budget: truncate long text snippets
---head N / --tail N  # Semantic slicing
---sort FIELD         # Sort results
 ```
 
-**Adapter-specific flags** — only meaningful for a specific adapter or file type:
+**Adapter-specific flags** — only meaningful for a specific adapter or file
+type, shown in their own `--help-all` groups (`SSL adapter`, `Nginx /
+cPanel`, `Markdown`, `HTML`, `Schema validation`):
 ```bash
 --dns-verified       # cpanel:// only — exclude NXDOMAIN from SSL counts
 --expiring-within N  # ssl:// only — filter by cert expiry
@@ -106,7 +135,20 @@ Not all flags in `reveal --help` are universal. There are three distinct categor
 --base-path DIR      # claude:// only — override session directory
 ```
 
-> **Why this matters**: The flat `--help` output doesn't distinguish these tiers. Adapter-specific flags are silently ignored when applied to the wrong target. See [Adapter-Specific Flags vs Query Parameters](#adapter-specific-flags-vs-query-parameters) for the architectural direction.
+> **Why this matters**: the flat `--help` output alone doesn't distinguish
+> these tiers — use `--help-all` for the grouped listing, or this table.
+> **Current state, stated honestly**: SSL/nginx adapter-specific flags applied
+> to the wrong target are *currently* silently ignored
+> (`cli/parser.py:805`) — this is the same anti-pattern BACK-1035 already
+> fixed for `--format grep`/`check` (stderr error + exit 2 instead of silent
+> wrong output) and BACK-1202 is fixing for `--depth`/`--ext`/`--type`/
+> `--fast`/`--respect-gitignore` on URI adapters. **It is not a design goal.**
+> A documented flag that doesn't apply to a target should error or warn, never
+> silently succeed — treat any remaining silent-ignore as a bug to file, not
+> expected behavior to route around. See
+> [Adapter-Specific Flags vs Query Parameters](#adapter-specific-flags-vs-query-parameters)
+> for the direction that removes the ambiguity entirely (adapter options move
+> into the URI's own query string).
 
 ### Universal Operations — Examples
 
