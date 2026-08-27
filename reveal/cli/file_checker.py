@@ -290,6 +290,7 @@ def _print_grouped_detections(
     relative: Path,
     no_group: bool = False,
     shown_guidance: Optional[set] = None,
+    no_snippets: bool = False,
 ) -> None:
     """Print detections for one file, collapsing rules that repeat excessively.
 
@@ -316,6 +317,7 @@ def _print_grouped_detections(
             somewhere in this run; mutated in place. None = always show
             (matches pre-BACK-1039 per-file-only behavior, e.g. single-file
             check_and_report_file, which has nothing else to dedup against).
+        no_snippets: Omit the 📝 code-excerpt line (BACK-1182).
     """
     severity_icons = SEVERITY_MARKERS
 
@@ -326,7 +328,7 @@ def _print_grouped_detections(
                 shown_guidance.add(d.rule_code)
             if d.suggestion:
                 print(f"  💡 {d.suggestion}")
-            if d.context:
+            if d.context and not no_snippets:
                 print(f"  📝 {d.context}")
 
     if no_group or len(detections) < _GROUP_THRESHOLD:
@@ -778,6 +780,7 @@ def check_exit_code(
 def _check_files_json(
     files: List[Path], directory: Path, select: Optional[List[str]], ignore: Optional[List[str]],
     severity: Optional[str] = None,
+    no_snippets: bool = False,
 ) -> tuple:
     """Check files and collect JSON results.
 
@@ -787,6 +790,8 @@ def _check_files_json(
         select: Rule codes to select
         ignore: Rule codes to ignore
         severity: Minimum severity level to report (low/medium/high/critical)
+        no_snippets: Omit each detection's `context` (code excerpt) field
+            (BACK-1182).
 
     Returns:
         Tuple of (total_issues, files_with_issues, file_results, files_errored).
@@ -836,7 +841,7 @@ def _check_files_json(
                         "message": d.message,
                         "severity": d.severity.value,
                         "suggestion": d.suggestion,
-                        "context": d.context
+                        **({} if no_snippets else {"context": d.context}),
                     }
                     for d in detections
                 ]
@@ -860,6 +865,7 @@ def _check_files_text(
     no_group: bool = False,
     severity: Optional[str] = None,
     limit: int = 50,
+    no_snippets: bool = False,
 ) -> tuple:
     """Check files with text output.
 
@@ -873,6 +879,7 @@ def _check_files_text(
         limit: Stop printing full per-file detail after this many files-with-
             issues and print a "+N more files" summary footer instead (BACK-539).
             0 (or negative) disables the cap — print every file in full.
+        no_snippets: Omit the 📝 code-excerpt line (BACK-1182).
 
     Returns:
         Tuple of (total_issues, files_with_issues, files_errored, files_degraded).
@@ -939,7 +946,10 @@ def _check_files_text(
                 hidden_issues += issue_count
                 continue
             print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
-            _print_grouped_detections(detections, relative, no_group=no_group, shown_guidance=shown_guidance)
+            _print_grouped_detections(
+                detections, relative, no_group=no_group, shown_guidance=shown_guidance,
+                no_snippets=no_snippets,
+            )
 
     if hidden_files:
         print(
@@ -1122,6 +1132,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     select = args.select.split(',') if args.select else None
     ignore = args.ignore.split(',') if args.ignore else None
     no_group = getattr(args, 'no_group', False)
+    no_snippets = getattr(args, 'no_snippets', False)
     severity = getattr(args, 'severity', None)
     limit = getattr(args, 'limit', 50)
 
@@ -1129,7 +1140,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     files_degraded = 0
     if output_format == 'json':
         total_issues, files_with_issues, file_results, files_errored = _check_files_json(
-            files_to_check, directory, select, ignore, severity=severity
+            files_to_check, directory, select, ignore, severity=severity, no_snippets=no_snippets,
         )
         files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
         _print_json_output(
@@ -1168,7 +1179,8 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
             )
             sys.exit(2)
         total_issues, files_with_issues, files_errored, files_degraded = _check_files_text(
-            files_to_check, directory, select, ignore, no_group=no_group, severity=severity, limit=limit
+            files_to_check, directory, select, ignore, no_group=no_group, severity=severity, limit=limit,
+            no_snippets=no_snippets,
         )
         _print_text_summary(
             len(files_to_check), files_with_issues, total_issues, directory, config,

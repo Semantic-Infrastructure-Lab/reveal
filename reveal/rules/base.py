@@ -181,27 +181,42 @@ class Detection:
     severity: Severity = Severity.MEDIUM
     category: Optional[RulePrefix] = None
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Serialize for JSON output."""
+    def to_dict(self, no_snippets: bool = False) -> Dict[str, Any]:
+        """Serialize for JSON output.
+
+        no_snippets (BACK-1182): omit `context` (the embedded source
+        excerpt) entirely — for a compliance-sensitive DD engagement where
+        the evidence output needs to be shareable without embedding actual
+        client source.
+        """
         data = asdict(self)
         # Convert enums to strings
         if self.severity:
             data['severity'] = self.severity.value
         if self.category:
             data['category'] = self.category if isinstance(self.category, str) else self.category.value
+        if no_snippets:
+            data.pop('context', None)
         return data
 
-    def __str__(self) -> str:
-        """Format for terminal output (Ruff-style)."""
+    def render(self, no_snippets: bool = False) -> str:
+        """Format for terminal output (Ruff-style).
+
+        no_snippets (BACK-1182): omit the 📝 code-excerpt line — rule,
+        file, line, severity and the 💡 suggestion still print.
+        """
         loc = f"{self.file_path}:{self.line}:{self.column}"
         severity_marker = SEVERITY_MARKERS.get(self.severity, "")
 
         result = f"{loc} {severity_marker} {self.rule_code} {self.message}"
         if self.suggestion:
             result += f"\n  💡 {self.suggestion}"
-        if self.context:
+        if self.context and not no_snippets:
             result += f"\n  📝 {self.context}"
         return result
+
+    def __str__(self) -> str:
+        return self.render()
 
 
 class BaseRule(ABC):

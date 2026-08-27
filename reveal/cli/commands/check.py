@@ -130,6 +130,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help='Explain a specific rule (e.g., "B001")',
     )
     parser.add_argument(
+        '--no-snippets', action='store_true', dest='no_snippets',
+        help='Omit the embedded source-code excerpt (the 📝 line / JSON "context" field) '
+             'from violation output -- rule/file/line/severity/suggestion still print. For '
+             'a compliance-sensitive engagement where the evidence output needs to be '
+             'shareable without embedding actual source (BACK-1182).',
+    )
+    parser.add_argument(
         '--exit-zero', action='store_true', dest='exit_zero',
         help='Always exit 0 once the scan itself completed, regardless of findings or '
              'degraded/unparseable files -- moves "were there issues" into the JSON/text '
@@ -229,7 +236,7 @@ def run_check(args: Namespace) -> None:
         # the shell level; see internal-docs/design/EXIT_CODE_CONTRACT.md.
         from reveal.cli.file_checker import check_exit_code
         sys.exit(check_exit_code(
-            len(violations) if violations else 0,
+            violations,
             files_degraded=1 if degraded else 0,
             exit_zero=getattr(args, 'exit_zero', False),
         ))

@@ -1208,7 +1208,7 @@ class TestHandleFile(unittest.TestCase):
                 format='text',
             )
 
-            with patch.object(checks, 'run_pattern_detection', return_value=([], False)) as mock_check:
+            with patch.object(checks, 'run_pattern_detection', return_value=(0, False)) as mock_check:
                 with patch('sys.exit'):
                     run_check(mock_args)
                 mock_check.assert_called_once()

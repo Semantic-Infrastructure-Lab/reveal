@@ -35,6 +35,7 @@ def _format_detections_json(
     detections: List[Any],
     parse_degraded: bool = False,
     rule_errors: Optional[List[dict]] = None,
+    no_snippets: bool = False,
 ) -> None:
     """Format detections as JSON.
 
@@ -47,12 +48,14 @@ def _format_detections_json(
         rule_errors: Rules that raised during check() ({"rule", "error"}, from
             RuleRegistry.check_file's errors= param) — otherwise invisible on
             stdout/JSON, visible only in the stderr log (BACK-1083).
+        no_snippets: Omit each detection's `context` (code excerpt) field
+            (BACK-1182).
     """
     from reveal.utils.results import add_cli_contract_fields
 
     result = {
         'file': path,
-        'detections': [d.to_dict() for d in detections],
+        'detections': [d.to_dict(no_snippets=no_snippets) for d in detections],
         'total': len(detections)
     }
     if parse_degraded:
@@ -82,6 +85,7 @@ def _format_detections_text(
     no_group: bool = False,
     parse_degraded: bool = False,
     rule_errors: Optional[List[dict]] = None,
+    no_snippets: bool = False,
 ) -> None:
     """Format detections as human-readable text.
 
@@ -95,6 +99,7 @@ def _format_detections_text(
         parse_degraded: True when the parser recovered from a syntax error —
             see _format_detections_json (BACK-1083).
         rule_errors: Rules that raised during check() — see _format_detections_json.
+        no_snippets: Omit the 📝 code-excerpt line (BACK-1182).
     """
     for err in rule_errors or []:
         print(f"{path}: ⚠️  rule {err['rule']} crashed and did not run — {err['error']}")
@@ -113,7 +118,7 @@ def _format_detections_text(
 
     if no_group or count < _GROUP_THRESHOLD:
         for d in sorted(detections, key=lambda x: (x.line, x.column)):
-            print(d)
+            print(d.render(no_snippets=no_snippets))
             print()
         return
 
@@ -127,12 +132,12 @@ def _format_detections_text(
 
     for d in sorted(detections, key=lambda x: (x.line, x.column)):
         if d.rule_code not in collapsed:
-            print(d)
+            print(d.render(no_snippets=no_snippets))
             print()
         elif d.rule_code not in shown_collapsed:
             shown_collapsed.add(d.rule_code)
             total = len(by_rule[d.rule_code])
-            print(d)
+            print(d.render(no_snippets=no_snippets))
             print(f"\n  ↳ +{total - 1} more {d.rule_code} occurrences hidden — use --no-group to expand\n")
 
 
@@ -166,6 +171,7 @@ def run_pattern_detection(
     select = args.select.split(',') if args.select else None
     ignore = args.ignore.split(',') if args.ignore else None
     no_group = getattr(args, 'no_group', False)
+    no_snippets = getattr(args, 'no_snippets', False)
     severity_arg = getattr(args, 'severity', None)
 
     # Get structure and content
@@ -202,11 +208,13 @@ def run_pattern_detection(
     # Format and output results
     formatters = {
         'json': lambda: _format_detections_json(
-            path, detections, parse_degraded=parse_degraded, rule_errors=rule_errors
+            path, detections, parse_degraded=parse_degraded, rule_errors=rule_errors,
+            no_snippets=no_snippets,
         ),
         'grep': lambda: _format_detections_grep(detections),
         'text': lambda: _format_detections_text(
-            path, detections, no_group=no_group, parse_degraded=parse_degraded, rule_errors=rule_errors
+            path, detections, no_group=no_group, parse_degraded=parse_degraded, rule_errors=rule_errors,
+            no_snippets=no_snippets,
         ),
     }
 
