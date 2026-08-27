@@ -2541,5 +2541,95 @@ class TestModuleGraphRenderer(unittest.TestCase):
         self.assertEqual(parsed['query'], 'module_graph')
 
 
+# ---------------------------------------------------------------------------
+# BACK-1198: per-language extraction confidence + dynamic-dispatch vocabulary
+# ---------------------------------------------------------------------------
+
+class TestCallGraphMeta(unittest.TestCase):
+    """calls:// meta (confidence/warnings) is language-weighted, not a flat
+    hardcoded 0.85 identical across every language regardless of measured
+    extraction reliability."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_python_and_ruby_get_different_confidence(self):
+        from reveal.adapters.calls.confidence import build_meta
+
+        py_dir = os.path.join(self.tmpdir, 'py')
+        os.makedirs(py_dir)
+        _write(py_dir, 'main.py', 'def f():\n    pass\n')
+
+        rb_dir = os.path.join(self.tmpdir, 'rb')
+        os.makedirs(rb_dir)
+        _write(rb_dir, 'main.rb', 'def f\nend\n')
+
+        py_meta = build_meta(py_dir)
+        rb_meta = build_meta(rb_dir)
+        # Not asserting exact values (they track VALIDATION.md and may be
+        # re-measured) -- asserting they're NOT the old flat constant and
+        # NOT identical to each other for two different languages.
+        self.assertNotEqual(py_meta['confidence'], 0.85)
+        self.assertNotEqual(rb_meta['confidence'], 0.85)
+        self.assertNotEqual(py_meta['confidence'], rb_meta['confidence'])
+
+    def test_ruby_dispatch_warning_names_ruby_idioms_not_python(self):
+        from reveal.adapters.calls.confidence import build_meta
+
+        rb_dir = os.path.join(self.tmpdir, 'rb')
+        os.makedirs(rb_dir)
+        _write(rb_dir, 'main.rb', 'def f\nend\n')
+
+        meta = build_meta(rb_dir)
+        dispatch_warning = meta['warnings'][0]['message']
+        self.assertIn('method_missing', dispatch_warning)
+        self.assertNotIn('getattr', dispatch_warning)
+
+    def test_uncalled_query_adds_derived_signal_warning(self):
+        from reveal.adapters.calls.confidence import build_meta
+
+        py_dir = os.path.join(self.tmpdir, 'py')
+        os.makedirs(py_dir)
+        _write(py_dir, 'main.py', 'def f():\n    pass\n')
+
+        meta_default = build_meta(py_dir)
+        meta_uncalled = build_meta(py_dir, uncalled=True)
+        codes_default = {w['code'] for w in meta_default['warnings']}
+        codes_uncalled = {w['code'] for w in meta_uncalled['warnings']}
+        self.assertNotIn('W-CALLS-5', codes_default)
+        self.assertIn('W-CALLS-5', codes_uncalled)
+
+    def test_unmeasured_language_falls_back_to_default_confidence(self):
+        from reveal.adapters.calls.confidence import build_meta
+
+        empty_dir = os.path.join(self.tmpdir, 'empty')
+        os.makedirs(empty_dir)
+        meta = build_meta(empty_dir)
+        self.assertEqual(meta['confidence'], 0.85)
+
+    def test_uncalled_renderer_prints_warnings_near_header(self):
+        """BACK-1198: the dynamic-dispatch/derived-signal caveats render near
+        the header, not only after however many entries follow (previously
+        ~2,235 lines below the count on a large real-corpus uncalled list)."""
+        data = {
+            'query': 'uncalled',
+            'path': '/tmp/src',
+            'total_defined': 10,
+            'total_uncalled': 1,
+            'entries': [{'name': 'orphan', 'file': 'a.py', 'line': 1, 'category': 'functions'}],
+            'meta': {'warnings': [{'code': 'W-CALLS-1', 'message': 'Dynamic dispatch (X) is not resolved.'}]},
+        }
+        out = _capture_renderer(render_calls_structure, data, 'text')
+        header_pos = out.index('Total defined:')
+        entry_pos = out.index('orphan')
+        warning_pos = out.index('Dynamic dispatch (X)')
+        self.assertLess(warning_pos, entry_pos)
+        self.assertGreater(warning_pos, header_pos)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -9,6 +9,8 @@ Usage:
     threshold = self.get_threshold('threshold', RuleDefaults.CYCLOMATIC_COMPLEXITY)
 """
 
+from typing import Dict
+
 
 # Canonical set of directories that directory walks skip by default.
 #
@@ -147,6 +149,79 @@ class DisplayDefaults:
     TREE_DIR_LIMIT = 50                  # --dir-limit default
     TREE_MAX_ENTRIES = 200               # --max-entries default
     SNIPPET_CONTEXT_LINES = 3            # Lines of context around matches
+
+
+# Cross-file call-graph EXTRACTION confidence, per language (BACK-1198).
+#
+# Grounded in reveal's own measured recall figures (VALIDATION.md, "Cross-File
+# Call-Graph Recall") -- NOT invented. Previously calls:// emitted a single
+# hardcoded 0.85 confidence regardless of language: identical for a language
+# measured at 100% recall (Go, TypeScript, Java, ...) and one with real,
+# documented residual gaps (C++ 95.73%, Dart 97.55%). Values below are the
+# best POST-FIX recall figure recorded for each language's real-corpus oracle
+# validation (20-per-bucket sample where VALIDATION.md reports one, else the
+# single measured figure); update this table if VALIDATION.md's numbers
+# change. A language absent from this table has not been oracle-validated at
+# all -- CALL_GRAPH_DEFAULT_CONFIDENCE is a floor, not a measurement.
+#
+# This is EXTRACTION confidence only -- "did calls:// find the real call
+# edges that exist in the source" -- not the separate, unmeasured question of
+# how much a language's dynamic-dispatch idioms (method_missing, reflection,
+# eval, ...) hide real callers from ANY static tool. See
+# CALL_GRAPH_DYNAMIC_DISPATCH_VOCAB below for that per-language caveat, and
+# adapters/calls/adapter.py's `?uncalled` handling for why that query gets
+# its own, more conservative framing (derived-signal vs. extraction).
+CALL_GRAPH_EXTRACTION_CONFIDENCE: Dict[str, float] = {
+    'python': 0.9996,     # reverse 99.96%, forward 100.00%, transitive 99.98%
+    'typescript': 1.00,
+    'tsx': 1.00,
+    'javascript': 1.00,
+    'go': 1.00,
+    'rust': 1.00,
+    'java': 1.00,
+    'ruby': 1.00,
+    'php': 1.00,
+    'csharp': 1.00,
+    'kotlin': 0.9979,     # 20/bucket -- residual: tree-sitter-kotlin grammar gap (BACK-738, open)
+    'swift': 0.9979,      # 20/bucket -- residual: 2 tree-sitter-swift grammar gaps (BACK-742, open)
+    'cpp': 0.9573,        # 20/bucket -- residual mostly oracle-incompleteness, not calls:// bugs
+    'c': 1.00,
+    'scala': 1.00,
+    'zig': 0.9998,        # 8,403/8,405 (20/bucket) -- residual: one file's parse error
+    'lua': 1.00,
+    'gdscript': 1.00,
+    'dart': 0.9755,       # 20/bucket -- residual: tree-sitter-dart generic-call gap (BACK-768)
+}
+
+# Prior blanket confidence value, kept as the floor for any language not yet
+# oracle-validated in CALL_GRAPH_EXTRACTION_CONFIDENCE above -- a known-stale
+# guess, not a claim of measured accuracy.
+CALL_GRAPH_DEFAULT_CONFIDENCE = 0.85
+
+# Per-language caveat for the "dynamic dispatch is not resolved" call-graph
+# warning (BACK-1198 item 2). Previously this warning's vocabulary was
+# Python's regardless of the language being scanned ("getattr, importlib,
+# eval/exec" printed verbatim on a Ruby/Java/Go scan, where none of those
+# apply). Not exhaustive per language -- covers the dominant, well-known
+# dynamic-dispatch idiom(s) for languages with one; CALL_GRAPH_DEFAULT_
+# DISPATCH_VOCAB is the honest fallback for any language not listed.
+CALL_GRAPH_DYNAMIC_DISPATCH_VOCAB: Dict[str, str] = {
+    'python': 'getattr/setattr, importlib, eval/exec',
+    'ruby': 'method_missing, define_method, send/public_send, const_missing',
+    'javascript': 'eval, Function(), Reflect, computed member access (obj[key]())',
+    'typescript': 'eval, Function(), Reflect, computed member access (obj[key]())',
+    'tsx': 'eval, Function(), Reflect, computed member access (obj[key]())',
+    'php': 'call_user_func(_array), __call/__callStatic, variable functions ($fn())',
+    'java': 'reflection (Method.invoke), dynamic proxies',
+    'csharp': 'reflection (MethodInfo.Invoke), dynamic, delegates/events',
+    'go': 'the reflect package, function values stored in interfaces',
+    'rust': 'dyn Trait objects, function pointers/closures stored in fields',
+    'kotlin': 'reflection (KFunction.call), function references',
+    'swift': 'NSObject/Objective-C runtime dispatch, @dynamicMemberLookup',
+    'scala': 'reflection, structural types, dynamic (scala.Dynamic)',
+    'lua': 'metatables (__index/__call), _G table lookups',
+}
+CALL_GRAPH_DEFAULT_DISPATCH_VOCAB = 'runtime dispatch mechanisms specific to this language'
 
 
 # Environment variable overrides
