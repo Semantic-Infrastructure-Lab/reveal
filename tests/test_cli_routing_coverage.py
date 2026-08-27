@@ -91,6 +91,80 @@ class TestHandleUriSortDesc:
         assert resource_arg.count('sort=') == 1
 
 
+# ─── handle_uri — BACK-1187/BACK-1192: --exclude on URI-scheme targets ───────
+
+class TestHandleUriExclude:
+    """--exclude was accepted by argparse and silently discarded for every
+    URI-scheme target (worked only via bare-path routing or an explicit
+    ?exclude= query param) — the same routing-seam silent-no-op class as
+    BACK-1034/BACK-1108."""
+
+    def test_exclude_injected_for_overview_scheme(self):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=['skip_me*'], base_path=None)
+                    handle_uri('overview://src', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert 'exclude=skip_me%2A' in resource_arg or 'exclude=skip_me*' in resource_arg
+
+    def test_exclude_joins_multiple_patterns_with_comma(self):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=['a*', 'b*'], base_path=None)
+                    handle_uri('stats://src', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert 'exclude=a*,b*' in resource_arg or 'exclude=a%2A%2Cb%2A' in resource_arg
+
+    def test_uri_exclude_takes_precedence_over_flag(self):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=['flag_pattern*'], base_path=None)
+                    handle_uri('overview://src?exclude=uri_pattern*', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert resource_arg.count('exclude=') == 1
+        assert 'flag_pattern' not in resource_arg
+
+    def test_exclude_warns_on_non_supporting_scheme(self, capsys):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=['skip_me*'], base_path=None)
+                    handle_uri('ast://src', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert 'exclude=' not in resource_arg
+        captured = capsys.readouterr()
+        assert '--exclude has no effect on ast://' in captured.err
+
+    def test_no_exclude_flag_no_injection_no_warning(self, capsys):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, base_path=None)
+                    handle_uri('ast://src', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert 'exclude=' not in resource_arg
+        captured = capsys.readouterr()
+        assert '--exclude' not in captured.err
+
+
 # ─── generic_adapter_handler — base_path override ────────────────────────────
 
 class TestGenericAdapterHandlerBasePath:

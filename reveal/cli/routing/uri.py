@@ -151,6 +151,30 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
             sep = '&' if '?' in resource else '?'
             resource = f"{resource}{sep}limit={limit_value}"
 
+    # Inject --exclude into the URI query string for the URI-scheme adapters
+    # that actually consume ?exclude= (BACK-1187/BACK-1192): only overview://
+    # and stats:// read it (BACK-1042). Every other scheme accepted the CLI
+    # flag via argparse and silently discarded it before this fix -- "the
+    # caller believes the scope was applied" (BACK-1192's framing) is exactly
+    # the failure mode a DD scoping flag must never have. --exclude is
+    # action='append' (a list); ?exclude= takes one comma-separated value,
+    # matching BACK-1042's own format. Skip injection if the URI already has
+    # an explicit exclude= param -- URI takes precedence, same as --sort/--limit.
+    _EXCLUDE_AWARE_SCHEMES = {'overview', 'stats'}
+    exclude_values = getattr(args, 'exclude', None)
+    if exclude_values:
+        if scheme in _EXCLUDE_AWARE_SCHEMES:
+            if 'exclude=' not in resource:
+                sep = '&' if '?' in resource else '?'
+                resource = f"{resource}{sep}exclude={','.join(exclude_values)}"
+        else:
+            aware = '/'.join(f'{s}://' for s in sorted(_EXCLUDE_AWARE_SCHEMES))
+            print(
+                f"Note: --exclude has no effect on {scheme}:// -- only {aware} "
+                f"support it. Pre-filter the target path or scope to a narrower directory.",
+                file=sys.stderr,
+            )
+
     # Look up adapter from registry
     from ...adapters.base import get_adapter_class, list_supported_schemes
     # Import adapters package to trigger all registrations (single source of truth)
