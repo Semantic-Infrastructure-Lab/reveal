@@ -1,5 +1,6 @@
 """Tests for imports:// adapter and import analysis."""
 
+import json
 import pytest
 from pathlib import Path
 from reveal.analyzers.imports import ImportStatement, ImportGraph
@@ -635,9 +636,11 @@ class TestImportsAdapter:
         adapter = ImportsAdapter(str(tmp_path))
         result = adapter.get_structure()
 
-        main_imports = result['files'][str(tmp_path / "main.py")]
+        # BACK-1212: 'files' keys and each entry's 'file'/'resolved' are
+        # relativized to the scan root (were absolute -- a path-leak bug).
+        main_imports = result['files']['main.py']
         by_module = {imp['module']: imp for imp in main_imports}
-        assert by_module['helper']['resolved'] == str(tmp_path / "helper.py")
+        assert by_module['helper']['resolved'] == 'helper.py'
         # A real stdlib import with no in-tree file must resolve to None,
         # never a fabricated path.
         assert by_module['os']['resolved'] is None
@@ -652,7 +655,9 @@ class TestImportsAdapter:
         adapter = ImportsAdapter(str(tmp_path))
         result = adapter.get_structure()
 
-        main_imports = result['files'][str(tmp_path / "main.py")]
+        # BACK-1212: 'files' keys are relativized to the scan root (were
+        # absolute -- a path-leak bug).
+        main_imports = result['files']['main.py']
         by_module = {imp['module']: imp for imp in main_imports}
         assert by_module['helper']['classification'] == 'intra_project'
         assert by_module['os']['classification'] == 'stdlib'
@@ -667,7 +672,9 @@ class TestImportsAdapter:
         adapter = ImportsAdapter(str(tmp_path))
         result = adapter.get_structure()
 
-        rb_imports = result['files'][str(tmp_path / "main.rb")]
+        # BACK-1212: 'files' keys are relativized to the scan root (were
+        # absolute -- a path-leak bug).
+        rb_imports = result['files']['main.rb']
         by_module = {imp['module']: imp for imp in rb_imports}
         assert by_module['json']['classification'] == 'unresolved'
 
@@ -1813,3 +1820,76 @@ class TestFanInEntrypointsRelativeDisplay:
         out = capsys.readouterr().out
         assert "sub/mod.py" in out
         assert abs_file not in out
+
+
+class TestJsonFormatDoesNotLeakAbsolutePaths:
+    """BACK-1212 (BACK-1194 follow-up): get_structure()'s JSON path never
+    routed imports.py's raw _format_* dicts through relativization -- only
+    ImportsRenderer's text path (_render_components's local `rel()`, etc.)
+    did. `--format json` leaked absolute host paths (analyst's filesystem
+    layout/username) in every query variant, since the scan root passed to
+    ImportsAdapter() is always absolute in real CLI usage."""
+
+    def _leaks(self, obj, root: str) -> bool:
+        return root in json.dumps(obj)
+
+    def test_default_all_files_view(self, tmp_path):
+        (tmp_path / "utils.py").write_text("def helper(): pass\n")
+        (tmp_path / "main.py").write_text("from utils import helper\n")
+        root = str(tmp_path.resolve())
+
+        result = ImportsAdapter(root).get_structure()
+
+        assert not self._leaks(result['files'], root)
+        for entries in result['files'].values():
+            for entry in entries:
+                assert not entry['file'].startswith(root)
+                if entry.get('resolved'):
+                    assert not entry['resolved'].startswith(root)
+
+    def test_unused_view(self, tmp_path):
+        (tmp_path / "a.py").write_text("import os\n")
+        root = str(tmp_path.resolve())
+
+        result = ImportsAdapter(root, 'unused').get_structure()
+
+        assert not self._leaks(result['unused'], root)
+
+    def test_fan_in_view(self, tmp_path):
+        (tmp_path / "utils.py").write_text("x = 1\n")
+        (tmp_path / "main.py").write_text("import utils\n")
+        root = str(tmp_path.resolve())
+
+        result = ImportsAdapter(root, 'rank=fan-in').get_structure()
+
+        assert not self._leaks(result['entries'], root)
+
+    def test_entrypoints_view(self, tmp_path):
+        (tmp_path / "main.py").write_text("import os\n")
+        root = str(tmp_path.resolve())
+
+        result = ImportsAdapter(root, 'entrypoints').get_structure()
+
+        assert not self._leaks(result['entries'], root)
+
+    def test_components_view(self, tmp_path):
+        (tmp_path / "sub").mkdir()
+        (tmp_path / "sub" / "a.py").write_text("import sub.b\n")
+        (tmp_path / "sub" / "b.py").write_text("x = 1\n")
+        root = str(tmp_path.resolve())
+
+        result = ImportsAdapter(root, 'components').get_structure()
+
+        assert not self._leaks(result['components'], root)
+        for component in result['components']:
+            assert not component['component'].startswith(root)
+
+    def test_circular_view(self, tmp_path):
+        (tmp_path / "a.py").write_text("import b\n")
+        (tmp_path / "b.py").write_text("import a\n")
+        root = str(tmp_path.resolve())
+
+        result = ImportsAdapter(root, 'circular').get_structure()
+
+        assert not self._leaks(result['cycles'], root)
+        assert not self._leaks(result['cycle_paths'], root)

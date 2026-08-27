@@ -762,6 +762,56 @@ def _extract_one_file(fp_str: str, want_structure: bool):
     return fp_str, imports, symbols, structure, failed
 
 
+def _relativize_imports_paths(result: Dict[str, Any], base_path: Path) -> None:
+    """Relativize the file-path fields the text renderer already relativizes
+    (ImportsRenderer._render_components's local `rel()`, etc.), but in the
+    raw structures get_structure() serializes directly to JSON -- those never
+    routed through the text renderer, so `--format json` leaked absolute host
+    paths (analyst's filesystem layout/username), same gap as overview.py's
+    `_relativize_paths` / deps.py's `_relativize_deps_paths` (BACK-1194
+    follow-up). BACK-1212. Mutates in place; dispatches on result['type']
+    since get_structure() returns a different shape per query param.
+    """
+    def rel(value: Optional[str]) -> Optional[str]:
+        return to_relative_display(value, base_path) if value else value
+
+    def relativize_import_dicts(imports: List[Dict[str, Any]]) -> None:
+        for imp in imports:
+            if imp.get('file'):
+                imp['file'] = rel(imp['file'])
+            if imp.get('resolved'):
+                imp['resolved'] = rel(imp['resolved'])
+
+    result_type = result.get('type')
+    if result_type == 'imports':
+        files = result.get('files')
+        if isinstance(files, dict):
+            relativized_files = {}
+            for file_path, entries in files.items():
+                relativize_import_dicts(entries)
+                relativized_files[rel(file_path)] = entries
+            result['files'] = relativized_files
+    elif result_type == 'unused_imports':
+        relativize_import_dicts(result.get('unused', []))
+    elif result_type in ('fan_in_ranking', 'entrypoints'):
+        for entry in result.get('entries', []):
+            if entry.get('file'):
+                entry['file'] = rel(entry['file'])
+    elif result_type == 'components':
+        for component in result.get('components', []):
+            if component.get('component'):
+                component['component'] = rel(component['component'])
+            if component.get('top_bridge'):
+                component['top_bridge'] = rel(component['top_bridge'])
+    elif result_type == 'circular_dependencies':
+        for key in ('cycles', 'cycle_paths'):
+            groups = result.get(key)
+            if groups:
+                result[key] = [[rel(fp) for fp in group] for group in groups]
+    # 'layer_violations' already relativizes (to_posix + relative_to
+    # project_root in _format_violations); 'imports_error' has no file fields.
+
+
 @register_adapter('imports')
 @register_renderer(ImportsRenderer)
 class ImportsAdapter(ResourceAdapter):
@@ -825,13 +875,14 @@ class ImportsAdapter(ResourceAdapter):
         elif 'violations' in query_params or kwargs.get('violations'):
             result = self._format_violations()
         elif query_params.get('rank') == 'fan-in':
-            return self._format_fan_in()
+            result = self._format_fan_in()
         elif 'entrypoints' in query_params:
-            return self._format_entrypoints()
+            result = self._format_entrypoints()
         elif 'components' in query_params:
-            return self._format_components()
+            result = self._format_components()
         else:
-            return self._format_all()
+            result = self._format_all()
+        _relativize_imports_paths(result, target_path)
         if verbose:
             result['verbose'] = True
         return result

@@ -759,6 +759,63 @@ class TestCoverageWarning(unittest.TestCase):
         self.assertNotIn('not analyzed', out)
 
 
+# ── JSON path-leak regression (BACK-1212, BACK-1194 follow-up) ─────────────────
+
+class TestJsonFormatDoesNotLeakAbsolutePaths(unittest.TestCase):
+    """get_structure()'s `report` dict never routed `facts.*`/`risks[]`/
+    `next_commands` through relativization -- only the text renderer did
+    (_render_entry_points/etc's own `_relpath` calls). `--format json` leaked
+    absolute host paths (analyst's filesystem layout/username) whenever the
+    scan root was absolute, which it always is via `Path(args.path).resolve()`
+    in run_architecture. `_IMPORTS_DATA`/`_COMPLEX_FNS` above are fixed under
+    a synthetic `/project/src` unrelated to the real scan root, so relative_to()
+    silently fails and falls through unchanged either way -- this class instead
+    anchors fixture paths under a REAL tmp dir so relativization can actually
+    resolve, the only way to distinguish "fixed" from "still leaking"."""
+
+    def test_json_output_does_not_leak_scan_root(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = str(Path(tmp).resolve())
+            imports_data = {
+                'entry_points': [{'file': f'{root}/main.py', 'fan_in': 0, 'fan_out': 8}],
+                'core_abstractions': [{'file': f'{root}/base.py', 'fan_in': 15, 'fan_out': 1}],
+                'components': [{
+                    'component': f'{root}/adapters', 'cohesion': 0.75, 'files': 10,
+                    'top_bridge': f'{root}/adapters/main.py',
+                }],
+                'circular_groups': [[f'{root}/a.py', f'{root}/b.py']],
+            }
+            complex_fns = [{'name': 'big_fn', 'complexity': 45, 'file': f'{root}/main.py', 'line': 10}]
+            args = _args(path=tmp, format='json')
+            with patch('reveal.adapters.architecture._run_combined_analysis', return_value=(complex_fns, imports_data)):
+                out = _capture(run_architecture, args)
+            data = json.loads(out)
+
+        # 'path'/'source' are the queried root itself -- expected, not a leak
+        # (BACK-1194 precedent). Everything else must be relative.
+        for entry in data['facts']['entry_points'] + data['facts']['core_abstractions']:
+            self.assertFalse(entry['file'].startswith(root), entry['file'])
+        for component in data['facts']['components']:
+            self.assertFalse(component['component'].startswith(root), component['component'])
+            if component.get('top_bridge'):
+                self.assertFalse(component['top_bridge'].startswith(root), component['top_bridge'])
+        for group in data['facts']['circular_groups']:
+            for fp in group:
+                self.assertFalse(fp.startswith(root), fp)
+        for risk in data['risks']:
+            if risk.get('file'):
+                self.assertFalse(risk['file'].startswith(root), risk['file'])
+            if risk.get('representative'):
+                self.assertFalse(risk['representative'].startswith(root), risk['representative'])
+        # Per-file suggested commands must be relative; whole-directory
+        # commands (containing a URI scheme) legitimately reuse the root
+        # already exposed via 'path'/'source'.
+        for cmd in data['next_commands']:
+            if '://' not in cmd:
+                self.assertNotIn(root, cmd, cmd)
+
+
 # ── --against integration (BACK-441) ────────────────────────────────────────
 
 def _commit_all(repo, message, parents=None):

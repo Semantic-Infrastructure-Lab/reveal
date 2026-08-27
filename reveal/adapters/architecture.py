@@ -357,6 +357,65 @@ def _relpath(file_str: str, base_path: Optional[Path]) -> str:
     return to_relative_display(file_str, base_path)
 
 
+def _relativize_architecture_paths(report: Dict[str, Any], base_path: Path) -> None:
+    """Relativize the file-path fields the text renderer already relativizes
+    via `_relpath` (_render_entry_points/_render_core_abstractions/etc), but
+    in the raw `report` dict get_structure() serializes directly to JSON --
+    that never routed through the text renderer, so `--format json` leaked
+    absolute host paths (analyst's filesystem layout/username), same gap as
+    overview.py's `_relativize_paths` (BACK-1194 follow-up). BACK-1212.
+
+    `facts.*` comes straight from ImportsAdapter's raw (unrelativized)
+    `_format_fan_in`/`_format_entrypoints`/`_format_components`/
+    `_format_circular` via `_format_imports_data()` -- imports.py's own
+    get_structure() relativizes those (BACK-1212), but architecture.py calls
+    the adapter methods directly, bypassing that. See `_relativize_risks()`
+    for the separate `risks[]` fix (must run earlier, before
+    `_build_next_commands()`). Mutates in place.
+    """
+    from ..utils.path_utils import to_relative_display
+
+    def rel(value: Optional[str]) -> Optional[str]:
+        return to_relative_display(value, base_path) if value else value
+
+    facts = report.get('facts', {})
+    for key in ('entry_points', 'core_abstractions'):
+        for entry in facts.get(key, []):
+            if entry.get('file'):
+                entry['file'] = rel(entry['file'])
+    for component in facts.get('components', []):
+        if component.get('component'):
+            component['component'] = rel(component['component'])
+        if component.get('top_bridge'):
+            component['top_bridge'] = rel(component['top_bridge'])
+    circular_groups = facts.get('circular_groups')
+    if circular_groups:
+        facts['circular_groups'] = [[rel(fp) for fp in group] for group in circular_groups]
+
+
+def _relativize_risks(risks: List[Dict[str, Any]], base_path: Path) -> None:
+    """Relativize `risks[].file`/`.representative` -- the structured fields
+    `_compute_risks()` leaves raw even though it already relativizes the
+    human-readable `description`/`.detail` strings computed from the same
+    values (BACK-1212). Called before `_build_next_commands()` so its
+    per-file suggested commands (`reveal <file> --boundary`) don't leak an
+    absolute path either -- unlike the two whole-directory commands, which
+    reuse the same root already exposed in the top-level `path`/`source`
+    fields (BACK-1194 precedent: the queried root itself isn't a leak).
+    Mutates in place.
+    """
+    from ..utils.path_utils import to_relative_display
+
+    def rel(value: Optional[str]) -> Optional[str]:
+        return to_relative_display(value, base_path) if value else value
+
+    for risk in risks:
+        if risk.get('file'):
+            risk['file'] = rel(risk['file'])
+        if risk.get('representative'):
+            risk['representative'] = rel(risk['representative'])
+
+
 class ArchitectureRenderer:
     """Renderer for architecture:// results."""
 
@@ -462,6 +521,7 @@ class ArchitectureAdapter(ResourceAdapter):
             complex_fns, imports_data = _run_combined_analysis(self, path, top * 4)
 
         risks = _compute_risks(imports_data, complex_fns, path)
+        _relativize_risks(risks, path)
         next_commands = _build_next_commands(path, risks, imports_data)
 
         report = {
@@ -477,6 +537,7 @@ class ArchitectureAdapter(ResourceAdapter):
             'unsupported_extensions': imports_data.get('unsupported_extensions', {}),
             'scope': _run_scope(self, path),
         }
+        _relativize_architecture_paths(report, path)
 
         meta = self.composed_meta()
         return ResultBuilder.create(
