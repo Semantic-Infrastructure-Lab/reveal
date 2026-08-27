@@ -625,6 +625,23 @@ class TestImportsAdapter:
         assert 'type' in result
         assert 'files' in result or 'error' not in result
 
+    def test_resolved_field_set_for_in_tree_import(self, tmp_path):
+        """BACK-1193: imports:// must surface resolve_import()'s answer per
+        statement so downstream consumers (deps://) can classify on
+        resolution truth instead of re-guessing from the raw module string."""
+        (tmp_path / "helper.py").write_text("VALUE = 1\n")
+        (tmp_path / "main.py").write_text("import helper\nimport os\n")
+
+        adapter = ImportsAdapter(str(tmp_path))
+        result = adapter.get_structure()
+
+        main_imports = result['files'][str(tmp_path / "main.py")]
+        by_module = {imp['module']: imp for imp in main_imports}
+        assert by_module['helper']['resolved'] == str(tmp_path / "helper.py")
+        # A real stdlib import with no in-tree file must resolve to None,
+        # never a fabricated path.
+        assert by_module['os']['resolved'] is None
+
     def test_query_params_flag_style(self, tmp_path):
         """Test flag-style query params (?circular vs ?circular=true)."""
         # Create test files with circular dependency

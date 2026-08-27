@@ -29,6 +29,11 @@ class ImportStatement:
     level: int = 0  # Relative import level: 0=absolute, 1='.', 2='..', etc.
     skip_unused: bool = False  # True when unused-detection is unreliable for this
                                # import (e.g. C/C++ #include, namespace/require imports)
+    resolved_path: Optional[Path] = None  # Set by ImportsAdapter._resolve_dependencies
+                               # once resolve_import() finds a real in-tree file for
+                               # this statement. None means "did not resolve" — may
+                               # still be a real external/stdlib package, never a
+                               # positive local-file claim (BACK-1193).
 
 
 def restamp_file_path(imports: List['ImportStatement'], file_path: Path) -> List['ImportStatement']:

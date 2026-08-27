@@ -76,8 +76,60 @@ def _local_package_names(base_path: Path) -> frozenset:
     return frozenset(names)
 
 
+def _classify_module(raw_module: str, is_python_file: bool, local_names: frozenset) -> tuple:
+    """Classify one non-relative, unresolved import (BACK-1193).
+
+    Returns ``(bucket, key)`` where bucket is 'internal', 'stdlib',
+    'external', or 'skip' (empty module string — nothing to count), and key
+    is the counted name (None for 'internal'/'skip').
+    """
+    if raw_module.startswith('dart:'):
+        return ('stdlib', raw_module)  # syntactic marker, no list needed
+    module = raw_module.split('.')[0]
+    if not module:
+        return ('skip', None)  # nothing to classify
+    if module in local_names:
+        return ('internal', None)
+    if is_python_file and module in _KNOWN_STDLIB:
+        return ('stdlib', module)
+    return ('external', module)
+
+
+def _tally_import(
+    imp: Dict[str, Any], is_python_file: bool, local_names: frozenset,
+    external_counts: Counter, stdlib_counts: Counter,
+) -> bool:
+    """Classify+count one import; returns True if it counts as internal."""
+    if imp.get('is_relative') or imp.get('resolved'):
+        return True  # syntactically relative, or resolved in-tree (BACK-1193)
+    bucket, key = _classify_module(imp.get('module') or '', is_python_file, local_names)
+    if bucket == 'stdlib':
+        stdlib_counts[key] += 1
+    elif bucket == 'external':
+        external_counts[key] += 1
+    return bucket == 'internal'
+
+
 def _analyse_imports(files: Dict[str, List[Dict[str, Any]]], base_path: Path) -> Dict[str, Any]:
-    """Derive package counts and top importers from the raw files dict."""
+    """Derive package counts and top importers from the raw files dict.
+
+    BACK-1193: this classifier used to be Python-only in three ways — a
+    ``__init__.py``-based local-package heuristic, an unconditional check
+    against Python's own stdlib list, and a dot-only module split — applied
+    unconditionally to all 18 languages reveal supports. On Ruby it reported
+    local files and stdlib modules as "third-party" (`open3`, `fileutils`)
+    and manufactured a bogus stdlib count from name collisions with Python
+    (`json`, `socket`, ...). Fixed by classifying on resolution truth first:
+    ``imports://``'s ``resolved`` field (BACK-1193, real in-tree file or
+    None from ``resolve_import()``) is now the primary signal, with the
+    ``__init__.py`` heuristic kept only as a fallback for imports resolution
+    could not settle. Python-list stdlib is only ever checked for Python
+    files — never fall back to Python's list for a non-Python import (task's
+    own rule). Dart is the one other language classified as stdlib, because
+    its ``dart:`` import prefix (`dart:async`, `dart:io`, ...) is a
+    syntactic marker, not a name lookup that could collide the way a bare
+    list-membership check would — same rule, no list needed.
+    """
     local_names = _local_package_names(base_path)
     external_counts: Counter = Counter()
     stdlib_counts: Counter = Counter()
@@ -90,19 +142,10 @@ def _analyse_imports(files: Dict[str, List[Dict[str, Any]]], base_path: Path) ->
             continue
         importer_counts[filepath] += len(imports)
         total_imports += len(imports)
+        is_python_file = filepath.endswith('.py')
         for imp in imports:
-            if imp.get('is_relative'):
+            if _tally_import(imp, is_python_file, local_names, external_counts, stdlib_counts):
                 relative_count += 1
-                continue
-            module = (imp.get('module') or '').split('.')[0]
-            if not module:
-                continue
-            if module in local_names:
-                relative_count += 1  # treat as internal
-            elif module in _KNOWN_STDLIB:
-                stdlib_counts[module] += 1
-            else:
-                external_counts[module] += 1
 
     # Top importers as relative paths
     top_importers = []
@@ -134,7 +177,7 @@ def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: in
     parts = [
         f"{total_files:,} files",
         f"{total_imports:,} imports",
-        f"{ext_pkgs} third-party packages",
+        f"{ext_pkgs} unresolved packages",
         f"{stdlib_pkgs} stdlib packages",
     ]
 
@@ -156,7 +199,10 @@ def _render_external_packages(analysis: Dict[str, Any], top: int) -> None:
     if not packages:
         return
     shown = packages[:top]
-    print(f"\nThird-party packages  (top {len(shown)} by usage)")
+    # BACK-1193: honest label — these are modules resolve_import() could not
+    # place in-tree. Most are real third-party packages, but an unresolved
+    # local (load-path boundary, missing file_index coverage) lands here too.
+    print(f"\nUnresolved packages (third-party or unresolved-local)  (top {len(shown)} by usage)")
     for pkg, count in shown:
         print(f"  {pkg:<30} {count:>4} use(s)")
     remaining = len(packages) - len(shown)
@@ -289,7 +335,8 @@ class DepsAdapter(ResourceAdapter):
                 {'uri': 'deps://.?no_unused=true', 'description': 'Skip the unused-imports section'},
             ],
             'features': [
-                'Third-party package usage counts (stdlib separated out)',
+                'Unresolved (third-party or unresolved-local) package usage '
+                'counts — stdlib separated out, Python only (BACK-1193)',
                 'Circular dependency cycles',
                 'Unused imports',
                 'Top importers by file',

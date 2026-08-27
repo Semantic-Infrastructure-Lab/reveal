@@ -57,7 +57,7 @@ def _capture(fn, *args, **kwargs):
 
 
 
-def _make_import(module, is_relative=False, names=None, line=1):
+def _make_import(module, is_relative=False, names=None, line=1, resolved=None):
     return {
         'file': '/project/src/mod.py',
         'line': line,
@@ -66,6 +66,7 @@ def _make_import(module, is_relative=False, names=None, line=1):
         'type': 'from_import' if names else 'import',
         'is_relative': is_relative,
         'alias': None,
+        'resolved': resolved,
     }
 
 
@@ -260,6 +261,48 @@ class TestAnalyseImports(unittest.TestCase):
         packages = result['external_packages']
         self.assertEqual(packages[0][0], 'requests')
         self.assertEqual(packages[0][1], 2)
+
+    # BACK-1193: deps:// applied a Python-only classifier to every language.
+    def test_resolved_import_treated_as_internal(self):
+        # imports:// resolved this to a real in-tree file (e.g. Ruby
+        # `require "s3_helper"` -> lib/s3_helper.rb) -- must not land in
+        # external_packages just because it isn't syntactically relative.
+        files = {'/proj/a.rb': [_make_import('s3_helper', resolved='/proj/lib/s3_helper.rb')]}
+        result = _analyse_imports(files, Path('/proj'))
+        ext_names = [p for p, _ in result['external_packages']]
+        self.assertNotIn('s3_helper', ext_names)
+        self.assertEqual(result['relative_count'], 1)
+
+    def test_non_python_stdlib_name_collision_not_counted_as_stdlib(self):
+        # Ruby's stdlib 'socket'/'digest' collide with Python's stdlib list by
+        # name only -- must not be reported as stdlib for a non-Python file
+        # (no Ruby stdlib list exists, so "unresolved" is the honest answer).
+        files = {'/proj/a.rb': [_make_import('socket'), _make_import('digest')]}
+        result = _analyse_imports(files, Path('/proj'))
+        stdlib_names = [p for p, _ in result['stdlib_packages']]
+        ext_names = [p for p, _ in result['external_packages']]
+        self.assertEqual(stdlib_names, [])
+        self.assertIn('socket', ext_names)
+        self.assertIn('digest', ext_names)
+
+    def test_python_stdlib_still_classified_for_python_files(self):
+        # The gate gained in BACK-1193 is per-file-language, not a regression
+        # for Python itself.
+        files = {'/proj/a.py': [_make_import('socket')]}
+        result = _analyse_imports(files, Path('/proj'))
+        stdlib_names = [p for p, _ in result['stdlib_packages']]
+        self.assertIn('socket', stdlib_names)
+
+    def test_dart_stdlib_prefix_classified_without_a_list(self):
+        # BACK-1193 addendum: 'dart:' is a syntactic marker, not a name that
+        # could collide -- Dart is the one other language deps:// classifies
+        # as stdlib, with no per-language stdlib list needed.
+        files = {'/proj/a.dart': [_make_import('dart:async'), _make_import('package:flutter/material')]}
+        result = _analyse_imports(files, Path('/proj'))
+        stdlib_names = [p for p, _ in result['stdlib_packages']]
+        ext_names = [p for p, _ in result['external_packages']]
+        self.assertIn('dart:async', stdlib_names)
+        self.assertIn('package:flutter/material', ext_names)
 
 
 # ── Data collector tests ───────────────────────────────────────────────────────

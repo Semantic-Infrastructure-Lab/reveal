@@ -1140,6 +1140,11 @@ class ImportsAdapter(ResourceAdapter):
                 if resolved and resolved != file_path:
                     self._graph.add_dependency(file_path, resolved)
                     self._graph.resolved_paths[stmt.module_name] = resolved
+                    # BACK-1193: carry the resolution onto the statement itself
+                    # (not just the module-name-keyed graph index) so per-import
+                    # consumers like deps:// can classify on resolution truth
+                    # instead of re-guessing from the raw module string.
+                    stmt.resolved_path = resolved
                     continue
 
                 # BACK-544: the single-file dotted match above only catches a
@@ -1151,6 +1156,7 @@ class ImportsAdapter(ResourceAdapter):
                     for target in extractor.resolve_namespace_targets(stmt, namespace_index):
                         if target != file_path:
                             self._graph.add_dependency(file_path, target)
+                            stmt.resolved_path = target  # BACK-1193: any in-tree target proves intra-project
 
     def _build_graph(
         self,
@@ -1450,7 +1456,12 @@ class ImportsAdapter(ResourceAdapter):
             'names': stmt.imported_names,
             'type': stmt.import_type,
             'is_relative': stmt.is_relative,
-            'alias': stmt.alias
+            'alias': stmt.alias,
+            # BACK-1193: real in-tree file resolve_import() resolved this import
+            # to, or None if it did not resolve. None is NOT a claim the module
+            # is external/stdlib — it may also be an unresolved local (missing
+            # file_index coverage, monorepo/load-path boundary).
+            'resolved': str(stmt.resolved_path) if stmt.resolved_path else None,
         }
 
 
