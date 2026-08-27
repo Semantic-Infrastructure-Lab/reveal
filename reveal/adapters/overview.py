@@ -347,6 +347,34 @@ def _relativize_paths(
             component['top_bridge'] = _relpath(component['top_bridge'], base_path)
 
 
+def _annotate_provenance(complex_fns: List[Dict[str, Any]], architecture: Dict[str, Any]) -> None:
+    """Tag each ranked entry with its provenance classification (BACK-1195):
+    'test' / 'vendor' / 'minified' / None (first-party). Live evidence on a
+    real corpus: overview://'s top-5 components-by-cohesion and top
+    complexity findings were 100% vendored/generated/test code, with the one
+    genuine first-party finding ranked below the noise — a reader had no way
+    to discount the noise in place without this. Must run AFTER
+    `_relativize_paths()` so path fields are already relative to the scan
+    root (classification only needs the relative path components, not the
+    absolute one). Mutates in place.
+    """
+    from ..utils.path_utils import classify_path_provenance
+
+    def provenance_for(file_str: Optional[str]) -> Optional[str]:
+        if not file_str:
+            return None
+        rel = Path(file_str)
+        return classify_path_provenance(rel.parts[:-1], rel.name)
+
+    for fn in complex_fns:
+        fn['provenance'] = provenance_for(fn.get('file'))
+    for section in ('fan_in', 'entrypoints'):
+        for entry in architecture.get(section, []):
+            entry['provenance'] = provenance_for(entry.get('file'))
+    for component in architecture.get('components', []):
+        component['provenance'] = provenance_for(component.get('component'))
+
+
 def _render_architecture(
     arch: Dict[str, Any],
     complex_fns: List[Dict[str, Any]],
@@ -528,6 +556,9 @@ class OverviewAdapter(ResourceAdapter):
                 'Hotspots (via stats://) and complex functions (via ast://)',
                 'Architecture summary: entry points, core abstractions, components (via imports://)',
                 'Recent git activity (via git://)',
+                "complex_functions[]/architecture.{fan_in,entrypoints,components}[] each carry a "
+                "'provenance' field: 'test'/'vendor'/'minified'/null (first-party) — BACK-1195, "
+                'so a reader can discount vendored/generated/test noise in the ranking in place.',
             ],
             'notes': [
                 'Static imports only for the architecture section — dynamically loaded files may appear as entry points.',
@@ -601,6 +632,7 @@ class OverviewAdapter(ResourceAdapter):
         complex_fns = _run_complex_functions(self, path, top)
         architecture = {} if no_imports else _run_imports_analysis(self, path)
         _relativize_paths(complex_fns, architecture, path)
+        _annotate_provenance(complex_fns, architecture)
 
         report = {
             'path': str(path),

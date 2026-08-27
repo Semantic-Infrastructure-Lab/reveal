@@ -89,6 +89,29 @@ AMBIGUOUS_SKIP_DIRECTORIES = frozenset({'env', 'venv', 'build', 'dist'})
 TEST_DIR_PREFIX = 'test'
 TEST_DIR_NAMES = frozenset({'test', 'tests', '__tests__', 'spec', 'specs'})
 
+# Vendored/third-party dependency directory names (BACK-1195). Live evidence:
+# on a real Ruby/Rails corpus, `overview://`'s top-5 components-by-cohesion
+# and top complexity findings were 100% vendored/generated/test code (e.g.
+# `vendor/holidays/lib/generated_definitions/`) — the one genuine first-party
+# finding ranked below the noise. Exact-match against a single path
+# component, same shape as TEST_DIR_NAMES/is_test_dir(); a caller checks
+# membership against every component of a file's relative path, not just the
+# top-level directory, since vendored trees are often nested (e.g.
+# `app/assets/vendor/`).
+VENDOR_DIR_NAMES = frozenset({
+    'vendor', 'third_party', 'thirdparty', 'node_modules', 'bower_components',
+})
+
+# Filename suffixes marking a minified/bundled build artifact (BACK-1195,
+# wishlist-3 addendum B3-4). A small reveal-specific list, deliberately not a
+# port of GitHub Linguist's ruleset — measured at only 6.5% coverage of the
+# non-first-party files on the reporter's reference corpus, and Linguist has
+# no test-directory category at all (misses `spec/`, this ticket's single
+# largest distortion class). Checked via `filename.endswith(suffix)`.
+MINIFIED_FILE_SUFFIXES = (
+    '.min.js', '.min.css', '-min.js', '-min.css', '.bundle.js',
+)
+
 
 class RuleDefaults:
     """Default thresholds for quality rules.

@@ -19,7 +19,7 @@ from reveal.registry import get_code_extensions
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import print_json_result
-from ..utils.path_utils import is_skippable_dir, to_posix
+from ..utils.path_utils import classify_path_provenance, is_skippable_dir, to_posix
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
@@ -391,6 +391,12 @@ def _collect_candidates(
             'changed': is_changed,
             'fan_in': fan_in,
             'graph_relevance': graph_relevance,
+            # BACK-1195: mark each candidate's provenance so a reader can
+            # discount vendored/generated/test noise in place -- also lets a
+            # future ranking change (B2-4: pack's budget spent almost
+            # entirely on vendored/test files) filter on this without a
+            # second directory walk.
+            'provenance': classify_path_provenance(rel.parts[:-1], rel.name),
         })
 
     # Sort: priority descending, then mtime descending
@@ -878,6 +884,9 @@ class PackAdapter(ResourceAdapter):
                 'Priority ranking: changed files (--since) > entry points > focus/graph relevance > fan-in > recency',
                 'Token or line budget enforcement',
                 'Tiered content emission: changed=full content, key files=structure, low-priority=names only',
+                "Each candidate is tagged files[].provenance: 'test'/'vendor'/'minified'/null "
+                '(first-party) — BACK-1195, cheap path-only classification, no ranking-order '
+                'change (yet).',
             ],
             'notes': [
                 'Token counts are approximate (chars / 4), not a real tokenizer.',

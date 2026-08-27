@@ -16,6 +16,7 @@ from reveal.adapters.overview import (
     _age_label,
     _is_test_file,
     _language_breakdown,
+    _annotate_provenance,
     _relpath,
     _render_architecture,
     _render_codebase_stats,
@@ -847,6 +848,43 @@ class TestRunOverview(unittest.TestCase):
                 self.assertEqual(data['architecture']['entrypoints'][0]['file'], 'src/main.py')
                 self.assertEqual(data['architecture']['components'][0]['component'], 'src')
                 self.assertEqual(data['architecture']['components'][0]['top_bridge'], 'src/main.py')
+
+
+class TestAnnotateProvenance(unittest.TestCase):
+    """BACK-1195: each ranked entry tagged with its provenance classification
+    -- live evidence on a real corpus showed overview://'s top-5 components-
+    by-cohesion were 100% vendored/generated/test, with the one genuine
+    first-party finding buried below the noise. Must run AFTER
+    `_relativize_paths()` so fields are already relative (as get_structure()
+    does)."""
+
+    def test_complex_functions_tagged(self):
+        complex_fns = [
+            {'file': 'vendor/lib/thing.rb', 'complexity': 40},
+            {'file': 'src/app.py', 'complexity': 12},
+        ]
+        architecture = {}
+        _annotate_provenance(complex_fns, architecture)
+        self.assertEqual(complex_fns[0]['provenance'], 'vendor')
+        self.assertIsNone(complex_fns[1]['provenance'])
+
+    def test_fan_in_and_entrypoints_tagged(self):
+        architecture = {
+            'fan_in': [{'file': 'spec/thing_spec.rb', 'fan_in': 3}],
+            'entrypoints': [{'file': 'app.min.js', 'fan_out': 1}],
+        }
+        _annotate_provenance([], architecture)
+        self.assertEqual(architecture['fan_in'][0]['provenance'], 'test')
+        self.assertEqual(architecture['entrypoints'][0]['provenance'], 'minified')
+
+    def test_components_tagged(self):
+        architecture = {'components': [
+            {'component': 'vendor/lib', 'cohesion': 1.0},
+            {'component': 'src', 'cohesion': 0.5},
+        ]}
+        _annotate_provenance([], architecture)
+        self.assertEqual(architecture['components'][0]['provenance'], 'vendor')
+        self.assertIsNone(architecture['components'][1]['provenance'])
 
 
 class TestIsTestFile(unittest.TestCase):

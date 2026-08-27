@@ -25,6 +25,20 @@ from ..utils.results import ResultBuilder
 _TEST_DIR_CANDIDATES = tuple(sorted(TEST_DIR_NAMES))
 
 
+def _provenance_for_file(file_str: Optional[str], base_path: Path) -> Optional[str]:
+    """Classify a hotspot entry's 'test'/'vendor'/'minified'/None provenance
+    (BACK-1195). `file_str` may be relative (file_hotspots, from StatsAdapter)
+    or absolute (function_hotspots, from AstAdapter) -- relativize first so
+    classification only sees the path components under the scan root, not
+    ancestor directories of the analyst's own filesystem.
+    """
+    if not file_str:
+        return None
+    from ..utils.path_utils import classify_path_provenance, to_relative_display
+    rel = Path(to_relative_display(file_str, base_path))
+    return classify_path_provenance(rel.parts[:-1], rel.name)
+
+
 def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List[Dict[str, Any]]:
     """Fetch file-level hotspots via StatsAdapter."""
     from reveal.adapters.stats import StatsAdapter
@@ -240,6 +254,9 @@ class HotspotsAdapter(ResourceAdapter):
                 'File-level hotspots via StatsAdapter (quality score, complexity, issues)',
                 'Function-level hotspots via AstAdapter (cyclomatic complexity ranking)',
                 'Heuristic test-coverage hint per function (has a matching test_* found?)',
+                "Each hotspot entry carries a 'provenance' field: 'test'/'vendor'/'minified'/null "
+                '(first-party) — BACK-1195, cheap path-only classification, no ranking-order '
+                'change (yet).',
             ],
             'notes': [
                 'Test-coverage hint is a name-matching heuristic, not real coverage data.',
@@ -295,6 +312,13 @@ class HotspotsAdapter(ResourceAdapter):
 
         file_hotspots: List[Dict[str, Any]] = [] if functions_only else _run_file_hotspots(self, path, top)
         fn_hotspots: List[Dict[str, Any]] = [] if files_only else _run_function_hotspots(self, path, min_cx, top)
+
+        # BACK-1195: mark each ranked entry with its provenance so a reader
+        # can discount vendored/generated/test noise in place.
+        for entry in file_hotspots:
+            entry['provenance'] = _provenance_for_file(entry.get('file'), path)
+        for fn in fn_hotspots:
+            fn['provenance'] = _provenance_for_file(fn.get('file'), path)
 
         test_index: Optional[Set[str]] = None
         if not files_only:

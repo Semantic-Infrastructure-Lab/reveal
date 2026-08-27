@@ -2,6 +2,7 @@
 
 import json
 import sys
+import tempfile
 import unittest
 from argparse import Namespace
 from io import StringIO
@@ -14,6 +15,7 @@ from reveal.adapters.hotspots import (
     HotspotsAdapter,
     _build_test_name_index,
     _is_covered,
+    _provenance_for_file,
     _render_file_hotspots,
     _render_function_hotspots,
     _render_report,
@@ -658,6 +660,31 @@ class TestIsCovered(unittest.TestCase):
 
     def test_reverse_containment_contains(self):
         self.assertTrue(_is_covered('get_file_blame_fast', '', {'file_blame'}))
+
+
+class TestProvenanceForFile(unittest.TestCase):
+    """BACK-1195: each hotspot entry tagged with its provenance
+    classification so a reader can discount vendored/generated/test noise
+    in place. Relativizes first since function_hotspots' 'file' arrives
+    absolute (from AstAdapter) while file_hotspots' arrives relative (from
+    StatsAdapter) -- both must classify correctly either way."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.base = Path(self.tmp)
+
+    def test_none_returns_none(self):
+        self.assertIsNone(_provenance_for_file(None, self.base))
+
+    def test_relative_vendor_path(self):
+        self.assertEqual(_provenance_for_file('vendor/lib/thing.rb', self.base), 'vendor')
+
+    def test_absolute_test_path(self):
+        abs_path = str(self.base / 'spec' / 'thing_spec.rb')
+        self.assertEqual(_provenance_for_file(abs_path, self.base), 'test')
+
+    def test_first_party_path_is_none(self):
+        self.assertIsNone(_provenance_for_file('src/app.py', self.base))
 
     def test_no_match_returns_false(self):
         self.assertFalse(_is_covered('obscure_fn', 'reveal/core.py', {'other_fn', 'helper'}))

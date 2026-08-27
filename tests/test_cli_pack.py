@@ -478,6 +478,45 @@ class TestCollectCandidates(unittest.TestCase):
         self.assertGreater(auth_file['priority'], other_file['priority'])
 
 
+class TestCollectCandidatesProvenance(unittest.TestCase):
+    """BACK-1195: each candidate is tagged with its provenance classification
+    so a reader (or a future ranking pass) can discount vendored/generated/
+    test noise in place."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.base = Path(self.tmp)
+
+    def _make(self, rel: str, content: str = "x\n") -> Path:
+        p = self.base / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content)
+        return p
+
+    def _provenance_for(self, candidates, needle):
+        return next(c for c in candidates if needle in c['relative'])['provenance']
+
+    def test_first_party_file_is_none(self):
+        self._make("src/app.py", "x\n")
+        candidates = _collect_candidates(self.base, focus=None)
+        self.assertIsNone(self._provenance_for(candidates, "src/app.py"))
+
+    def test_vendor_file_tagged(self):
+        self._make("vendor/lib/thing.rb", "x\n")
+        candidates = _collect_candidates(self.base, focus=None)
+        self.assertEqual(self._provenance_for(candidates, "vendor"), 'vendor')
+
+    def test_spec_file_tagged_test(self):
+        self._make("spec/thing_spec.rb", "x\n")
+        candidates = _collect_candidates(self.base, focus=None)
+        self.assertEqual(self._provenance_for(candidates, "spec"), 'test')
+
+    def test_minified_file_tagged(self):
+        self._make("app.min.js", "x\n")
+        candidates = _collect_candidates(self.base, focus=None)
+        self.assertEqual(self._provenance_for(candidates, "app.min.js"), 'minified')
+
+
 # ---------------------------------------------------------------------------
 # _compute_graph_relevance (BACK-833)
 # ---------------------------------------------------------------------------

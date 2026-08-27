@@ -14,6 +14,8 @@ from ..defaults import (
     SKIP_DIRECTORIES,
     AMBIGUOUS_SKIP_DIRECTORIES,
     TEST_DIR_NAMES,
+    VENDOR_DIR_NAMES,
+    MINIFIED_FILE_SUFFIXES,
 )
 from ..registry import _is_cpp_header_content, language_for_extension, LANGUAGE_DISPLAY_NAMES
 
@@ -95,6 +97,60 @@ def is_test_filename(stem: str) -> bool:
     checks on top of this — see ``adapters/surface.py::_is_test_file``.
     """
     return stem.startswith('test_') or stem.endswith('_test') or stem in TEST_DIR_NAMES
+
+
+def is_vendor_dir(name: str) -> bool:
+    """True if directory *name* is exactly a conventional vendored/
+    third-party dependency directory name (BACK-1195).
+
+    Exact-match against ``VENDOR_DIR_NAMES``, same shape as ``is_test_dir()``
+    — a caller checks every component of a file's relative path (vendored
+    trees are often nested, e.g. ``app/assets/vendor/``), not just the
+    top-level directory.
+    """
+    return name in VENDOR_DIR_NAMES
+
+
+def is_minified_filename(filename: str) -> bool:
+    """True if *filename* (with extension) matches a conventional minified/
+    bundled build-artifact suffix (BACK-1195, wishlist-3 addendum B3-4).
+
+    Deliberately a small reveal-specific list (``MINIFIED_FILE_SUFFIXES``),
+    not a port of GitHub Linguist's ruleset — see that constant's docstring
+    for the measured rationale.
+    """
+    return filename.endswith(MINIFIED_FILE_SUFFIXES)
+
+
+def classify_path_provenance(parts: Iterable[str], filename: str) -> Optional[str]:
+    """Classify a file as ``'test'`` / ``'vendor'`` / ``'minified'`` / ``None``
+    (first-party) from cheap, reliable path-only signals (BACK-1195) — no
+    file content is read.
+
+    *parts* is every directory component of the file's path relative to the
+    scan root (checked against ``is_test_dir``/``is_vendor_dir`` so a nested
+    vendored tree like ``app/assets/vendor/`` still classifies correctly);
+    *filename* is the bare filename including extension.
+
+    Checked in this priority order because a file can match more than one
+    signal (e.g. a minified vendored bundle) and the caller needs one label:
+    test-ness is the most actionable DD signal (BACK-1199's motivating case
+    was spec/ files misreported as orphaned source), vendored code is the
+    single largest distortion class in this ticket's live evidence, and a
+    minified filename is the narrowest/rarest signal.
+
+    Content-marker-based generated-file detection
+    (``checks.py::_is_generated_file``) is intentionally not folded in here
+    — it requires reading file content, which ranking adapters don't
+    otherwise need to do for every file in a directory walk.
+    """
+    if any(is_test_dir(p) for p in parts) or is_test_filename(Path(filename).stem):
+        return 'test'
+    if any(is_vendor_dir(p) for p in parts):
+        return 'vendor'
+    if is_minified_filename(filename):
+        return 'minified'
+    return None
 
 
 def to_relative_display(file_str: Union[str, PurePath], base_path: Union[str, Path, None]) -> str:

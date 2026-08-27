@@ -18,6 +18,9 @@ from reveal.utils.path_utils import (
     is_skippable_dir,
     is_test_dir,
     is_test_filename,
+    is_vendor_dir,
+    is_minified_filename,
+    classify_path_provenance,
 )
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
@@ -973,3 +976,53 @@ class TestIsTestFilename:
     def test_unrelated_name_does_not_match(self):
         assert is_test_filename('main') is False
         assert is_test_filename('testpkg') is False
+
+
+class TestIsVendorDir:
+    """BACK-1195: canonical vendored/third-party directory vocabulary."""
+
+    def test_canonical_names_recognized(self):
+        for name in ('vendor', 'third_party', 'thirdparty', 'node_modules', 'bower_components'):
+            assert is_vendor_dir(name) is True, name
+
+    def test_unrelated_name_does_not_match(self):
+        for name in ('vendors', 'src', 'lib'):
+            assert is_vendor_dir(name) is False, name
+
+
+class TestIsMinifiedFilename:
+    """BACK-1195: minified/bundled build-artifact filename suffixes."""
+
+    def test_recognized_suffixes(self):
+        for name in ('app.min.js', 'app.min.css', 'app-min.js', 'app-min.css', 'app.bundle.js'):
+            assert is_minified_filename(name) is True, name
+
+    def test_unrelated_filename_does_not_match(self):
+        for name in ('app.js', 'minimal.py', 'admin.js'):
+            assert is_minified_filename(name) is False, name
+
+
+class TestClassifyPathProvenance:
+    """BACK-1195: 'test'/'vendor'/'minified'/None classification, cheap
+    path-only signals, no file content read. Priority order matters when a
+    file matches more than one signal."""
+
+    def test_first_party_file_is_none(self):
+        assert classify_path_provenance(('src',), 'app.py') is None
+
+    def test_top_level_vendor_dir(self):
+        assert classify_path_provenance(('vendor',), 'thing.rb') == 'vendor'
+
+    def test_nested_vendor_dir(self):
+        assert classify_path_provenance(('app', 'assets', 'vendor'), 'lib.js') == 'vendor'
+
+    def test_spec_dir_is_test(self):
+        assert classify_path_provenance(('spec',), 'thing_spec.rb') == 'test'
+
+    def test_minified_filename(self):
+        assert classify_path_provenance((), 'app.min.js') == 'minified'
+
+    def test_test_takes_priority_over_vendor(self):
+        # A vendored dependency's own bundled test suite: test-ness is the
+        # more actionable DD signal (BACK-1199's motivating case).
+        assert classify_path_provenance(('vendor', 'spec'), 'thing_spec.rb') == 'test'
