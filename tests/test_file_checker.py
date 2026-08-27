@@ -1346,7 +1346,7 @@ class TestCheckFilesTextSeverity:
         high = self._make_detection('high')
 
         with patch('reveal.cli.file_checker.check_and_collect_file', return_value=(2, [low, high], {"status": "ok"})):
-            total, files_with, _, _errored = _check_files_json([dummy], tmp_path, None, None, severity='high')
+            total, files_with, _, _errored, _truncated = _check_files_json([dummy], tmp_path, None, None, severity='high')
 
         assert total == 1
         assert files_with == 1

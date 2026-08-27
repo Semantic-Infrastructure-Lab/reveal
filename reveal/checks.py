@@ -36,12 +36,15 @@ def _format_detections_json(
     parse_degraded: bool = False,
     rule_errors: Optional[List[dict]] = None,
     no_snippets: bool = False,
+    max_snippet_chars: Optional[int] = None,
+    total_available: Optional[int] = None,
 ) -> None:
     """Format detections as JSON.
 
     Args:
         path: File path
-        detections: List of Detection objects
+        detections: List of Detection objects (already max-items-truncated
+            by the caller, if requested — this just renders what it's given)
         parse_degraded: True when the parser recovered from a syntax error
             (BACK-1084's structure['_has_errors']) — detections/structure for
             this file may be incomplete or wrong, not just "clean" (BACK-1083).
@@ -50,14 +53,27 @@ def _format_detections_json(
             stdout/JSON, visible only in the stderr log (BACK-1083).
         no_snippets: Omit each detection's `context` (code excerpt) field
             (BACK-1182).
+        max_snippet_chars: Truncate each detection's `context` to N chars
+            instead of omitting it (BACK-1181). Ignored when no_snippets.
+        total_available: True detection count before any --max-items
+            truncation, if different from len(detections) (BACK-1181).
     """
     from reveal.utils.results import add_cli_contract_fields
 
     result = {
         'file': path,
-        'detections': [d.to_dict(no_snippets=no_snippets) for d in detections],
+        'detections': [
+            d.to_dict(no_snippets=no_snippets, max_snippet_chars=max_snippet_chars)
+            for d in detections
+        ],
         'total': len(detections)
     }
+    if total_available is not None and total_available != len(detections):
+        result['meta'] = {
+            'truncated': True,
+            'total_available': total_available,
+            'returned': len(detections),
+        }
     if parse_degraded:
         result['warning'] = (
             "file did not parse cleanly; results may be incomplete or incorrect"
@@ -86,6 +102,8 @@ def _format_detections_text(
     parse_degraded: bool = False,
     rule_errors: Optional[List[dict]] = None,
     no_snippets: bool = False,
+    max_snippet_chars: Optional[int] = None,
+    total_available: Optional[int] = None,
 ) -> None:
     """Format detections as human-readable text.
 
@@ -94,12 +112,17 @@ def _format_detections_text(
 
     Args:
         path: File path
-        detections: List of Detection objects
+        detections: List of Detection objects (already max-items-truncated
+            by the caller, if requested — this just renders what it's given)
         no_group: Disable collapsing of repeated rules
         parse_degraded: True when the parser recovered from a syntax error —
             see _format_detections_json (BACK-1083).
         rule_errors: Rules that raised during check() — see _format_detections_json.
         no_snippets: Omit the 📝 code-excerpt line (BACK-1182).
+        max_snippet_chars: Truncate the excerpt to N chars instead of
+            omitting it (BACK-1181). Ignored when no_snippets.
+        total_available: True detection count before any --max-items
+            truncation, if different from len(detections) (BACK-1181).
     """
     for err in rule_errors or []:
         print(f"{path}: ⚠️  rule {err['rule']} crashed and did not run — {err['error']}")
@@ -116,10 +139,15 @@ def _format_detections_text(
         print(f"{path}: ⚠️  file did not parse cleanly — results below may be incomplete or incorrect")
     print(f"{path}: Found {count} issue{'s' if count != 1 else ''}\n")
 
+    def _print_truncation_footer():
+        if total_available is not None and total_available > count:
+            print(f"… +{total_available - count} more issue(s) hidden (--max-items {count})\n")
+
     if no_group or count < _GROUP_THRESHOLD:
         for d in sorted(detections, key=lambda x: (x.line, x.column)):
-            print(d.render(no_snippets=no_snippets))
+            print(d.render(no_snippets=no_snippets, max_snippet_chars=max_snippet_chars))
             print()
+        _print_truncation_footer()
         return
 
     # Group by rule_code to find repeated rules
@@ -132,13 +160,14 @@ def _format_detections_text(
 
     for d in sorted(detections, key=lambda x: (x.line, x.column)):
         if d.rule_code not in collapsed:
-            print(d.render(no_snippets=no_snippets))
+            print(d.render(no_snippets=no_snippets, max_snippet_chars=max_snippet_chars))
             print()
         elif d.rule_code not in shown_collapsed:
             shown_collapsed.add(d.rule_code)
             total = len(by_rule[d.rule_code])
-            print(d.render(no_snippets=no_snippets))
+            print(d.render(no_snippets=no_snippets, max_snippet_chars=max_snippet_chars))
             print(f"\n  ↳ +{total - 1} more {d.rule_code} occurrences hidden — use --no-group to expand\n")
+    _print_truncation_footer()
 
 
 def run_pattern_detection(
@@ -205,16 +234,29 @@ def run_pattern_detection(
             detections = [d for d in detections
                           if _SEVERITY_ORDER.index(d.severity.value) >= min_idx]
 
+    # BACK-1181: --max-items caps what's RENDERED, not the true count -- the
+    # return value below (and thus check_exit_code's total_issues) must
+    # still reflect reality, or a truncated view could silently mask
+    # findings from the exit code / summary.
+    max_items = getattr(args, 'max_items', None)
+    max_snippet_chars = getattr(args, 'max_snippet_chars', None)
+    total_available = len(detections)
+    rendered_detections = detections
+    if max_items is not None and total_available > max_items:
+        rendered_detections = detections[:max_items]
+
     # Format and output results
     formatters = {
         'json': lambda: _format_detections_json(
-            path, detections, parse_degraded=parse_degraded, rule_errors=rule_errors,
-            no_snippets=no_snippets,
+            path, rendered_detections, parse_degraded=parse_degraded, rule_errors=rule_errors,
+            no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
+            total_available=total_available,
         ),
         'grep': lambda: _format_detections_grep(detections),
         'text': lambda: _format_detections_text(
-            path, detections, no_group=no_group, parse_degraded=parse_degraded, rule_errors=rule_errors,
-            no_snippets=no_snippets,
+            path, rendered_detections, no_group=no_group, parse_degraded=parse_degraded, rule_errors=rule_errors,
+            no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
+            total_available=total_available,
         ),
     }
 

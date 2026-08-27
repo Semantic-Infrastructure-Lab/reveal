@@ -181,13 +181,15 @@ class Detection:
     severity: Severity = Severity.MEDIUM
     category: Optional[RulePrefix] = None
 
-    def to_dict(self, no_snippets: bool = False) -> Dict[str, Any]:
+    def to_dict(self, no_snippets: bool = False, max_snippet_chars: Optional[int] = None) -> Dict[str, Any]:
         """Serialize for JSON output.
 
         no_snippets (BACK-1182): omit `context` (the embedded source
         excerpt) entirely — for a compliance-sensitive DD engagement where
         the evidence output needs to be shareable without embedding actual
         client source.
+        max_snippet_chars (BACK-1181): truncate `context` to N characters
+        instead of omitting it entirely. Ignored when no_snippets is set.
         """
         data = asdict(self)
         # Convert enums to strings
@@ -197,13 +199,17 @@ class Detection:
             data['category'] = self.category if isinstance(self.category, str) else self.category.value
         if no_snippets:
             data.pop('context', None)
+        elif max_snippet_chars is not None and data.get('context') and len(data['context']) > max_snippet_chars:
+            data['context'] = data['context'][:max_snippet_chars] + '…'
         return data
 
-    def render(self, no_snippets: bool = False) -> str:
+    def render(self, no_snippets: bool = False, max_snippet_chars: Optional[int] = None) -> str:
         """Format for terminal output (Ruff-style).
 
         no_snippets (BACK-1182): omit the 📝 code-excerpt line — rule,
         file, line, severity and the 💡 suggestion still print.
+        max_snippet_chars (BACK-1181): truncate the excerpt to N characters
+        instead of omitting it entirely. Ignored when no_snippets is set.
         """
         loc = f"{self.file_path}:{self.line}:{self.column}"
         severity_marker = SEVERITY_MARKERS.get(self.severity, "")
@@ -211,8 +217,11 @@ class Detection:
         result = f"{loc} {severity_marker} {self.rule_code} {self.message}"
         if self.suggestion:
             result += f"\n  💡 {self.suggestion}"
-        if self.context and not no_snippets:
-            result += f"\n  📝 {self.context}"
+        context = self.context
+        if context and max_snippet_chars is not None and len(context) > max_snippet_chars:
+            context = context[:max_snippet_chars] + '…'
+        if context and not no_snippets:
+            result += f"\n  📝 {context}"
         return result
 
     def __str__(self) -> str:

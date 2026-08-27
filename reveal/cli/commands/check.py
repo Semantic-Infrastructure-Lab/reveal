@@ -130,6 +130,19 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help='Explain a specific rule (e.g., "B001")',
     )
     parser.add_argument(
+        '--max-items', type=int, metavar='N', dest='max_items',
+        help='Stop after N violations total (budget mode) -- documented elsewhere as a '
+             '"universal adapter option" but previously rejected by check specifically '
+             '(BACK-1181). Same semantics as URI adapters\' --max-items: total_available '
+             'is still reported so truncation is visible.',
+    )
+    parser.add_argument(
+        '--max-snippet-chars', type=int, metavar='N', dest='max_snippet_chars',
+        help='Truncate the embedded source-code excerpt (the 📝 line / JSON "context" '
+             'field) to N characters (BACK-1181). rule/file/line/severity/suggestion are '
+             'never truncated. See also --no-snippets to omit the excerpt entirely.',
+    )
+    parser.add_argument(
         '--no-snippets', action='store_true', dest='no_snippets',
         help='Omit the embedded source-code excerpt (the 📝 line / JSON "context" field) '
              'from violation output -- rule/file/line/severity/suggestion still print. For '

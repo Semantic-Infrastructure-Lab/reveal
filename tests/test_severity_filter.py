@@ -26,12 +26,22 @@ def _make_detection(severity: Severity, rule_code: str = 'B001') -> Detection:
 
 
 def _make_args(severity=None, select=None, ignore=None, no_group=False):
-    """Build a minimal args namespace for run_pattern_detection."""
+    """Build a minimal args namespace for run_pattern_detection.
+
+    Explicitly sets every attribute run_pattern_detection reads via getattr()
+    -- a bare Mock() auto-vivifies any unset attribute access into a truthy
+    Mock instance rather than raising AttributeError, so getattr(mock, 'x',
+    default) silently returns that Mock, not `default` (BACK-1181 caught this
+    the hard way: an unset max_items compared as `int > Mock` crashed).
+    """
     args = Mock()
     args.select = select
     args.ignore = ignore
     args.no_group = no_group
     args.severity = severity
+    args.no_snippets = False
+    args.max_items = None
+    args.max_snippet_chars = None
     return args
 
 

@@ -291,6 +291,7 @@ def _print_grouped_detections(
     no_group: bool = False,
     shown_guidance: Optional[set] = None,
     no_snippets: bool = False,
+    max_snippet_chars: Optional[int] = None,
 ) -> None:
     """Print detections for one file, collapsing rules that repeat excessively.
 
@@ -318,6 +319,8 @@ def _print_grouped_detections(
             (matches pre-BACK-1039 per-file-only behavior, e.g. single-file
             check_and_report_file, which has nothing else to dedup against).
         no_snippets: Omit the 📝 code-excerpt line (BACK-1182).
+        max_snippet_chars: Truncate the excerpt to N chars instead of
+            omitting it (BACK-1181). Ignored when no_snippets.
     """
     severity_icons = SEVERITY_MARKERS
 
@@ -328,8 +331,11 @@ def _print_grouped_detections(
                 shown_guidance.add(d.rule_code)
             if d.suggestion:
                 print(f"  💡 {d.suggestion}")
-            if d.context and not no_snippets:
-                print(f"  📝 {d.context}")
+            context = d.context
+            if context and max_snippet_chars is not None and len(context) > max_snippet_chars:
+                context = context[:max_snippet_chars] + '…'
+            if context and not no_snippets:
+                print(f"  📝 {context}")
 
     if no_group or len(detections) < _GROUP_THRESHOLD:
         for d in detections:
@@ -781,6 +787,8 @@ def _check_files_json(
     files: List[Path], directory: Path, select: Optional[List[str]], ignore: Optional[List[str]],
     severity: Optional[str] = None,
     no_snippets: bool = False,
+    max_snippet_chars: Optional[int] = None,
+    max_items: Optional[int] = None,
 ) -> tuple:
     """Check files and collect JSON results.
 
@@ -792,18 +800,28 @@ def _check_files_json(
         severity: Minimum severity level to report (low/medium/high/critical)
         no_snippets: Omit each detection's `context` (code excerpt) field
             (BACK-1182).
+        max_snippet_chars: Truncate each detection's `context` to N chars
+            instead of omitting it (BACK-1181). Ignored when no_snippets.
+        max_items: Cap the total number of rendered detections across the
+            whole scan (BACK-1181) -- a running budget, not per-file. Files
+            still report their true `issues` count and contribute fully to
+            total_issues/exit-code computation; only the emitted `detections` arrays
+            are truncated once the budget is exhausted.
 
     Returns:
-        Tuple of (total_issues, files_with_issues, file_results, files_errored).
-        files_errored counts files whose analyzer/parse pipeline raised
-        (BACK-1083) — distinct from files simply skipped (no analyzer for the
-        file type), which are not counted as an error.
+        Tuple of (total_issues, files_with_issues, file_results, files_errored,
+        items_truncated). files_errored counts files whose analyzer/parse
+        pipeline raised (BACK-1083) — distinct from files simply skipped (no
+        analyzer for the file type), which are not counted as an error.
+        items_truncated is True when max_items cut off some detections.
     """
     total_issues = 0
     files_with_issues = 0
     files_errored = 0
     file_results = []
     sorted_files = sorted(files)
+    remaining_budget = max_items
+    items_truncated = False
 
     if len(sorted_files) >= _PARALLEL_THRESHOLD:
         try:
@@ -830,6 +848,18 @@ def _check_files_json(
                 rel_path = file_path.relative_to(cwd)
             except ValueError:
                 rel_path = file_path.relative_to(directory)
+
+            rendered = detections
+            if remaining_budget is not None:
+                if remaining_budget <= 0:
+                    rendered = []
+                    if detections:
+                        items_truncated = True
+                elif len(detections) > remaining_budget:
+                    rendered = detections[:remaining_budget]
+                    items_truncated = True
+                remaining_budget -= len(rendered)
+
             entry = {
                 "file": to_posix(rel_path),
                 "issues": issue_count,
@@ -841,9 +871,16 @@ def _check_files_json(
                         "message": d.message,
                         "severity": d.severity.value,
                         "suggestion": d.suggestion,
-                        **({} if no_snippets else {"context": d.context}),
+                        **({} if no_snippets else {
+                            "context": (
+                                d.context[:max_snippet_chars] + '…'
+                                if max_snippet_chars is not None and d.context
+                                and len(d.context) > max_snippet_chars
+                                else d.context
+                            )
+                        }),
                     }
-                    for d in detections
+                    for d in rendered
                 ]
             }
             if st != "ok":
@@ -854,7 +891,7 @@ def _check_files_json(
                 entry["rule_errors"] = status["rule_errors"]
             file_results.append(entry)
 
-    return total_issues, files_with_issues, file_results, files_errored
+    return total_issues, files_with_issues, file_results, files_errored, items_truncated
 
 
 def _check_files_text(
@@ -866,6 +903,8 @@ def _check_files_text(
     severity: Optional[str] = None,
     limit: int = 50,
     no_snippets: bool = False,
+    max_snippet_chars: Optional[int] = None,
+    max_items: Optional[int] = None,
 ) -> tuple:
     """Check files with text output.
 
@@ -880,6 +919,11 @@ def _check_files_text(
             issues and print a "+N more files" summary footer instead (BACK-539).
             0 (or negative) disables the cap — print every file in full.
         no_snippets: Omit the 📝 code-excerpt line (BACK-1182).
+        max_snippet_chars: Truncate the excerpt to N chars instead of
+            omitting it (BACK-1181). Ignored when no_snippets.
+        max_items: Cap the total number of rendered detections across the
+            whole scan (BACK-1181) -- a running budget, not per-file (see
+            _check_files_json).
 
     Returns:
         Tuple of (total_issues, files_with_issues, files_errored, files_degraded).
@@ -892,6 +936,8 @@ def _check_files_text(
     files_degraded = 0
     hidden_files = 0
     hidden_issues = 0
+    remaining_budget = max_items
+    items_truncated = False
     sorted_files = sorted(files)
 
     # Use streaming parallel execution so results are processed as they complete
@@ -946,10 +992,27 @@ def _check_files_text(
                 hidden_issues += issue_count
                 continue
             print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
+
+            rendered = detections
+            if remaining_budget is not None:
+                if remaining_budget <= 0:
+                    rendered = []
+                    items_truncated = True
+                elif len(detections) > remaining_budget:
+                    rendered = detections[:remaining_budget]
+                    items_truncated = True
+                remaining_budget -= len(rendered)
+
             _print_grouped_detections(
-                detections, relative, no_group=no_group, shown_guidance=shown_guidance,
-                no_snippets=no_snippets,
+                rendered, relative, no_group=no_group, shown_guidance=shown_guidance,
+                no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
             )
+
+    if items_truncated:
+        print(
+            f"\n… some issues hidden (--max-items {max_items}) — "
+            f"raise --max-items or narrow with --select to see more\n"
+        )
 
     if hidden_files:
         print(
@@ -973,6 +1036,7 @@ def _print_json_output(
     files_errored: int = 0,
     scan_disclosures: Optional[List[str]] = None,
     exit_zero: bool = False,
+    items_truncated: bool = False,
 ) -> None:
     """Print JSON output with results and summary.
 
@@ -1015,6 +1079,7 @@ def _print_json_output(
             "total_issues": total_issues,
             "exit_code": check_exit_code(total_issues, files_errored, files_degraded, exit_zero=exit_zero),
             "scan_disclosures": scan_disclosures or [],
+            "items_truncated": items_truncated,
         }
     }
     if scope is not None:
@@ -1133,14 +1198,17 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     ignore = args.ignore.split(',') if args.ignore else None
     no_group = getattr(args, 'no_group', False)
     no_snippets = getattr(args, 'no_snippets', False)
+    max_snippet_chars = getattr(args, 'max_snippet_chars', None)
+    max_items = getattr(args, 'max_items', None)
     severity = getattr(args, 'severity', None)
     limit = getattr(args, 'limit', 50)
 
     # Check files based on output format
     files_degraded = 0
     if output_format == 'json':
-        total_issues, files_with_issues, file_results, files_errored = _check_files_json(
+        total_issues, files_with_issues, file_results, files_errored, items_truncated = _check_files_json(
             files_to_check, directory, select, ignore, severity=severity, no_snippets=no_snippets,
+            max_snippet_chars=max_snippet_chars, max_items=max_items,
         )
         files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
         _print_json_output(
@@ -1149,6 +1217,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
             select=select, ignore=ignore, files_errored=files_errored,
             scan_disclosures=_get_scan_disclosures(),
             exit_zero=getattr(args, 'exit_zero', False),
+            items_truncated=items_truncated,
         )
     elif output_format == 'grep':
         # BACK-1035: this recursive/directory path only ever branched on
@@ -1157,7 +1226,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         # already honors grep correctly via checks.py's
         # _format_detections_grep — reuse the same file:line:col:rule:msg
         # shape here, built from the JSON-mode per-file detections.
-        total_issues, files_with_issues, file_results, files_errored = _check_files_json(
+        total_issues, files_with_issues, file_results, files_errored, _ = _check_files_json(
             files_to_check, directory, select, ignore, severity=severity
         )
         files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
@@ -1180,7 +1249,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
             sys.exit(2)
         total_issues, files_with_issues, files_errored, files_degraded = _check_files_text(
             files_to_check, directory, select, ignore, no_group=no_group, severity=severity, limit=limit,
-            no_snippets=no_snippets,
+            no_snippets=no_snippets, max_snippet_chars=max_snippet_chars, max_items=max_items,
         )
         _print_text_summary(
             len(files_to_check), files_with_issues, total_issues, directory, config,
