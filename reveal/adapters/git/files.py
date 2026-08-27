@@ -309,6 +309,8 @@ def get_file_history(
                     'type': 'content_search_unavailable',
                     'message': disclosure,
                 })
+        if getattr(repo, 'is_shallow', False):
+            result['shallow_clone'] = True
         return result
 
     except (KeyError, pygit2.GitError) as e:
@@ -365,7 +367,7 @@ def get_file_timeline(
 
         buckets = bucket_commits_func(matched, bucket)
 
-        return ResultBuilder.create(
+        result = ResultBuilder.create(
             result_type='git_timeline',
             source=f"{subpath}@{ref}",
             source_type='file',
@@ -377,6 +379,9 @@ def get_file_timeline(
             commit_count=len(matched),
             distinct_author_count=len({c.get('email') or c.get('author') for c in matched}),
         )
+        if getattr(repo, 'is_shallow', False):
+            result['shallow_clone'] = True
+        return result
 
     except (KeyError, pygit2.GitError) as e:
         raise ValueError(f"Failed to get file timeline: {subpath}") from e

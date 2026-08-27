@@ -73,6 +73,11 @@ class GitRenderer:
     @staticmethod
     def _render_ref_structure(result: dict) -> None:
         """Render ref/commit history."""
+        if result.get('shallow_clone'):
+            print("⚠ Shallow clone detected — history/contributor counts may be incomplete.")
+            print("  Run `git fetch --unshallow` for the full picture.")
+            print()
+
         print(f"Ref: {result['ref']}")
         print()
 
@@ -106,6 +111,11 @@ class GitRenderer:
     @staticmethod
     def _render_file_history(result: dict) -> None:
         """Render file history."""
+        if result.get('shallow_clone'):
+            print("⚠ Shallow clone detected — history/contributor counts may be incomplete.")
+            print("  Run `git fetch --unshallow` for the full picture.")
+            print()
+
         element = result.get('element')
         if element:
             print(f"Element History: {result['path']} → {element} @ {result['ref']}")

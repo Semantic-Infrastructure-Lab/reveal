@@ -15,7 +15,7 @@ import tempfile
 import shutil
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, PropertyMock
 import pytest
 
 # Check if pygit2 is available
@@ -478,6 +478,65 @@ class TestFileHistory:
         structure = adapter.get_structure()
 
         assert len(structure['commits']) == 1
+
+
+class TestShallowCloneWarning:
+    """BACK-1177: shallow-clone detection was only wired into get_ownership()
+    and get_file_blame() (BACK-1128) — every other history-derived query
+    (ref structure, ref timeline, file history, file timeline) silently
+    reported a truncated view as if it were the repo's complete history.
+    """
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_ref_structure_flags_shallow_clone(self, git_repo):
+        adapter = GitAdapter(path=str(git_repo), ref='feature')
+        with patch.object(pygit2.Repository, 'is_shallow', new_callable=PropertyMock, return_value=True):
+            structure = adapter.get_structure()
+        assert structure['type'] == 'git_ref'
+        assert structure['shallow_clone'] is True
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_ref_structure_not_flagged_on_normal_clone(self, git_repo):
+        adapter = GitAdapter(path=str(git_repo), ref='feature')
+        structure = adapter.get_structure()
+        assert 'shallow_clone' not in structure
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_ref_timeline_flags_shallow_clone(self, git_repo):
+        adapter = GitAdapter(path=str(git_repo), query={'type': 'history', 'bucket': 'month'})
+        with patch.object(pygit2.Repository, 'is_shallow', new_callable=PropertyMock, return_value=True):
+            structure = adapter.get_structure()
+        assert structure['type'] == 'git_timeline'
+        assert structure['shallow_clone'] is True
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_file_history_flags_shallow_clone(self, git_repo):
+        adapter = GitAdapter(path=str(git_repo), subpath='README.md', query={'type': 'history'})
+        with patch.object(pygit2.Repository, 'is_shallow', new_callable=PropertyMock, return_value=True):
+            structure = adapter.get_structure()
+        assert structure['type'] == 'git_file_history'
+        assert structure['shallow_clone'] is True
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_file_timeline_flags_shallow_clone(self, git_repo):
+        adapter = GitAdapter(
+            path=str(git_repo), subpath='README.md',
+            query={'type': 'history', 'bucket': 'month'},
+        )
+        with patch.object(pygit2.Repository, 'is_shallow', new_callable=PropertyMock, return_value=True):
+            structure = adapter.get_structure()
+        assert structure['type'] == 'git_timeline'
+        assert structure['shallow_clone'] is True
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_ref_structure_renders_shallow_warning_in_text(self, git_repo, capsys):
+        from reveal.adapters.git.renderer import GitRenderer
+        adapter = GitAdapter(path=str(git_repo), ref='feature')
+        with patch.object(pygit2.Repository, 'is_shallow', new_callable=PropertyMock, return_value=True):
+            structure = adapter.get_structure()
+        GitRenderer.render_structure(structure, format='text')
+        out = capsys.readouterr().out
+        assert 'Shallow clone detected' in out
 
 
 class TestFileBlame:

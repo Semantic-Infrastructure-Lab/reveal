@@ -59,6 +59,8 @@ def get_ref_structure(
                     'type': 'content_search_unavailable',
                     'message': disclosure,
                 })
+            if getattr(repo, 'is_shallow', False):
+                result['shallow_clone'] = True
             return result
         else:
             raise ValueError(f"Cannot resolve ref to commit: {ref}")
@@ -86,7 +88,7 @@ def get_ref_timeline(
         commit_obj = cast('pygit2.Commit', obj)
         timeline = get_commit_timeline_func(repo, commit_obj)
 
-        return ResultBuilder.create(
+        result = ResultBuilder.create(
             result_type='git_timeline',
             source=f"{repo.workdir or repo.path}@{ref}",
             source_type='repository',
@@ -95,6 +97,9 @@ def get_ref_timeline(
             ref=ref,
             **timeline,
         )
+        if getattr(repo, 'is_shallow', False):
+            result['shallow_clone'] = True
+        return result
 
     except (KeyError, pygit2.GitError) as e:
         raise ValueError(f"Invalid ref: {ref}") from e
