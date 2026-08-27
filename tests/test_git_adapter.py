@@ -2774,6 +2774,52 @@ class TestViewScopedParamWarnings:
         assert r['total_commits'] == 5  # 'since' had no effect -- warning is additive, not an error
 
 
+class TestDateFilterCorrectness:
+    """BACK-1192: the underlying ?date>=/?date<=/?since=/?until= filter was
+    silently broken for every commit, regardless of the actual dates involved
+    -- coerce_numeric=True on the 'date' field (a formatted string, not the
+    numeric 'timestamp' field) made float(field_value) raise on every commit,
+    and the numeric-coercion-failure path returns False unconditionally
+    rather than falling back to string comparison. Confirmed live:
+    date>=2026-01-01 against a commit dated 2026-08-26 matched nothing."""
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_since_filters_to_matching_commits(self, git_repo_timeline):
+        adapter = GitAdapter(path=str(git_repo_timeline), query={'since': '2026-02-01'})
+        r = adapter.get_structure()
+        messages = {c['message'] for c in r['commits']['recent']}
+        assert messages == {'app v3', 'app v4', 'add readme'}
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_until_filters_to_matching_commits(self, git_repo_timeline):
+        # 'app v2' is committed AT NOON on 2026-01-20 (fixture's epoch() bakes
+        # in hour=12); a bare date '2026-01-20' compares as that day's
+        # midnight, so a noon commit is > midnight and correctly excluded by
+        # <=. Same lexical-comparison semantics 'since' already had.
+        adapter = GitAdapter(path=str(git_repo_timeline), query={'until': '2026-01-20'})
+        r = adapter.get_structure()
+        messages = {c['message'] for c in r['commits']['recent']}
+        assert messages == {'app v1'}
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_since_and_until_combine_as_a_range(self, git_repo_timeline):
+        adapter = GitAdapter(
+            path=str(git_repo_timeline),
+            query={'since': '2026-01-10', 'until': '2026-02-15'})
+        r = adapter.get_structure()
+        messages = {c['message'] for c in r['commits']['recent']}
+        assert messages == {'app v2', 'app v3'}
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_raw_date_operator_also_fixed(self, git_repo_timeline):
+        """The underlying bug affected the primary documented ?date>= filter
+        too, not just the since/until aliases."""
+        adapter = GitAdapter(path=str(git_repo_timeline), query={'date>': '2026-02-01'})
+        r = adapter.get_structure()
+        messages = {c['message'] for c in r['commits']['recent']}
+        assert messages == {'app v3', 'app v4', 'add readme'}
+
+
 @pytest.fixture
 def git_repo_timeline(tmp_path):
     """Git repo with commits spread across months/weeks for BACK-484 timeline tests.

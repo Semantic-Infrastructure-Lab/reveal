@@ -35,6 +35,7 @@ _SCHEMA_QUERY_PARAMS = {
     'bucket': {'type': 'string', 'description': 'Modifier on type=history: bucket commits into periods (commit_count + distinct author_count per period) instead of a flat list. Works on a file, directory, or the whole repo.', 'values': ['week', 'month'], 'examples': ['?type=history&bucket=month', '?type=history&bucket=week']},
     'no_merges': {'type': 'string', 'description': 'Set to "1" to exclude merge commits (commits with more than one parent)', 'examples': ['?type=history&no_merges=1']},
     'since': {'type': 'string', 'description': 'Ergonomic alias for date>=YYYY-MM-DD (rewritten into a date filter)', 'examples': ['?since=2026-01-01']},
+    'until': {'type': 'string', 'description': 'Ergonomic alias for date<=YYYY-MM-DD (rewritten into a date filter)', 'examples': ['?until=2026-01-01']},
     'ignore': {'type': 'string', 'description': 'For blame: comma-separated commit hash prefixes to suppress', 'examples': ['?type=blame&ignore=69b0093,f5fcac0']},
     'raw': {'type': 'string', 'description': 'For file-at-ref: "1" returns raw file contents instead of structural view', 'examples': ['?raw=1']},
     'content~': {'type': 'string', 'description': 'Pickaxe search: only commits where the diff added or removed the given string (regex)', 'examples': ['?content~=TODO']},
@@ -251,6 +252,11 @@ class GitAdapter(ResourceAdapter):
             # ?since=YYYY-MM-DD — ergonomic alias for date>=YYYY-MM-DD
             elif k == 'since':
                 filter_parts.append(f"date>={v}")
+            # ?until=YYYY-MM-DD — ergonomic alias for date<=YYYY-MM-DD (BACK-1192,
+            # symmetric with ?since= above — the CLI --until flag needs a target
+            # to alias into; only date>= existed before this)
+            elif k == 'until':
+                filter_parts.append(f"date<={v}")
             # Filter parameters
             else:
                 # Check if key already ends with an operator character (~, !, >, <, .)

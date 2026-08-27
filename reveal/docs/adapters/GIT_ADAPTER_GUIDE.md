@@ -527,8 +527,8 @@ all buckets.
   than the flat-list default of 50, since a meaningful timeline needs the
   full matching range)
 - All the usual commit filters (`author`, `email`, `message~=`, `since`,
-  `no_merges`, etc.) compose with `bucket=` the same way they do with plain
-  `type=history`
+  `until`, `no_merges`, etc.) compose with `bucket=` the same way they do
+  with plain `type=history`
 
 **Use cases**:
 - "Is this file/subsystem's commit activity increasing or decreasing?"
@@ -827,6 +827,9 @@ that shares are limited to the fetched history. Run `git fetch --unshallow` firs
 | `email` | string | `=`, `~=` | Filter by author email |
 | `message` | string | `=`, `~=` | Filter by commit message |
 | `hash` | string | `=`, `.=` | Filter by commit hash prefix |
+| `date` | ISO date | `>`, `<`, `>=`, `<=` | Filter by commit date, e.g. `date>=2026-01-01` |
+| `since` | ISO date | `=` only | Ergonomic alias for `date>=YYYY-MM-DD` |
+| `until` | ISO date | `=` only | Ergonomic alias for `date<=YYYY-MM-DD` |
 
 ### Result Control Parameters
 

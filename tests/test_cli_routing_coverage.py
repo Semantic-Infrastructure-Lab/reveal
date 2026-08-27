@@ -165,6 +165,92 @@ class TestHandleUriExclude:
         assert '--exclude' not in captured.err
 
 
+# ─── handle_uri — BACK-1192: --since/--until on URI-scheme targets ───────────
+
+class TestHandleUriSinceUntil:
+    """--since/--until were accepted by argparse and silently discarded for
+    every URI-scheme target -- git:// is the only scheme that consumes them
+    (as ?since=/?until= ergonomic aliases for date>=/date<=)."""
+
+    def test_since_injected_for_git_scheme(self):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, since='2026-01-01', until=None, base_path=None)
+                    handle_uri('git://.', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert 'since=2026-01-01' in resource_arg
+
+    def test_until_injected_for_git_scheme(self):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, since=None, until='2026-01-01', base_path=None)
+                    handle_uri('git://.', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert 'until=2026-01-01' in resource_arg
+
+    def test_both_since_and_until_injected(self):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, since='2026-01-01', until='2026-06-01', base_path=None)
+                    handle_uri('git://.', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert 'since=2026-01-01' in resource_arg
+        assert 'until=2026-06-01' in resource_arg
+
+    def test_uri_since_takes_precedence_over_flag(self):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, since='2099-01-01', until=None, base_path=None)
+                    handle_uri('git://.?since=2020-01-01', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert resource_arg.count('since=') == 1
+        assert '2099-01-01' not in resource_arg
+
+    def test_since_warns_on_non_supporting_scheme(self, capsys):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, since='2026-01-01', until=None, base_path=None)
+                    handle_uri('ast://.', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert 'since=' not in resource_arg
+        captured = capsys.readouterr()
+        assert '--since has no effect on ast://' in captured.err
+
+    def test_no_since_until_flags_no_injection_no_warning(self, capsys):
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, since=None, until=None, base_path=None)
+                    handle_uri('ast://.', None, args)
+        resource_arg = mock_handler.call_args[0][2]
+        assert 'since=' not in resource_arg and 'until=' not in resource_arg
+        captured = capsys.readouterr()
+        assert captured.err == ''
+
+
 # ─── generic_adapter_handler — base_path override ────────────────────────────
 
 class TestGenericAdapterHandlerBasePath:
