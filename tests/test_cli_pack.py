@@ -363,14 +363,14 @@ class TestWalkFiles(unittest.TestCase):
         self._make("spec/widget_spec.rb")
         self._make("src/widget.rb")
         files = list(_walk_files(self.base, exclude_patterns=['spec/*']))
-        names = {str(f.relative_to(self.base)) for f in files}
+        names = {f.relative_to(self.base).as_posix() for f in files}
         self.assertNotIn("spec/widget_spec.rb", names)
         self.assertIn("src/widget.rb", names)
 
     def test_no_exclude_patterns_unaffected(self):
         self._make("spec/widget_spec.rb")
         files = list(_walk_files(self.base, exclude_patterns=None))
-        names = {str(f.relative_to(self.base)) for f in files}
+        names = {f.relative_to(self.base).as_posix() for f in files}
         self.assertIn("spec/widget_spec.rb", names)
 
 
