@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-08-23 (uncharted-telescope-0822 — v0.122.0 release: Python 3.14 support restored, exit-code contract, MCP hardening, disclosure-surface sweep)
+> **Last updated**: 2026-08-28 (eternal-guardian-0827 — v0.123.0 release: disclosure-surface sweep round 2, MCP resources + tool parity, check/pack ergonomics, silent-CLI-flag audit)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,15 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.123.0 — Disclosure-surface sweep round 2, MCP resources + tool parity, check/pack ergonomics, silent-CLI-flag audit
+
+- ✅ Absolute host-path leaks (BACK-1194's original scope, extended in two more sweeps) closed across `overview://`, `deps://`, `imports://`, `architecture://`, `hotspots://`, `depends://`, and `surface://` (BACK-1212, BACK-1213/1214/1215, BACK-1178 follow-up, BACK-1222) — consolidated onto one shared `to_relative_display()` helper.
+- ✅ A systematic audit of CLI flags accepted by argparse but silently dropped on the floor closed 8 confirmed instances: `--since`/`--until`, `--exclude`, `--no-gitignore`, `--max-items`/`--max-snippet-chars` on bare files, `--head`/`--tail`/`--range` on URI results, `--severity`/`--only-failures` for `ssl://`/`domain://`/`mysql://` `--check`, and `REVEAL_IGNORE` for `check`/`overview://` (BACK-1192/1187/1202/1203/1204/1207/1205/1219/1201/1221).
+- ✅ `reveal-mcp` gained 4 Resources for its self-description surface, `reveal_pack --architecture` parity, and an opt-in access log (BACK-1171, BACK-1170, BACK-1144); adapter errors now emit a valid envelope instead of 0 bytes and not-applicable results are distinguishable from real failures (BACK-1209, BACK-1210).
+- ✅ `reveal check` gained `--exit-zero`/`--max-items`/`--max-snippet-chars`/`--no-snippets`; `deps://`/`calls://`'s per-language trust signals consolidated into a shared capability table, with `calls://` confidence now measured per-language instead of a flat `0.85` (BACK-1186/1181/1182, BACK-1093, BACK-1198).
+- ✅ `pack://`'s entry-point scoring no longer lets empty barrel files dominate a budget (84%→8% on one real corpus); ranked results across `overview://`/`hotspots://`/`pack://` now disclose vendor/generated/minified provenance (BACK-1196, BACK-1195).
+- ✅ `help://quick`'s decision tree now derives from the adapter registry itself instead of a hand-maintained dict, closing a 15-of-33-adapters unreachability gap (BACK-1156/1157/1154).
 
 ### v0.122.0 — Python 3.14 support restored, exit-code contract, MCP hardening + tool parity, disclosure-surface sweep
 
