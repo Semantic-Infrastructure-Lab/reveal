@@ -143,6 +143,17 @@ class TestCreateOverviewParser(unittest.TestCase):
         args = parser.parse_args(['--top', '10'])
         self.assertEqual(args.top, 10)
 
+    def test_all_flag(self):
+        """BACK-1226: --all used to be a hard argparse error on this subcommand."""
+        parser = create_overview_parser()
+        args = parser.parse_args(['--all'])
+        self.assertTrue(args.all)
+
+    def test_all_flag_defaults_false(self):
+        parser = create_overview_parser()
+        args = parser.parse_args([])
+        self.assertFalse(args.all)
+
     def test_no_git_flag(self):
         parser = create_overview_parser()
         args = parser.parse_args(['--no-git'])
@@ -450,6 +461,13 @@ class TestRenderLanguageBreakdown(unittest.TestCase):
         out = _capture(_render_language_breakdown, files, 3)
         self.assertIn('more', out)
 
+    def test_truncation_hint_names_all_flag(self):
+        """BACK-1226: naming a flag that actually works, not just 'and N more'."""
+        files = [{'file': f'a.py'}, {'file': 'b.md'}, {'file': 'c.yaml'},
+                 {'file': 'd.json'}, {'file': 'e.rs'}, {'file': 'f.go'}]
+        out = _capture(_render_language_breakdown, files, 3)
+        self.assertIn('(use --all)', out)
+
     def test_empty_input_produces_no_output(self):
         out = _capture(_render_language_breakdown, [], 5)
         self.assertEqual(out, '')
@@ -525,6 +543,17 @@ class TestRenderHotspots(unittest.TestCase):
     def test_empty_produces_no_output(self):
         out = _capture(_render_hotspots, [], 5)
         self.assertEqual(out, '')
+
+    def test_truncation_hint_names_all_flag(self):
+        """BACK-1226: a capped section must say how to see the rest."""
+        hotspots = [self._hotspot(70) for _ in range(10)]
+        out = _capture(_render_hotspots, hotspots, 3)
+        self.assertIn('7 more (use --all)', out)
+
+    def test_no_hint_when_nothing_truncated(self):
+        hotspots = [self._hotspot(70) for _ in range(3)]
+        out = _capture(_render_hotspots, hotspots, 5)
+        self.assertNotIn('more', out)
 
 
 class TestRenderComplexFunctions(unittest.TestCase):
@@ -849,6 +878,43 @@ class TestRunOverview(unittest.TestCase):
                 self.assertEqual(data['architecture']['components'][0]['component'], 'src')
                 self.assertEqual(data['architecture']['components'][0]['top_bridge'], 'src/main.py')
 
+    def _arch_with_many_components(self, n=10):
+        arch = dict(_ARCH_DATA)
+        arch['components'] = [
+            {'component': f'/proj/src/c{i}', 'files': 1, 'internal': 1,
+             'outgoing': 0, 'incoming': 0, 'cohesion': 0.5, 'top_bridge': None}
+            for i in range(n)
+        ]
+        return arch
+
+    def test_default_top_caps_components(self):
+        import tempfile
+        p_stats, p_git, p_ast, p_arch = self._patch_runners(arch=self._arch_with_many_components())
+        with p_stats, p_git, p_ast, p_arch:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = _capture(run_overview, _args(path=tmp))
+                self.assertNotIn('c9', out)
+                self.assertIn('more (use --all)', out)
+
+    def test_all_flag_shows_every_component(self):
+        """BACK-1226: --all was accepted by argparse (global flag) but never
+        reached the renderer -- Components stayed capped at 5 of 61 regardless."""
+        import tempfile
+        p_stats, p_git, p_ast, p_arch = self._patch_runners(arch=self._arch_with_many_components())
+        with p_stats, p_git, p_ast, p_arch:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = _capture(run_overview, _args(path=tmp, all=True))
+                self.assertIn('c9', out)
+                self.assertNotIn('more (use --all)', out)
+
+    def test_verbose_flag_also_shows_every_component(self):
+        import tempfile
+        p_stats, p_git, p_ast, p_arch = self._patch_runners(arch=self._arch_with_many_components())
+        with p_stats, p_git, p_ast, p_arch:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = _capture(run_overview, _args(path=tmp, verbose=True))
+                self.assertIn('c9', out)
+
 
 class TestAnnotateProvenance(unittest.TestCase):
     """BACK-1195: each ranked entry tagged with its provenance classification
@@ -1067,6 +1133,35 @@ class TestRenderArchitecture(unittest.TestCase):
         out = _capture(_render_architecture, arch, [], 3)
         self.assertIn('ep0.py', out)
         self.assertNotIn('ep3.py', out)
+
+    def test_entry_points_hint_when_truncated(self):
+        """BACK-1226: previously silent -- no way to tell 10 fan-in=0 fell to 3."""
+        arch = self._arch(entrypoints=[
+            {'file': f'/proj/src/ep{i}.py', 'fan_out': 5 - i} for i in range(10)
+        ])
+        out = _capture(_render_architecture, arch, [], 3)
+        self.assertIn('more (use --all)', out)
+
+    def test_no_entry_points_hint_when_all_shown(self):
+        out = _capture(_render_architecture, self._arch(), [], 5)
+        entry_points_section = out.split('Entry points')[1].split('Core abstractions')[0]
+        self.assertNotIn('more', entry_points_section)
+
+    def test_components_hint_when_truncated(self):
+        """BACK-1226: Components had no 'N more' footer at all, unlike its
+        sibling sections -- the header honestly said 61 while showing 5."""
+        arch = self._arch(components=[
+            {'component': f'/proj/src/c{i}', 'files': 1, 'internal': 1,
+             'outgoing': 0, 'incoming': 0, 'cohesion': 0.5, 'top_bridge': None}
+            for i in range(10)
+        ])
+        out = _capture(_render_architecture, arch, [], 3)
+        self.assertIn('7 more (use --all)', out)
+
+    def test_no_components_hint_when_all_shown(self):
+        out = _capture(_render_architecture, self._arch(), [], 5)
+        components_section = out.split('Components')[1]
+        self.assertNotIn('more', components_section)
 
     def test_relative_paths_shown_when_base_provided(self):
         out = _capture(_render_architecture, self._arch(), [], 5, base_path=Path('/proj'))

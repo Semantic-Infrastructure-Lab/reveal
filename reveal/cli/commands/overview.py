@@ -18,6 +18,7 @@ from reveal.adapters.overview import (  # noqa: F401 - re-exported for back-comp
     OverviewAdapter,
     OverviewRenderer,
     StatsAdapter,
+    UNLIMITED_TOP,
     _NON_CODE_EXT_LABELS,
     _age_label,
     _is_test_file,
@@ -81,6 +82,13 @@ def create_overview_parser() -> argparse.ArgumentParser:
         help='Number of items to show in each section (default: 5)'
     )
     parser.add_argument(
+        '--all',
+        action='store_true',
+        help='Show every entry in each capped section (Languages, Hotspots, Entry '
+             'points, Components) instead of --top N (BACK-1226). Same effect as '
+             '--verbose here.'
+    )
+    parser.add_argument(
         '--exclude', action='append', metavar='PATTERN',
         help='Exclude files/directories matching pattern from analysis entirely '
              '(e.g., --exclude "*.min.js" --exclude "wp-includes/js/dist/*"). '
@@ -106,7 +114,7 @@ def run_overview(args: Namespace) -> None:
         print(f"Error: path '{args.path}' does not exist", file=sys.stderr)
         sys.exit(1)
 
-    top = args.top
+    top = UNLIMITED_TOP if (getattr(args, 'all', False) or getattr(args, 'verbose', False)) else args.top
     no_git = getattr(args, 'no_git', False)
     no_imports = getattr(args, 'no_imports', False)
     respect_gitignore = getattr(args, 'respect_gitignore', True)

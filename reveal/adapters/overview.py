@@ -29,6 +29,16 @@ from ..utils.results import ResultBuilder
 logger = logging.getLogger(__name__)
 
 
+# Large-but-finite stand-in for "no cap" on overview's --top-bounded sections
+# (Languages, Hotspots, Entry points, Components; also the Complex-functions and
+# git-log data fetch limits). Keeps every `[:top]`/`min(len(x), top)` call site
+# plain int arithmetic instead of needing None-handling threaded through each
+# renderer/collector — and a real "-n <huge>" git-log/AST query behaves exactly
+# like an uncapped one, bounded by the actual repo/result size either way
+# (BACK-1226).
+UNLIMITED_TOP = 10**9
+
+
 # Display labels for extensions the language registry doesn't know at all
 # (BACK-431 Issue B #5) — these are document/data formats, not tree-sitter
 # languages, so they aren't derivable from language_for_extension(); genuinely
@@ -229,7 +239,7 @@ def _render_language_breakdown(files_list: List[Dict[str, Any]], top: int) -> No
         print(f"  {lang:<16} {count:>4} files  {bar} {pct}%")
     remaining = len(langs) - len(shown)
     if remaining > 0:
-        print(f"  ... and {remaining} more")
+        print(f"  ... and {remaining} more (use --all)")
 
 
 def _render_quality_pulse(summary: Dict[str, Any], hotspots: List[Dict[str, Any]]) -> None:
@@ -280,6 +290,9 @@ def _render_hotspots(hotspots: List[Dict[str, Any]], top: int) -> None:
         issue_str = f"  — {', '.join(issues)}" if issues else ''
         print(f"  {icon} {name}  {q}/100{issue_str}")
         print(f"       → reveal {name}")
+    remaining = len(hotspots) - min(len(hotspots), top)
+    if remaining > 0:
+        print(f"  ... and {remaining} more (use --all)")
 
 
 def _render_complex_functions(fns: List[Dict[str, Any]], base_path: Optional[Path] = None) -> None:
@@ -419,6 +432,9 @@ def _render_architecture(
         for ep in live_eps[:top]:
             rel = _relpath(ep['file'], base_path)
             print(f"    {rel:<50}  fan-out {ep['fan_out']}")
+        remaining = len(live_eps) - min(len(live_eps), top)
+        if remaining > 0:
+            print(f"    ... and {remaining} more (use --all)")
 
     core = [e for e in fan_in if e.get('fan_in', 0) > 0][:5]
     if core:
@@ -434,6 +450,9 @@ def _render_architecture(
             cohesion = c['cohesion']
             bar = '█' * int(cohesion * 10) + '░' * (10 - int(cohesion * 10))
             print(f"    {rel:<42}  {cohesion:.2f}  {bar}  {c['files']} files")
+        remaining = len(components) - min(len(components), top)
+        if remaining > 0:
+            print(f"    ... and {remaining} more (use --all)")
 
 
 def _render_git_log(history: List[Dict[str, Any]], foreign_root: Optional[str] = None) -> None:

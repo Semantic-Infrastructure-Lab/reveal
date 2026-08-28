@@ -929,8 +929,31 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
         if available_elements:
             result['available_elements'] = available_elements
 
-    renderer_class.render_structure(result, args.format)
+    renderer_class.render_structure(result, args.format, **_render_structure_top_kwargs(renderer_class, args))
 
+
+def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace') -> dict:
+    """Forward --top/--all/--verbose to render_structure() for overview:// only (BACK-1226).
+
+    render_structure(result, args.format) never passed args.top/all/verbose through
+    for ANY URI-invoked renderer, so overview://'s per-section caps (Components,
+    Entry points, Language, Hotspots) were unreachable via --all/--verbose and even
+    via a working ?top=N query string (the resolved top never left get_structure()).
+
+    Scoped to OverviewRenderer specifically rather than fixed generically: sibling
+    renderers declare differently-typed/shaped 'top' params (hotspots.py top:int=10,
+    deps.py top:int=10, architecture.py top:int=5 plus a second no_imports param,
+    contracts.py/trace.py have no top param at all) that were never designed to
+    receive a value from here, and forwarding blind would either crash them or
+    silently change behavior nobody asked this ticket to touch.
+    """
+    if getattr(renderer_class, '__name__', '') != 'OverviewRenderer':
+        return {}
+    if getattr(args, 'all', False) or getattr(args, 'verbose', False):
+        from ...adapters.overview import UNLIMITED_TOP
+        return {'top': UNLIMITED_TOP}
+    top = getattr(args, 'top', None)
+    return {'top': top} if top is not None else {}
 
 def handle_adapter(adapter_class: type, scheme: str, resource: str,
                    element: Optional[str], args: 'Namespace') -> None:

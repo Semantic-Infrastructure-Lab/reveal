@@ -678,6 +678,70 @@ class TestRenderStructure:
         assert call_args[0].get('post_processed') is True
 
 
+class TestRenderStructureTopForwarding:
+    """BACK-1226: render_structure(result, args.format) used to drop args.top/
+    all/verbose entirely for every URI-invoked renderer, so overview://'s
+    --all/--verbose/?top=N were all no-ops no matter what the user passed."""
+
+    def _adapter(self):
+        adapter = MagicMock()
+        adapter.get_structure.return_value = {}
+        return adapter
+
+    def test_overview_renderer_gets_unlimited_top_with_all_flag(self):
+        renderer_cls = MagicMock()
+        renderer_cls.__name__ = 'OverviewRenderer'
+        args = _args(all=True, verbose=False, top=5)
+        _render_structure(self._adapter(), renderer_cls, args)
+        _, kwargs = renderer_cls.render_structure.call_args
+        assert kwargs['top'] >= 10**6
+
+    def test_overview_renderer_gets_unlimited_top_with_verbose_flag(self):
+        renderer_cls = MagicMock()
+        renderer_cls.__name__ = 'OverviewRenderer'
+        args = _args(all=False, verbose=True, top=5)
+        _render_structure(self._adapter(), renderer_cls, args)
+        _, kwargs = renderer_cls.render_structure.call_args
+        assert kwargs['top'] >= 10**6
+
+    def test_overview_renderer_gets_explicit_top(self):
+        renderer_cls = MagicMock()
+        renderer_cls.__name__ = 'OverviewRenderer'
+        args = _args(all=False, verbose=False, top=20)
+        _render_structure(self._adapter(), renderer_cls, args)
+        _, kwargs = renderer_cls.render_structure.call_args
+        assert kwargs['top'] == 20
+
+    def test_overview_renderer_gets_no_top_kwarg_when_unset(self):
+        """No --top/--all/--verbose passed: let render_structure keep its own default."""
+        renderer_cls = MagicMock()
+        renderer_cls.__name__ = 'OverviewRenderer'
+        args = _args()  # no top/all/verbose attributes at all
+        _render_structure(self._adapter(), renderer_cls, args)
+        _, kwargs = renderer_cls.render_structure.call_args
+        assert 'top' not in kwargs
+
+    def test_non_overview_renderer_gets_no_top_kwarg(self):
+        """Sibling renderers (contracts.py/trace.py declare no top param at all;
+        others use differently-shaped signatures) must not receive one just
+        because --all was passed -- scoped to OverviewRenderer specifically."""
+        renderer_cls = MagicMock()
+        renderer_cls.__name__ = 'ArchitectureRenderer'
+        args = _args(all=True, verbose=False, top=5)
+        _render_structure(self._adapter(), renderer_cls, args)
+        _, kwargs = renderer_cls.render_structure.call_args
+        assert 'top' not in kwargs
+
+    def test_renderer_with_no_dunder_name_does_not_crash(self):
+        """A bare MagicMock() (common in other tests here) has no real
+        __name__ -- accessing it directly used to raise AttributeError."""
+        renderer_cls = MagicMock()
+        args = _args(all=True, verbose=False, top=5)
+        _render_structure(self._adapter(), renderer_cls, args)  # must not raise
+        _, kwargs = renderer_cls.render_structure.call_args
+        assert 'top' not in kwargs
+
+
 # ─── _parse_file_line_syntax ─────────────────────────────────────────────────
 
 class TestParseFileLineSyntax:
