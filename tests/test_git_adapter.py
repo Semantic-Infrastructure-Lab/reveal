@@ -495,6 +495,59 @@ class TestFileHistory:
         assert len(structure['commits']) == 1
 
 
+class TestDirectoryHistory:
+    """BACK-1225: a directory subpath used to fall through to the file-content
+    branch and fail with 'git:// expects a file path, not a directory' -- the
+    subpath dispatch only recognized 'history' by exact string match, so
+    overview://'s 'log' query type (and any directory target) never reached
+    the file/directory history logic at all. git_repo's 'src/' directory was
+    touched by exactly one of its three commits ('Add main.py')."""
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_directory_history_returns_only_commits_touching_it(self, git_repo):
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='src',
+            query={'type': 'history'}
+        )
+        structure = adapter.get_structure()
+
+        assert structure['type'] == 'git_directory_history'
+        assert structure['source_type'] == 'directory'
+        assert structure['path'] == 'src'
+        messages = [c['message'] for c in structure['commits']]
+        assert messages == ['Add main.py']
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_type_log_is_an_alias_for_history_on_a_directory(self, git_repo):
+        """The exact query overview.py's _run_git_log sends for a subdirectory
+        overview:// target."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='src',
+            query={'type': 'log'}
+        )
+        structure = adapter.get_structure()  # must not raise
+
+        assert structure['type'] == 'git_directory_history'
+        messages = [c['message'] for c in structure['commits']]
+        assert messages == ['Add main.py']
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_file_subpath_unaffected_by_directory_dispatch(self, git_repo):
+        """A file target must still be labeled/handled as a file, not swept
+        into the new directory branch by the is_dir check."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={'type': 'log'}
+        )
+        structure = adapter.get_structure()
+
+        assert structure['type'] == 'git_file_history'
+        assert structure['source_type'] == 'file'
+
+
 class TestShallowCloneWarning:
     """BACK-1177: shallow-clone detection was only wired into get_ownership()
     and get_file_blame() (BACK-1128) — every other history-derived query

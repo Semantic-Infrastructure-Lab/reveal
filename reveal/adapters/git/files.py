@@ -248,9 +248,13 @@ def get_file_history(
     query_filters: list,
     format_commit_func,
     matches_all_filters_func,
-    commit_touches_file_func
+    commit_touches_file_func,
+    is_dir: bool = False,
 ) -> Dict[str, Any]:
-    """Get commit history for a specific file."""
+    """Get commit history for a specific file or directory (BACK-1225: is_dir
+    labels the result honestly -- the touch-detection function passed in
+    (commit_touches_file vs commit_touches_directory) is what actually
+    changes behavior; is_dir only affects result_type/source_type/error text."""
     import pygit2
 
     try:
@@ -292,9 +296,9 @@ def get_file_history(
         controlled_commits = apply_result_control(commits, result_control)
 
         result = ResultBuilder.create(
-            result_type='git_file_history',
+            result_type='git_directory_history' if is_dir else 'git_file_history',
             source=f"{subpath}@{ref}",
-            source_type='file',
+            source_type='directory' if is_dir else 'file',
             contract_version=CONTRACT_VERSION,
             path=subpath,
             ref=ref,
@@ -314,7 +318,8 @@ def get_file_history(
         return result
 
     except (KeyError, pygit2.GitError) as e:
-        raise ValueError(f"Failed to get file history: {subpath}") from e
+        kind = 'directory' if is_dir else 'file'
+        raise ValueError(f"Failed to get {kind} history: {subpath}") from e
 
 
 def get_file_timeline(

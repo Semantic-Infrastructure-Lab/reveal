@@ -123,10 +123,21 @@ def _run_git_log(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dic
     canonical query string compose() expects, so it can't route through
     compose() as-is) and previously swallowed a crashed git log into `[]`
     with only a logger.warning, no envelope error. record_composed_error()
-    closes that the same way BACK-984 did for every compose()-based site."""
+    closes that the same way BACK-984 did for every compose()-based site.
+
+    BACK-1225: query type must be 'history', not 'log' -- GitAdapter's
+    subpath-scoped dispatch only recognizes the exact string 'history' (see
+    adapter.py get_structure()); 'log' fell through to its file-content
+    branch and failed with a misdirected error on every subdirectory target
+    (i.e. every overview:// call below repo root). At repo root (no subpath)
+    this changes nothing: GitAdapter's ref-based branch only ever checked
+    query_type for truthiness, never its exact value. The two GitAdapter
+    result shapes differ by key -- repo-root's refs.get_ref_structure()
+    returns 'history'; a subpath's files.get_file_history() returns
+    'commits' -- so both are checked here."""
     try:
-        data = GitAdapter(path=str(path), query={'type': 'log', 'limit': str(limit)}).get_structure()
-        return data.get('history', [])
+        data = GitAdapter(path=str(path), query={'type': 'history', 'limit': str(limit)}).get_structure()
+        return data.get('history', data.get('commits', []))
     except Exception as exc:
         logger.warning("git log collection failed for %s: %s", path, exc)
         adapter.record_composed_error('GitAdapter', path, exc)

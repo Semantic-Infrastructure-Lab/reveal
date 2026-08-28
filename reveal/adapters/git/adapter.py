@@ -539,13 +539,27 @@ class GitAdapter(ResourceAdapter):
             # (e.g. get_element_line_range reads the actual file on disk).
             git_subpath = self._repo_relative_subpath(repo)
 
-            if query_type == 'history':
+            # BACK-1225: 'log' (what overview:// sends for its "Recent changes"
+            # section) is the same request as 'history' here -- it was never
+            # recognized by this string check, so a directory subpath fell
+            # through to the file-content branch below and failed with a
+            # misdirected "git:// expects a file path" error blaming the
+            # caller's syntax instead of this adapter's own missing alias.
+            if query_type in ('history', 'log'):
                 element_name = self.query.get('element')
+                # subpath docstring promises "file or directory" -- only used
+                # to label the result honestly (result_type/source_type); the
+                # touch check itself (commit_touches_path) already handles
+                # both transparently (a directory's tree entry has a content-
+                # addressed oid too, same as a file's blob id -- already
+                # proven by get_ownership()'s directory-scoped queries).
+                subpath_is_dir = not element_name and os.path.isdir(
+                    os.path.join(self.path, self.subpath))
                 if element_name:
                     touch_func = lambda repo, commit, subpath, _en=element_name: \
                         files.commit_touches_element(repo, commit, subpath, _en)
                 else:
-                    touch_func = files.commit_touches_file
+                    touch_func = files.commit_touches_path
 
                 if 'bucket' in self.query:
                     return files.get_file_timeline(
@@ -561,7 +575,8 @@ class GitAdapter(ResourceAdapter):
                     self.result_control, self.query_filters,
                     commits.format_commit,
                     lambda cd: queries.matches_all_filters(cd, self.query_filters),
-                    touch_func
+                    touch_func,
+                    is_dir=subpath_is_dir,
                 )
                 if element_name:
                     result['element'] = element_name

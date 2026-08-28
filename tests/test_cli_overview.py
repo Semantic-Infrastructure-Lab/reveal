@@ -362,7 +362,19 @@ class TestRunGitLog(unittest.TestCase):
     def test_limit_passed_as_query_param(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = {}
         _run_git_log(self.adapter, Path('/project'), 7)
-        MockAdapter.assert_called_once_with(path=str(Path('/project')), query={'type': 'log', 'limit': '7'})
+        MockAdapter.assert_called_once_with(path=str(Path('/project')), query={'type': 'history', 'limit': '7'})
+
+    @patch('reveal.adapters.overview.GitAdapter')
+    def test_reads_commits_key_for_directory_targets(self, MockAdapter):
+        """BACK-1225: files.get_file_history() (the subpath/directory code
+        path) returns 'commits', not 'history' -- refs.get_ref_structure()
+        (the repo-root code path) returns 'history'. Both must work."""
+        MockAdapter.return_value.get_structure.return_value = {
+            'commits': [{'hash': 'def5678', 'message': 'dir-scoped commit'}],
+        }
+        result = _run_git_log(self.adapter, Path('/project/sub'), 5)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['hash'], 'def5678')
 
 
 class TestResolveGitRoot(unittest.TestCase):
