@@ -17,7 +17,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import print_json_result
-from ..analyzers.capability_table import depends_intra_project_classification_supported
+from ..analyzers._capability_table import depends_intra_project_classification_supported
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
 from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor

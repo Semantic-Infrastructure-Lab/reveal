@@ -14,7 +14,7 @@ numbers come from (reveal's own VALIDATION.md oracle recall figures).
 from pathlib import Path
 from typing import Any, Dict
 
-from ...analyzers.capability_table import calls_extraction_confidence
+from ...analyzers._capability_table import calls_extraction_confidence
 from ...defaults import (
     CALL_GRAPH_DEFAULT_CONFIDENCE,
     CALL_GRAPH_DYNAMIC_DISPATCH_VOCAB,

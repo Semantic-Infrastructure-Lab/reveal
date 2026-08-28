@@ -1,4 +1,4 @@
-"""Tests for reveal/analyzers/capability_table.py (BACK-1093).
+"""Tests for reveal/analyzers/_capability_table.py (BACK-1093).
 
 The shared per-(language, adapter, signal) registry that replaces two
 independent, adapter-private trust mechanisms (depends://'s True/False/None
@@ -8,7 +8,7 @@ table) with one consultable surface.
 
 import pytest
 
-from reveal.analyzers.capability_table import (
+from reveal.analyzers._capability_table import (
     calls_extraction_confidence,
     depends_intra_project_classification_supported,
 )

@@ -55,6 +55,12 @@ class V004(BaseRule):
         # name extraction — exercised live by test_typescript_react.py's
         # `new_expression` tests (BACK-730).
         '_js_callee_names': 'test_typescript_react.py',
+        # BACK-1093: not a registered analyzer itself, a shared per-
+        # (language, adapter, signal) capability registry consulted by
+        # depends:// and calls://'s confidence scoring — exercised by
+        # test_capability_table.py (file kept singly-underscored to avoid
+        # an awkward test__capability_table.py name).
+        '_capability_table': 'test_capability_table.py',
     }
 
     def check(self,
