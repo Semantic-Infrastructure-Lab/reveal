@@ -28,6 +28,7 @@ from .uri import (
     _build_adapter_kwargs,
     _apply_field_selection,
     _apply_budget_constraints,
+    _apply_head_tail_range,
     _render_structure,
 )
 
@@ -66,6 +67,7 @@ __all__ = [
     '_build_adapter_kwargs',
     '_apply_field_selection',
     '_apply_budget_constraints',
+    '_apply_head_tail_range',
     '_render_structure',
     # File/directory dispatch
     'handle_file_or_directory',

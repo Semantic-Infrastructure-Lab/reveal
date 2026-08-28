@@ -786,23 +786,27 @@ def _apply_field_selection(result: dict, args: 'Namespace') -> dict:
     return result
 
 
+def _find_budget_list_field(result: dict, adapter=None) -> Optional[str]:
+    """Find the budget/slicing-limitable list field on a structure result.
+
+    Adapter declares which field via BUDGET_LIST_FIELD; falls back to probing
+    for adapters that predate it (transition period only).
+    """
+    declared = getattr(adapter, 'BUDGET_LIST_FIELD', None) if adapter is not None else None
+    if declared:
+        return declared if (declared in result and isinstance(result[declared], list)) else None
+    for field_name in ['items', 'results', 'checks', 'commits', 'files']:
+        if field_name in result and isinstance(result[field_name], list):
+            return field_name
+    return None
+
+
 def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None) -> dict:
     """Apply budget constraints to result list fields."""
     if not isinstance(result, dict):
         return result
 
-    # Adapter declares which field is budget-limitable; fall back to probing for
-    # adapters that predate BUDGET_LIST_FIELD (transition period only).
-    declared = getattr(adapter, 'BUDGET_LIST_FIELD', None) if adapter is not None else None
-    if declared:
-        list_field = declared if (declared in result and isinstance(result[declared], list)) else None
-    else:
-        list_field = None
-        for field_name in ['items', 'results', 'checks', 'commits', 'files']:
-            if field_name in result and isinstance(result[field_name], list):
-                list_field = field_name
-                break
-
+    list_field = _find_budget_list_field(result, adapter)
     if not list_field:
         return result
 
@@ -822,6 +826,44 @@ def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None) -> 
             result['meta']['budget'] = budget_result['meta']
         else:
             result['meta'] = budget_result['meta']
+
+    return result
+
+
+def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None) -> dict:
+    """Apply --head/--tail/--range to a directory-shaped URI structure result.
+
+    BACK-1204: these flags already worked on bare-file structural listings
+    (display/formatting.py forwards them into analyzer.get_structure()) and
+    on element/text-body retrieval (BACK-355, uri.py's _render_element), but
+    were a silent no-op specifically on a URI adapter's structure()-level
+    list results (e.g. ast://<dir>'s 'results' field) -- confirmed live:
+    'reveal ast://. --head 1 --format json' returned len(results)=200
+    unchanged with or without --head 1. Mirrors _apply_budget_constraints's
+    field-discovery (BUDGET_LIST_FIELD / probe fallback) since it's the same
+    "which field is the sliceable list" question.
+    """
+    if not isinstance(result, dict):
+        return result
+
+    head = getattr(args, 'head', None)
+    tail = getattr(args, 'tail', None)
+    range_ = getattr(args, 'range', None)
+    if not (head or tail or range_):
+        return result
+
+    list_field = _find_budget_list_field(result, adapter)
+    if not list_field:
+        return result
+
+    items = result[list_field]
+    if head:
+        result[list_field] = items[:head]
+    elif tail:
+        result[list_field] = items[-tail:]
+    elif range_:
+        start, end = range_
+        result[list_field] = items[max(start - 1, 0):end]
 
     return result
 
@@ -860,6 +902,7 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
 
     # Apply post-processing
     result = _apply_field_selection(result, args)
+    result = _apply_head_tail_range(result, args, adapter)
     result = _apply_budget_constraints(result, args, adapter)
     post_process = getattr(type(adapter), 'post_process', None)
     if post_process is not None:

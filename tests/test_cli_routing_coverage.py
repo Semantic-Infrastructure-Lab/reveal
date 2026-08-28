@@ -20,6 +20,7 @@ from reveal.cli.routing import (
     _build_adapter_kwargs,
     _apply_field_selection,
     _apply_budget_constraints,
+    _apply_head_tail_range,
     _render_structure,
     _parse_file_line_syntax,
     _validate_path_exists,
@@ -46,6 +47,9 @@ def _args(**kwargs):
         'fields': None,
         'max_items': None,
         'max_snippet_chars': None,
+        'head': None,
+        'tail': None,
+        'range': None,
         'check': False,
         'hotspots': False,
     }
@@ -553,6 +557,53 @@ class TestApplyBudgetConstraints:
         args = _args(max_items=5)
         out = _apply_budget_constraints(result, args)
         assert len(out['items']) <= 5
+
+
+# ─── _apply_head_tail_range ────────────────────────────────────────────────────
+
+class TestApplyHeadTailRange:
+    """BACK-1204: --head/--tail/--range were a silent no-op on a URI
+    adapter's directory-shaped structure result (e.g. ast://<dir>'s
+    'results' field), though they already worked on bare-file structural
+    listings and element/text-body retrieval."""
+
+    def test_no_flags_returns_unchanged(self):
+        result = {'results': [{'i': i} for i in range(10)]}
+        args = _args()
+        out = _apply_head_tail_range(result, args)
+        assert len(out['results']) == 10
+
+    def test_no_list_field_returns_unchanged(self):
+        result = {'total': 5, 'extra': 'data'}
+        args = _args(head=1)
+        out = _apply_head_tail_range(result, args)
+        assert out == result
+
+    def test_head_slices_from_start(self):
+        result = {'results': [{'i': i} for i in range(10)]}
+        args = _args(head=3)
+        out = _apply_head_tail_range(result, args)
+        assert [r['i'] for r in out['results']] == [0, 1, 2]
+
+    def test_tail_slices_from_end(self):
+        result = {'results': [{'i': i} for i in range(10)]}
+        args = _args(tail=3)
+        out = _apply_head_tail_range(result, args)
+        assert [r['i'] for r in out['results']] == [7, 8, 9]
+
+    def test_range_slices_1_indexed_inclusive(self):
+        result = {'results': [{'i': i} for i in range(10)]}
+        args = _args(range=(2, 4))
+        out = _apply_head_tail_range(result, args)
+        assert [r['i'] for r in out['results']] == [1, 2, 3]
+
+    def test_declared_budget_list_field_honored(self):
+        adapter = MagicMock(BUDGET_LIST_FIELD='commits')
+        result = {'commits': [{'i': i} for i in range(10)], 'items': ['decoy']}
+        args = _args(head=2)
+        out = _apply_head_tail_range(result, args, adapter)
+        assert len(out['commits']) == 2
+        assert out['items'] == ['decoy']
 
 
 # ─── _render_structure ────────────────────────────────────────────────────────
