@@ -1042,6 +1042,35 @@ class TestHandleFileOrDirectory(unittest.TestCase):
                 # Verify show_directory_tree was called
                 mock_tree.assert_called_once()
 
+    def test_directory_max_items_hint_not_applicable(self):
+        """BACK-1203: --max-items/--max-snippet-chars have no analog on a
+        directory tree (it already has --max-entries for that) -- hint on
+        stderr instead of silently ignoring, like BACK-1202's precedent."""
+        import tempfile
+        from io import StringIO
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            mock_args = Namespace(
+                hotspots=False,
+                recursive=False,
+                check=False,
+                depth=2,
+                max_entries=100,
+                max_items=5,
+                max_snippet_chars=None,
+                fast=False,
+                respect_gitignore=True,
+                exclude=None
+            )
+
+            stderr = StringIO()
+            with patch('reveal.tree_view.show_directory_tree', return_value='tree output'):
+                with patch('sys.stdout'), patch('sys.stderr', stderr):
+                    handle_file_or_directory(temp_dir, mock_args)
+
+            assert '--max-items' in stderr.getvalue()
+            assert '--max-entries' in stderr.getvalue()
+
     def test_directory_recursive_check(self):
         """Verify directory with --check delegates to run_check (canonical implementation)."""
         import tempfile

@@ -248,6 +248,16 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
     if getattr(args, 'meta', False):
         _show_directory_meta(path, args)
         return
+    # BACK-1203: --max-items/--max-snippet-chars have no analog on a bare
+    # directory listing (a recursive tree, not a flat result list) — the
+    # equivalent flag here is --max-entries. Hint instead of silently
+    # ignoring, matching BACK-1202's "honest not-applicable" precedent.
+    if getattr(args, 'max_items', None) is not None or getattr(args, 'max_snippet_chars', None) is not None:
+        print(
+            "Note: --max-items/--max-snippet-chars have no effect on a directory listing "
+            "(use --max-entries to bound the number of entries shown)",
+            file=sys.stderr,
+        )
     if getattr(args, 'grep', None):
         if getattr(args, 'name', None):
             print("Note: --name ignored when --grep is used (--grep searches all text, --name filters structural output)", file=sys.stderr)

@@ -683,6 +683,45 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
                          structure=structure)
 
 
+def _apply_file_budget_constraints(structure: Dict[str, Any], args=None) -> Dict[str, Any]:
+    """Apply --max-items/--max-snippet-chars to a bare-file structure dict.
+
+    Mirrors cli/routing/uri.py::_apply_budget_constraints, but a file's
+    structure has multiple list-valued categories (functions, classes,
+    imports, ...) rather than one adapter-declared list field (BACK-1203:
+    these flags were a silent no-op on bare file/directory paths, working
+    only via the ast:// URI form). Each list-of-dicts category is budgeted
+    independently; per-category truncation metadata is recorded under the
+    underscored '_budget' key, matching this dict's existing convention for
+    meta signaling (e.g. '_domain_not_found').
+    """
+    if not isinstance(structure, dict) or args is None:
+        return structure
+
+    max_items = getattr(args, 'max_items', None)
+    max_snippet_chars = getattr(args, 'max_snippet_chars', None)
+    if max_items is None and max_snippet_chars is None:
+        return structure
+
+    from reveal.utils.query import apply_budget_limits
+
+    budget_meta = {}
+    for category, items in structure.items():
+        if not isinstance(items, list) or not items or not isinstance(items[0], dict):
+            continue
+        budget_result = apply_budget_limits(
+            items, max_items=max_items, truncate_strings=max_snippet_chars
+        )
+        structure[category] = budget_result['items']
+        if budget_result['meta']['truncated']:
+            budget_meta[category] = budget_result['meta']
+
+    if budget_meta:
+        structure['_budget'] = budget_meta
+
+    return structure
+
+
 def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config=None):
     """Show file structure.
 
@@ -702,6 +741,7 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
         kwargs['outline'] = args.outline
 
     structure = analyzer.get_structure(**kwargs)
+    structure = _apply_file_budget_constraints(structure, args)
     path = analyzer.path
 
     # --frontmatter is a silent no-op in text mode (data is extracted but not

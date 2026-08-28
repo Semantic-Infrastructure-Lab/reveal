@@ -25,6 +25,7 @@ from reveal.display.structure import (
     _render_single_category,
     _build_outline_hierarchy,
     _handle_outline_mode,
+    _apply_file_budget_constraints,
     show_structure,
 )
 
@@ -483,6 +484,8 @@ class TestShowStructure:
         args.related_flat = True
         args.outline = False
         args.typed = False
+        args.max_items = None
+        args.max_snippet_chars = None
 
         with patch('reveal.display.formatting._format_related_flat', return_value=['a.py', 'b.py']):
             out = _capture(show_structure, analyzer, 'text', args)
@@ -497,6 +500,8 @@ class TestShowStructure:
         args.outline = False
         args.typed = True
         args.filter = None
+        args.max_items = None
+        args.max_snippet_chars = None
 
         with patch('reveal.display.structure._render_typed_structure_output') as mock_rts:
             show_structure(analyzer, 'text', args)
@@ -859,6 +864,8 @@ class TestShowStructureExtra:
         args.related_flat = False
         args.typed = False
         args.outline = True
+        args.max_items = None
+        args.max_snippet_chars = None
 
         with patch('reveal.display.structure._handle_outline_mode') as mock_om:
             show_structure(analyzer, 'text', args)
@@ -871,7 +878,76 @@ class TestShowStructureExtra:
         args.related_flat = False
         args.typed = False
         args.outline = False
+        args.max_items = None
+        args.max_snippet_chars = None
 
         with patch('reveal.display.structure._handle_standard_output') as mock_so:
             show_structure(analyzer, 'text', args)
         mock_so.assert_called_once()
+
+
+class TestApplyFileBudgetConstraints:
+    """BACK-1203: --max-items/--max-snippet-chars were a silent no-op on
+    bare file paths (worked only via the ast:// URI form)."""
+
+    def test_no_args_returns_structure_unchanged(self):
+        structure = {'functions': [{'name': 'a'}, {'name': 'b'}]}
+        assert _apply_file_budget_constraints(structure, None) is structure
+
+    def test_neither_flag_set_returns_structure_unchanged(self):
+        structure = {'functions': [{'name': 'a'}, {'name': 'b'}]}
+        args = MagicMock(max_items=None, max_snippet_chars=None)
+        result = _apply_file_budget_constraints(structure, args)
+        assert result['functions'] == [{'name': 'a'}, {'name': 'b'}]
+        assert '_budget' not in result
+
+    def test_max_items_truncates_each_list_category_independently(self):
+        structure = {
+            'functions': [{'name': 'a'}, {'name': 'b'}, {'name': 'c'}],
+            'imports': [{'name': 'os'}],
+        }
+        args = MagicMock(max_items=2, max_snippet_chars=None)
+        result = _apply_file_budget_constraints(structure, args)
+        assert result['functions'] == [{'name': 'a'}, {'name': 'b'}]
+        assert result['imports'] == [{'name': 'os'}]  # under budget, untouched
+        assert result['_budget']['functions']['truncated'] is True
+        assert result['_budget']['functions']['total_available'] == 3
+        assert 'imports' not in result['_budget']
+
+    def test_max_snippet_chars_truncates_string_values(self):
+        structure = {'functions': [{'name': 'a', 'doc': 'x' * 50}]}
+        args = MagicMock(max_items=None, max_snippet_chars=10)
+        result = _apply_file_budget_constraints(structure, args)
+        assert len(result['functions'][0]['doc']) <= 13  # 10 chars + '...'
+
+    def test_scalar_and_non_dict_list_categories_left_alone(self):
+        structure = {
+            'row_count': 42,
+            'columns': ['a', 'b', 'c'],
+            'functions': [{'name': 'a'}, {'name': 'b'}],
+        }
+        args = MagicMock(max_items=1, max_snippet_chars=None)
+        result = _apply_file_budget_constraints(structure, args)
+        assert result['row_count'] == 42
+        assert result['columns'] == ['a', 'b', 'c']
+        assert result['functions'] == [{'name': 'a'}]
+
+    def test_show_structure_json_applies_budget_end_to_end(self):
+        """Live end-to-end: reveal <file> --format json --max-items N used to
+        return every function untouched; now it truncates like ast:// does."""
+        analyzer = TestShowStructure()._make_analyzer(
+            {'functions': [{'name': 'a'}, {'name': 'b'}, {'name': 'c'}]}
+        )
+        analyzer._extract_relationships.return_value = None
+        args = MagicMock()
+        args.related_flat = False
+        args.typed = False
+        args.outline = False
+        args.max_items = 2
+        args.max_snippet_chars = None
+
+        out = _capture(show_structure, analyzer, 'json', args)
+        import json
+        result = json.loads(out)
+        assert len(result['structure']['functions']) == 2
+        assert result['structure']['_budget']['functions']['truncated'] is True
