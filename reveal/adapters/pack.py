@@ -619,8 +619,8 @@ def _count_lines(path: Path) -> int:
         return 0
 
 
-def _render_architecture_brief(selected: List[Dict[str, Any]]) -> None:
-    """Print a concise architecture hint derived from fan-in and priority."""
+def _format_architecture_brief(selected: List[Dict[str, Any]]) -> List[str]:
+    """Format a concise architecture hint derived from fan-in and priority."""
     entry_points = [
         f['relative'] for f in selected
         if not f.get('changed') and f.get('priority', 0) >= 8
@@ -630,18 +630,25 @@ def _render_architecture_brief(selected: List[Dict[str, Any]]) -> None:
         key=lambda f: -f.get('fan_in', 0),
     )[:5]
 
-    print('── Architecture Hint ──')
+    lines = ['── Architecture Hint ──']
     if entry_points:
-        print(f"Entry points:      {', '.join(entry_points)}")
+        lines.append(f"Entry points:      {', '.join(entry_points)}")
     if core:
         abstractions = '  '.join(
             f"{f['relative']}({f['fan_in']})" for f in core
         )
-        print(f"Core abstractions: {abstractions}")
+        lines.append(f"Core abstractions: {abstractions}")
     if not entry_points and not core and selected:
         top = sorted(selected, key=lambda f: -f.get('priority', 0))[:3]
-        print(f"Top files:         {', '.join(f['relative'] for f in top)}")
-    print()
+        lines.append(f"Top files:         {', '.join(f['relative'] for f in top)}")
+    lines.append('')
+    return lines
+
+
+def _render_architecture_brief(selected: List[Dict[str, Any]]) -> None:
+    """Print a concise architecture hint derived from fan-in and priority."""
+    for line in _format_architecture_brief(selected):
+        print(line)
 
 
 def _print_pack_header(
@@ -803,6 +810,7 @@ def _format_pack_result(
     budget_lines: Optional[int],
     since_error: Optional[str] = None,
     content: bool = True,
+    architecture: bool = False,
 ) -> str:
     """Render pack output as a string (for MCP / non-stdout consumers).
 
@@ -813,6 +821,8 @@ def _format_pack_result(
     if not selected:
         lines.append("No files fit within budget.")
     else:
+        if architecture:
+            lines.extend(_format_architecture_brief(selected))
         lines.extend(_format_pack_file_groups(selected, meta))
     if content and selected:
         lines.extend(_format_pack_content(selected))

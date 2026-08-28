@@ -346,6 +346,21 @@ class TestRevealPackTool(unittest.TestCase):
         result = self.reveal_pack('/nonexistent/path/xyz')
         self.assertIsInstance(result, str)
 
+    def test_pack_with_architecture(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'main.py').write_text("def main():\n    pass\n")
+            (Path(d) / 'utils.py').write_text("def helper():\n    pass\n")
+            result = self.reveal_pack(d, budget=5000, architecture=True)
+            self.assertIsInstance(result, str)
+            self.assertIn('Architecture Hint', result)
+
+    def test_pack_without_architecture(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'main.py').write_text("def main():\n    pass\n")
+            result = self.reveal_pack(d, budget=5000, architecture=False)
+            self.assertIsInstance(result, str)
+            self.assertNotIn('Architecture Hint', result)
+
 
 class TestRevealCheckTool(unittest.TestCase):
 

@@ -429,6 +429,7 @@ def reveal_pack(
     since: str = '',
     content: bool = True,
     focus: str = '',
+    architecture: bool = False,
 ) -> str:
     """Get a token-budgeted context snapshot of a codebase — ideal for PR review.
 
@@ -454,6 +455,8 @@ def reveal_pack(
         since: Git ref for PR review mode, e.g. 'main' or 'HEAD~3' (prioritizes changed files)
         content: Include file structure in output (default True)
         focus: Emphasize files matching this name pattern (e.g., 'auth', 'api')
+        architecture: Prepend an architecture brief (entry points + high fan-in
+            core abstractions) before the file listing
     """
     from pathlib import Path
     from .cli.commands.pack import (
@@ -483,7 +486,7 @@ def reveal_pack(
 
     return _format_pack_result(
         p, selected, meta, budget_tokens, budget_lines,
-        since_error=since_error, content=content,
+        since_error=since_error, content=content, architecture=architecture,
     )
 
 
