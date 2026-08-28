@@ -447,6 +447,7 @@ def _build_check_kwargs(adapter, args: 'Namespace') -> dict:
     add_if_supported('expiring_within')
     add_if_supported('probe_http')
     add_if_supported('severity')
+    add_if_supported('only_failures')
 
     return kwargs
 

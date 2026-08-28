@@ -60,6 +60,30 @@ def _args(**kwargs):
     return Namespace(**defaults)
 
 
+# ─── _build_check_kwargs — allowlist coverage ────────────────────────────────
+
+class TestBuildCheckKwargs:
+    def test_only_failures_reaches_adapter_kwargs(self):
+        """BACK-1219: --only-failures must reach adapter.check() via the URI --check path."""
+        class Adapter:
+            def check(self, **kwargs):
+                return {}
+
+        args = _args(only_failures=True)
+        kwargs = _build_check_kwargs(Adapter(), args)
+        assert kwargs.get('only_failures') is True
+
+    def test_severity_still_reaches_adapter_kwargs(self):
+        """Regression guard: BACK-1205's severity allowlist entry stays intact."""
+        class Adapter:
+            def check(self, **kwargs):
+                return {}
+
+        args = _args(severity='critical')
+        kwargs = _build_check_kwargs(Adapter(), args)
+        assert kwargs.get('severity') == 'critical'
+
+
 # ─── handle_uri — sort with --desc flag ──────────────────────────────────────
 
 class TestHandleUriSortDesc:
