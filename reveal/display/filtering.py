@@ -225,20 +225,36 @@ class PathFilter:
         Returns:
             True if path should be filtered (hidden)
         """
+        return self.filter_reason(path) is not None
+
+    def filter_reason(self, path: Path) -> Optional[str]:
+        """Check if path should be filtered out, and why.
+
+        Same checks as should_filter(), in the same order, but returns which
+        one fired so callers (e.g. the directory-tree "N hidden" footer,
+        BACK-1224) can tell a silent .gitignore exclusion from an explicit
+        --exclude the user already knows about.
+
+        Args:
+            path: Path to check
+
+        Returns:
+            'gitignore', 'noise', or 'exclude' if filtered; None if it survives.
+        """
         # Check .gitignore
         if self.gitignore_parser and self.gitignore_parser.matches(path):
-            return True
+            return 'gitignore'
 
         # Check default noise patterns
         if self.include_defaults:
             if self._matches_noise_pattern(path):
-                return True
+                return 'noise'
 
         # Check custom exclude patterns
         if self._matches_exclude_pattern(path):
-            return True
+            return 'exclude'
 
-        return False
+        return None
 
     def _matches_noise_pattern(self, path: Path) -> bool:
         """Check if path matches default noise patterns.

@@ -12,6 +12,8 @@ from reveal.tree_view import (
     show_file_list,
     show_file_list_json,
     _count_entries,
+    _count_entries_with_suppressed,
+    _format_suppressed_footer,
     _get_file_info,
     _walk_directory
 )
@@ -327,6 +329,112 @@ class TestCountEntries(unittest.TestCase):
         count = _count_entries(path, depth=0, show_hidden=False, path_filter=path_filter)
 
         self.assertEqual(count, 0)
+
+
+class TestSuppressedEntriesFooter(unittest.TestCase):
+    """BACK-1224: directory tree must not silently hide gitignored entries."""
+
+    def setUp(self):
+        """Create a repo-like temp directory: a .gitignore hiding a whole source tree,
+        isolated from any default-noise-pattern name (__pycache__ etc.) so gitignore-only
+        assertions don't have to account for noise filtering too."""
+        self.temp_dir = tempfile.mkdtemp()
+
+        with open(os.path.join(self.temp_dir, '.gitignore'), 'w') as f:
+            f.write('vendored/\n')
+        with open(os.path.join(self.temp_dir, 'README.md'), 'w') as f:
+            f.write('x')
+
+        os.makedirs(os.path.join(self.temp_dir, 'vendored'))
+        with open(os.path.join(self.temp_dir, 'vendored', 'lib.py'), 'w') as f:
+            f.write('x')
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir)
+
+    def test_count_with_suppressed_tallies_gitignore(self):
+        """A gitignored directory is counted as one suppressed entry, by cause."""
+        path = Path(self.temp_dir)
+        path_filter = PathFilter(root_path=path, respect_gitignore=True, include_defaults=False)
+        count, suppressed = _count_entries_with_suppressed(
+            path, depth=3, show_hidden=False, path_filter=path_filter)
+
+        # README.md kept; .gitignore is dotfile-hidden by default
+        self.assertEqual(count, 1)
+        self.assertEqual(suppressed['gitignore'], 1)  # vendored/
+
+    def test_count_with_suppressed_tallies_noise(self):
+        """Default noise patterns (e.g. __pycache__) are tallied separately from gitignore."""
+        noise_dir = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(noise_dir, '__pycache__'))
+            with open(os.path.join(noise_dir, '__pycache__', 'x.pyc'), 'w') as f:
+                f.write('x')
+            with open(os.path.join(noise_dir, '.gitignore'), 'w') as f:
+                f.write('vendored/\n')
+            os.makedirs(os.path.join(noise_dir, 'vendored'))
+
+            path = Path(noise_dir)
+            path_filter = PathFilter(root_path=path, respect_gitignore=True, include_defaults=True)
+            _, suppressed = _count_entries_with_suppressed(
+                path, depth=3, show_hidden=False, path_filter=path_filter)
+
+            self.assertEqual(suppressed['gitignore'], 1)   # vendored/
+            self.assertEqual(suppressed['noise'], 1)        # __pycache__/
+        finally:
+            shutil.rmtree(noise_dir)
+
+    def test_suppressed_directory_not_recursed_into(self):
+        """A suppressed dir counts as 1 entry, not 1 + its contents (cheap by design)."""
+        path = Path(self.temp_dir)
+        path_filter = PathFilter(root_path=path, respect_gitignore=True, include_defaults=False)
+        _, suppressed = _count_entries_with_suppressed(
+            path, depth=3, show_hidden=False, path_filter=path_filter)
+
+        # vendored/lib.py must not add a second gitignore tally
+        self.assertEqual(suppressed['gitignore'], 1)
+
+    def test_show_directory_tree_reports_gitignore_footer(self):
+        """The rendered tree names the hidden count and how to reveal it."""
+        output = show_directory_tree(self.temp_dir, depth=3, respect_gitignore=True)
+
+        self.assertIn('entries hidden by .gitignore', output)
+        self.assertIn('--no-gitignore', output)
+
+    def test_show_directory_tree_no_footer_when_nothing_suppressed(self):
+        """A plain directory with nothing gitignored/noise/excluded reports no footer."""
+        clean_dir = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(clean_dir, 'plain.txt'), 'w') as f:
+                f.write('x')
+            output = show_directory_tree(clean_dir, depth=3)
+            self.assertNotIn('entries hidden', output)
+        finally:
+            shutil.rmtree(clean_dir)
+
+    def test_show_directory_tree_json_includes_suppressed_count(self):
+        """MCP/agent JSON consumers get the same attribution as the text footer."""
+        result = show_directory_tree_json(self.temp_dir, depth=3, respect_gitignore=True)
+
+        self.assertIn('suppressed_count', result)
+        self.assertEqual(result['suppressed_count']['gitignore'], 1)
+        self.assertGreaterEqual(result['suppressed_count']['total'], 1)
+
+    def test_format_suppressed_footer_single_cause(self):
+        from collections import Counter
+        footer = _format_suppressed_footer(Counter({'gitignore': 4}))
+        self.assertEqual(footer, '... 4 entries hidden by .gitignore (use --no-gitignore to show)')
+
+    def test_format_suppressed_footer_multi_cause(self):
+        from collections import Counter
+        footer = _format_suppressed_footer(Counter({'gitignore': 4, 'exclude': 2}))
+        self.assertTrue(footer.startswith('... 6 entries hidden ('))
+        self.assertIn('4 by .gitignore (use --no-gitignore to show)', footer)
+        self.assertIn('2 by --exclude', footer)
+
+    def test_format_suppressed_footer_empty(self):
+        from collections import Counter
+        self.assertIsNone(_format_suppressed_footer(Counter()))
 
 
 class TestFormatSize(unittest.TestCase):

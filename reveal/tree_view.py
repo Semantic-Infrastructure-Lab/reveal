@@ -3,6 +3,7 @@
 import datetime
 import heapq
 import os
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Generator, List, Optional, Tuple
@@ -237,8 +238,9 @@ def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **
         include_defaults=True
     )
 
-    # Count total entries first for warnings
-    total_entries = _count_entries(root_path, options.depth, options.show_hidden, path_filter)
+    # Count total entries first for warnings, plus tally what's suppressed (BACK-1224)
+    total_entries, suppressed = _count_entries_with_suppressed(
+        root_path, options.depth, options.show_hidden, path_filter)
 
     lines = [f"{root_path.name or root_path}/\n"]
 
@@ -270,6 +272,11 @@ def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **
             hints.append('--dir-limit 0')
         lines.append(f"\n... {context['truncated']} more entries (use {' '.join(hints)} to show all)")
 
+    # Show suppressed-entries footer (BACK-1224) — filtering is legitimate, silence isn't
+    suppressed_footer = _format_suppressed_footer(suppressed)
+    if suppressed_footer:
+        lines.append(f"\n{suppressed_footer}")
+
     # Add navigation hint
     lines.append(f"\nUsage: reveal {path}/<file>")
 
@@ -278,27 +285,79 @@ def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **
 
 def _count_entries(path: Path, depth: int, show_hidden: bool, path_filter: PathFilter) -> int:
     """Count total entries in directory tree (fast, no analysis)."""
+    count, _ = _count_entries_with_suppressed(path, depth, show_hidden, path_filter)
+    return count
+
+
+def _count_entries_with_suppressed(path: Path, depth: int, show_hidden: bool,
+                                    path_filter: PathFilter) -> Tuple[int, Counter]:
+    """Count kept entries, plus a tally of suppressed ones by cause (BACK-1224).
+
+    Same recursion as _count_entries: only descends into KEPT directories, so
+    a suppressed directory contributes one tally entry for itself rather than
+    walking its full subtree. That matches the footer's framing ("N entries
+    hidden here") rather than a recursive file count of what's inside an
+    entirely-hidden tree — cheap, and consistent with what _count_entries
+    already measured before this function existed.
+    """
+    suppressed: Counter = Counter()
+
     if depth <= 0:
-        return 0
+        return 0, suppressed
 
     try:
         entries = list(path.iterdir())
     except PermissionError:
-        return 0
+        return 0, suppressed
 
-    # Apply filtering
-    if not show_hidden:
-        entries = [e for e in entries if not e.name.startswith('.')]
-
-    # Apply path filtering (gitignore, noise patterns, custom excludes)
-    entries = [e for e in entries if not path_filter.should_filter(e)]
-
-    count = len(entries)
+    kept = []
     for entry in entries:
-        if entry.is_dir():
-            count += _count_entries(entry, depth - 1, show_hidden, path_filter)
+        if not show_hidden and entry.name.startswith('.'):
+            suppressed['hidden'] += 1
+            continue
+        reason = path_filter.filter_reason(entry)
+        if reason is not None:
+            suppressed[reason] += 1
+            continue
+        kept.append(entry)
 
-    return count
+    count = len(kept)
+    for entry in kept:
+        if entry.is_dir():
+            sub_count, sub_suppressed = _count_entries_with_suppressed(
+                entry, depth - 1, show_hidden, path_filter)
+            count += sub_count
+            suppressed += sub_suppressed
+
+    return count, suppressed
+
+
+def _format_suppressed_footer(suppressed: Counter) -> Optional[str]:
+    """Render the 'N entries hidden by ...' footer from a cause tally (BACK-1224).
+
+    Surfaces gitignore/noise/exclude counts, but only gitignore gets a
+    "use --flag" hint: noise patterns have no CLI escape hatch, and a user
+    who typed --exclude already knows why those entries are missing. Hidden
+    dotfiles are omitted entirely: no CLI flag currently exposes show_hidden,
+    so a hint would point at nothing actionable.
+    """
+    causes = []  # (count, label, hint)
+    if suppressed.get('gitignore'):
+        causes.append((suppressed['gitignore'], '.gitignore', ' (use --no-gitignore to show)'))
+    if suppressed.get('noise'):
+        causes.append((suppressed['noise'], 'default noise filters', ''))
+    if suppressed.get('exclude'):
+        causes.append((suppressed['exclude'], '--exclude', ''))
+
+    if not causes:
+        return None
+    if len(causes) == 1:
+        count, label, hint = causes[0]
+        return f"... {count} entries hidden by {label}{hint}"
+
+    total = sum(c for c, _, _ in causes)
+    breakdown = '; '.join(f"{c} by {label}{hint}" for c, label, hint in causes)
+    return f"... {total} entries hidden ({breakdown})"
 
 
 def _initialize_context() -> dict:
@@ -502,6 +561,13 @@ def show_directory_tree_json(path: str, options: Optional[TreeViewOptions] = Non
     result: dict = {'path': str(root_path), 'name': root_path.name or str(root_path), 'entries': entries}
     if context['truncated'] > 0:
         result['truncated'] = context['truncated']
+
+    # Suppressed-entries tally (BACK-1224) — same footer info as show_directory_tree,
+    # structured for MCP/agent consumers instead of formatted text.
+    _, suppressed = _count_entries_with_suppressed(root_path, options.depth, options.show_hidden, path_filter)
+    if suppressed:
+        result['suppressed_count'] = {'total': sum(suppressed.values()), **dict(suppressed)}
+
     return result
 
 
