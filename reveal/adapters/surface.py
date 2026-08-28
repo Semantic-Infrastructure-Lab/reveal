@@ -163,6 +163,21 @@ def _collect_source_files(path: Path, source_only: bool = False) -> Dict['_Surfa
     return buckets
 
 
+def _relativize_surface_paths(surfaces: Dict[str, List[Dict[str, Any]]], base_path: Path) -> None:
+    """Relativize each surface entry's 'file' field before JSON serialization
+    (BACK-1215). Entries come from per-language scanners that record the
+    absolute file path they were invoked with -- never routed through
+    relativization, same confidentiality gap as BACK-1212/BACK-1213/BACK-1194.
+    Mutates in place.
+    """
+    from ..utils.path_utils import to_relative_display
+
+    for entries in surfaces.values():
+        for entry in entries:
+            if entry.get('file'):
+                entry['file'] = to_relative_display(entry['file'], base_path)
+
+
 def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) -> Dict[str, Any]:
     collected = _collect_source_files(path, source_only=source_only)
     surfaces: Dict[str, List[Dict[str, Any]]] = {
@@ -193,6 +208,8 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
 
     if type_filter:
         surfaces = {k: v for k, v in surfaces.items() if k == type_filter}
+
+    _relativize_surface_paths(surfaces, path)
 
     total = sum(len(v) for v in surfaces.values())
     return {

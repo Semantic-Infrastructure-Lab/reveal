@@ -879,6 +879,27 @@ class TestRunSurface(unittest.TestCase):
             self.assertIn('surfaces', data)
             self.assertIn('env', data['surfaces'])
 
+    def test_json_format_does_not_leak_absolute_scan_root(self):
+        """BACK-1215: every surfaces[<category>][].file came straight from the
+        per-language scanner's absolute invocation path, never relativized --
+        same confidentiality gap as BACK-1212/BACK-1213/BACK-1194."""
+        with tempfile.TemporaryDirectory() as d:
+            root = str(Path(d).resolve())
+            _write(d, 'app.py', 'import os\nX = os.getenv("KEY")\n')
+            parser = create_surface_parser()
+            args = parser.parse_args([d])
+            args.format = 'json'
+            buf = StringIO()
+            with patch('sys.stdout', buf):
+                run_surface(args)
+            data = json.loads(buf.getvalue())
+
+        env_entries = data['surfaces']['env']
+        self.assertTrue(env_entries)
+        for entry in env_entries:
+            self.assertFalse(entry['file'].startswith(root), entry['file'])
+        self.assertEqual(env_entries[0]['file'], 'app.py')
+
 
 class TestNavSurfaceTS(unittest.TestCase):
     """Unit tests for the TypeScript surface scanner (nav_surface_ts)."""
