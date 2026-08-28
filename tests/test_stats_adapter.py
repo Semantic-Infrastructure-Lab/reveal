@@ -1318,8 +1318,19 @@ class TestStatsAnalysisFunctions:
         test_json = tmp_path / "test.json"
         test_json.write_text('{"key": "value"}')
 
-        # Mock stat to raise OSError
-        with patch.object(Path, 'stat', side_effect=OSError("Permission denied")):
+        real_stat = Path.stat
+
+        def _stat(self, *args, **kwargs):
+            # Raise only for the file under test -- a blanket patch of every
+            # Path.stat() call also breaks unrelated stat() calls earlier in
+            # the call chain (e.g. registry.discover_plugins()'s
+            # plugin_dir.is_dir()), which flaked on Windows CI depending on
+            # plugin-discovery cache state (BACK-1218).
+            if self == test_json:
+                raise OSError("Permission denied")
+            return real_stat(self, *args, **kwargs)
+
+        with patch.object(Path, 'stat', _stat):
             # Should include file despite stat error
             files = find_analyzable_files(tmp_path, code_only=True)
             file_names = {f.name for f in files}
