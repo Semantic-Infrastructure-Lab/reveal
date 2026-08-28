@@ -163,9 +163,10 @@ class TestGetStructureFalsyDefaults(unittest.TestCase):
         self.assertEqual(result['file_hotspots'], [])
         self.assertEqual(result['function_hotspots'], [])
 
+    @patch('reveal.adapters.stats.StatsAdapter.get_structure', return_value={'hotspots': []})
     @patch('reveal.adapters.ast.AstAdapter.__init__', return_value=None)
     @patch('reveal.adapters.ast.AstAdapter.get_structure', return_value={'results': []})
-    def test_min_complexity_zero_is_respected(self, _mock_gs, mock_init):
+    def test_min_complexity_zero_is_respected(self, _mock_gs, mock_init, _mock_stats):
         adapter = HotspotsAdapter('.', 'min_complexity=0')
         adapter.get_structure()
         _resource, query = mock_init.call_args.args

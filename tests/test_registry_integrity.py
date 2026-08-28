@@ -242,11 +242,13 @@ class TestAnalyzerRegistryIntegrity(unittest.TestCase):
             print(f"   1. This test's expected_min value")
             print(f"   2. README.md language count")
 
-    def test_all_analyzer_files_have_tests(self):
-        """All analyzer files should have corresponding test files (V004 compliance).
+    # Analyzers with no dedicated test_<name>.py: covered instead by shared
+    # multi-language test files (test_conformance_matrix.py, test_composite_matrix.py,
+    # test_cli_languages.py, etc.) rather than a per-analyzer file.
+    ANALYZERS_COVERED_BY_SHARED_SUITES = {'python', 'typescript', 'bash', 'javascript'}
 
-        This is informational - missing tests are flagged by V004 rule.
-        """
+    def test_all_analyzer_files_have_tests(self):
+        """All analyzer files should have corresponding test files (V004 compliance)."""
         analyzers_dir = Path(__file__).parent.parent / 'reveal' / 'analyzers'
         analyzer_files = [
             f for f in analyzers_dir.glob('*.py')
@@ -257,6 +259,8 @@ class TestAnalyzerRegistryIntegrity(unittest.TestCase):
         missing_tests = []
 
         for analyzer_file in analyzer_files:
+            if analyzer_file.stem in self.ANALYZERS_COVERED_BY_SHARED_SUITES:
+                continue
             test_file = tests_dir / f'test_{analyzer_file.stem}.py'
             if not test_file.exists():
                 # Check for _analyzer suffix variant
@@ -264,11 +268,13 @@ class TestAnalyzerRegistryIntegrity(unittest.TestCase):
                 if not test_file_alt.exists():
                     missing_tests.append(analyzer_file.stem)
 
-        # This is a soft warning - we allow some analyzers to not have tests
-        # (they might be tested in shared test suites)
-        if missing_tests:
-            print(f"\n⚠️  Analyzers without dedicated test files: {', '.join(missing_tests)}")
-            print(f"   Run `reveal reveal:// --check` to see V004 warnings")
+        self.assertEqual(
+            missing_tests, [],
+            f"Analyzers without dedicated test files: {', '.join(missing_tests)}. "
+            f"Add tests/test_<name>.py, or add the analyzer to "
+            f"ANALYZERS_COVERED_BY_SHARED_SUITES if it's genuinely covered by a "
+            f"shared multi-language test file. Run `reveal reveal:// --check` for V004 warnings."
+        )
 
 
 class TestRevealAdapterOutputIntegrity(unittest.TestCase):

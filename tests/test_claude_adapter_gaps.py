@@ -781,7 +781,7 @@ class TestPostProcessSessionList:
         sessions = []
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
         ClaudeAdapter._post_process_session_list(result, self._args(since='today', all=True))
-        # Should not crash; sessions already empty
+        assert result['recent_sessions'] == []
 
     def test_head_arg_limits(self):
         sessions = self._sessions([f'sess-{i}' for i in range(10)])

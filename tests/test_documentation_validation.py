@@ -173,8 +173,7 @@ class TestDocumentationStructure:
             for doc in docs_with_no_refs[:5]:  # Show first 5
                 warning += f"    - {doc}\n"
 
-            # Only warn for now, don't fail (this is aspirational)
-            pytest.skip(warning)
+            pytest.fail(warning)
 
 
 class TestDocumentationConsistency:
@@ -185,6 +184,10 @@ class TestDocumentationConsistency:
         """Get the docs directory path."""
         repo_root = Path(__file__).parent.parent
         return repo_root / "reveal" / "docs"
+
+    # Files that intentionally break the *_GUIDE.md/*_HELP.md/*_PATTERNS.md
+    # naming convention (top-level entry points, not category guides).
+    NAMING_CONVENTION_EXCEPTIONS = {"QUICK_START.md", "WHY_REVEAL.md"}
 
     def test_guide_files_have_guide_suffix(self, docs_dir):
         """Test that guide files follow naming convention."""
@@ -197,7 +200,7 @@ class TestDocumentationConsistency:
             name = doc_file.name
 
             # Skip special files
-            if name in ["README.md", "CHANGELOG.md"]:
+            if name in ["README.md", "CHANGELOG.md"] or name in self.NAMING_CONVENTION_EXCEPTIONS:
                 continue
 
             # Check if it looks like a guide but doesn't have GUIDE or HELP suffix
@@ -207,15 +210,13 @@ class TestDocumentationConsistency:
                         name.endswith("_PATTERNS.md")):
                     inconsistent_names.append(name)
 
-        # This is informational only - some files intentionally break pattern
         if inconsistent_names:
-            info = (
-                f"\nFiles with potentially inconsistent naming:\n"
-                f"  {', '.join(inconsistent_names)}\n\n"
-                f"Most guides use *_GUIDE.md or *_HELP.md pattern.\n"
-                f"Consider if these should follow the convention."
+            pytest.fail(
+                f"Files with inconsistent naming (expected *_GUIDE.md, *_HELP.md, "
+                f"or *_PATTERNS.md):\n  {', '.join(inconsistent_names)}\n\n"
+                f"Rename to follow the convention, or add to NAMING_CONVENTION_EXCEPTIONS "
+                f"if it's deliberately a top-level entry point."
             )
-            # Don't fail, just log for information
 
     def test_adapter_consistency_flag_taxonomy_matches_parser(self, docs_dir):
         """ADAPTER_CONSISTENCY.md's flag taxonomy must match cli/parser.py's

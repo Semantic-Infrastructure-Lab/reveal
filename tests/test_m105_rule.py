@@ -130,14 +130,6 @@ def handle_data():
         )
         assert len(detections) == 0
 
-    def test_no_detections_when_handlers_properly_wired(self):
-        """Test no detections when everything is properly wired."""
-        # This is more of an integration test
-        # In practice, M105 checks actual main.py
-        rule = M105()
-        # Testing with actual reveal/cli/handlers_scaffold.py should pass
-        # because it's properly wired
-
 
 class TestM105Integration:
     """Integration tests for M105 with actual reveal files."""
