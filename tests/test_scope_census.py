@@ -17,6 +17,7 @@ from reveal.utils.path_utils import (
     tally_files_by_language,
 )
 from reveal.capabilities import capability_tiers_for, scope_dict_for_path
+from reveal.config import RevealConfig
 
 import pytest
 
@@ -96,6 +97,32 @@ class TestCensusForPath:
         assert census.skipped_gitignore == 0
         assert census.skipped_no_analyzer == 0
         assert census.skipped_dirs == 0
+
+    def test_reveal_yaml_ignore_key_honored(self, tmp_path):
+        # BACK-1201: REVEAL_IGNORE / config.yaml 'ignore:' patterns were
+        # parsed into RevealConfig but should_ignore() had zero callers
+        # anywhere -- _walk_code_files (the BACK-887 shared walker
+        # census_for_path delegates to) now consults it.
+        _write(tmp_path, 'keep.py')
+        _write(tmp_path, 'vendor/thing.py')
+        (tmp_path / '.reveal.yaml').write_text('ignore:\n  - "vendor/**"\n')
+        RevealConfig._cache.clear()
+        try:
+            census = census_for_path(tmp_path)
+        finally:
+            RevealConfig._cache.clear()
+        assert census.per_language == {'python': 1}
+
+    def test_reveal_ignore_env_var_honored(self, tmp_path, monkeypatch):
+        _write(tmp_path, 'keep.py')
+        _write(tmp_path, 'vendor/thing.py')
+        monkeypatch.setenv('REVEAL_IGNORE', 'vendor/**')
+        RevealConfig._cache.clear()
+        try:
+            census = census_for_path(tmp_path)
+        finally:
+            RevealConfig._cache.clear()
+        assert census.per_language == {'python': 1}
 
 
 class TestCensusAndCoverageForPath:

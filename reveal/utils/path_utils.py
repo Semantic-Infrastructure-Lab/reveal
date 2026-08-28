@@ -398,6 +398,16 @@ def _walk_code_files(
     if path.is_file():
         yield path
         return
+    # BACK-1201: REVEAL_IGNORE / config.yaml 'ignore:' patterns were parsed
+    # into RevealConfig but should_ignore() had zero callers anywhere --
+    # wired in here (the BACK-887 single-source-of-truth walker) so every
+    # consumer honors it at once. Applied unconditionally, unlike
+    # exclude_patterns/respect_gitignore above: REVEAL_IGNORE is documented
+    # as an always-on env var, not an opt-in flag. Reuses should_ignore()
+    # itself (not a second glob-matching path) since it already relativizes
+    # correctly against the discovered project root.
+    from ..config import RevealConfig  # deferred: cli/config cycle
+    config = RevealConfig.get(start_path=path)
     gitignore_patterns: List[str] = []
     if respect_gitignore:
         from ..cli.file_checker import load_gitignore_patterns  # deferred: cli cycle
@@ -411,14 +421,19 @@ def _walk_code_files(
         for d in dirs:
             if is_skippable_dir(root_path, d):
                 continue
+            dir_path = root_path / d
+            if config.should_ignore(dir_path):
+                continue
             if skip_patterns:
-                rel_dir = (root_path / d).relative_to(path)
+                rel_dir = dir_path.relative_to(path)
                 if should_skip_file(rel_dir / '_', skip_patterns):
                     continue
             kept_dirs.append(d)
         dirs[:] = kept_dirs
         for fname in filenames:
             fp = root_path / fname
+            if config.should_ignore(fp):
+                continue
             if skip_patterns and should_skip_file(fp.relative_to(path), skip_patterns):
                 continue
             yield fp
