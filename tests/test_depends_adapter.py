@@ -1766,7 +1766,7 @@ class TestZeitwerkConventionInference:
         root = self._rails_app(tmp_path)
         r = DependsAdapter(str(root / 'app' / 'models' / 'topic.rb')).get_structure()
         files = {d['file'] for d in r['dependents']}
-        assert str(root / 'app' / 'models' / 'post.rb') in files
+        assert 'app/models/post.rb' in files
         assert r['count'] >= 1
 
     def test_namespaced_constant_reference_resolved(self, tmp_path):
@@ -1776,7 +1776,7 @@ class TestZeitwerkConventionInference:
         root = self._rails_app(tmp_path)
         r = DependsAdapter(str(root / 'app' / 'models' / 'user' / 'anonymizer.rb')).get_structure()
         files = {d['file'] for d in r['dependents']}
-        assert str(root / 'app' / 'models' / 'post.rb') in files
+        assert 'app/models/post.rb' in files
 
     def test_absolute_top_level_constant_reference_resolved(self, tmp_path):
         """BACK-669 solidus second-corpus loop: `::Topic.find(1)` (a leading
@@ -1791,7 +1791,7 @@ class TestZeitwerkConventionInference:
                'class AbsoluteRef\n  def go\n    ::Topic.find(1)\n  end\nend\n')
         r = DependsAdapter(str(root / 'app' / 'models' / 'topic.rb')).get_structure()
         files = {d['file'] for d in r['dependents']}
-        assert str(root / 'app' / 'models' / 'absolute_ref.rb') in files
+        assert 'app/models/absolute_ref.rb' in files
 
     def test_cross_directory_reference_resolved(self, tmp_path):
         """A controller (app/controllers) referencing a model (app/models) by
@@ -1800,7 +1800,7 @@ class TestZeitwerkConventionInference:
         root = self._rails_app(tmp_path)
         r = DependsAdapter(str(root / 'app' / 'models' / 'post.rb')).get_structure()
         files = {d['file'] for d in r['dependents']}
-        assert str(root / 'app' / 'controllers' / 'posts_controller.rb') in files
+        assert 'app/controllers/posts_controller.rb' in files
 
     def test_explicit_require_edge_still_reported(self, tmp_path):
         """Zeitwerk inference is additive — an explicit require_relative edge
@@ -1811,8 +1811,8 @@ class TestZeitwerkConventionInference:
                'require_relative "topic"\nclass Importer; end\n')
         r = DependsAdapter(str(root / 'app' / 'models' / 'topic.rb')).get_structure()
         files = {d['file'] for d in r['dependents']}
-        assert str(root / 'app' / 'models' / 'importer.rb') in files
-        assert str(root / 'app' / 'models' / 'post.rb') in files
+        assert 'app/models/importer.rb' in files
+        assert 'app/models/post.rb' in files
 
     def test_no_edge_for_undeclared_constant(self, tmp_path):
         """A reference to a constant with no matching in-tree file (an
@@ -2220,6 +2220,38 @@ class TestGemLoadPathRoots:
         r = DependsAdapter(str(tmp_path / 'pkg' / 'a.py')).get_structure()
         importers = {Path(d['file']).name for d in r['dependents']}
         assert 'b.py' in importers
+
+
+class TestJsonOutputDoesNotLeakAbsolutePaths:
+    """BACK-1214: both get_structure() branches (file-target ->
+    _format_file_dependents, directory-target -> _format_directory_summary)
+    serialized absolute filesystem paths straight from the import graph --
+    'dependents[].file' and 'modules[].module'/'modules[].dependents[]' --
+    never relativized. Same confidentiality gap as BACK-1212/BACK-1213.
+    Uses simple_pkg (a real tmp_path tree with a pyproject.toml project
+    marker) so to_relative_display's relative_to() can actually resolve."""
+
+    def test_file_target_dependents_are_relative(self, simple_pkg):
+        from reveal.adapters.depends import DependsAdapter
+        root = str(simple_pkg)
+        r = DependsAdapter(str(simple_pkg / 'pkg' / 'utils.py')).get_structure()
+        assert r['dependents']
+        for dep in r['dependents']:
+            assert not dep['file'].startswith(root), dep['file']
+        files = {d['file'] for d in r['dependents']}
+        assert 'pkg/models.py' in files
+
+    def test_directory_target_modules_are_relative(self, simple_pkg):
+        from reveal.adapters.depends import DependsAdapter
+        root = str(simple_pkg)
+        r = DependsAdapter(str(simple_pkg)).get_structure()
+        assert r['modules']
+        for m in r['modules']:
+            assert not m['module'].startswith(root), m['module']
+            for dep in m['dependents']:
+                assert not dep.startswith(root), dep
+        modules = {m['module'] for m in r['modules']}
+        assert 'pkg/utils.py' in modules
 
 
 if __name__ == '__main__':

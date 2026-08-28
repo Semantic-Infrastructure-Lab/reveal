@@ -29,6 +29,7 @@ from ..utils.path_utils import (
     is_unsafe_scan_root,
     resolve_project_root,
     search_parents,
+    to_relative_display,
     _PACKAGE_ROOT_MARKERS,
     _VCS_ROOT_MARKERS,
     _has_package_marker,
@@ -1556,6 +1557,13 @@ class DependsAdapter(ResourceAdapter):
             if not matched:
                 dependents.append({'file': str(importer), 'line': 0, 'module': '', 'names': [], 'type': 'unknown', 'is_relative': False, 'alias': None})
 
+        # BACK-1214: each dependent's 'file' came from _format_import_stmt's
+        # str(stmt.file_path)/str(importer), always absolute -- never
+        # relativized. Same confidentiality gap as BACK-1212/BACK-1213.
+        for dep in dependents:
+            if dep.get('file'):
+                dep['file'] = to_relative_display(dep['file'], self._scan_root)
+
         result = ResultBuilder.create(
             result_type='module_dependents',
             source=str(self._target_path),
@@ -1596,10 +1604,13 @@ class DependsAdapter(ResourceAdapter):
         for target, importers in self._graph.reverse_deps.items():
             if not _path_is_under(target, directory):
                 continue
+            # BACK-1214: 'module' and every 'dependents' entry are absolute
+            # paths from the import graph -- never relativized. Same
+            # confidentiality gap as BACK-1212/BACK-1213.
             modules.append({
-                'module': str(target),
+                'module': to_relative_display(str(target), self._scan_root),
                 'dependent_count': len(importers),
-                'dependents': sorted(str(p) for p in importers),
+                'dependents': sorted(to_relative_display(str(p), self._scan_root) for p in importers),
             })
 
         modules.sort(key=lambda m: m['dependent_count'], reverse=True)
