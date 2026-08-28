@@ -700,5 +700,33 @@ class TestProvenanceForFile(unittest.TestCase):
         self.assertFalse(_is_covered('fn', '', {'other'}))
 
 
+class TestJsonFormatDoesNotLeakAbsolutePaths(unittest.TestCase):
+    """BACK-1213: function_hotspots[].file came straight from AstAdapter's
+    raw compose() output and was never relativized, unlike file_hotspots[]
+    (from StatsAdapter, already relative) -- same confidentiality gap as
+    BACK-1212/BACK-1194. Anchors fixture paths under a REAL tmp dir so
+    relativization can actually resolve (a synthetic root would make
+    relative_to() fail silently and mask the bug either way)."""
+
+    def test_json_output_does_not_leak_scan_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = str(Path(tmp).resolve())
+            file_hotspots = [_file_hotspot('mod.py', quality=50)]
+            fn_hotspots = [_fn_hotspot('big_fn', 25, file=f'{root}/pkg/mod.py')]
+            args = _args(path=tmp, format='json')
+            with patch('reveal.adapters.hotspots._run_file_hotspots', return_value=file_hotspots):
+                with patch('reveal.adapters.hotspots._run_function_hotspots', return_value=fn_hotspots):
+                    buf = StringIO()
+                    with patch('sys.stdout', buf):
+                        run_hotspots(args)
+            data = json.loads(buf.getvalue())
+
+        for entry in data['file_hotspots']:
+            self.assertFalse(entry['file'].startswith(root), entry['file'])
+        for fn in data['function_hotspots']:
+            self.assertFalse(fn['file'].startswith(root), fn['file'])
+        self.assertEqual(data['function_hotspots'][0]['file'], 'pkg/mod.py')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -39,6 +39,27 @@ def _provenance_for_file(file_str: Optional[str], base_path: Path) -> Optional[s
     return classify_path_provenance(rel.parts[:-1], rel.name)
 
 
+def _relativize_hotspots_paths(file_hotspots: List[Dict[str, Any]], fn_hotspots: List[Dict[str, Any]], base_path: Path) -> None:
+    """Relativize both hotspot lists' 'file' fields before JSON serialization
+    (BACK-1213). `fn_hotspots` comes from AstAdapter's compose() output, which
+    never relativizes -- same confidentiality gap as BACK-1212/BACK-1194.
+    `file_hotspots` (from StatsAdapter) is already relative today, but is
+    relativized here too defensively so this doesn't silently regress if that
+    upstream guarantee ever changes. Mutates in place.
+    """
+    from ..utils.path_utils import to_relative_display
+
+    def rel(value: Optional[str]) -> Optional[str]:
+        return to_relative_display(value, base_path) if value else value
+
+    for entry in file_hotspots:
+        if entry.get('file'):
+            entry['file'] = rel(entry['file'])
+    for fn in fn_hotspots:
+        if fn.get('file'):
+            fn['file'] = rel(fn['file'])
+
+
 def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List[Dict[str, Any]]:
     """Fetch file-level hotspots via StatsAdapter."""
     from reveal.adapters.stats import StatsAdapter
@@ -312,6 +333,8 @@ class HotspotsAdapter(ResourceAdapter):
 
         file_hotspots: List[Dict[str, Any]] = [] if functions_only else _run_file_hotspots(self, path, top)
         fn_hotspots: List[Dict[str, Any]] = [] if files_only else _run_function_hotspots(self, path, min_cx, top)
+
+        _relativize_hotspots_paths(file_hotspots, fn_hotspots, path)
 
         # BACK-1195: mark each ranked entry with its provenance so a reader
         # can discount vendored/generated/test noise in place.
