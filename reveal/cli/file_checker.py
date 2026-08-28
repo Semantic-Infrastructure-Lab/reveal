@@ -500,6 +500,14 @@ def collect_files_to_check(
     no_analyzer_by_language: Dict[str, Dict[str, object]] = {}
     skip_patterns = list(gitignore_patterns) + list(exclude_patterns or [])
 
+    # BACK-1221: REVEAL_IGNORE / config.yaml 'ignore:' patterns were wired
+    # into _walk_code_files's walk (BACK-1201) but this is `check`'s own,
+    # separate walk (see BACK-1221's investigation note for the full list
+    # of independent walkers) -- honor them here too so `reveal check`
+    # actually respects the documented always-on env var.
+    from ..config import RevealConfig  # deferred: cli/config cycle
+    config = RevealConfig.get(start_path=directory)
+
     for root, dirs, files in os.walk(directory):
         # Filter out excluded directories and *.egg-info build artifacts
         root_path = Path(root)
@@ -508,8 +516,12 @@ def collect_files_to_check(
             if is_skippable_dir(root_path, d) or d.endswith('.egg-info'):
                 skipped_dirs += 1
                 continue
+            dir_path = root_path / d
+            if config.should_ignore(dir_path):
+                skipped_dirs += 1
+                continue
             if skip_patterns:
-                rel_dir = (root_path / d).relative_to(directory)
+                rel_dir = dir_path.relative_to(directory)
                 # Append a dummy filename so should_skip_file sees parts correctly
                 if should_skip_file(rel_dir / '_', skip_patterns):
                     skipped_dirs += 1
@@ -520,6 +532,11 @@ def collect_files_to_check(
         for filename in files:
             file_path = root_path / filename
             relative_path = file_path.relative_to(directory)
+
+            # Skip REVEAL_IGNORE/config.yaml-ignored files
+            if config.should_ignore(file_path):
+                skipped_gitignore += 1
+                continue
 
             # Skip gitignored/excluded files
             if should_skip_file(relative_path, skip_patterns):

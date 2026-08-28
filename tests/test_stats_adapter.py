@@ -1336,6 +1336,23 @@ class TestStatsAnalysisFunctions:
             file_names = {f.name for f in files}
             assert 'test.json' in file_names
 
+    def test_reveal_ignore_env_var_honored(self, tmp_path, monkeypatch):
+        """BACK-1221: REVEAL_IGNORE is documented as an always-on env var, but
+        find_analyzable_files() had its own independent walk (gitignore/exclude
+        only) that never consulted RevealConfig.should_ignore() — only
+        _walk_code_files (BACK-1201) did. overview://'s "Codebase N files"
+        line (via StatsAdapter) silently ignored REVEAL_IGNORE."""
+        from reveal.adapters.stats.analysis import find_analyzable_files
+
+        (tmp_path / 'keep.py').write_text('def foo(): pass')
+        (tmp_path / 'skip.py').write_text('def bar(): pass')
+        monkeypatch.setenv('REVEAL_IGNORE', 'skip.py')
+        from reveal.config import RevealConfig
+        RevealConfig._cache.clear()
+
+        files = find_analyzable_files(tmp_path, code_only=False, respect_gitignore=False)
+        assert {f.name for f in files} == {'keep.py'}
+
     def test_analyze_file_returns_none_when_no_analyzer(self, tmp_path):
         """Test that analyze_file returns None when no analyzer is available."""
         from reveal.adapters.stats.analysis import analyze_file

@@ -59,6 +59,13 @@ def find_analyzable_files(
 
     skip_patterns = gitignore_patterns + list(exclude_patterns or [])
 
+    # BACK-1221: honor REVEAL_IGNORE/config.yaml 'ignore:' here too — this is
+    # one of several independent walkers that never routed through
+    # RevealConfig.should_ignore() despite it being documented as always-on
+    # (see BACK-1221's investigation note for the full list).
+    from ...config import RevealConfig  # deferred: cli/config cycle
+    config = RevealConfig.get(start_path=directory)
+
     for root, dirs, files in os.walk(directory):
         root_path = Path(root)
 
@@ -66,6 +73,8 @@ def find_analyzable_files(
         # so os.walk never descends into them.
         def _keep_dir(d: str) -> bool:
             if is_skippable_dir(root_path, d):
+                return False
+            if config.should_ignore(root_path / d):
                 return False
             if skip_patterns:
                 from ...cli.file_checker import should_skip_file  # deferred: cli cycle
@@ -82,6 +91,9 @@ def find_analyzable_files(
 
         for file in files:
             file_path = root_path / file
+
+            if config.should_ignore(file_path):
+                continue
 
             if skip_patterns:
                 from ...cli.file_checker import should_skip_file  # deferred: cli cycle

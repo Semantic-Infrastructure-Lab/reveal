@@ -256,6 +256,23 @@ class TestCollectFilesToCheck:
 
         assert len(files) == 1
 
+    def test_reveal_ignore_env_var_honored(self, tmp_path, monkeypatch):
+        """BACK-1221: REVEAL_IGNORE is documented as an always-on env var, but
+        collect_files_to_check() had its own independent walk that never
+        consulted RevealConfig.should_ignore() — only _walk_code_files
+        (BACK-1201) did. `reveal check` silently ignored REVEAL_IGNORE."""
+        (tmp_path / 'keep.py').write_text('# keep')
+        (tmp_path / 'skip.py').write_text('# skip')
+        monkeypatch.setenv('REVEAL_IGNORE', 'skip.py')
+        from reveal.config import RevealConfig
+        RevealConfig._cache.clear()
+
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+            files = collect_files_to_check(tmp_path, []).files
+
+        assert [f.name for f in files] == ['keep.py']
+
 
 class TestFileCollectionResultCounts:
     """BACK-889: collect_files_to_check() discloses *why* files/dirs were
