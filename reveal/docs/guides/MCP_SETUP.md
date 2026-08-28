@@ -319,6 +319,22 @@ reveal-mcp --help
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | reveal-mcp
 ```
 
+### Access logging
+
+reveal-mcp does not confine which paths/URIs a tool call can read — every
+`path`/`uri`/`target` argument is trusted as-is (`BACK-1144`). For a
+post-hoc audit trail of what every tool call actually touched (useful if a
+prompt-injection-driven call is suspected), opt in:
+
+```bash
+REVEAL_MCP_ACCESS_LOG=1 reveal-mcp             # append one JSON line per tool call
+                                                # default path: ~/.reveal/mcp_access.jsonl
+REVEAL_MCP_ACCESS_LOG_PATH=/custom/path.jsonl  # override the log location
+```
+
+Off by default (no disk writes, no perf cost) — best-effort and never fails
+a tool call even if the log write itself fails.
+
 ### Resolved: the server used to die under heavy concurrent tool calls
 
 Earlier releases could hit a server crash — the client reporting

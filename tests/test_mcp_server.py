@@ -6,6 +6,7 @@ test reveal_structure, reveal_element, reveal_nav, reveal_query, reveal_pack,
 reveal_check, reveal_grep, and reveal_trace as callable Python functions.
 """
 
+import json
 import os
 import shutil
 import sys
@@ -927,6 +928,76 @@ class TestMcpServerRegistration(unittest.TestCase):
     def test_server_has_instructions(self):
         from reveal.mcp_server import mcp
         self.assertIn('progressive disclosure', mcp.instructions.lower())
+
+
+class TestMcpAccessLogging(unittest.TestCase):
+    """BACK-1144: opt-in post-hoc audit trail for MCP tool-call arguments."""
+
+    def setUp(self):
+        self._orig_dir = os.getcwd()
+        os.chdir(Path(__file__).parent.parent)
+        self._orig_enabled = os.environ.get('REVEAL_MCP_ACCESS_LOG')
+        self._orig_path = os.environ.get('REVEAL_MCP_ACCESS_LOG_PATH')
+        self._tmpdir = tempfile.mkdtemp()
+        self.log_path = Path(self._tmpdir) / 'mcp_access.jsonl'
+
+    def tearDown(self):
+        os.chdir(self._orig_dir)
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+        for key, val in (('REVEAL_MCP_ACCESS_LOG', self._orig_enabled),
+                         ('REVEAL_MCP_ACCESS_LOG_PATH', self._orig_path)):
+            if val is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = val
+
+    def _call(self, name, arguments):
+        import asyncio
+        from reveal.mcp_server import mcp
+        from mcp.types import CallToolRequestParams
+
+        async def call():
+            return await mcp._handle_call_tool(None, CallToolRequestParams(name=name, arguments=arguments))
+        return asyncio.run(call())
+
+    def test_disabled_by_default_writes_nothing(self):
+        os.environ.pop('REVEAL_MCP_ACCESS_LOG', None)
+        os.environ['REVEAL_MCP_ACCESS_LOG_PATH'] = str(self.log_path)
+        import reveal.mcp_server as mod
+        mod._MCP_ACCESS_LOG_ENABLED = False
+        mod._MCP_ACCESS_LOG_PATH = self.log_path
+        self._call('reveal_structure', {'path': 'reveal/mcp_server.py'})
+        self.assertFalse(self.log_path.exists())
+
+    def test_enabled_logs_tool_and_args(self):
+        import reveal.mcp_server as mod
+        mod._MCP_ACCESS_LOG_ENABLED = True
+        mod._MCP_ACCESS_LOG_PATH = self.log_path
+        try:
+            self._call('reveal_structure', {'path': 'reveal/mcp_server.py'})
+            self.assertTrue(self.log_path.exists())
+            record = json.loads(self.log_path.read_text().strip().splitlines()[-1])
+            self.assertEqual(record['tool'], 'reveal_structure')
+            self.assertEqual(record['args']['path'], 'reveal/mcp_server.py')
+            self.assertIn('ts', record)
+            self.assertIn('pid', record)
+        finally:
+            mod._MCP_ACCESS_LOG_ENABLED = False
+
+    def test_logging_never_breaks_the_call_on_write_failure(self):
+        import reveal.mcp_server as mod
+        mod._MCP_ACCESS_LOG_ENABLED = True
+        # A path with a nonexistent parent that mkdir(parents=True) cannot
+        # create (its own parent doesn't exist and isn't creatable under a
+        # regular file) forces the write to fail inside the try/except.
+        bogus_parent = Path(self._tmpdir) / 'not_a_dir'
+        bogus_parent.write_text('x')
+        mod._MCP_ACCESS_LOG_PATH = bogus_parent / 'access.jsonl'
+        try:
+            result = self._call('reveal_structure', {'path': 'reveal/mcp_server.py'})
+            self.assertFalse(result.is_error)
+        finally:
+            mod._MCP_ACCESS_LOG_ENABLED = False
 
 
 class TestMcpResourceRegistration(unittest.TestCase):

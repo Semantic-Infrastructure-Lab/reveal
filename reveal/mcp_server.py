@@ -19,9 +19,12 @@ Configuration example (Claude Code settings.json):
 
 import functools
 import io
+import json
 import os
 import sys
 import threading
+import time
+from pathlib import Path
 
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
@@ -38,6 +41,39 @@ _OPEN_WORLD_READONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, o
 
 # Suppress update-check prints that would corrupt MCP tool responses.
 os.environ.setdefault('REVEAL_NO_UPDATE_CHECK', '1')
+
+# Access logging (BACK-1144): reveal-mcp has no root-confinement -- every
+# path/uri argument is trusted as-is, so an LLM driven by a malicious doc or
+# webpage (prompt injection) could ask a tool to read anything the server
+# process can see (~/.ssh/id_rsa, another user's repo, ...) with no warning
+# and no record. This does not confine access -- it just gives a post-hoc
+# audit trail of what every tool call actually touched. Opt-in and
+# best-effort, mirroring the REVEAL_PERF_LOG convention in main.py.
+_MCP_ACCESS_LOG_ENABLED = os.environ.get('REVEAL_MCP_ACCESS_LOG') == '1'
+_MCP_ACCESS_LOG_PATH = Path(
+    os.environ.get('REVEAL_MCP_ACCESS_LOG_PATH', str(Path.home() / '.reveal' / 'mcp_access.jsonl'))
+)
+
+
+def _log_mcp_access(tool_name: str, kwargs: dict) -> None:
+    """Append one JSON line recording an MCP tool call's arguments.
+
+    Never raises -- access logging must not break a tool call.
+    """
+    if not _MCP_ACCESS_LOG_ENABLED:
+        return
+    try:
+        record = {
+            'ts': time.time(),
+            'pid': os.getpid(),
+            'tool': tool_name,
+            'args': kwargs,
+        }
+        _MCP_ACCESS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(_MCP_ACCESS_LOG_PATH, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(record, default=str) + '\n')
+    except Exception:
+        pass
 
 mcp = MCPServer(
     "reveal",
@@ -188,6 +224,7 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = 
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
+            _log_mcp_access(fn.__name__, kwargs)
             return _raise_if_error_sentinel(fn(*args, **kwargs))
 
         mcp.tool(annotations=annotations, title=title)(wrapper)
