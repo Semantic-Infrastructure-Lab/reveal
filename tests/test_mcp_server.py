@@ -929,6 +929,65 @@ class TestMcpServerRegistration(unittest.TestCase):
         self.assertIn('progressive disclosure', mcp.instructions.lower())
 
 
+class TestMcpResourceRegistration(unittest.TestCase):
+    """BACK-1171: verify the MCP server registers the self-description Resources."""
+
+    def setUp(self):
+        self._orig_dir = os.getcwd()
+        os.chdir(Path(__file__).parent.parent)
+
+    def tearDown(self):
+        os.chdir(self._orig_dir)
+
+    def test_static_resources_registered(self):
+        import asyncio
+        from reveal.mcp_server import mcp
+
+        async def list_uris():
+            resources = await mcp.list_resources()
+            return {str(r.uri) for r in resources}
+
+        uris = asyncio.run(list_uris())
+        self.assertIn('help://quick', uris)
+        self.assertIn('help://adapters', uris)
+        self.assertIn('help://rules', uris)
+
+    def test_schema_template_registered(self):
+        import asyncio
+        from reveal.mcp_server import mcp
+
+        async def list_templates():
+            return await mcp.list_resource_templates()
+
+        templates = asyncio.run(list_templates())
+        template_uris = {t.uri_template for t in templates}
+        self.assertIn('help://schemas/{adapter}', template_uris)
+
+    def test_read_static_resource_returns_content(self):
+        import asyncio
+        from reveal.mcp_server import mcp
+
+        async def read():
+            return await mcp.read_resource('help://quick')
+
+        contents = asyncio.run(read())
+        self.assertTrue(contents)
+        text = contents[0].content
+        self.assertIn('Reveal', text)
+
+    def test_read_template_resource_returns_content(self):
+        import asyncio
+        from reveal.mcp_server import mcp
+
+        async def read():
+            return await mcp.read_resource('help://schemas/calls')
+
+        contents = asyncio.run(read())
+        self.assertTrue(contents)
+        text = contents[0].content
+        self.assertIn('calls://', text)
+
+
 class TestDefaultArgs(unittest.TestCase):
     """Verify _default_args produces a complete Namespace."""
 

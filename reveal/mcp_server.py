@@ -645,6 +645,82 @@ def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
     return _run_and_capture(run_trace, args)
 
 
+# ---------------------------------------------------------------------------
+# MCP Resources — self-description surface (BACK-1171)
+#
+# Pure static/semi-static reference data (adapter list, per-adapter schemas,
+# rule catalog, quick-reference map) belongs on Resources, not Tools: it has
+# no side effects, doesn't change mid-session, and a host can cache it
+# (ttlMs) instead of spending a model-decided tool call every time an agent
+# needs to check valid syntax. All four are thin wrappers over the same
+# handle_uri() dispatch reveal_query already uses for these same 'help://'
+# URIs — this just exposes them via the protocol-native primitive too.
+# ---------------------------------------------------------------------------
+
+def _read_help_uri(uri: str) -> str:
+    from .cli.routing import handle_uri
+
+    args = _default_args(path=uri, format='text')
+    return _run_and_capture(handle_uri, uri, None, args)
+
+
+@mcp.resource(
+    'help://quick',
+    name='reveal_help_quick',
+    title='Reveal: Quick Reference',
+    description=(
+        "Router map of every reveal adapter/task with a starter query — "
+        "the fastest way to find the right command for a scenario."
+    ),
+    mime_type='text/plain',
+)
+def resource_help_quick() -> str:
+    return _read_help_uri('help://quick')
+
+
+@mcp.resource(
+    'help://adapters',
+    name='reveal_help_adapters',
+    title='Reveal: Adapter Catalog',
+    description=(
+        "Full list of every registered reveal URI adapter with one-line "
+        "syntax and an example."
+    ),
+    mime_type='text/plain',
+)
+def resource_help_adapters() -> str:
+    return _read_help_uri('help://adapters')
+
+
+@mcp.resource(
+    'help://rules',
+    name='reveal_help_rules',
+    title='Reveal: Quality Rule Catalog',
+    description=(
+        "Every reveal quality-check rule ID (B/S/I/C/M categories) with a "
+        "one-line description."
+    ),
+    mime_type='text/plain',
+)
+def resource_help_rules() -> str:
+    return _read_help_uri('help://rules')
+
+
+@mcp.resource(
+    'help://schemas/{adapter}',
+    name='reveal_help_schema',
+    title='Reveal: Adapter Schema',
+    description=(
+        "Exact query syntax (fields, operators, examples) for one reveal "
+        "adapter, generated live from its own schema — check this before "
+        "guessing at filter syntax for a specific scheme."
+    ),
+    mime_type='text/markdown',
+)
+def resource_help_schema(adapter: str) -> str:
+    return _read_help_uri(f'help://schemas/{adapter}')
+
+
 def main() -> None:
     """Entry point for the ``reveal-mcp`` command."""
     import argparse

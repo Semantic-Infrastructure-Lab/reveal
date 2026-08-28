@@ -129,13 +129,15 @@ contract that needs to cite evidence provenance. This forces JSON output —
 provenance only attaches to dict results — so the response shape differs from
 a plain-text query; only set it when the caller actually needs the manifest.
 
-### `reveal_pack(path, budget, since, content, focus)`
+### `reveal_pack(path, budget, since, content, focus, architecture)`
 
 Token-budgeted context snapshot — ideal for PR review. Selects the most important
-files, with changed files first (when `since` is set).
+files, with changed files first (when `since` is set). Set `architecture=True` to
+prepend an architecture brief (entry points + high fan-in core abstractions).
 
 ```
 reveal_pack("src/", budget=8000, since="main", content=True)
+reveal_pack("src/", budget=8000, architecture=True)
 ```
 
 With `content=True` (default):
@@ -220,6 +222,20 @@ changed files; a directory reviews the whole tree.
 reveal_review("main..feature")
 reveal_review("src/", select="B,S")
 ```
+
+## Available Resources
+
+Unlike Tools (model-decided actions), Resources are read-only, non-side-effecting
+reference data — an MCP host can load and cache them (`ttlMs`) instead of spending
+a tool call every time an agent needs to check valid syntax. All four mirror
+`reveal_query('help://...')` output, exposed via the protocol-native primitive too.
+
+| Resource URI | Content |
+|---|---|
+| `help://quick` | Router map of every adapter/task with a starter query |
+| `help://adapters` | Full adapter catalog — one-line syntax + example per scheme |
+| `help://rules` | Quality-check rule catalog (B/S/I/C/M categories) |
+| `help://schemas/{adapter}` | Exact query syntax for one adapter, e.g. `help://schemas/calls` |
 
 ## Recommended Agent Workflow
 
