@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
-from ..base import ResourceAdapter, register_adapter, register_renderer
+from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from ...utils.query import parse_query_params
 from ...utils.results import ResultBuilder
@@ -195,6 +195,28 @@ class LetsEncryptAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     CANONICAL_EMPTY_RESOURCE = ''  # bare letsencrypt:// is valid (BUG-136)
+
+    # letsencrypt:// has no plain-file form, so these flags are never valid
+    # on a file path — GUARDED_FLAG_EXTENSIONS stays empty and the guard
+    # always fires (same pattern as ssl://). BACK-1207.
+    GUARDED_FLAG_CONTEXT = 'the letsencrypt:// adapter'
+    GUARDED_FLAG_HELP = 'letsencrypt'
+    GUARDED_FLAGS = (
+        AdapterFlag(
+            attr='check_orphans',
+            flag='--check-orphans',
+            examples=(
+                "  reveal letsencrypt:// --check-orphans   # certs not referenced by any nginx vhost"
+            ),
+        ),
+        AdapterFlag(
+            attr='check_duplicates',
+            flag='--check-duplicates',
+            examples=(
+                "  reveal letsencrypt:// --check-duplicates   # certs with identical SANs"
+            ),
+        ),
+    )
 
     def __init__(self, resource: str = '', query: Optional[str] = None):
         """Initialize Let's Encrypt adapter (no path/domain, just query flags).

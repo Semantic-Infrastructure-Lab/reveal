@@ -853,6 +853,11 @@ class NginxUriAdapter(ResourceAdapter):
             ('cpanel_certs', '--cpanel-certs'),
             ('diagnose', '--diagnose'),
             ('global_audit', '--global-audit'),
+            # BACK-1207: 'audit'/'probe' are explicit named get_structure()
+            # params (nginx-only per their own --help text) but were missing
+            # from this list, so they were a silent no-op on a plain file path.
+            ('audit', '--audit'),
+            ('probe', '--probe'),
         )
     )
 

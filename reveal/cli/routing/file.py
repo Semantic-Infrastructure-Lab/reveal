@@ -222,6 +222,21 @@ def _guard_ssl_flags(args: 'Namespace') -> None:
     _guard_adapter_flags(args, 'ssl', None)
 
 
+def _guard_cpanel_flags(args: 'Namespace') -> None:
+    """Exit with error if cpanel:// adapter flags are used on plain file paths."""
+    _guard_adapter_flags(args, 'cpanel', None)
+
+
+def _guard_letsencrypt_flags(args: 'Namespace') -> None:
+    """Exit with error if letsencrypt:// adapter flags are used on plain file paths."""
+    _guard_adapter_flags(args, 'letsencrypt', None)
+
+
+def _guard_autossl_flags(args: 'Namespace') -> None:
+    """Exit with error if autossl:// adapter flags are used on plain file paths."""
+    _guard_adapter_flags(args, 'autossl', None)
+
+
 def _guard_related_flags(args: 'Namespace', path_str: str) -> None:
     """Exit with error if --related/--related-all are used on non-markdown files."""
     if not (getattr(args, 'related', False) or getattr(args, 'related_all', False)):
@@ -382,6 +397,9 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     _guard_hotspots_flag(args, path_str)
     _guard_nginx_flags(args, path_str)
     _guard_ssl_flags(args)
+    _guard_cpanel_flags(args)
+    _guard_letsencrypt_flags(args)
+    _guard_autossl_flags(args)
     _guard_related_flags(args, path_str)
 
     path, element_from_path = _parse_file_line_syntax(path_str)

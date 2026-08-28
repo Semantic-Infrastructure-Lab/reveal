@@ -162,6 +162,23 @@ class SSLAdapter(ResourceAdapter):
                 "  reveal ssl://example.com --validate-nginx   # cross-validate cert vs nginx config"
             ),
         ),
+        # BACK-1207: probe_http/local_certs were ssl-only per their own
+        # --help text ("(ssl:// only)") but missing from this list, so they
+        # were a silent no-op on a plain file path.
+        AdapterFlag(
+            attr='probe_http',
+            flag='--probe-http',
+            examples=(
+                "  reveal ssl://example.com --probe-http   # live redirect-chain + security-header probe"
+            ),
+        ),
+        AdapterFlag(
+            attr='local_certs',
+            flag='--local-certs',
+            examples=(
+                "  reveal ssl://nginx:///path/to/config --check --local-certs   # validate cert files locally, no network"
+            ),
+        ),
     )
 
     @staticmethod

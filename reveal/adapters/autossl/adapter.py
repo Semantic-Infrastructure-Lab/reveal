@@ -19,7 +19,7 @@ import re
 from typing import Any, Dict, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
-from ..base import ResourceAdapter, register_adapter, register_renderer
+from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from ...utils.query import parse_query_params
 from .parser import AUTOSSL_LOG_DIR, list_runs, parse_run
@@ -335,6 +335,21 @@ class AutosslAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     CANONICAL_EMPTY_RESOURCE = ''  # bare autossl:// means "list runs", not "."
+
+    # autossl:// has no plain-file form, so this flag is never valid on a
+    # file path — GUARDED_FLAG_EXTENSIONS stays empty and the guard always
+    # fires (same pattern as ssl://). BACK-1207.
+    GUARDED_FLAG_CONTEXT = 'the autossl:// adapter'
+    GUARDED_FLAG_HELP = 'autossl'
+    GUARDED_FLAGS = (
+        AdapterFlag(
+            attr='user',
+            flag='--user',
+            examples=(
+                "  reveal autossl://latest --user USERNAME   # filter to one named user"
+            ),
+        ),
+    )
 
     def __init__(self, resource: str = "", query: Optional[str] = None):
         """Initialize AutoSSL adapter with a timestamp/domain/'latest', or empty for list-runs mode.

@@ -33,6 +33,9 @@ from reveal.cli.routing import (
     _guard_hotspots_flag,
     _guard_nginx_flags,
     _guard_ssl_flags,
+    _guard_cpanel_flags,
+    _guard_letsencrypt_flags,
+    _guard_autossl_flags,
     _guard_related_flags,
     _handle_file_path,
 )
@@ -848,6 +851,20 @@ class TestGuardNginxFlags:
                      check_conflicts=False, cpanel_certs=False, diagnose=False)
         _guard_nginx_flags(args, 'nginx.conf')  # should not raise
 
+    def test_audit_flag_on_py_file_exits(self, capsys):
+        """BACK-1207: --audit was nginx-only but missing from GUARDED_FLAGS."""
+        args = _args(audit=True)
+        with pytest.raises(SystemExit):
+            _guard_nginx_flags(args, 'app.py')
+        assert '--audit' in capsys.readouterr().err
+
+    def test_probe_flag_on_py_file_exits(self, capsys):
+        """BACK-1207: --probe was nginx-only but missing from GUARDED_FLAGS."""
+        args = _args(probe=True)
+        with pytest.raises(SystemExit):
+            _guard_nginx_flags(args, 'app.py')
+        assert '--probe' in capsys.readouterr().err
+
 
 # ─── _guard_ssl_flags ────────────────────────────────────────────────────────
 
@@ -890,6 +907,74 @@ class TestGuardSslFlags:
     def test_no_ssl_flags_passes(self):
         args = _args(expiring_within=None, summary=False, validate_nginx=False)
         _guard_ssl_flags(args)  # should not raise
+
+    def test_probe_http_on_plain_path_exits(self, capsys):
+        """BACK-1207: --probe-http was ssl-only but missing from GUARDED_FLAGS."""
+        args = _args(probe_http=True)
+        with pytest.raises(SystemExit):
+            _guard_ssl_flags(args)
+        assert '--probe-http' in capsys.readouterr().err
+
+    def test_local_certs_on_plain_path_exits(self, capsys):
+        """BACK-1207: --local-certs was ssl-only but missing from GUARDED_FLAGS."""
+        args = _args(local_certs=True)
+        with pytest.raises(SystemExit):
+            _guard_ssl_flags(args)
+        assert '--local-certs' in capsys.readouterr().err
+
+
+# ─── _guard_cpanel_flags / _guard_letsencrypt_flags / _guard_autossl_flags ────
+
+class TestGuardCpanelFlags:
+    """BACK-1207: cpanel:// flags had no guard at all -- silently ignored on
+    any plain file path, e.g. 'reveal app.py --dns-verified' produced normal
+    file output instead of an error."""
+
+    def test_dns_verified_on_plain_path_exits(self, capsys):
+        args = _args(dns_verified=True)
+        with pytest.raises(SystemExit):
+            _guard_cpanel_flags(args)
+        assert '--dns-verified' in capsys.readouterr().err
+
+    def test_check_live_on_plain_path_exits(self, capsys):
+        args = _args(check_live=True)
+        with pytest.raises(SystemExit):
+            _guard_cpanel_flags(args)
+        assert '--check-live' in capsys.readouterr().err
+
+    def test_no_cpanel_flags_passes(self):
+        args = _args()
+        _guard_cpanel_flags(args)  # should not raise
+
+
+class TestGuardLetsencryptFlags:
+    def test_check_orphans_on_plain_path_exits(self, capsys):
+        args = _args(check_orphans=True)
+        with pytest.raises(SystemExit):
+            _guard_letsencrypt_flags(args)
+        assert '--check-orphans' in capsys.readouterr().err
+
+    def test_check_duplicates_on_plain_path_exits(self, capsys):
+        args = _args(check_duplicates=True)
+        with pytest.raises(SystemExit):
+            _guard_letsencrypt_flags(args)
+        assert '--check-duplicates' in capsys.readouterr().err
+
+    def test_no_letsencrypt_flags_passes(self):
+        args = _args()
+        _guard_letsencrypt_flags(args)  # should not raise
+
+
+class TestGuardAutosslFlags:
+    def test_user_on_plain_path_exits(self, capsys):
+        args = _args(user='someuser')
+        with pytest.raises(SystemExit):
+            _guard_autossl_flags(args)
+        assert '--user' in capsys.readouterr().err
+
+    def test_no_autossl_flags_passes(self):
+        args = _args()
+        _guard_autossl_flags(args)  # should not raise
 
 
 # ─── _guard_related_flags ────────────────────────────────────────────────────

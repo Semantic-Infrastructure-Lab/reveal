@@ -34,7 +34,7 @@ if sys.platform != 'win32':
     import fcntl
     import struct
 
-from ..base import ResourceAdapter, register_adapter, register_renderer
+from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
 from ...utils.query import parse_query_params
 from ...utils.results import ResultBuilder
 from .renderer import CpanelRenderer
@@ -528,6 +528,28 @@ class CpanelAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     CANONICAL_EMPTY_RESOURCE = ''  # bare cpanel:// must raise TypeError, not silently become "."
+
+    # cpanel:// has no plain-file form, so these flags are never valid on a
+    # file path — GUARDED_FLAG_EXTENSIONS stays empty and the guard always
+    # fires (same pattern as ssl://). BACK-1207.
+    GUARDED_FLAG_CONTEXT = 'the cpanel:// adapter'
+    GUARDED_FLAG_HELP = 'cpanel'
+    GUARDED_FLAGS = (
+        AdapterFlag(
+            attr='dns_verified',
+            flag='--dns-verified',
+            examples=(
+                "  reveal cpanel://USERNAME/ssl --dns-verified   # exclude NXDOMAIN from summary counts"
+            ),
+        ),
+        AdapterFlag(
+            attr='check_live',
+            flag='--check-live',
+            examples=(
+                "  reveal cpanel://USERNAME/ssl --check-live   # compare disk cert vs live ssl:// fetch"
+            ),
+        ),
+    )
 
     def __init__(self, resource: str = "", query: Optional[str] = None):
         """Initialize cPanel adapter with a username[/element][?query].
