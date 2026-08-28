@@ -9,6 +9,8 @@ from typing import Dict, Any, List, Optional, Tuple
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 
+from ...utils.severity import filter_by_severity
+
 
 @dataclass
 class CertificateInfo:
@@ -643,7 +645,7 @@ def _check_http_redirect(host: str) -> Dict[str, Any]:
 
 def check_ssl_health(
     host: str, port: int = 443, warn_days: int = 30, critical_days: int = 7,
-    advanced: bool = False, probe_http: bool = False
+    advanced: bool = False, probe_http: bool = False, severity: Optional[str] = None
 ) -> Dict[str, Any]:
     """Run SSL health checks on a host.
 
@@ -654,6 +656,10 @@ def check_ssl_health(
         critical_days: Days until expiry to trigger critical
         advanced: Include advanced checks (TLS version, key strength, etc.)
         probe_http: Check that HTTP redirects to HTTPS
+        severity: Minimum severity to include in the returned `checks` list
+            (low/medium/high/critical). Display-only -- `status`/`summary`/
+            `exit_code` are computed from the full unfiltered check set before
+            this filter is applied (BACK-1205).
 
     Returns:
         Health check result dict
@@ -682,7 +688,9 @@ def check_ssl_health(
         overall_status = _determine_overall_ssl_status(checks)
         summary = _calculate_ssl_check_summary(checks)
 
-        # Build result
+        # Build result (status/summary/exit_code already computed from the full
+        # `checks` above; next_steps also uses the unfiltered list -- severity
+        # only trims what's returned in result['checks'])
         result = _build_ssl_health_success_result(
             host, port, overall_status, leaf, checks, summary, advanced
         )
@@ -690,6 +698,9 @@ def check_ssl_health(
         # Add next steps for advanced mode
         if advanced:
             result['next_steps'] = _generate_remediation_steps(checks, host)
+
+        if severity:
+            result['checks'] = filter_by_severity(result['checks'], severity)
 
         return result
 

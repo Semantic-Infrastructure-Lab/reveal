@@ -11,6 +11,7 @@ from .renderer import SSLRenderer
 from reveal.analyzers.nginx import NginxAnalyzer
 from ...utils.query import parse_query_params
 from ...utils.results import ResultBuilder
+from ...utils.severity import filter_by_severity
 from reveal.reveal_types import CONTRACT_VERSION
 
 _SCHEMA_ELEMENTS = {
@@ -643,6 +644,7 @@ class SSLAdapter(ResourceAdapter):
         validate_nginx = kwargs.get('validate_nginx', False)
         local_certs = kwargs.get('local_certs', False)
         probe_http = kwargs.get('probe_http', False)
+        severity = kwargs.get('severity')
 
         # --expiring-within=N (or ?expiring-within=N in URI) overrides warn_days
         expiring_within = kwargs.get('expiring_within') or getattr(self, 'query_params', {}).get('expiring-within')
@@ -669,7 +671,7 @@ class SSLAdapter(ResourceAdapter):
         # Handle nginx batch mode
         if self._nginx_path:
             return self._check_nginx_domains(
-                warn_days, critical_days, advanced, only_failures
+                warn_days, critical_days, advanced, only_failures, severity
             )
 
         if not self.host:
@@ -681,11 +683,13 @@ class SSLAdapter(ResourceAdapter):
             critical_days=critical_days,
             advanced=advanced,
             probe_http=probe_http,
+            severity=severity,
         )
 
     def _check_nginx_domains(
         self, warn_days: int = 30, critical_days: int = 7,
-        advanced: bool = False, only_failures: bool = False
+        advanced: bool = False, only_failures: bool = False,
+        severity: Optional[str] = None
     ) -> Dict[str, Any]:
         """Check SSL certificates for all domains in nginx config.
 
@@ -694,6 +698,8 @@ class SSLAdapter(ResourceAdapter):
             critical_days: Days until expiry to trigger critical
             advanced: Run advanced checks
             only_failures: Only include failures/warnings in results
+            severity: Minimum severity to include in each domain's `checks`
+                list (display-only, see _batch_check_domains)
 
         Returns:
             Batch check results
@@ -704,7 +710,7 @@ class SSLAdapter(ResourceAdapter):
 
         return self._batch_check_domains(
             domains, warn_days, critical_days, advanced, only_failures,
-            source=self._nginx_path
+            source=self._nginx_path, severity=severity
         )
 
     def _collect_cert_entries(self) -> List[Dict[str, Any]]:
@@ -828,7 +834,8 @@ class SSLAdapter(ResourceAdapter):
             }
 
     def _check_all_domains(self, domains: List[str], warn_days: int,
-                           critical_days: int, advanced: bool) -> List[Dict[str, Any]]:
+                           critical_days: int, advanced: bool,
+                           severity: Optional[str] = None) -> List[Dict[str, Any]]:
         """Check SSL health for all domains.
 
         Args:
@@ -836,6 +843,7 @@ class SSLAdapter(ResourceAdapter):
             warn_days: Days until expiry to trigger warning
             critical_days: Days until expiry to trigger critical
             advanced: Run advanced checks
+            severity: Minimum severity to include in each domain's `checks` list
 
         Returns:
             List of check results for all domains
@@ -843,7 +851,7 @@ class SSLAdapter(ResourceAdapter):
         all_results = []
         for domain in domains:
             result = check_ssl_health(
-                domain, 443, warn_days, critical_days, advanced
+                domain, 443, warn_days, critical_days, advanced, severity=severity
             )
             all_results.append(result)
         return all_results
@@ -922,7 +930,8 @@ class SSLAdapter(ResourceAdapter):
 
     def _batch_check_domains(
         self, domains: List[str], warn_days: int = 30, critical_days: int = 7,
-        advanced: bool = False, only_failures: bool = False, source: Optional[str] = None
+        advanced: bool = False, only_failures: bool = False, source: Optional[str] = None,
+        severity: Optional[str] = None
     ) -> Dict[str, Any]:
         """Core batch checking logic for SSL certificates.
 
@@ -933,12 +942,15 @@ class SSLAdapter(ResourceAdapter):
             advanced: Run advanced checks
             only_failures: Only include failures/warnings in results
             source: Source description (e.g., file path, nginx config)
+            severity: Minimum severity to include in each domain's `checks`
+                list -- display-only; summary/status/exit_code below are always
+                computed from ALL results, same as only_failures (BACK-1205)
 
         Returns:
             Batch check results
         """
         # Check all domains
-        all_results = self._check_all_domains(domains, warn_days, critical_days, advanced)
+        all_results = self._check_all_domains(domains, warn_days, critical_days, advanced, severity)
 
         # Filter results if requested
         results = self._filter_failure_results(all_results, only_failures)
@@ -966,11 +978,14 @@ class SSLAdapter(ResourceAdapter):
             'exit_code': 0 if summary['failures'] == 0 else 2,
         }
 
-    def _validate_single_domain(self, domain: str) -> Dict[str, Any]:
+    def _validate_single_domain(self, domain: str, severity: Optional[str] = None) -> Dict[str, Any]:
         """Validate SSL configuration for a single domain.
 
         Args:
             domain: Domain to validate
+            severity: Minimum severity to include in the returned `issues` list.
+                Display-only -- `status` below is decided from the full
+                unfiltered issues list before this filter is applied (BACK-1205).
 
         Returns:
             Validation result with status and issues
@@ -981,14 +996,15 @@ class SSLAdapter(ResourceAdapter):
         try:
             cert_result = check_ssl_health(domain, 443)
         except Exception as e:
+            issues = [{
+                'type': 'connection_error',
+                'message': f'Could not connect to {domain}: {e}',
+                'severity': 'critical',
+            }]
             return {
                 'domain': domain,
                 'status': 'failure',
-                'issues': [{
-                    'type': 'connection_error',
-                    'message': f'Could not connect to {domain}: {e}',
-                    'severity': 'critical',
-                }],
+                'issues': filter_by_severity(issues, severity),
             }
 
         # Validates via live SSL connection only
@@ -1001,10 +1017,11 @@ class SSLAdapter(ResourceAdapter):
                         'severity': 'high' if check['status'] == 'failure' else 'medium',
                     })
 
+        status = 'pass' if not issues else 'failure'
         return {
             'domain': domain,
-            'status': 'pass' if not issues else 'failure',
-            'issues': issues,
+            'status': status,
+            'issues': filter_by_severity(issues, severity),
         }
 
     def _build_validation_summary(self, validation_results: list) -> Dict[str, Any]:
@@ -1060,12 +1077,15 @@ class SSLAdapter(ResourceAdapter):
                 'exit_code': 2,
             }
 
+        severity = kwargs.get('severity')
+
         # Get domains from nginx config
         domain_info = self._get_nginx_domains()
         domains = domain_info['domains']
 
-        # Validate each domain
-        validation_results = [self._validate_single_domain(d) for d in domains]
+        # Validate each domain -- status is decided per-domain from the full
+        # issue set before severity trims what's returned (see _validate_single_domain)
+        validation_results = [self._validate_single_domain(d, severity=severity) for d in domains]
 
         # Build and return summary
         return self._build_validation_summary(validation_results)

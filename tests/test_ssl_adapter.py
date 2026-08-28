@@ -586,6 +586,27 @@ class TestSSLHealthCheck(unittest.TestCase):
         self.assertEqual(result['exit_code'], 0)
 
     @patch.object(SSLFetcher, 'fetch_certificate_with_verification')
+    def test_check_severity_filters_checks_but_not_exit_code(self, mock_fetch):
+        """--severity trims the returned `checks` list (BACK-1205) but status/exit_code/
+        summary stay computed from the full unfiltered set, same as --only-failures
+        already does (see _batch_check_domains's "based on ALL results" comment)."""
+        mock_fetch.return_value = self._create_mock_fetcher(days_valid=60)
+
+        unfiltered = check_ssl_health('example.com', 443)
+        # All 3 base checks (expiry/chain/hostname) are severity='high'
+        matching = check_ssl_health('example.com', 443, severity='high')
+        above = check_ssl_health('example.com', 443, severity='critical')
+
+        self.assertEqual(len(matching['checks']), len(unfiltered['checks']))
+        self.assertEqual(matching['checks'], unfiltered['checks'])
+        self.assertEqual(above['checks'], [])
+
+        for result in (matching, above):
+            self.assertEqual(result['status'], unfiltered['status'])
+            self.assertEqual(result['summary'], unfiltered['summary'])
+            self.assertEqual(result['exit_code'], unfiltered['exit_code'])
+
+    @patch.object(SSLFetcher, 'fetch_certificate_with_verification')
     def test_check_warning_expiry(self, mock_fetch):
         """Health check should warn for cert expiring soon."""
         mock_fetch.return_value = self._create_mock_fetcher(days_valid=20)
@@ -2099,6 +2120,24 @@ class TestExpiringWithinExitCode(unittest.TestCase):
         kwargs = _build_check_kwargs(adapter, args)
         self.assertTrue(kwargs.get('probe_http'))
 
+    def test_routing_passes_severity_to_check(self):
+        """_build_check_kwargs should include severity when set on args (BACK-1205:
+        was missing from the allowlist alongside select/ignore/advanced/etc., so
+        --check --severity was silently ignored for ssl://domain://mysql://)."""
+        from reveal.cli.routing import _build_check_kwargs
+        from argparse import Namespace
+
+        adapter = self._make_adapter()
+
+        def mock_check(**kwargs): return {}
+        adapter.check = mock_check
+
+        args = Namespace(severity='high', advanced=False, validate_nginx=False,
+                         local_certs=False, select=None, ignore=None,
+                         expiring_within=None, probe_http=None)
+        kwargs = _build_check_kwargs(adapter, args)
+        self.assertEqual(kwargs.get('severity'), 'high')
+
 
 class TestTLSVersionCipherCapture(unittest.TestCase):
     """Tests for cipher suite capture in _check_tls_version."""
@@ -2287,6 +2326,69 @@ class TestCheckHttpRedirect(unittest.TestCase):
             adapter.check(probe_http=True)
             call_kwargs = mock_check.call_args[1]
             self.assertTrue(call_kwargs.get('probe_http'))
+
+    def test_adapter_check_passes_severity_to_check_ssl_health(self):
+        """SSLAdapter.check(severity=...) passes the flag to check_ssl_health (BACK-1205)."""
+        adapter = SSLAdapter.__new__(SSLAdapter)
+        adapter.host = 'example.com'
+        adapter.port = 443
+        adapter.element = None
+        adapter._nginx_path = None
+        adapter._cert_file_path = None
+        adapter._certificate = None
+        adapter._chain = []
+        adapter._verification = None
+        adapter._fetcher = MagicMock()
+
+        with patch('reveal.adapters.ssl.adapter.check_ssl_health') as mock_check:
+            mock_check.return_value = {'status': 'pass', 'exit_code': 0}
+            adapter.check(severity='critical')
+            call_kwargs = mock_check.call_args[1]
+            self.assertEqual(call_kwargs.get('severity'), 'critical')
+
+    def test_batch_check_domains_threads_severity_per_domain_without_affecting_summary(self):
+        """_batch_check_domains passes severity to each per-domain check_ssl_health
+        call, but summary/status/exit_code are computed from ALL results regardless
+        (BACK-1205; see the pre-existing "based on ALL results, not just filtered"
+        comment on the summary line -- severity follows the same rule as only_failures)."""
+        adapter = SSLAdapter.__new__(SSLAdapter)
+
+        def fake_check(host, port, warn_days=30, critical_days=7, advanced=False,
+                        probe_http=False, severity=None):
+            checks = [{'name': 'certificate_expiry', 'status': 'pass', 'severity': 'high'}]
+            self.assertEqual(severity, 'critical')  # confirms threading reached here
+            from reveal.utils.severity import filter_by_severity
+            return {'status': 'pass', 'checks': filter_by_severity(checks, severity)}
+
+        with patch('reveal.adapters.ssl.adapter.check_ssl_health', side_effect=fake_check):
+            result = adapter._batch_check_domains(['a.example.com', 'b.example.com'], severity='critical')
+
+        # Every per-domain result's checks list was filtered to nothing (none critical)
+        self.assertTrue(all(r['checks'] == [] for r in result['results']))
+        # But summary/status/exit_code reflect the real (unfiltered-by-severity) domain statuses
+        self.assertEqual(result['summary']['total'], 2)
+        self.assertEqual(result['exit_code'], 0)
+
+    def test_validate_single_domain_filters_issues_but_keeps_status(self):
+        """_validate_single_domain(severity=...) trims the returned `issues` list but
+        `status` is still decided from the full unfiltered issue set (BACK-1205)."""
+        adapter = SSLAdapter.__new__(SSLAdapter)
+
+        fake_cert_result = {
+            'status': 'failure',
+            'checks': [
+                {'name': 'certificate_expiry', 'status': 'failure', 'message': 'expired'},
+                {'name': 'chain_verification', 'status': 'warning', 'message': 'unverified'},
+            ],
+        }
+        with patch('reveal.adapters.ssl.adapter.check_ssl_health', return_value=fake_cert_result):
+            unfiltered = adapter._validate_single_domain('example.com')
+            filtered = adapter._validate_single_domain('example.com', severity='critical')
+
+        self.assertEqual(unfiltered['status'], 'failure')
+        self.assertEqual(filtered['status'], 'failure')  # decided before the severity filter
+        self.assertGreater(len(unfiltered['issues']), len(filtered['issues']))
+        self.assertTrue(all(i['severity'] == 'critical' for i in filtered['issues']) or filtered['issues'] == [])
 
 
 if __name__ == '__main__':

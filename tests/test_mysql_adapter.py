@@ -781,6 +781,44 @@ class TestCheckMethod(unittest.TestCase):
         }
         self.assertEqual(check_names, expected_names)
 
+    @patch('reveal.adapters.mysql.MySQLAdapter._get_performance')
+    @patch('reveal.adapters.mysql.MySQLAdapter._execute_query')
+    def test_check_severity_filters_checks_but_not_exit_code(self, mock_query, mock_perf):
+        """--severity trims the returned `checks` list (BACK-1205) but status/exit_code/
+        summary stay computed from the full unfiltered set, same as --only-failures."""
+        mock_perf.return_value = {
+            'tuning_ratios': {
+                'table_scan_ratio': '50.0%',  # failure
+                'thread_cache_miss_rate': '30.0%',  # failure
+                'temp_tables_to_disk_ratio': '10.0%'  # pass
+            }
+        }
+        show_status_rows = [
+            {'Variable_name': 'Threads_connected', 'Value': '195'},
+            {'Variable_name': 'Max_used_connections', 'Value': '199'},
+            {'Variable_name': 'Open_files', 'Value': '950'},
+            {'Variable_name': 'Innodb_buffer_pool_reads', 'Value': '50000'},
+            {'Variable_name': 'Innodb_buffer_pool_read_requests', 'Value': '100000'},
+        ]
+        show_variables_rows = [
+            {'Variable_name': 'max_connections', 'Value': '200'},
+            {'Variable_name': 'open_files_limit', 'Value': '1000'},
+        ]
+
+        # Two full check() calls each consume 2 _execute_query calls -- give the
+        # mock enough side_effect entries for both.
+        mock_query.side_effect = [show_status_rows, show_variables_rows] * 2
+
+        unfiltered = self.adapter.check()
+        filtered = self.adapter.check(severity='critical')
+
+        self.assertTrue(all(c['severity'] == 'critical' for c in filtered['checks']))
+        self.assertLess(len(filtered['checks']), len(unfiltered['checks']))
+
+        self.assertEqual(filtered['status'], unfiltered['status'])
+        self.assertEqual(filtered['exit_code'], unfiltered['exit_code'])
+        self.assertEqual(filtered['summary'], unfiltered['summary'])
+
 
 class TestMySQLAdapterSchema(unittest.TestCase):
     """Test schema generation for AI agent integration."""

@@ -11,6 +11,7 @@ from .replication import ReplicationMonitor
 from .storage import StorageAnalyzer
 from .renderer import MySQLRenderer
 from ...utils.results import ResultBuilder
+from ...utils.severity import filter_by_severity
 from reveal.reveal_types import CONTRACT_VERSION
 
 
@@ -1122,6 +1123,7 @@ class MySQLAdapter(ResourceAdapter):
             }
         """
         only_failures = kwargs.get('only_failures', False)
+        severity = kwargs.get('severity')
 
         # Collect all health metrics using extracted helper
         metrics = self._collect_health_metrics()
@@ -1147,13 +1149,17 @@ class MySQLAdapter(ResourceAdapter):
                 )
                 checks.append(check_result)
 
-        # Calculate summary and overall status using extracted helper (before filtering)
+        # Calculate summary and overall status using extracted helper (before filtering) --
+        # status/exit_code must stay the true health signal regardless of what
+        # only_failures/severity trim from the returned checks list (BACK-1205).
         overall_status, exit_code, summary = self._calculate_check_summary(checks)
 
-        # Filter to only failures if requested
+        # Filter to only failures / minimum severity if requested (display-only)
         filtered_checks = checks
         if only_failures:
-            filtered_checks = [c for c in checks if c['status'] in ('failure', 'warning')]
+            filtered_checks = [c for c in filtered_checks if c['status'] in ('failure', 'warning')]
+        if severity:
+            filtered_checks = filter_by_severity(filtered_checks, severity)
 
         # Note: advanced parameter reserved for future enhanced checks
 

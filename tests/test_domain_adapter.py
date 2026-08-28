@@ -335,6 +335,56 @@ class TestDomainAdapterCheck(unittest.TestCase):
         failures = result['summary'].get('failures', 0)
         self.assertTrue(failures > 0, f"Expected failures > 0, got {failures}")
 
+    @patch('reveal.adapters.domain.adapter.check_dns_resolution')
+    @patch('reveal.adapters.domain.adapter.check_nameserver_response')
+    @patch('reveal.adapters.domain.adapter.check_dns_propagation')
+    @patch('reveal.adapters.ssl.certificate.check_ssl_health')
+    def test_check_severity_filters_checks_but_not_exit_code(self, mock_ssl, mock_propagation, mock_nameserver, mock_resolution):
+        """--severity trims the returned `checks` list (BACK-1205) but exit_code/summary
+        stay computed from the full unfiltered set, same as --only-failures already does."""
+        mock_resolution.return_value = {
+            'name': 'dns_resolution',
+            'status': 'failure',
+            'value': 'No resolution',
+            'threshold': 'Resolves',
+            'message': 'DNS resolution failed',
+            'severity': 'critical'
+        }
+        mock_nameserver.return_value = {
+            'name': 'nameserver_response',
+            'status': 'pass',
+            'value': 'Responsive',
+            'threshold': 'Responsive',
+            'message': 'Nameservers responding',
+            'severity': 'medium'
+        }
+        mock_propagation.return_value = {
+            'name': 'dns_propagation',
+            'status': 'pass',
+            'value': 'Propagated',
+            'threshold': 'Propagated',
+            'message': 'DNS propagated',
+            'severity': 'medium'
+        }
+        mock_ssl.return_value = {
+            'status': 'pass',
+            'certificate': {'days_until_expiry': 60}
+        }
+
+        adapter = DomainAdapter("domain://example.com")
+        unfiltered = adapter.check()
+        filtered = adapter.check(severity='critical')
+
+        # Only the critical dns_resolution check should remain
+        self.assertTrue(all(c['severity'] == 'critical' for c in filtered['checks']))
+        self.assertLess(len(filtered['checks']), len(unfiltered['checks']))
+
+        # status/summary/exit_code are the true health signal -- unaffected by
+        # the display-only severity filter
+        self.assertEqual(filtered['status'], unfiltered['status'])
+        self.assertEqual(filtered['summary'], unfiltered['summary'])
+        self.assertEqual(filtered['exit_code'], unfiltered['exit_code'])
+
 
 class TestDomainAdapterSchema(unittest.TestCase):
     """Test domain adapter schema generation."""

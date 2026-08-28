@@ -11,6 +11,7 @@ from .dns import (
 from .renderer import DomainRenderer
 from ..ssl.certificate import check_ssl_health
 from ...utils.results import ResultBuilder
+from ...utils.severity import filter_by_severity
 from reveal.reveal_types import CONTRACT_VERSION
 
 
@@ -974,6 +975,7 @@ class DomainAdapter(ResourceAdapter):
         assert self.domain is not None
         advanced = kwargs.get('advanced', False)
         only_failures = kwargs.get('only_failures', False)
+        severity = kwargs.get('severity')
 
         # Run all checks
         checks = _run_dns_checks(self.domain)
@@ -982,13 +984,17 @@ class DomainAdapter(ResourceAdapter):
         checks.append(_check_http_to_https_redirect(self.domain))
         checks.extend(check_email_dns(self.domain))
 
-        # Calculate metrics
+        # Calculate metrics from the FULL unfiltered set -- status/exit_code must
+        # stay the true health signal regardless of what only_failures/severity
+        # trim from the returned `checks` list below (BACK-1205).
         overall_status = _calculate_overall_status(checks)
         summary = _calculate_check_summary(checks)
 
-        # Filter results if requested
+        # Filter results if requested (display-only, does not affect status/exit_code)
         if only_failures:
             checks = [c for c in checks if c['status'] in ('failure', 'warning')]
+        if severity:
+            checks = filter_by_severity(checks, severity)
 
         # Generate contextual next steps
         next_steps = _generate_domain_next_steps(checks, self.domain)
