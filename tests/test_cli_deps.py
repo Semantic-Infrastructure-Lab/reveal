@@ -636,6 +636,10 @@ class TestRunDeps(unittest.TestCase):
                 self.assertEqual(data['circular']['cycles'], [['src/main.py', 'src/utils.py', 'src/main.py']])
                 self.assertEqual(data['circular']['cycle_paths'], [['src/main.py', 'src/utils.py']])
                 self.assertEqual(data['unused'][0]['file'], 'src/main.py')
+                # BACK-1222: base's own 'source' field (the embedded imports://
+                # envelope's metadata) was still absolute even after the fields
+                # above were fixed for BACK-1194.
+                self.assertEqual(data['base']['source'], '.')
 
     def test_summary_only_drops_base_files(self):
         """BACK-1040: --summary-only strips base.files (the bulk of deps.json

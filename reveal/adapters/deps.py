@@ -63,6 +63,8 @@ def _relativize_deps_paths(
     """
     from ..utils.path_utils import to_relative_display
 
+    if base.get('source'):
+        base['source'] = to_relative_display(base['source'], base_path)
     files = base.get('files')
     if isinstance(files, dict):
         base['files'] = {
