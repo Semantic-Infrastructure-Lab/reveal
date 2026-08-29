@@ -210,6 +210,11 @@ def _add_global_options(target) -> None:
     """
     target.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default='text',
                         help='Output format (text, json, typed [typed JSON with types/relationships], grep)')
+    target.add_argument('--also-json', metavar='PATH', default=None,
+                        help='BACK-1184: also write the result as JSON to PATH, in addition to '
+                             '--format\'s primary output -- one invocation, one parse, both a '
+                             'human-readable report and a machine-readable artifact. URI-adapter '
+                             'form only (scheme://resource); no-op if --format is already json.')
     target.add_argument('--copy', '-c', action='store_true',
                         help='Copy output to clipboard (also prints normally)')
     target.add_argument('--verbose', '-v', action='store_true',

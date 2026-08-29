@@ -50,6 +50,21 @@ def attach_provenance(result):
     return result
 
 
+def write_also_json(result, args) -> None:
+    """BACK-1184: write *result* as JSON to args.also_json, if set, alongside
+    whatever --format is already rendering to stdout. Lets one invocation
+    produce both a human-readable report and a machine-readable artifact
+    without a second reveal call re-parsing the same files. No-op when
+    --also-json wasn't passed, or when --format is already json (the primary
+    output already covers it).
+    """
+    path = getattr(args, 'also_json', None)
+    if not path or getattr(args, 'format', 'text') == 'json':
+        return
+    with open(path, 'w') as f:
+        print_json_result(result, file=f)
+
+
 def print_json_result(result, file=None) -> None:
     """Print a reveal result dict as JSON — the single funnel for adapter/
     renderer CLI JSON output (BACK-893). Not for printing arbitrary values

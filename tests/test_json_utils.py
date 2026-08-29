@@ -1,5 +1,6 @@
 """Tests for reveal/utils/json_utils.py - JSON utilities."""
 
+import argparse
 import pytest
 import json
 from datetime import datetime, date
@@ -8,6 +9,7 @@ from reveal.utils.json_utils import (
     safe_json_dumps,
     print_json_result,
     set_provenance_enabled,
+    write_also_json,
 )
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
@@ -234,3 +236,53 @@ class TestPrintJsonResult:
 
         decoded = json.loads(capsys.readouterr().out)
         assert decoded == [1, 2, 3]
+
+
+class TestWriteAlsoJson:
+    """BACK-1184: --also-json writes the already-computed result to a file
+    alongside whatever --format is primarily rendering to stdout."""
+
+    def test_writes_json_to_path(self, tmp_path):
+        out = tmp_path / "result.json"
+        args = argparse.Namespace(format='text', also_json=str(out))
+
+        write_also_json({'type': 'demo', 'value': 1}, args)
+
+        assert json.loads(out.read_text()) == {'type': 'demo', 'value': 1}
+
+    def test_noop_when_also_json_not_set(self, tmp_path):
+        args = argparse.Namespace(format='text', also_json=None)
+
+        # Must not raise even though nothing was configured to receive output.
+        write_also_json({'type': 'demo'}, args)
+
+        assert list(tmp_path.iterdir()) == []
+
+    def test_noop_when_format_already_json(self, tmp_path):
+        """--format json already produces the JSON on stdout -- writing it a
+        second time to a file would just be redundant duplication."""
+        out = tmp_path / "result.json"
+        args = argparse.Namespace(format='json', also_json=str(out))
+
+        write_also_json({'type': 'demo'}, args)
+
+        assert not out.exists()
+
+    def test_missing_also_json_attr_is_noop(self, tmp_path):
+        """Namespaces that never registered --also-json (e.g. older/mocked
+        argparse namespaces in tests) must not raise."""
+        args = argparse.Namespace(format='text')
+
+        write_also_json({'type': 'demo'}, args)  # no AttributeError
+
+    def test_written_json_matches_stdout_json(self, tmp_path, capsys):
+        """The file's content is byte-for-byte what --format json would have
+        printed -- same print_json_result funnel, same provenance handling."""
+        out = tmp_path / "result.json"
+        args = argparse.Namespace(format='text', also_json=str(out))
+        result = {'type': 'demo', 'nested': {'a': 1}}
+
+        write_also_json(result, args)
+        print_json_result(result)
+
+        assert out.read_text() == capsys.readouterr().out

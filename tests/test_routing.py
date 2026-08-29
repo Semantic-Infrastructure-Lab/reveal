@@ -6,6 +6,8 @@ which tries multiple initialization patterns for adapters.
 
 import io
 import json
+import shutil
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from unittest.mock import Mock, MagicMock, patch
@@ -18,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import pytest
 
 from reveal.cli.routing import generic_adapter_handler, handle_uri, handle_adapter, handle_file_or_directory
-from reveal.cli.routing import _render_structure
+from reveal.cli.routing import _render_structure, _render_element, _handle_check_mode
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
 pytestmark = pytest.mark.component
@@ -1661,6 +1663,83 @@ class TestNotApplicableEnvelope(unittest.TestCase):
 
         envelope = json.loads(buf.getvalue())
         self.assertEqual(envelope['applicable'], False)
+
+
+class TestAlsoJson(unittest.TestCase):
+    """BACK-1184: --also-json writes the already-computed result to a file
+    alongside whatever --format is rendering to stdout, for all three
+    URI-adapter render paths (structure/element/check)."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.out_path = os.path.join(self.tmpdir, 'also.json')
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_render_structure_writes_also_json(self):
+        class OkAdapter:
+            def get_structure(self, **kwargs):
+                return {'type': 'x', 'value': 1}
+
+        args = Namespace(format='text', also_json=self.out_path)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _render_structure(OkAdapter(), MockRenderer, args, scheme='stats', resource='src')
+
+        with open(self.out_path) as f:
+            self.assertEqual(json.load(f), {'type': 'x', 'value': 1})
+
+    def test_render_element_writes_also_json(self):
+        class OkAdapter:
+            def get_element(self, name, **kwargs):
+                return {'type': 'element', 'name': name}
+
+        args = Namespace(format='text', also_json=self.out_path)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _render_element(OkAdapter(), MockRenderer, 'foo', 'foo', args)
+
+        with open(self.out_path) as f:
+            self.assertEqual(json.load(f), {'type': 'element', 'name': 'foo'})
+
+    def test_handle_check_mode_writes_also_json(self):
+        class OkAdapter:
+            def check(self, **kwargs):
+                return {'type': 'check', 'exit_code': 0}
+
+        args = Namespace(format='text', also_json=self.out_path, verbose=False)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            with self.assertRaises(SystemExit):
+                _handle_check_mode(OkAdapter(), MockRenderer, args)
+
+        with open(self.out_path) as f:
+            self.assertEqual(json.load(f), {'type': 'check', 'exit_code': 0})
+
+    def test_no_file_written_when_also_json_unset(self):
+        class OkAdapter:
+            def get_structure(self, **kwargs):
+                return {'type': 'x'}
+
+        args = Namespace(format='text', also_json=None)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _render_structure(OkAdapter(), MockRenderer, args, scheme='stats', resource='src')
+
+        self.assertFalse(os.path.exists(self.out_path))
+
+    def test_no_file_written_when_format_already_json(self):
+        class OkAdapter:
+            def get_structure(self, **kwargs):
+                return {'type': 'x'}
+
+        args = Namespace(format='json', also_json=self.out_path)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _render_structure(OkAdapter(), MockRenderer, args, scheme='stats', resource='src')
+
+        self.assertFalse(os.path.exists(self.out_path))
 
 
 if __name__ == '__main__':

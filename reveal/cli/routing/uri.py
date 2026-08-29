@@ -11,7 +11,7 @@ import sys
 from typing import Any, List, Optional, TYPE_CHECKING
 
 from ...errors import NotApplicableError
-from ...utils import print_json_result
+from ...utils import print_json_result, write_also_json
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -500,6 +500,7 @@ def _handle_check_mode(adapter, renderer_class: type[Any], args: 'Namespace') ->
     # Build check kwargs and execute
     check_kwargs = _build_check_kwargs(adapter, args)
     result = adapter.check(**check_kwargs)
+    write_also_json(result, args)
 
     # Render check results
     if hasattr(renderer_class, 'render_check'):
@@ -709,6 +710,7 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
             if _mode(result, args, _text_field, _label):
                 return
 
+    write_also_json(result, args)
     renderer_class.render_element(result, args.format)
 
 
@@ -929,6 +931,7 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
         if available_elements:
             result['available_elements'] = available_elements
 
+    write_also_json(result, args)
     renderer_class.render_structure(result, args.format, **_render_structure_top_kwargs(renderer_class, args))
 
 
