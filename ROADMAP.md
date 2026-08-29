@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-08-28 (eternal-guardian-0827 — v0.123.0 release: disclosure-surface sweep round 2, MCP resources + tool parity, check/pack ergonomics, silent-CLI-flag audit)
+> **Last updated**: 2026-08-29 (xenon-wolf-0829 — v0.124.0 release: classify:// adapter, --also-json, manifest-informed import resolution for Python/Rust/Ruby, classification-field wiring)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,15 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.124.0 — classify:// adapter, --also-json, manifest-informed import resolution, classification-field wiring
+
+- ✅ New `classify://` adapter — full-population provenance (test/vendor/minified/first-party), independent of any other adapter's ranking (BACK-1233).
+- ✅ `--also-json PATH` — one call now produces both a human-readable and a machine-readable artifact (BACK-1184).
+- ✅ Manifest-informed `is_intra_project_import` for Python/Rust/Ruby completes BACK-1189 (Java/Kotlin/C#/Go already covered) — 0%→83.5%/92.3%/45.4% of previously-unclassifiable imports now get a confident verdict on real-world corpora.
+- ✅ `imports://`/`deps://`'s public `classification` field now consults the same declared-namespace inventory `depends://` already builds, fixing it for Go/C#/Java/Kotlin/PHP (BACK-1234, BACK-1236).
+- ✅ `overview://` disclosure fixes: directory-target git history no longer errors and drops silently (BACK-1225), Components/Entry-points/Hotspots/Language-breakdown now honor `--all`/`--verbose` (BACK-1226); directory tree now discloses suppressed entries instead of silently hiding them (BACK-1224).
+- ✅ `pack://`'s config-file entry-point bonus no longer lets a monorepo's per-package config files dominate a budget (BACK-1206); M102's `__init__.py` fallback no longer false-positives on a bare substring match (BACK-1101); stderr warnings now carry a visible severity prefix (BACK-1231).
 
 ### v0.123.0 — Disclosure-surface sweep round 2, MCP resources + tool parity, check/pack ergonomics, silent-CLI-flag audit
 

@@ -14,6 +14,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.124.0] - 2026-08-29 (sessions oceanic-demon-0828, mitama-0828, xenon-wolf-0829)
+
+### Added
+- **New `classify://` adapter (BACK-1233)** — one row of provenance (test/vendor/minified/first-party) per file across the full, unranked file population; `overview://`/`hotspots://`/`pack://` only ever tagged their own ranked/selected subsets, leaving "what fraction of this codebase is first-party" structurally uncomputable from any of them. Registered as adapter #35, with a due-diligence workflow recipe and `help://` reachability.
+- **`--also-json PATH` writes a second JSON artifact alongside `--format`'s primary output (BACK-1184)** — one reveal call now produces both a human-readable report and a machine-readable file without a second, re-parsing invocation; wired into all three URI-adapter render paths (structure/element/check).
+- **Manifest-informed `is_intra_project_import` for Python, Rust, and Ruby — completes BACK-1189** (Java/Kotlin/C#/Go already had a separate declared-namespace mechanism): Python resolves against `pyproject.toml`/`requirements.txt` (0%→83.5% of previously-unclassifiable imports on Home Assistant core); Rust against `Cargo.toml`, including workspace `path =` dependencies (0%→92.3% on Meilisearch); Ruby against `Gemfile.lock` + gemspec/`lib` (0%→45.4% on Discourse). All inventory builders `lru_cache`'d per project root after an uncached first draft hung past 5 minutes on a large corpus.
+- **`imports://`/`deps://`'s public `classification` field now consults the same declared-namespace inventory `depends://` already builds (BACK-1234)** — previously Python-only, leaving Go/C#/Java/Kotlin/PHP's already-shipped namespace-matching signal invisible to this field; 24.3% of previously-`unresolved` imports on a real Java corpus now correctly show `intra_project`. `deps://`'s summary counters now honor the same field instead of re-deriving their own bucket (BACK-1236).
+
+### Fixed
+- **Directory tree silently hid gitignored/filtered entries with no indication anything was dropped (BACK-1224)** — text output gets a footer naming the cause (gitignore/noise/exclude) and the escape hatch (`--no-gitignore`); JSON output gains a parallel `suppressed_count` field.
+- **`overview://<subdir>` errored on stderr and silently dropped its "Recent changes" section (BACK-1225)** — `GitAdapter`'s subpath dispatch didn't recognize `'log'` as an alias for `'history'`, so every directory-target overview fell through to a content-fetch branch that rejects directories. Directory-scoped git history now works and is labeled correctly (`directory` vs `file`).
+- **`overview://`'s Components/Entry-points/Hotspots/Language-breakdown sections capped with no working escape hatch (BACK-1226)** — `--all`/`--verbose` parsed but were never forwarded to the renderer (and `--all` wasn't even a declared subcommand flag); all four capped sections now honor `--all`/`--verbose` and print "... and N more (use --all)".
+- **`pack://`'s config-file entry-point bonus let a monorepo's per-package `package.json`/`Cargo.toml` files dominate a token budget (BACK-1206)** — only the shallowest occurrence of each recognized config filename keeps the unconditional bonus; deeper duplicates score normally.
+- **`--show-ast` didn't visually distinguish tree-sitter MISSING/ERROR recovery nodes from ordinary nodes (BACK-1129)** — both now marked inline plus a summary banner.
+- **`python://packages/<name>` and `module/<name>` missed the editable-install-conflict signal `python://doctor` already detects for the same installed state (BACK-1130)** — both endpoints now share the same detection.
+- **Bare `reveal` invocation printed argparse usage instead of advertising capabilities (BACK-976)** — now routes to the same payload as `--discover`, per the agent-bootstrap bare-invocation contract; a no-path invocation *with* flags still falls back to usage.
+- **A bare verb shadowed by a same-named path (e.g. `reveal overview` in a directory containing `./overview/`) resolved silently (BACK-1112)** — now prints a one-line stderr hint pointing at the unambiguous form; dispatch precedence itself is unchanged.
+- **M102's `__init__.py` fallback flagged real files as dead code on a bare substring match (BACK-1101)** — short stems (`check`, `errors`) could incidentally match inside an unrelated docstring/comment; now requires a real reference (relative import, `from . import`, or a quoted `__all__` entry).
+- **`logger.warning()` calls printed with no visible severity prefix on stderr (BACK-1231)** — nothing configured `logging.basicConfig()`, so ~2,900 unprefixed "Partial parse" lines (and every other warning) were invisible to `[WARN]`-based stderr filtering.
+- **L001 heading-anchor slugification collapsed double-hyphen anchors produced by em-dashes, false-flagging correct links as broken (BACK-1232)**.
+- Removed a genuinely-dead `CONTRACT_VERSION` import that I001 correctly flagged (BACK-1065), and confirmed M102 already fires correctly with no code change needed (BACK-1068) — both tickets' original hypotheses (a false positive; an inert rule) were stale and falsified by direct repro before any fix was written.
+- `check.json`'s `items_truncated` field (shipped in 0.123.0 via BACK-1181) documented in that release's own changelog entry, retroactively (BACK-1230); `VALIDATION.md`'s stale "BACK-738 open" claim corrected in 3 spots (shape 1 shipped in 0.123.0).
+
 ## [0.123.0] - 2026-08-28 (sessions benevolent-muse-0823, divine-harbinger-0820, equatorial-aurora-0820, wovago-0819, pouring-typhoon-0819, vimekece-0826, hyper-vault-0826, heroic-nymph-0826, jikane-0826, eclipsing-nemesis-0826, mythical-angel-0827, woyifa-0827, dazzling-shade-0827, receding-plasma-0827, tragic-sage-0827, legendary-incinerator-0827, steel-moonbeam-0827, eternal-guardian-0827)
 
 ### Security
