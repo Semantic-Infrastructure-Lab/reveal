@@ -814,6 +814,30 @@ def main():
         finally:
             self.teardown_file(path)
 
+    def test_used_as_dict_literal_value_ok(self):
+        """Test that an import used only as a dict-literal value (not a
+        bare identifier/attribute access) is not flagged as unused
+        (BACK-1065 regression -- extract_symbols' usage-context filter must
+        not special-case 'pair' nodes the way it does 'assignment'/
+        'keyword_argument' targets)."""
+        content = """
+from reveal.reveal_types import CONTRACT_VERSION
+
+def build():
+    return {
+        'contract_version': CONTRACT_VERSION,
+    }
+"""
+        path = self.create_temp_python(content)
+        try:
+            rule = I001()
+            detections = rule.check(path, None, content)
+
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_file(path)
+
     def test_from_import_unused(self):
         """Test unused from imports flag each name individually."""
         content = """
