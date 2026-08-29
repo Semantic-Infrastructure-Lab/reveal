@@ -15,8 +15,10 @@ Uses tree-sitter for consistent parsing across all language analyzers.
 import hashlib
 import logging
 import os
+import re
+from functools import lru_cache
 from pathlib import Path
-from typing import List, Set, Optional, Dict, Tuple
+from typing import FrozenSet, List, Set, Optional, Dict, Tuple
 from ...core import disk_cache, node_children as _children, node_prev_sibling as _prev_sibling
 from ...core.treesitter_compat import _zero_arg
 
@@ -25,6 +27,13 @@ logger = logging.getLogger(__name__)
 from .types import ImportStatement, restamp_file_path
 from .base import LanguageExtractor, register_extractor
 from .resolver import resolve_python_import, resolve_python_from_import_submodules
+from ...rules.imports import STDLIB_MODULES
+from ...utils.path_utils import resolve_project_root
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib  # type: ignore  # Python < 3.11 fallback
 
 # Module-level cache for extract_imports results keyed by (file_path_str, mtime_ns).
 # I002 builds an import graph by calling extract_imports on every file in a directory,
@@ -527,13 +536,138 @@ class PythonExtractor(LanguageExtractor):
     ) -> Optional[bool]:
         """A *relative* Python import (`from . import x`, `from ..pkg import y`)
         is unambiguously intra-project — if it didn't resolve, that's a real
-        miss. An *absolute* import (`import os`, `from django.db import models`)
-        could be stdlib, a third-party dependency, or an in-tree package; we
-        can't cheaply tell without a package inventory, so return None rather
-        than risk crying wolf."""
+        miss. An *absolute* import (`import os`, `from django.db import
+        models`) could be stdlib, a third-party dependency, or an in-tree
+        package.
+
+        BACK-1189: upgrades the prior unconditional ``None`` for absolute
+        imports into a real verdict wherever it can be told cheaply and
+        safely, honest-decline (``None``) otherwise:
+
+          1. A known stdlib top-level name (``STDLIB_MODULES``, the same list
+             ``resolver.py`` already uses to stop a same-named local package
+             from shadowing it) is always ``False`` — no manifest needed.
+          2. Otherwise, resolve the project root (``pyproject.toml``/
+             ``setup.py``/``setup.cfg``/a contiguous ``__init__.py`` chain)
+             and build its package inventory: ``True`` if the top-level name
+             is a real in-tree top-level package/module (root or ``src/``
+             layout), ``False`` if it matches a dependency the project's own
+             ``pyproject.toml``/``requirements.txt`` declares.
+          3. Anything else (an unlisted or transitively-pulled dependency,
+             a name whose PyPI distribution name doesn't match its import
+             name — ``Pillow``/``PIL``, ``PyYAML``/``yaml``) stays ``None``:
+             under-classifying is honest, a wrong verdict here is not.
+        """
         if stmt.is_relative or stmt.level > 0:
             return True
+        top_level = stmt.module_name.split('.')[0]
+        if not top_level:
+            return None
+        if top_level in STDLIB_MODULES:
+            return False
+        project_root = resolve_project_root(base_path, python_init_chain=True)
+        if project_root is None:
+            return None
+        local_names, external_names = _python_project_inventory(project_root)
+        if top_level in local_names:
+            return True
+        if _normalize_dist_name(top_level) in external_names:
+            return False
         return None
+
+
+# ---------------------------------------------------------------------------
+# BACK-1189: manifest-informed project inventory for is_intra_project_import.
+#
+# Cached per project root (functools.lru_cache on the resolved path string):
+# unlike Go's is_intra_project_import (a single small go.mod re-read per
+# call, cheap enough uncached), Python's inventory walks the project's
+# top-level directory/-ies and parses pyproject.toml/requirements.txt --
+# measured hanging past 5 minutes uncached on a ~5,000-file real corpus
+# (Home Assistant core) where most files share the same project root, so
+# every one of many thousands of unresolved absolute imports was paying a
+# full inventory rebuild. Safe within one process/invocation: reveal is a
+# one-shot CLI process, so there's no long-lived-daemon staleness concern.
+# ---------------------------------------------------------------------------
+
+_DEP_NAME_RE = re.compile(r'^\s*([A-Za-z0-9][A-Za-z0-9._-]*)')
+
+
+def _normalize_dist_name(name: str) -> str:
+    """PEP 503 normalization: case-fold, collapse runs of -._ to a single '-'."""
+    return re.sub(r'[-_.]+', '-', name).lower()
+
+
+def _parse_requirement_names(path: Path) -> Set[str]:
+    """Package names declared in a requirements.txt-shaped file (one
+    requirement per line, comments/options/version-specifiers stripped)."""
+    names: Set[str] = set()
+    try:
+        content = path.read_text(encoding='utf-8', errors='ignore')
+    except OSError:
+        return names
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or line.startswith('-'):
+            continue
+        match = _DEP_NAME_RE.match(line)
+        if match:
+            names.add(match.group(1))
+    return names
+
+
+def _parse_pyproject_dependency_names(path: Path) -> Set[str]:
+    """Package names declared as dependencies in pyproject.toml -- PEP 621
+    ``[project.dependencies]``/``[project.optional-dependencies]``, and
+    legacy Poetry's ``[tool.poetry.dependencies]`` table (keys, not values;
+    ``python`` itself is a version constraint there, not a dependency)."""
+    names: Set[str] = set()
+    try:
+        with open(path, 'rb') as f:
+            data = tomllib.load(f)
+    except (OSError, ValueError):
+        return names
+    project = data.get('project') or {}
+    for dep in project.get('dependencies') or []:
+        match = _DEP_NAME_RE.match(dep)
+        if match:
+            names.add(match.group(1))
+    for group in (project.get('optional-dependencies') or {}).values():
+        for dep in group or []:
+            match = _DEP_NAME_RE.match(dep)
+            if match:
+                names.add(match.group(1))
+    poetry_deps = ((data.get('tool') or {}).get('poetry') or {}).get('dependencies') or {}
+    names.update(name for name in poetry_deps if name.lower() != 'python')
+    return names
+
+
+@lru_cache(maxsize=256)
+def _python_project_inventory(project_root: Path) -> Tuple[FrozenSet[str], FrozenSet[str]]:
+    """(local top-level import names, declared third-party dist names) for a
+    Python project rooted at *project_root* -- the manifest/on-disk inventory
+    that upgrades ``is_intra_project_import``'s honest ``None`` for absolute
+    imports into a real verdict (BACK-1189). Cached per root -- see the
+    module comment above this function."""
+    local: Set[str] = set()
+    for base in (project_root, project_root / 'src'):
+        try:
+            children = list(base.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            if child.is_dir() and (child / '__init__.py').exists():
+                local.add(child.name)
+            elif base is project_root and child.suffix == '.py' and child.stem not in (
+                'setup', 'conftest'
+            ):
+                local.add(child.stem)
+
+    external: Set[str] = set()
+    external.update(_parse_requirement_names(project_root / 'requirements.txt'))
+    external.update(_parse_pyproject_dependency_names(project_root / 'pyproject.toml'))
+
+    return frozenset(local), frozenset(_normalize_dist_name(n) for n in external)
 
 
 # Backward compatibility: Keep old function-based API

@@ -32,11 +32,87 @@ class TestIsIntraProjectImport:
         e = PythonExtractor()
         assert e.is_intra_project_import(self._stmt('.utils', is_relative=True, level=1), Path('/p')) is True
 
-    def test_python_absolute_is_unknown(self):
+    def test_python_stdlib_is_external(self):
+        """BACK-1189: a known stdlib top-level name is always False, no
+        manifest/project-root needed."""
         from reveal.analyzers.imports.python import PythonExtractor
         e = PythonExtractor()
-        # `import os` / `from django.db import models` — can't cheaply tell.
-        assert e.is_intra_project_import(self._stmt('os'), Path('/p')) is None
+        assert e.is_intra_project_import(self._stmt('os'), Path('/p')) is False
+        assert e.is_intra_project_import(self._stmt('collections'), Path('/p')) is False
+
+    def test_python_absolute_without_project_root_is_unknown(self):
+        from reveal.analyzers.imports.python import PythonExtractor
+        e = PythonExtractor()
+        # No pyproject.toml/setup.py/__init__.py chain to resolve a root from
+        # — genuinely can't tell, and a non-stdlib name stays honest-declined.
+        assert e.is_intra_project_import(self._stmt('django'), Path('/p')) is None
+
+    def test_python_local_package_is_intra_project(self, tmp_path):
+        """BACK-1189: an absolute import of the project's own top-level
+        package (found via the on-disk inventory, not a resolved edge) is a
+        real True verdict, not a conservative None."""
+        from reveal.analyzers.imports.python import PythonExtractor
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "demo"\n')
+        (tmp_path / 'mypackage').mkdir()
+        (tmp_path / 'mypackage' / '__init__.py').write_text('')
+        e = PythonExtractor()
+        assert e.is_intra_project_import(self._stmt('mypackage'), tmp_path) is True
+        assert e.is_intra_project_import(self._stmt('mypackage.sub'), tmp_path) is True
+
+    def test_python_src_layout_local_package_is_intra_project(self, tmp_path):
+        """BACK-1189: PEP 517 src/ layout — the importable package sits under
+        src/, not the project root itself."""
+        from reveal.analyzers.imports.python import PythonExtractor
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "demo"\n')
+        (tmp_path / 'src' / 'mypackage').mkdir(parents=True)
+        (tmp_path / 'src' / 'mypackage' / '__init__.py').write_text('')
+        e = PythonExtractor()
+        assert e.is_intra_project_import(self._stmt('mypackage'), tmp_path) is True
+
+    def test_python_declared_pyproject_dependency_is_external(self, tmp_path):
+        """BACK-1189: a name declared as a PEP 621 dependency is False, even
+        though it never resolved to an in-tree file."""
+        from reveal.analyzers.imports.python import PythonExtractor
+        (tmp_path / 'pyproject.toml').write_text(
+            '[project]\nname = "demo"\ndependencies = ["Requests>=2.0", "click"]\n'
+        )
+        e = PythonExtractor()
+        assert e.is_intra_project_import(self._stmt('requests'), tmp_path) is False
+        assert e.is_intra_project_import(self._stmt('click'), tmp_path) is False
+
+    def test_python_declared_requirements_txt_dependency_is_external(self, tmp_path):
+        """BACK-1189: requirements.txt is the other declared-dependency
+        source, parsed the same way pyproject.toml's list is."""
+        from reveal.analyzers.imports.python import PythonExtractor
+        (tmp_path / 'setup.py').write_text('# project marker only\n')
+        (tmp_path / 'requirements.txt').write_text('flask==2.0.1\n# a comment\nnumpy\n')
+        e = PythonExtractor()
+        assert e.is_intra_project_import(self._stmt('flask'), tmp_path) is False
+        assert e.is_intra_project_import(self._stmt('numpy'), tmp_path) is False
+
+    def test_python_unlisted_dependency_stays_unknown(self, tmp_path):
+        """BACK-1189: a real third-party import that the manifest doesn't
+        declare (transitive-only, or an import name that differs from its
+        PyPI distribution name) must stay None, not a guessed verdict."""
+        from reveal.analyzers.imports.python import PythonExtractor
+        (tmp_path / 'pyproject.toml').write_text(
+            '[project]\nname = "demo"\ndependencies = ["click"]\n'
+        )
+        e = PythonExtractor()
+        assert e.is_intra_project_import(self._stmt('somelib'), tmp_path) is None
+
+    def test_python_local_package_wins_over_same_named_dependency(self, tmp_path):
+        """A same-named local package always wins — checked before the
+        declared-dependency list, so a shadow case never gets a wrong
+        'external' verdict."""
+        from reveal.analyzers.imports.python import PythonExtractor
+        (tmp_path / 'pyproject.toml').write_text(
+            '[project]\nname = "demo"\ndependencies = ["click"]\n'
+        )
+        (tmp_path / 'click').mkdir()
+        (tmp_path / 'click' / '__init__.py').write_text('')
+        e = PythonExtractor()
+        assert e.is_intra_project_import(self._stmt('click'), tmp_path) is True
 
     def test_go_uses_module_prefix(self, tmp_path):
         from reveal.analyzers.imports.go import GoExtractor
