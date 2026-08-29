@@ -52,15 +52,18 @@ def _extractor_has_real_classification(extractor_cls: type) -> bool:
     always falling through to the base class's honest-but-uninformative
     `None` default.
 
-    A dedicated per-language override (python.py/go.py/javascript.py)
-    always counts. The shared generic implementation
-    (`_GenericTreeSitterImportExtractor`, used by C/C++/Java/C#/PHP/Ruby/
-    Swift/Kotlin/Scala/Dart/GDScript/Lua) only counts when the extractor's
-    own `_ImportSpec` sets one of the flags that implementation's
-    `is_intra_project_import()` actually branches on — merely using that
-    shared class is not itself a capability, since several of its spec
-    combinations still fall through to `None` (e.g. a language with no
-    include/namespace/module-directory convention at all).
+    A dedicated per-language override (python.py/go.py/javascript.py/rust.py,
+    and BACK-1189's `RubyImportExtractor.is_intra_project_import` -- a
+    bespoke override on the Ruby subclass itself, not a change to the
+    shared base class below) always counts. The shared generic
+    implementation (`_GenericTreeSitterImportExtractor`, used by
+    C/C++/Java/C#/PHP/Swift/Kotlin/Scala/Dart/GDScript/Lua) only counts
+    when the extractor's own `_ImportSpec` sets one of the flags that
+    implementation's `is_intra_project_import()` actually branches on —
+    merely using that shared class is not itself a capability, since
+    several of its spec combinations still fall through to `None` (e.g. a
+    language with no include/namespace/module-directory convention at
+    all).
     """
     override = extractor_cls.is_intra_project_import
     if override is LanguageExtractor.is_intra_project_import:

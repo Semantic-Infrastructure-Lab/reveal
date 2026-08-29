@@ -53,11 +53,14 @@ class TestDependsIntraProjectClassificationSupported:
         # generic.py's shared extractor with module_dir_convention set.
         assert depends_intra_project_classification_supported('Swift') is True
 
-    def test_ruby_is_not_supported(self):
-        # generic.py's shared extractor, but Ruby's spec sets none of the
-        # flags is_intra_project_import branches on -- always falls through
-        # to None (BACK-1093's motivating gap).
-        assert depends_intra_project_classification_supported('Ruby') is False
+    def test_ruby_is_supported(self):
+        # BACK-1189: RubyImportExtractor now overrides is_intra_project_import
+        # with Gemfile.lock/gemspec-lib-informed classification (a bespoke
+        # override on the Ruby subclass, not a change to the shared generic
+        # base class 11 other languages also use) -- picked up automatically
+        # by this module's derived-from-the-registry design, no hand-
+        # maintained list to update.
+        assert depends_intra_project_classification_supported('Ruby') is True
 
     def test_rust_is_supported(self):
         # BACK-1189: rust.py now overrides is_intra_project_import with

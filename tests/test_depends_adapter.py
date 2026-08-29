@@ -290,23 +290,20 @@ class TestDependsAdapterHonestDecline:
         assert r['undercount_possible'] is False
         assert r['_meta']['confidence'] == 'high'
 
-    def test_ruby_unresolved_import_discloses_unclassifiable_language(self, tmp_path):
-        """BACK-1093: Ruby's extractor always returns None from
-        is_intra_project_import (no real True/False signal, unlike Python/
-        C#/Swift) -- an unresolved require() is invisible to
-        _unresolved_intra, so 'confidence: high' alone would misleadingly
-        suggest the same guarantee a genuinely-classified language gets.
-        Must be disclosed in known_limits rather than silently absent."""
+    def test_ruby_unresolved_import_does_not_trigger_unclassifiable_note(self, tmp_path):
+        """BACK-1189: Ruby now has real classification support
+        (Gemfile.lock/gemspec-lib-informed, RubyImportExtractor's own
+        override) -- must never appear in the BACK-1093 known_limits note
+        anymore. This tmp_path has no Gemfile.lock, so this particular
+        import still honestly returns None (same as Python's equivalent
+        test above) -- that's a per-import honest-decline, not a
+        language-level incapacity, and the two must not be conflated."""
         from reveal.adapters.depends import DependsAdapter
         _write(tmp_path / 'a.rb', "require 'missing_intra_module'\ndef foo; end\n")
         _write(tmp_path / 'b.rb', "def bar; end\n")
         r = DependsAdapter(str(tmp_path / 'b.rb')).get_structure()
         limits = r['_meta']['known_limits']
-        assert any('Ruby' in l and 'BACK-1093' in l for l in limits)
-        # Deliberately NOT folded into the binary confidence value (see
-        # _build_meta's comment) -- still 'high' since _unresolved_intra
-        # itself is 0 here.
-        assert r['_meta']['confidence'] == 'high'
+        assert not any('Ruby' in l and 'BACK-1093' in l for l in limits)
 
     def test_python_unresolved_import_does_not_trigger_unclassifiable_note(self, tmp_path):
         """Python has real classification support -- must never appear in

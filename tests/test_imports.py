@@ -212,6 +212,142 @@ class TestIsIntraProjectImport:
         e = RustExtractor()
         assert e.is_intra_project_import(self._stmt('somecrate::Thing'), Path('/p')) is None
 
+    # BACK-1189 Ruby slice: Gemfile.lock (external) + each gemspec/app's
+    # own lib/ inventory (local), the last of the six originally-named
+    # languages still hard-None.
+
+    def _ruby_stmt(self, module_name, is_relative=False):
+        return ImportStatement(
+            module_name=module_name, is_relative=is_relative, level=0,
+            file_path=Path('/proj/app/main.rb'), line_number=1,
+            import_type='require', imported_names=[], alias=None,
+        )
+
+    def test_ruby_relative_require_is_intra_project(self):
+        from reveal.analyzers.imports.generic import RubyImportExtractor
+        e = RubyImportExtractor()
+        stmt = self._ruby_stmt('./helper', is_relative=True)
+        assert e.is_intra_project_import(stmt, Path('/proj')) is True
+
+    def test_ruby_app_lib_file_is_intra_project(self, tmp_path):
+        """A Rails *application* has no gemspec at all -- its own top-level
+        lib/ is still the load-path root a legacy explicit `require` targets
+        (confirmed live against Discourse's lib/s3_helper.rb shape)."""
+        from reveal.analyzers.imports.generic import RubyImportExtractor
+        (tmp_path / 'Gemfile.lock').write_text('GEM\n  specs:\n')
+        (tmp_path / 'lib').mkdir()
+        (tmp_path / 'lib' / 's3_helper.rb').write_text('module S3Helper; end\n')
+        e = RubyImportExtractor()
+        assert e.is_intra_project_import(self._ruby_stmt('s3_helper'), tmp_path) is True
+
+    def test_ruby_app_lib_subdir_is_intra_project(self, tmp_path):
+        from reveal.analyzers.imports.generic import RubyImportExtractor
+        (tmp_path / 'Gemfile.lock').write_text('GEM\n  specs:\n')
+        (tmp_path / 'lib' / 'nested_replies').mkdir(parents=True)
+        e = RubyImportExtractor()
+        stmt = self._ruby_stmt('nested_replies/sort')
+        assert e.is_intra_project_import(stmt, tmp_path) is True
+
+    def test_ruby_own_gemspec_name_is_intra_project(self, tmp_path):
+        """A library gem referencing itself by name (its own tests, the
+        same shape Rust's own-crate-name check covers)."""
+        from reveal.analyzers.imports.generic import RubyImportExtractor
+        (tmp_path / 'Gemfile.lock').write_text('GEM\n  specs:\n')
+        (tmp_path / 'my-gem.gemspec').write_text('# stub\n')
+        e = RubyImportExtractor()
+        assert e.is_intra_project_import(self._ruby_stmt('my-gem'), tmp_path) is True
+
+    def test_ruby_multi_gem_monorepo_cross_gem_lib_is_intra_project(self, tmp_path):
+        """BACK-669: a bare require in one gem can target another gem's
+        lib/, registered on Bundler's shared $LOAD_PATH -- every gemspec
+        under the tree contributes, not just the nearest one."""
+        from reveal.analyzers.imports.generic import RubyImportExtractor
+        (tmp_path / 'Gemfile.lock').write_text('GEM\n  specs:\n')
+        engine_dir = tmp_path / 'engines' / 'billing'
+        engine_dir.mkdir(parents=True)
+        (engine_dir / 'billing.gemspec').write_text('# stub\n')
+        (engine_dir / 'lib').mkdir()
+        (engine_dir / 'lib' / 'billing_helper.rb').write_text('# stub\n')
+        e = RubyImportExtractor()
+        stmt = self._ruby_stmt('billing_helper', is_relative=False)
+        # called as if from a different gem/app file entirely
+        assert e.is_intra_project_import(stmt, tmp_path / 'app') is True
+
+    def test_ruby_declared_gemfile_lock_dependency_is_external(self, tmp_path):
+        (tmp_path / 'Gemfile.lock').write_text(
+            'GEM\n'
+            '  remote: https://rubygems.org/\n'
+            '  specs:\n'
+            '    activesupport (7.0.4)\n'
+            '      concurrent-ruby (~> 1.0)\n'
+            '      i18n (>= 1.6, < 2)\n'
+            '    concurrent-ruby (1.2.2)\n'
+            '\n'
+            'PLATFORMS\n'
+            '  x86_64-linux\n'
+            '\n'
+            'DEPENDENCIES\n'
+            '  activesupport\n'
+        )
+        from reveal.analyzers.imports.generic import RubyImportExtractor
+        e = RubyImportExtractor()
+        stmt = self._ruby_stmt('active_support/core_ext/string')
+        # top-level segment 'active_support' doesn't match gem name
+        # 'activesupport' (no mechanical mapping) -- stays honest None...
+        assert e.is_intra_project_import(stmt, tmp_path) is None
+        # ...but an exact-name match does resolve.
+        assert e.is_intra_project_import(self._ruby_stmt('concurrent-ruby'), tmp_path) is False
+
+    def test_ruby_transitive_subdependency_not_counted_as_declared(self, tmp_path):
+        """A dependency's own transitive sub-dependency (6-space indented
+        under its parent, not this project's own 4-space top-level entry)
+        must not be treated as a declared dependency of THIS project --
+        it's real gem metadata, but not a signal this project actually
+        depends on it directly."""
+        (tmp_path / 'Gemfile.lock').write_text(
+            'GEM\n'
+            '  remote: https://rubygems.org/\n'
+            '  specs:\n'
+            '    activesupport (7.0.4)\n'
+            '      i18n (>= 1.6, < 2)\n'
+        )
+        from reveal.analyzers.imports.generic import RubyImportExtractor
+        e = RubyImportExtractor()
+        # i18n only appears as a nested (6-space) sub-dependency line here.
+        assert e.is_intra_project_import(self._ruby_stmt('i18n'), tmp_path) is None
+
+    def test_ruby_path_sourced_gem_not_counted_as_external(self, tmp_path):
+        """A PATH-sourced gem is a local sibling, not a real external
+        dependency -- mis-classifying it external would be the exact
+        "cry wolf in reverse" failure BACK-547 exists to prevent."""
+        (tmp_path / 'Gemfile.lock').write_text(
+            'PATH\n'
+            '  remote: vendor/local_gem\n'
+            '  specs:\n'
+            '    local_gem (1.0.0)\n'
+            '\n'
+            'GEM\n'
+            '  remote: https://rubygems.org/\n'
+            '  specs:\n'
+        )
+        from reveal.analyzers.imports.generic import RubyImportExtractor
+        e = RubyImportExtractor()
+        # Not flagged False (external) just because it's PATH-sourced; also
+        # not True since no gemspec/lib inventory was set up for it here --
+        # correctly stays the honest None, never a wrong external claim.
+        assert e.is_intra_project_import(self._ruby_stmt('local_gem'), tmp_path) is None
+
+    def test_ruby_without_gemfile_lock_is_unknown(self):
+        from reveal.analyzers.imports.generic import RubyImportExtractor
+        e = RubyImportExtractor()
+        assert e.is_intra_project_import(self._ruby_stmt('somegem'), Path('/no/such/proj')) is None
+
+    def test_ruby_unlisted_name_stays_unknown(self, tmp_path):
+        (tmp_path / 'Gemfile.lock').write_text('GEM\n  specs:\n')
+        from reveal.analyzers.imports.generic import RubyImportExtractor
+        e = RubyImportExtractor()
+        assert e.is_intra_project_import(self._ruby_stmt('totally_unheard_of'), tmp_path) is None
+
 
 class TestImportStatement:
     """Test ImportStatement dataclass."""

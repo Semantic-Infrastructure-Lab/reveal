@@ -55,12 +55,14 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from ...core import node_children as _children
 from ...core import tree_root
 from ...core.treesitter_compat import _zero_arg
+from ...defaults import SKIP_DIRECTORIES
 from ...utils.path_utils import is_skippable_dir
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from .types import ImportStatement
@@ -2899,11 +2901,149 @@ class PhpImportExtractor(_GenericTreeSitterImportExtractor):
     spec = _PHP_SPEC
 
 
+def _find_ruby_project_root(start_path: Path) -> Optional[Path]:
+    """Walk up from *start_path* to the nearest directory containing
+    ``Gemfile.lock`` (BACK-1189) -- the generated, plain-text, safely
+    parseable lockfile that pins every external dependency's resolved
+    version, unlike the ``Gemfile`` itself (an executable Ruby DSL,
+    correctly declined per this ticket's own reasoning: decline honestly
+    rather than half-parse)."""
+    current = start_path.resolve()
+    while current != current.parent:
+        if (current / 'Gemfile.lock').exists():
+            return current
+        current = current.parent
+    return None
+
+
+@lru_cache(maxsize=None)
+def _ruby_gem_inventory(project_root: Path) -> Tuple[FrozenSet[str], FrozenSet[str]]:
+    """(local top-level require names, external gem names) for the Ruby
+    project rooted at *project_root* -- the manifest inventory that
+    upgrades ``is_intra_project_import``'s honest ``None`` into a real
+    verdict (BACK-1189), the same shape Python/Rust already ship.
+
+    Local: every top-level entry directly under ``project_root/lib`` (a
+    Bundler *application*'s own load-path root -- Rails apps have no
+    gemspec at all, and legacy explicit ``require``s of the app's own
+    ``lib/`` files are common; spot-checked live on Discourse, where this
+    is the entire signal source -- it has zero gemspecs of its own) plus,
+    for a *library*-shaped project, every ``*.gemspec``'s own declared gem
+    name (the common own-gem-by-name reference from that gem's own tests,
+    the same shape Rust's own-crate-name check covers) and every top-level
+    entry under that gemspec's sibling ``lib/``. Every gemspec under the
+    tree contributes, not just the nearest one -- BACK-669's multi-gem-
+    monorepo finding (Rails Engine gems, each with its own gemspec+lib/)
+    established that a bare ``require`` in one gem can target another
+    gem's ``lib/``, registered on Bundler's shared ``$LOAD_PATH``.
+
+    External: every gem name declared in ``Gemfile.lock``'s ``GEM`` section
+    ``specs:`` block (top-level entries only -- 4-space indented; a
+    dependency's own transitive sub-dependencies are indented 6+ and
+    excluded, since those aren't THIS project's own declared dependency).
+    ``PATH``/``GIT`` sections are deliberately not read here: a
+    ``PATH``-sourced gem is a local sibling, not an external one, and
+    mis-classifying it external would be the exact "cry wolf in reverse"
+    failure BACK-547 exists to prevent (Rust's ``path = "..."`` dependency
+    handling is the same principle). Gem names and require paths have no
+    single mechanical mapping (a gem can declare arbitrary
+    ``require_paths``), so this is intentionally the conservative
+    hyphen/underscore RubyGems convention, not a guess -- anything that
+    matches neither set stays honest ``None``.
+    """
+    def _add_lib_entries(lib_dir: Path) -> None:
+        if not lib_dir.is_dir():
+            return
+        try:
+            entries = list(lib_dir.iterdir())
+        except OSError:
+            return
+        for entry in entries:
+            if entry.is_file() and entry.suffix == '.rb':
+                local.add(entry.stem)
+            elif entry.is_dir():
+                local.add(entry.name)
+
+    local: Set[str] = set()
+    _add_lib_entries(project_root / 'lib')
+    for gemspec in project_root.rglob('*.gemspec'):
+        if any(part in SKIP_DIRECTORIES for part in gemspec.parts):
+            continue
+        local.add(gemspec.stem.replace('-', '_'))
+        _add_lib_entries(gemspec.parent / 'lib')
+
+    external: Set[str] = set()
+    try:
+        text = (project_root / 'Gemfile.lock').read_text(encoding='utf-8', errors='ignore')
+    except OSError:
+        text = ''
+    section: Optional[str] = None
+    in_specs = False
+    spec_line = re.compile(r'^    (\S+) \(')
+    for line in text.splitlines():
+        if line and not line[0].isspace():
+            section = line.strip()
+            in_specs = False
+            continue
+        if section != 'GEM':
+            continue
+        if line.strip() == 'specs:':
+            in_specs = True
+            continue
+        if not in_specs:
+            continue
+        match = spec_line.match(line)
+        if match:
+            external.add(match.group(1).replace('-', '_'))
+
+    return frozenset(local), frozenset(external)
+
+
 @register_extractor
 class RubyImportExtractor(_GenericTreeSitterImportExtractor):
     extensions = {'.rb'}
     language_name = 'Ruby'
     spec = _RUBY_SPEC
+
+    def is_intra_project_import(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
+        project_namespaces: Optional[Set[str]] = None,
+    ) -> Optional[bool]:
+        """BACK-1189 Ruby slice: real classification from Gemfile.lock
+        (external) and each gemspec's lib/ inventory (local), upgrading the
+        shared generic extractor's unconditional ``None`` (Ruby's
+        ``require`` targets are path-literal strings, not dotted
+        namespaces, so the base class's ``resolve_namespaces``/
+        ``package_node_types`` branches never apply here).
+
+        Overridden on ``RubyImportExtractor`` specifically, not on
+        ``_GenericTreeSitterImportExtractor`` -- 11 other languages share
+        that base class and must not be affected by a Ruby-only signal.
+        """
+        if stmt.is_relative:
+            return True
+        top_level = stmt.module_name.split('/')[0]
+        if top_level.endswith('.rb'):
+            top_level = top_level[:-3]
+        if not top_level:
+            return None
+        project_root = _find_ruby_project_root(base_path)
+        if project_root is None:
+            return None
+        local_names, external_names = _ruby_gem_inventory(project_root)
+        # A gem's declared name conventionally uses hyphens while its
+        # require path uses underscores (both inventory sets are built
+        # normalized this way -- see _ruby_gem_inventory), so the lookup
+        # key is normalized the same way on both sides.
+        normalized = top_level.replace('-', '_')
+        if normalized in local_names:
+            return True
+        if normalized in external_names:
+            return False
+        return None
 
 
 @register_extractor
