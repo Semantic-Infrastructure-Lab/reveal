@@ -787,6 +787,41 @@ class TestM102IsImported(unittest.TestCase):
         result = rule._is_imported('mymodule', all_imports, path, self.tmpdir)
         assert result is False
 
+    def test_relative_submodule_import_marks_used(self):
+        # BACK-1101: 'from .stem import X' is a genuine reference.
+        rule = M102()
+        all_imports: set = set()
+        (self.tmpdir / '__init__.py').write_text('from .check import run_check\n')
+        path = self.tmpdir / 'check.py'
+        path.write_text('def run_check(): pass\n')
+        result = rule._is_imported('check', all_imports, path, self.tmpdir)
+        assert result is True
+
+    def test_from_dot_import_stem_marks_used(self):
+        # BACK-1101: 'from . import stem' is a genuine reference.
+        rule = M102()
+        all_imports: set = set()
+        (self.tmpdir / '__init__.py').write_text('from . import errors\n')
+        path = self.tmpdir / 'errors.py'
+        path.write_text('class MyError(Exception): pass\n')
+        result = rule._is_imported('errors', all_imports, path, self.tmpdir)
+        assert result is True
+
+    def test_stem_in_docstring_prose_not_marked_used(self):
+        # BACK-1101 regression: a short stem like 'check' incidentally
+        # appearing as a bare word in __init__.py's docstring/comments must
+        # NOT count as a real reference -- only an import or a quoted
+        # __all__ entry does.
+        rule = M102()
+        all_imports: set = set()
+        (self.tmpdir / '__init__.py').write_text(
+            '"""This package does not check its own imports here."""\n'
+        )
+        path = self.tmpdir / 'check.py'
+        path.write_text('x = 1\n')
+        result = rule._is_imported('check', all_imports, path, self.tmpdir)
+        assert result is False
+
 
 class TestM102FindPackageRoot(unittest.TestCase):
     """Cover _find_package_root fallback path (lines 284-286)."""

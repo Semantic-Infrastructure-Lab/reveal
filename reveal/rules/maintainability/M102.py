@@ -337,12 +337,22 @@ class M102(BaseRule):
             if imp.startswith(module_name + '.'):
                 return True
 
-        # Check if referenced in __init__.py __all__
+        # Check if referenced in __init__.py -- a real reference (a relative
+        # import of the submodule, or a quoted __all__ entry), not a bare
+        # substring match (BACK-1101: 'check'/'errors'-style short stems
+        # incidentally matched inside unrelated docstrings/comments/
+        # identifiers, causing false 'is used' verdicts and under-firing).
         init_file = path.parent / '__init__.py'
         if init_file.exists():
             try:
                 init_content = init_file.read_text(encoding='utf-8')
-                if path.stem in init_content:
+                stem = re.escape(path.stem)
+                reference_patterns = (
+                    rf'from\s+\.{stem}\b',                      # from .stem import ...
+                    rf'from\s+\.\s+import\b[^#\n]*\b{stem}\b',  # from . import stem
+                    rf'''['"]{stem}['"]''',                      # 'stem' in __all__
+                )
+                if any(re.search(p, init_content) for p in reference_patterns):
                     return True
             except (OSError, UnicodeDecodeError):
                 pass
