@@ -161,6 +161,23 @@ _SUBCOMMANDS = {
 }
 
 
+def _warn_if_subcommand_shadows_path(name: str) -> None:
+    """Hint on stderr when a bare verb (e.g. `reveal overview`) silently
+    shadows a same-named file/dir in cwd (BACK-1112).
+
+    The precedence itself (bare word = verb, `./x` or `x/` = path) is
+    intentional and correct -- this only makes the shadowing visible
+    instead of silent.
+    """
+    if not os.path.exists(name):
+        return
+    target = f'./{name}/' if os.path.isdir(name) else f'./{name}'
+    print(
+        f"note: {target} exists — use ./{name} or {name}/ to target it",
+        file=sys.stderr,
+    )
+
+
 def _dispatch_subcommand() -> bool:
     """Dispatch to a named subcommand using a table-driven lookup.
 
@@ -177,6 +194,8 @@ def _dispatch_subcommand() -> bool:
 
     if name not in _SUBCOMMANDS:
         return False
+
+    _warn_if_subcommand_shadows_path(name)
 
     module_path, parser_fn, runner_fn = _SUBCOMMANDS[name]
     import importlib

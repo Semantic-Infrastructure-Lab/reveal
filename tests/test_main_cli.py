@@ -276,5 +276,36 @@ class TestPerfLogging(unittest.TestCase):
             self.assertFalse(log_path.exists())
 
 
+class TestSubcommandPathShadowHint(unittest.TestCase):
+    """BACK-1112: a bare verb (e.g. `reveal overview`) that dispatches as a
+    subcommand while a same-named file/dir sits in cwd should hint on
+    stderr, not silently shadow it. The dispatch precedence itself (bare
+    word = verb) is unchanged and correct."""
+
+    def run_reveal(self, *args, cwd):
+        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
+        return subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', cwd=cwd)
+
+    def test_hints_when_verb_shadows_a_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "overview").mkdir()
+            result = self.run_reveal("overview", cwd=tmp)
+
+            self.assertIn("note: ./overview/ exists", result.stderr)
+
+    def test_hints_when_verb_shadows_a_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "check").touch()
+            result = self.run_reveal("check", cwd=tmp)
+
+            self.assertIn("note: ./check exists", result.stderr)
+
+    def test_no_hint_when_nothing_shadowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self.run_reveal("overview", cwd=tmp)
+
+            self.assertNotIn("note:", result.stderr)
+
+
 if __name__ == '__main__':
     unittest.main()
