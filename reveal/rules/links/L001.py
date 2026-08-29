@@ -109,9 +109,14 @@ class L001(BaseRule):
             if not heading_text:
                 continue
             anchor = heading_text.lower()
+            # GitHub strips punctuation (keeping word chars/spaces/hyphens)
+            # then converts each space to a hyphen INDIVIDUALLY -- it does
+            # not collapse runs. A stripped em-dash leaves two flanking
+            # spaces that must survive as two separate hyphens (BACK-1232);
+            # collapsing here silently produced a single-hyphen anchor that
+            # never matched GitHub's actual double-hyphen slug.
             anchor = re.sub(r'[^\w\s-]', '', anchor)
-            anchor = re.sub(r'[\s_]+', '-', anchor)
-            anchor = re.sub(r'-+', '-', anchor)
+            anchor = re.sub(r'[\s_]', '-', anchor)
             anchor = anchor.strip('-')
             if anchor:
                 anchors.append(anchor)

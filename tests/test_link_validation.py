@@ -157,6 +157,28 @@ Link to [missing section](missing.md#section).
         self.assertEqual(len(detections), 1)
         self.assertIn('missing.md', detections[0].message)
 
+    def test_em_dash_heading_anchor_not_flagged(self):
+        """BACK-1232: em-dash heading anchors must match GitHub's real slug.
+
+        GitHub strips the em-dash (doesn't substitute a hyphen) but still
+        converts each of its two flanking spaces to a hyphen individually,
+        producing a double hyphen. A slugifier that collapses runs of
+        whitespace/hyphens instead produces a single-hyphen anchor and
+        false-positives on a link that is actually correct.
+        """
+        content = """
+# Test Document
+
+Jump to [section](#container-mechanics--verified-at-runtime).
+
+## Container mechanics — verified at runtime
+Content here.
+"""
+        path = self.create_markdown_file("test.md", content)
+        detections = self.rule.check(path, None, content)
+
+        self.assertEqual(len(detections), 0)
+
     def test_case_sensitivity(self):
         """Test case sensitivity detection."""
         # Create file with specific case
