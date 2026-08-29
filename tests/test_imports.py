@@ -5,6 +5,8 @@ import pytest
 from pathlib import Path
 from reveal.analyzers.imports import ImportStatement, ImportGraph
 from reveal.analyzers.imports.python import extract_python_imports, extract_python_symbols
+from reveal.analyzers.imports.classify import classify_import
+from reveal.analyzers.imports.base import build_project_namespaces
 from reveal.adapters.imports import ImportsAdapter
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
@@ -813,6 +815,110 @@ class TestImportsAdapter:
         rb_imports = result['files']['main.rb']
         by_module = {imp['module']: imp for imp in rb_imports}
         assert by_module['json']['classification'] == 'unresolved'
+
+    def test_classification_uses_declared_namespace_for_java(self, tmp_path):
+        """BACK-1234: the public 'classification' field used to only ever
+        consult a Python-shaped __init__.py local-names heuristic -- for
+        Java (and C#/Kotlin/PHP), an import that didn't resolve to a file
+        landed in 'unresolved' even when the tree plainly declares that
+        package elsewhere. `OtherThing` never resolves to a real file (no
+        such class exists), but `com.example.util` IS a declared package
+        (Helper.java) -- the namespace match is what BACK-1234 wires in."""
+        util_dir = tmp_path / "com" / "example" / "util"
+        util_dir.mkdir(parents=True)
+        (util_dir / "Helper.java").write_text(
+            "package com.example.util;\npublic class Helper {}\n"
+        )
+        app_dir = tmp_path / "com" / "example" / "app"
+        app_dir.mkdir(parents=True)
+        (app_dir / "Main.java").write_text(
+            "package com.example.app;\n"
+            "import com.example.util.OtherThing;\n"
+            "public class Main {}\n"
+        )
+
+        adapter = ImportsAdapter(str(tmp_path))
+        result = adapter.get_structure()
+
+        main_imports = next(
+            imps for path, imps in result['files'].items() if path.endswith('Main.java')
+        )
+        by_module = {imp['module']: imp for imp in main_imports}
+        record = by_module['com.example.util.OtherThing']
+        assert record['resolved'] is None  # genuinely no matching file -- namespace-only signal
+        assert record['classification'] == 'intra_project'
+
+    def test_classification_stays_unresolved_for_undeclared_java_package(self, tmp_path):
+        """Sibling of the above: an import whose package the tree never
+        declares (a real third-party dependency) must stay 'unresolved' --
+        BACK-1234 must not turn every Java import intra-project."""
+        app_dir = tmp_path / "com" / "example" / "app"
+        app_dir.mkdir(parents=True)
+        (app_dir / "Main.java").write_text(
+            "package com.example.app;\n"
+            "import org.apache.commons.lang3.StringUtils;\n"
+            "public class Main {}\n"
+        )
+
+        adapter = ImportsAdapter(str(tmp_path))
+        result = adapter.get_structure()
+
+        main_imports = next(
+            imps for path, imps in result['files'].items() if path.endswith('Main.java')
+        )
+        by_module = {imp['module']: imp for imp in main_imports}
+        assert by_module['org.apache.commons.lang3.StringUtils']['classification'] == 'unresolved'
+
+
+class TestClassifyImportIsIntra:
+    """BACK-1234: `classify_import`'s new `is_intra` parameter -- the
+    extractor's own `is_intra_project_import` verdict, when not None, takes
+    priority over the local_names heuristic."""
+
+    def test_is_intra_true_overrides_heuristic(self):
+        assert classify_import(
+            'some.external.looking.Name', is_relative=False, resolved=None,
+            is_python_file=False, local_names=frozenset(), is_intra=True,
+        ) == 'intra_project'
+
+    def test_is_intra_false_maps_to_unresolved(self):
+        assert classify_import(
+            'some.module', is_relative=False, resolved=None,
+            is_python_file=False, local_names=frozenset(), is_intra=False,
+        ) == 'unresolved'
+
+    def test_is_intra_none_falls_through_to_heuristic(self):
+        # local_names heuristic alone would classify this as internal.
+        assert classify_import(
+            'mypkg.sub', is_relative=False, resolved=None,
+            is_python_file=False, local_names=frozenset({'mypkg'}), is_intra=None,
+        ) == 'intra_project'
+
+    def test_resolution_truth_still_wins_over_is_intra(self):
+        # resolved/is_relative are settled before is_intra is even consulted.
+        assert classify_import(
+            'anything', is_relative=True, resolved=None,
+            is_python_file=False, local_names=frozenset(), is_intra=False,
+        ) == 'intra_project'
+
+
+class TestBuildProjectNamespaces:
+    """BACK-1234: the shared namespace-inventory builder `imports://` and
+    `depends://` both draw from."""
+
+    def test_collects_declared_java_packages(self, tmp_path):
+        (tmp_path / "Helper.java").write_text(
+            "package com.example.util;\npublic class Helper {}\n"
+        )
+        (tmp_path / "Main.java").write_text(
+            "package com.example.app;\npublic class Main {}\n"
+        )
+        namespaces = build_project_namespaces([tmp_path / "Helper.java", tmp_path / "Main.java"])
+        assert namespaces == {'com.example.util', 'com.example.app'}
+
+    def test_ignores_languages_without_namespace_declarations(self, tmp_path):
+        (tmp_path / "main.py").write_text("import os\n")
+        assert build_project_namespaces([tmp_path / "main.py"]) == set()
 
     def test_query_params_flag_style(self, tmp_path):
         """Test flag-style query params (?circular vs ?circular=true)."""

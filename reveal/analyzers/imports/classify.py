@@ -105,14 +105,29 @@ def classify_module(
 def classify_import(
     module: str, is_relative: bool, resolved: Optional[str],
     is_python_file: bool, local_names: frozenset,
+    is_intra: Optional[bool] = None,
 ) -> str:
     """Classify one import record into the public 'classification' values.
 
     ``resolved``/``is_relative`` (BACK-1193 resolution truth) take priority
     over any name-based guess -- a resolved in-tree file is 'intra_project'
     regardless of what its module string looks like.
+
+    ``is_intra`` (BACK-1234): the extractor's own
+    ``is_intra_project_import`` verdict for languages with a real
+    declared-namespace/manifest signal (Go, and C#/Java/Kotlin/PHP given
+    ``project_namespaces``). Only consulted to *upgrade* an otherwise-
+    'external' (bare-heuristic) verdict to 'intra_project' -- it never
+    overrides a 'stdlib' or already-'internal' verdict from ``local_names``,
+    which is why Python's own ``is_intra_project_import`` correctly
+    returning ``False`` for e.g. ``os`` (a stdlib module, not "unresolved")
+    must not downgrade `os`'s classification away from 'stdlib'. ``None``
+    (the extractor can't tell, or doesn't implement the method) leaves the
+    heuristic's verdict untouched either way.
     """
     if is_relative or resolved:
         return INTRA_PROJECT
     bucket, _key = classify_module(module or '', is_python_file, local_names)
+    if bucket == 'external' and is_intra is True:
+        return INTRA_PROJECT
     return _BUCKET_TO_CLASSIFICATION[bucket]
