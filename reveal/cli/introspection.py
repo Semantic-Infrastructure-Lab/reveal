@@ -193,6 +193,14 @@ def show_ast(path: str, max_depth: Optional[int] = None) -> str:
         # Format the AST
         lines = []
         lines.append(f"🌳 Tree-sitter AST: {path}")
+        # BACK-1129: a one-line banner up front, reusing the existing
+        # node-cache-backed detection (no second tree walk) -- otherwise the
+        # only signal a reader gets is spotting an inline "ERROR"/"MISSING"
+        # marker somewhere in a tree that can run thousands of lines deep.
+        if hasattr(analyzer, '_has_recovery_artifacts') and analyzer._has_recovery_artifacts():
+            lines.append(
+                "⚠ parse recovered with error/missing node(s) -- structure below may be incomplete or wrong"
+            )
         lines.append("")
 
         root_node = tree_root(analyzer.tree)
@@ -226,14 +234,24 @@ def _format_ast_node(node, depth: int = 0, max_depth: Optional[int] = None, pref
     indent = "  " * depth
     node_type = _zero_arg(node, 'kind')
 
+    # BACK-1129: tree-sitter's error-recovery inserts MISSING tokens as
+    # ordinary-looking zero-width leaves -- with no marker, a MISSING ')'
+    # renders identically to a real empty token and the recovery is
+    # invisible. Flag both recovery shapes distinctly so they're impossible
+    # to miss in a large tree (ERROR already renders literally as the text
+    # "ERROR" via its node kind, but with no highlighting it's easy to scroll
+    # past on anything but a tiny file).
+    is_missing = bool(_zero_arg(node, 'is_missing'))
+    marker = " ⚠ MISSING" if is_missing else (" ⚠ ERROR" if node_type == 'ERROR' else "")
+
     # Show text for leaf nodes
     if _zero_arg(node, 'child_count') == 0:
         text = src_bytes[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8', errors='ignore') if src_bytes else ""
         if len(text) > 50:
             text = text[:47] + "..."
-        lines.append(f"{indent}{node_type}: \"{text}\"")
+        lines.append(f"{indent}{node_type}: \"{text}\"{marker}")
     else:
-        lines.append(f"{indent}{node_type}")
+        lines.append(f"{indent}{node_type}{marker}")
 
     # Recurse for children
     for child in _children(node):

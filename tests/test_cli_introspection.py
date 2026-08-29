@@ -179,6 +179,37 @@ class TestShowAST(unittest.TestCase):
         self.assertIn("🌳 Tree-sitter AST:", result)
         # Should show root node only
 
+    def test_show_ast_clean_file_has_no_recovery_banner(self):
+        """A cleanly-parsed file must not print the BACK-1129 warning banner."""
+        result = show_ast(str(self.py_file))
+        self.assertNotIn("parse recovered with error/missing node", result)
+
+    def test_show_ast_missing_token_shows_banner_and_marker(self):
+        """BACK-1129: an unclosed construct (`def foo(:`) recovers with a
+        MISSING token spliced into an otherwise well-typed subtree and no
+        ERROR node anywhere in the tree -- the exact shape that used to be
+        completely invisible (a MISSING ')' rendered identically to a real
+        empty token)."""
+        broken = Path(self.temp_dir) / "broken.py"
+        broken.write_text("def foo(:\n    pass\n")
+
+        result = show_ast(str(broken))
+
+        self.assertIn("parse recovered with error/missing node(s)", result)
+        self.assertIn("MISSING", result)
+
+    def test_show_ast_error_node_shows_banner_and_marker(self):
+        """A genuine ERROR node (parser lost its place) must also get the
+        summary banner and an inline marker, not just its literal 'ERROR'
+        kind text easy to miss deep in a large tree."""
+        broken = Path(self.temp_dir) / "broken.py"
+        broken.write_text("def foo(: * / @ #\n")
+
+        result = show_ast(str(broken))
+
+        self.assertIn("parse recovered with error/missing node(s)", result)
+        self.assertIn("ERROR", result)
+
 
 class TestFormatASTNode(unittest.TestCase):
     """Tests for _format_ast_node helper function."""
