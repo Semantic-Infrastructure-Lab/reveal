@@ -456,8 +456,15 @@ def _main_impl() -> None:
     if _handle_special_modes(args):
         return
 
-    # Path is required for normal operation
+    # Path is required for normal operation. A truly bare invocation (no args
+    # at all) advertises capabilities instead of dumping argparse usage --
+    # SIL agent-bootstrap-manual.md §3.1 requires a qualifying tool to
+    # "advertise its own capabilities on bare invocation" (BACK-976). Any
+    # other no-path case (a flag combo with nothing to act on) keeps the
+    # original argparse-usage fallback.
     if not args.path:
+        if len(sys.argv) == 1:
+            handle_discover(False)
         parser.print_help()
         sys.exit(1)
 

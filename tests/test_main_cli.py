@@ -106,9 +106,22 @@ class TestCLIFlags(unittest.TestCase):
         self.assertIn("reveal", result.stdout.lower())
         self.assertIn("Examples:", result.stdout)
 
-    def test_no_args_shows_help(self):
-        """Should show help when run with no arguments."""
+    def test_no_args_advertises_capabilities(self):
+        """A bare invocation (no args at all) advertises capabilities via
+        the same payload as --discover, per SIL agent-bootstrap-manual.md
+        §3.1's "advertise its own capabilities on bare invocation"
+        requirement (BACK-976) -- not a raw argparse usage dump."""
         result = self.run_reveal()
+
+        self.assertEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertIn("adapters", payload)
+        self.assertGreater(payload["adapter_count"], 0)
+
+    def test_no_path_with_flags_shows_help(self):
+        """A flag combo with no path and no special-mode match still falls
+        back to argparse usage, distinct from a truly bare invocation."""
+        result = self.run_reveal("--format", "json")
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("usage:", result.stdout)
