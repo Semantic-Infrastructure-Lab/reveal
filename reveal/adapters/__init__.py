@@ -32,6 +32,7 @@ from .autossl import AutosslAdapter
 from .letsencrypt import LetsEncryptAdapter
 from .nginx import NginxUriAdapter
 from .calls import CallsAdapter
+from .classify import ClassifyAdapter
 from .depends import DependsAdapter
 from .patches import PatchesAdapter
 from .codex import CodexAdapter
@@ -85,6 +86,7 @@ __all__ = [
     'LetsEncryptAdapter',
     'NginxUriAdapter',
     'CallsAdapter',
+    'ClassifyAdapter',
     'DependsAdapter',
     'PatchesAdapter',
     'CodexAdapter',
