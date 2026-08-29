@@ -16,6 +16,7 @@ Fills coverage gaps beyond the 9 tests in test_python_adapter.py:
 
 import sys
 import unittest
+from unittest import mock
 from reveal.adapters.python import PythonAdapter
 
 import pytest
@@ -151,6 +152,38 @@ class TestPackagesSubRoute(unittest.TestCase):
         # Must not raise; may return None or error dict
         self.assertIsNotNone(result)
 
+    def test_editable_conflict_surfaced(self):
+        """BACK-1130: packages/<name> used to resolve version via a bare
+        importlib.metadata.distribution() call with zero indication the
+        answer might be ambiguous -- even though python://doctor's
+        check_editable_conflicts() already detects exactly this for the
+        same installed state. Simulates a conflict for 'pip' (always
+        installed) since this environment's real editable-conflict state
+        would make the test environment-dependent otherwise."""
+        fake_issue = {
+            'category': 'editable_conflict',
+            'package': 'pip',
+            'message': "Multiple editable .pth files for 'pip'",
+            'impact': 'Version conflicts - imports may load unexpected version',
+            'severity': 'high',
+            'details': [{'version': '1.0', 'path': '/fake/a.pth'},
+                        {'version': '2.0', 'path': '/fake/b.pth'}],
+        }
+        with mock.patch(
+            'reveal.adapters.python.doctor.check_editable_conflicts',
+            return_value=([fake_issue], [], []),
+        ):
+            result = self.adapter.get_element('packages/pip')
+        self.assertEqual(result.get('editable_conflict'), fake_issue)
+
+    def test_no_editable_conflict_omits_field(self):
+        with mock.patch(
+            'reveal.adapters.python.doctor.check_editable_conflicts',
+            return_value=([], [], []),
+        ):
+            result = self.adapter.get_element('packages/pip')
+        self.assertNotIn('editable_conflict', result)
+
 
 class TestModuleSubRoute(unittest.TestCase):
 
@@ -165,6 +198,31 @@ class TestModuleSubRoute(unittest.TestCase):
     def test_unknown_module_does_not_crash(self):
         result = self.adapter.get_element('module/no_such_module_xyz_999')
         self.assertIsNotNone(result)
+
+    def test_editable_conflict_surfaced_in_conflicts_list(self):
+        """BACK-1130: module/<name> only ran detect_pip_import_conflicts
+        (pip-location vs import-location) and detect_cwd_shadowing -- never
+        check_editable_conflicts(), so this endpoint reported conflicts: []
+        even when doctor.py, looking at the exact same installed state,
+        correctly flags the module's package as an editable_conflict.
+        'pytest' is a real installed distribution here, so pip_package
+        resolves normally; only the conflict signal itself is simulated."""
+        fake_issue = {
+            'category': 'editable_conflict',
+            'package': 'pytest',
+            'message': "Multiple editable .pth files for 'pytest'",
+            'impact': 'Version conflicts - imports may load unexpected version',
+            'severity': 'high',
+            'details': [{'version': '1.0', 'path': '/fake/a.pth'},
+                        {'version': '2.0', 'path': '/fake/b.pth'}],
+        }
+        with mock.patch(
+            'reveal.adapters.python.doctor.check_editable_conflicts',
+            return_value=([fake_issue], [], []),
+        ):
+            result = self.adapter.get_element('module/pytest')
+        conflict_types = [c.get('type') for c in result['conflicts']]
+        self.assertIn('editable_conflict', conflict_types)
 
 
 class TestGetStructureContract(unittest.TestCase):

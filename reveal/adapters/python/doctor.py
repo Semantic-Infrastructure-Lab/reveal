@@ -324,6 +324,10 @@ def _find_editable_packages(site_packages_dirs):
         if len(versions) > 1:
             issues.append({
                 "category": "editable_conflict",
+                # BACK-1130: kept alongside the human message so a caller
+                # (find_editable_conflict() below) can filter by exact name
+                # instead of parsing it back out of the message string.
+                "package": pkg_name,
                 "message": f"Multiple editable .pth files for '{pkg_name}'",
                 "impact": "Version conflicts - imports may load unexpected version",
                 "severity": "high",
@@ -376,6 +380,32 @@ def check_editable_conflicts() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any
         return [], [], []  # package introspection is best-effort
 
     return issues, warnings, recommendations
+
+
+def find_editable_conflict(package_name: str) -> Optional[Dict[str, Any]]:
+    """Return the ``editable_conflict`` issue for ``package_name``, if any.
+
+    BACK-1130: ``python://packages/<name>`` and ``python://module/<name>``
+    used to resolve a package's version via a bare
+    ``importlib.metadata.distribution(name)`` call -- first-match-wins and
+    sys.path-scan-order-dependent, the exact ambiguity ``python://doctor``
+    already detects and reports for this same installed state via
+    :func:`check_editable_conflicts`. This lets both of those more-targeted
+    endpoints surface the same signal instead of a confident-looking single
+    answer that may not be the version actually imported.
+
+    Distribution names and ``.pth``-derived package names don't always use
+    the same hyphen/underscore convention (``reveal-cli`` vs
+    ``reveal_cli``), so the comparison is normalized on both sides.
+    """
+    normalized = package_name.lower().replace('-', '_')
+    issues, _warnings, _recommendations = check_editable_conflicts()
+    for issue in issues:
+        if issue.get('category') != 'editable_conflict':
+            continue
+        if issue.get('package', '').lower().replace('-', '_') == normalized:
+            return issue
+    return None
 
 
 def calculate_health_score(

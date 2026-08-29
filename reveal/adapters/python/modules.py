@@ -172,6 +172,23 @@ def get_module_analysis(module_name: str) -> Dict[str, Any]:
     )
     result["conflicts"].extend(pip_conflicts)
 
+    # BACK-1130: only detect_pip_import_conflicts (pip-location vs
+    # import-location) and detect_cwd_shadowing (below) ran here -- neither
+    # calls python://doctor's check_editable_conflicts(), so a package this
+    # module belongs to could have a real editable_conflict doctor already
+    # flags and this endpoint would still report conflicts: [].
+    pip_package = result["pip_package"]
+    if pip_package and pip_package.get("name"):
+        from .doctor import find_editable_conflict
+        editable_conflict = find_editable_conflict(pip_package["name"])
+        if editable_conflict:
+            result["conflicts"].append({
+                "type": "editable_conflict",
+                "severity": "high",
+                "message": editable_conflict["message"],
+                "details": editable_conflict.get("details"),
+            })
+
     # Check CWD shadowing
     cwd_conflicts, cwd_recommendations = detect_cwd_shadowing(result.get("import_path"))
     result["conflicts"].extend(cwd_conflicts)

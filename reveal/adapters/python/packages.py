@@ -77,7 +77,7 @@ def get_package_details(package_name: str) -> Dict[str, Any]:
         dist = importlib.metadata.distribution(package_name)
         metadata = dist.metadata
 
-        return {
+        result = {
             "name": metadata.get("Name"),  # type: ignore[attr-defined]
             "version": metadata.get("Version"),  # type: ignore[attr-defined]
             "summary": metadata.get("Summary"),  # type: ignore[attr-defined]
@@ -88,5 +88,17 @@ def get_package_details(package_name: str) -> Dict[str, Any]:
             "homepage": metadata.get("Home-page"),  # type: ignore[attr-defined]
             "dependencies": dist.requires or [],
         }
+
+        # BACK-1130: the distribution() call above is first-match-wins and
+        # sys.path-scan-order-dependent -- if multiple editable .pth files
+        # exist for this package, the version/location above may not be the
+        # one actually imported. python://doctor already detects this;
+        # surface it here too instead of a confident-looking single answer.
+        from .doctor import find_editable_conflict
+        conflict = find_editable_conflict(package_name)
+        if conflict:
+            result["editable_conflict"] = conflict
+
+        return result
     except Exception as e:
         return {"error": f"Package not found: {package_name}", "details": str(e)}
