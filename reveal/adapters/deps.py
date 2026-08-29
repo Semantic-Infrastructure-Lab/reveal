@@ -91,6 +91,12 @@ def _tally_import(
     if imp.get('is_relative') or imp.get('resolved'):
         return True  # syntactically relative, or resolved in-tree (BACK-1193)
     bucket, key = _classify_module(imp.get('module') or '', is_python_file, local_names)
+    if bucket == 'external' and imp.get('classification') == 'intra_project':
+        # BACK-1236: imports://'s own is_intra_project_import verdict (BACK-1234,
+        # declared-namespace matching for Go/C#/Java/Kotlin/PHP) upgraded this
+        # import past the name-only heuristic above -- honor that here too,
+        # rather than still tallying it as an external package.
+        return True
     if bucket == 'stdlib':
         stdlib_counts[key] += 1
     elif bucket == 'external':

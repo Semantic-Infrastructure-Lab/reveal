@@ -294,6 +294,19 @@ class TestAnalyseImports(unittest.TestCase):
         self.assertNotIn('s3_helper', ext_names)
         self.assertEqual(result['relative_count'], 1)
 
+    # BACK-1236: deps://'s summary counters used to re-derive their own bucket
+    # from the raw module name, ignoring imports://'s own (BACK-1234-fixed)
+    # 'classification' field -- so a namespace-declared-but-unresolved Java
+    # import still landed in external_packages even after BACK-1234 shipped.
+    def test_namespace_upgraded_import_not_counted_as_external(self):
+        imp = _make_import('com.example.util.OtherThing')
+        imp['classification'] = 'intra_project'  # BACK-1234 upgrade, not resolved
+        files = {'/proj/Main.java': [imp]}
+        result = _analyse_imports(files, Path('/proj'))
+        ext_names = [p for p, _ in result['external_packages']]
+        self.assertNotIn('com', ext_names)  # classify_module's top-level-segment key
+        self.assertEqual(result['relative_count'], 1)
+
     def test_non_python_stdlib_name_collision_not_counted_as_stdlib(self):
         # Ruby's stdlib 'socket'/'digest' collide with Python's stdlib list by
         # name only -- must not be reported as stdlib for a non-Python file
