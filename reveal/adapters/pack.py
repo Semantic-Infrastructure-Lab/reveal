@@ -360,12 +360,29 @@ def _collect_candidates(
     """Collect and score candidate files for the pack."""
     candidates: List[Dict[str, Any]] = []
 
-    for f in _walk_files(path, exclude_patterns=exclude_patterns):
+    files = [
+        f for f in _walk_files(path, exclude_patterns=exclude_patterns)
         # Skip near-empty __init__.py files — they're almost always re-export
         # stubs and waste token budget without adding understanding
-        if f.name == '__init__.py' and f.stat().st_size < 500:
-            continue
+        if not (f.name == '__init__.py' and f.stat().st_size < 500)
+    ]
 
+    # BACK-1206: a monorepo can have one _ENTRY_POINT_CONFIG_FILES-name
+    # (package.json, Cargo.toml, ...) per sub-package/plugin — dozens of
+    # legitimate-but-shallow manifests would otherwise all claim the same
+    # unconditional +10.0 "one per project" bonus BACK-1196 reserved for a
+    # real project root, flooding the budget the same way repeated
+    # index.js/main.py barrels did before that fix. Only the shallowest
+    # occurrence(s) of each config filename — the project's own root config,
+    # not a nested package's — keep the full bonus.
+    min_depth_by_name: Dict[str, int] = {}
+    for f in files:
+        if f.name in _ENTRY_POINT_CONFIG_FILES:
+            depth = len(f.relative_to(path).parts)
+            if depth < min_depth_by_name.get(f.name, depth + 1):
+                min_depth_by_name[f.name] = depth
+
+    for f in files:
         rel = f.relative_to(path)
         stat = f.stat()
         size_chars = stat.st_size
@@ -375,9 +392,10 @@ def _collect_candidates(
         is_changed = bool(changed_files and str(f.resolve()) in changed_files)
         fan_in = (fan_in_scores or {}).get(str(f.resolve()), 0)
         graph_relevance = (graph_relevance_scores or {}).get(str(f.resolve()), 0.0)
+        is_root_config = len(rel.parts) == min_depth_by_name.get(f.name, -1)
         priority = _compute_priority(
             f, rel, focus, is_changed=is_changed, fan_in=fan_in,
-            graph_relevance=graph_relevance,
+            graph_relevance=graph_relevance, is_root_config=is_root_config,
         )
 
         candidates.append({
@@ -411,6 +429,7 @@ def _compute_priority(
     is_changed: bool = False,
     fan_in: int = 0,
     graph_relevance: float = 0.0,
+    is_root_config: bool = True,
 ) -> float:
     """Score a file's priority for inclusion in the pack."""
     name = path.name.lower()
@@ -432,8 +451,12 @@ def _compute_priority(
     # module's 2.0) with no size/content check at all, so a tree of
     # near-empty barrel files could dominate a budget-constrained selection.
     # Config/build files (Makefile, package.json, ...) are one-per-project,
-    # not a repeated convention, so they keep the full bonus unconditionally.
-    if name in _ENTRY_POINT_CONFIG_FILES:
+    # not a repeated convention, so they keep the full bonus unconditionally
+    # for the project's own root config. BACK-1206: a monorepo can have one
+    # of these per sub-package/plugin too — a non-root instance (caller has
+    # already determined a shallower same-named file exists) falls through
+    # to ordinary scoring instead of claiming the same ONE-per-project bonus.
+    if name in _ENTRY_POINT_CONFIG_FILES and is_root_config:
         score += 10.0
     elif name in _ENTRY_POINT_PATTERNS:
         file_size = path.stat().st_size
@@ -502,7 +525,7 @@ def _compute_priority(
         path.suffix.lower() in _DATA_MARKUP_EXTENSIONS
         and fan_in == 0
         and name not in _ENTRY_POINT_PATTERNS
-        and name not in _ENTRY_POINT_CONFIG_FILES
+        and not (name in _ENTRY_POINT_CONFIG_FILES and is_root_config)
     ):
         score -= 2.0
 

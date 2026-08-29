@@ -264,6 +264,23 @@ class TestComputePriority(unittest.TestCase):
             score = _compute_priority(path, rel, focus=None)
             self.assertGreaterEqual(score, 10.0)
 
+    def test_non_root_config_file_loses_unconditional_bonus(self):
+        """BACK-1206: a monorepo's per-plugin package.json/Cargo.toml is not
+        the project's root config — passing is_root_config=False must not
+        grant the ONE-per-project +10.0 bonus BACK-1196 reserved for it."""
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "plugins/plugin-a/package.json")
+            score = _compute_priority(path, rel, focus=None, is_root_config=False)
+            self.assertLess(score, 10.0)
+
+    def test_root_config_file_default_still_unconditional(self):
+        """is_root_config defaults True so existing single-project callers/tests
+        are unaffected by the BACK-1206 change."""
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "package.json")
+            score = _compute_priority(path, rel, focus=None)
+            self.assertGreaterEqual(score, 10.0)
+
     def test_large_file_penalized(self):
         with tempfile.TemporaryDirectory() as d:
             # Use a key-dir file so baseline score is 2.0; large penalty (-1) → 1.0
@@ -462,6 +479,18 @@ class TestCollectCandidates(unittest.TestCase):
         auth_file = next(c for c in candidates if "auth" in c['relative'])
         other_file = next(c for c in candidates if "utils" in c['relative'])
         self.assertGreater(auth_file['priority'], other_file['priority'])
+
+    def test_monorepo_only_root_config_file_gets_bonus(self):
+        """BACK-1206: dozens of per-plugin package.json files must not all
+        claim the same ONE-per-project bonus as the repo's own root config --
+        only the shallowest instance of each config filename does."""
+        self._make("package.json", '{"name": "root"}\n')
+        self._make("plugins/plugin-a/package.json", '{"name": "plugin-a"}\n')
+        self._make("plugins/plugin-b/package.json", '{"name": "plugin-b"}\n')
+        candidates = {c['relative']: c for c in _collect_candidates(self.base, focus=None)}
+        self.assertGreaterEqual(candidates["package.json"]['priority'], 10.0)
+        self.assertLess(candidates["plugins/plugin-a/package.json"]['priority'], 10.0)
+        self.assertLess(candidates["plugins/plugin-b/package.json"]['priority'], 10.0)
 
     def test_graph_relevance_scores_flow_into_candidates(self):
         self._make("auth/login.py", "# login\n")
