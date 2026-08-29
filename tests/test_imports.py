@@ -23,8 +23,11 @@ class TestIsIntraProjectImport:
 
     def test_base_default_is_none(self):
         from reveal.analyzers.imports.base import LanguageExtractor
-        # Rust/Zig extractors that don't override inherit None (conservative).
+        # Zig doesn't override -- inherits the base's conservative None.
         from reveal.analyzers.imports.rust import RustExtractor
+        # Rust DOES override (BACK-1189) but with no Cargo.toml findable from
+        # /p and a non-stdlib, non-relative name, still correctly lands on
+        # None -- exercising the same honest-decline floor, not the override.
         assert RustExtractor().is_intra_project_import(self._stmt('crate::x'), Path('/p')) is None
 
     def test_python_relative_is_intra_project(self):
@@ -149,6 +152,63 @@ class TestIsIntraProjectImport:
         from reveal.analyzers.imports.base import get_extractor
         e = get_extractor(Path('Foo.cs'))
         assert e.is_intra_project_import(self._stmt('MyApp.Services'), Path('/p')) is None
+
+    def test_rust_relative_is_intra_project(self):
+        """BACK-1189: crate::/super::/self:: use paths are already marked
+        is_relative by the extractor -- unambiguous, no Cargo.toml needed."""
+        from reveal.analyzers.imports.rust import RustExtractor
+        e = RustExtractor()
+        stmt = self._stmt('crate::utils', is_relative=True)
+        assert e.is_intra_project_import(stmt, Path('/p')) is True
+
+    def test_rust_stdlib_is_external(self):
+        from reveal.analyzers.imports.rust import RustExtractor
+        e = RustExtractor()
+        assert e.is_intra_project_import(self._stmt('std::collections'), Path('/p')) is False
+        assert e.is_intra_project_import(self._stmt('core::fmt'), Path('/p')) is False
+
+    def test_rust_own_crate_name_is_intra_project(self, tmp_path):
+        """BACK-1189: a Rust 2018+ integration test (tests/*.rs) refers to its
+        own crate by its Cargo.toml package name, not `crate::` -- a real
+        intra-project reference the manifest is required to recognize."""
+        from reveal.analyzers.imports.rust import RustExtractor
+        (tmp_path / 'Cargo.toml').write_text('[package]\nname = "my-crate"\n')
+        e = RustExtractor()
+        # Cargo.toml hyphens become underscores in the identifier.
+        assert e.is_intra_project_import(self._stmt('my_crate::Config'), tmp_path) is True
+
+    def test_rust_declared_dependency_is_external(self, tmp_path):
+        from reveal.analyzers.imports.rust import RustExtractor
+        (tmp_path / 'Cargo.toml').write_text(
+            '[package]\nname = "demo"\n'
+            '[dependencies]\nserde = "1.0"\ntokio = { version = "1", features = ["full"] }\n'
+        )
+        e = RustExtractor()
+        assert e.is_intra_project_import(self._stmt('serde::Deserialize'), tmp_path) is False
+        assert e.is_intra_project_import(self._stmt('tokio::spawn'), tmp_path) is False
+
+    def test_rust_path_dependency_is_intra_project(self, tmp_path):
+        """BACK-1189: a `path = "..."` dependency is a sibling crate in the
+        same tree (a Cargo workspace member) -- intra-project, not external,
+        even though it's declared in [dependencies]."""
+        from reveal.analyzers.imports.rust import RustExtractor
+        (tmp_path / 'Cargo.toml').write_text(
+            '[package]\nname = "demo"\n'
+            '[dependencies]\ncommon = { path = "../common" }\n'
+        )
+        e = RustExtractor()
+        assert e.is_intra_project_import(self._stmt('common::Shared'), tmp_path) is True
+
+    def test_rust_unlisted_dependency_stays_unknown(self, tmp_path):
+        from reveal.analyzers.imports.rust import RustExtractor
+        (tmp_path / 'Cargo.toml').write_text('[package]\nname = "demo"\n')
+        e = RustExtractor()
+        assert e.is_intra_project_import(self._stmt('rand::Rng'), tmp_path) is None
+
+    def test_rust_without_cargo_toml_is_unknown(self):
+        from reveal.analyzers.imports.rust import RustExtractor
+        e = RustExtractor()
+        assert e.is_intra_project_import(self._stmt('somecrate::Thing'), Path('/p')) is None
 
 
 class TestImportStatement:

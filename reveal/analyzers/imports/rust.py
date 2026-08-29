@@ -10,8 +10,9 @@ Benefits:
 """
 
 import logging
+from functools import lru_cache
 from pathlib import Path
-from typing import List, Set, Optional
+from typing import FrozenSet, List, Set, Optional, Tuple
 from ...core import node_children as _children, node_prev_sibling as _prev_sibling
 from ...core.treesitter_compat import _zero_arg
 
@@ -19,6 +20,16 @@ logger = logging.getLogger(__name__)
 
 from .types import ImportStatement
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib  # type: ignore  # Python < 3.11 fallback
+
+# Rust's own "stdlib" — always external, no Cargo.toml needed. `core`/`alloc`
+# are the no_std subsets of `std`; all three are equally never a dependency
+# or an in-tree crate.
+_RUST_STD_CRATES = frozenset({'std', 'core', 'alloc'})
 
 # Cross-invocation disk cache (BACK-626, extending BACK-625 to Rust): same
 # independent-reparse gap as PythonExtractor had -- extract_imports() does not
@@ -519,6 +530,50 @@ class RustExtractor(LanguageExtractor):
 
         return None
 
+    def is_intra_project_import(
+        self,
+        stmt: ImportStatement,
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
+        project_namespaces: Optional[Set[str]] = None,
+    ) -> Optional[bool]:
+        """A `crate::`/`super::`/`self::` use path (``stmt.is_relative``) is
+        unambiguously intra-project. Everything else (a bare crate name --
+        ``use serde::Deserialize``, or a Rust 2018+ own-crate reference by
+        name, e.g. an integration test's ``use mylib::Config``) needs
+        Cargo.toml to tell apart (BACK-1189):
+
+          1. ``std``/``core``/``alloc`` are always ``False`` -- no manifest
+             needed.
+          2. Otherwise find the nearest Cargo.toml (same walk
+             :meth:`_find_cargo_root` already does for resolution) and
+             check its ``[package].name`` (the crate's own name, referenced
+             this way from its own integration tests) and its
+             dependency tables. A ``path = "..."`` dependency is a sibling
+             crate in the same tree (a workspace member), not external, so
+             its name counts as local, not a real dependency name.
+          3. Anything else (a `git`/version-only dependency this
+             particular Cargo.toml doesn't list, e.g. inherited via
+             ``[workspace.dependencies]`` + ``dep.workspace = true``) stays
+             ``None`` -- honest under-classification, never a guess.
+        """
+        if stmt.is_relative:
+            return True
+        top_level = stmt.module_name.split('::')[0]
+        if not top_level:
+            return None
+        if top_level in _RUST_STD_CRATES:
+            return False
+        crate_root = self._find_cargo_root(base_path)
+        if crate_root is None:
+            return None
+        local_names, external_names = _rust_crate_inventory(crate_root)
+        if top_level in local_names:
+            return True
+        if top_level in external_names:
+            return False
+        return None
+
     @staticmethod
     def _deepest_module_match(parts: List[str], base_dir: Path) -> Optional[Path]:
         """Find the DEEPEST existing module file matching a prefix of `parts`.
@@ -604,6 +659,60 @@ class RustExtractor(LanguageExtractor):
             if result:
                 return result
         return None
+
+
+# ---------------------------------------------------------------------------
+# BACK-1189: Cargo.toml-informed crate inventory for is_intra_project_import.
+# Cached per crate root -- see the equivalent Python cache's comment
+# (analyzers/imports/python.py) for why: a directory's worth of Cargo.toml
+# parsing repeated across every unresolved `use` in a large crate is real,
+# measured overhead, not a hypothetical one.
+# ---------------------------------------------------------------------------
+
+def _dependency_table_names(table: dict) -> Tuple[Set[str], Set[str]]:
+    """Split one Cargo.toml dependency table (``[dependencies]``,
+    ``[dev-dependencies]``, ``[build-dependencies]``) into (local, external)
+    crate-identifier names. A ``path = "..."`` entry is a sibling crate in
+    the same tree (a workspace member) -- local, not a real dependency --
+    everything else (a bare version string, or a table with ``version``/
+    ``git``/``workspace`` but no ``path``) is a real external dependency."""
+    local: Set[str] = set()
+    external: Set[str] = set()
+    for name, spec in (table or {}).items():
+        ident = name.replace('-', '_')
+        if isinstance(spec, dict) and 'path' in spec:
+            local.add(ident)
+        else:
+            external.add(ident)
+    return local, external
+
+
+@lru_cache(maxsize=256)
+def _rust_crate_inventory(crate_root: Path) -> Tuple[FrozenSet[str], FrozenSet[str]]:
+    """(local crate-identifier names, external dependency names) for the
+    crate rooted at *crate_root* -- the manifest inventory that upgrades
+    ``is_intra_project_import``'s honest ``None`` for a bare crate-name use
+    path into a real verdict (BACK-1189)."""
+    local: Set[str] = set()
+    external: Set[str] = set()
+    try:
+        with open(crate_root / 'Cargo.toml', 'rb') as f:
+            data = tomllib.load(f)
+    except (OSError, ValueError):
+        return frozenset(), frozenset()
+
+    package_name = ((data.get('package') or {}).get('name'))
+    if package_name:
+        # Own crate, referenced by name -- the common integration-test shape
+        # (tests/*.rs uses `use mylib::Config;`, not `crate::Config`).
+        local.add(package_name.replace('-', '_'))
+
+    for table_name in ('dependencies', 'dev-dependencies', 'build-dependencies'):
+        table_local, table_external = _dependency_table_names(data.get(table_name) or {})
+        local.update(table_local)
+        external.update(table_external)
+
+    return frozenset(local), frozenset(external)
 
 
 # Backward compatibility: Keep old function-based API

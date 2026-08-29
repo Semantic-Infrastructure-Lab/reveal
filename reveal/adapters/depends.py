@@ -213,7 +213,7 @@ _SCHEMA_NOTES = [
     'Not deps:// (one character apart) — depends:// answers "who imports this '
     'one module" for a single target; deps:// is a whole-tree dependency dashboard',
     'Scan root: ?root=DIR > .reveal.yaml root:true > package marker > VCS root > inferred subtree',
-    "BACK-1093: some languages (Ruby, Rust, Zig, Dart, GDScript, Lua) have no real "
+    "BACK-1093: some languages (Ruby, Zig, Dart, GDScript, Lua) have no real "
     "True/False intra-project classification at all -- an unresolved import from one "
     "of them never trips the BACK-547 honest-decline caveat, so 'high' confidence on "
     "a scan dominated by them is disclosed via a dedicated known_limits entry rather "

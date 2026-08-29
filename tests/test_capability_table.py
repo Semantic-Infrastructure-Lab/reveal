@@ -59,9 +59,12 @@ class TestDependsIntraProjectClassificationSupported:
         # to None (BACK-1093's motivating gap).
         assert depends_intra_project_classification_supported('Ruby') is False
 
-    def test_rust_is_not_supported(self):
-        # rust.py subclasses LanguageExtractor directly, no override at all.
-        assert depends_intra_project_classification_supported('Rust') is False
+    def test_rust_is_supported(self):
+        # BACK-1189: rust.py now overrides is_intra_project_import with
+        # Cargo.toml-informed classification -- picked up automatically by
+        # this module's derived-from-the-registry design, no hand-maintained
+        # list to update.
+        assert depends_intra_project_classification_supported('Rust') is True
 
     def test_unknown_language_defaults_to_not_supported(self):
         # Conservative default for a language absent from the registry entirely
