@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-08-29 (xenon-wolf-0829 — v0.124.0 release: classify:// adapter, --also-json, manifest-informed import resolution for Python/Rust/Ruby, classification-field wiring)
+> **Last updated**: 2026-08-30 (contracting-station-0830 — v0.125.0 release: I007/I008 dependency reconciliation, classify:// in-tree-vendoring detection)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,11 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.125.0 — I007/I008 dependency reconciliation, classify:// in-tree-vendoring detection
+
+- ✅ New `I007`/`I008` check rules — declared-vs-imported dependency reconciliation for Python + Rust (BACK-1191).
+- ✅ `classify://` detects in-tree-vendored files via banner + locale-fan-out content signals (BACK-1238).
 
 ### v0.124.0 — classify:// adapter, --also-json, manifest-informed import resolution, classification-field wiring
 

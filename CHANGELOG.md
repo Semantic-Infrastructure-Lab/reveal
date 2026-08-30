@@ -14,7 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.124.0] - 2026-08-29 (sessions oceanic-demon-0828, mitama-0828, xenon-wolf-0829)
+## [0.125.0] - 2026-08-30 (sessions torrential-dewpoint-0829, contracting-station-0830)
+
+### Added
+- **New `I007`/`I008` check rules — declared-vs-imported dependency reconciliation (BACK-1191)** — `I007` flags a manifest-declared dependency that's never imported anywhere in the project; `I008` flags an import with no matching manifest declaration. Built on BACK-1189's manifest-declared-dependency inventories, scoped to Python (`pyproject.toml`/`requirements.txt`) and Rust (`Cargo.toml`) — Ruby/Go/JS-TS/PHP/C# deliberately out of scope for now (see `BACK-1240`; Ruby specifically is structurally unsound for I007 since `Gemfile.lock` only exposes the resolved transitive graph, not direct declarations). Dogfooded against reveal's own ~950-file corpus before shipping: fixed a pytest-`conftest`-import false-positive class, added two real PyPI alias gaps (`dnspython`/`dns`, `python-whois`/`whois`), confirmed three genuinely-dead entries in reveal's own `pyproject.toml` (`lxml`, `rich`, `tree-sitter`).
+
+### Fixed
+- **`classify://` (and `overview://`'s provenance tag) had no in-tree-vendoring signal — vendored files inside the app tree (not under a `vendor/`-named directory) classified `first_party` (BACK-1238)** — new content-based signals: a minifier-preserved `/*!`/`//!` license-banner + version token, and locale-file fan-out (≥5 same-extension siblings named after language codes in one directory). Deliberately scoped to `classify://` only, not folded into the shared path-only `classify_path_provenance()` used by `overview://`/`hotspots://`/`pack://`.
+- **`WHY_REVEAL.md` claimed 85 quality rules; I007/I008 brought the real count to 87** — caught by CI's V029 self-validation check, fixed same-session.
 
 ### Added
 - **New `classify://` adapter (BACK-1233)** — one row of provenance (test/vendor/minified/first-party) per file across the full, unranked file population; `overview://`/`hotspots://`/`pack://` only ever tagged their own ranked/selected subsets, leaving "what fraction of this codebase is first-party" structurally uncomputable from any of them. Registered as adapter #35, with a due-diligence workflow recipe and `help://` reachability.
