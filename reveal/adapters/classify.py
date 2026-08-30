@@ -13,16 +13,49 @@ walker rather than building a new classifier or a new directory walk.
 
 from __future__ import annotations
 
+import re
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .stats.analysis import find_analyzable_files, get_file_display_path
 from ..utils import print_json_result
-from ..utils.path_utils import classify_path_provenance
+from ..utils.path_utils import classify_path_provenance, looks_vendored_by_banner
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 from ..utils.validation import require_path_exists
+
+# BACK-1238: many same-extension siblings in one directory named after
+# 2-3 letter language codes (optionally region-tagged, e.g. `en`, `zh-CN`)
+# is an unusual pattern for first-party application code, but a common shape
+# for vendored i18n bundles (moment.js locales, jQuery Validate messages).
+# Threshold picked well above the ticket's real evidence (13-14 locale files
+# per vendored library) so a small first-party set of genuinely per-language
+# files (e.g. 2-3 fixtures) doesn't false-positive.
+_LOCALE_STEM_RE = re.compile(r'^[a-z]{2,3}(-[A-Z]{2})?$')
+_LOCALE_FANOUT_THRESHOLD = 5
+
+
+def _apply_locale_fanout(rows: List[Dict[str, Any]]) -> None:
+    """Reclassify first_party files as vendor when they're part of a
+    locale-file fan-out (BACK-1238) — mutates *rows* in place.
+
+    Structural signal, not a per-file content check: needs every sibling in
+    the directory, so it runs as a second pass over the full population
+    rather than inline in the per-file loop.
+    """
+    groups: Dict[Any, List[Dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        rel = Path(row['file'])
+        if _LOCALE_STEM_RE.match(rel.stem):
+            groups[(rel.parent, rel.suffix)].append(row)
+    for group_rows in groups.values():
+        if len(group_rows) < _LOCALE_FANOUT_THRESHOLD:
+            continue
+        for row in group_rows:
+            if row['provenance'] == 'first_party':
+                row['provenance'] = 'vendor'
 
 
 def _classify_directory(directory: Path) -> List[Dict[str, Any]]:
@@ -30,10 +63,13 @@ def _classify_directory(directory: Path) -> List[Dict[str, Any]]:
     for file_path in find_analyzable_files(directory):
         rel = Path(get_file_display_path(file_path, directory))
         provenance = classify_path_provenance(rel.parts[:-1], rel.name)
+        if provenance is None and looks_vendored_by_banner(file_path):
+            provenance = 'vendor'
         rows.append({
             'file': rel.as_posix(),
             'provenance': provenance or 'first_party',
         })
+    _apply_locale_fanout(rows)
     return rows
 
 
@@ -87,11 +123,12 @@ class ClassifyAdapter(ResourceAdapter):
             ],
             'features': [
                 'One row per file — not a ranked/capped subset like overview://, hotspots://, pack://',
-                'Path-only classifier: no file content is read',
+                'Path-only signals (test/vendor-dir/minified) plus two cheap content signals for in-tree vendoring (BACK-1238): a minifier-preserved license banner in the first few lines, and locale-file fan-out (many same-extension siblings named after language codes)',
                 'summary.by_provenance gives a first-party-vs-noise fraction for the whole target',
             ],
             'notes': [
-                "Content-based generated-file detection (checks.py's _is_generated_file) is not folded in — path-only classification only.",
+                "Content-based generated-file detection (checks.py's _is_generated_file) is not folded in.",
+                'Content reads are bounded to the first few lines of files not already classified by path alone — overview:///hotspots:///pack:// remain path-only.',
             ],
             'see_also': [
                 'reveal hotspots://<dir> - ranked complexity hotspots, each tagged with provenance',
@@ -127,7 +164,7 @@ class ClassifyAdapter(ResourceAdapter):
                 {'uri': 'classify://src', 'description': 'Provenance for every file under src/', 'output_type': 'classify_report', 'task': 'dd'},
             ],
             'notes': [
-                'Path-only classification (directory/filename conventions) — no file content is read.',
+                'Mostly path-only classification (directory/filename conventions), plus two bounded content checks for in-tree vendoring (BACK-1238) — see get_help().',
             ],
         }
 

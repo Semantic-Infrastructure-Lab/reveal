@@ -5,8 +5,10 @@ Consolidates common patterns for searching up directory trees.
 
 import json
 import os
+import re
 import tempfile
 from dataclasses import dataclass, field
+from itertools import islice
 from pathlib import Path, PurePath
 from typing import Any, Callable, Dict, Iterable, Iterator, Optional, List, Set, Union
 
@@ -151,6 +153,45 @@ def classify_path_provenance(parts: Iterable[str], filename: str) -> Optional[st
     if is_minified_filename(filename):
         return 'minified'
     return None
+
+
+# BACK-1238: content-marker vendoring signal, deliberately kept separate from
+# classify_path_provenance() above rather than folded into it. That function
+# is shared by overview://, hotspots://, and pack:// — ranking adapters that
+# tag only the handful of entries they already select, on a signature that
+# doesn't even carry a real filesystem path (overview:// calls it after
+# relativizing). classify://'s full-population walk already opens every file
+# path it visits (find_analyzable_files), so the extra read here is close to
+# free for that one caller — see the ticket's scope note. Only classify.py
+# calls this; the other three callers stay path-only and untouched.
+#
+# A "bang comment" -- `/*!` or `//!` -- is a minifier-preservation convention
+# (UglifyJS/Terser/cssnano strip normal comments but keep these) used almost
+# exclusively by bundled third-party JS/CSS to keep a license banner alive
+# through minification (moment.js, jQuery plugins). First-party application
+# code has no reason to use it. Gated on a version-looking token in the same
+# head so a stray `/*!` on unrelated first-party code doesn't false-positive.
+_VENDOR_BANNER_RE = re.compile(r'/\*!|//!')
+_VERSION_TOKEN_RE = re.compile(r'\bv?\d+\.\d+(\.\d+)?\b')
+
+
+def looks_vendored_by_banner(file_path: Path, max_lines: int = 5) -> bool:
+    """True if *file_path*'s first *max_lines* lines carry a minifier-
+    preserved license-banner comment alongside a version token (BACK-1238) —
+    e.g. ``/*! moment.js v2.29.4 ... */``.
+
+    Reads at most *max_lines* lines, not the whole file — bounded cost for
+    classify://'s full-population walk. Any read failure (binary file,
+    permissions, encoding) is treated as "no signal", not an error — this is
+    an additive heuristic layered on top of classify_path_provenance()'s
+    path-only result, not a required check.
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            head = ''.join(islice(f, max_lines))
+    except OSError:
+        return False
+    return bool(_VENDOR_BANNER_RE.search(head) and _VERSION_TOKEN_RE.search(head))
 
 
 def to_relative_display(file_str: Union[str, PurePath], base_path: Union[str, Path, None]) -> str:
