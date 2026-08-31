@@ -169,6 +169,19 @@ def run_check(args: Namespace) -> None:
     from reveal.utils import check_for_updates
     check_for_updates()
 
+    # BACK-1248: --also-json (BACK-1184) is only wired for the URI-adapter
+    # render paths in cli/routing/uri.py -- `check` has no uri:// form and
+    # this subcommand path never calls write_also_json(). Previously the
+    # flag was silently accepted, no file was written, and stderr stayed
+    # empty; the silence (not the limitation itself) was the defect, so
+    # disclose it here rather than implementing full subcommand support.
+    if getattr(args, 'also_json', None):
+        print(
+            f"Warning: --also-json has no effect on 'reveal check' — it only writes for "
+            "URI-adapter queries (e.g. 'overview://path'). Use --format json instead.",
+            file=sys.stderr,
+        )
+
     # Introspection flags exit early
     if getattr(args, 'rules', False):
         from reveal.cli.handlers import handle_rules_list

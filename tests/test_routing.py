@@ -1246,6 +1246,40 @@ class TestHandleFile(unittest.TestCase):
         finally:
             os.unlink(temp_path)
 
+    def test_check_also_json_warns_instead_of_silently_no_opping(self):
+        """BACK-1248: --also-json (BACK-1184) is URI-adapter-form only;
+        `check` has no uri:// form and previously accepted the flag with no
+        warning, no file written, exit 0. Now warns on stderr."""
+        import io
+        import tempfile
+        import contextlib
+        from reveal.cli.commands.check import run_check
+        from reveal import checks
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.py', mode='w') as f:
+            f.write("x = 1\n")
+            temp_path = f.name
+
+        try:
+            mock_args = Namespace(
+                path=temp_path,
+                rules=False,
+                explain=None,
+                no_fallback=False,
+                select=None,
+                ignore=None,
+                format='text',
+                also_json='/tmp/should-not-be-written.json',
+            )
+
+            stderr = io.StringIO()
+            with patch.object(checks, 'run_pattern_detection', return_value=(0, False)):
+                with patch('sys.exit'), contextlib.redirect_stderr(stderr):
+                    run_check(mock_args)
+            self.assertIn('also-json', stderr.getvalue())
+        finally:
+            os.unlink(temp_path)
+
     def test_element_extraction(self):
         """Verify element parameter calls extract_element."""
         import tempfile
