@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .stats.analysis import find_analyzable_files, get_file_display_path
@@ -76,9 +76,21 @@ def _apply_locale_fanout(rows: List[Dict[str, Any]]) -> None:
                 row['provenance'] = 'vendor'
 
 
-def _classify_directory(directory: Path) -> List[Dict[str, Any]]:
+def _classify_directory(directory: Path) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    """Returns (rows, excluded_by_extension).
+
+    BACK-1241: the population here is gated on find_analyzable_files() ->
+    get_analyzer() returning a real analyzer -- extensions with no
+    registered analyzer anywhere (.erb, .vue, .scss, .css confirmed live)
+    are silently absent from both `rows` and its own count, and
+    overview://'s total_files agrees by construction (same shared walker),
+    not because the population is actually complete. excluded_by_extension
+    makes the gap visible instead of reporting a partial population as if
+    it were the full one.
+    """
     rows = []
-    for file_path in find_analyzable_files(directory):
+    excluded_by_extension: Dict[str, int] = {}
+    for file_path in find_analyzable_files(directory, excluded_by_extension=excluded_by_extension):
         rel = Path(get_file_display_path(file_path, directory))
         provenance = classify_path_provenance(rel.parts[:-1], rel.name)
         if provenance is None and looks_vendored_by_banner(file_path):
@@ -88,7 +100,7 @@ def _classify_directory(directory: Path) -> List[Dict[str, Any]]:
             'provenance': provenance or 'first_party',
         })
     _apply_locale_fanout(rows)
-    return rows
+    return rows, excluded_by_extension
 
 
 class ClassifyRenderer:
@@ -105,6 +117,14 @@ class ClassifyRenderer:
         print(f"{summary.get('total', len(rows))} files")
         for label, count in summary.get('by_provenance', {}).items():
             print(f"  {label}: {count}")
+        excluded = summary.get('excluded', 0)
+        if excluded:
+            # BACK-1241: the count above is not the full population -- make
+            # that visible in text mode too, not just JSON.
+            by_ext = summary.get('excluded_by_extension', {})
+            top = ', '.join(f"{ext} ({n})" for ext, n in list(by_ext.items())[:5])
+            more = f", +{len(by_ext) - 5} more extensions" if len(by_ext) > 5 else ''
+            print(f"\n⚠ {excluded} more file(s) not classified — no analyzer for: {top}{more}")
         print()
         for row in rows:
             print(f"  {row['provenance']:>11}  {row['file']}")
@@ -134,7 +154,7 @@ class ClassifyAdapter(ResourceAdapter):
     def get_help() -> Dict[str, Any]:
         return {
             'name': 'classify',
-            'description': 'Provenance tag (first_party/test/vendor/minified) for every file in a directory, over the full unranked population.',
+            'description': 'Provenance tag (first_party/test/vendor/minified) for every ANALYZABLE file in a directory, over the full unranked population of those files.',
             'syntax': 'classify://<dir>',
             'examples': [
                 {'uri': 'classify://src', 'description': 'Provenance for every analyzable file under src/'},
@@ -143,10 +163,12 @@ class ClassifyAdapter(ResourceAdapter):
                 'One row per file — not a ranked/capped subset like overview://, hotspots://, pack://',
                 'Path-only signals (test/vendor-dir/minified) plus two cheap content signals for in-tree vendoring (BACK-1238): a minifier-preserved license banner in the first few lines, and locale-file fan-out (many same-extension siblings named after language codes)',
                 'summary.by_provenance gives a first-party-vs-noise fraction for the whole target',
+                "summary.excluded/excluded_by_extension (BACK-1241) discloses files skipped for having no registered analyzer at all (.erb/.vue/.scss confirmed common) -- summary.total is the analyzed population, not every file on disk",
             ],
             'notes': [
                 "Content-based generated-file detection (checks.py's _is_generated_file) is not folded in.",
                 'Content reads are bounded to the first few lines of files not already classified by path alone — overview:///hotspots:///pack:// remain path-only.',
+                'Inclusion rule (BACK-1241): a file is in the counted population iff registry.get_analyzer() recognizes its extension -- the same rule overview:///hotspots:///pack:// use for their own totals, which is why those numbers agree with classify:// by construction, not because either is a full-disk count. Template/markup formats without a registered analyzer (.erb, .vue, .scss, .css) are invisible to all of them; check summary.excluded_by_extension before treating summary.total as "the codebase".',
             ],
             'see_also': [
                 'reveal hotspots://<dir> - ranked complexity hotspots, each tagged with provenance',
@@ -159,7 +181,7 @@ class ClassifyAdapter(ResourceAdapter):
     def get_schema() -> Dict[str, Any]:
         return {
             'adapter': 'classify',
-            'description': 'Provenance classification for every file in a directory, full population',
+            'description': 'Provenance classification for every analyzable file in a directory (see summary.excluded for what has no registered analyzer)',
             'uri_syntax': 'classify://<dir>',
             'query_params': {},
             'elements': {},
@@ -191,7 +213,7 @@ class ClassifyAdapter(ResourceAdapter):
         require_path_exists(path)
 
         directory = path if path.is_dir() else path.parent
-        rows = _classify_directory(directory)
+        rows, excluded_by_extension = _classify_directory(directory)
 
         by_provenance: Dict[str, int] = {}
         for row in rows:
@@ -202,6 +224,16 @@ class ClassifyAdapter(ResourceAdapter):
             'summary': {
                 'total': len(rows),
                 'by_provenance': by_provenance,
+                # BACK-1241: `total` above is NOT the full file population --
+                # it's only files with a registered analyzer. `excluded`
+                # (population - total) plus the per-extension breakdown
+                # discloses what's missing (.erb/.vue/.scss and similar
+                # unanalyzed-but-real source formats) instead of `total`
+                # silently reading as complete coverage.
+                'excluded': sum(excluded_by_extension.values()),
+                'excluded_by_extension': dict(
+                    sorted(excluded_by_extension.items(), key=lambda kv: -kv[1])
+                ),
             },
         }
 

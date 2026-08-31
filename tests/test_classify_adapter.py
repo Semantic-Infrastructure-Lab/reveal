@@ -126,6 +126,31 @@ def test_classify_locale_fanout_still_fires_under_real_vendor_dir(tmp_path):
         assert by_file[f'vendor/gems/somegem/config/locales/{code}.yml'] == 'vendor'
 
 
+def test_classify_discloses_excluded_files_with_no_analyzer(tmp_path):
+    """BACK-1241: classify:// (and overview://, sharing the same walker)
+    silently excludes extensions with no registered analyzer (.erb/.vue/
+    .scss/.css confirmed real) from both the population and the count --
+    summary.excluded/excluded_by_extension must disclose the gap."""
+    _write(tmp_path / 'main.py')
+    _write(tmp_path / 'README.md', '# readme\n')
+    _write(tmp_path / 'show.html.erb', '<div><%= @user.name %></div>\n')
+    _write(tmp_path / 'component.vue', '<template><div/></template>\n')
+    _write(tmp_path / 'style.css', 'body { color: red; }\n')
+    _write(tmp_path / 'style.scss', '.foo { color: blue; }\n')
+
+    result = ClassifyAdapter(str(tmp_path)).get_structure()
+
+    # Only the 2 analyzable files are in the population/count, as before.
+    assert result['summary']['total'] == 2
+    files = {row['file'] for row in result['files']}
+    assert files == {'main.py', 'README.md'}
+    # The 4 excluded files are now disclosed, not silently dropped.
+    assert result['summary']['excluded'] == 4
+    assert result['summary']['excluded_by_extension'] == {
+        '.erb': 1, '.vue': 1, '.css': 1, '.scss': 1,
+    }
+
+
 def test_classify_locale_fanout_below_threshold_stays_first_party(tmp_path):
     # A couple of genuinely per-language first-party fixtures shouldn't
     # false-positive -- only a fan-out above the threshold trips it.

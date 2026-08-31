@@ -31,6 +31,7 @@ def find_analyzable_files(
     code_only: bool = False,
     respect_gitignore: bool = True,
     exclude_patterns: Optional[List[str]] = None,
+    excluded_by_extension: Optional[Dict[str, int]] = None,
 ) -> Iterator[Path]:
     """Yield files that can be analyzed.
 
@@ -42,6 +43,14 @@ def find_analyzable_files(
             patterns, matched with the same semantics as gitignore_patterns
             (same directory-pruning behavior, so an excluded subtree is
             never walked/analyzed at all)
+        excluded_by_extension: BACK-1241 — when given, a dict this function
+            increments (by lowercased extension, or '(no extension)') every
+            time a file is skipped purely because it has no registered
+            analyzer (registry.get_analyzer() returned None) -- the gap
+            classify:// silently fell into (its population/count is this
+            same generator's yielded set, with nothing disclosing what was
+            filtered out). Optional and additive: existing callers that
+            don't pass it see no change in behavior or yield order.
 
     Yields:
         Analyzable file paths one at a time (generator — avoids materializing
@@ -105,6 +114,9 @@ def find_analyzable_files(
 
             # Check if reveal can analyze this file type
             if not get_analyzer(str(file_path)):
+                if excluded_by_extension is not None:
+                    ext = file_path.suffix.lower() or '(no extension)'
+                    excluded_by_extension[ext] = excluded_by_extension.get(ext, 0) + 1
                 continue
 
             # Apply code_only filter
