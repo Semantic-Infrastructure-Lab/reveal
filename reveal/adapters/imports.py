@@ -1387,6 +1387,17 @@ class ImportsAdapter(ResourceAdapter):
 
         components = []
         for directory, file_set in dir_files.items():
+            # BACK-1246: compare resolved (canonical, absolute) forms, not the
+            # raw Path objects in file_set. Some per-language resolvers (e.g.
+            # javascript.py's _resolve_target_path) return absolute dependency
+            # targets while _scanned_files keeps whatever path style the CLI
+            # invocation used (often relative) -- an unresolved `dep in
+            # file_set` check then never matches for that language, silently
+            # zeroing internal/cohesion for every component. Resolving both
+            # sides here (comparison-only; `directory`/`file_set` below still
+            # use the original style for display) fixes it regardless of
+            # which side happens to be absolute.
+            resolved_file_set = {f.resolve() for f in file_set}
             internal = 0
             outgoing = 0
             incoming = 0
@@ -1394,18 +1405,27 @@ class ImportsAdapter(ResourceAdapter):
 
             for f in file_set:
                 for dep in self._graph.dependencies.get(f, set()):
-                    if dep in file_set:
+                    if dep.resolve() in resolved_file_set:
                         internal += 1
                     else:
                         outgoing += 1
                         bridge_counts[f] += 1
                 for src in self._graph.reverse_deps.get(f, set()):
-                    if src not in file_set:
+                    if src.resolve() not in resolved_file_set:
                         incoming += 1
 
             total_out = internal + outgoing
             cohesion = internal / total_out if total_out > 0 else 0.0
-            top_bridge = str(max(bridge_counts, key=bridge_counts.get)) if bridge_counts else None
+            # BACK-1243: break ties deterministically -- max() over a dict
+            # with equal-count keys otherwise depends on hash-seed-salted
+            # dict iteration order (PYTHONHASHSEED), varying top_bridge
+            # between runs on identical input. Sort by (count, path string)
+            # so the highest count wins and ties resolve to the same file
+            # every time.
+            top_bridge = (
+                str(max(bridge_counts.items(), key=lambda kv: (kv[1], str(kv[0])))[0])
+                if bridge_counts else None
+            )
 
             components.append({
                 'component': str(directory),
