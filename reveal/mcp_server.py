@@ -26,8 +26,21 @@ import threading
 import time
 from pathlib import Path
 
-from mcp.server import MCPServer
-from mcp.types import ToolAnnotations
+try:
+    from mcp.server import MCPServer
+    from mcp.types import ToolAnnotations
+except ImportError:
+    # BACK-1247: `mcp` lives in its own dedicated extra (reveal-cli[mcp]),
+    # not reveal-cli's base dependencies -- a plain `pip install reveal-cli`
+    # ships this reveal-mcp entry point without what it needs to import,
+    # and the resulting raw ModuleNotFoundError traceback gives no hint
+    # toward the fix. Confirmed live: reproduces at 0.124.0/0.125.0.
+    print(
+        "reveal-mcp requires the 'mcp' package, which is not installed.\n"
+        "Fix: pip install reveal-cli[mcp]",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 from .cli.defaults import _default_args
 

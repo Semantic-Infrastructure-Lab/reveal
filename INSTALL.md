@@ -111,6 +111,19 @@ reveal mysql://localhost/slow-queries       # Slow query analysis (last 24h)
 reveal mysql://localhost/innodb             # InnoDB buffer pool and locks
 ```
 
+### MCP Server (Claude Code, Cursor, Windsurf, ...)
+
+For `reveal-mcp`, the Model Context Protocol server (BACK-1247: a plain
+`pip install reveal-cli` does not include this -- `reveal-mcp` will exit
+with a clear message telling you to install this extra if it's missing):
+
+```bash
+pip install reveal-cli[mcp]
+```
+
+**What you get:** the `reveal-mcp` command, exposing reveal's capabilities
+as MCP tools over stdio or SSE transport. See `reveal-mcp --help`.
+
 ### Development Tools
 
 For contributors:
