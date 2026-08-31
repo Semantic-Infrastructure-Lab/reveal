@@ -100,6 +100,10 @@ TEST_DIR_NAMES = frozenset({'test', 'tests', '__tests__', 'spec', 'specs'})
 # `app/assets/vendor/`).
 VENDOR_DIR_NAMES = frozenset({
     'vendor', 'third_party', 'thirdparty', 'node_modules', 'bower_components',
+    # BACK-1242: extend beyond the original 5 -- free, no false-positive risk
+    # (a directory literally named one of these is essentially always a
+    # vendored-dependency convention, same category as 'vendor'/'node_modules').
+    'extern', 'externs', '3rdparty', '3rd-party', 'deps',
 })
 
 # Filename suffixes marking a minified/bundled build artifact (BACK-1195,

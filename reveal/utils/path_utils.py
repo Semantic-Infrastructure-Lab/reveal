@@ -88,17 +88,37 @@ def is_test_dir(name: str) -> bool:
     return name in TEST_DIR_NAMES
 
 
-def is_test_filename(stem: str) -> bool:
+# BACK-1251: extensions where a bare TEST_DIR_NAMES-stem match (e.g.
+# `spec.md`) is more often a requirements/spec-driven-development document
+# than a test -- `spec.md`/`spec.rst` under a docs-style directory
+# (`openspec/feature-x/spec.md`) is a real, non-corpus-specific convention.
+# `test_`/`_test`-prefixed filenames are unaffected (those are unambiguous
+# regardless of extension).
+_DOC_EXTENSIONS_EXCLUDED_FROM_BARE_TEST_STEM = frozenset({'.md', '.rst', '.txt', '.adoc'})
+
+
+def is_test_filename(stem: str, suffix: str = '') -> bool:
     """True if *stem* (filename without extension) follows the generic,
     language-agnostic ``test_``/``_test`` naming convention, or is itself
     one of the canonical test-directory names used as a bare filename
     (e.g. a top-level ``tests.py``) (BACK-1199).
 
+    *suffix* (e.g. ``'.md'``, including the dot) narrows the bare
+    TEST_DIR_NAMES-stem branch only: a file literally named ``spec.md`` is
+    commonly a requirements doc, not a test (BACK-1251) -- callers that
+    don't pass *suffix* keep the original, unnarrowed behavior.
+
     Callers needing per-language precision (e.g. Ruby's ``_spec`` suffix,
     Java's ``Test``/``Tests`` suffix) layer their own extension-specific
     checks on top of this — see ``adapters/surface.py::_is_test_file``.
     """
-    return stem.startswith('test_') or stem.endswith('_test') or stem in TEST_DIR_NAMES
+    if stem.startswith('test_') or stem.endswith('_test'):
+        return True
+    if stem in TEST_DIR_NAMES:
+        if suffix and suffix.lower() in _DOC_EXTENSIONS_EXCLUDED_FROM_BARE_TEST_STEM:
+            return False
+        return True
+    return False
 
 
 def is_vendor_dir(name: str) -> bool:
@@ -146,7 +166,7 @@ def classify_path_provenance(parts: Iterable[str], filename: str) -> Optional[st
     — it requires reading file content, which ranking adapters don't
     otherwise need to do for every file in a directory walk.
     """
-    if any(is_test_dir(p) for p in parts) or is_test_filename(Path(filename).stem):
+    if any(is_test_dir(p) for p in parts) or is_test_filename(Path(filename).stem, Path(filename).suffix):
         return 'test'
     if any(is_vendor_dir(p) for p in parts):
         return 'vendor'

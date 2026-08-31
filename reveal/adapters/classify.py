@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .stats.analysis import find_analyzable_files, get_file_display_path
 from ..utils import print_json_result
-from ..utils.path_utils import classify_path_provenance, looks_vendored_by_banner
+from ..utils.path_utils import classify_path_provenance, looks_vendored_by_banner, is_vendor_dir
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 from ..utils.validation import require_path_exists
@@ -35,6 +35,17 @@ from ..utils.validation import require_path_exists
 # files (e.g. 2-3 fixtures) doesn't false-positive.
 _LOCALE_STEM_RE = re.compile(r'^[a-z]{2,3}(-[A-Z]{2})?$')
 _LOCALE_FANOUT_THRESHOLD = 5
+
+# BACK-1242: directory names where a project keeps ITS OWN translations by
+# Rails/Django/JS convention -- locale fan-out on its own is not a vendor
+# signal here (confirmed false-positive: config/locales/*.yml,
+# src/renderer/i18n/*.ts both measured as a project's first-party i18n, not
+# vendored code). Still eligible if nested under a real vendor directory
+# (e.g. vendor/gems/somegem/config/locales) -- see the is_vendor_dir check
+# below.
+_FIRST_PARTY_I18N_DIR_NAMES = frozenset({
+    'locale', 'locales', 'lang', 'langs', 'translations', 'translation', 'i18n', 'l10n',
+})
 
 
 def _apply_locale_fanout(rows: List[Dict[str, Any]]) -> None:
@@ -50,8 +61,15 @@ def _apply_locale_fanout(rows: List[Dict[str, Any]]) -> None:
         rel = Path(row['file'])
         if _LOCALE_STEM_RE.match(rel.stem):
             groups[(rel.parent, rel.suffix)].append(row)
-    for group_rows in groups.values():
+    for (parent, _suffix), group_rows in groups.items():
         if len(group_rows) < _LOCALE_FANOUT_THRESHOLD:
+            continue
+        parent_parts = parent.parts
+        immediate_name = parent_parts[-1].lower() if parent_parts else ''
+        if (
+            immediate_name in _FIRST_PARTY_I18N_DIR_NAMES
+            and not any(is_vendor_dir(p) for p in parent_parts)
+        ):
             continue
         for row in group_rows:
             if row['provenance'] == 'first_party':

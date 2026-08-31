@@ -77,18 +77,53 @@ def test_classify_ignores_bang_comment_without_version_token(tmp_path):
 def test_classify_detects_locale_file_fanout(tmp_path):
     # jQuery Validate/moment.js-style vendored i18n bundle: many
     # same-extension siblings named after language codes, not under
-    # vendor/, no banner (plain locale data files often have none).
+    # vendor/, no banner (plain locale data files often have none). Uses a
+    # library-named directory (momentjs/), matching BACK-1238's real cited
+    # evidence -- not a generic 'i18n'/'locale' directory name, which
+    # BACK-1242 carved out as a first-party convention (see the two tests
+    # below).
     for code in ('en', 'fr', 'de', 'es', 'it', 'nl'):
-        _write(tmp_path / 'app' / 'assets' / 'i18n' / f'{code}.js')
-    _write(tmp_path / 'app' / 'assets' / 'i18n' / 'index.js')
+        _write(tmp_path / 'app' / 'assets' / 'momentjs' / f'{code}.js')
+    _write(tmp_path / 'app' / 'assets' / 'momentjs' / 'index.js')
 
     result = ClassifyAdapter(str(tmp_path)).get_structure()
 
     by_file = {row['file']: row['provenance'] for row in result['files']}
     for code in ('en', 'fr', 'de', 'es', 'it', 'nl'):
-        assert by_file[f'app/assets/i18n/{code}.js'] == 'vendor'
+        assert by_file[f'app/assets/momentjs/{code}.js'] == 'vendor'
     # index.js doesn't match the locale-stem pattern -- untouched.
-    assert by_file['app/assets/i18n/index.js'] == 'first_party'
+    assert by_file['app/assets/momentjs/index.js'] == 'first_party'
+
+
+def test_classify_locale_fanout_spares_first_party_i18n_directory(tmp_path):
+    # BACK-1242: a directory literally named after a first-party i18n
+    # convention (Rails' config/locales/, generically locale/i18n/lang/...)
+    # is where a PROJECT keeps ITS OWN translations -- fan-out there alone
+    # must not flip these to vendor. Confirmed false positive on a real
+    # Rails corpus (config/locales/*.yml) and a real TypeScript corpus
+    # (src/renderer/i18n/*.ts).
+    for code in ('en', 'fr', 'de', 'es', 'it', 'nl'):
+        _write(tmp_path / 'config' / 'locales' / f'{code}.yml')
+
+    result = ClassifyAdapter(str(tmp_path)).get_structure()
+
+    by_file = {row['file']: row['provenance'] for row in result['files']}
+    for code in ('en', 'fr', 'de', 'es', 'it', 'nl'):
+        assert by_file[f'config/locales/{code}.yml'] == 'first_party'
+
+
+def test_classify_locale_fanout_still_fires_under_real_vendor_dir(tmp_path):
+    # The first-party i18n carve-out doesn't apply once actually nested
+    # under a recognized vendor directory (e.g. a vendored gem's own
+    # config/locales/) -- still a real fan-out, still vendored.
+    for code in ('en', 'fr', 'de', 'es', 'it', 'nl'):
+        _write(tmp_path / 'vendor' / 'gems' / 'somegem' / 'config' / 'locales' / f'{code}.yml')
+
+    result = ClassifyAdapter(str(tmp_path)).get_structure()
+
+    by_file = {row['file']: row['provenance'] for row in result['files']}
+    for code in ('en', 'fr', 'de', 'es', 'it', 'nl'):
+        assert by_file[f'vendor/gems/somegem/config/locales/{code}.yml'] == 'vendor'
 
 
 def test_classify_locale_fanout_below_threshold_stays_first_party(tmp_path):
@@ -102,6 +137,25 @@ def test_classify_locale_fanout_below_threshold_stays_first_party(tmp_path):
     by_file = {row['file']: row['provenance'] for row in result['files']}
     assert by_file['fixtures/en.js'] == 'first_party'
     assert by_file['fixtures/fr.js'] == 'first_party'
+
+
+def test_classify_spec_md_is_not_tagged_test(tmp_path):
+    # BACK-1251: a file literally named spec.md is a common
+    # spec-driven-development requirements doc (e.g. openspec/), not a test
+    # -- TEST_DIR_NAMES' bare 'spec' stem match previously fired on any .md
+    # file with that stem regardless of directory. Confirmed on a real
+    # corpus: 145 of 414 test-tagged files were openspec/ requirements docs.
+    _write(tmp_path / 'openspec' / 'feature-x' / 'spec.md')
+    # A real spec FILE (code extension) under an actual test directory
+    # should still classify as test -- the fix narrows the bare-stem match
+    # for doc extensions only, it doesn't touch directory-based detection.
+    _write(tmp_path / 'spec' / 'user_spec.rb')
+
+    result = ClassifyAdapter(str(tmp_path)).get_structure()
+
+    by_file = {row['file']: row['provenance'] for row in result['files']}
+    assert by_file['openspec/feature-x/spec.md'] == 'first_party'
+    assert by_file['spec/user_spec.rb'] == 'test'
 
 
 def test_classify_missing_path_raises(tmp_path):
