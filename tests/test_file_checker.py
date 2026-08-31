@@ -150,6 +150,21 @@ class TestShouldSkipFile:
         assert should_skip_file(Path('reveal/main.py'), patterns) is False
         assert should_skip_file(Path('tests/test_foo.py'), patterns) is False
 
+    def test_multi_segment_directory_pattern_depth_2(self):
+        """BACK-1249: a trailing-slash pattern with an internal slash
+        (e.g. 'app/models/') previously compared parts[0] ('app') against
+        the WHOLE pattern string ('app/models') and could never match --
+        silently excluding nothing at any depth beyond a single segment,
+        not just "one level down" as originally reported.
+        """
+        patterns = ['app/models/']
+
+        assert should_skip_file(Path('app/models/user.rb'), patterns) is True
+        assert should_skip_file(Path('app/controllers/orders.rb'), patterns) is False
+        # A depth-1 single-segment pattern must keep working (regression
+        # guard for the pre-existing, already-passing case).
+        assert should_skip_file(Path('spec/dummy/thing.rb'), ['spec/']) is True
+
 
 class TestCollectFilesToCheck:
     """Tests for collect_files_to_check function."""

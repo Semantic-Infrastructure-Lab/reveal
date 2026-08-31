@@ -406,10 +406,21 @@ def should_skip_file(relative_path: Path, gitignore_patterns: List[str]) -> bool
         if fnmatch.fnmatch(path_str, pattern):
             return True
         # Directory patterns (trailing /): match any file whose path starts with that dir
-        # gitignore's "htmlcov/" means "htmlcov/ and all its contents"
+        # gitignore's "htmlcov/" means "htmlcov/ and all its contents".
+        # BACK-1249: a multi-segment pattern (e.g. "app/models/") only ever
+        # compared parts[0] ("app") against the WHOLE pattern string
+        # ("app/models") -- never equal, so it silently matched nothing at
+        # any depth, not just "one level down" as originally reported. Now
+        # splits the pattern into segments and compares each of parts[0:N]
+        # against the corresponding segment (still root-anchored, same as
+        # the single-segment case below preserved this way all along).
         if pattern.endswith('/'):
-            dir_name = pattern.rstrip('/')
-            if parts and fnmatch.fnmatch(parts[0], dir_name):
+            dir_segments = [seg for seg in pattern.rstrip('/').split('/') if seg]
+            if (
+                dir_segments
+                and len(parts) >= len(dir_segments)
+                and all(fnmatch.fnmatch(parts[i], seg) for i, seg in enumerate(dir_segments))
+            ):
                 return True
         # Bare directory name without slash: also treat as directory prefix match
         # e.g. "htmlcov" should match "htmlcov/index.html"
