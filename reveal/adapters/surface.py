@@ -211,6 +211,27 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
 
     _relativize_surface_paths(surfaces, path)
 
+    # BACK-1244: 'http' entries come from AST call-shape matching alone
+    # (verb('/path', ...)) -- a real route declaration and an RSpec/pytest
+    # request-spec call exercising that same route are indistinguishable at
+    # that level, so on a Rails app using `resources`/`resource` (excluded
+    # as too ambiguous to surface a path for) config/routes.rb can
+    # contribute ZERO entries while the entire reported "http surface" is
+    # actually test-spec calls -- inverted evidence for a DD review, where
+    # untested routes are exactly what's absent. Tag each entry and, when
+    # any are test-sourced, disclose it in known_limits rather than
+    # presenting the mix as an undifferentiated route table.
+    http_entries = surfaces.get('http', [])
+    test_origin_count = 0
+    if http_entries and not source_only:
+        for entry in http_entries:
+            entry_path = Path(entry['file'])
+            is_test_origin = _is_test_file(entry_path) or any(
+                is_test_dir(part) for part in entry_path.parts[:-1]
+            )
+            entry['test_origin'] = is_test_origin
+            test_origin_count += is_test_origin
+
     total = sum(len(v) for v in surfaces.values())
     return {
         'path': str(path),
@@ -226,6 +247,12 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
                 'taxonomy covers common libraries only — project-specific clients not detected',
                 'dynamic surface registrations (e.g. plugin-loaded routes) not tracked',
                 *(['test files excluded (--source-only)'] if source_only else []),
+                *([
+                    f"{test_origin_count} of {len(http_entries)} 'http' surface entries come from "
+                    "test files (test-spec calls exercising a route, not the route declaration "
+                    "itself) -- see each entry's 'test_origin' field, or pass source_only=true to "
+                    "exclude them"
+                ] if test_origin_count else []),
             ],
         },
     }
@@ -304,7 +331,11 @@ def _render_entry(surface_type: str, entry: Dict[str, Any]) -> None:
         method = entry.get('methods', 'ANY')
         path_ = entry.get('path', '?')
         name = entry.get('name', '?')
-        print(f"  {method}  {path_}  → {name}{loc}")
+        # BACK-1244: flag test-spec-sourced entries inline, not just in
+        # known_limits -- easy to miss a text summary note once a scan
+        # scrolls past it.
+        marker = '  [test]' if entry.get('test_origin') else ''
+        print(f"  {method}  {path_}  → {name}{loc}{marker}")
 
     elif surface_type == 'mcp':
         name = entry.get('name', '?')

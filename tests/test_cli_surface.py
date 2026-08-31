@@ -479,6 +479,49 @@ class TestScanSurface(unittest.TestCase):
         report = _scan_surface(Path(self.tmp))
         self.assertEqual(report['total'], 0)
 
+    def test_http_route_from_request_spec_tagged_test_origin(self):
+        """BACK-1244: a route-shaped call inside an RSpec request spec is
+        AST-identical to a real route declaration -- surface:// can't tell
+        them apart at the call-shape level, so it must at least disclose
+        which entries came from a test file rather than presenting a mixed
+        route table as undifferentiated."""
+        _write(self.tmp, 'config/routes.rb', '''\
+            Rails.application.routes.draw do
+              resources :admin_users
+            end
+        ''')
+        _write(self.tmp, 'spec/requests/admin_spec.rb', '''\
+            RSpec.describe "Admin", type: :request do
+              it "lists users" do
+                get '/admin/users'
+              end
+            end
+        ''')
+        report = _scan_surface(Path(self.tmp))
+        entries = report['surfaces']['http']
+        self.assertEqual(len(entries), 1)
+        self.assertTrue(entries[0]['test_origin'])
+        self.assertTrue(
+            any('test files' in limit for limit in report['_meta']['known_limits'])
+        )
+
+    def test_http_route_from_real_route_file_not_tagged_test_origin(self):
+        """A route declared in config/routes.rb (not a test path) must not
+        be flagged test_origin, and no test-origin known_limits entry
+        should appear when nothing came from a test file."""
+        _write(self.tmp, 'config/routes.rb', '''\
+            Rails.application.routes.draw do
+              get "/health", to: "health#index"
+            end
+        ''')
+        report = _scan_surface(Path(self.tmp))
+        entries = report['surfaces']['http']
+        self.assertEqual(len(entries), 1)
+        self.assertFalse(entries[0]['test_origin'])
+        self.assertFalse(
+            any('test files' in limit for limit in report['_meta']['known_limits'])
+        )
+
 
 class TestCliCommandProvenance(unittest.TestCase):
     """BACK-534: @command is a CLI surface only with click/typer provenance."""
