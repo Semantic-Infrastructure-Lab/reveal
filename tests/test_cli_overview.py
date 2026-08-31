@@ -905,7 +905,11 @@ class TestRunOverview(unittest.TestCase):
         with p_stats, p_git, p_ast, p_arch:
             with tempfile.TemporaryDirectory() as tmp:
                 out = _capture(run_overview, _args(path=tmp))
-                self.assertNotIn('c9', out)
+                # Bare 'c9' can false-positive-match tempfile.TemporaryDirectory()'s
+                # randomly generated suffix in the "Overview: <path>" header line
+                # (e.g. a run-specific tmp...c9... path) -- assert against the
+                # actual rendered component path instead.
+                self.assertNotIn('/proj/src/c9', out)
                 self.assertIn('more (use --all)', out)
 
     def test_all_flag_shows_every_component(self):
