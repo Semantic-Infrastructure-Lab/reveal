@@ -559,6 +559,16 @@ vi.fn();
     assert 'AuthService.login' in targets
 
 
+def test_patches_adapter_nonexistent_path_raises(tmp_path):
+    """BACK-1250: a nonexistent path previously returned a clean,
+    successful-looking empty result (total_uses: 0, errors: [],
+    source_type mislabeled 'file') indistinguishable from a real "this
+    suite does no patching" finding. Now raises like classify:// does.
+    """
+    with pytest.raises(FileNotFoundError):
+        PatchesAdapter(str(tmp_path / 'does_not_exist')).get_structure()
+
+
 class TestNoTestsIsNotApplicable:
     """BACK-1210: 'no tests found' is a not-applicable result (a real DD
     finding about the target), not an adapter failure -- must raise

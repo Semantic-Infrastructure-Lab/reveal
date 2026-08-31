@@ -10,6 +10,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from reveal.testability.patches import group_patches, scan_patches
 from reveal.utils.query import parse_query_params
 from reveal.utils.results import ResultBuilder
+from reveal.utils.validation import require_path_exists
 
 from .renderer import PatchesRenderer
 
@@ -106,6 +107,12 @@ class PatchesAdapter(ResourceAdapter):
         }
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+        # BACK-1250: scan_patches() silently accepted a nonexistent path and
+        # returned a clean, successful-looking empty result (total_uses: 0,
+        # errors: [], source_type mislabeled 'file') -- indistinguishable
+        # from "this suite genuinely does no patching." Same convention as
+        # classify.py's own get_structure().
+        require_path_exists(Path(self.path))
         patches = scan_patches([self.path])
         # BACK-1211: query_parser.coerce_value() turns a literal '0'/'1'
         # value into bool regardless of field type -- str(True/False) would
