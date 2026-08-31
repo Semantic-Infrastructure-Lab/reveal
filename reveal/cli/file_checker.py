@@ -252,9 +252,12 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
     """Run file checks in parallel, yielding results as each future completes.
 
     Unlike _run_parallel, results are emitted as soon as they are ready rather
-    than buffering the entire list before returning.  At most max_workers
-    results are held in memory simultaneously.  Output order is non-deterministic
-    (completion order), which is acceptable for text output but not JSON.
+    than buffering the entire list before returning, so at most max_workers
+    results are held in memory simultaneously during execution. Yield order is
+    completion order (non-deterministic) -- callers that need a stable
+    processing order (e.g. _check_files_text's --limit cutoff, BACK-1243)
+    must buffer and re-sort before acting on it; this generator itself makes
+    no ordering guarantee.
 
     Use _run_parallel for JSON output where deterministic ordering matters.
 
@@ -957,9 +960,12 @@ def _check_files_text(
     items_truncated = False
     sorted_files = sorted(files)
 
-    # Use streaming parallel execution so results are processed as they complete
-    # rather than buffering the full result set in memory first.  Non-deterministic
-    # output order is acceptable for text mode (matches ruff/flake8 parallel behaviour).
+    # Use streaming parallel execution so workers run concurrently rather than
+    # buffering the full result set before any of them start. Completion order
+    # itself is non-deterministic, which is why results are gathered into
+    # results_by_file below and then walked in sorted_files' stable order --
+    # BACK-1243, see the comment there for what broke when this used
+    # completion order directly.
     if len(sorted_files) >= _PARALLEL_THRESHOLD:
         try:
             result_iter = _run_parallel_streaming(sorted_files, directory, select, ignore)
@@ -980,7 +986,25 @@ def _check_files_text(
     # BACK-1039: shared run-wide (not per-file) so a rule's full guidance
     # prints once for the whole run — see _print_grouped_detections.
     shown_guidance: set = set()
-    for file_path, issue_count, detections, status in result_iter:
+
+    # BACK-1243: consume the streaming iterator into a dict first, then drive
+    # the print/limit loop over `sorted_files`'s stable order rather than
+    # completion order. Workers still run concurrently (unchanged) -- only
+    # the order results are PROCESSED in changes. This isn't just cosmetic:
+    # the `--limit` cutoff below decides which files get full detail vs. get
+    # folded into the "N more files hidden" footer, and on completion order
+    # that decision (and the hidden-count total) varied run to run on
+    # byte-identical input -- confirmed live, `check --format json` was
+    # already unaffected since it uses order-preserving `_run_parallel`.
+    results_by_file = {
+        file_path: (issue_count, detections, status)
+        for file_path, issue_count, detections, status in result_iter
+    }
+
+    for file_path in sorted_files:
+        if file_path not in results_by_file:
+            continue  # worker raised; already logged by _run_parallel_streaming
+        issue_count, detections, status = results_by_file[file_path]
         detections = _apply_severity_filter(detections, severity)
         issue_count = len(detections)
         st = status.get("status", "ok")
