@@ -326,7 +326,7 @@ def _render_brief(report: Dict[str, Any], top: int, base_path: Path, no_imports:
 
     print(f"Architecture Brief: {path}\n")
 
-    from reveal.adapters.imports import coverage_warning_line
+    from reveal.adapters.imports import coverage_warning_line, detect_autoload_regime, autoload_regime_warning
     warning = coverage_warning_line(report.get('unsupported_extensions', {}))
     if warning:
         print(f"{warning}\n")
@@ -338,6 +338,13 @@ def _render_brief(report: Dict[str, Any], top: int, base_path: Path, no_imports:
     _render_next_commands(report.get('next_commands', []))
 
     if not no_imports:
+        # BACK-1245: on a detected convention-autoloading framework, the
+        # generic caveat below understates the problem by an order of
+        # magnitude (the whole app is loaded that way, not just some
+        # plugins/registries) -- print the framework-specific warning too.
+        regime = detect_autoload_regime(base_path)
+        if regime:
+            print(f"\n{autoload_regime_warning(regime)}")
         print("\nNote: static imports only — dynamically loaded files (plugins, registries) may appear as entry points.")
 
 
@@ -521,6 +528,20 @@ class ArchitectureAdapter(ResourceAdapter):
             complex_fns, imports_data = _run_combined_analysis(self, path, top * 4)
 
         risks = _compute_risks(imports_data, complex_fns, path)
+        if not no_imports:
+            from reveal.adapters.imports import detect_autoload_regime, autoload_regime_warning
+            regime = detect_autoload_regime(path)
+            if regime:
+                # BACK-1245: surface in `risks` (the established disclosure
+                # channel other adapters/callers already consume) rather
+                # than only in the text renderer's footer -- a JSON caller
+                # reading entry_points/core_abstractions never saw this.
+                risks.insert(0, {
+                    'type': 'autoload_regime',
+                    'severity': 'medium',
+                    'description': f"{regime['framework']} detected ({regime['evidence']}) — import graph is structurally thin here",
+                    'detail': autoload_regime_warning(regime),
+                })
         _relativize_risks(risks, path)
         next_commands = _build_next_commands(path, risks, imports_data)
 

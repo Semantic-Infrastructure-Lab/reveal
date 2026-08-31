@@ -91,6 +91,96 @@ def coverage_warning_line(unsupported: Dict[str, int]) -> str:
     return f"⚠ {skipped_total} code file(s) not analyzed — no import support for: {exts}"
 
 
+# BACK-1245: cheap, conservative, manifest-only detection of a convention-
+# autoloading framework regime. Rails/Django/Laravel load most application
+# code by naming convention, not require/import/use -- for these, the
+# explicit import graph these adapters build is structurally thin (near-
+# meaningless, not just "somewhat approximate"), but the only prior
+# disclosure was a generic one-liner ("dynamically loaded files may appear
+# as entry points") that reads as a minor edge case regardless of which
+# regime is in play. False negatives here (a framework not in this table)
+# are safe -- callers just keep seeing the generic caveat; a false positive
+# would not be, so detection intentionally requires an unambiguous manifest
+# marker, not a guess from file extensions alone.
+_AUTOLOAD_REGIMES: Tuple[Tuple[str, str, str], ...] = (
+    # (manifest filename, content substring to require (empty = presence-only), framework label)
+    ('Gemfile', "gem 'rails'", 'Ruby on Rails'),
+    ('Gemfile', 'gem "rails"', 'Ruby on Rails'),
+    ('manage.py', '', 'Django'),
+    ('artisan', '', 'Laravel'),
+)
+
+
+_AUTOLOAD_REGIME_MAX_WALK_UP = 6
+
+
+def detect_autoload_regime(path: Path) -> Optional[Dict[str, str]]:
+    """Return {'framework': ..., 'evidence': ...} if `path` -- or an ancestor,
+    up to _AUTOLOAD_REGIME_MAX_WALK_UP levels up -- looks like a
+    convention-autoloading project's root; None otherwise. See
+    _AUTOLOAD_REGIMES for what's covered.
+
+    Walks upward because a real invocation typically targets a subdirectory
+    (`imports://app/models`, `architecture://src/entities`), not the project
+    root where Gemfile/manage.py/artisan actually live -- checking only the
+    exact queried path would silently miss the common case (confirmed: the
+    due-diligence recipe this was filed against runs adapters against
+    subdirectories routinely). Crossing into an unrelated enclosing project
+    is possible but low-cost (an extra, still-true disclosure line) compared
+    to the silent miss this fixes.
+    """
+    try:
+        base = (path if path.is_dir() else path.parent).resolve()
+    except OSError:
+        return None
+    seen_frameworks: set = set()
+    current = base
+    for _ in range(_AUTOLOAD_REGIME_MAX_WALK_UP):
+        for filename, needle, framework in _AUTOLOAD_REGIMES:
+            if framework in seen_frameworks:
+                continue
+            candidate = current / filename
+            if not candidate.is_file():
+                continue
+            if not needle:
+                seen_frameworks.add(framework)
+                continue
+            try:
+                if needle in candidate.read_text(errors='ignore'):
+                    seen_frameworks.add(framework)
+            except OSError:
+                continue
+        if seen_frameworks:
+            break
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    if not seen_frameworks:
+        return None
+    framework = sorted(seen_frameworks)[0]
+    evidence = next(f"{fn} ({framework.split()[-1].lower()} marker)" for fn, _, fw in _AUTOLOAD_REGIMES if fw == framework)
+    return {'framework': framework, 'evidence': evidence}
+
+
+def autoload_regime_warning(regime: Optional[Dict[str, str]]) -> str:
+    """Strong, framework-named disclosure line for when detect_autoload_regime()
+    finds a hit -- distinct from the generic 'dynamically loaded files may
+    appear as entry points' caveat this is meant to sit alongside, not
+    replace (BACK-1245: that caveat reads as a minor edge case even on a
+    codebase where it describes almost the entire application).
+    """
+    if not regime:
+        return ''
+    return (
+        f"⚠ {regime['framework']} detected ({regime['evidence']}) — this framework "
+        "loads most application code by naming convention, not require/import. "
+        "fan-in/fan-out/circular/entry-point signals below reflect only the small "
+        "explicit import graph, not real usage; treat them as unreliable for this "
+        "codebase, not merely approximate."
+    )
+
+
 _SCHEMA_QUERY_PARAMS = {
     'unused': {
         'type': 'flag',
@@ -421,8 +511,21 @@ class ImportsRenderer:
         print(f"Circular Dependencies: {count} cycle group{'s' if count != 1 else ''}")
         print(f"{'='*60}\n")
 
+        regime = result.get('metadata', {}).get('autoload_regime')
+        total_imports = result.get('metadata', {}).get('total_imports', 0)
+        scanned_files = result.get('metadata', {}).get('scanned_files', 0)
         if count == 0:
-            print("  ✅ No circular dependencies found!\n")
+            if regime:
+                # BACK-1245: an unqualified green check reads as "verified
+                # acyclic" when there's barely an explicit import graph to
+                # have cycles in -- disclose the denominator instead.
+                print(
+                    f"  ✅ No circular dependencies found among {total_imports} explicit "
+                    f"import(s) across {scanned_files} file(s).\n"
+                )
+                print(f"  {autoload_regime_warning(regime)}\n")
+            else:
+                print("  ✅ No circular dependencies found!\n")
             return
 
         groups = result['cycles']
@@ -554,8 +657,12 @@ class ImportsRenderer:
             fpath = to_relative_display(e['file'], source_path) if source_path else e['file']
             print(f"  {fpath:<{col_w}}  {e['fan_in']:>7}  {e['fan_out']:>8}")
         print()
-        print("  Note: static imports only — files loaded via dynamic dispatch")
-        print("  (importlib, require(), Class.forName, autoload, etc.) show lower fan-in than actual.")
+        regime = result.get('metadata', {}).get('autoload_regime')
+        if regime:
+            print(f"  {autoload_regime_warning(regime)}")
+        else:
+            print("  Note: static imports only — files loaded via dynamic dispatch")
+            print("  (importlib, require(), Class.forName, autoload, etc.) show lower fan-in than actual.")
         print()
 
     @staticmethod
@@ -583,8 +690,12 @@ class ImportsRenderer:
             fpath = to_relative_display(e['file'], source_path) if source_path else e['file']
             print(f"  {fpath:<{col_w}}  {e['fan_out']:>8}")
         print()
-        print("  Note: static imports only — files loaded via dynamic dispatch")
-        print("  (importlib, require(), Class.forName, autoload, etc.) are false positives here.")
+        regime = result.get('metadata', {}).get('autoload_regime')
+        if regime:
+            print(f"  {autoload_regime_warning(regime)}")
+        else:
+            print("  Note: static imports only — files loaded via dynamic dispatch")
+            print("  (importlib, require(), Class.forName, autoload, etc.) are false positives here.")
         print()
 
     @staticmethod
@@ -940,6 +1051,10 @@ class ImportsAdapter(ResourceAdapter):
             # bounded JSON/text output; the count alone (below) is exact.
             'files_failed_count': len(self._files_failed),
             'files_failed': sorted(str(fp) for fp in self._files_failed)[:50],
+            # BACK-1245: None on every corpus except a detected convention-
+            # autoloading framework (Rails/Django/Laravel) -- see
+            # detect_autoload_regime()/autoload_regime_warning() above.
+            'autoload_regime': detect_autoload_regime(self._target_path) if self._target_path else None,
         }
 
     @staticmethod

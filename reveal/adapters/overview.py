@@ -417,10 +417,17 @@ def _render_architecture(
 
     print("\nArchitecture")
 
-    from reveal.adapters.imports import coverage_warning_line
+    from reveal.adapters.imports import coverage_warning_line, detect_autoload_regime, autoload_regime_warning
     warning = coverage_warning_line(unsupported)
     if warning:
         print(f"  {warning}")
+
+    if base_path is not None:
+        regime = detect_autoload_regime(base_path)
+        if regime:
+            # BACK-1245: same disclosure as architecture://'s text/JSON forms
+            # -- this summary view shares the identical fan-in/circular data.
+            print(f"  {autoload_regime_warning(regime)}")
 
     if not fan_in and not entrypoints and not components:
         return
