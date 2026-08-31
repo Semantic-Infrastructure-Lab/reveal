@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.126.0] - 2026-08-30 (session pimubu-0830)
+
+### Fixed
+- **11 external-reporter wishlist items confirmed and fixed (BACK-1241–1251)** — `classify://` now discloses files it silently excluded from its population instead of just dropping them (BACK-1241); `classify://`'s `vendor` tag false-positive on first-party i18n fixed, banner-detection scope documented as a deliberate limit rather than broadened (BACK-1242); `architecture://` cohesion was always `0.00` for JS/TS due to a relative-vs-absolute path mismatch, fixed generically at the comparison layer so it covers every language's resolver, not just JS/TS (BACK-1246); `check`'s `top_bridge`/text renderer were non-deterministic run to run, now verified byte-identical (BACK-1243); `surface://`'s Rails HTTP routes included RSpec test-spec calls with no way to tell them from real routes, now flagged with a `test_origin` field (BACK-1244); import-graph adapters (`imports://`/`architecture://`/`overview://`) now disclose Rails/Django/Laravel convention-autoloading blindness instead of silently under-reporting (BACK-1245); `reveal-mcp` gives a friendly error instead of a raw traceback when the `[mcp]` extra isn't installed, now documented in INSTALL.md (BACK-1247); `--also-json` no longer silently no-ops on `check` (BACK-1248); `--exclude 'dir/'` no longer silently no-ops for any multi-segment pattern beyond depth 2 (BACK-1249); `patches://` on a nonexistent path no longer returns a fake-empty result (BACK-1250); `spec.md` no longer wrongly tagged `test` (BACK-1251).
+- **Test-detection primitives missed capitalized/PascalCase conventions across 5 languages (BACK-1252)** — found via a class-of-issue audit after the BACK-1241–1251 fixes: `is_test_dir()` was case-sensitive (missed Swift's `Tests/`), `is_test_filename()` had no PascalCase `Test`/`Tests` support (Java/Kotlin/C#/PHP/Swift's primary convention), and `surface.py`'s own duplicate test-file check had zero coverage for 3 of its 11 languages (PHP/Swift/Kotlin) — silently undermining the BACK-1244 fix for those languages. Consolidated `surface.py`'s check onto the shared `is_test_filename()` instead of hand-adding per-language branches.
+
 ## [0.125.0] - 2026-08-30 (sessions torrential-dewpoint-0829, contracting-station-0830)
 
 ### Added

@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-08-30 (contracting-station-0830 — v0.125.0 release: I007/I008 dependency reconciliation, classify:// in-tree-vendoring detection)
+> **Last updated**: 2026-08-30 (pimubu-0830 — v0.126.0 release: external wishlist batch-6 fixes, multi-language test-detection gap)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,11 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.126.0 — External wishlist batch-6 fixes, multi-language test-detection gap
+
+- ✅ 11 external-reporter wishlist items fixed: `classify://` exclusion disclosure, vendor-tag false positives, `architecture://` JS/TS cohesion always-0.00, non-deterministic `check` rendering, `surface://` test-route disclosure, import-graph convention-autoloading disclosure, `reveal-mcp` friendly install error, plus 4 smaller CLI/adapter silent-no-op fixes (BACK-1241–1251).
+- ✅ Class-of-issue audit found and fixed a real multi-language test-detection gap spanning `is_test_dir()`, `is_test_filename()`, and `surface.py`'s own duplicate check (BACK-1252).
 
 ### v0.125.0 — I007/I008 dependency reconciliation, classify:// in-tree-vendoring detection
 
