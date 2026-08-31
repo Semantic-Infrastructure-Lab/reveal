@@ -78,14 +78,20 @@ def is_test_dir(name: str) -> bool:
     independent, drifting copies of this check (surface.py, hotspots.py,
     rules/maintainability/M102.py).
 
-    Exact-match against ``TEST_DIR_NAMES`` deliberately, not a prefix
-    match — a prefix match on ``test`` also matches real package names
-    like ``testpkg``. Callers that want the broader, opt-in prefix
-    generalization (``testing/``, ``test-fixtures/``, ...) combine this
-    with their own ``name.startswith(TEST_DIR_PREFIX)`` check — see
+    Exact-match (case-insensitive, BACK-1252) against ``TEST_DIR_NAMES``
+    deliberately, not a prefix match — a prefix match on ``test`` also
+    matches real package names like ``testpkg``. Case-insensitive because
+    Swift Package Manager's canonical test directory is capitalized
+    (``Tests/``), not lowercase like every other ecosystem's convention
+    this set already covers — confirmed live: `is_test_dir('Tests')` was
+    `False` before this fix, silently exempting Swift's entire test tree
+    from every classify:///surface:// consumer of this function. Callers
+    that want the broader, opt-in prefix generalization (``testing/``,
+    ``test-fixtures/``, ...) combine this with their own
+    ``name.startswith(TEST_DIR_PREFIX)`` check — see
     ``adapters/surface.py::_is_test_dir``.
     """
-    return name in TEST_DIR_NAMES
+    return name.lower() in TEST_DIR_NAMES
 
 
 # BACK-1251: extensions where a bare TEST_DIR_NAMES-stem match (e.g.
@@ -97,22 +103,45 @@ def is_test_dir(name: str) -> bool:
 _DOC_EXTENSIONS_EXCLUDED_FROM_BARE_TEST_STEM = frozenset({'.md', '.rst', '.txt', '.adoc'})
 
 
+# BACK-1252: languages whose PRIMARY test-class naming convention is a bare
+# PascalCase Test/Tests suffix (JUnit/PHPUnit/XCTest/Kotlin test/NUnit),
+# not the snake_case test_/_test the check below already covers. Gated by
+# suffix, not applied blanket: a real (non-test) class/file ending in
+# literal "Test"/"Tests" is rare enough in these languages' own idiom (and
+# already reveal's precedent -- surface.py's _is_test_file used this exact
+# shape for .java/.cs alone before this ticket widened + consolidated it
+# here) that the false-positive risk is low, while the prior blanket miss
+# (confirmed live: is_test_filename('UserTest') was False) meant every one
+# of these languages' test files silently classified as first_party unless
+# they *also* happened to sit under a TEST_DIR_NAMES-matching directory.
+_PASCAL_TEST_SUFFIX_EXTENSIONS = frozenset({'.java', '.kt', '.kts', '.cs', '.swift', '.php'})
+
+
 def is_test_filename(stem: str, suffix: str = '') -> bool:
     """True if *stem* (filename without extension) follows the generic,
-    language-agnostic ``test_``/``_test`` naming convention, or is itself
-    one of the canonical test-directory names used as a bare filename
-    (e.g. a top-level ``tests.py``) (BACK-1199).
+    language-agnostic ``test_``/``_test`` naming convention, is a bare
+    PascalCase ``Test``/``Tests`` suffix for a language where that's the
+    primary convention (BACK-1252, gated by *suffix* — see
+    ``_PASCAL_TEST_SUFFIX_EXTENSIONS``), or is itself one of the canonical
+    test-directory names used as a bare filename (e.g. a top-level
+    ``tests.py``) (BACK-1199).
 
-    *suffix* (e.g. ``'.md'``, including the dot) narrows the bare
-    TEST_DIR_NAMES-stem branch only: a file literally named ``spec.md`` is
-    commonly a requirements doc, not a test (BACK-1251) -- callers that
-    don't pass *suffix* keep the original, unnarrowed behavior.
+    *suffix* (e.g. ``'.md'``, including the dot) both gates the PascalCase
+    check above and narrows the bare TEST_DIR_NAMES-stem branch: a file
+    literally named ``spec.md`` is commonly a requirements doc, not a test
+    (BACK-1251) -- callers that don't pass *suffix* keep the original,
+    unnarrowed snake_case-only behavior.
 
-    Callers needing per-language precision (e.g. Ruby's ``_spec`` suffix,
-    Java's ``Test``/``Tests`` suffix) layer their own extension-specific
-    checks on top of this — see ``adapters/surface.py::_is_test_file``.
+    Callers needing further per-language precision beyond what *suffix*
+    gates here (e.g. Ruby's ``_spec`` suffix, Rust's ``_tests``/``tests.rs``)
+    layer their own extension-specific checks on top of this — see
+    ``adapters/surface.py::_is_test_file``.
     """
     if stem.startswith('test_') or stem.endswith('_test'):
+        return True
+    if suffix.lower() in _PASCAL_TEST_SUFFIX_EXTENSIONS and (
+        stem.endswith('Test') or stem.endswith('Tests')
+    ):
         return True
     if stem in TEST_DIR_NAMES:
         if suffix and suffix.lower() in _DOC_EXTENSIONS_EXCLUDED_FROM_BARE_TEST_STEM:

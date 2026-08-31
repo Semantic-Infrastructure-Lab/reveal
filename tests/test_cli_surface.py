@@ -21,6 +21,7 @@ from reveal.adapters.ast.nav_surface import (
 )
 from reveal.cli.commands.surface import (
     _SURFACE_SCANNERS,
+    _is_test_file,
     _render_report,
     _scan_surface,
     _supported_coverage_languages,
@@ -39,6 +40,40 @@ def _write(directory: str, filename: str, content: str) -> str:
     with open(path, 'w') as f:
         f.write(textwrap.dedent(content))
     return path
+
+
+class TestIsTestFile(unittest.TestCase):
+    """BACK-1244/BACK-1252: _is_test_file backs the http-surface
+    test_origin field -- 3 of _SURFACE_SCANNERS' 11 languages (PHP, Swift,
+    Kotlin) had NO test-file detection at all before this ticket
+    consolidated onto the shared, now-PascalCase-aware is_test_filename()."""
+
+    def test_every_scanner_language_has_some_test_detection(self):
+        # Regression guard for the exact gap this ticket closed: a scanner
+        # language with zero recognized test-filename shape anywhere would
+        # make test_origin silently always False for that language.
+        samples = {
+            '.py': 'test_user.py', '.ts': 'user.test.ts', '.tsx': 'user.test.tsx',
+            '.js': 'user.test.js', '.jsx': 'user.test.jsx', '.java': 'UserTest.java',
+            '.cs': 'UserTests.cs', '.php': 'UserTest.php', '.swift': 'UserTests.swift',
+            '.kt': 'UserTest.kt', '.kts': 'UserTest.kts', '.rb': 'user_spec.rb',
+            '.go': 'user_test.go', '.rs': 'user_test.rs',
+            '.cpp': 'user_test.cpp', '.hpp': 'user_tests.hpp',
+            '.cc': 'user_tests.cc', '.cxx': 'user_tests.cxx',
+            '.hxx': 'user_tests.hxx', '.hh': 'user_tests.hh',
+        }
+        covered_extensions = {ext for spec in _SURFACE_SCANNERS for ext in spec.extensions}
+        for ext in covered_extensions:
+            self.assertIn(ext, samples, f'{ext} has no sample in this test -- add one')
+            self.assertTrue(
+                _is_test_file(Path(samples[ext])),
+                f'{ext}: {samples[ext]} not recognized as a test file',
+            )
+
+    def test_php_swift_kotlin_not_false_positive_on_real_files(self):
+        self.assertFalse(_is_test_file(Path('UserController.php')))
+        self.assertFalse(_is_test_file(Path('NetworkClient.swift')))
+        self.assertFalse(_is_test_file(Path('UserRepository.kt')))
 
 
 class TestSupportedCoverageLanguages(unittest.TestCase):

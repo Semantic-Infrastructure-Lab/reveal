@@ -58,20 +58,26 @@ def _is_test_file(fpath: Path) -> bool:
     name = fpath.name
     stem = fpath.stem
     suffix = fpath.suffix
+    # BACK-1252: is_test_filename() now covers the PascalCase Test/Tests
+    # suffix (gated by suffix -- java/kt/kts/cs/swift/php) as well as the
+    # generic snake_case test_/_test convention, so check it first instead
+    # of hand-rolling a second, drifting copy of the same Java/C# logic
+    # here. This is also what closes the gap that .php/.swift/.kt (3 of
+    # this function's 11 supported languages) had NO test-file detection
+    # at all before -- confirmed live: a route entry from a PHPUnit/Ktor/
+    # XCTest test file previously always reported test_origin=False.
+    if is_test_filename(stem, suffix):
+        return True
     if suffix == '.py':
-        return is_test_filename(stem) or name in _TEST_FILE_PY_NAMES
+        return name in _TEST_FILE_PY_NAMES
     if suffix in ('.ts', '.tsx', '.js', '.jsx'):
         return any(infix in name for infix in _TEST_FILE_TS_INFIX)
-    if suffix in ('.java', '.cs'):
-        return stem.endswith('Test') or stem.endswith('Tests')
     if suffix == '.rb':
         return stem.endswith('_spec') or stem.endswith('_test') or name == 'spec_helper.rb'
-    if suffix == '.go':
-        return stem.endswith('_test')
     if suffix == '.rs':
-        return stem.endswith('_test') or stem.endswith('_tests') or name == 'tests.rs'
+        return stem.endswith('_tests') or name == 'tests.rs'
     if suffix in ('.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh', '.h'):
-        return stem.endswith('_test') or stem.endswith('_tests') or stem.startswith('test_')
+        return stem.endswith('_tests')
     return False
 
 

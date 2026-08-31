@@ -960,6 +960,13 @@ class TestIsTestDir:
         for name in ('testpkg', 'testing', 'contests', 'attestation'):
             assert is_test_dir(name) is False, name
 
+    def test_case_insensitive_swift_tests_convention(self):
+        # BACK-1252: Swift Package Manager's canonical test directory is
+        # capitalized ("Tests/"), not lowercase like every other ecosystem
+        # this set already covered -- was silently invisible before.
+        for name in ('Tests', 'TESTS', 'Test', 'Spec', 'SPECS'):
+            assert is_test_dir(name) is True, name
+
 
 class TestIsTestFilename:
     """BACK-1199: canonical test_/_test filename vocabulary."""
@@ -976,6 +983,23 @@ class TestIsTestFilename:
     def test_unrelated_name_does_not_match(self):
         assert is_test_filename('main') is False
         assert is_test_filename('testpkg') is False
+
+    def test_pascal_test_suffix_for_gated_languages(self):
+        # BACK-1252: JUnit/PHPUnit/XCTest/Kotlin/NUnit's primary convention
+        # is a bare PascalCase Test/Tests suffix, not snake_case -- gated
+        # by suffix so it doesn't fire for languages where "Test" isn't
+        # the idiom.
+        for suffix in ('.java', '.kt', '.kts', '.cs', '.swift', '.php'):
+            assert is_test_filename('UserTest', suffix) is True, suffix
+            assert is_test_filename('UserTests', suffix) is True, suffix
+            assert is_test_filename('UserController', suffix) is False, suffix
+
+    def test_pascal_test_suffix_not_applied_ungated(self):
+        # Without a gating suffix, "UserTest" is NOT recognized -- avoids a
+        # blanket, ungated PascalCase match that could false-positive on
+        # unrelated conventions.
+        assert is_test_filename('UserTest') is False
+        assert is_test_filename('UserTest', '.py') is False
 
 
 class TestIsVendorDir:
