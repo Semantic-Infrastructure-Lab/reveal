@@ -23,6 +23,18 @@ def _run(cwd, *args):
     return proc
 
 
+def _text(cwd, *args):
+    """Like _run(...).stdout, but with a diagnosable failure instead of a bare
+    TypeError when stdout comes back None (BACK-1271: seen on Windows CI only,
+    root cause unconfirmed -- this surfaces returncode/stderr on the next hit)."""
+    proc = _run(cwd, *args)
+    assert proc.stdout is not None, (
+        f'stdout was None (BACK-1271); returncode={proc.returncode!r} '
+        f'stderr={proc.stderr!r}'
+    )
+    return proc.stdout
+
+
 @pytest.fixture
 def wide_tree(tmp_path):
     """Enough complex functions to trip overview's complex_functions cap."""
@@ -45,7 +57,7 @@ def test_overview_text_discloses_truncation_the_json_reports(wide_tree):
     if not warned:
         pytest.skip('fixture did not trigger truncation')
 
-    text = _run(wide_tree, 'overview://.').stdout
+    text = _text(wide_tree, 'overview://.')
     assert 'Caveats' in text
     assert warned[0]['message'] in text
 
@@ -133,7 +145,7 @@ def test_deps_text_carries_the_autoload_disclosure(tmp_path):
     if not regime:
         pytest.skip('Rails autoload regime not detected on this fixture')
 
-    text = _run(tmp_path, 'deps://.').stdout
+    text = _text(tmp_path, 'deps://.')
     assert regime['framework'] in text
     assert 'naming convention' in text
 
@@ -151,10 +163,10 @@ def test_deps_labels_ecosystem_only_on_a_mixed_stack(tmp_path):
         "import { Button } from '@mui/material';\n"
         "export const A = () => <Button/>;\n"
     )
-    mixed = _run(tmp_path, 'deps://.').stdout
+    mixed = _text(tmp_path, 'deps://.')
     assert '[python]' in mixed and '[tsx]' in mixed, mixed
 
-    single = _run(tmp_path, 'deps://api').stdout
+    single = _text(tmp_path, 'deps://api')
     assert '[python]' not in single, single
 
 
