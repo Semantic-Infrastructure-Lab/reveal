@@ -22,6 +22,16 @@ _FILTER_SHORTHANDS = {
 _KNOWN_FILTER_KEYS = {'type', 'name', 'complexity', 'size', 'lines', 'depth', 'decorator', 'calls', 'callee_of', 'callers', 'has_annotations', 'param_type', 'return_type', 'reveal_type'}
 
 
+def _render_meta_warnings(data: Dict[str, Any]) -> None:
+    """Print data's meta.warnings other than 'auto_capped' (already surfaced
+    inline via the 'Results: N of M' line above). BACK-1266: ast:// gained an
+    'unfiltered_ranking' warning (BACK-1258) that only ever reached JSON —
+    the text renderer never called this, the exact 'JSON honest, text drops
+    caveats' defect BACK-1261/1262 fixed everywhere else that same session."""
+    from reveal.utils.warning_render import render_meta_warnings
+    render_meta_warnings(data, skip_types=frozenset({'auto_capped'}))
+
+
 def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
     """Render AST query results.
 
@@ -81,12 +91,14 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
         _suggest_filter_correction(query)
         # For single-file name searches, check if the term exists as a variable/constant
         _suggest_reveal_type_if_variable(query, data.get('path', ''))
+        _render_meta_warnings(data)
         return
 
     # show=calls → call graph view
     show_mode = data.get('show_mode')
     if show_mode == 'calls':
         _render_call_graph(data)
+        _render_meta_warnings(data)
         return
 
     # Group by file
@@ -103,6 +115,8 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
         for elem in elements:
             _render_ast_element(elem)
         print()
+
+    _render_meta_warnings(data)
 
 
 def _render_ast_element(elem: Dict[str, Any]) -> None:

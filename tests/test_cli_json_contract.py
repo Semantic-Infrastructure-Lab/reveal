@@ -78,6 +78,48 @@ class TestCliJsonContract(unittest.TestCase):
                 )
 
 
+class TestBack1178MetaContractVersionParity(unittest.TestCase):
+    """BACK-1178: cli/commands/*.py's --format json envelope must keep the
+    adapter's own 'contract_version'/'meta' rather than stripping them and
+    re-deriving a 1.0/no-meta envelope from add_cli_contract_fields() -- that
+    split made the subcommand form disagree with its uri:// twin over the
+    same payload. Round 1 fixed 6 files (overview/hotspots/deps/surface/
+    contracts/architecture) but missed trace.py, which had the byte-identical
+    strip pattern and went undetected because TestCliJsonContract above only
+    checks envelope *presence*, not which keys survive it. Static, so it
+    catches a reintroduced 'contract_version'/'meta' entry in the strip
+    tuple without needing to execute each command."""
+
+    _FILES = (
+        'overview.py', 'hotspots.py', 'deps.py', 'surface.py',
+        'contracts.py', 'architecture.py', 'trace.py',
+    )
+
+    def test_strip_tuple_keeps_contract_version_and_meta(self):
+        for filename in self._FILES:
+            with self.subTest(file=filename):
+                content = (_COMMANDS_DIR / filename).read_text(encoding='utf-8')
+                strip_tuples = re.findall(r"if k not in \(([^)]*)\)", content)
+                self.assertTrue(
+                    strip_tuples,
+                    f"{filename}: expected a 'if k not in (...)' report-rebuild "
+                    f"strip tuple; update this test if the pattern changed.",
+                )
+                for tup in strip_tuples:
+                    self.assertNotIn(
+                        "'contract_version'", tup,
+                        f"{filename} strips 'contract_version' from its own "
+                        f"report before enveloping -- reintroduces BACK-1178's "
+                        f"1.0-vs-1.1 split against the uri:// form.",
+                    )
+                    self.assertNotIn(
+                        "'meta'", tup,
+                        f"{filename} strips 'meta' from its own report before "
+                        f"enveloping -- reintroduces BACK-1178's split against "
+                        f"the uri:// form.",
+                    )
+
+
 class TestCheckJsonContract(unittest.TestCase):
     """BACK-962: check.py's own --format json output lives in reveal/checks.py
     and reveal/cli/file_checker.py, not cli/commands/check.py (which has zero

@@ -50,6 +50,32 @@ def test_overview_text_discloses_truncation_the_json_reports(wide_tree):
     assert warned[0]['message'] in text
 
 
+def test_ast_text_discloses_the_unfiltered_ranking_warning(tmp_path):
+    """BACK-1266: ast:// gained an 'unfiltered_ranking' meta.warnings entry
+    (BACK-1258, same session as this file's original fix) but the text
+    renderer never called render_meta_warnings -- the JSON had the caveat,
+    the default/human output silently dropped it. Same defect class this
+    file exists to close, reintroduced in the same batch that closed it."""
+    vendor = tmp_path / 'vendor'
+    vendor.mkdir()
+    (vendor / 'app.min.js').write_text(
+        'function f(a,b,c,d,e,f){'
+        'if(a){if(b){if(c){if(d){if(e){return f}}}}}return 0}\n'
+    )
+    as_json = json.loads(
+        _run(tmp_path, 'ast://.?complexity>1', '--format', 'json').stdout
+    )
+    warned = [
+        w for w in as_json.get('meta', {}).get('warnings', [])
+        if w.get('type') == 'unfiltered_ranking'
+    ]
+    if not warned:
+        pytest.skip('fixture did not trigger the unfiltered_ranking warning')
+
+    text = _run(tmp_path, 'ast://.?complexity>1').stdout
+    assert warned[0]['message'] in text
+
+
 def test_patches_says_not_measured_rather_than_clean(tmp_path):
     """Patch detection is Python + jest/vitest only, so on a Ruby tree
     'No patch pressure groups found.' alone reads as a clean result for a
