@@ -24,6 +24,14 @@ _SDK_PACKAGES: frozenset = frozenset({
     'stripe', 'twilio', 'sendgrid', 'slack_sdk', 'github',
     'atlassian', 'jira', 'pagerduty',
     'boto3', 'botocore', 'litellm', 'anthropic_bedrock',
+    # BACK-1260: Google's AI SDKs. A module whose entire job is calling an AI
+    # vendor through its official SDK was absent from `sdk` and from `network`,
+    # visible only as three GOOGLE_* env vars with nothing marking them as a
+    # vendor integration -- exactly the question an AI-tooling / vendor-risk
+    # review exists to answer. Multi-segment on purpose: bare 'google' would
+    # claim every unrelated google-* package.
+    'google.genai', 'google.generativeai', 'google.ai', 'vertexai',
+    'mistralai', 'groq', 'together', 'replicate', 'huggingface_hub',
 })
 
 _WRITE_MODES: frozenset = frozenset({'w', 'wb', 'a', 'ab', 'x', 'xb'})
@@ -100,7 +108,11 @@ def _process_import(
             full = f"{mod}.{alias.name}" if mod else alias.name
             asname = alias.asname or alias.name
             aliases[asname] = full
-            _check_network_import(mod, file_path, node.lineno, surfaces)
+            # BACK-1260: classify the full dotted name, not just the module it
+            # was imported from. `from google import genai` carries the vendor
+            # identity in the imported NAME -- checking 'google' alone can only
+            # either miss it or over-claim every google package.
+            _check_network_import(full, file_path, node.lineno, surfaces)
 
 
 def _check_network_import(
@@ -109,12 +121,17 @@ def _check_network_import(
     line: int,
     surfaces: Dict[str, List[Dict[str, Any]]],
 ) -> None:
-    root = name.split('.')[0]
-    if root in _NET_PACKAGES:
+    # BACK-1260: match every dotted prefix, not just the root. Comparing only
+    # `name.split('.')[0]` meant a multi-segment catalog entry could never fire
+    # -- 'google.cloud' had been in _SDK_PACKAGES all along and was dead
+    # config, because the root of any google import is always 'google'.
+    parts = name.split('.')
+    prefixes = ['.'.join(parts[:i]) for i in range(1, len(parts) + 1)]
+    if any(p in _NET_PACKAGES for p in prefixes):
         _add_once(surfaces['network'], {'type': 'import', 'name': name, 'file': file_path, 'line': line})
-    elif root in _DB_PACKAGES:
+    elif any(p in _DB_PACKAGES for p in prefixes):
         _add_once(surfaces['db'], {'type': 'import', 'name': name, 'file': file_path, 'line': line})
-    elif root in _SDK_PACKAGES:
+    elif any(p in _SDK_PACKAGES for p in prefixes):
         _add_once(surfaces['sdk'], {'type': 'import', 'name': name, 'file': file_path, 'line': line})
 
 

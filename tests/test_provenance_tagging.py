@@ -120,3 +120,35 @@ class TestRankingAdaptersCarryProvenance:
         result = self._run(tree, 'calls://.?uncalled=true&type=function')
         assert result['entries'], 'fixture produced no uncalled entries'
         assert all('provenance' in e for e in result['entries'])
+
+
+class TestAiVendorSdkDetection:
+    """BACK-1260: surface://'s sdk catalog missed every Google AI SDK, and its
+    matcher only ever compared the ROOT path segment — so the multi-segment
+    'google.cloud' entry that had been in the catalog all along was dead
+    config, since the root of any google import is always 'google'."""
+
+    @pytest.mark.parametrize('source,expected', [
+        ('from google import genai\n', 'google.genai'),
+        ('import vertexai\n', 'vertexai'),
+        ('from google.generativeai import GenerativeModel\n',
+         'google.generativeai.GenerativeModel'),
+        ('from google.cloud import storage\n', 'google.cloud.storage'),
+    ])
+    def test_ai_vendor_sdks_are_detected(self, tmp_path, source, expected):
+        from reveal.adapters.ast.nav_surface import scan_file_surface
+        f = tmp_path / 'client.py'
+        f.write_text(source)
+        names = [e['name'] for e in scan_file_surface(str(f))['sdk']]
+        assert expected in names, names
+
+    @pytest.mark.parametrize('source', [
+        'from google import protobuf\n',
+        'from googleapiclient import discovery\n',
+    ])
+    def test_unrelated_google_packages_are_not_claimed(self, tmp_path, source):
+        """A bare 'google' catalog entry would over-claim these."""
+        from reveal.adapters.ast.nav_surface import scan_file_surface
+        f = tmp_path / 'client.py'
+        f.write_text(source)
+        assert scan_file_surface(str(f))['sdk'] == []
