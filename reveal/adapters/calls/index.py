@@ -31,6 +31,37 @@ _INDEX_CACHE_MAX = 8
 # never appear as explicit call expressions in source code.
 _IMPLICIT_DECORATORS: frozenset = frozenset({'property', 'classmethod', 'staticmethod'})
 
+# BACK-1265: web/CLI framework route and handler decorators. A decorated route
+# is invoked by the framework's registry, never by a call expression, so every
+# endpoint in a Flask/FastAPI/Django/Click/Celery app read as dead code --
+# 4 of 20 in an external random-sample precision measurement. BACK-952 already
+# provided .reveal.yaml config for exactly this, but an empty default meant the
+# rule only worked for projects that had already been bitten by it and knew to
+# declare their own framework's decorators.
+#
+# Matched as bare names after stripping the module prefix (@app.get -> 'get'),
+# same convention as _get_decorator_names(). Deliberately the routing/dispatch
+# vocabulary only: a function *decorated* with one of these is a registration
+# in every framework that uses the name, and suppressing a genuinely dead one
+# costs far less than a reader verifying every endpoint by hand.
+_DEFAULT_ENTRY_POINT_DECORATORS: frozenset = frozenset({
+    # HTTP verbs (FastAPI, Flask, Sanic, Starlette, aiohttp, Bottle)
+    'get', 'post', 'put', 'patch', 'delete', 'head', 'options',
+    'route', 'websocket', 'websocket_route',
+    # Error/lifecycle handlers
+    'exception_handler', 'errorhandler', 'middleware', 'on_event',
+    'before_request', 'after_request', 'teardown_request',
+    'before_app_request', 'app_errorhandler',
+    # CLI (Click, Typer)
+    'command', 'group', 'callback',
+    # Task queues / schedulers (Celery, RQ, Huey, APScheduler)
+    'task', 'shared_task', 'periodic_task', 'scheduled_job',
+    # Event/signal dispatch
+    'listener', 'subscribe', 'receiver', 'event', 'on', 'hook',
+    # Test/BDD step registration
+    'given', 'when', 'then', 'step', 'fixture',
+})
+
 # BACK-1197: Ruby's own equivalent of Python's __dunder__ exclusion — method
 # names invoked by the language/framework runtime, never a source-level call
 # expression. 'initialize' alone accounted for 365 of 2,235 uncalled entries
@@ -289,6 +320,86 @@ def _bfs_level(
             level_records.append({**record, 'callee': t})
             next_targets.add(record['caller'])
     return level_records, next_targets
+
+
+# BACK-1265: names referenced without a call expression, per Python file.
+# Separate cache from _INDEX_CACHE because it is derived from a different pass.
+_REFERENCE_CACHE: OrderedDict = OrderedDict()
+_REFERENCE_CACHE_MAX = 8
+
+
+def _python_referenced_names(directory: Path) -> Set[str]:
+    """Names a Python file references without calling them directly.
+
+    build_callers_index only walks `elements`, and only those in the
+    functions/methods/tests categories, so it sees two kinds of use and misses
+    a third:
+
+    1. Module-level calls are invisible. A function called as `main()` inside
+       `if __name__ == "__main__":` is not inside any element, so it was
+       reported as uncalled in the same file that calls it -- the single
+       clearest false positive in the external precision sample.
+    2. A bare identifier passed as an argument, keyword, or assigned value --
+       `Thread(target=fn)`, `set_defaults(func=fn)`, `mock.side_effect = fn`,
+       Airflow's `python_callable=fn`, Flask's `view_func=` -- is a use, and a
+       statically visible one. The extractor records the *call* (`Thread`) and
+       drops its arguments, so every callback registered this way read as dead.
+
+    Deliberately errs toward "referenced": a bare Name load that happens to be
+    an unrelated variable of the same name suppresses one true positive, while
+    the inverse costs a reader a full manual verification to disprove. For a
+    dead-code report that trade is the right way round.
+
+    Python-only, and honest about it: this reads Python's own AST. The
+    equivalent JS/TS mechanisms (JSX invocation, test-framework callbacks,
+    object shorthand) need the same treatment in that analyzer.
+    """
+    import ast as _ast
+
+    cache_key = _dir_cache_key(directory)
+    dir_str = str(directory)
+    cached = _REFERENCE_CACHE.get(dir_str)
+    if cached and cached[0] == cache_key:
+        _REFERENCE_CACHE.move_to_end(dir_str)
+        return cached[1]
+
+    referenced: Set[str] = set()
+    for py_file in directory.rglob('*.py'):
+        try:
+            if is_unsafe_scan_root(py_file.parent):
+                continue
+            tree = _ast.parse(py_file.read_text(encoding='utf-8', errors='ignore'))
+        except (OSError, SyntaxError, ValueError, RecursionError):
+            continue
+
+        called_here = set()
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Call):
+                func = node.func
+                if isinstance(func, _ast.Name):
+                    called_here.add(func.id)
+                    referenced.add(func.id)
+                elif isinstance(func, _ast.Attribute):
+                    referenced.add(func.attr)
+            elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
+                for dec in node.decorator_list:
+                    target = dec.func if isinstance(dec, _ast.Call) else dec
+                    if isinstance(target, _ast.Name):
+                        referenced.add(target.id)
+                    elif isinstance(target, _ast.Attribute):
+                        referenced.add(target.attr)
+
+        # Second pass: bare identifiers in load position that are not the
+        # function of a call (those are already counted above).
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Name) and isinstance(node.ctx, _ast.Load):
+                referenced.add(node.id)
+
+    _REFERENCE_CACHE[dir_str] = (cache_key, referenced)
+    _REFERENCE_CACHE.move_to_end(dir_str)
+    if len(_REFERENCE_CACHE) > _REFERENCE_CACHE_MAX:
+        _REFERENCE_CACHE.popitem(last=False)
+    return referenced
 
 
 def _dir_cache_key(directory: Path) -> Any:
@@ -771,16 +882,19 @@ def _project_entry_point_decorators(directory: Path) -> FrozenSet[str]:
             entry_points:
               decorators: [route, get, post, put, delete, command]  # Flask/FastAPI/Click
 
-    Returns an empty frozenset (no behavior change) if unset or unreadable.
+    Returns _DEFAULT_ENTRY_POINT_DECORATORS if unset or unreadable -- BACK-1265
+    made that set non-empty, because requiring every web project to declare
+    Flask/FastAPI's own decorators before its routes stop reading as dead code
+    is a configuration step nobody knows to take. Project config is additive.
     """
     from ...config import get_config
     try:
         config = get_config(start_path=directory)
         entry_points = config.get_adapter_config('calls', 'entry_points')
         decorators = entry_points.get('decorators', []) if isinstance(entry_points, dict) else []
-        return frozenset(str(d) for d in decorators)
+        return _DEFAULT_ENTRY_POINT_DECORATORS | frozenset(str(d) for d in decorators)
     except Exception:
-        return frozenset()
+        return _DEFAULT_ENTRY_POINT_DECORATORS
 
 
 def find_uncalled(
@@ -833,6 +947,10 @@ def find_uncalled(
     file_filter: Optional[str] = str(path_obj.resolve()) if is_file else None
 
     called_names: Set[str] = set(build_callers_index(path).keys())
+    # BACK-1265: union in names used without a direct call expression --
+    # module-level calls and callbacks passed by reference. See
+    # _python_referenced_names for why both were invisible to the index.
+    called_names |= _python_referenced_names(directory)
     file_lines: Dict[str, List[str]] = {}
     structures = collect_structures(str(directory))
     extra_implicit_decorators = _project_entry_point_decorators(directory)

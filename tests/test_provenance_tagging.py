@@ -178,3 +178,79 @@ class TestSpecDirIsAmbiguousForDocuments:
     def test_classification(self, parts, filename, expected):
         from reveal.utils.path_utils import classify_path_provenance
         assert classify_path_provenance(parts, filename) == expected
+
+
+class TestUncalledPrecision:
+    """BACK-1265: calls://?uncalled measured at 10% precision on an external
+    random sample (2 true positives in 20). Each fixture below is one of the
+    reported mechanisms; all six were false positives before the fix."""
+
+    @pytest.fixture
+    def tree(self, tmp_path):
+        (tmp_path / 'app.py').write_text(
+            'import threading\n'
+            '\n'
+            '\n'
+            'class App:\n'
+            '    def get(self, path):\n'
+            '        def deco(fn):\n'
+            '            return fn\n'
+            '        return deco\n'
+            '\n'
+            '\n'
+            'app = App()\n'
+            '\n'
+            '\n'
+            'def main_entry():\n'
+            '    return 1\n'
+            '\n'
+            '\n'
+            'def thread_body():\n'
+            '    return 2\n'
+            '\n'
+            '\n'
+            'def kwarg_cb():\n'
+            '    return 3\n'
+            '\n'
+            '\n'
+            'def attr_cb():\n'
+            '    return 4\n'
+            '\n'
+            '\n'
+            'def really_dead():\n'
+            '    return 99\n'
+            '\n'
+            '\n'
+            '@app.get("/items")\n'
+            'def list_items():\n'
+            '    return []\n'
+            '\n'
+            '\n'
+            'def start(sink):\n'
+            '    threading.Thread(target=thread_body).start()\n'
+            '    sink(func=kwarg_cb)\n'
+            '    sink.side_effect = attr_cb\n'
+            '\n'
+            '\n'
+            'if __name__ == "__main__":\n'
+            '    main_entry()\n'
+        )
+        return tmp_path
+
+    def _uncalled(self, tree):
+        from reveal.adapters.calls.index import find_uncalled
+        return {e['name'] for e in find_uncalled(str(tree))['entries']}
+
+    @pytest.mark.parametrize('name,mechanism', [
+        ('main_entry', 'called at module level under an __main__ guard'),
+        ('thread_body', 'passed by reference as Thread(target=...)'),
+        ('kwarg_cb', 'passed by reference as a keyword argument'),
+        ('attr_cb', 'assigned to an attribute'),
+        ('list_items', 'registered by a framework route decorator'),
+    ])
+    def test_referenced_functions_are_not_reported_dead(self, tree, name, mechanism):
+        assert name not in self._uncalled(tree), mechanism
+
+    def test_genuinely_dead_code_is_still_reported(self, tree):
+        """The fix errs toward 'referenced', so this guards the other side."""
+        assert 'really_dead' in self._uncalled(tree)

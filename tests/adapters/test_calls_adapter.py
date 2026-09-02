@@ -1951,9 +1951,18 @@ class TestFindUncalledProjectEntryPoints(unittest.TestCase):
     def _write(self, filename, content):
         return _write(self.tmpdir, filename, textwrap.dedent(content))
 
-    def test_route_flagged_without_config(self):
-        """A Flask-style @app.route handler with no other caller is flagged as
-        dead code by default — no config means no behavior change."""
+    def test_route_not_flagged_without_config(self):
+        """BACK-1265: a Flask-style @app.route handler is NOT dead code by
+        default any more.
+
+        This previously asserted the opposite ("no config means no behavior
+        change"), which meant BACK-952's mechanism only helped projects that
+        had already been bitten and knew to declare their own framework's
+        decorators in .reveal.yaml. Measured externally: framework route and
+        handler decorators were 4 of 20 in a random-sample precision check of
+        calls://?uncalled. The route is registered by the framework and never
+        appears as a call expression, so flagging it is wrong regardless of
+        whether the project has a config file."""
         from reveal.adapters.calls.index import find_uncalled
         self._write('app.py', '''\
             class App:
@@ -1970,7 +1979,7 @@ class TestFindUncalledProjectEntryPoints(unittest.TestCase):
         ''')
         result = find_uncalled(self.tmpdir)
         names = {e['name'] for e in result['entries']}
-        self.assertIn('list_users', names)
+        self.assertNotIn('list_users', names)
 
     def test_route_excluded_with_configured_entry_point(self):
         """.reveal.yaml adapters.calls.entry_points.decorators: [route] excludes
