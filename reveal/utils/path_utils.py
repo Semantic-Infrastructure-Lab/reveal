@@ -205,6 +205,53 @@ def is_minified_filename(filename: str) -> bool:
     return bool(MINIFIED_FILENAME_RE.search(filename))
 
 
+# BACK-1264: 'spec'/'specs' names two different things -- an RSpec test tree,
+# and a directory of specification *documents* (openspec, OpenAPI, RFC-style
+# design specs). For a code file the test reading is right. For a document it
+# usually isn't: you cannot write an RSpec example in Markdown. BACK-1251
+# already made this call for the *filename* (`spec.md` is a requirements doc,
+# not a test) -- this is the same call for the *directory*.
+_AMBIGUOUS_TEST_DIR_NAMES = frozenset({'spec', 'specs'})
+
+# A repo-root `spec/` -- or one package level down, for monorepos
+# (`packages/web/spec/`) -- really is the test tree, and a .md inside it really
+# is test-support material. Deeper than that the name is being used in its
+# specification sense. Measured on camaleon-cms: 205 documents tagged 'test',
+# 204 of them under `openspec/changes/<x>/specs/<capability>/`, exactly 1 under
+# the real `spec/` tree -- and this rule keeps that 1 correct.
+_TEST_ROOT_MAX_DEPTH = 2
+
+# ...and regardless of depth, a spec dir nested under a documentation tree is
+# holding specification documents, not tests.
+_DOC_TREE_DIR_NAMES = frozenset({
+    'doc', 'docs', 'documentation', 'openspec', 'design', 'designs',
+    'rfc', 'rfcs', 'adr', 'adrs', 'proposals', 'notes',
+})
+
+
+def _has_test_ancestor(parts: List[str], suffix: str) -> bool:
+    """True if any directory component marks *parts* as living in a test tree.
+
+    See _AMBIGUOUS_TEST_DIR_NAMES for why document files treat 'spec'/'specs'
+    differently from code files.
+    """
+    for index, part in enumerate(parts):
+        if not is_test_dir(part):
+            continue
+        is_ambiguous = (
+            part.lower() in _AMBIGUOUS_TEST_DIR_NAMES
+            and suffix.lower() in _DOC_EXTENSIONS_EXCLUDED_FROM_BARE_TEST_STEM
+        )
+        if is_ambiguous:
+            under_doc_tree = any(
+                p.lower() in _DOC_TREE_DIR_NAMES for p in parts[:index]
+            )
+            if under_doc_tree or index > _TEST_ROOT_MAX_DEPTH:
+                continue
+        return True
+    return False
+
+
 def classify_path_provenance(parts: Iterable[str], filename: str) -> Optional[str]:
     """Classify a file as ``'test'`` / ``'vendor'`` / ``'minified'`` / ``None``
     (first-party) from cheap, reliable path-only signals (BACK-1195) — no
@@ -227,7 +274,10 @@ def classify_path_provenance(parts: Iterable[str], filename: str) -> Optional[st
     — it requires reading file content, which ranking adapters don't
     otherwise need to do for every file in a directory walk.
     """
-    if any(is_test_dir(p) for p in parts) or is_test_filename(Path(filename).stem, Path(filename).suffix):
+    parts = list(parts)
+    if _has_test_ancestor(parts, Path(filename).suffix) or is_test_filename(
+        Path(filename).stem, Path(filename).suffix
+    ):
         return 'test'
     if any(is_vendor_dir(p) for p in parts):
         return 'vendor'

@@ -152,3 +152,29 @@ class TestAiVendorSdkDetection:
         f = tmp_path / 'client.py'
         f.write_text(source)
         assert scan_file_surface(str(f))['sdk'] == []
+
+
+class TestSpecDirIsAmbiguousForDocuments:
+    """BACK-1264: 'spec'/'specs' names two different things — an RSpec test
+    tree and a directory of specification documents. BACK-1251 made that call
+    for the filename ('spec.md' is a requirements doc); the directory kept the
+    test reading, so an openspec/ tree read as 205 test files on camaleon-cms.
+    You cannot write an RSpec example in Markdown."""
+
+    @pytest.mark.parametrize('parts,filename,expected', [
+        # Specification documents — not tests.
+        (('openspec', 'changes', 'x', 'specs', 'cap'), 'spec.md', None),
+        (('openspec', 'specs'), 'spec.md', None),
+        (('docs', 'specs'), 'api.md', None),
+        # Real test trees — still tests, including their support documents.
+        (('spec', 'support', 'fixtures'), 'plan.md', 'test'),
+        (('specs', 'feature-x'), 'spec.md', 'test'),
+        (('packages', 'web', 'spec'), 'notes.md', 'test'),   # monorepo
+        (('tests', 'docs'), 'plan.md', 'test'),              # 'tests' is unambiguous
+        # Code is unaffected at any depth — only documents are ambiguous.
+        (('spec',), 'user_spec.rb', 'test'),
+        (('openspec', 'changes', 'x', 'specs'), 'helper_spec.rb', 'test'),
+    ])
+    def test_classification(self, parts, filename, expected):
+        from reveal.utils.path_utils import classify_path_provenance
+        assert classify_path_provenance(parts, filename) == expected
