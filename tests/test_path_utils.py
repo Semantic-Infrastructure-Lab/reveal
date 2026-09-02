@@ -1025,6 +1025,26 @@ class TestIsMinifiedFilename:
         for name in ('app.js', 'minimal.py', 'admin.js'):
             assert is_minified_filename(name) is False, name
 
+    def test_content_hashed_suffixes(self):
+        for name in ('app.min.1a2b3c.js', 'a.min.mjs', 'a.min.cjs', 'A.MIN.JS', 'a.bundle.css'):
+            assert is_minified_filename(name) is True, name
+
+    def test_short_content_hash_digest(self):
+        """BACK-1258 follow-up (found on re-review, 2026-09-02): webpack's
+        contenthash:4 config produces 4-char digests, shorter than the
+        original 6-char floor."""
+        for name in ('app.min.a1b2.js', 'app.min.AB12.js'):
+            assert is_minified_filename(name) is True, name
+
+    def test_digest_shorter_than_floor_does_not_match(self):
+        """Below the 4-char floor, still correctly not treated as a digest
+        (and there's no bare min./bundle.-then-extension form here either)."""
+        assert is_minified_filename('a.min.5c.js') is False
+
+    def test_non_digest_content_between_marker_and_extension_does_not_match(self):
+        for name in ('foo.min.js.map', 'component.min.vue', 'runtime.abc123.js'):
+            assert is_minified_filename(name) is False, name
+
 
 class TestClassifyPathProvenance:
     """BACK-1195: 'test'/'vendor'/'minified'/None classification, cheap

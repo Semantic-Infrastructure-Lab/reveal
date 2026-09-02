@@ -123,8 +123,15 @@ MINIFIED_FILE_SUFFIXES = (
 # classified as first_party — which is how a vendored bundle reached #1 in a
 # hotspots ranking tagged `null`. Marker and extension are matched with an
 # optional digest between them.
+#
+# Digest floor is 4, not 6 (found on re-review, 2026-09-02): webpack's
+# `output.hashDigestLength` config (`contenthash:4`) is a real, documented
+# setting shorter than the original 6-char floor, so `app.min.a1b2.js` was a
+# false negative under it -- a shorter floor accepts a strictly larger set of
+# already-accepted-risk digest strings (the group was already unconstrained
+# in content, just length), not a new category of false positive.
 MINIFIED_FILENAME_RE = re.compile(
-    r'[.\-](min|bundle)([.\-][0-9a-zA-Z]{6,})?\.(js|mjs|cjs|css)$',
+    r'[.\-](min|bundle)([.\-][0-9a-zA-Z]{4,})?\.(js|mjs|cjs|css)$',
     re.IGNORECASE,
 )
 
