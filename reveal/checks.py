@@ -65,6 +65,26 @@ def _format_detections_json(
         total_available: True detection count before any --max-items
             truncation, if different from len(detections) (BACK-1181).
     """
+    print(safe_json_dumps(_build_detections_json(
+        path, detections, parse_degraded=parse_degraded, rule_errors=rule_errors,
+        no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
+        total_available=total_available,
+    )))
+
+
+def _build_detections_json(
+    path: str,
+    detections: List[Any],
+    parse_degraded: bool = False,
+    rule_errors: Optional[List[dict]] = None,
+    no_snippets: bool = False,
+    max_snippet_chars: Optional[int] = None,
+    total_available: Optional[int] = None,
+) -> dict:
+    """Build the single-file check JSON document. Split out of
+    _format_detections_json (BACK-1248) so --also-json can write the exact
+    document --format json prints, rather than a second shape.
+    """
     from reveal.utils.results import add_cli_contract_fields
 
     result = {
@@ -87,9 +107,9 @@ def _format_detections_json(
         )
     if rule_errors:
         result['errors'] = rule_errors
-    print(safe_json_dumps(
-        add_cli_contract_fields(result, result_type='check', source=path, source_type='file')
-    ))
+    return add_cli_contract_fields(
+        result, result_type='check', source=path, source_type='file',
+    )
 
 
 def _format_detections_grep(detections: List[Any]) -> None:
@@ -269,6 +289,23 @@ def run_pattern_detection(
 
     formatter = formatters.get(output_format, formatters['text'])
     formatter()
+
+    # BACK-1248: --also-json on a single file. Built from the same detections
+    # the renderer just used -- no second analysis pass -- and deliberately the
+    # same document `--format json` prints for this invocation, so the artifact
+    # never depends on which --format the human report happened to use.
+    also_json = getattr(args, 'also_json', None)
+    if also_json and output_format != 'json':
+        try:
+            with open(also_json, 'w') as f:
+                f.write(safe_json_dumps(_build_detections_json(
+                    path, rendered_detections, parse_degraded=parse_degraded,
+                    rule_errors=rule_errors, no_snippets=no_snippets,
+                    max_snippet_chars=max_snippet_chars,
+                    total_available=total_available,
+                )))
+        except OSError as e:
+            print(f"Warning: --also-json could not write {also_json}: {e}", file=sys.stderr)
 
     # Print breadcrumbs after text output (not for json/grep)
     if output_format == 'text':

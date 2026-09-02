@@ -1364,7 +1364,7 @@ class TestCheckFilesTextSeverity:
         high = self._make_detection('high')
 
         with patch('reveal.cli.file_checker.check_and_collect_file', return_value=(2, [low, high], {"status": "ok"})):
-            total, files_with, _errored, _degraded = _check_files_text([dummy], tmp_path, None, None, severity='high')
+            total, files_with, _errored, _degraded, *_ = _check_files_text([dummy], tmp_path, None, None, severity='high')
 
         assert total == 1
         assert files_with == 1
@@ -1419,7 +1419,7 @@ class TestCheckFilesTextLimit:
 
         with patch('reveal.cli.file_checker._PARALLEL_THRESHOLD', 999), \
              patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det], {"status": "ok"})):
-            total, files_with, _errored, _degraded = _check_files_text(files, tmp_path, None, None, limit=3)
+            total, files_with, _errored, _degraded, *_ = _check_files_text(files, tmp_path, None, None, limit=3)
 
         # Counts reflect ALL files, not just the ones printed in full.
         assert total == 10
@@ -1436,7 +1436,7 @@ class TestCheckFilesTextLimit:
 
         with patch('reveal.cli.file_checker._PARALLEL_THRESHOLD', 999), \
              patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det], {"status": "ok"})):
-            total, files_with, _errored, _degraded = _check_files_text(files, tmp_path, None, None, limit=0)
+            total, files_with, _errored, _degraded, *_ = _check_files_text(files, tmp_path, None, None, limit=0)
 
         assert total == 10
         assert files_with == 10
@@ -1451,7 +1451,7 @@ class TestCheckFilesTextLimit:
 
         with patch('reveal.cli.file_checker._PARALLEL_THRESHOLD', 999), \
              patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det], {"status": "ok"})):
-            total, files_with, _errored, _degraded = _check_files_text(files, tmp_path, None, None, limit=50)
+            total, files_with, _errored, _degraded, *_ = _check_files_text(files, tmp_path, None, None, limit=50)
 
         assert total == 5
         assert files_with == 5

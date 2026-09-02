@@ -88,10 +88,21 @@ class TestCheckJsonContract(unittest.TestCase):
 
     _REVEAL_DIR = Path(__file__).parent.parent / 'reveal'
 
-    # file (relative to reveal/) -> number of --format json print sites.
+    # file (relative to reveal/) -> number of JSON serialization sites.
+    # BACK-1248 added a second site to each file: --also-json writes check's
+    # report to a path while a text/grep report goes to stdout. Both sites in
+    # a file serialize the SAME enveloping builder (_build_detections_json /
+    # _build_json_report), so the envelope assertion below counts builders,
+    # not a 1:1 site-to-envelope ratio.
     _EXPECTED_CHECK_JSON_SITES = {
-        'checks.py': 1,
-        'cli/file_checker.py': 2,
+        'checks.py': 2,
+        'cli/file_checker.py': 3,
+    }
+
+    # file -> the enveloping builder its --also-json site shares with stdout.
+    _EXPECTED_ENVELOPE_BUILDERS = {
+        'checks.py': '_build_detections_json',
+        'cli/file_checker.py': '_build_json_report',
     }
 
     def test_check_json_dumps_sites_are_enveloped(self):
@@ -107,12 +118,21 @@ class TestCheckJsonContract(unittest.TestCase):
                     f"safe_json_dumps() call(s), found {total_calls} — update "
                     f"_EXPECTED_CHECK_JSON_SITES if this is intentional."
                 )
+                # Each serialization site must emit an enveloped document —
+                # either by calling add_cli_contract_fields() itself, or by
+                # rendering the shared builder that does. Counting both is what
+                # lets --also-json reuse a builder (BACK-1248) without either
+                # loosening the guard or forcing a duplicate envelope call.
                 envelope_calls = len(re.findall(r'add_cli_contract_fields\(', content))
+                builder = self._EXPECTED_ENVELOPE_BUILDERS[relpath]
+                builder_calls = len(re.findall(rf'(?<!def ){builder}\(', content))
                 self.assertGreaterEqual(
-                    envelope_calls, expected_sites,
-                    f"{relpath} has a json output call not wrapped by "
-                    f"add_cli_contract_fields() — `reveal check --format json` must "
-                    f"carry contract_version/type/source/source_type (BACK-962)."
+                    envelope_calls + builder_calls, total_calls,
+                    f"{relpath}: {total_calls} serialization site(s) but only "
+                    f"{envelope_calls} add_cli_contract_fields() + {builder_calls} "
+                    f"{builder}() call(s) — a `reveal check` JSON output path is "
+                    f"emitting a document without the Output Contract envelope "
+                    f"(BACK-962/BACK-1248)."
                 )
 
 

@@ -1246,39 +1246,76 @@ class TestHandleFile(unittest.TestCase):
         finally:
             os.unlink(temp_path)
 
-    def test_check_also_json_warns_instead_of_silently_no_opping(self):
-        """BACK-1248: --also-json (BACK-1184) is URI-adapter-form only;
-        `check` has no uri:// form and previously accepted the flag with no
-        warning, no file written, exit 0. Now warns on stderr."""
-        import io
+    def test_check_also_json_writes_the_same_report_format_json_prints(self):
+        """BACK-1248: --also-json used to be wired only for the uri:// render
+        paths, so `reveal check` accepted the flag and wrote nothing (later:
+        warned and wrote nothing), forcing consumers to dispatch check twice
+        over the same tree. It now writes the artifact, and the artifact is
+        the same document `--format json` prints."""
+        import json
         import tempfile
-        import contextlib
-        from reveal.cli.commands.check import run_check
-        from reveal import checks
+        import subprocess
+        import sys as _sys
+        from pathlib import Path
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.py', mode='w') as f:
-            f.write("x = 1\n")
-            temp_path = f.name
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outdir:
+            src = Path(tmp) / 'sample.py'
+            src.write_text("import os\n\n\ndef f(a):\n    return eval(a)\n")
 
-        try:
-            mock_args = Namespace(
-                path=temp_path,
-                rules=False,
-                explain=None,
-                no_fallback=False,
-                select=None,
-                ignore=None,
-                format='text',
-                also_json='/tmp/should-not-be-written.json',
-            )
+            # Both targets: a single file and a directory render check's JSON
+            # through different code paths and emit different (correct) shapes.
+            # --also-json must follow whichever one the invocation used.
+            # The artifact lives outside `tmp` so writing it doesn't add a file
+            # to the very tree the directory case is scanning.
+            for target in (str(src), tmp):
+                artifact = Path(outdir) / 'out.json'
+                artifact.unlink(missing_ok=True)
 
-            stderr = io.StringIO()
-            with patch.object(checks, 'run_pattern_detection', return_value=(0, False)):
-                with patch('sys.exit'), contextlib.redirect_stderr(stderr):
-                    run_check(mock_args)
-            self.assertIn('also-json', stderr.getvalue())
-        finally:
-            os.unlink(temp_path)
+                def run(*extra):
+                    return subprocess.run(
+                        [_sys.executable, '-m', 'reveal', 'check', target,
+                         '--exit-zero', *extra],
+                        capture_output=True, text=True,
+                    )
+
+                text_run = run('--also-json', str(artifact))
+                self.assertTrue(
+                    artifact.exists(),
+                    f"artifact not written for {target}: {text_run.stderr}",
+                )
+                written = json.loads(artifact.read_text())
+                printed = json.loads(run('--format', 'json').stdout)
+
+                self.assertEqual(written['type'], 'check')
+                self.assertEqual(
+                    written, printed,
+                    f"--also-json artifact differs from --format json for {target}",
+                )
+
+    def test_check_also_json_artifact_ignores_the_text_only_limit_flag(self):
+        """BACK-1248: --limit is a print-density cap on the human report. It
+        must not truncate the machine artifact, or --also-json's content would
+        depend on a flag that exists only to shorten terminal output."""
+        import json
+        import tempfile
+        import subprocess
+        import sys as _sys
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            for i in range(5):
+                (Path(tmp) / f'm{i}.py').write_text("def f(a):\n    return eval(a)\n")
+
+            def artifact_files(*extra):
+                out = Path(tmp) / 'a.json'
+                subprocess.run(
+                    [_sys.executable, '-m', 'reveal', 'check', tmp, '--exit-zero',
+                     '--also-json', str(out), *extra],
+                    capture_output=True, text=True,
+                )
+                return json.loads(out.read_text())['files']
+
+            self.assertEqual(artifact_files(), artifact_files('--limit', '1'))
 
     def test_element_extraction(self):
         """Verify element parameter calls extract_element."""

@@ -814,6 +814,53 @@ def check_exit_code(
     return 1 if total_issues > 0 else 0
 
 
+def _build_file_entry(
+    rel_path: Path,
+    issue_count: int,
+    rendered: list,
+    status: dict,
+    no_snippets: bool = False,
+    max_snippet_chars: Optional[int] = None,
+) -> dict:
+    """Build one `files[]` entry for check's JSON report.
+
+    Extracted from _check_files_json (BACK-1248) so the text render path can
+    produce the byte-identical per-file shape for --also-json instead of the
+    artifact drifting from what --format json emits.
+    """
+    entry = {
+        "file": to_posix(rel_path),
+        "issues": issue_count,
+        "detections": [
+            {
+                "line": d.line,
+                "column": d.column,
+                "rule_code": d.rule_code,
+                "message": d.message,
+                "severity": d.severity.value,
+                "suggestion": d.suggestion,
+                **({} if no_snippets else {
+                    "context": (
+                        d.context[:max_snippet_chars] + '…'
+                        if max_snippet_chars is not None and d.context
+                        and len(d.context) > max_snippet_chars
+                        else d.context
+                    )
+                }),
+            }
+            for d in rendered
+        ]
+    }
+    st = status.get("status", "ok")
+    if st != "ok":
+        entry["status"] = st
+        if status.get("detail"):
+            entry["detail"] = status["detail"]
+    if status.get("rule_errors"):
+        entry["rule_errors"] = status["rule_errors"]
+    return entry
+
+
 def _check_files_json(
     files: List[Path], directory: Path, select: Optional[List[str]], ignore: Optional[List[str]],
     severity: Optional[str] = None,
@@ -891,36 +938,10 @@ def _check_files_json(
                     items_truncated = True
                 remaining_budget -= len(rendered)
 
-            entry = {
-                "file": to_posix(rel_path),
-                "issues": issue_count,
-                "detections": [
-                    {
-                        "line": d.line,
-                        "column": d.column,
-                        "rule_code": d.rule_code,
-                        "message": d.message,
-                        "severity": d.severity.value,
-                        "suggestion": d.suggestion,
-                        **({} if no_snippets else {
-                            "context": (
-                                d.context[:max_snippet_chars] + '…'
-                                if max_snippet_chars is not None and d.context
-                                and len(d.context) > max_snippet_chars
-                                else d.context
-                            )
-                        }),
-                    }
-                    for d in rendered
-                ]
-            }
-            if st != "ok":
-                entry["status"] = st
-                if status.get("detail"):
-                    entry["detail"] = status["detail"]
-            if status.get("rule_errors"):
-                entry["rule_errors"] = status["rule_errors"]
-            file_results.append(entry)
+            file_results.append(_build_file_entry(
+                rel_path, issue_count, rendered, status,
+                no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
+            ))
 
     return total_issues, files_with_issues, file_results, files_errored, items_truncated
 
@@ -936,6 +957,7 @@ def _check_files_text(
     no_snippets: bool = False,
     max_snippet_chars: Optional[int] = None,
     max_items: Optional[int] = None,
+    collect_json: bool = False,
 ) -> tuple:
     """Check files with text output.
 
@@ -955,11 +977,19 @@ def _check_files_text(
         max_items: Cap the total number of rendered detections across the
             whole scan (BACK-1181) -- a running budget, not per-file (see
             _check_files_json).
+        collect_json: Also accumulate the `files[]` entries that --format json
+            would emit, for --also-json (BACK-1248). The JSON artifact gets its
+            own max_items budget and ignores `limit`, because `limit` is a
+            print-density cap on the human report -- letting it truncate the
+            machine artifact would make --also-json's content depend on a
+            flag that exists only to shorten terminal output.
 
     Returns:
-        Tuple of (total_issues, files_with_issues, files_errored, files_degraded).
-        See _check_files_json for what counts as errored vs. skipped (BACK-1083);
-        files_degraded is status == "warning" (parsed via error-recovery).
+        Tuple of (total_issues, files_with_issues, files_errored, files_degraded,
+        file_results, items_truncated_json). file_results is [] unless
+        collect_json. See _check_files_json for what counts as errored vs.
+        skipped (BACK-1083); files_degraded is status == "warning" (parsed via
+        error-recovery).
     """
     total_issues = 0
     files_with_issues = 0
@@ -969,6 +999,9 @@ def _check_files_text(
     hidden_issues = 0
     remaining_budget = max_items
     items_truncated = False
+    file_results: List[dict] = []
+    json_budget = max_items
+    json_items_truncated = False
     sorted_files = sorted(files)
 
     # Use streaming parallel execution so workers run concurrently rather than
@@ -1036,6 +1069,24 @@ def _check_files_text(
         for err in status.get("rule_errors", []):
             print(f"{relative}: ⚠️  rule {err['rule']} crashed and did not run — {err['error']}")
 
+        # BACK-1248: build the --also-json artifact off the same collected
+        # results, before the `limit` cutoff below skips printing this file.
+        if collect_json and (issue_count > 0 or st != "ok"):
+            json_rendered = detections
+            if json_budget is not None:
+                if json_budget <= 0:
+                    json_rendered = []
+                    if detections:
+                        json_items_truncated = True
+                elif len(detections) > json_budget:
+                    json_rendered = detections[:json_budget]
+                    json_items_truncated = True
+                json_budget -= len(json_rendered)
+            file_results.append(_build_file_entry(
+                relative, issue_count, json_rendered, status,
+                no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
+            ))
+
         if issue_count > 0:
             total_issues += issue_count
             files_with_issues += 1
@@ -1073,10 +1124,13 @@ def _check_files_text(
             f"(--limit {limit}) — narrow with --select, or raise/disable with --limit N/--limit 0"
         )
 
-    return total_issues, files_with_issues, files_errored, files_degraded
+    return (
+        total_issues, files_with_issues, files_errored, files_degraded,
+        file_results, json_items_truncated,
+    )
 
 
-def _print_json_output(
+def _build_json_report(
     file_results: List[dict],
     files_checked: int,
     files_with_issues: int,
@@ -1089,8 +1143,11 @@ def _print_json_output(
     scan_disclosures: Optional[List[str]] = None,
     exit_zero: bool = False,
     items_truncated: bool = False,
-) -> None:
-    """Print JSON output with results and summary.
+) -> dict:
+    """Build check's JSON report dict (Output Contract envelope included).
+
+    Split out of _print_json_output (BACK-1248) so `--also-json` can write the
+    exact same document to a file while the text report goes to stdout.
 
     Args:
         file_results: List of file result dicts
@@ -1116,7 +1173,6 @@ def _print_json_output(
             rule-wide — e.g. "I002 skipped, tree too large" doesn't map to
             any single file. [] means confirmed complete, not omitted.
     """
-    import json
     from reveal.utils.results import add_cli_contract_fields
     from reveal.utils.json_utils import attach_provenance
 
@@ -1150,10 +1206,34 @@ def _print_json_output(
             gap["language"] = display_name_for_extension(ext) or gap["language"]
         scope_dict["unscoped_categories"] = gaps
         result["scope"] = scope_dict
-    print(json.dumps(
-        attach_provenance(add_cli_contract_fields(result, result_type='check', source=source, source_type='directory')),
-        indent=2,
+    return attach_provenance(add_cli_contract_fields(
+        result, result_type='check', source=source, source_type='directory',
     ))
+
+
+def _print_json_output(*args, **kwargs) -> None:
+    """Print check's JSON report to stdout. See _build_json_report."""
+    import json
+    print(json.dumps(_build_json_report(*args, **kwargs), indent=2))
+
+
+def _write_also_json_report(path: str, *args, **kwargs) -> None:
+    """BACK-1248: write check's JSON report to *path* alongside a text/grep
+    render on stdout, so one invocation produces both the human report and the
+    machine artifact.
+
+    Previously --also-json was wired only for the uri:// render paths and this
+    subcommand merely warned that the flag did nothing, which left consumers
+    dispatching `check` twice over the same tree. A write failure is reported
+    on stderr and does not change the exit code -- the check itself succeeded,
+    and its exit code is the answer the caller is branching on.
+    """
+    import json
+    try:
+        with open(path, 'w') as f:
+            f.write(json.dumps(_build_json_report(*args, **kwargs), indent=2))
+    except OSError as e:
+        print(f"Warning: --also-json could not write {path}: {e}", file=sys.stderr)
 
 
 def _print_grep_output(file_results: List[dict]) -> None:
@@ -1283,6 +1363,13 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         )
         files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
         _print_grep_output(file_results)
+        if getattr(args, 'also_json', None):
+            _write_also_json_report(
+                args.also_json, file_results, len(files_to_check), files_with_issues,
+                total_issues, directory,
+                scope=collection.to_scope_census(), select=select, ignore=ignore,
+                files_errored=files_errored, exit_zero=getattr(args, 'exit_zero', False),
+            )
         for reason in _get_scan_disclosures():
             # BACK-1051: grep output is meant to stay machine-parseable
             # (file:line:col:rule:message only) — disclose to stderr rather
@@ -1299,15 +1386,28 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
                 file=sys.stderr,
             )
             sys.exit(2)
-        total_issues, files_with_issues, files_errored, files_degraded = _check_files_text(
+        also_json = getattr(args, 'also_json', None)
+        (
+            total_issues, files_with_issues, files_errored, files_degraded,
+            json_file_results, json_items_truncated,
+        ) = _check_files_text(
             files_to_check, directory, select, ignore, no_group=no_group, severity=severity, limit=limit,
             no_snippets=no_snippets, max_snippet_chars=max_snippet_chars, max_items=max_items,
+            collect_json=bool(also_json),
         )
         _print_text_summary(
             len(files_to_check), files_with_issues, total_issues, directory, config,
             files_errored=files_errored, files_degraded=files_degraded,
             scan_disclosures=_get_scan_disclosures(),
         )
+        if also_json:
+            _write_also_json_report(
+                also_json, json_file_results, len(files_to_check), files_with_issues,
+                total_issues, directory,
+                scope=collection.to_scope_census(), select=select, ignore=ignore,
+                files_errored=files_errored, exit_zero=getattr(args, 'exit_zero', False),
+                items_truncated=json_items_truncated,
+            )
 
     # Exit with appropriate code (BACK-1099: distinguish "clean" from
     # "issues found" from "scan incomplete" -- files_errored/files_degraded
