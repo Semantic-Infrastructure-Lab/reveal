@@ -20,6 +20,7 @@ from ..analyzers.imports.classify import (
     local_package_names as _local_package_names,
 )
 from ..utils import print_json_result
+from ..utils.path_utils import _language_for_path
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
@@ -86,8 +87,16 @@ def _relativize_deps_paths(
 def _tally_import(
     imp: Dict[str, Any], is_python_file: bool, local_names: frozenset,
     external_counts: Counter, stdlib_counts: Counter,
+    external_languages: Optional[Dict[str, set]] = None,
+    language: Optional[str] = None,
 ) -> bool:
-    """Classify+count one import; returns True if it counts as internal."""
+    """Classify+count one import; returns True if it counts as internal.
+
+    BACK-1262: *external_languages* accumulates which source language each
+    unresolved package was imported from, so a mixed-stack repo's table can say
+    whether `react` came from npm and `pydantic` from Python instead of
+    interleaving both in one usage-sorted list with no way to tell.
+    """
     if imp.get('is_relative') or imp.get('resolved'):
         return True  # syntactically relative, or resolved in-tree (BACK-1193)
     bucket, key = _classify_module(imp.get('module') or '', is_python_file, local_names)
@@ -101,6 +110,8 @@ def _tally_import(
         stdlib_counts[key] += 1
     elif bucket == 'external':
         external_counts[key] += 1
+        if external_languages is not None and language:
+            external_languages.setdefault(key, set()).add(language)
     return bucket == 'internal'
 
 
@@ -126,6 +137,7 @@ def _analyse_imports(files: Dict[str, List[Dict[str, Any]]], base_path: Path) ->
     """
     local_names = _local_package_names(base_path)
     external_counts: Counter = Counter()
+    external_languages: Dict[str, set] = {}
     stdlib_counts: Counter = Counter()
     relative_count = 0
     importer_counts: Counter = Counter()
@@ -137,8 +149,12 @@ def _analyse_imports(files: Dict[str, List[Dict[str, Any]]], base_path: Path) ->
         importer_counts[filepath] += len(imports)
         total_imports += len(imports)
         is_python_file = filepath.endswith('.py')
+        language = _language_for_path(Path(filepath))
         for imp in imports:
-            if _tally_import(imp, is_python_file, local_names, external_counts, stdlib_counts):
+            if _tally_import(
+                imp, is_python_file, local_names, external_counts, stdlib_counts,
+                external_languages=external_languages, language=language,
+            ):
                 relative_count += 1
 
     # Top importers as relative paths (BACK-1194: shared resolve()-aware
@@ -156,6 +172,9 @@ def _analyse_imports(files: Dict[str, List[Dict[str, Any]]], base_path: Path) ->
         'total_files': len(files),
         'relative_count': relative_count,
         'external_packages': external_counts.most_common(),
+        'external_package_languages': {
+            pkg: sorted(langs) for pkg, langs in external_languages.items()
+        },
         'stdlib_packages': stdlib_counts.most_common(),
         'top_importers': top_importers,
     }
@@ -194,12 +213,22 @@ def _render_external_packages(analysis: Dict[str, Any], top: int) -> None:
     if not packages:
         return
     shown = packages[:top]
+    # BACK-1262: on a mixed-stack repo this list interleaves ecosystems --
+    # pytest/pydantic/fastapi next to @mui/material and react -- sorted by
+    # usage with nothing saying which is which, so it is easy to misattribute
+    # at a glance. The per-file language classification already exists upstream.
+    langs = analysis.get('external_package_languages', {})
+    multi_stack = len({l for ls in langs.values() for l in ls}) > 1
     # BACK-1193: honest label — these are modules resolve_import() could not
     # place in-tree. Most are real third-party packages, but an unresolved
     # local (load-path boundary, missing file_index coverage) lands here too.
     print(f"\nUnresolved packages (third-party or unresolved-local)  (top {len(shown)} by usage)")
     for pkg, count in shown:
-        print(f"  {pkg:<30} {count:>4} use(s)")
+        if multi_stack:
+            label = ', '.join(langs.get(pkg, [])) or '?'
+            print(f"  {pkg:<30} {count:>4} use(s)  [{label}]")
+        else:
+            print(f"  {pkg:<30} {count:>4} use(s)")
     remaining = len(packages) - len(shown)
     if remaining > 0:
         print(f"  ... and {remaining} more")
@@ -274,6 +303,17 @@ def _render_deps(report: Dict[str, Any], top: int) -> None:
     print()
     print(f"Dependencies: {path_str}")
     print("━" * 60)
+
+    # BACK-1261: deps.json carried autoload_regime from the start and the text
+    # render never showed it, while all three sibling import-graph adapters
+    # print it. On a Rails/Django/Laravel codebase the entire dependency report
+    # below describes the small explicit import graph, not real usage -- the
+    # one caveat a reader most needs, and the only adapter that withheld it.
+    from .imports import autoload_regime_warning
+    regime = (report.get('base', {}).get('metadata', {}) or {}).get('autoload_regime')
+    warning = autoload_regime_warning(regime)
+    if warning:
+        print(f"\n{warning}")
 
     _render_summary(analysis, cycle_count, len(unused))
     _render_external_packages(analysis, top)

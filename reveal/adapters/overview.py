@@ -525,6 +525,11 @@ def _render_overview(report: Dict[str, Any], top: int) -> None:
     _render_complex_functions(complex_fns, base_path=path)
     _render_architecture(architecture, complex_fns, top, base_path=path)
     _render_git_log(git_log, report.get('git_foreign_root'))
+    # BACK-1261: the JSON documented these and the render dropped them, so a
+    # section showing 5 of 97 complex functions looked complete. Printed after
+    # the body rather than inline because they describe the report as a whole.
+    from ..utils.warning_render import render_meta_warnings
+    render_meta_warnings(report, heading="Caveats")
     _render_next_steps()
 
 

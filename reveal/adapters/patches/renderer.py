@@ -27,9 +27,23 @@ class PatchesRenderer:
             print("(sys.stdout/stderr and builtins suppressed — use suppress=false to include)")
         print()
 
+        from ...utils.warning_render import render_meta_warnings
+
         groups = result.get('groups', [])
         if not groups:
+            # BACK-1261: "No groups found" read as *clean* when it often means
+            # *not measured* -- patch detection is Python + jest/vitest only, so
+            # on a Ruby, Go or Java repo this line was a confident zero for a
+            # question that was never asked. testability:// already prints
+            # exactly this disclosure for the identical limitation; patches://
+            # printed nothing, on any corpus.
             print("No patch pressure groups found.")
+            print(
+                "  ⚠ Patch detection covers Python (unittest.mock) and "
+                "JS/TS (jest/vitest) test suites only — on any other language "
+                "this is 'not measured', not 'no patch pressure'."
+            )
+            render_meta_warnings(result)
             return
 
         for item in groups:
@@ -49,6 +63,11 @@ class PatchesRenderer:
                 for ex in examples[:3]:
                     print(f"    {ex.get('test_file')}::{ex.get('test_name')} L{ex.get('line')}")
             print()
+
+        # BACK-1261: W-PATCHES-1 ("patch pressure is advisory") was in the JSON
+        # from the start and never printed, so the text render stated findings
+        # with more confidence than the contract does.
+        render_meta_warnings(result)
 
     @staticmethod
     def render_error(error: Exception) -> None:
