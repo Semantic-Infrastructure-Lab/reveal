@@ -16,6 +16,7 @@ from typing import Optional, Tuple, Any, List
 from collections.abc import Callable
 
 
+from .logging_setup import configure_stderr_logging
 from .registry import get_all_analyzers, TREESITTER_EXTENSION_MAP
 from . import __version__
 from .utils import copy_to_clipboard, check_for_updates, set_provenance_enabled
@@ -25,26 +26,9 @@ from .config import disable_breadcrumbs_permanently
 PERF_LOG_PATH = Path(os.environ.get('REVEAL_PERF_LOG_PATH', str(Path.home() / '.reveal' / 'perf.jsonl')))
 
 
-def _configure_stderr_logging() -> None:
-    """Give reveal's own logger.warning()+ calls a visible severity prefix.
-
-    Without this, nothing under the CLI ever calls logging.basicConfig(),
-    so Python's handler-of-last-resort takes over and prints just the bare
-    message -- not even a generic "WARNING:" tag, let alone one a consumer
-    could grep for (BACK-1231). Scoped to the 'reveal' logger, not root, so
-    embedding reveal as a library doesn't have its host process's logging
-    configuration overridden by importing this CLI module. Propagation is
-    left at its default (True) -- disabling it would silently break any
-    caller (including reveal's own test suite's caplog/assertLogs) that
-    listens for 'reveal.*' records via the root logger.
-    """
-    reveal_logger = logging.getLogger('reveal')
-    if reveal_logger.handlers:
-        return
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
-    reveal_logger.addHandler(handler)
-    reveal_logger.setLevel(logging.WARNING)
+# BACK-1231: moved to reveal/logging_setup.py so pool workers can call it
+# without importing the CLI. Re-exported here for any caller using the old name.
+_configure_stderr_logging = configure_stderr_logging
 
 
 def _perf_flag_present() -> bool:

@@ -1118,13 +1118,16 @@ class ImportsAdapter(ResourceAdapter):
             return
 
         from concurrent.futures import ProcessPoolExecutor
+        from ..logging_setup import worker_bootstrap
         from itertools import repeat
 
         n = len(candidates)
         # A few chunks per worker balances load without excessive IPC round-trips.
         chunksize = max(1, n // (workers * 8))
         paths = [str(fp) for fp in candidates]
-        with ProcessPoolExecutor(max_workers=workers) as executor:
+        with ProcessPoolExecutor(
+            max_workers=workers, initializer=worker_bootstrap,
+        ) as executor:
             for fp_str, imports, symbols, structure, failed in executor.map(
                 _extract_one_file, paths, repeat(want_structure), chunksize=chunksize
             ):

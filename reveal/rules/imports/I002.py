@@ -462,9 +462,12 @@ class I002(BaseRule):
 
         try:
             from concurrent.futures import ProcessPoolExecutor
+            from ...logging_setup import worker_bootstrap
             all_imports = []
             failed_files = []
-            with ProcessPoolExecutor(max_workers=workers) as executor:
+            with ProcessPoolExecutor(
+                max_workers=workers, initializer=worker_bootstrap,
+            ) as executor:
                 for fp_str, (imports, failed) in zip(
                     file_strs, executor.map(_extract_imports_for_file, file_strs)
                 ):

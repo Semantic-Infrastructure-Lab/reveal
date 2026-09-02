@@ -268,6 +268,7 @@ class StatsAdapter(ResourceAdapter):
                                 min_complexity, max_complexity, min_functions) -> list:
         """Collect file stats that match the specified filters."""
         from concurrent.futures import ProcessPoolExecutor
+        from ...logging_setup import worker_bootstrap
 
         # BACK-1042: ?exclude=pat1,pat2 / ?respect_gitignore=false, composed
         # in by overview's --exclude/--no-gitignore flags (also usable
@@ -305,8 +306,8 @@ class StatsAdapter(ResourceAdapter):
             graph_cache = _i002_preload(self.path, files)
             with ProcessPoolExecutor(
                 max_workers=workers,
-                initializer=_i002_init_worker,
-                initargs=(graph_cache,),
+                initializer=worker_bootstrap,
+                initargs=(_i002_init_worker, (graph_cache,)),
             ) as executor:
                 all_stats = list(executor.map(_analyze_file_worker, args))
         else:

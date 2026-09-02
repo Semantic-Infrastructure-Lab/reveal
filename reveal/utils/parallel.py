@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ProcessPoolExecutor
+from ..logging_setup import worker_bootstrap
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -102,6 +103,8 @@ def grep_files(
 
     # Parallel scan — ProcessPoolExecutor preserves result order via .map().
     args = [(p, needles) for p in paths_list]
-    with ProcessPoolExecutor(max_workers=min(workers, len(paths_list))) as pool:
+    with ProcessPoolExecutor(
+        max_workers=min(workers, len(paths_list)), initializer=worker_bootstrap,
+    ) as pool:
         results = pool.map(_scan_one, args)
     return [p for p in results if p is not None]

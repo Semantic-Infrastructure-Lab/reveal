@@ -12,6 +12,7 @@ import logging
 import time
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
+from ..logging_setup import worker_bootstrap
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List, Dict, TYPE_CHECKING
@@ -242,8 +243,8 @@ def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
     caches = _preload_scan_caches(files, directory, select, ignore)
     with ProcessPoolExecutor(
         max_workers=workers,
-        initializer=_init_scan_caches,
-        initargs=(caches,),
+        initializer=worker_bootstrap,
+        initargs=(_init_scan_caches, (caches,)),
     ) as pool:
         return list(pool.map(_parallel_worker, args_iter))
 
@@ -276,8 +277,8 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
     caches = _preload_scan_caches(files, directory, select, ignore)
     with ProcessPoolExecutor(
         max_workers=workers,
-        initializer=_init_scan_caches,
-        initargs=(caches,),
+        initializer=worker_bootstrap,
+        initargs=(_init_scan_caches, (caches,)),
     ) as pool:
         futures = {pool.submit(_parallel_worker, args): args[0] for args in args_list}
         for future in as_completed(futures):
