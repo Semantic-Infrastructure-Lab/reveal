@@ -713,6 +713,16 @@ class RevealConfig:
 
         return False
 
+    def ignore_patterns(self) -> List[str]:
+        """The raw REVEAL_IGNORE / config.yaml ``ignore:`` pattern list, if
+        any (BACK-1266) -- for callers that need the patterns themselves
+        rather than a single should_ignore(path) verdict, e.g. merging them
+        into utils.exclusions' active --exclude scope so URI-form adapters
+        (which route directory pruning through is_skippable_dir, not
+        should_ignore) honor REVEAL_IGNORE the way ``check`` already does.
+        """
+        return list(self._config.get('ignore', []))
+
     def get_layers(self) -> List[Dict[str, Any]]:
         """Get architectural layers configuration (for I003).
 

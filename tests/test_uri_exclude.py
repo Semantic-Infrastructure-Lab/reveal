@@ -76,6 +76,34 @@ def test_ast_honors_file_shaped_pattern(tree):
     assert filtered < baseline
 
 
+def test_pack_honors_file_shaped_exclude(tree):
+    """BACK-1266 follow-up (2026-09-02): pack:// already threaded its own
+    ?exclude= query param all the way to a file-shaped should_skip_file()
+    check (BACK-1196) -- it just never received the CLI --exclude flag,
+    since 'pack' predated BACK-1196 and was never added to
+    _EXCLUDE_AWARE_SCHEMES."""
+    baseline = _query(tree, 'pack://.', key='files')
+    filtered = _query(tree, 'pack://.', '--exclude', '*.min.js', key='files')
+    assert len(filtered) < len(baseline)
+
+
+def test_contracts_honors_file_shaped_exclude(tmp_path):
+    """BACK-1266 follow-up (2026-09-02): contracts://'s Go/Rust/Ruby/C++
+    collectors had their own os.walk with directory pruning only -- no
+    per-file path_is_excluded() check, unlike the Python path (which
+    reuses ast/analysis.py's collect_structures and got this for free)."""
+    (tmp_path / 'main.go').write_text(
+        'package main\n\ntype Speaker interface {\n\tSpeak() string\n}\n\nfunc main() {}\n'
+    )
+    (tmp_path / 'generated.pb.go').write_text(
+        'package main\n\ntype Generated interface {\n\tDo() string\n}\n'
+    )
+    baseline = _query(tmp_path, 'contracts://.', key='total_contracts')
+    filtered = _query(tmp_path, 'contracts://.', '--exclude', '*.pb.go',
+                       key='total_contracts')
+    assert filtered < baseline
+
+
 def test_calls_uncalled_honors_exclude(tree):
     """Their row 3: calls:// total_uncalled was unchanged by the flag."""
     baseline = _query(tree, 'calls://.?uncalled=true&type=function',
@@ -129,6 +157,52 @@ def test_check_subcommand_still_honors_exclude(tree):
         return json.loads(out.stdout)['summary']['files_checked']
 
     assert files_checked() > files_checked('--exclude', 'app/assets/*')
+
+
+def test_ast_honors_reveal_ignore_env_var(tree):
+    """BACK-1266: REVEAL_IGNORE was wired into _walk_code_files (the `check`
+    walker, BACK-1201) but is_skippable_dir -- the choke point every URI-form
+    adapter routes through -- never consulted it, so ast:// (and friends)
+    stayed blind to REVEAL_IGNORE the same way they were blind to --exclude
+    before BACK-1257."""
+    import os
+
+    def total(env_extra):
+        env = {**os.environ, **env_extra}
+        proc = subprocess.run(
+            [sys.executable, '-m', 'reveal', 'ast://.?complexity>3', '--format', 'json'],
+            capture_output=True, text=True, cwd=str(tree), timeout=600, env=env,
+        )
+        assert proc.returncode == 0, proc.stderr
+        return json.loads(proc.stdout)['total_results']
+
+    baseline = total({})
+    filtered = total({'REVEAL_IGNORE': 'app/assets/*'})
+    assert baseline > filtered > 0, (
+        f'REVEAL_IGNORE did not reduce ast:// results ({baseline} -> {filtered})'
+    )
+
+
+def test_reveal_ignore_and_cli_exclude_combine(tree):
+    """Different patterns from each source both apply -- one doesn't shadow
+    the other."""
+    import os
+
+    def total(env_extra, *flags):
+        env = {**os.environ, **env_extra}
+        proc = subprocess.run(
+            [sys.executable, '-m', 'reveal', 'ast://.?complexity>3', *flags, '--format', 'json'],
+            capture_output=True, text=True, cwd=str(tree), timeout=600, env=env,
+        )
+        assert proc.returncode == 0, proc.stderr
+        return json.loads(proc.stdout)['total_results']
+
+    ignore_only = total({'REVEAL_IGNORE': 'app/assets/*.min.js'})
+    both = total({'REVEAL_IGNORE': 'app/assets/*.min.js'}, '--exclude', 'app/assets/*.py')
+    assert both < ignore_only, (
+        'combining REVEAL_IGNORE with --exclude did not filter more than '
+        f'REVEAL_IGNORE alone ({ignore_only} -> {both})'
+    )
 
 
 def test_scope_does_not_leak_between_dispatches(tree):

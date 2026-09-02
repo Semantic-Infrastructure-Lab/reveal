@@ -241,11 +241,17 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     matching BACK-1042's own format. Skip injection if the URI already has
     an explicit exclude= param -- URI takes precedence, same as --sort/--limit.
     """
-    _EXCLUDE_AWARE_SCHEMES = {'overview', 'stats'}
-    exclude_values = getattr(args, 'exclude', None)
-    if not exclude_values:
-        return resource
-    if scheme in _EXCLUDE_AWARE_SCHEMES and 'exclude=' not in resource:
+    # BACK-1266 follow-up (2026-09-02): pack:// already reads its own
+    # ?exclude= (BACK-1196, same comma-separated format as overview's) all
+    # the way through _collect_candidates -> _walk_files' own
+    # should_skip_file() check -- which handles file-shaped patterns
+    # (*.min.js), not just directory-shaped ones. It just never received the
+    # CLI --exclude flag because this set predates BACK-1196 having its own
+    # query param wired up.
+    _EXCLUDE_AWARE_SCHEMES = {'overview', 'stats', 'pack'}
+    exclude_values = list(getattr(args, 'exclude', None) or [])
+
+    if exclude_values and scheme in _EXCLUDE_AWARE_SCHEMES and 'exclude=' not in resource:
         sep = '&' if '?' in resource else '?'
         resource = f"{resource}{sep}exclude={','.join(exclude_values)}"
 
@@ -262,9 +268,29 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     # never consult.
     target_str = resource.partition('?')[0]
     target = _Path(target_str) if target_str else None
+    walk_root = None
     if target is not None and target.exists():
-        set_active_exclusions(target if target.is_dir() else target.parent, exclude_values)
-    elif scheme not in _EXCLUDE_AWARE_SCHEMES:
+        walk_root = target if target.is_dir() else target.parent
+
+    # BACK-1266: REVEAL_IGNORE / config.yaml 'ignore:' patterns were parsed
+    # into RevealConfig and wired into _walk_code_files (the subcommand-form
+    # walker `check` uses) under BACK-1201, but every URI-form adapter routes
+    # directory pruning through is_skippable_dir instead -- which BACK-1257
+    # taught to consult --exclude but not REVEAL_IGNORE, so the env var
+    # stayed silently unhonored on ast:///calls:///hotspots:// etc. exactly
+    # the way --exclude was before that fix. Merged in here, once at
+    # dispatch, onto the same active-scope plumbing rather than a second
+    # matcher. Discovered relative to the walk root (matching
+    # _walk_code_files' own RevealConfig.get(start_path=...)), not cwd.
+    from ...config import RevealConfig
+    ignore_values = RevealConfig.get(start_path=walk_root).ignore_patterns()
+    combined_values = exclude_values + [p for p in ignore_values if p not in exclude_values]
+
+    if not combined_values:
+        return resource
+    if walk_root is not None:
+        set_active_exclusions(walk_root, combined_values)
+    elif exclude_values and scheme not in _EXCLUDE_AWARE_SCHEMES:
         print(
             f"Note: --exclude has no effect on {scheme}:// -- it does not walk a "
             f"filesystem tree. Pre-filter the target or scope to a narrower path.",

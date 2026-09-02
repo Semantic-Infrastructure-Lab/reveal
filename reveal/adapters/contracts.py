@@ -17,6 +17,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .surface import _supported_coverage_languages
 from ..registry import _is_cpp_header_content
 from ..utils import print_json_result
+from ..utils.exclusions import path_is_excluded
 from ..utils.path_utils import (
     assess_language_coverage,
     detect_non_python_language,
@@ -90,7 +91,9 @@ def _collect_ruby_files(path: Path) -> List[Path]:
         dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
         for fname in filenames:
             if fname.endswith('.rb'):
-                files.append(Path(os.path.join(root, fname)))
+                fpath = Path(os.path.join(root, fname))
+                if not path_is_excluded(fpath):
+                    files.append(fpath)
     return files
 
 
@@ -113,7 +116,9 @@ def _collect_go_files(path: Path) -> List[Path]:
         dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
         for fname in filenames:
             if fname.endswith('.go'):
-                files.append(Path(os.path.join(root, fname)))
+                fpath = Path(os.path.join(root, fname))
+                if not path_is_excluded(fpath):
+                    files.append(fpath)
     return files
 
 
@@ -136,7 +141,9 @@ def _collect_rust_files(path: Path) -> List[Path]:
         dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
         for fname in filenames:
             if fname.endswith('.rs'):
-                files.append(Path(os.path.join(root, fname)))
+                fpath = Path(os.path.join(root, fname))
+                if not path_is_excluded(fpath):
+                    files.append(fpath)
     return files
 
 
@@ -176,7 +183,7 @@ def _collect_cpp_files(path: Path) -> List[Path]:
         dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
         for fname in filenames:
             fpath = Path(os.path.join(root, fname))
-            if _is_cpp_file(fpath):
+            if _is_cpp_file(fpath) and not path_is_excluded(fpath):
                 files.append(fpath)
     return files
 
