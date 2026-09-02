@@ -218,8 +218,16 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
         print(f"Supported schemes: {schemes}", file=sys.stderr)
         sys.exit(1)
 
-    # Dispatch to scheme-specific handler
-    handle_adapter(adapter_class, scheme, resource, element, args)
+    # Dispatch to scheme-specific handler. BACK-1257: the --exclude walk scope
+    # _inject_exclude_flag published is process-global, so it must not outlive
+    # this dispatch -- under the MCP server (one long-lived process, many
+    # requests over different trees) a leaked scope would silently filter an
+    # unrelated later query.
+    from ...utils.exclusions import clear_active_exclusions
+    try:
+        handle_adapter(adapter_class, scheme, resource, element, args)
+    finally:
+        clear_active_exclusions()
 
 
 def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
@@ -237,15 +245,29 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     exclude_values = getattr(args, 'exclude', None)
     if not exclude_values:
         return resource
-    if scheme in _EXCLUDE_AWARE_SCHEMES:
-        if 'exclude=' not in resource:
-            sep = '&' if '?' in resource else '?'
-            resource = f"{resource}{sep}exclude={','.join(exclude_values)}"
-    else:
-        aware = '/'.join(f'{s}://' for s in sorted(_EXCLUDE_AWARE_SCHEMES))
+    if scheme in _EXCLUDE_AWARE_SCHEMES and 'exclude=' not in resource:
+        sep = '&' if '?' in resource else '?'
+        resource = f"{resource}{sep}exclude={','.join(exclude_values)}"
+
+    # BACK-1257: every other path-walking scheme gets exclusion by publishing
+    # the scope for the shared directory-pruning predicate (see
+    # utils/exclusions.py), rather than 13+ per-adapter query params. Schemes
+    # whose resource is not a filesystem path (env://, help://, git://,
+    # sqlite://, ssl://, ...) never walk, so they keep the advisory.
+    from pathlib import Path as _Path
+    from ...utils.exclusions import set_active_exclusions
+    # An empty resource (env://, help://) is not "the current directory" for
+    # this purpose -- it means the scheme takes no path at all, so it must fall
+    # through to the advisory rather than silently accepting a scope it will
+    # never consult.
+    target_str = resource.partition('?')[0]
+    target = _Path(target_str) if target_str else None
+    if target is not None and target.exists():
+        set_active_exclusions(target if target.is_dir() else target.parent, exclude_values)
+    elif scheme not in _EXCLUDE_AWARE_SCHEMES:
         print(
-            f"Note: --exclude has no effect on {scheme}:// -- only {aware} "
-            f"support it. Pre-filter the target path or scope to a narrower directory.",
+            f"Note: --exclude has no effect on {scheme}:// -- it does not walk a "
+            f"filesystem tree. Pre-filter the target or scope to a narrower path.",
             file=sys.stderr,
         )
     return resource

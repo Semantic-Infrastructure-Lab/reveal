@@ -72,6 +72,16 @@ def create_hotspots_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='Show only file-level hotspots, skip function analysis'
     )
+    parser.add_argument(
+        # BACK-1257: the uri:// form accepts --exclude via the global parser, so
+        # `reveal hotspots://. --exclude X` worked while `reveal hotspots .
+        # --exclude X` died with "unrecognized arguments" -- the same request,
+        # two syntaxes, one of them a hard parser error.
+        '--exclude', action='append', metavar='PATTERN',
+        help='Exclude files/directories matching pattern from analysis entirely '
+             '(e.g., --exclude "*.min.js" --exclude "vendor/*"). Repeatable. '
+             'Patterns are relative to the analysed path.',
+    )
     return parser
 
 
@@ -92,8 +102,12 @@ def run_hotspots(args: Namespace) -> None:
         f'&functions_only={"true" if functions_only else "false"}'
         f'&files_only={"true" if files_only else "false"}'
     )
-    adapter = HotspotsAdapter(str(path), query)
-    result = adapter.get_structure()
+    # BACK-1257: publish the same walk-scope the uri:// form publishes, so both
+    # syntaxes filter identically. Scoped to this call rather than set globally.
+    from reveal.utils.exclusions import exclusion_scope
+    with exclusion_scope(path, getattr(args, 'exclude', None)):
+        adapter = HotspotsAdapter(str(path), query)
+        result = adapter.get_structure()
 
     file_hotspots = result['file_hotspots']
     fn_hotspots = result['function_hotspots']

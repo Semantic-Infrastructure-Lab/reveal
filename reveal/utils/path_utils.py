@@ -58,6 +58,14 @@ def is_skippable_dir(parent: Path, name: str) -> bool:
     """
     if name in _SKIP_DIRS:
         return True
+    # BACK-1257: honor the CLI's active --exclude scope here, the one predicate
+    # every walker already routes directory pruning through, so all URI-form
+    # adapters gain exclusion at once instead of 13+ hand-wired patches. Placed
+    # after the cheap membership test and early-outs on an empty scope, so the
+    # hot path is unchanged when --exclude wasn't passed.
+    from .exclusions import dir_is_excluded
+    if dir_is_excluded(parent / name):
+        return True
     if name not in _AMBIGUOUS_SKIP_DIRS:
         return False
     from ..registry import get_code_extensions

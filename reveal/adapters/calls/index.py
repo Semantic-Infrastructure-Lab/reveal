@@ -348,8 +348,12 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
     directory = path_obj if path_obj.is_dir() else path_obj.parent
     dir_str = str(directory)
 
-    # Check cache
-    cache_key = _dir_cache_key(directory)
+    # Check cache. BACK-1257: the key must include the active --exclude scope,
+    # or a long-lived host (the MCP server) would serve an unfiltered index to a
+    # later filtered request over the same tree — _dir_cache_key fingerprints
+    # directory mtimes only, which exclusion does not change.
+    from ...utils.exclusions import active_exclusions
+    cache_key = (_dir_cache_key(directory), active_exclusions())
     if dir_str in _INDEX_CACHE and _INDEX_CACHE[dir_str][0] == cache_key:
         _INDEX_CACHE.move_to_end(dir_str)
         return _INDEX_CACHE[dir_str][1]

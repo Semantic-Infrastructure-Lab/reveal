@@ -74,6 +74,13 @@ def is_code_file(path: Path) -> bool:
     # Data/doc/config formats (.md, .json, .yaml, .toml, .csv, etc.) are
     # intentionally excluded — ast:// is for code structure, not data.
     from ...registry import get_code_extensions
+    # BACK-1257: is_skippable_dir handles directory-shaped --exclude patterns
+    # for every walker; a file-shaped one ('*.min.js') needs a check at the
+    # yield site. This is the one for ast://, and via collect_structures for
+    # calls:// and hotspots://'s function list.
+    from ...utils.exclusions import path_is_excluded
+    if path_is_excluded(path):
+        return False
     return path.suffix.lower() in get_code_extensions()
 
 

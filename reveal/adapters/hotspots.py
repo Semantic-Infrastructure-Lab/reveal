@@ -63,7 +63,14 @@ def _relativize_hotspots_paths(file_hotspots: List[Dict[str, Any]], fn_hotspots:
 def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List[Dict[str, Any]]:
     """Fetch file-level hotspots via StatsAdapter."""
     from reveal.adapters.stats import StatsAdapter
-    data = adapter.compose(StatsAdapter, str(path), default={}, hotspots=True, top=top)
+    from reveal.utils.exclusions import active_exclusions
+    # BACK-1257: stats:// filters via its own ?exclude= param, not the walk-scope
+    # context, so the scope has to be forwarded explicitly here -- overview://'s
+    # _run_stats already does this. Without it hotspots:// would honor --exclude
+    # for its function list (via ast://) but not its file list.
+    _root, _patterns = active_exclusions()
+    extra = {'exclude': list(_patterns)} if _patterns else {}
+    data = adapter.compose(StatsAdapter, str(path), default={}, hotspots=True, top=top, **extra)
     hotspots = data.get('hotspots', [])
     return cast(List[Dict[str, Any]], hotspots[:top])
 
