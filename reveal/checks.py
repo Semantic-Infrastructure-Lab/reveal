@@ -3,6 +3,7 @@
 This module is separate from main.py to avoid circular dependencies with cli.routing.
 """
 
+import os
 import re
 import sys
 from collections import defaultdict
@@ -294,8 +295,10 @@ def run_pattern_detection(
     # the renderer just used -- no second analysis pass -- and deliberately the
     # same document `--format json` prints for this invocation, so the artifact
     # never depends on which --format the human report happened to use.
+    # isinstance rather than truthiness: `args` is a Mock in several callers'
+    # tests, and getattr on a Mock returns a truthy Mock for any attribute.
     also_json = getattr(args, 'also_json', None)
-    if also_json and output_format != 'json':
+    if isinstance(also_json, (str, os.PathLike)) and output_format != 'json':
         try:
             with open(also_json, 'w') as f:
                 f.write(safe_json_dumps(_build_detections_json(
