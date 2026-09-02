@@ -377,9 +377,16 @@ def add_cli_contract_fields(
     the command's existing keys without renaming or nesting anything, so
     existing consumers of a command's --format json output see new keys but
     no moved/removed ones (BACK-906).
+
+    BACK-1178: when *report* already carries a `contract_version` (it came
+    straight off an adapter result), that value wins over the `contract_version`
+    argument. A subcommand and its `uri://` form render the same adapter
+    payload, so they must not disagree about which contract that payload
+    conforms to — the argument is only the fallback for reports built by the
+    command itself (check/health/review), which have no adapter version.
     """
     return {
-        'contract_version': contract_version,
+        'contract_version': report.get('contract_version', contract_version),
         'type': result_type,
         'source': str(source),
         'source_type': source_type,

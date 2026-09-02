@@ -107,9 +107,15 @@ def run_deps(args: Namespace) -> None:
         from reveal.utils.results import add_cli_contract_fields
         from reveal.utils.json_utils import attach_provenance
         import json
+        # BACK-1178: keep the adapter's own 'contract_version' and 'meta'.
+        # Stripping them made this subcommand emit a 1.0 envelope for the
+        # same payload its uri:// form emits as 1.1 -- self-consistent (1.0
+        # is the no-meta baseline) but a needless split for a consumer that
+        # reaches the same data two ways. type/source/source_type are still
+        # rebuilt below with the CLI-appropriate values.
         report = {
             k: v for k, v in result.items()
-            if k not in ('contract_version', 'type', 'source', 'source_type', 'meta')
+            if k not in ('type', 'source', 'source_type')
         }
         if getattr(args, 'summary_only', False) and isinstance(report.get('base'), dict):
             files = report['base'].get('files')
