@@ -822,6 +822,7 @@ def find_uncalled(
         ``test_entrypoints_excluded``, and ``entries`` (list of uncalled
         symbols).
     """
+    from ...utils.path_utils import provenance_for_display_path
     path_obj = Path(path)
     is_file = path_obj.is_file()
     directory = path_obj.parent if is_file else path_obj
@@ -886,6 +887,13 @@ def find_uncalled(
                 'line': line_no,
                 'category': 'methods' if is_method else 'functions',
                 'is_private': name.startswith('_'),
+                # BACK-1258: a dead-code listing is exactly where vendored and
+                # test code costs the reader most -- measured 15.5% vendor or
+                # minified plus 17.8% test on camaleon-cms, with no field to
+                # discount them by. The adapter already excludes test-framework
+                # entry points and reports the count; this makes the rest of
+                # the provenance visible in the same listing.
+                'provenance': provenance_for_display_path(file_path, directory),
             })
 
     entries.sort(key=lambda e: (_uncalled_entry_mtime(e), e['file'], e['line']))

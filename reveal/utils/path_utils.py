@@ -17,7 +17,7 @@ from ..defaults import (
     AMBIGUOUS_SKIP_DIRECTORIES,
     TEST_DIR_NAMES,
     VENDOR_DIR_NAMES,
-    MINIFIED_FILE_SUFFIXES,
+    MINIFIED_FILENAME_RE,
 )
 from ..registry import _is_cpp_header_content, language_for_extension, LANGUAGE_DISPLAY_NAMES
 
@@ -170,15 +170,39 @@ def is_vendor_dir(name: str) -> bool:
     return name in VENDOR_DIR_NAMES
 
 
+def provenance_for_display_path(file_str: Optional[str], base_path: Path) -> Optional[str]:
+    """classify_path_provenance() for a path that may be absolute or relative.
+
+    Relativizes against *base_path* first so classification only sees the
+    components under the scan root, never ancestor directories of the analyst's
+    own filesystem — a checkout that happens to live under ~/src/vendor/ must
+    not make every file in it 'vendor'.
+
+    BACK-1258: promoted from adapters/hotspots.py::_provenance_for_file so
+    ast:// and calls:// can attach the same tag hotspots:// and overview://
+    already emit, rather than each re-deriving the relativization.
+    """
+    if not file_str:
+        return None
+    rel = Path(to_relative_display(file_str, base_path))
+    return classify_path_provenance(rel.parts[:-1], rel.name)
+
+
 def is_minified_filename(filename: str) -> bool:
     """True if *filename* (with extension) matches a conventional minified/
     bundled build-artifact suffix (BACK-1195, wishlist-3 addendum B3-4).
 
-    Deliberately a small reveal-specific list (``MINIFIED_FILE_SUFFIXES``),
-    not a port of GitHub Linguist's ruleset — see that constant's docstring
-    for the measured rationale.
+    Deliberately reveal-specific (``MINIFIED_FILENAME_RE``), not a port of
+    GitHub Linguist's ruleset — see that constant's docstring for the measured
+    rationale.
+
+    BACK-1258: this was a case-sensitive ``endswith`` over five literal
+    suffixes, which missed content-hashed build output (``app.min.1a2b3c.js``),
+    ESM/CJS extensions, and any capitalization. Those all returned False, so a
+    vendored bundle could rank #1 in hotspots tagged ``null`` while
+    ``classify://`` called the same file ``first_party``.
     """
-    return filename.endswith(MINIFIED_FILE_SUFFIXES)
+    return bool(MINIFIED_FILENAME_RE.search(filename))
 
 
 def classify_path_provenance(parts: Iterable[str], filename: str) -> Optional[str]:

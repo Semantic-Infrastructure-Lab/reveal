@@ -32,11 +32,8 @@ def _provenance_for_file(file_str: Optional[str], base_path: Path) -> Optional[s
     classification only sees the path components under the scan root, not
     ancestor directories of the analyst's own filesystem.
     """
-    if not file_str:
-        return None
-    from ..utils.path_utils import classify_path_provenance, to_relative_display
-    rel = Path(to_relative_display(file_str, base_path))
-    return classify_path_provenance(rel.parts[:-1], rel.name)
+    from ..utils.path_utils import provenance_for_display_path
+    return provenance_for_display_path(file_str, base_path)
 
 
 def _relativize_hotspots_paths(file_hotspots: List[Dict[str, Any]], fn_hotspots: List[Dict[str, Any]], base_path: Path) -> None:

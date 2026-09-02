@@ -65,9 +65,14 @@ def _apply_locale_fanout(rows: List[Dict[str, Any]]) -> None:
         if len(group_rows) < _LOCALE_FANOUT_THRESHOLD:
             continue
         parent_parts = parent.parts
-        immediate_name = parent_parts[-1].lower() if parent_parts else ''
+        # BACK-1258: check every ancestor, not just the immediate parent.
+        # Rails and Django both nest locale files below the i18n root
+        # (config/locales/<engine>/<area>/en.yml), so an immediate-parent test
+        # sees 'admin'/'common'/'routes' and misses the exemption entirely --
+        # measured on camaleon-cms, 56 of the project's own translation files
+        # (74% of every vendor verdict on that repo) were labelled vendor.
         if (
-            immediate_name in _FIRST_PARTY_I18N_DIR_NAMES
+            any(p.lower() in _FIRST_PARTY_I18N_DIR_NAMES for p in parent_parts)
             and not any(is_vendor_dir(p) for p in parent_parts)
         ):
             continue

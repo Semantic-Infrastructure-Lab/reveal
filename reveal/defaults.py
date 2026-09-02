@@ -9,6 +9,7 @@ Usage:
     threshold = self.get_threshold('threshold', RuleDefaults.CYCLOMATIC_COMPLEXITY)
 """
 
+import re
 from typing import Dict
 
 
@@ -111,9 +112,20 @@ VENDOR_DIR_NAMES = frozenset({
 # port of GitHub Linguist's ruleset — measured at only 6.5% coverage of the
 # non-first-party files on the reporter's reference corpus, and Linguist has
 # no test-directory category at all (misses `spec/`, this ticket's single
-# largest distortion class). Checked via `filename.endswith(suffix)`.
+# largest distortion class). Kept for any caller doing a literal suffix test.
 MINIFIED_FILE_SUFFIXES = (
     '.min.js', '.min.css', '-min.js', '-min.css', '.bundle.js',
+)
+
+# BACK-1258: the plain endswith() test above was case-sensitive and blind to
+# both ESM/CJS extensions and content-hashed build output, so `app.min.1a2b3c.js`
+# (webpack/vite/sprockets' default naming), `bundle.min.mjs` and `A.MIN.JS` all
+# classified as first_party — which is how a vendored bundle reached #1 in a
+# hotspots ranking tagged `null`. Marker and extension are matched with an
+# optional digest between them.
+MINIFIED_FILENAME_RE = re.compile(
+    r'[.\-](min|bundle)([.\-][0-9a-zA-Z]{6,})?\.(js|mjs|cjs|css)$',
+    re.IGNORECASE,
 )
 
 

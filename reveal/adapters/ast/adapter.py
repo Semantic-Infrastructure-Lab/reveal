@@ -307,6 +307,31 @@ class AstAdapter(ResourceAdapter):
                 ) == 'python':
                     elem['calls'] = [c for c in elem['calls'] if c.split('.')[-1] not in PYTHON_BUILTINS]
 
+        # BACK-1258: tag each result test/vendor/minified, the same field
+        # hotspots:// and overview:// already carry. ast://?complexity>N is a
+        # ranking a reader treats as "what to look at first", and on a repo that
+        # commits vendored JS it can be dominated by files nobody will ever edit
+        # (8 of 19 on camaleon-cms) with nothing in the output saying so.
+        # Additive and advisory -- ranking and result count are unchanged.
+        from ...utils.path_utils import provenance_for_display_path
+        _base = Path(self.path)
+        for elem in controlled:
+            elem['provenance'] = provenance_for_display_path(elem.get('file'), _base)
+        _noise = sum(
+            1 for e in controlled
+            if e.get('provenance') in ('vendor', 'minified')
+        )
+        if _noise:
+            meta['warnings'].append({
+                'type': 'unfiltered_ranking',
+                'message': (
+                    f'{_noise} of {len(controlled)} results are vendored or minified '
+                    f'files. Results are not filtered by provenance -- read the '
+                    f'per-result "provenance" field, or exclude them with '
+                    f'--exclude, before treating this as a ranking of your own code.'
+                ),
+            })
+
         # Build result using ResultBuilder (automatically handles contract_version, source, source_type)
         result = ResultBuilder.create(
             result_type='ast_query',
