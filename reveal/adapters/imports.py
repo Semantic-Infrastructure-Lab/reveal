@@ -1461,24 +1461,74 @@ class ImportsAdapter(ResourceAdapter):
 
         These are unambiguously entry points (CLIs, test runners, scripts) or dead code.
         Sorted by fan-out descending: high fan-out = likely real entry point; low = likely dead code.
+
+        BACK-1263: importers under a test root do not count toward fan-in here.
+        The heuristic's own definition ("no one imports this" = "execution
+        starts here") is falsified by the single most common non-caller
+        importer, the test suite: a production entry point imported by its own
+        tests (`from myapp.worker import main`) has fan-in > 0 and drops off
+        the list, while leaf test files nothing imports flood the top sorted by
+        fan-out, looking like a confident answer. Measured on a conventional
+        src/ + tests/ layout: both real __main__-guarded entry points excluded,
+        3 of the 4 reported were test files. A test importing a module is
+        evidence that module is *testable*, not that something calls it.
         """
         if not self._graph:
             return self._build_response('entrypoints', entries=[], total_scanned=0)
 
+        from ..utils.path_utils import is_test_dir, is_test_filename
+
+        def _is_test_file(f) -> bool:
+            p = Path(f)
+            return (
+                any(is_test_dir(part) for part in p.parts[:-1])
+                or is_test_filename(p.stem, p.suffix)
+            )
+
+        def _non_test_fan_in(f) -> int:
+            return sum(
+                1 for importer in self._graph.reverse_deps.get(f, set())
+                if not _is_test_file(importer)
+            )
+
         all_files = self._scanned_files | set(self._graph.files.keys()) | set(self._graph.reverse_deps.keys())
+        candidates = [f for f in all_files if _non_test_fan_in(f) == 0]
         entries = sorted(
             [
                 {
                     'file': str(f),
                     'fan_out': len(self._graph.dependencies.get(f, set())),
+                    # Kept visible rather than filtered out: a test file with
+                    # no importers genuinely has fan-in 0, and dropping it
+                    # silently would trade one wrong answer for another.
+                    'is_test': _is_test_file(f),
+                    'test_only_importers': len(
+                        self._graph.reverse_deps.get(f, set())
+                    ),
                 }
-                for f in all_files
-                if len(self._graph.reverse_deps.get(f, set())) == 0
+                for f in candidates
             ],
-            key=lambda e: (-e['fan_out'], e['file']),
+            # Non-test files first: a production entry point is what the caller
+            # asked for, and previously could not appear at all.
+            key=lambda e: (e['is_test'], -e['fan_out'], e['file']),
         )
 
-        return self._build_response('entrypoints', entries=entries, total_scanned=len(all_files))
+        response = self._build_response(
+            'entrypoints', entries=entries, total_scanned=len(all_files),
+        )
+        test_share = sum(1 for e in entries if e['is_test'])
+        if entries and test_share:
+            meta = response.setdefault('metadata', {})
+            meta.setdefault('warnings', []).append({
+                'type': 'test_files_in_entrypoints',
+                'message': (
+                    f'{test_share} of {len(entries)} entry points are test files '
+                    f'(is_test=true). Nothing imports a leaf test file, so it '
+                    f'satisfies the fan-in=0 definition without being a place '
+                    f'execution starts.'
+                ),
+            })
+        return response
 
     def _format_components(self) -> Dict[str, Any]:
         """Score each directory as a component using import graph cohesion.

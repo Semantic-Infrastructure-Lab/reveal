@@ -105,3 +105,52 @@ def test_deps_labels_ecosystem_only_on_a_mixed_stack(tmp_path):
 
     single = _run(tmp_path, 'deps://api').stdout
     assert '[python]' not in single, single
+
+
+class TestEntrypointsTestFanIn:
+    """BACK-1263: imports://?entrypoints defines an entry point as fan-in=0,
+    which an ordinary pytest layout inverts — a production entry point imported
+    by its own tests drops off the list, while leaf test files nothing imports
+    flood the top sorted by fan-out, looking like a confident answer."""
+
+    @pytest.fixture
+    def tree(self, tmp_path):
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "x"\n')
+        app = tmp_path / 'myapp'
+        tests = tmp_path / 'tests'
+        app.mkdir()
+        tests.mkdir()
+        (app / '__init__.py').write_text('')
+        (app / 'worker.py').write_text(
+            'def main():\n    return 1\n\n\n'
+            'if __name__ == "__main__":\n    main()\n'
+        )
+        (tests / 'test_worker.py').write_text(
+            'from myapp.worker import main\n\n\n'
+            'def test_main():\n    assert main() == 1\n'
+        )
+        return tmp_path
+
+    def _entries(self, tree):
+        out = _run(tree, 'imports://.?entrypoints', '--format', 'json')
+        assert out.returncode == 0, out.stderr
+        return json.loads(out.stdout)['entries']
+
+    def test_real_entry_point_is_not_excluded_by_its_own_test(self, tree):
+        entries = self._entries(tree)
+        files = [e['file'] for e in entries]
+        assert any(f.endswith('myapp/worker.py') for f in files), files
+
+    def test_test_files_are_labelled_and_sorted_last(self, tree):
+        entries = self._entries(tree)
+        assert all('is_test' in e for e in entries)
+        non_test = [i for i, e in enumerate(entries) if not e['is_test']]
+        test = [i for i, e in enumerate(entries) if e['is_test']]
+        if non_test and test:
+            assert max(non_test) < min(test), entries
+
+    def test_test_share_is_disclosed(self, tree):
+        out = _run(tree, 'imports://.?entrypoints', '--format', 'json')
+        meta = json.loads(out.stdout).get('metadata', {})
+        types = {w.get('type') for w in meta.get('warnings', [])}
+        assert 'test_files_in_entrypoints' in types, meta
