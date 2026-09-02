@@ -397,6 +397,14 @@ def _collect_candidates(
             f, rel, focus, is_changed=is_changed, fan_in=fan_in,
             graph_relevance=graph_relevance, is_root_config=is_root_config,
         )
+        # BACK-1195/B2-4: same classifier _compute_priority now scores on
+        # (BACK-1266 follow-up, 2026-09-02) -- this was the "future ranking
+        # change" the original comment here named but never wired in, which
+        # is exactly why a Rails spec/dummy/ harness file (test-provenance
+        # by directory, not by the old hardcoded {'test','tests',...}
+        # literal-name set _compute_priority used to check) could out-rank
+        # real application code in a budget-constrained pack.
+        provenance = classify_path_provenance(rel.parts[:-1], rel.name)
 
         candidates.append({
             'path': str(f),
@@ -410,11 +418,8 @@ def _collect_candidates(
             'fan_in': fan_in,
             'graph_relevance': graph_relevance,
             # BACK-1195: mark each candidate's provenance so a reader can
-            # discount vendored/generated/test noise in place -- also lets a
-            # future ranking change (B2-4: pack's budget spent almost
-            # entirely on vendored/test files) filter on this without a
-            # second directory walk.
-            'provenance': classify_path_provenance(rel.parts[:-1], rel.name),
+            # discount vendored/generated/test noise in place.
+            'provenance': provenance,
         })
 
     # Sort: priority descending, then mtime descending
@@ -501,17 +506,25 @@ def _compute_priority(
     elif fan_in >= 1:
         score += 1.0
 
-    # Penalize test/vendor/docs files. Directory markers are matched as whole
-    # path components (via rel_parts) so a *top-level* tests/ or vendor/ dir is
-    # penalized the same as a nested one — BACK-526: the old '/tests/' substring
-    # check missed a path starting with 'tests/', letting test-model DTOs under
-    # a top-level tests/ tree surface in the "Key modules" tier.
-    if rel_parts & {'test', 'tests', 'vendor', 'docs', '__pycache__', 'node_modules'}:
+    # Penalize test/vendor files via the shared classify_path_provenance
+    # verdict (BACK-1266 follow-up, 2026-09-02) rather than a private
+    # literal-name set. That old set only matched a directory named exactly
+    # 'test'/'tests'/'vendor' -- it missed 'spec'/'specs' entirely (Rails'
+    # spec/dummy/ harness convention: dummy is not itself the test-dir
+    # marker, 'spec' is, and 'spec' wasn't in the set) and every
+    # PascalCase/multi-language test convention BACK-1252 already taught the
+    # shared classifier. Filename-based test detection (test_/_test prefix,
+    # PascalCase *Test suffix) is also folded in here now, replacing the
+    # separate substring scan below for that part.
+    if classify_path_provenance(rel.parts[:-1], rel.name) in ('test', 'vendor'):
         score -= 3.0
-    for penalty in ('test_', '_test', '/.'):
-        if penalty in rel_str:
-            score -= 3.0
-            break
+    # Remaining noise categories classify_path_provenance doesn't cover
+    # (it classifies test/vendor/minified/first-party, not "supporting
+    # docs" or build caches).
+    if rel_parts & {'docs', '__pycache__'}:
+        score -= 3.0
+    if '/.' in rel_str:
+        score -= 3.0
 
     # BACK-526: non-source data/markup files (localization tables, data blobs,
     # standalone docs) are supporting material, not "key modules" of the code.

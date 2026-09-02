@@ -237,6 +237,21 @@ class TestComputePriority(unittest.TestCase):
             score = _compute_priority(path, rel, focus=None)
             self.assertEqual(score, 0.0)
 
+    def test_spec_dummy_harness_penalized_like_tests(self):
+        """BACK-1266 follow-up (found on re-review, 2026-09-02): the old
+        literal {'test','tests','vendor',...} rel_parts set didn't include
+        'spec'/'specs', so a Rails spec/dummy/ harness file -- 'dummy' isn't
+        itself a test-dir marker, 'spec' is -- was scored as ordinary
+        first-party code and could out-rank real application code in a
+        budget-constrained pack (the reported case: 7 of 12 selected files
+        were spec/dummy/ harness, 1 was real app code, both tiers scored
+        equally). Now routed through the same classify_path_provenance
+        BACK-1264 already fixed for spec/specs depth-awareness."""
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "spec/dummy/config/application.rb")
+            score = _compute_priority(path, rel, focus=None)
+            self.assertEqual(score, 0.0)
+
     def test_data_file_in_key_dir_not_key_module(self):
         """BACK-526: a localization/data blob in a key-named dir must not reach
         the Key-modules tier (priority >= 2) the way real source does."""
