@@ -9,6 +9,12 @@ This document outlines reveal's development priorities and future direction. For
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
 
+### v0.127.0 — 2026-09-01 external handoff batch (12 items) + adversarial re-review follow-ups
+
+- ✅ 12 items from the 2026-09-01 external handoff fixed: `--also-json` on `check`, pool-worker logging prefix (macOS/Windows), `--exclude` on every `uri://` adapter, provenance tagging on `ast://`/`calls://?uncalled`, M102 false positives on `src/` layouts, `surface://` AI-vendor SDK detection, meta-warnings caveats reaching the text renderer (3 sites), `deps://` mixed-ecosystem labelling, `imports://?entrypoints` test-suite false negatives, a `specs/`-directory doc-tagging bug, and `calls://?uncalled` precision fixes (BACK-1248–1265).
+- ✅ Adversarial re-review of that batch found and closed 2 undisclosed gaps (`trace.py` missing the BACK-1178 parity fix; `ast://`'s new warning not reaching text) plus 4 more previously-deferred items, including a 3-layer import-cache bug that silently suppressed partial-parse warnings on warm runs (BACK-1266–1270).
+- ⚠️ `contract_version` moves 1.0 → 1.1 on 6 subcommand-form adapters — consumer-visible if anything pins the literal (BACK-1178).
+
 ### v0.126.0 — External wishlist batch-6 fixes, multi-language test-detection gap
 
 - ✅ 11 external-reporter wishlist items fixed: `classify://` exclusion disclosure, vendor-tag false positives, `architecture://` JS/TS cohesion always-0.00, non-deterministic `check` rendering, `surface://` test-route disclosure, import-graph convention-autoloading disclosure, `reveal-mcp` friendly install error, plus 4 smaller CLI/adapter silent-no-op fixes (BACK-1241–1251).

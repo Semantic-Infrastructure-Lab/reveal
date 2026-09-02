@@ -14,6 +14,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.127.0] - 2026-09-02 (sessions foggy-current-0901, desert-dusk-0902, crimson-wash-0902)
+
+### Changed
+- **`overview`/`deps`/`surface`/`contracts`/`architecture`/`hotspots` subcommand-form JSON moves `contract_version` 1.0 → 1.1 and gains a `meta` key (BACK-1178)** — these six subcommands stripped `meta`/`contract_version` from the adapter result before re-enveloping it, so the subcommand form reported 1.0 (no `meta`) for the same payload the `uri://` form already reports as 1.1. The payload change is additive, but the `contract_version` value itself moves for these six — **consumer-visible if anything pins the literal `1.0`.** `check`/`health`/`review` (no adapter backing) are unchanged at 1.0.
+
+### Fixed
+- **12 items from the 2026-09-01 external handoff confirmed and fixed** — `--also-json` on `check` now writes a real artifact instead of warning it's a no-op (BACK-1248); `ProcessPoolExecutor` workers configure logging so their warnings keep the `WARNING:` prefix on spawn/forkserver platforms (macOS/Windows), not just fork/Linux (BACK-1231); `--exclude` now works on every `uri://` adapter, not just `check` and `overview`/`stats` (BACK-1257); `ast://` and `calls://?uncalled` now carry the vendor/test/minified provenance tag the other ranking adapters already had, and the minified-file and locale-fan-out detectors that fed it were undercounting (BACK-1258); M102's dead-import check resolved module names incorrectly on `src/` layouts and never looked past a project's own package root, producing a near-total false-positive rate wherever `from x.y import z` was the dominant style (BACK-1259); `surface://` missed AI-vendor SDK imports written as `from google import genai` (multi-segment catalog entries never matched) (BACK-1260); `meta.warnings` caveats present in JSON since they were added were silently dropped by the text renderer in three places — `overview://`'s complex-functions truncation, `patches://`'s scope-not-measured advisory, `deps://`'s Rails/Django/Laravel autoload-regime disclosure (BACK-1261); `deps://`'s unresolved-package list interleaved ecosystems with no label on a mixed Python+JS stack (BACK-1262); `imports://?entrypoints` excluded real entry points imported by their own test suite while flooding the list with untested leaf test files (BACK-1263); a `specs/` directory under a docs tree (OpenSpec-style) tagged every document under it `test` (BACK-1264); `calls://?uncalled` measured at 10% real-world precision — module-level calls, callback-by-reference registration (`Thread(target=fn)`, Flask `view_func=`, etc.), and framework route decorators were all invisible to it (BACK-1265).
+- **2 gaps in the above batch, found and closed same-week by an adversarial re-review** — `trace.py` was missing the BACK-1178 fix applied to the other six subcommands (BACK-1178 follow-up); `ast://`'s new `unfiltered_ranking` warning never reached the text renderer, the exact defect BACK-1261 exists to close, reintroduced in the same batch that closed it (BACK-1258 follow-up).
+- **`REVEAL_IGNORE` env var silently unhonored on every `uri://` adapter (BACK-1266)** — wired into `check`'s walker only; merged onto the same active-scope plumbing `--exclude` (BACK-1257) already uses.
+- **File-shaped `--exclude` patterns didn't apply to `pack://` or `contracts://`'s non-Python collectors (BACK-1269)**.
+- **Minified-filename detection missed webpack's 4-char content-hash digests (BACK-1258 follow-up)** — digest floor lowered 6 → 4 chars.
+- **`pack://`'s candidate scoring didn't route its test/vendor penalty through the same provenance classifier it already computes for display (BACK-1267)** — a private, narrower hardcoded directory set (missing `spec`/`specs`) let Rails `spec/dummy/` harness files score identically to real application code.
+- **A 3-layer import-cache bug silently suppressed partial-parse-failure warnings on any warm run (BACK-1270)** — `ImportsDiskCache`, `PythonExtractor`'s separate hand-rolled cache duplicate, and `ImportsAdapter._build_graph`'s whole-graph cache all cached bare import lists / omitted `_files_failed`, so a file that failed to parse on a cold run read as confirmed-clean, zero-imports on every subsequent warm run — the false negative `I001` (unused-import) most needs to avoid, since it deletes code based on the answer. `CACHE_SCHEMA_VERSION` bumped 1 → 2; old entries are simply never read, no migration needed.
+
+### Added
+- **`ast://?complexity` discloses that its score is unweighted McCabe (BACK-1268)** — a `complexity_is_unweighted` warning, surfaced only on a query that actually filters by complexity, notes that ~40 flat branches score identically to one 40-deep nested branch.
+
+### Known gaps carried forward (disclosed, not fixed this release)
+- `classify://`'s `'first_party'` string vs. every other adapter's `null` for the same provenance concept — a real output-contract change for external consumers, deferred pending an explicit version-bump decision.
+- 4 tests skipped on Windows CI only (BACK-1271) — `subprocess.run(capture_output=True)` returns `stdout=None` for certain bare-text-output `reveal` CLI invocations on GitHub's Windows runners specifically (clean exit code, empty/benign stderr — not a reveal crash). Deterministic across 2 CI runs × 3 Python versions; root cause unconfirmed without direct Windows access. Linux/macOS unaffected.
+
 ## [0.126.0] - 2026-08-30 (session pimubu-0830)
 
 ### Fixed
