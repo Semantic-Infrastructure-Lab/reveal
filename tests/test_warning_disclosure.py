@@ -76,6 +76,31 @@ def test_ast_text_discloses_the_unfiltered_ranking_warning(tmp_path):
     assert warned[0]['message'] in text
 
 
+def test_ast_complexity_query_discloses_unweighted_metric(tmp_path):
+    """B8-8 cheap fallback (2026-09-02): complexity is pure McCabe (decision-
+    point count), not nesting-depth-weighted, so many flat branches score the
+    same as one deeply nested branch at the same count. Only surfaced on a
+    query that actually filters by complexity -- unfiltered browsing
+    shouldn't repeat the caveat on every result."""
+    (tmp_path / 'flat.py').write_text(
+        'def f(x):\n' + '\n'.join(f'    if x == {i}: return {i}' for i in range(6)) + '\n'
+    )
+    as_json = json.loads(
+        _run(tmp_path, 'ast://.?complexity>1', '--format', 'json').stdout
+    )
+    codes = [w.get('type') for w in as_json.get('meta', {}).get('warnings', [])]
+    assert 'complexity_is_unweighted' in codes, as_json.get('meta')
+
+    text = _run(tmp_path, 'ast://.?complexity>1').stdout
+    assert 'nesting depth' in text
+
+    unfiltered = json.loads(
+        _run(tmp_path, 'ast://.?type=function', '--format', 'json').stdout
+    )
+    unfiltered_codes = [w.get('type') for w in unfiltered.get('meta', {}).get('warnings', [])]
+    assert 'complexity_is_unweighted' not in unfiltered_codes
+
+
 def test_patches_says_not_measured_rather_than_clean(tmp_path):
     """Patch detection is Python + jest/vitest only, so on a Ruby tree
     'No patch pressure groups found.' alone reads as a clean result for a

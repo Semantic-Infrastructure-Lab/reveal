@@ -332,6 +332,25 @@ class AstAdapter(ResourceAdapter):
                 ),
             })
 
+        # Cheap half of a known limitation (found 2026-09-01, disclosed rather
+        # than silently fixed -- the accurate fix needs re-weighting every
+        # downstream complexity threshold, which needs its own re-baselined
+        # change): complexity is pure McCabe cyclomatic complexity, a
+        # decision-point count with no nesting-depth weighting, only surfaced
+        # when a query actually filters on it -- unfiltered browsing doesn't
+        # need the caveat repeated on every result.
+        if 'complexity' in self.query:
+            meta['warnings'].append({
+                'type': 'complexity_is_unweighted',
+                'message': (
+                    'complexity is McCabe cyclomatic complexity (a count of '
+                    'decision points), not weighted by nesting depth -- ~40 flat, '
+                    'sequential branches at the same level score identically to '
+                    'one branch nested 40 levels deep. Two functions with the '
+                    'same score can have very different actual structure.'
+                ),
+            })
+
         # Build result using ResultBuilder (automatically handles contract_version, source, source_type)
         result = ResultBuilder.create(
             result_type='ast_query',
