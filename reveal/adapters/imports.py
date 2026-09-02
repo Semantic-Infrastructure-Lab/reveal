@@ -1374,9 +1374,9 @@ class ImportsAdapter(ResourceAdapter):
         fingerprint = _candidate_set_fingerprint(candidates) if cacheable else None
         if fingerprint is not None:
             cached = disk_cache.get(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint)
-            if cached is not None:
-                (self._graph, self._symbols_by_file,
-                 self._scanned_files, self._unsupported_extensions) = cached
+            if isinstance(cached, tuple) and len(cached) == 5:
+                (self._graph, self._symbols_by_file, self._scanned_files,
+                 self._unsupported_extensions, self._files_failed) = cached
                 return
 
         all_imports = self._process_extracted_files(
@@ -1386,10 +1386,17 @@ class ImportsAdapter(ResourceAdapter):
         self._resolve_dependencies(target_path, file_index)
 
         if fingerprint is not None:
+            # BACK-1266 follow-up (2026-09-02): self._files_failed must be
+            # part of this cache entry, not just the 4 fields above -- a
+            # cache hit used to leave it at its __init__ default ([]), so
+            # get_metadata()'s files_failed_count silently read 0 on every
+            # warm run for a directory that genuinely has unparseable files.
+            # Same failure mode as the per-file extract_imports() caches
+            # (get_or_compute), one layer up.
             disk_cache.put(
                 _ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint,
-                (self._graph, self._symbols_by_file,
-                 self._scanned_files, self._unsupported_extensions),
+                (self._graph, self._symbols_by_file, self._scanned_files,
+                 self._unsupported_extensions, self._files_failed),
             )
 
     def _build_response(self, response_type: str, **data_fields) -> Dict[str, Any]:

@@ -50,7 +50,9 @@ class ImportsDiskCache:
         self.namespace = namespace
         self._env_var = env_var
         self._default_max_files = default_max_files
-        self._mem_cache: Dict[Tuple[str, int], List[ImportStatement]] = {}
+        # BACK-1266 follow-up (2026-09-02): cached value is (imports,
+        # parse_failed), not just imports -- see get_or_compute.
+        self._mem_cache: Dict[Tuple[str, int], Tuple[List[ImportStatement], bool]] = {}
 
     def max_files(self) -> int:
         """Read the entry cap, honoring this cache's env var override."""
@@ -78,9 +80,32 @@ class ImportsDiskCache:
         return hasher.hexdigest()
 
     def get_or_compute(
-        self, file_path: Path, compute: Callable[[], List[ImportStatement]]
+        self,
+        file_path: Path,
+        compute: Callable[[], List[ImportStatement]],
+        get_parse_failed: Optional[Callable[[], bool]] = None,
+        restore_parse_failed: Optional[Callable[[bool], None]] = None,
     ) -> List[ImportStatement]:
-        """Return cached imports for *file_path*, computing (and caching) on a miss."""
+        """Return cached imports for *file_path*, computing (and caching) on a miss.
+
+        BACK-1266 follow-up (2026-09-02): a file that fails to parse sets the
+        calling extractor's ``parse_failed`` flag as a side effect of
+        *compute* (BACK-982) -- I001/I002/the imports:// adapter all read it
+        immediately after extract_imports() to tell "confirmed empty" apart
+        from "analysis could not run", specifically so a partial/error-
+        recovered parse never reads as a clean result an unused-import rule
+        could act on. That side effect only fires when *compute* actually
+        runs -- on a cache hit (mem or disk) it never does, so on any warm
+        run every file that ever failed to parse silently reported as clean
+        again, the exact failure mode ``parse_failed`` exists to prevent.
+        *get_parse_failed*/*restore_parse_failed* close the loop: the flag is
+        captured alongside the cached imports on a miss, and restored on a
+        hit. Both optional and independent -- a caller that doesn't pass them
+        gets the pre-fix behavior (imports-only caching), same as before this
+        parameter existed; an entry cached before this fix (no stored flag)
+        restores False, i.e. "assume clean" until that entry is next
+        invalidated, not "reject the whole cache".
+        """
         path_str = os.path.abspath(str(file_path))
         try:
             mtime_ns = os.stat(path_str).st_mtime_ns
@@ -88,19 +113,29 @@ class ImportsDiskCache:
             mtime_ns = 0
         cache_key = (path_str, mtime_ns)
         if cache_key in self._mem_cache:
-            return restamp_file_path(self._mem_cache[cache_key], file_path)
+            imports, parse_failed = self._mem_cache[cache_key]
+            if restore_parse_failed is not None:
+                restore_parse_failed(parse_failed)
+            return restamp_file_path(imports, file_path)
 
         fingerprint = self.fingerprint(path_str, mtime_ns)
         if fingerprint is not None:
             cached = disk_cache.get(self.namespace, fingerprint)
-            if cached is not None:
-                self._mem_cache[cache_key] = cached
-                return restamp_file_path(cached, file_path)
+            if isinstance(cached, tuple) and len(cached) == 2:
+                imports, parse_failed = cached
+                self._mem_cache[cache_key] = (imports, parse_failed)
+                if restore_parse_failed is not None:
+                    restore_parse_failed(parse_failed)
+                return restamp_file_path(imports, file_path)
 
         imports = compute()
-        self._mem_cache[cache_key] = imports
+        parse_failed = get_parse_failed() if get_parse_failed is not None else False
+        self._mem_cache[cache_key] = (imports, parse_failed)
         if fingerprint is not None:
-            disk_cache.put(self.namespace, fingerprint, imports, max_entries=self.max_files())
+            disk_cache.put(
+                self.namespace, fingerprint, (imports, parse_failed),
+                max_entries=self.max_files(),
+            )
         return imports
 
     def clear(self) -> None:

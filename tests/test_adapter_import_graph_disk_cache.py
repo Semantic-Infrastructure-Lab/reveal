@@ -93,6 +93,23 @@ def test_cache_hit_restores_all_needed_state(tmp_path):
     assert {f.name for f in adapter2._symbols_by_file} == symbols_before
 
 
+def test_cache_hit_restores_files_failed(tmp_path):
+    """BACK-1266 follow-up (2026-09-02): _files_failed was not part of the
+    cached tuple -- a cache hit left it at its __init__ default ([]), so
+    get_metadata()'s files_failed_count silently read 0 on every warm run
+    for a directory that genuinely has unparseable files. I001/I002 rely on
+    this to avoid confidently acting on an incomplete parse (BACK-982)."""
+    (tmp_path / "broken.py").write_text("def f(\n    x = ( ( (\n")
+    adapter = ImportsAdapter(resource=str(tmp_path))
+    adapter._build_graph(adapter._target_path)
+    assert adapter._files_failed, "fixture should trip a parse failure"
+    failed_before = {f.name for f in adapter._files_failed}
+
+    adapter2 = ImportsAdapter(resource=str(tmp_path))
+    adapter2._build_graph(adapter2._target_path)
+    assert {f.name for f in adapter2._files_failed} == failed_before
+
+
 def test_adding_a_file_invalidates_cache(tmp_path):
     _write_tree(tmp_path)
     adapter = ImportsAdapter(resource=str(tmp_path))

@@ -40,7 +40,9 @@ except ImportError:
 # often visiting the same files multiple times across different graph builds.
 # I001 also calls extract_imports for each checked file independently.
 # Caching avoids redundant parses + file reads across both rules and repeated builds.
-_extract_imports_cache: Dict[Tuple[str, int], List[ImportStatement]] = {}
+# BACK-1266 follow-up (2026-09-02): value is (imports, parse_failed), not
+# just imports -- see extract_imports().
+_extract_imports_cache: Dict[Tuple[str, int], Tuple[List[ImportStatement], bool]] = {}
 
 # Cross-invocation disk cache (BACK-625): extract_imports parses+walks the
 # tree independently of TreeSitterAnalyzer.get_structure()'s own structure
@@ -120,18 +122,31 @@ class PythonExtractor(LanguageExtractor):
             mtime_ns = 0
         cache_key = (path_str, mtime_ns)
         if cache_key in _extract_imports_cache:
-            return restamp_file_path(_extract_imports_cache[cache_key], file_path)
+            imports, self.parse_failed = _extract_imports_cache[cache_key]
+            return restamp_file_path(imports, file_path)
 
         fingerprint = _imports_fingerprint(path_str, mtime_ns)
         if fingerprint is not None:
             cached = disk_cache.get(_IMPORTS_CACHE_NAMESPACE, fingerprint)
-            if cached is not None:
+            if isinstance(cached, tuple) and len(cached) == 2:
                 _extract_imports_cache[cache_key] = cached
-                return restamp_file_path(cached, file_path)
+                imports, self.parse_failed = cached
+                return restamp_file_path(imports, file_path)
 
+        # BACK-1266 follow-up (2026-09-02): self.parse_failed must be cached
+        # alongside imports, not just imports -- a cache hit above skips this
+        # whole block (including _get_tree_analyzer's `self.parse_failed =
+        # True` side effect), so without it, any file that ever failed to
+        # parse silently read as clean again on every subsequent warm run.
+        # I001/I002/the imports:// adapter all rely on this flag to avoid
+        # confidently acting (e.g. suggesting an unused import be deleted) on
+        # an incomplete parse (BACK-982).
         analyzer = self._get_tree_analyzer(path_str)
         if not analyzer:
-            _extract_imports_cache[cache_key] = []
+            _extract_imports_cache[cache_key] = ([], self.parse_failed)
+            if fingerprint is not None:
+                disk_cache.put(_IMPORTS_CACHE_NAMESPACE, fingerprint, ([], self.parse_failed),
+                                max_entries=_imports_cache_max_files())
             return []
 
         # Read source lines for noqa comment detection
@@ -147,9 +162,9 @@ class PythonExtractor(LanguageExtractor):
         for node in analyzer._find_nodes_by_type('import_from_statement'):
             imports.extend(self._parse_from_import(node, file_path, analyzer, source_lines))
 
-        _extract_imports_cache[cache_key] = imports
+        _extract_imports_cache[cache_key] = (imports, self.parse_failed)
         if fingerprint is not None:
-            disk_cache.put(_IMPORTS_CACHE_NAMESPACE, fingerprint, imports,
+            disk_cache.put(_IMPORTS_CACHE_NAMESPACE, fingerprint, (imports, self.parse_failed),
                             max_entries=_imports_cache_max_files())
         return imports
 

@@ -119,7 +119,36 @@ def test_disk_result_equals_fresh_scan(tmp_path, mod, extractor_cls, suffix, src
     fp = mod._IMPORTS_CACHE.fingerprint(path_str, mtime_ns)
     from_disk = disk_cache.get(mod._IMPORTS_CACHE.namespace, fp)
     assert from_disk is not None
-    assert from_disk == scanned
+    # BACK-1266 follow-up (2026-09-02): stored value is (imports,
+    # parse_failed), not bare imports -- see ImportsDiskCache.get_or_compute.
+    imports_from_disk, parse_failed_from_disk = from_disk
+    assert imports_from_disk == scanned
+    assert parse_failed_from_disk is False
+
+
+def test_parse_failure_survives_disk_cache_hit(tmp_path):
+    """BACK-1266 follow-up (2026-09-02): a file that fails to parse must
+    still read as failed on a warm (disk-cache-hit) run, not silently as
+    clean -- I001/I002/imports:// all rely on extractor.parse_failed to
+    avoid confidently acting on an incomplete parse (BACK-982). One
+    representative language (Go) exercises the shared ImportsDiskCache path
+    all five non-Python extractors route through."""
+    path = tmp_path / "broken.go"
+    path.write_text("package main\n\nfunc f( {\n")  # unbalanced -- ERROR node(s)
+    extractor = go_mod.GoExtractor()
+
+    extractor.extract_imports(path)
+    assert extractor.parse_failed, "fixture should trip a parse failure"
+
+    go_mod._IMPORTS_CACHE.clear()  # in-process only; disk entry remains
+    extractor2 = go_mod.GoExtractor()
+    assert not extractor2.parse_failed
+
+    extractor2.extract_imports(path)
+    assert extractor2.parse_failed, (
+        "parse_failed was lost on a disk-cache hit -- the file would read "
+        "as a clean/confirmed-empty result on every subsequent warm run"
+    )
 
 
 @pytest.mark.parametrize("mod,extractor_cls,suffix,src,expect,src2,expect2", CASES)

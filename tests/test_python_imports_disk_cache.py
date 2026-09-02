@@ -81,7 +81,37 @@ def test_disk_result_equals_fresh_scan(tmp_path):
     fp = py_imports_mod._imports_fingerprint(path_str, mtime_ns)
     from_disk = disk_cache.get(py_imports_mod._IMPORTS_CACHE_NAMESPACE, fp)
     assert from_disk is not None
-    assert from_disk == scanned
+    # BACK-1266 follow-up (2026-09-02): stored value is (imports,
+    # parse_failed), not bare imports -- see extract_imports().
+    imports_from_disk, parse_failed_from_disk = from_disk
+    assert imports_from_disk == scanned
+    assert parse_failed_from_disk is False
+
+
+def test_parse_failure_survives_disk_cache_hit(tmp_path, monkeypatch):
+    """BACK-1266 follow-up (2026-09-02): a file that fails to parse must
+    still read as failed on a warm (disk-cache-hit) run, not silently as
+    clean -- I001/I002/imports:// all rely on extractor.parse_failed to
+    avoid confidently acting on an incomplete parse (BACK-982)."""
+    src = tmp_path / "broken.py"
+    src.write_text("def f(\n    x = ( ( (\n")  # unbalanced parens -- ERROR node(s)
+    extractor = py_imports_mod.PythonExtractor()
+
+    extractor.extract_imports(src)
+    assert extractor.parse_failed, "fixture should trip a parse failure"
+
+    # Simulate a fresh process: clear the in-process cache and swap in a
+    # fresh extractor instance (parse_failed starts False), forcing the
+    # disk-cache-hit path to be the only source of the flag.
+    py_imports_mod._extract_imports_cache.clear()
+    extractor2 = py_imports_mod.PythonExtractor()
+    assert not extractor2.parse_failed
+
+    extractor2.extract_imports(src)
+    assert extractor2.parse_failed, (
+        "parse_failed was lost on a disk-cache hit -- the file would read "
+        "as a clean/confirmed-empty result on every subsequent warm run"
+    )
 
 
 def test_edit_invalidates_cache(tmp_path):

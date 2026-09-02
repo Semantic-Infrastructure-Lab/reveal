@@ -44,7 +44,13 @@ from ..version import __version__
 # __version__, so routine dataclass edits between releases do NOT need a bump;
 # this is a belt-and-suspenders guard for dev checkouts where __version__ is
 # static across shape changes.
-CACHE_SCHEMA_VERSION = 1
+#
+# 2026-09-02 (BACK-1266 follow-up): bumped 1 -> 2. ImportsDiskCache's stored
+# value changed shape from bare `imports` to `(imports, parse_failed)` --
+# without this bump, in a dev checkout (unreleased, __version__ unchanged) a
+# pre-existing v1 entry unpacks as `imports, parse_failed = <ImportStatement
+# list>`, which raises unless that file happens to have exactly 2 imports.
+CACHE_SCHEMA_VERSION = 2
 
 # Best-effort cap on entries kept per namespace (oldest evicted on write).
 _MAX_ENTRIES_PER_NAMESPACE = 64

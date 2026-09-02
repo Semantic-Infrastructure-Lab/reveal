@@ -516,7 +516,11 @@ class JavaScriptExtractor(LanguageExtractor):
         Returns:
             List of ImportStatement objects
         """
-        return _IMPORTS_CACHE.get_or_compute(file_path, lambda: self._extract_imports_uncached(file_path))
+        return _IMPORTS_CACHE.get_or_compute(
+            file_path, lambda: self._extract_imports_uncached(file_path),
+            get_parse_failed=lambda: self.parse_failed,
+            restore_parse_failed=lambda v: setattr(self, 'parse_failed', v),
+        )
 
     def _extract_imports_uncached(self, file_path: Path) -> List[ImportStatement]:
         analyzer = self._get_tree_analyzer(file_path)
