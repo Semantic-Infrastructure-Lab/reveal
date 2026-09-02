@@ -119,6 +119,83 @@ class TestM102OrphanFile(unittest.TestCase):
         import reveal.rules.maintainability.M102 as m
         m._import_cache.clear()
 
+    def _m102_flagged(self, files: dict) -> set:
+        """Run M102 over a synthetic tree, return the set of flagged modules."""
+        from reveal.rules.maintainability.M102 import M102
+        temp_dir = self.create_temp_directory_structure(files)
+        rule = M102()
+        flagged = set()
+        for py in sorted(temp_dir.rglob('*.py')):
+            content = py.read_text(encoding='utf-8')
+            for det in rule.check(str(py), None, content):
+                flagged.add(det.message.split("'")[1])
+        return flagged
+
+    # BACK-1259: M102 was a near-total false positive on several ordinary
+    # layouts. It resolves `from x.y import z` correctly (a flat layout is
+    # clean), but derives the module's own name relative to a guessed
+    # package_root, and never scans outside it -- so on a src/ layout, with no
+    # project marker, or with importers under tests/, the name it looks up is
+    # not the name anyone writes and the importers are invisible. Measured on
+    # home-assistant/core: 30 hits on components/mqtt, 3 of them real.
+    # Every test below fails before that fix.
+
+    _WORKER = 'def main():\n    return 1\n'
+    _ORPHAN = 'def nobody():\n    return 0\n'
+    _APP = 'from mypkg.worker import main\n\n\ndef go():\n    return main()\n'
+
+    def test_src_layout_importee_is_not_orphaned(self):
+        flagged = self._m102_flagged({
+            'pyproject.toml': '[project]\nname = "x"\n',
+            'src/mypkg/__init__.py': '',
+            'src/mypkg/worker.py': self._WORKER,
+            'src/mypkg/app.py': self._APP,
+            'src/mypkg/orphan.py': self._ORPHAN,
+        })
+        self.assertNotIn('src.mypkg.worker', flagged)
+        # ... and the genuine orphan is still caught (no over-suppression).
+        self.assertIn('src.mypkg.orphan', flagged)
+
+    def test_missing_project_marker_importee_is_not_orphaned(self):
+        flagged = self._m102_flagged({
+            'mypkg/__init__.py': '',
+            'mypkg/worker.py': self._WORKER,
+            'mypkg/app.py': self._APP,
+            'mypkg/orphan.py': self._ORPHAN,
+        })
+        self.assertNotIn('worker', flagged)
+        self.assertIn('orphan', flagged)
+
+    def test_importer_outside_the_package_dir_counts(self):
+        """A module imported only by its own test suite is not dead code."""
+        flagged = self._m102_flagged({
+            'pyproject.toml': '[project]\nname = "x"\n',
+            'mypkg/__init__.py': '',
+            'mypkg/worker.py': self._WORKER,
+            'mypkg/orphan.py': self._ORPHAN,
+            'tests/test_worker.py':
+                'from mypkg.worker import main\n\n\ndef test_main():\n'
+                '    assert main() == 1\n',
+        })
+        self.assertNotIn('mypkg.worker', flagged)
+        self.assertIn('mypkg.orphan', flagged)
+
+    def test_nested_non_build_setup_py_does_not_shift_the_module_name(self):
+        """A module literally named setup.py inside the package (home-assistant
+        has one) made _find_package_root stop there, re-rooting every name."""
+        flagged = self._m102_flagged({
+            'pyproject.toml': '[project]\nname = "x"\n',
+            'mypkg/__init__.py': '',
+            'mypkg/setup.py': 'def async_setup():\n    return True\n',
+            'mypkg/sub/__init__.py': '',
+            'mypkg/sub/worker.py': self._WORKER,
+            'mypkg/app.py':
+                'from mypkg.sub.worker import main\n\n\ndef go():\n'
+                '    return main()\n',
+        })
+        self.assertNotIn('sub.worker', flagged)
+        self.assertNotIn('mypkg.sub.worker', flagged)
+
     def create_temp_directory_structure(self, files: dict) -> Path:
         """Helper: Create temp directory with multiple files.
 

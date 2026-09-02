@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ...utils.path_utils import is_test_dir, is_test_filename
+from ...utils.path_utils import is_test_dir, is_test_filename, is_unsafe_scan_root
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,68 @@ def _resolve_relative_import(
         return '.'.join(pkg_parts) if pkg_parts else None
     except ValueError:
         return None
+
+
+def _package_boundary(path: Path) -> tuple:
+    """Return (boundary_parent, dotted_name) derived from the __init__.py chain.
+
+    BACK-1259: this is the name real importers actually write -- the path
+    relative to the directory that would sit on sys.path -- as opposed to
+    _get_module_name's package_root-relative name, which gains a bogus prefix
+    on a src/ layout ('src.mypkg.worker' where every importer writes
+    'mypkg.worker') and loses one when no project marker is found at all.
+    """
+    parts = []
+    current = path.parent
+    for _ in range(20):
+        if not (current / '__init__.py').exists():
+            break
+        parts.append(current.name)
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    if not parts:
+        return None, None
+    parts = list(reversed(parts))
+    if path.stem != '__init__':
+        parts.append(path.stem)
+    return current, '.'.join(parts)
+
+
+def _project_scan_root(boundary_parent: Path) -> Optional[Path]:
+    """Widen the import scan upward to the project root, or None if there
+    isn't a safe one.
+
+    BACK-1259: importers frequently live outside the package directory --
+    tests/, sibling packages, scripts/ -- and _collect_all_imports only walks
+    package_root, so those importers are invisible and their target reads as
+    orphaned. Measured on home-assistant/core: 30 M102 hits on components/mqtt,
+    3 of them real; the other 27 were imported from tests/.
+
+    Returns None rather than a bare directory when no project marker is found,
+    because the widened scan is an unbounded rglob: a package sitting directly
+    in $HOME or /tmp would otherwise make this parse every Python file under
+    it. Same guard find_project_root and the I002 scan already use.
+    """
+    current = boundary_parent
+    for _ in range(6):
+        if is_unsafe_scan_root(current):
+            # Stop widening here, but still fall back to boundary_parent below
+            # -- that directory is the one holding the top-level package, so
+            # scanning it is bounded even when there is no marker above it.
+            break
+        if (
+            (current / 'pyproject.toml').exists()
+            or (current / 'setup.py').exists()
+            or (current / '.git').exists()
+        ):
+            return current
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    return None if is_unsafe_scan_root(boundary_parent) else boundary_parent
 
 
 def _add_module_and_parents(imports: Set[str], module: str) -> None:
@@ -312,7 +374,15 @@ class M102(BaseRule):
 
         imports: set[str] = set()
 
-        for py_file in package_root.rglob('*.py'):
+        try:
+            candidates = list(package_root.rglob('*.py'))
+        except OSError:
+            # BACK-1259: rglob itself can raise if a directory disappears
+            # mid-walk (concurrent temp-dir cleanup), which must degrade to
+            # "no evidence" rather than propagate out of a lint rule.
+            candidates = []
+
+        for py_file in candidates:
             try:
                 content = py_file.read_text(encoding='utf-8', errors='ignore')
                 _extract_imports_regex(content, imports, py_file, package_root)
@@ -356,6 +426,31 @@ class M102(BaseRule):
                     return True
             except (OSError, UnicodeDecodeError):
                 pass
+
+        # BACK-1259: package_root inference can produce a dotted name whose
+        # prefix differs from the one real importers write (a src/ layout, a
+        # stray nested setup.py that is a module rather than a build script, or
+        # no project marker at all), and the scan above never leaves
+        # package_root, so importers under tests/ or a sibling package are
+        # invisible. Retry with the sys.path-relative name over a project-wide
+        # scan. Strictly detection-reducing: this can only clear a false
+        # positive, never create a hit.
+        boundary_parent, qualified = _package_boundary(path)
+        if qualified:
+            scan_root = _project_scan_root(boundary_parent)
+            # Skip the retry when it cannot change the answer -- same name and
+            # same scan root means the first pass already covered it. This is
+            # the common, correctly-configured case (reveal's own tree), so the
+            # widened scan costs nothing there.
+            if scan_root is not None and (
+                qualified != module_name or scan_root != package_root
+            ):
+                wide_imports = self._collect_all_imports(scan_root)
+                for candidate in {qualified, module_name}:
+                    if candidate in wide_imports:
+                        return True
+                    if any(imp.startswith(candidate + '.') for imp in wide_imports):
+                        return True
 
         return False
 
