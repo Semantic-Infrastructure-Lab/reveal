@@ -169,12 +169,20 @@ def _nav_narrow(ctx: _NavCtx) -> None:
         print(render_narrowing(var_name, events, ctx.analyzer.content.splitlines()))
 
 
+def _implicit_nodes(ctx: _NavCtx) -> list:
+    """Call sites the analyzer knows of that are not call-expression nodes
+    (Ruby paren-less calls, BACK-1299); [] for analyzers without the hook."""
+    hook = getattr(ctx.analyzer, '_implicit_call_nodes', None)
+    return hook(ctx.func_node) if hook else []
+
+
 def _nav_calls(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import range_calls, render_range_calls  # noqa: I006
     # args.calls is 'FULL' (bare --calls), a range string (--calls 89-120), or
     # None (flag absent).  _parse_line_range handles 'FULL' via its fallback.
     from_line, to_line = _parse_line_range(ctx.args.calls, ctx.func_start, ctx.func_end)
-    calls = range_calls(ctx.func_node, from_line, to_line, ctx.get_text)
+    calls = range_calls(ctx.func_node, from_line, to_line, ctx.get_text,
+                        implicit_nodes=_implicit_nodes(ctx))
     if ctx.as_json:
         _nav_json('calls', ctx.analyzer.path, ctx.element, from_line, to_line, calls)
     else:
@@ -260,6 +268,7 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
     else:
         effects = collect_effects(
             ctx.func_node, from_line, to_line, ctx.get_text, language=language,
+            implicit_nodes=_implicit_nodes(ctx),
         )
 
     if ctx.as_json:
@@ -356,6 +365,7 @@ def _nav_boundary(ctx: _NavCtx) -> None:
     else:
         boundary = collect_boundary(
             ctx.func_node, from_line, to_line, ctx.get_text, language=language,
+            implicit_nodes=_implicit_nodes(ctx),
         )
 
     if ctx.as_json:

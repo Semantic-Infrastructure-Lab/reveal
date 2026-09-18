@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence
 from . import node_children as _children
 from .treesitter_compat import _zero_arg
 from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_KINDS
@@ -35,7 +35,11 @@ def _generic_call_hits(
     line = _zero_arg(node, 'start_position').row + 1
     in_range = from_line <= line <= to_line
     node_kind = _zero_arg(node, 'kind')
-    if not (node_kind in call_node_types and node_kind != 'attribute_call' and in_range):
+    # Dart's 'argument_part' is excluded for the same reason: _dart_selector_hits /
+    # _dart_cascade_hits already emit each call with its qualified callee, and
+    # this generic path read the `(args)` node's own text -- a junk `()` callee
+    # duplicated onto every Dart call (BACK-1279 agreement probe).
+    if not (node_kind in call_node_types and node_kind not in ('attribute_call', 'argument_part') and in_range):
         return []
     callee = _extract_callee(node, get_text, call_node_types)
     # BACK-744: 'init_declarator' is a CALL_NODE_TYPES member for C++
@@ -181,8 +185,13 @@ def range_calls(
     to_line: int,
     get_text: Callable,
     call_node_types: Optional[frozenset] = None,
+    implicit_nodes: Sequence[Any] = (),
 ) -> List[Dict[str, Any]]:
     """Return call sites within a line range.
+
+    `implicit_nodes` are call sites that are not call-expression nodes (Ruby's
+    paren-less `helper`), supplied by the analyzer's `_implicit_call_nodes`
+    hook so this path agrees with structure/calls:// (BACK-1299).
 
     Each item is a dict:
         line      -- 1-indexed line of the call
@@ -207,6 +216,12 @@ def range_calls(
         results.extend(_gdscript_attribute_hits(node, children, get_text, from_line, to_line))
         results.extend(_dart_cascade_hits(node, get_text, from_line, to_line))
         stack.extend(reversed(children))
+
+    for node in implicit_nodes:
+        line = _zero_arg(node, 'start_position').row + 1
+        if from_line <= line <= to_line:
+            results.append({'line': line, 'callee': get_text(node).strip(),
+                            'first_arg': None, 'has_more_args': False})
 
     seen_callees = {r['callee'] for r in results}
     results.extend(_decorator_arg_hits(func_node, call_node_types, get_text, seen_callees))
@@ -473,6 +488,8 @@ def _extract_callee(
     if _zero_arg(call_node, 'kind') == 'new_expression':
         if call_node.child_by_field_name('constructor') is not None:
             return _extract_js_new_callee(call_node, get_text)
+        if call_node.child_by_field_name('type') is None:
+            return _extract_dart_flat_type_callee(call_node, get_text)  # Dart: no fields
         return _extract_cpp_new_callee(call_node, get_text)
 
     # Java: method_invocation is a flat node `[object? . name argument_list]` —
@@ -636,18 +653,23 @@ def _extract_object_creation_callee(node: Any, get_text: Callable) -> Optional[s
     Jellyfin source, EncodingHelper.cs's GetH26xOrAv1Encoder, BACK-431
     feature-breadth pass). C#'s generic type collapses to its base name
     (`Dictionary`, not `Dictionary<K, V>`) to match plain `new Foo()`.
+    Java's `new Foo(args)` names its type with `type_identifier` /
+    `scoped_type_identifier` / `generic_type` (same generic collapse); without
+    them the nav path dropped every Java constructor call the analyzer path
+    reports (BACK-1279 agreement probe).
     """
     for child in _children(node):
-        if _zero_arg(child, 'kind') in ('name', 'qualified_name'):
+        if _zero_arg(child, 'kind') in ('name', 'qualified_name', 'scoped_type_identifier'):
             class_name = get_text(child).strip()
             if class_name:
                 return f"new {class_name}"
-        if _zero_arg(child, 'kind') == 'identifier':
+        if _zero_arg(child, 'kind') in ('identifier', 'type_identifier'):
             class_name = get_text(child).strip()
             if class_name:
                 return f"new {class_name}"
-        if _zero_arg(child, 'kind') == 'generic_name':
-            base = next((c for c in _children(child) if _zero_arg(c, 'kind') == 'identifier'), None)
+        if _zero_arg(child, 'kind') in ('generic_name', 'generic_type'):
+            base = next((c for c in _children(child)
+                         if _zero_arg(c, 'kind') in ('identifier', 'type_identifier', 'scoped_type_identifier')), None)
             if base is not None:
                 class_name = get_text(base).strip()
                 if class_name:
@@ -856,7 +878,31 @@ def _extract_cpp_direct_init_callee(node: Any, get_text: Callable) -> Optional[s
 # `call`) or structural sub-dispatch (new_expression, the C++ misparse guard)
 # are deliberately NOT in this table — see the explicit `if` guards around the
 # dict lookup in _extract_callee.
+def _extract_dart_flat_type_callee(node: Any, get_text: Callable) -> Optional[str]:
+    """Dart `new Foo(..)` / `const Foo(..)` / `List<int>.from(..)`: flat
+    children [new|const]? type_identifier type_arguments? ('.' identifier)?
+    arguments. Returns `Foo` or `Foo.named` (generics dropped). Mirrors
+    analyzers/dart.py:_callee_name_dart_flat_type_call (BACK-1279).
+    """
+    base = named = None
+    seen_dot = False
+    for child in _children(node):
+        kind = _zero_arg(child, 'kind')
+        if kind == 'type_identifier' and base is None:
+            base = get_text(child).strip()
+        elif kind == '.':
+            seen_dot = True
+        elif kind == 'identifier' and seen_dot and named is None:
+            named = get_text(child).strip()
+    if not base:
+        return None
+    return f"{base}.{named}" if named else base
+
+
 _CALLEE_DISPATCH: Dict[str, Callable[[Any, Callable], Optional[str]]] = {
+    # Dart constructor shapes (flat, field-less; BACK-1279).
+    'constructor_invocation': _extract_dart_flat_type_callee,
+    'const_object_expression': _extract_dart_flat_type_callee,
     # PHP: $obj->method(args) — emit "<receiver>-><name>" so taxonomy patterns
     # like '->execute', '->fetch', '->prepare' can match.
     'member_call_expression': _extract_member_call_callee,

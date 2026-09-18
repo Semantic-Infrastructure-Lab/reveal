@@ -1,6 +1,6 @@
 """Ruby analyzer using tree-sitter."""
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
@@ -103,7 +103,7 @@ class RubyAnalyzer(TreeSitterAnalyzer):
     })
     _RUBY_SCOPE_NODES = frozenset({'method', 'singleton_method'})
 
-    def _implicit_calls_in_function(self, func_node) -> List[str]:
+    def _implicit_call_nodes(self, func_node) -> List[Any]:
         idents: List[tuple] = []
         bound: set = set()
         stack = list(_children(func_node))
@@ -128,11 +128,7 @@ class RubyAnalyzer(TreeSitterAnalyzer):
                 else:
                     idents.append((name, node))
             stack.extend(reversed(_children(node)))
-        out: List[str] = []
-        for name, _ in idents:
-            if name not in bound and name not in out:
-                out.append(name)
-        return out
+        return [node for name, node in idents if name not in bound]
 
     @staticmethod
     def _is_assignment_target(parent, node) -> bool:

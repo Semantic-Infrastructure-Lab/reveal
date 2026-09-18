@@ -2253,13 +2253,25 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return getattr(self, handler_name)(call_node)
         return self._callee_name_generic(call_node)
 
-    def _implicit_calls_in_function(self, func_node) -> List[str]:
-        """Hook: callee names that are not call-expression nodes (BACK-1297).
+    def _implicit_call_nodes(self, func_node) -> List[Any]:
+        """Hook: nodes that are call sites but not call-expression nodes
+        (BACK-1297/1299), one per occurrence.
 
         No-op by default — overridden in analyzers/ruby.py, where a receiver-
-        less, argument-less call (`used`) parses as a bare `identifier`.
+        less, argument-less call (`used`) parses as a bare `identifier`. Both
+        the analyzer path (names, below) and the ast:// nav path (lines) read
+        this one hook.
         """
         return []
+
+    def _implicit_calls_in_function(self, func_node) -> List[str]:
+        """Unique callee names for `_implicit_call_nodes`, in source order."""
+        names: List[str] = []
+        for node in self._implicit_call_nodes(func_node):
+            name = self._get_node_text(node)
+            if name not in names:
+                names.append(name)
+        return names
 
     def _extract_calls_in_function(self, func_node) -> List[str]:
         """Walk function body subtree and return unique callee name strings.

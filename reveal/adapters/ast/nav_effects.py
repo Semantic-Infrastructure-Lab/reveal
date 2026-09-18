@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
@@ -1785,6 +1785,7 @@ def collect_effects(
     to_line: int,
     get_text: Callable,
     language: Optional[str] = None,
+    implicit_nodes: Sequence[Any] = (),
 ) -> List[Dict[str, Any]]:
     """Return classified side-effect sites in a line range, in line order.
 
@@ -1801,7 +1802,8 @@ def collect_effects(
         via       -- 'call' or 'property'
     """
     results = []
-    for call in range_calls(func_node, from_line, to_line, get_text):
+    for call in range_calls(func_node, from_line, to_line, get_text,
+                            implicit_nodes=implicit_nodes):
         kind = classify_call(call.get('callee') or '', language)
         results.append({**call, 'kind': kind, 'via': 'call'})
     results.extend(
