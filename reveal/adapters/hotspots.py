@@ -10,19 +10,16 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, cast
+from typing import Any, Dict, Iterable, List, Optional, Set, cast
 
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
-from ..defaults import TEST_DIR_NAMES
+from ..conventions import LanguageConventions, conventions_for, family_for_path
+from ..defaults import TEST_DIR_NAMES, VENDOR_DIR_NAMES
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
-
-# Top-level test-directory candidates to scan (BACK-1199: canonical
-# vocabulary, shared with surface.py/M102 via defaults.TEST_DIR_NAMES).
-_TEST_DIR_CANDIDATES = tuple(sorted(TEST_DIR_NAMES))
 
 
 def _provenance_for_file(file_str: Optional[str], base_path: Path) -> Optional[str]:
@@ -87,34 +84,68 @@ def _camel_to_snake(name: str) -> str:
     return re.sub(r'([A-Z])', lambda m: '_' + m.group(1).lower(), name).lstrip('_')
 
 
-def _build_test_name_index(path: Path) -> Set[str]:
-    """Heuristic: collect base names covered by test files, test_* functions, and Test* classes."""
+# Directories never worth walking for tests (vendored/build output).
+_SKIP_WALK_DIRS = VENDOR_DIR_NAMES | {'target', 'build', 'dist', '__pycache__'}
+
+
+def _add_names(names: Set[str], raw: str) -> None:
+    """Index *raw* both as written and snake_cased (`MemberPromote` -> member_promote)."""
+    names.add(raw)
+    snake = _camel_to_snake(raw)
+    if snake:
+        names.add(snake)
+
+
+def _scan_test_file(names: Set[str], conv: LanguageConventions, fname: str, full: str,
+                    is_test_file: bool) -> None:
+    """Add what one file's name and (test-file or colocated) symbols say is tested."""
+    for pat in conv.test_file_patterns:
+        m = pat.match(fname)
+        if m:
+            _add_names(names, m.group(1))  # test_liquidity_sweep.py -> liquidity_sweep
+            break
+    if not (conv.test_symbol_patterns and (is_test_file or conv.colocated_test_symbols)):
+        return
+    try:
+        content = Path(full).read_text(errors='replace')
+    except OSError:
+        return
+    for pat in conv.test_symbol_patterns:
+        for m in pat.finditer(content):
+            _add_names(names, m.group(1))  # TestClassifyGuard -> classify_guard
+
+
+def _build_test_name_index(path: Path, families: Optional[Iterable[str]] = None) -> Set[str]:
+    """Heuristic: names covered by test files/symbols, per each family's conventions.
+
+    *families* limits the scan to those language families (default: Python only,
+    the historical behavior). A file counts as a test file when it sits under a
+    test directory or its name matches the family's test-file pattern, so
+    colocated layouts (Go `_test.go`, JS `*.test.ts`) are seen too (BACK-1276).
+    """
+    convs = {f: conventions_for(f) for f in (families if families is not None else ('python',))}
+    convs = {f: c for f, c in convs.items() if c.has_test_index}
     names: Set[str] = set()
-    fn_pattern = re.compile(r'^\s*def\s+test_(\w+)', re.MULTILINE)
-    cls_pattern = re.compile(r'^\s*class\s+Test(\w+)', re.MULTILINE)
-    for candidate in _TEST_DIR_CANDIDATES:
-        test_dir = path / candidate
-        if not test_dir.is_dir():
-            continue
-        for root, dirs, files in os.walk(str(test_dir)):
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
-            for fname in files:
-                if not fname.endswith('.py'):
-                    continue
-                if fname.startswith('test_'):
-                    names.add(fname[5:-3])  # test_liquidity_sweep.py → liquidity_sweep
-                try:
-                    content = Path(os.path.join(root, fname)).read_text(errors='replace')
-                    names.update(m.group(1) for m in fn_pattern.finditer(content))
-                    # TestClassifyGuard → classify_guard
-                    names.update(_camel_to_snake(m.group(1)) for m in cls_pattern.finditer(content))
-                except OSError:
-                    pass
+    if not convs:
+        return names
+    for root, dirs, files in os.walk(str(path)):
+        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in _SKIP_WALK_DIRS]
+        in_test_dir = any(part in TEST_DIR_NAMES for part in Path(root).relative_to(path).parts)
+        for fname in files:
+            conv = convs.get(family_for_path(fname))
+            if conv is None:
+                continue
+            is_test_file = in_test_dir or any(p.match(fname) for p in conv.test_file_patterns)
+            if is_test_file or conv.colocated_test_symbols:
+                _scan_test_file(names, conv, fname, os.path.join(root, fname), is_test_file)
     return names
 
 
 def _is_covered(name: str, loc: str, test_index: Set[str]) -> bool:
-    module_name = Path(loc).stem if loc else ''
+    snake = _camel_to_snake(name)
+    if snake != name and _is_covered(snake, loc, test_index):  # Go/Java CamelCase names
+        return True
+    module_name = _camel_to_snake(Path(loc).stem) if loc else ''
     bare = name.lstrip('_')
     return (
         name in test_index
@@ -167,7 +198,7 @@ def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Se
     has_coverage_info = test_index is not None
     print("\nComplex functions:")
     if has_coverage_info:
-        print("  (✅ = test found  ⚪ = no test found)")
+        print("  (✅ = test found  ⚪ = no test found  ❔ = unknown for this language)")
     for fn in fns:
         name = fn.get('name', '?')
         cx = fn.get('complexity', '?')
@@ -183,7 +214,13 @@ def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Se
             icon = '💡'
 
         if has_coverage_info:
-            cov = '✅' if _is_covered(name, loc, test_index) else '⚪'  # type: ignore[arg-type]
+            hint = fn.get('has_test_hint', ...)
+            if hint is None:
+                cov = '❔'  # language has no known test convention (BACK-1276)
+            elif hint is ...:
+                cov = '✅' if _is_covered(name, loc, test_index) else '⚪'  # type: ignore[arg-type]
+            else:
+                cov = '✅' if hint else '⚪'
             cov_str = f' {cov}'
         else:
             cov_str = ''
@@ -348,20 +385,18 @@ class HotspotsAdapter(ResourceAdapter):
             fn['provenance'] = _provenance_for_file(fn.get('file'), path)
 
         test_index: Optional[Set[str]] = None
+        unknown_families: Set[str] = set()
         if not files_only:
-            test_index = _build_test_name_index(path)
+            families = {family_for_path(fn.get('file', '')) for fn in fn_hotspots}
+            test_index = _build_test_name_index(path, families or None)
             for fn in fn_hotspots:
-                fn_name = fn.get('name', '')
-                module_name = Path(fn.get('file', '')).stem
-                bare = fn_name.lstrip('_')
-                fn['has_test_hint'] = (
-                    fn_name in test_index or bare in test_index or module_name in test_index
-                    or any(s.startswith(bare) for s in test_index)
-                    or any(
-                        bare.endswith('_' + s) or bare.startswith(s + '_') or ('_' + s + '_') in bare
-                        for s in test_index if len(s) >= 5
-                    )
-                )
+                family = family_for_path(fn.get('file', ''))
+                if conventions_for(family).has_test_index:
+                    fn['has_test_hint'] = _is_covered(fn.get('name', ''), fn.get('file', ''), test_index)
+                else:
+                    # No test convention known for this language: unknown, not "untested".
+                    fn['has_test_hint'] = None
+                    unknown_families.add(Path(fn.get('file', '')).suffix or family or '?')
         self.test_index = test_index
 
         report = {
@@ -371,12 +406,20 @@ class HotspotsAdapter(ResourceAdapter):
         }
 
         meta = self.composed_meta()
+        warnings = list(meta.get('warnings') or []) if meta else []
+        if unknown_families:
+            warnings.append({
+                'type': 'test_convention_unknown',
+                'message': 'has_test_hint is null for functions in languages with no known '
+                           'test convention (' + ', '.join(sorted(unknown_families)) + '); '
+                           'null means unknown, not untested',
+            })
         return ResultBuilder.create(
             result_type='hotspots_scan',
             source=self.path,
             contract_version=CONTRACT_VERSION,
             data=report,
-            warnings=meta.get('warnings') if meta else None,
+            warnings=warnings or None,
             errors=meta.get('errors') if meta else None,
             confidence=meta.get('confidence') if meta else None,
         )

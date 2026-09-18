@@ -87,6 +87,20 @@ class LanguageConventions:
     # when it is not stdlib. None here = no reliable stdlib rule for the language,
     # so nothing is claimed stdlib (BACK-1193: never fall back to Python's list).
     stdlib_key: Optional[Callable[[str], Optional[str]]] = None
+    # How to find which names the tests cover (hotspots `has_test_hint`, BACK-1276).
+    # Basename patterns for test files (group 1 = the module under test), and
+    # source patterns (MULTILINE, group 1 = the name under test) applied to test
+    # files. `colocated_test_symbols`: tests live inline in ordinary source files
+    # (Rust `#[cfg(test)]`), so symbol patterns run on every file of the family.
+    # No patterns = no way to tell, which callers must report as unknown, not "untested".
+    test_file_patterns: Tuple[Pattern[str], ...] = ()
+    test_symbol_patterns: Tuple[Pattern[str], ...] = ()
+    colocated_test_symbols: bool = False
+
+    @property
+    def has_test_index(self) -> bool:
+        """True if this family has any rule for attributing tests to names."""
+        return bool(self.test_file_patterns or self.test_symbol_patterns)
 
     def is_implicit_name(self, name: str) -> bool:
         """True if *name* is invoked by the language/runtime rather than called."""
@@ -195,6 +209,11 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         LanguageConventions(
             family='python',
             stdlib_key=_python_stdlib_key,
+            test_file_patterns=(re.compile(r'^test_(.+)\.py$'), re.compile(r'^(.+)_test\.py$')),
+            test_symbol_patterns=(
+                re.compile(r'^\s*(?:async\s+)?def\s+test_(\w+)', re.MULTILINE),
+                re.compile(r'^\s*class\s+Test(\w+)', re.MULTILINE),
+            ),
             builtins=PYTHON_BUILTINS,
             implicit_decorators=frozenset({'property', 'classmethod', 'staticmethod'}),
             implicit_name_pattern=re.compile(r'^__.*__$'),
@@ -210,6 +229,8 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         # (BACK-1009: 18.5% of ?uncalled hits on the VS Code corpus).
         LanguageConventions(
             family='js', implicit_names=frozenset({'constructor'}), stdlib_key=_node_stdlib_key,
+            # Jest/Vitest/Mocha test titles are free text, so only the file name is a signal.
+            test_file_patterns=(re.compile(r'^(.+)\.(?:test|spec)\.[cm]?[jt]sx?$'),),
         ),
         # BACK-1197: `initialize` is invoked by .new; the rest are Module/Class
         # hook callbacks and metaprogramming dispatch.
@@ -223,6 +244,10 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         LanguageConventions(
             family='go',
             stdlib_key=_go_stdlib_key,
+            test_file_patterns=(re.compile(r'^(.+)_test\.go$'),),
+            test_symbol_patterns=(
+                re.compile(r'^func\s+(?:Test|Benchmark|Example|Fuzz)(\w+)', re.MULTILINE),
+            ),
             implicit_names=frozenset({'main', 'init'}),
             test_name_pattern=re.compile(r'^(Test|Benchmark|Example|Fuzz)(?![a-z])'),
             test_file_suffixes=('_test.go',),
@@ -232,6 +257,10 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         LanguageConventions(
             family='rust',
             stdlib_key=_rust_stdlib_key,
+            test_symbol_patterns=(re.compile(
+                r'#\[(?:\w+::)?(?:test|rstest)\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*(?:async\s+)?fn\s+(?:test_)?(\w+)'
+            ),),
+            colocated_test_symbols=True,
             implicit_names=frozenset({'main'}),
             test_decorators=frozenset({'test', 'bench', 'rstest'}),
         ),
@@ -242,10 +271,14 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         LanguageConventions(
             family='java', test_annotation_markers=_JVM_TEST_MARKERS,
             stdlib_key=_prefix_stdlib_key('java', 'javax', 'jdk'),
+            test_file_patterns=(re.compile(r'^(.+?)Tests?\.java$'), re.compile(r'^Test(.+)\.java$')),
+            test_symbol_patterns=(re.compile(r'(?:void|fun)\s+`?test(\w+)', re.MULTILINE),),
         ),
         LanguageConventions(
             family='kotlin', test_annotation_markers=_JVM_TEST_MARKERS,
             stdlib_key=_prefix_stdlib_key('kotlin', 'java', 'javax'),
+            test_file_patterns=(re.compile(r'^(.+?)Tests?\.kt$'), re.compile(r'^Test(.+)\.kt$')),
+            test_symbol_patterns=(re.compile(r'(?:void|fun)\s+`?test(\w+)', re.MULTILINE),),
         ),
         LanguageConventions(
             family='scala', test_annotation_markers=_JVM_TEST_MARKERS,

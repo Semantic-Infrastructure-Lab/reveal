@@ -1462,7 +1462,7 @@ reveal hotspots . --format json    # JSON for CI/scripting
 reveal stats://. --hotspots
 ```
 
-**Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores. Each function shows a test-coverage indicator: ✅ (a `test_<func>` function exists in `tests/`/`test/`/`spec/`, or a `test_<module>.py` file covers the module) or ⚪ (no test match found). JSON output adds `has_test_hint: true/false` per function.
+**Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores. Each function shows a test-coverage indicator: ✅ (a `test_<func>` function exists in `tests/`/`test/`/`spec/`, or a `test_<module>.py` file covers the module) or ⚪ (no test match found). JSON output adds `has_test_hint: true/false/null` per function (`null` = no test convention known for that language).
 
 **Use case:** Identify the 10 worst files in a codebase — start technical debt work here. Output is the same data `reveal review` uses to surface hotspots in PR reviews.
 

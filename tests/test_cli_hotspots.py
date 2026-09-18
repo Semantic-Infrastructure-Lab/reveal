@@ -731,3 +731,64 @@ class TestJsonFormatDoesNotLeakAbsolutePaths(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestMultiLanguageTestIndex(unittest.TestCase):
+    """BACK-1276: has_test_hint follows each language's test conventions."""
+
+    def _index(self, files, families):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            for rel, body in files.items():
+                full = os.path.join(d, rel)
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                Path(full).write_text(body)
+            return _build_test_name_index(Path(d), families)
+
+    def test_go_colocated_test_file(self):
+        idx = self._index(
+            {'util/etcd.go': 'package util\n',
+             'util/etcd_test.go': 'package util\nfunc TestMemberPromote(t *testing.T) {}\n'},
+            {'go'})
+        self.assertIn('member_promote', idx)
+        self.assertTrue(_is_covered('MemberPromote', 'util/etcd.go', idx))
+
+    def test_go_test_symbol_outside_test_file_ignored(self):
+        idx = self._index({'a.go': 'func TestNotReally() {}\n'}, {'go'})
+        self.assertEqual(idx, set())
+
+    def test_rust_inline_test_module(self):
+        idx = self._index(
+            {'src/lib.rs': '#[cfg(test)]\nmod tests {\n    #[test]\n    fn parses_header() {}\n'
+                           '    #[tokio::test]\n    async fn test_fetch_rows() {}\n}\n'},
+            {'rust'})
+        self.assertIn('parses_header', idx)
+        self.assertIn('fetch_rows', idx)
+
+    def test_js_spec_file_name(self):
+        idx = self._index({'src/parser.spec.ts': "it('does things', () => {})\n"}, {'js'})
+        self.assertIn('parser', idx)
+
+    def test_java_test_class_and_method(self):
+        idx = self._index(
+            {'src/FooBarTest.java': 'class FooBarTest { void testParseHeader() {} }\n'}, {'java'})
+        self.assertIn('foo_bar', idx)
+        self.assertIn('parse_header', idx)
+
+    def test_python_only_by_default(self):
+        idx = self._index({'a_test.go': 'func TestX() {}\n'}, None)
+        self.assertEqual(idx, set())
+
+    def test_family_without_convention_is_not_scanned(self):
+        idx = self._index({'tests/x.rb': "def test_thing; end\n"}, {'ruby'})
+        self.assertEqual(idx, set())
+
+    def test_render_marks_unknown(self):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        fn = _fn_hotspot('foo', 12)
+        fn['has_test_hint'] = None
+        with redirect_stdout(buf):
+            _render_function_hotspots([fn], test_index=set())
+        self.assertIn('❔', buf.getvalue())

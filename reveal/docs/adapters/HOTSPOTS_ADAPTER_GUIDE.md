@@ -45,10 +45,14 @@ reveal 'hotspots://.?top=20' --format json
 `file_hotspots` is a ranked list from `stats://` (quality score, hotspot
 score, issues, line count). `function_hotspots` is a ranked list from
 `ast://`'s complexity filter, each annotated with a heuristic
-`has_test_hint` boolean — a name-matching guess (does a `test_<name>`
-function or `test_<module>.py` file exist?), not real coverage data.
+`has_test_hint` — a name-matching guess (does a test for this name exist,
+by the language's own convention: Python `test_<name>`, Go `TestName` in
+`_test.go`, Rust `#[test] fn`, `*.test.ts`/`*.spec.ts` files, JUnit
+`FooTest`/`testBar`?), not real coverage data. It is `null` (unknown, not
+untested) for languages with no known test convention, and the result carries
+a `test_convention_unknown` warning.
 
-Text output shows a coverage overlay (✅ = test found, ⚪ = no test found)
+Text output shows a coverage overlay (✅ = test found, ⚪ = no test found, ❔ = unknown for this language)
 next to each complex function; this is recomputed from the same heuristic
 at render time and is not part of the JSON contract.
 

@@ -453,7 +453,7 @@ Complex functions in hotspot output include a test-coverage indicator:
 - **✅** — a `test_<func>` function exists in `tests/`/`test/`/`spec/`, **or** a `test_<module>.py` file covers the module (e.g. `test_liquidity_sweep.py` covers any function in `liquidity_sweep.py`)
 - **⚪** — neither match found; the function may still be tested indirectly
 
-JSON output (`--format json`) includes `has_test_hint: true/false` per function, enabling scripted filtering:
+JSON output (`--format json`) includes `has_test_hint: true/false/null` per function (`null` = unknown for that language, not untested), enabling scripted filtering:
 
 ```bash
 reveal hotspots . --format json | jq '.function_hotspots[] | select(.has_test_hint == false and .complexity > 15)'
