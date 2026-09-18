@@ -292,3 +292,34 @@ class TestEntryPointDecorators:
         from reveal.conventions import conventions_for
         assert conventions_for('java').is_implicit_name('main')
         assert conventions_for('csharp').is_implicit_name('Main')
+
+
+class TestEntryPointAndReexportFiles:
+    """BACK-1287: entry-point / barrel-file conventions are per language."""
+
+    def test_pack_entry_point_names_cover_more_languages(self):
+        from reveal.adapters.pack import _is_entry_point_name, _is_entry_config_file
+        for n in ('Program.cs', 'Application.java', 'main.swift', 'index.php', 'main.cpp', 'lib.rs', 'main.py'):
+            assert _is_entry_point_name(n), n
+        assert not _is_entry_point_name('helpers.py')
+        for n in ('go.mod', 'pom.xml', 'build.gradle.kts', 'Gemfile', 'composer.json',
+                  'CMakeLists.txt', 'Package.swift', 'App.csproj'):
+            assert _is_entry_config_file(n), n
+
+    def test_makefile_and_dockerfile_match_despite_case(self):
+        # _compute_priority lowercases the name; the set used to hold 'Makefile'.
+        from reveal.adapters.pack import _is_entry_config_file
+        assert _is_entry_config_file('makefile') and _is_entry_config_file('Dockerfile')
+
+    def test_makefile_earns_root_bonus(self, tmp_path):
+        from reveal.adapters.pack import _compute_priority
+        mk = tmp_path / 'Makefile'
+        mk.write_text('all:\n\techo hi\n')
+        assert _compute_priority(mk, mk.relative_to(tmp_path), None) >= 10.0
+
+    def test_reexport_barrels_excluded_from_core_abstractions(self):
+        from reveal.adapters.architecture import _is_reexport_file
+        for f in ('pkg/__init__.py', 'src/index.ts', 'src/net/mod.rs', 'pkg/doc.go'):
+            assert _is_reexport_file(f), f
+        for f in ('pkg/core.py', 'src/lib.rs', 'src/main.ts'):
+            assert not _is_reexport_file(f), f

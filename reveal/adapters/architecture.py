@@ -21,6 +21,7 @@ from reveal.capabilities import scope_dict_for_path
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..conventions import conventions_for_path
 from ..registry import language_for_extension
 from ..utils import print_json_result
 from ..utils.path_utils import is_test_path
@@ -279,8 +280,15 @@ def _render_entry_points(entry_points: List[Dict], top: int, base_path: Path) ->
     print()
 
 
+def _is_reexport_file(file_str: str) -> bool:
+    """Barrel/re-export files (`__init__.py`, `index.ts`, `mod.rs`, `doc.go`) hold
+    no logic of their own, so they must not dominate 'Core Abstractions' (BACK-1287)."""
+    name = Path(file_str).name
+    return name in conventions_for_path(name).reexport_files
+
+
 def _render_core_abstractions(core: List[Dict], top: int, base_path: Path) -> None:
-    ranked = [e for e in core if e.get('fan_in', 0) > 0 and Path(e['file']).name != '__init__.py'][:top]
+    ranked = [e for e in core if e.get('fan_in', 0) > 0 and not _is_reexport_file(e['file'])][:top]
     if not ranked:
         return
     print("Core Abstractions  (most imported)")

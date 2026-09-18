@@ -18,19 +18,14 @@ from reveal.reveal_types import CONTRACT_VERSION
 from reveal.registry import get_code_extensions
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..conventions import conventions_for_path
 from ..utils import print_json_result
 from ..utils.path_utils import classify_path_provenance, is_skippable_dir, to_posix
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
-# Entry point filename patterns (highest priority)
-_ENTRY_POINT_PATTERNS = {
-    'main.py', 'app.py', 'server.py', 'index.py', 'cli.py', 'run.py',
-    'wsgi.py', 'asgi.py',
-    'main.js', 'index.js', 'app.js', 'server.js',
-    'main.ts', 'index.ts', 'app.ts',
-    'main.go', 'main.rb', 'main.rs',
-}
+# Entry point filename patterns (highest priority) live per language in
+# conventions.LanguageConventions.entry_point_files (BACK-1287).
 # __init__.py excluded from unconditional entry points — most are near-empty;
 # only promote them if they have substantial content (scored by size below)
 
@@ -41,8 +36,23 @@ _ENTRY_POINT_PATTERNS = {
 # code). These always keep the full entry-point bonus regardless of size —
 # a small package.json/Cargo.toml is still a unique, legitimate signal.
 _ENTRY_POINT_CONFIG_FILES = {
-    'Makefile', 'Dockerfile', 'pyproject.toml', 'package.json', 'Cargo.toml',
+    'makefile', 'dockerfile', 'pyproject.toml', 'package.json', 'cargo.toml',
+    'go.mod', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'gemfile',
+    'composer.json', 'cmakelists.txt', 'package.swift',
 }
+
+
+def _is_entry_config_file(name: str) -> bool:
+    """Project manifest/build file (matched case-insensitively -- BACK-1287 fixed
+    'Makefile'/'Dockerfile' never matching the lowercased name)."""
+    lower = name.lower()
+    return lower in _ENTRY_POINT_CONFIG_FILES or lower.endswith('.csproj')
+
+
+def _is_entry_point_name(name: str) -> bool:
+    """Convention-based entry-point basename for the file's own language."""
+    lower = name.lower()
+    return lower in conventions_for_path(lower).entry_point_files
 
 _APPROX_CHARS_PER_TOKEN = 4
 
@@ -377,7 +387,7 @@ def _collect_candidates(
     # not a nested package's — keep the full bonus.
     min_depth_by_name: Dict[str, int] = {}
     for f in files:
-        if f.name in _ENTRY_POINT_CONFIG_FILES:
+        if _is_entry_config_file(f.name):
             depth = len(f.relative_to(path).parts)
             if depth < min_depth_by_name.get(f.name, depth + 1):
                 min_depth_by_name[f.name] = depth
@@ -461,9 +471,9 @@ def _compute_priority(
     # of these per sub-package/plugin too — a non-root instance (caller has
     # already determined a shallower same-named file exists) falls through
     # to ordinary scoring instead of claiming the same ONE-per-project bonus.
-    if name in _ENTRY_POINT_CONFIG_FILES and is_root_config:
+    if _is_entry_config_file(name) and is_root_config:
         score += 10.0
-    elif name in _ENTRY_POINT_PATTERNS:
+    elif _is_entry_point_name(name):
         file_size = path.stat().st_size
         if file_size > 2000:
             score += 10.0
@@ -537,8 +547,8 @@ def _compute_priority(
     if (
         path.suffix.lower() in _DATA_MARKUP_EXTENSIONS
         and fan_in == 0
-        and name not in _ENTRY_POINT_PATTERNS
-        and not (name in _ENTRY_POINT_CONFIG_FILES and is_root_config)
+        and not _is_entry_point_name(name)
+        and not (_is_entry_config_file(name) and is_root_config)
     ):
         score -= 2.0
 

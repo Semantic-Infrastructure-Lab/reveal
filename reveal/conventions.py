@@ -104,6 +104,11 @@ class LanguageConventions:
     colocated_test_symbols: bool = False
     # Exact basenames that are test infrastructure though no pattern matches (`conftest.py`).
     test_file_names: FrozenSet[str] = frozenset()
+    # Lowercase basenames a runtime/build tool starts from (pack's entry-point bonus,
+    # BACK-1287), and files that only re-export (barrels), excluded from "core
+    # abstractions" rankings in architecture://.
+    entry_point_files: FrozenSet[str] = frozenset()
+    reexport_files: FrozenSet[str] = frozenset()
 
     def is_test_basename(self, name: str) -> bool:
         """True if file *name* is a test file by this family's own naming convention."""
@@ -256,6 +261,11 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
     c.family: c for c in (
         LanguageConventions(
             family='python',
+            entry_point_files=frozenset({
+                'main.py', 'app.py', 'server.py', 'index.py', 'cli.py', 'run.py',
+                'wsgi.py', 'asgi.py', '__main__.py',
+            }),
+            reexport_files=frozenset({'__init__.py'}),
             stdlib_key=_python_stdlib_key,
             test_file_patterns=(re.compile(r'^test_(.+)\.py$'), re.compile(r'^(.+)_test\.py$')),
             test_file_names=frozenset({'conftest.py'}),
@@ -279,6 +289,13 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         # (BACK-1009: 18.5% of ?uncalled hits on the VS Code corpus).
         LanguageConventions(
             family='js', implicit_names=frozenset({'constructor'}), stdlib_key=_node_stdlib_key,
+            entry_point_files=frozenset({
+                'main.js', 'index.js', 'app.js', 'server.js',
+                'main.ts', 'index.ts', 'app.ts', 'server.ts',
+            }),
+            reexport_files=frozenset({
+                'index.js', 'index.jsx', 'index.mjs', 'index.ts', 'index.tsx',
+            }),
             entry_point_decorators=JS_ENTRY_POINT_DECORATORS,
             # Jest/Vitest/Mocha test titles are free text, so only the file name is a signal.
             test_file_patterns=(re.compile(r'^(.+)\.(?:test|spec)\.[cm]?[jt]sx?$'),),
@@ -287,6 +304,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         # hook callbacks and metaprogramming dispatch.
         LanguageConventions(
             family='ruby',
+            entry_point_files=frozenset({'main.rb', 'config.ru'}),
             implicit_names=frozenset({
                 'initialize', 'included', 'extended', 'inherited',
                 'method_missing', 'respond_to_missing?',
@@ -299,6 +317,8 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         # the prefix must not start with a lowercase letter (`Testable` is not a test).
         LanguageConventions(
             family='go',
+            entry_point_files=frozenset({'main.go'}),
+            reexport_files=frozenset({'doc.go'}),
             stdlib_key=_go_stdlib_key,
             test_file_patterns=(re.compile(r'^(.+)_test\.go$'),),
             test_symbol_patterns=(
@@ -312,6 +332,8 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         # reduced to the bare last path segment by the calls adapter).
         LanguageConventions(
             family='rust',
+            entry_point_files=frozenset({'main.rs', 'lib.rs'}),
+            reexport_files=frozenset({'mod.rs'}),
             entry_point_decorators=PYTHON_ENTRY_POINT_DECORATORS,
             stdlib_key=_rust_stdlib_key,
             test_symbol_patterns=(re.compile(
@@ -323,16 +345,22 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             implicit_names=frozenset({'main'}),
             test_decorators=frozenset({'test', 'bench', 'rstest'}),
         ),
-        LanguageConventions(family='c', test_file_patterns=(
-            re.compile(r'^(.+)_tests\.(?:cpp|cc|cxx|hpp|hxx|hh|h)$'),
-        )),
+        LanguageConventions(
+            family='c',
+            entry_point_files=frozenset({'main.c', 'main.cpp', 'main.cc'}),
+            test_file_patterns=(re.compile(r'^(.+)_tests\.(?:cpp|cc|cxx|hpp|hxx|hh|h)$'),),
+        ),
+        LanguageConventions(family='php', entry_point_files=frozenset({'index.php'})),
+        LanguageConventions(family='swift', entry_point_files=frozenset({'main.swift'})),
         LanguageConventions(
             family='csharp', test_annotation_markers=_CSHARP_TEST_MARKERS,
+            entry_point_files=frozenset({'program.cs', 'startup.cs'}),
             implicit_names=frozenset({'Main'}),
             stdlib_key=_prefix_stdlib_key('System'),
         ),
         LanguageConventions(
             family='java', test_annotation_markers=_JVM_TEST_MARKERS,
+            entry_point_files=frozenset({'main.java', 'app.java', 'application.java'}),
             implicit_names=frozenset({'main'}),
             entry_point_decorators=JVM_ENTRY_POINT_DECORATORS,
             stdlib_key=_prefix_stdlib_key('java', 'javax', 'jdk'),
@@ -342,6 +370,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         ),
         LanguageConventions(
             family='kotlin', test_annotation_markers=_JVM_TEST_MARKERS,
+            entry_point_files=frozenset({'main.kt', 'application.kt'}),
             implicit_names=frozenset({'main'}),
             entry_point_decorators=JVM_ENTRY_POINT_DECORATORS,
             stdlib_key=_prefix_stdlib_key('kotlin', 'java', 'javax'),
