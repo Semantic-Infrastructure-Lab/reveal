@@ -12,40 +12,21 @@ their own copy.
 Buckets:
     'internal' -- syntactically relative, resolved to a real in-tree file
                   (BACK-1193), or a name matching a local package directory.
-    'stdlib'   -- matched a language-appropriate stdlib list (Python's
-                  sys.stdlib_module_names, or a syntactic marker like Dart's
-                  'dart:' prefix that needs no list).
+    'stdlib'   -- matched the language's ``stdlib_key`` rule from the
+                  conventions profile (Python's sys.stdlib_module_names, Go's
+                  closed root list, Rust std/core/alloc, java./javax., Node
+                  builtins, ...) or a syntactic marker like Dart's 'dart:'.
+                  A language with no rule never yields 'stdlib'.
     'external' -- did not resolve and isn't stdlib; may be a genuine
                   third-party package OR an unresolved local (missing
                   file_index coverage, monorepo/load-path boundary) -- never
                   claim positively which.
     'skip'     -- empty module string, nothing to classify.
 """
-import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
-# Python stdlib module names (Python 3.10+, with fallback set for older versions)
-try:
-    _STDLIB: frozenset = getattr(sys, 'stdlib_module_names', frozenset())
-except Exception:
-    # sys.stdlib_module_names is 3.10+; any lookup failure falls back to
-    # _STDLIB_FALLBACK below rather than leaving stdlib detection empty.
-    _STDLIB = frozenset()
-
-# Common stdlib top-level names as fallback
-_STDLIB_FALLBACK = frozenset({
-    'abc', 'ast', 'asyncio', 'builtins', 'collections', 'contextlib',
-    'copy', 'dataclasses', 'datetime', 'enum', 'functools', 'gc',
-    'glob', 'hashlib', 'http', 'importlib', 'inspect', 'io', 'itertools',
-    'json', 'logging', 'math', 'multiprocessing', 'operator', 'os',
-    'pathlib', 'pickle', 'platform', 're', 'shutil', 'signal', 'socket',
-    'sqlite3', 'string', 'struct', 'subprocess', 'sys', 'tempfile',
-    'threading', 'time', 'traceback', 'typing', 'unittest', 'urllib',
-    'uuid', 'warnings', 'weakref', 'zipfile', 'zlib',
-})
-
-KNOWN_PYTHON_STDLIB = _STDLIB | _STDLIB_FALLBACK
+from ...conventions import conventions_for
 
 # Public field values for imports:// records' 'classification' field
 # (BACK-1190). Distinct from the internal bucket names above -- these are
@@ -82,7 +63,7 @@ def local_package_names(base_path: Path) -> frozenset:
 
 
 def classify_module(
-    raw_module: str, is_python_file: bool, local_names: frozenset,
+    raw_module: str, family: str, local_names: frozenset,
 ) -> Tuple[str, Optional[str]]:
     """Classify one non-relative, unresolved import (BACK-1193).
 
@@ -97,17 +78,21 @@ def classify_module(
         return ('skip', None)  # nothing to classify
     if module in local_names:
         return ('internal', None)
-    if is_python_file and module in KNOWN_PYTHON_STDLIB:
-        return ('stdlib', module)
+    stdlib_key = conventions_for(family).stdlib_key
+    key = stdlib_key(raw_module) if stdlib_key else None
+    if key:
+        return ('stdlib', key)
     return ('external', module)
 
 
 def classify_import(
     module: str, is_relative: bool, resolved: Optional[str],
-    is_python_file: bool, local_names: frozenset,
+    family: str, local_names: frozenset,
     is_intra: Optional[bool] = None,
 ) -> str:
     """Classify one import record into the public 'classification' values.
+
+    ``family`` is the language family slug (``conventions.family_for_path``).
 
     ``resolved``/``is_relative`` (BACK-1193 resolution truth) take priority
     over any name-based guess -- a resolved in-tree file is 'intra_project'
@@ -127,7 +112,7 @@ def classify_import(
     """
     if is_relative or resolved:
         return INTRA_PROJECT
-    bucket, _key = classify_module(module or '', is_python_file, local_names)
+    bucket, _key = classify_module(module or '', family, local_names)
     if bucket == 'external' and is_intra is True:
         return INTRA_PROJECT
     return _BUCKET_TO_CLASSIFICATION[bucket]

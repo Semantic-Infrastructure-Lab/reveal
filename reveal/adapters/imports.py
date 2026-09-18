@@ -26,6 +26,7 @@ from ..core import disk_cache
 from ..utils import print_json_result
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.classify import classify_import, local_package_names
+from ..conventions import family_for_path
 from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
@@ -1730,7 +1731,7 @@ class ImportsAdapter(ResourceAdapter):
             # used as a fallback classifier for another language (BACK-1193).
             'classification': classify_import(
                 stmt.module_name, stmt.is_relative, resolved,
-                str(stmt.file_path).endswith('.py'), self._get_local_names(),
+                family_for_path(str(stmt.file_path)), self._get_local_names(),
                 is_intra=is_intra,
             ),
         }

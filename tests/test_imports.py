@@ -1014,27 +1014,27 @@ class TestClassifyImportIsIntra:
     def test_is_intra_true_overrides_heuristic(self):
         assert classify_import(
             'some.external.looking.Name', is_relative=False, resolved=None,
-            is_python_file=False, local_names=frozenset(), is_intra=True,
+            family='', local_names=frozenset(), is_intra=True,
         ) == 'intra_project'
 
     def test_is_intra_false_maps_to_unresolved(self):
         assert classify_import(
             'some.module', is_relative=False, resolved=None,
-            is_python_file=False, local_names=frozenset(), is_intra=False,
+            family='', local_names=frozenset(), is_intra=False,
         ) == 'unresolved'
 
     def test_is_intra_none_falls_through_to_heuristic(self):
         # local_names heuristic alone would classify this as internal.
         assert classify_import(
             'mypkg.sub', is_relative=False, resolved=None,
-            is_python_file=False, local_names=frozenset({'mypkg'}), is_intra=None,
+            family='', local_names=frozenset({'mypkg'}), is_intra=None,
         ) == 'intra_project'
 
     def test_resolution_truth_still_wins_over_is_intra(self):
         # resolved/is_relative are settled before is_intra is even consulted.
         assert classify_import(
             'anything', is_relative=True, resolved=None,
-            is_python_file=False, local_names=frozenset(), is_intra=False,
+            family='', local_names=frozenset(), is_intra=False,
         ) == 'intra_project'
 
 

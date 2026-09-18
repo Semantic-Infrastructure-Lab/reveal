@@ -19,6 +19,7 @@ from ..analyzers.imports.classify import (
     classify_module as _classify_module,
     local_package_names as _local_package_names,
 )
+from ..conventions import family_for_path
 from ..utils import print_json_result
 from ..utils.path_utils import _language_for_path
 from ..utils.query import parse_query_params
@@ -85,7 +86,7 @@ def _relativize_deps_paths(
 
 
 def _tally_import(
-    imp: Dict[str, Any], is_python_file: bool, local_names: frozenset,
+    imp: Dict[str, Any], family: str, local_names: frozenset,
     external_counts: Counter, stdlib_counts: Counter,
     external_languages: Optional[Dict[str, set]] = None,
     language: Optional[str] = None,
@@ -99,7 +100,7 @@ def _tally_import(
     """
     if imp.get('is_relative') or imp.get('resolved'):
         return True  # syntactically relative, or resolved in-tree (BACK-1193)
-    bucket, key = _classify_module(imp.get('module') or '', is_python_file, local_names)
+    bucket, key = _classify_module(imp.get('module') or '', family, local_names)
     if bucket == 'external' and imp.get('classification') == 'intra_project':
         # BACK-1236: imports://'s own is_intra_project_import verdict (BACK-1234,
         # declared-namespace matching for Go/C#/Java/Kotlin/PHP) upgraded this
@@ -148,11 +149,11 @@ def _analyse_imports(files: Dict[str, List[Dict[str, Any]]], base_path: Path) ->
             continue
         importer_counts[filepath] += len(imports)
         total_imports += len(imports)
-        is_python_file = filepath.endswith('.py')
+        family = family_for_path(filepath)
         language = _language_for_path(Path(filepath))
         for imp in imports:
             if _tally_import(
-                imp, is_python_file, local_names, external_counts, stdlib_counts,
+                imp, family, local_names, external_counts, stdlib_counts,
                 external_languages=external_languages, language=language,
             ):
                 relative_count += 1

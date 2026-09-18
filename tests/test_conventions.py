@@ -151,3 +151,51 @@ class TestDecoratorBareNames:
     ])
     def test_bare_names(self, raw, bare):
         assert _get_decorator_names({'decorators': [raw]}) == {bare}
+
+
+class TestStdlibKey:
+    """BACK-1275: per-language stdlib classification via conventions.stdlib_key."""
+
+    def _classify(self, module, family):
+        from reveal.analyzers.imports.classify import classify_module
+        return classify_module(module, family, frozenset())
+
+    def test_go_stdlib_and_third_party(self):
+        assert self._classify('net/http', 'go') == ('stdlib', 'net/http')
+        assert self._classify('fmt', 'go') == ('stdlib', 'fmt')
+        assert self._classify('k8s.io/client-go/kubernetes', 'go')[0] == 'external'
+        # A dotless local module path is not stdlib.
+        assert self._classify('myapp/pkg', 'go')[0] == 'external'
+
+    def test_rust_std_core_alloc(self):
+        for mod in ('std::io::Read', 'core::fmt', 'alloc::vec::Vec'):
+            assert self._classify(mod, 'rust')[0] == 'stdlib'
+        assert self._classify('serde::Serialize', 'rust')[0] == 'external'
+
+    def test_jvm_namespaces(self):
+        assert self._classify('java.util.List', 'java') == ('stdlib', 'java')
+        assert self._classify('javax.swing.JFrame', 'java')[0] == 'stdlib'
+        assert self._classify('org.junit.Test', 'java')[0] == 'external'
+        assert self._classify('kotlin.collections.List', 'kotlin')[0] == 'stdlib'
+        assert self._classify('kotlinx.coroutines.Flow', 'kotlin')[0] == 'external'
+
+    def test_node_builtins(self):
+        assert self._classify('fs', 'js') == ('stdlib', 'fs')
+        assert self._classify('node:path', 'js') == ('stdlib', 'path')
+        assert self._classify('fs/promises', 'js') == ('stdlib', 'fs')
+        assert self._classify('react', 'js')[0] == 'external'
+
+    def test_csharp_system(self):
+        assert self._classify('System.Collections.Generic', 'csharp')[0] == 'stdlib'
+        assert self._classify('Newtonsoft.Json', 'csharp')[0] == 'external'
+
+    def test_python_stdlib_not_applied_to_other_languages(self):
+        # BACK-1193: `json`/`socket` in Ruby must not read as Python stdlib.
+        assert self._classify('json', 'ruby')[0] == 'external'
+        assert self._classify('json', 'python') == ('stdlib', 'json')
+
+    def test_unknown_family_claims_no_stdlib(self):
+        assert self._classify('os', '')[0] == 'external'
+
+    def test_dart_marker_is_family_independent(self):
+        assert self._classify('dart:async', 'dart') == ('stdlib', 'dart:async')
