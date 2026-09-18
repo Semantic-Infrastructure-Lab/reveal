@@ -46,8 +46,17 @@ CASES = [
      {'helper', 'b', 'Foo', 'c'}),
     ('.rs', 'rust', "fn f(){ helper(); a.b(); Foo::new(); x::<u32>(); }",
      {'helper', 'b', 'new', 'x'}),
-    ('.dart', 'dart', "void f(){ helper(); a.b(); new Foo(); const Bar(1); a..c(); }",
-     {'helper', 'b', 'Foo', 'Bar', 'c'}),
+    # super./this. receivers: `.member` is a bare sibling, not a `selector` (was `?`).
+    ('.dart', 'dart', "void f(){ helper(); a.b(); new Foo(); const Bar(1); a..c(); super.initState(); this.z(); }",
+     {'helper', 'b', 'Foo', 'Bar', 'c', 'initState', 'z'}),
+    # Swift operators share `infix_expression` with Scala calls but are not calls.
+    ('.swift', 'swift', "func f(a: Int, b: Int) { if a != b { g(a) }; let c = a |> h; let d = a >= b; foo(a) }",
+     {'g', 'foo'}),
+    # Kotlin annotations are `constructor_invocation` nodes (a Dart call kind) but not calls.
+    ('.kt', 'kotlin', "@Suppress(\"x\") fun f() { helper(); a.b() }",
+     {'helper', 'b'}),
+    ('.scala', 'scala', "object O { def f() = { helper(); a.b(1); new Foo(); x foo y } }",
+     {'helper', 'b', 'Foo', 'foo'}),
 ]
 
 

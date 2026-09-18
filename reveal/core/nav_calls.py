@@ -230,6 +230,21 @@ def range_calls(
     return results
 
 
+_DART_MEMBER_SELECTORS = ('unconditional_assignable_selector', 'conditional_assignable_selector')
+
+
+def _dart_extend_receiver(base_parts: List[str], member_node: Any, get_text: Callable) -> List[str]:
+    """Append a `.member` (or `?.member`) selector to the callee text so far;
+    an index selector (`a[0]`) ends the chain."""
+    inner_sub = _children(member_node)
+    if inner_sub and _zero_arg(inner_sub[0], 'kind') == 'index_selector':
+        return []
+    member = get_text(inner_sub[-1]).strip() if inner_sub else ''
+    if not member:
+        return []
+    return base_parts + [f'.{member}'] if base_parts else [f'.{member}']
+
+
 def _extract_dart_selector_calls(children: List[Any], get_text: Callable) -> List[Dict[str, Any]]:
     """Reconstruct call sites from Dart's flat identifier+selector siblings.
 
@@ -240,13 +255,21 @@ def _extract_dart_selector_calls(children: List[Any], get_text: Callable) -> Lis
     `.member` selectors, and emit one entry per `argument_part` selector.
     Chained calls (whose callee text was reset by a prior call) collapse to
     `.member`, mirroring every other language's chained-call convention.
+
+    The receiver may be an `identifier`, `this` or `super`, and after `this` /
+    `super` the `.member` is a BARE sibling (no `selector` wrapper) -- so
+    `super.initState()` had no callee at all and rendered as `?` (found by the
+    corpus agreement sweep; mirrors analyzers/dart.py's `_dart_qualifier_in`).
     """
     results: List[Dict[str, Any]] = []
     base_parts: List[str] = []
     for child in children:
         kind = _zero_arg(child, 'kind')
-        if kind == 'identifier':
+        if kind in ('identifier', 'this', 'super'):
             base_parts = [get_text(child)]
+            continue
+        if kind in _DART_MEMBER_SELECTORS:
+            base_parts = _dart_extend_receiver(base_parts, child, get_text)
             continue
         if kind != 'selector':
             base_parts = []
@@ -262,13 +285,8 @@ def _extract_dart_selector_calls(children: List[Any], get_text: Callable) -> Lis
             first_arg, has_more = _extract_first_arg(inner, get_text)
             results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
             base_parts = []
-        elif inner_kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
-            inner_sub = _children(inner)
-            if inner_sub and _zero_arg(inner_sub[0], 'kind') == 'index_selector':
-                base_parts = []
-            else:
-                member = get_text(inner_sub[-1]).strip() if inner_sub else ''
-                base_parts = (base_parts + [f'.{member}']) if base_parts and member else ([f'.{member}'] if member else [])
+        elif inner_kind in _DART_MEMBER_SELECTORS:
+            base_parts = _dart_extend_receiver(base_parts, inner, get_text)
         else:
             base_parts = []
     return results
@@ -729,7 +747,14 @@ def _extract_scala_infix_callee(node: Any, get_text: Callable) -> Optional[str]:
     `xs filterNot q`. The `operator` field is the method name — an
     `identifier` (alphabetic infix) or `operator_identifier` (symbolic).
     Emit the bare name. Mirrors treesitter.py:_callee_name_scala_infix
-    (BACK-746)."""
+    (BACK-746).
+
+    Swift shares the `infix_expression` kind but its operators (`a != b`,
+    `x |> f`) are not calls and use an `op` field, not `operator` -- returning
+    None keeps them out of --calls/--sideeffects, as the analyzer path does
+    (corpus agreement sweep: 121 spurious Swift operator callees)."""
+    if node.child_by_field_name('op') is not None:
+        return None
     op = node.child_by_field_name('operator')
     if op is not None:
         text = get_text(op).strip()

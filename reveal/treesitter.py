@@ -11,6 +11,7 @@ from .complexity import (
     calculate_complexity_and_depth,
     _DECISION_TYPES,
     _NESTING_TYPES,
+    _CASE_TOKEN_PARENTS,
     _KEYWORD_PAIRS,
 )
 from .core import disk_cache
@@ -2360,8 +2361,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 if name and name not in seen_calls:
                     calls.append(name)
                     seen_calls.add(name)
-            if kind in _DECISION_TYPES and (parent_kind is None or (parent_kind, kind) not in _KEYWORD_PAIRS):
-                decision_count += 1
+            if kind in _DECISION_TYPES:
+                if parent_kind is None or (parent_kind, kind) not in _KEYWORD_PAIRS:
+                    decision_count += 1
+            elif kind == 'case' and parent_kind in _CASE_TOKEN_PARENTS:
+                decision_count += 1  # Java/C#/Dart arms: see complexity._CASE_TOKEN_PARENTS
 
             if kind in FUNCTION_NODE_TYPES:
                 continue

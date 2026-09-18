@@ -66,6 +66,15 @@ _DECISION_TYPES = frozenset({
     'expression_case', 'type_case', 'communication_case',
 })
 
+# Java/C#/Dart have no dedicated arm node that is also a decision kind: their
+# `case` arms exist only as a bare `case` keyword token under one of these
+# parents (`default` is a different token kind, so it stays uncounted). Bare
+# `case` is otherwise NOT a decision (BACK-1289: it double-counted JS/Python
+# arms and Ruby's container), so count it only in these contexts. Removing it
+# outright made a 2-case Java/C#/Dart switch score 1 -- found by the corpus
+# complexity sweep, not by unit tests.
+_CASE_TOKEN_PARENTS = frozenset({'switch_label', 'switch_section', 'case_builtin'})
+
 _NESTING_TYPES = frozenset({
     'if_statement', 'if_expression', 'if', 'IfStatement',
     'unless',  # Ruby block `unless … end` nests; the modifiers (MODIFIER_NODES) do not
@@ -136,7 +145,10 @@ def calculate_complexity_and_depth(node) -> tuple:
             max_depth = depth
         for child in _children(n):
             child_type = _zero_arg(child, 'kind')
-            if child_type in decision_types and (n_type is None or (n_type, child_type) not in keyword_pairs):
+            if child_type in decision_types:
+                if n_type is None or (n_type, child_type) not in keyword_pairs:
+                    decision_count += 1
+            elif child_type == 'case' and n_type in _CASE_TOKEN_PARENTS:
                 decision_count += 1
             child_depth = depth + 1 if child_type in nesting_types else depth
             stack.append((child, child_type, child_depth))

@@ -764,6 +764,12 @@ def test_ruby_nested_def_bare_calls_stay_in_own_scope(tmp_path):
     ('.js', "function f(x){ switch(x){ case 1: a(); break; case 2: b(); break; } }", 3),
     ('.rb', "def f(x)\n  case x\n  when 1 then 1\n  when 2 then 2\n  end\nend\n", 3),
     ('.py', "def f(x):\n  match x:\n    case 1: pass\n    case 2: pass\n", 4),
+    # Java/C#/Dart arms exist only as a bare `case` token under a switch_label /
+    # switch_section / case_builtin parent; removing bare `case` (BACK-1289)
+    # scored a 2-case switch 1 until _CASE_TOKEN_PARENTS restored them.
+    ('.java', "class A { int f(int x){ switch(x){ case 1: return 1; case 2: return 2; default: return 0; } } }", 3),
+    ('.cs', "class A { int F(int x){ switch(x){ case 1: return 1; case 2: return 2; default: return 0; } } }", 3),
+    ('.dart', "int f(int x){ switch(x){ case 1: return 1; case 2: return 2; default: return 0; } }", 3),
     # BACK-1298: Go expression/type/select arms count; `default` does not.
     ('.go', "package p\nfunc f(x int) int {\n\tswitch x {\n\tcase 1:\n\t\treturn 1\n\tcase 2:\n\t\treturn 2\n\tdefault:\n\t\treturn 0\n\t}\n}\n", 3),
     ('.go', "package p\nfunc f(v interface{}) int {\n\tswitch v.(type) {\n\tcase int:\n\t\treturn 1\n\tcase string:\n\t\treturn 2\n\t}\n\treturn 0\n}\n", 3),
