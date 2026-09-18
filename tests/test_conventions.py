@@ -270,3 +270,25 @@ def test_rust_trait_impl_methods_flagged(tmp_path):
     assert funcs['fmt'].get('trait_impl') is True
     assert 'trait_impl' not in funcs['plain']
     assert 'trait_impl' not in funcs.get('nested', {})
+
+
+class TestEntryPointDecorators:
+    """BACK-1273: framework entry-point decorators are per-language, case-sensitive."""
+
+    def test_nestjs_and_spring_are_entry_points(self):
+        from reveal.conventions import conventions_for
+        assert 'Get' in conventions_for('js').entry_point_decorators
+        assert 'GetMapping' in conventions_for('java').entry_point_decorators
+        assert 'Override' in conventions_for('java').entry_point_decorators
+
+    def test_python_verbs_stay_python_and_rust(self):
+        from reveal.conventions import conventions_for
+        assert 'route' in conventions_for('python').entry_point_decorators
+        assert 'get' in conventions_for('rust').entry_point_decorators
+        assert 'route' not in conventions_for('java').entry_point_decorators
+        assert conventions_for('go').entry_point_decorators == frozenset()
+
+    def test_java_main_is_implicit(self):
+        from reveal.conventions import conventions_for
+        assert conventions_for('java').is_implicit_name('main')
+        assert conventions_for('csharp').is_implicit_name('Main')

@@ -67,6 +67,9 @@ class LanguageConventions:
     builtins: FrozenSet[str] = frozenset()
     # Decorators/annotations that make the runtime dispatch a function implicitly.
     implicit_decorators: FrozenSet[str] = frozenset()
+    # Framework route/handler/scheduler decorators (bare names, case-sensitive) that
+    # register a function with a framework; it is invoked by dispatch, not a call.
+    entry_point_decorators: FrozenSet[str] = frozenset()
     # Definition names invoked by the language/runtime, never by a call expression.
     implicit_names: FrozenSet[str] = frozenset()
     # Same, by pattern (Python `__dunder__`).
@@ -134,6 +137,39 @@ class LanguageConventions:
             return not self.test_file_suffixes or file_path.endswith(self.test_file_suffixes)
         return False
 
+
+# Framework entry-point decorators, by ecosystem (BACK-1265, BACK-1273).
+# Python: HTTP verbs (FastAPI, Flask, Sanic, Starlette, aiohttp, Bottle), error/lifecycle
+# handlers, CLI (Click, Typer), task queues (Celery, RQ, Huey, APScheduler), event/signal
+# dispatch, BDD step registration. Rust attribute macros (actix/rocket `#[get("/")]`) share
+# the lowercase verb spelling.
+PYTHON_ENTRY_POINT_DECORATORS: FrozenSet[str] = frozenset({
+    'get', 'post', 'put', 'patch', 'delete', 'head', 'options',
+    'route', 'websocket', 'websocket_route',
+    'exception_handler', 'errorhandler', 'middleware', 'on_event',
+    'before_request', 'after_request', 'teardown_request',
+    'before_app_request', 'app_errorhandler',
+    'command', 'group', 'callback',
+    'task', 'shared_task', 'periodic_task', 'scheduled_job',
+    'listener', 'subscribe', 'receiver', 'event', 'on', 'hook',
+    'given', 'when', 'then', 'step', 'fixture',
+})
+# NestJS/Angular: decorators are PascalCase, so the lowercase Python list never matched.
+JS_ENTRY_POINT_DECORATORS: FrozenSet[str] = frozenset({
+    'Get', 'Post', 'Put', 'Patch', 'Delete', 'Head', 'Options', 'All',
+    'Query', 'Mutation', 'Subscription', 'ResolveField',
+    'MessagePattern', 'EventPattern', 'SubscribeMessage', 'OnEvent',
+    'Cron', 'Interval', 'Timeout', 'Process', 'HostListener',
+})
+# Spring, JAX-RS, Jakarta lifecycle, and `@Override` (reached through the overridden type).
+JVM_ENTRY_POINT_DECORATORS: FrozenSet[str] = frozenset({
+    'RequestMapping', 'GetMapping', 'PostMapping', 'PutMapping', 'PatchMapping',
+    'DeleteMapping', 'ExceptionHandler', 'ModelAttribute', 'InitBinder',
+    'Bean', 'Scheduled', 'EventListener', 'TransactionalEventListener',
+    'KafkaListener', 'RabbitListener', 'JmsListener',
+    'PostConstruct', 'PreDestroy', 'Override',
+    'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS',
+})
 
 # --- stdlib classification (BACK-1275) --------------------------------------
 
@@ -229,6 +265,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             ),
             builtins=PYTHON_BUILTINS,
             implicit_decorators=frozenset({'property', 'classmethod', 'staticmethod'}),
+            entry_point_decorators=PYTHON_ENTRY_POINT_DECORATORS,
             implicit_name_pattern=re.compile(r'^__.*__$'),
             test_decorators=frozenset({'fixture'}),
             test_name_prefixes=('test_',),
@@ -242,6 +279,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         # (BACK-1009: 18.5% of ?uncalled hits on the VS Code corpus).
         LanguageConventions(
             family='js', implicit_names=frozenset({'constructor'}), stdlib_key=_node_stdlib_key,
+            entry_point_decorators=JS_ENTRY_POINT_DECORATORS,
             # Jest/Vitest/Mocha test titles are free text, so only the file name is a signal.
             test_file_patterns=(re.compile(r'^(.+)\.(?:test|spec)\.[cm]?[jt]sx?$'),),
         ),
@@ -274,6 +312,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         # reduced to the bare last path segment by the calls adapter).
         LanguageConventions(
             family='rust',
+            entry_point_decorators=PYTHON_ENTRY_POINT_DECORATORS,
             stdlib_key=_rust_stdlib_key,
             test_symbol_patterns=(re.compile(
                 r'#\[(?:\w+::)?(?:test|rstest)\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*(?:async\s+)?fn\s+(?:test_)?(\w+)'
@@ -289,10 +328,13 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         )),
         LanguageConventions(
             family='csharp', test_annotation_markers=_CSHARP_TEST_MARKERS,
+            implicit_names=frozenset({'Main'}),
             stdlib_key=_prefix_stdlib_key('System'),
         ),
         LanguageConventions(
             family='java', test_annotation_markers=_JVM_TEST_MARKERS,
+            implicit_names=frozenset({'main'}),
+            entry_point_decorators=JVM_ENTRY_POINT_DECORATORS,
             stdlib_key=_prefix_stdlib_key('java', 'javax', 'jdk'),
             test_name_prefixes=('test',), test_prefixes_in_test_files_only=True,
             test_file_patterns=(re.compile(r'^(.+?)Tests?\.java$'), re.compile(r'^Test(.+)\.java$')),
@@ -300,6 +342,8 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         ),
         LanguageConventions(
             family='kotlin', test_annotation_markers=_JVM_TEST_MARKERS,
+            implicit_names=frozenset({'main'}),
+            entry_point_decorators=JVM_ENTRY_POINT_DECORATORS,
             stdlib_key=_prefix_stdlib_key('kotlin', 'java', 'javax'),
             test_name_prefixes=('test',), test_prefixes_in_test_files_only=True,
             test_file_patterns=(re.compile(r'^(.+?)Tests?\.kt$'), re.compile(r'^Test(.+)\.kt$')),

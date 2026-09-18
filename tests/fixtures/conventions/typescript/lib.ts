@@ -8,3 +8,8 @@ function used(): Buffer {
 function orphan() {
   return React.version;
 }
+
+class Ctl {
+  @Get()
+  index() {}
+}

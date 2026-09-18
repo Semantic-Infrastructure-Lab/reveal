@@ -40,24 +40,6 @@ _INDEX_CACHE_MAX = 8
 # vocabulary only: a function *decorated* with one of these is a registration
 # in every framework that uses the name, and suppressing a genuinely dead one
 # costs far less than a reader verifying every endpoint by hand.
-_DEFAULT_ENTRY_POINT_DECORATORS: frozenset = frozenset({
-    # HTTP verbs (FastAPI, Flask, Sanic, Starlette, aiohttp, Bottle)
-    'get', 'post', 'put', 'patch', 'delete', 'head', 'options',
-    'route', 'websocket', 'websocket_route',
-    # Error/lifecycle handlers
-    'exception_handler', 'errorhandler', 'middleware', 'on_event',
-    'before_request', 'after_request', 'teardown_request',
-    'before_app_request', 'app_errorhandler',
-    # CLI (Click, Typer)
-    'command', 'group', 'callback',
-    # Task queues / schedulers (Celery, RQ, Huey, APScheduler)
-    'task', 'shared_task', 'periodic_task', 'scheduled_job',
-    # Event/signal dispatch
-    'listener', 'subscribe', 'receiver', 'event', 'on', 'hook',
-    # Test/BDD step registration
-    'given', 'when', 'then', 'step', 'fixture',
-})
-
 # Language family for a path; conventions (implicit names, builtins, test markers)
 # are scoped per family in reveal/conventions.py.
 _lang_family = family_for_path
@@ -120,7 +102,9 @@ def _is_implicit_element(
     conv = conventions_for(lang_family)
     if conv.is_implicit_name(name):
         return True
-    return bool(decorator_names & (conv.implicit_decorators | extra_implicit_decorators))
+    return bool(decorator_names & (
+        conv.implicit_decorators | conv.entry_point_decorators | extra_implicit_decorators
+    ))
 
 
 def _uncalled_entry_mtime(entry: Dict[str, Any]) -> float:
@@ -813,19 +797,20 @@ def _project_entry_point_decorators(directory: Path) -> FrozenSet[str]:
             entry_points:
               decorators: [route, get, post, put, delete, command]  # Flask/FastAPI/Click
 
-    Returns _DEFAULT_ENTRY_POINT_DECORATORS if unset or unreadable -- BACK-1265
-    made that set non-empty, because requiring every web project to declare
-    Flask/FastAPI's own decorators before its routes stop reading as dead code
-    is a configuration step nobody knows to take. Project config is additive.
+    Project config is additive to each language's own framework decorators
+    (``LanguageConventions.entry_point_decorators``, BACK-1265/BACK-1273):
+    requiring every web project to declare Flask/FastAPI/Spring/NestJS
+    decorators before its routes stop reading as dead code is a configuration
+    step nobody knows to take.
     """
     from ...config import get_config
     try:
         config = get_config(start_path=directory)
         entry_points = config.get_adapter_config('calls', 'entry_points')
         decorators = entry_points.get('decorators', []) if isinstance(entry_points, dict) else []
-        return _DEFAULT_ENTRY_POINT_DECORATORS | frozenset(str(d) for d in decorators)
+        return frozenset(str(d) for d in decorators)
     except Exception:
-        return _DEFAULT_ENTRY_POINT_DECORATORS
+        return frozenset()
 
 
 def find_uncalled(
