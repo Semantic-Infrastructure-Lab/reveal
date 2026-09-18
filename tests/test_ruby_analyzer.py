@@ -757,3 +757,17 @@ def test_ruby_locals_params_and_method_names_are_not_calls(tmp_path):
 def test_ruby_nested_def_bare_calls_stay_in_own_scope(tmp_path):
     src = "def outer\n  def inner\n    only_inner\n  end\nend\n"
     assert _ruby_calls(tmp_path, src, 'outer') == []
+
+
+# BACK-1289: switch/case arms counted once, not once for the arm and again for its `case` keyword.
+@pytest.mark.parametrize("suffix,src,expected", [
+    ('.js', "function f(x){ switch(x){ case 1: a(); break; case 2: b(); break; } }", 3),
+    ('.rb', "def f(x)\n  case x\n  when 1 then 1\n  when 2 then 2\n  end\nend\n", 3),
+    ('.py', "def f(x):\n  match x:\n    case 1: pass\n    case 2: pass\n", 4),
+])
+def test_switch_arms_not_double_counted(tmp_path, suffix, src, expected):
+    from reveal.registry import get_analyzer
+    f = tmp_path / f"f{suffix}"
+    f.write_text(src)
+    funcs = get_analyzer(str(f))(str(f)).get_structure()['functions']
+    assert funcs[0]['complexity'] == expected

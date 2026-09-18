@@ -23,7 +23,10 @@ _DECISION_TYPES = frozenset({
     # Conditionals
     'if_statement', 'if_expression', 'if', 'IfStatement',
     'elif_clause', 'elsif', 'elseif_clause', 'else_if_clause',
-    'case_statement', 'case',
+    'case_statement',
+    # Bare `case` is NOT a decision kind: JS/Python arms wrap a `case` keyword
+    # token (double-count), and Ruby's `case` container is not a branch --
+    # its `when` arms are (BACK-1289).
     'when',
     'switch_case',
     'unless',
@@ -100,7 +103,6 @@ _KEYWORD_PAIRS = frozenset({
     ('while', 'while'),
     ('until', 'until'),
     ('for', 'for'),
-    ('case', 'case'),
     ('when', 'when'),
     ('rescue', 'rescue'),
     ('boolean_operator', 'or'),
