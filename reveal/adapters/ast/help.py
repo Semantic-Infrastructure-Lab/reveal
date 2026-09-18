@@ -160,6 +160,16 @@ _HELP_WORKFLOWS = [
             "reveal 'ast://.?decorator=property&lines>10'   # Complex properties (code smell)",
         ]
     },
+    {
+        'name': 'Find Implicit Dict Contracts (Python)',
+        'scenario': 'Dict[str, Any] records passed between modules with no declared shape',
+        'steps': [
+            "reveal 'ast://src/?show=dict-schemas'      # Shapes read in several places + TypedDict drift",
+            "reveal 'ast://src/?show=dict-heatmap'      # Every untyped-dict name, most keys first",
+            "reveal check src/ --select T006            # Params that should take an existing TypedDict",
+            "reveal 'ast://src/?reveal_type=elem'       # Where one variable's shape comes from",
+        ]
+    },
 ]
 
 _HELP_ANTI_PATTERNS = [
@@ -267,10 +277,17 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'show': {
         'type': 'string',
-        'description': 'Display mode (not a filter): show=calls renders a compact call graph view; show=dict-heatmap ranks bare-dict params by key access count (TypedDict migration priority list).',
+        'description': (
+            'Display mode (not a filter): show=calls renders a compact call graph view; '
+            'show=dict-heatmap ranks untyped-dict names (annotated/unannotated params, loop '
+            'variables, locals) by distinct string keys read (TypedDict migration priority list); '
+            'show=dict-schemas clusters those across functions into shared implicit record '
+            'shapes, naming any existing TypedDict that already covers one and the keys it '
+            'fails to declare. Python only.'
+        ),
         'operators': ['=='],
-        'valid_values': ['calls', 'dict-heatmap'],
-        'examples': ['show=calls', 'show=dict-heatmap']
+        'valid_values': ['calls', 'dict-heatmap', 'dict-schemas'],
+        'examples': ['show=calls', 'show=dict-heatmap', 'show=dict-schemas']
     },
 }
 
@@ -327,7 +344,121 @@ _SCHEMA_OUTPUT_TYPES = [
                 }
             ]
         }
-    }
+    },
+    {
+        'type': 'ast_dict_heatmap',
+        'description': 'show=dict-heatmap: untyped-dict names ranked by distinct string keys read',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'ast_dict_heatmap'},
+                'path': {'type': 'string'},
+                'total_results': {'type': 'integer'},
+                'unsupported_language': {'type': 'string'},
+                'results': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'file': {'type': 'string'},
+                            'function': {'type': 'string'},
+                            'line': {'type': 'integer'},
+                            'param': {'type': 'string', 'description': 'variable name'},
+                            'source': {'type': 'string', 'enum': [
+                                'annotated_param', 'unannotated_param', 'loop_var',
+                                'local', 'attribute',
+                            ]},
+                            'annotation': {'type': 'string'},
+                            'iterable': {'type': 'string', 'description': 'loop_var only'},
+                            'key_count': {'type': 'integer'},
+                            'access_count': {'type': 'integer'},
+                            'keys': {'type': 'array', 'items': {'type': 'string'}},
+                            'suggested_name': {'type': 'string'},
+                        }
+                    }
+                }
+            }
+        },
+        'example': {
+            'contract_version': CONTRACT_VERSION,
+            'type': 'ast_dict_heatmap',
+            'path': './src',
+            'total_results': 1,
+            'unsupported_language': '',
+            'results': [{
+                'file': 'src/render.py', 'function': 'render', 'line': 12,
+                'param': 'elem', 'source': 'loop_var', 'annotation': '',
+                'iterable': "structure['functions']", 'key_count': 3, 'access_count': 4,
+                'keys': ['calls', 'line', 'name'], 'suggested_name': 'ElemState',
+            }]
+        }
+    },
+    {
+        'type': 'ast_dict_schemas',
+        'description': (
+            'show=dict-schemas: untyped dict shapes read in 2+ functions, with any '
+            'existing TypedDict that covers them and the keys it does not declare'
+        ),
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'ast_dict_schemas'},
+                'path': {'type': 'string'},
+                'total_results': {'type': 'integer'},
+                'unsupported_language': {'type': 'string'},
+                'results': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'suggested_name': {'type': 'string'},
+                            'consumer_count': {'type': 'integer'},
+                            'file_count': {'type': 'integer'},
+                            'seed_keys': {'type': 'array', 'items': {'type': 'string'}},
+                            'keys': {'type': 'array', 'description': '[{key, consumers}]'},
+                            'variable_names': {'type': 'array', 'items': {'type': 'string'}},
+                            'sources': {'type': 'object', 'description': 'source -> count'},
+                            'typeddict_matches': {
+                                'type': 'array',
+                                'description': '[{name, file, line, coverage, undeclared_keys}]',
+                            },
+                            'consumers': {
+                                'type': 'array',
+                                'description': '[{file, line, function, param, source}]',
+                            },
+                        }
+                    }
+                }
+            }
+        },
+        'example': {
+            'contract_version': CONTRACT_VERSION,
+            'type': 'ast_dict_schemas',
+            'path': './src',
+            'total_results': 1,
+            'unsupported_language': '',
+            'results': [{
+                'suggested_name': 'ElemState', 'consumer_count': 2, 'file_count': 2,
+                'seed_keys': ['calls', 'line', 'line_end', 'name'],
+                'keys': [{'key': 'name', 'consumers': 2}, {'key': 'line', 'consumers': 2},
+                         {'key': 'calls', 'consumers': 2}, {'key': 'line_end', 'consumers': 1}],
+                'variable_names': ['elem'],
+                'sources': {'loop_var': 1, 'annotated_param': 1},
+                'typeddict_matches': [{
+                    'name': 'Element', 'file': 'src/types.py', 'line': 8,
+                    'coverage': 1.0, 'undeclared_keys': ['line_end'],
+                }],
+                'consumers': [
+                    {'file': 'src/render.py', 'line': 12, 'function': 'render',
+                     'param': 'elem', 'source': 'loop_var'},
+                    {'file': 'src/rank.py', 'line': 30, 'function': 'rank',
+                     'param': 'elem', 'source': 'annotated_param'},
+                ],
+            }]
+        }
+    },
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
@@ -381,6 +512,16 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'description': 'Compact call graph view for all functions in src/',
         'output_type': 'ast_query'
     },
+    {
+        'uri': 'ast://src/?show=dict-heatmap',
+        'description': 'Untyped dicts (params, loop vars, locals) ranked by keys read',
+        'output_type': 'ast_dict_heatmap'
+    },
+    {
+        'uri': 'ast://src/?show=dict-schemas',
+        'description': 'Dict shapes read in several places, and TypedDicts that already cover them',
+        'output_type': 'ast_dict_schemas'
+    },
 ]
 
 
@@ -411,7 +552,13 @@ def get_help() -> Dict[str, Any]:
             'param_type': 'Find functions where any param has this type annotation (e.g., param_type=dict, param_type=Dict*)',
             'return_type': 'Find functions with this return annotation (e.g., return_type=bool, return_type=None)',
             'reveal_type': 'Show type evidence for a variable: params, assignments, for-loops across the file (e.g., reveal_type=trade)',
-            'show': 'Display mode: show=calls renders call graph, show=dict-heatmap ranks bare-dict params by key access count (TypedDict migration priority list)'
+            'show': (
+                'Display mode: show=calls renders call graph, show=dict-heatmap ranks '
+                'untyped-dict params/loop vars/locals by distinct keys read (TypedDict '
+                'migration priority list), show=dict-schemas clusters them into shared '
+                'implicit record shapes and flags existing TypedDicts that readers bypass '
+                'or that have drifted (Python only)'
+            ),
         },
         'result_control': {
             'sort': 'Sort results by field (e.g., sort=complexity, sort=-lines for descending)',
@@ -488,5 +635,9 @@ def get_schema() -> Dict[str, Any]:
             'Call graph fields on functions/methods in JSON: calls[] (outgoing), called_by[] (within-file incoming), resolved_calls[] (cross-file resolved entries)',
             'calls= and callee_of= filters search within-file call lists; for project-wide callers use calls:// adapter',
             'show=calls renders a compact call graph view (arrow diagram) instead of the standard element list',
+            'show=dict-heatmap / show=dict-schemas are Python-only and return their own '
+            'result types (ast_dict_heatmap / ast_dict_schemas), not ast_query; TypedDicts '
+            'are matched only if defined under the scanned path. The rule form is T006: '
+            'reveal check <path> --select T006',
         ]
     }

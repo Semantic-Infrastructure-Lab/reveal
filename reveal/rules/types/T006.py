@@ -1,34 +1,82 @@
-"""T006: TypedDict available but function uses bare dict.
+"""T006: a param typed as an untyped dict reads the keys of an existing TypedDict.
 
-When a TypedDict is defined (or imported and re-exported) in the same module and
-a function parameter is annotated as bare `dict` or `Dict[...]`, T006 checks
-whether the keys accessed on that parameter match ≥3 fields of the TypedDict.
-If so, it suggests replacing `dict` with the more specific TypedDict name.
+Fires when a function parameter annotated as an untyped dict -- `dict`,
+`Dict[...]`, `Mapping[...]`, `Any`, a dict type alias, or Optional/Union of
+those -- reads keys an existing TypedDict declares, covering most of what the
+function reads. The TypedDict may live anywhere in the project, not just the
+same module: the usual case is a shared record type in one module
+(`types.py`) that readers elsewhere never adopted. A same-module TypedDict
+needs 3 shared keys; one from another module needs 4, since generic keys
+(file/line/name) recur across unrelated record types.
 
-This fires *before* annotation exists — it's a nudge, not an enforcement.
-Fully unannotated parameters (no `dict` annotation at all) are skipped;
-T005 handles annotation coverage separately.
+Only annotated params fire. Unannotated params are T005's concern, and loop
+variables / locals have no line-level fix (their type comes from whatever
+they iterate) -- `ast://<path>?show=dict-schemas` reports those.
+
+Analysis lives in reveal/analyzers/python_dict_usage.py, shared with
+`ast://?show=dict-heatmap` / `?show=dict-schemas`.
 """
 
 import ast
-from typing import Dict, List, Optional, Set, Any
+import logging
+import os
+import re
+from pathlib import Path
+from typing import Any, Dict, FrozenSet, List, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
+from ...analyzers.python_dict_usage import (
+    SCHEMA_MIN_SHARED_KEYS,
+    best_typeddict_match,
+    build_context,
+    collect_typeddict_definitions,
+    function_dict_usages,
+    has_untyped_dict_param,
+    iter_python_files,
+    resolve_typeddicts,
+)
+from ...utils.path_utils import resolve_project_root
 
-_BARE_DICT_NAMES = frozenset({'dict', 'Dict'})
-_MIN_KEY_MATCH = 3
+logger = logging.getLogger(__name__)
+
+# project_root -> {'typeddicts': [TypedDict record, ...], 'dict_aliases': frozenset}
+_project_index: Dict[Path, Dict[str, Any]] = {}
+# BACK-1051 pattern: project_root -> why its cross-module scan was skipped
+_project_skip_reasons: Dict[Path, str] = {}
+
+_DEFAULT_MAX_PROJECT_FILES = 5000
+_REMOTE_MIN_SHARED_KEYS = 4
+_EMPTY_FACTS: Dict[str, Any] = {'typeddicts': [], 'dict_aliases': frozenset()}
+
+# Only files that can define a TypedDict or a dict type alias are parsed when
+# indexing a project; everything else costs one read and one regex search.
+_DEFINES_TYPE_FACTS = re.compile(
+    r'TypedDict'
+    r'|^\w+\s*(?::\s*TypeAlias\s*)?=\s*(?:typing\.)?'
+    r'(?:Dict|dict|Mapping|MutableMapping|DefaultDict|OrderedDict|Optional|Union)\b'
+    r'|^type\s+\w+',
+    re.MULTILINE,
+)
 
 
 class T006(BaseRule, ASTParsingMixin):
-    """Suggest TypedDict when bare dict annotation + matching TypedDict exists."""
+    """Suggest an existing TypedDict for a param annotated as an untyped dict.
+
+    Fires when a param annotated dict / Dict[...] / Mapping / Any / a dict alias
+    reads keys (d['k'], d.get('k'), 'k' in d) that a TypedDict anywhere in the
+    project declares: 3+ shared keys if it is in the same module, 4+ otherwise,
+    covering 60% of what the function reads. Loop vars and locals are reported
+    by ast://<path>?show=dict-schemas instead. Project scan capped by
+    REVEAL_T006_MAX_FILES (default 5000).
+    """
 
     code = "T006"
     message = "Function uses bare dict but a matching TypedDict is available"
     category = RulePrefix.T
     severity = Severity.LOW
     file_patterns = ['.py']
-    version = "1.0.0"
+    version = "2.0.0"
 
     def check(
         self,
@@ -40,176 +88,192 @@ class T006(BaseRule, ASTParsingMixin):
         if tree is None:
             return detections
 
-        typeddicts = _collect_typeddicts(tree)
-        if not typeddicts:
+        facts = _project_facts(file_path)
+        visible = _visible_typeddicts(tree, file_path, facts['typeddicts'])
+        if not visible:
             return detections
+        local = [td for td in visible if td['file'] == file_path]
+        remote = [td for td in visible if td['file'] != file_path]
 
+        ctx = build_context([tree], known_aliases=facts['dict_aliases'])
         for node in self._ast_walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                _check_function(node, typeddicts, file_path, detections, self)
-
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not has_untyped_dict_param(node, ctx.dict_aliases):
+                continue
+            for usage in function_dict_usages(node, file_path, ctx):
+                detection = self._detect(usage, local, remote, file_path)
+                if detection is not None:
+                    detections.append(detection)
         return detections
 
+    def _detect(
+        self,
+        usage: Dict[str, Any],
+        local: List[Dict[str, Any]],
+        remote: List[Dict[str, Any]],
+        file_path: str,
+    ) -> Optional[Detection]:
+        if usage['source'] != 'annotated_param':
+            return None
+        keys = set(usage['keys'])
+        if len(keys) < SCHEMA_MIN_SHARED_KEYS:
+            return None
+        match = _best_match(keys, local, remote)
+        if match is None:
+            return None
 
-# ─────────────────────────── TypedDict collection ────────────────────────────
-
-def _collect_typeddicts(tree: ast.AST) -> Dict[str, Set[str]]:
-    """Return {TypedDict_name: {field, ...}} for all TypedDicts in module scope."""
-    result: Dict[str, Set[str]] = {}
-
-    for node in ast.walk(tree):
-        # Class-based: class Trade(TypedDict): symbol: str; pnl: float
-        if isinstance(node, ast.ClassDef) and _has_typed_dict_base(node):
-            fields = _extract_class_fields(node)
-            if fields:
-                result[node.name] = fields
-
-        # Functional: Trade = TypedDict('Trade', symbol=str, pnl=float)
-        # or:         Trade = TypedDict('Trade', {'symbol': str, 'pnl': float})
-        elif isinstance(node, ast.Assign):
-            if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-                name = node.targets[0].id
-                fields = _extract_functional_typeddict(node.value)
-                if fields:
-                    result[name] = fields
-
-    return result
-
-
-def _has_typed_dict_base(node: ast.ClassDef) -> bool:
-    for base in node.bases:
-        if isinstance(base, ast.Name) and base.id == 'TypedDict':
-            return True
-        if isinstance(base, ast.Attribute) and base.attr == 'TypedDict':
-            return True
-    return False
-
-
-def _extract_class_fields(node: ast.ClassDef) -> Set[str]:
-    fields: Set[str] = set()
-    for stmt in node.body:
-        if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
-            fields.add(stmt.target.id)
-    return fields
-
-
-def _extract_functional_typeddict(value: ast.expr) -> Optional[Set[str]]:
-    if not (isinstance(value, ast.Call)):
-        return None
-    func = value.func
-    if not (
-        (isinstance(func, ast.Name) and func.id == 'TypedDict') or
-        (isinstance(func, ast.Attribute) and func.attr == 'TypedDict')
-    ):
-        return None
-
-    fields: Set[str] = set()
-
-    # keyword form: TypedDict('X', symbol=str, pnl=float)
-    for kw in value.keywords:
-        if kw.arg:
-            fields.add(kw.arg)
-
-    # dict form: TypedDict('X', {'symbol': str, 'pnl': float})
-    if len(value.args) >= 2 and isinstance(value.args[1], ast.Dict):
-        for key in value.args[1].keys:
-            if isinstance(key, ast.Constant) and isinstance(key.value, str):
-                fields.add(key.value)
-
-    return fields if fields else None
-
-
-# ─────────────────────────── function checking ───────────────────────────────
-
-def _check_function(
-    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
-    typeddicts: Dict[str, Set[str]],
-    file_path: str,
-    detections: List[Detection],
-    rule: 'T006',
-) -> None:
-    args = func_node.args
-    all_args = (
-        args.posonlyargs + args.args + args.kwonlyargs
-        + ([args.vararg] if args.vararg else [])
-        + ([args.kwarg] if args.kwarg else [])
-    )
-    # Only check params explicitly annotated as bare dict / Dict
-    bare_dict_params = [
-        a for a in all_args
-        if a.annotation is not None and _is_bare_dict(a.annotation)
-    ]
-    if not bare_dict_params:
-        return
-
-    for param in bare_dict_params:
-        keys_accessed = _collect_subscript_keys(func_node, param.arg)
-        if len(keys_accessed) < _MIN_KEY_MATCH:
-            continue
-
-        best_match = _best_typeddict_match(keys_accessed, typeddicts)
-        if best_match is None:
-            continue
-
-        td_name, matched_keys = best_match
-        overlap = len(matched_keys)
-        detections.append(rule.create_detection(
+        td, matched = match
+        name, annotation = usage['param'], usage['annotation']
+        where = '' if td['file'] == file_path else f" (defined at {_display(td)})"
+        undeclared = sorted(keys - matched)
+        context = f"Keys accessed: {', '.join(sorted(matched)[:6])}"
+        if undeclared:
+            context += f"; not declared on {td['name']}: {', '.join(undeclared[:6])}"
+        return self.create_detection(
             file_path=file_path,
-            line=func_node.lineno,
+            line=usage['line'],
             message=(
-                f"{func_node.name}: param '{param.arg}: dict' — "
-                f"TypedDict '{td_name}' covers {overlap}/{len(keys_accessed)} "
-                f"accessed keys"
+                f"{usage['function']}: param '{name}: {annotation}' — "
+                f"TypedDict '{td['name']}' covers {len(matched)}/{len(keys)} accessed keys"
             ),
-            suggestion=f"Replace 'dict' with '{td_name}' for param '{param.arg}'",
-            context=f"Keys accessed: {', '.join(sorted(matched_keys)[:6])}",
-        ))
+            suggestion=f"Replace '{annotation}' with '{td['name']}' for param '{name}'{where}",
+            context=context,
+        )
 
 
-def _is_bare_dict(annotation: ast.expr) -> bool:
-    if isinstance(annotation, ast.Name):
-        return annotation.id in _BARE_DICT_NAMES
-    if isinstance(annotation, ast.Attribute):
-        return annotation.attr in _BARE_DICT_NAMES
-    # Dict[K, V] — subscripted form
-    if isinstance(annotation, ast.Subscript):
-        return _is_bare_dict(annotation.value)
-    return False
+# ─────────────────────────── TypedDict visibility ────────────────────────────
 
-
-def _collect_subscript_keys(
-    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
-    param_name: str,
-) -> Set[str]:
-    """Collect string keys accessed via param_name['key'] in the function body."""
-    keys: Set[str] = set()
-    for node in ast.walk(func_node):
-        if not isinstance(node, ast.Subscript):
-            continue
-        target = node.value
-        if not (isinstance(target, ast.Name) and target.id == param_name):
-            continue
-        idx = node.slice
-        # Python 3.9+: slice is the index directly; earlier: ast.Index wrapper
-        if isinstance(idx, ast.Index):
-            idx = idx.value  # type: ignore[attr-defined]
-        if isinstance(idx, ast.Constant) and isinstance(idx.value, str):
-            keys.add(idx.value)
-    return keys
-
-
-def _best_typeddict_match(
-    accessed_keys: Set[str],
-    typeddicts: Dict[str, Set[str]],
+def _best_match(
+    keys: set,
+    local: List[Dict[str, Any]],
+    remote: List[Dict[str, Any]],
 ) -> Optional[tuple]:
-    """Return (name, matched_keys) for the TypedDict with most overlap, or None."""
-    best_name = None
-    best_overlap: Set[str] = set()
+    """A same-module TypedDict needs SCHEMA_MIN_SHARED_KEYS shared keys; one
+    from another module needs _REMOTE_MIN_SHARED_KEYS, because nothing ties
+    the reader to it but the keys, and generic keys (file/line/name) recur
+    across unrelated record types. On equal evidence the local one wins."""
+    local_match = best_typeddict_match(keys, local)
+    remote_match = best_typeddict_match(keys, remote, min_shared=_REMOTE_MIN_SHARED_KEYS)
+    if remote_match and (not local_match or len(remote_match[1]) > len(local_match[1])):
+        return remote_match
+    return local_match
 
-    for name, fields in typeddicts.items():
-        overlap = accessed_keys & fields
-        if len(overlap) >= _MIN_KEY_MATCH and len(overlap) > len(best_overlap):
-            best_name = name
-            best_overlap = overlap
 
-    return (best_name, best_overlap) if best_name else None
+def _visible_typeddicts(
+    tree: ast.Module,
+    file_path: str,
+    project_typeddicts: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """This module's TypedDicts first (so they win ties and same-name
+    shadowing), then the project's -- merged before resolution so a local
+    subclass of a project TypedDict inherits its fields. The project index's
+    copy of this module is dropped: the in-memory content is authoritative,
+    and its records keep `file == file_path` so callers can tell local ones
+    apart by plain comparison."""
+    raw: Dict[str, List[Dict[str, Any]]] = {}
+    collect_typeddict_definitions(tree, file_path, raw)
+    here = Path(file_path).resolve()
+    for td in project_typeddicts:
+        if Path(td['file']) != here:
+            raw.setdefault(td['name'], []).append({
+                'name': td['name'], 'file': td['file'], 'line': td['line'],
+                'bases': [], 'own_fields': td['fields'], 'functional': True,
+            })
+    return resolve_typeddicts(raw)
+
+
+def _display(td: Dict[str, Any]) -> str:
+    try:
+        path = os.path.relpath(td['file'])
+    except ValueError:  # different drive on Windows
+        path = td['file']
+    return f"{path}:{td['line']}"
+
+
+# ─────────────────────────── project index ───────────────────────────────────
+
+def _project_facts(file_path: str) -> Dict[str, Any]:
+    """TypedDicts and dict aliases defined anywhere in file_path's project.
+
+    Only for a file that exists on disk: in-memory content under a phantom
+    path (stdin, tests) has no project, and indexing whatever directory the
+    process runs in would attribute unrelated TypedDicts to it.
+    """
+    path = Path(file_path)
+    if not path.is_file():
+        return _EMPTY_FACTS
+    root = _find_project_root(path.resolve())
+    if root not in _project_index:
+        _project_index[root] = _build_index(root)
+    return _project_index[root]
+
+
+def _find_project_root(path: Path) -> Path:
+    root = resolve_project_root(path)
+    return root if root is not None else path.parent
+
+
+def _max_project_files() -> int:
+    raw = os.environ.get('REVEAL_T006_MAX_FILES')
+    if raw:
+        try:
+            value = int(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            logger.debug("Invalid REVEAL_T006_MAX_FILES=%r, using default", raw)
+    return _DEFAULT_MAX_PROJECT_FILES
+
+
+def _build_index(project_root: Path) -> Dict[str, Any]:
+    """Scan project_root once for TypedDict and dict-alias definitions.
+
+    Aborts past the file-count ceiling -- a huge marker-less parent must not
+    stall an interactive check -- and records why, so the run can say
+    cross-module matching was skipped instead of implying none exists.
+    """
+    ceiling = _max_project_files()
+    files = []
+    for file_path in iter_python_files(str(project_root)):
+        files.append(file_path)
+        if len(files) > ceiling:
+            reason = (
+                f"T006: project root {project_root} exceeds {ceiling} .py files; "
+                "matching TypedDicts from the same module only "
+                "(set REVEAL_T006_MAX_FILES to raise the ceiling)"
+            )
+            logger.warning(reason)
+            _project_skip_reasons[project_root] = reason
+            return _EMPTY_FACTS
+
+    raw: Dict[str, List[Dict[str, Any]]] = {}
+    trees = []
+    for file_path in files:
+        try:
+            text = Path(file_path).read_text(encoding='utf-8', errors='replace')
+        except OSError:
+            continue
+        if not _DEFINES_TYPE_FACTS.search(text):
+            continue
+        try:
+            tree = ast.parse(text)
+        except (SyntaxError, ValueError):
+            continue
+        trees.append(tree)
+        collect_typeddict_definitions(tree, file_path, raw)
+
+    aliases: FrozenSet[str] = build_context(trees).dict_aliases
+    return {'typeddicts': resolve_typeddicts(raw), 'dict_aliases': aliases}
+
+
+def get_scan_disclosures() -> List[str]:
+    """One-line reasons for every project whose cross-module TypedDict scan
+    was skipped by the file-count ceiling. Mirrors D005/I002."""
+    return list(_project_skip_reasons.values())
+
+
+def _clear_index() -> None:
+    """Clear the project index cache (for tests)."""
+    _project_index.clear()
+    _project_skip_reasons.clear()

@@ -1,166 +1,34 @@
-"""Dict usage heatmap for ast://...?show=dict-heatmap.
+"""Text renderers for ast://...?show=dict-heatmap and ?show=dict-schemas.
 
-Scans functions with bare dict parameters, counts distinct key accesses per
-param, and returns a ranked list (most keys = most urgent TypedDict candidate).
-
-Output items:
-    {
-        'file': str,
-        'function': str,
-        'line': int,
-        'param': str,
-        'annotation': str,   # 'dict', 'Dict', 'Dict[...]', etc.
-        'key_count': int,
-        'keys': List[str],   # distinct string keys accessed
-        'suggested_name': str,  # e.g. 'trade' -> 'TradeState'
-    }
+The analysis lives in reveal/analyzers/python_dict_usage.py, shared with rule T006.
 """
 from __future__ import annotations
 
-import ast
-import os
-from pathlib import Path
-from typing import Any, Dict, List, Set
+from collections import Counter
+from typing import Any, Dict, List
 
-from ...utils.path_utils import is_skippable_dir
+from ...analyzers.python_dict_usage import SCHEMA_MIN_CONSUMERS
 
-_BARE_DICT_NAMES = frozenset({'dict', 'Dict'})
-
-
-# ─────────────────────────── public entry point ──────────────────────────────
-
-def collect_dict_heatmap(path: str) -> List[Dict[str, Any]]:
-    """Return ranked list of bare-dict params with their key access counts."""
-    path_obj = Path(path)
-    items: List[Dict[str, Any]] = []
-
-    if path_obj.is_file():
-        _scan_file(str(path_obj), items)
-    elif path_obj.is_dir():
-        for root, dirs, files in os.walk(str(path_obj)):
-            dirs[:] = [
-                d for d in dirs
-                if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
-            ]
-            for name in files:
-                if name.endswith(('.py', '.pyi')):
-                    _scan_file(str(Path(root) / name), items)
-
-    # Sort: most keys first (most urgent migration target)
-    items.sort(key=lambda x: -x['key_count'])
-    return items
+_SOURCE_LABELS = {
+    'annotated_param': 'param',
+    'unannotated_param': 'param, unannotated',
+    'loop_var': 'loop var',
+    'local': 'local',
+    'attribute': 'attribute',
+}
 
 
-def has_python_files(path: str) -> bool:
-    """True if `path` is, or contains, at least one .py/.pyi file.
-
-    Used to tell "genuinely clean Python project" apart from "no Python
-    source here at all" when `collect_dict_heatmap` comes back empty —
-    the two must not render the same message (BACK-749).
-    """
-    path_obj = Path(path)
-    if path_obj.is_file():
-        return path_obj.suffix in ('.py', '.pyi')
-    if path_obj.is_dir():
-        for root, dirs, files in os.walk(str(path_obj)):
-            dirs[:] = [
-                d for d in dirs
-                if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
-            ]
-            if any(name.endswith(('.py', '.pyi')) for name in files):
-                return True
-    return False
+def _describe(item: Dict[str, Any]) -> str:
+    name = item['param']
+    if item.get('source') == 'loop_var':
+        return f"for {name} in {item.get('iterable', '')}"
+    annotation = item.get('annotation', '')
+    return f"{name}: {annotation}" if annotation else name
 
 
-# ─────────────────────────── file scanner ────────────────────────────────────
-
-def _scan_file(file_path: str, items: List[Dict[str, Any]]) -> None:
-    try:
-        content = Path(file_path).read_text(encoding='utf-8', errors='replace')
-        tree = ast.parse(content)
-    except (SyntaxError, OSError):
-        return
-
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            _check_function(node, file_path, items)
-
-
-def _check_function(
-    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
-    file_path: str,
-    items: List[Dict[str, Any]],
-) -> None:
-    args = func_node.args
-    all_args = (
-        args.posonlyargs + args.args + args.kwonlyargs
-        + ([args.vararg] if args.vararg else [])
-        + ([args.kwarg] if args.kwarg else [])
-    )
-    for param in all_args:
-        if param.arg in ('self', 'cls'):
-            continue
-        if param.annotation is None:
-            continue
-        if not _is_bare_dict(param.annotation):
-            continue
-
-        annotation_text = ast.unparse(param.annotation)
-        keys = _collect_subscript_keys(func_node, param.arg)
-        if not keys:
-            continue
-
-        items.append({
-            'file': file_path,
-            'function': func_node.name,
-            'line': func_node.lineno,
-            'param': param.arg,
-            'annotation': annotation_text,
-            'key_count': len(keys),
-            'keys': sorted(keys),
-            'suggested_name': _suggest_typeddict_name(param.arg),
-        })
-
-
-def _is_bare_dict(annotation: ast.expr) -> bool:
-    if isinstance(annotation, ast.Name):
-        return annotation.id in _BARE_DICT_NAMES
-    if isinstance(annotation, ast.Attribute):
-        return annotation.attr in _BARE_DICT_NAMES
-    if isinstance(annotation, ast.Subscript):
-        return _is_bare_dict(annotation.value)
-    return False
-
-
-def _collect_subscript_keys(
-    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
-    param_name: str,
-) -> Set[str]:
-    keys: Set[str] = set()
-    for node in ast.walk(func_node):
-        if not isinstance(node, ast.Subscript):
-            continue
-        target = node.value
-        if not (isinstance(target, ast.Name) and target.id == param_name):
-            continue
-        idx = node.slice
-        if isinstance(idx, ast.Index):
-            idx = idx.value  # type: ignore[attr-defined]  # Python 3.8
-        if isinstance(idx, ast.Constant) and isinstance(idx.value, str):
-            keys.add(idx.value)
-    return keys
-
-
-def _suggest_typeddict_name(param_name: str) -> str:
-    """Suggest a TypedDict name from a param name, e.g. 'trade' → 'TradeState'."""
-    if not param_name:
-        return 'ItemState'
-    return param_name.capitalize() + 'State'
-
-
-# ─────────────────────────── renderer ────────────────────────────────────────
-
-def render_dict_heatmap(items: List[Dict[str, Any]], path: str, unsupported_language: str = '') -> str:
+def render_dict_heatmap(
+    items: List[Dict[str, Any]], path: str, unsupported_language: str = '',
+) -> str:
     if not items:
         if unsupported_language:
             return (
@@ -168,39 +36,102 @@ def render_dict_heatmap(items: List[Dict[str, Any]], path: str, unsupported_lang
                 f"  (detected {unsupported_language}; this report only analyzes Python source)"
             )
         return (
-            f"dict heatmap: no bare-dict params with key accesses found in {path}\n"
-            f"  (functions must be annotated as `param: dict` or `param: Dict[...]`\n"
-            f"   and access keys via param['key'] for this report to fire)"
+            f"dict heatmap: no untyped-dict names with key accesses found in {path}\n"
+            f"  (a name counts when it's an untyped param, loop variable, or local\n"
+            f"   read with string keys: x['k'], x.get('k'), 'k' in x)"
         )
 
-    lines = [f"Bare-dict heatmap — {path}", f"Ranked by distinct key accesses (TypedDict migration priority)", '']
-
+    lines = [
+        f"Untyped-dict heatmap — {path}",
+        "Ranked by distinct keys read (TypedDict migration priority)",
+        '',
+    ]
     for item in items:
-        func = item['function']
-        param = item['param']
-        annotation = item['annotation']
-        key_count = item['key_count']
         keys = item['keys']
-        suggested = item['suggested_name']
-        file_path = item['file']
-        line = item['line']
-
-        key_preview = ', '.join(keys[:8])
-        if len(keys) > 8:
-            key_preview += ', …'
-
+        key_preview = ', '.join(keys[:8]) + (', …' if len(keys) > 8 else '')
+        source = _SOURCE_LABELS.get(item.get('source', ''), item.get('source', ''))
         lines.append(
-            f"  {file_path}:{line}  {func}({param}: {annotation})"
-            f"  —  {key_count} keys"
+            f"  {item['file']}:{item['line']}  {item['function']}({_describe(item)})"
+            f"  —  {item['key_count']} keys [{source}]"
         )
         lines.append(f"    keys:      {key_preview}")
-        lines.append(f"    suggest:   {param}: {suggested}")
+        lines.append(f"    suggest:   {item['param']}: {item['suggested_name']}")
         lines.append('')
 
+    by_source = Counter(i.get('source', '') for i in items)
+    source_summary = ', '.join(
+        f"{n} {_SOURCE_LABELS.get(s, s)}" for s, n in by_source.most_common()
+    )
     total_keys = sum(i['key_count'] for i in items)
-    lines.append(f"  {len(items)} candidate(s), {total_keys} total key access(es)")
+    lines.append(
+        f"  {len(items)} candidate(s) ({source_summary}), {total_keys} total distinct key(s)"
+    )
     lines.append('')
-    lines.append(f"  → Check for TypedDicts: reveal --check {path} --rules T006")
-    lines.append(f"  → Trace a param:        reveal 'ast://{path}?reveal_type=<param>'")
-
+    lines.append(f"  → Shared shapes across files: reveal 'ast://{path}?show=dict-schemas'")
+    lines.append(f"  → Check for TypedDicts:       reveal check {path} --select T006")
+    lines.append(f"  → Trace a name:               reveal 'ast://{path}?reveal_type=<name>'")
     return '\n'.join(lines)
+
+
+def render_dict_schemas(
+    schemas: List[Dict[str, Any]], path: str, unsupported_language: str = '',
+) -> str:
+    if not schemas:
+        if unsupported_language:
+            return (
+                f"dict schemas: Python-only — no .py/.pyi files found in {path}\n"
+                f"  (detected {unsupported_language}; this report only analyzes Python source)"
+            )
+        return (
+            f"dict schemas: no untyped dict shape is read in {SCHEMA_MIN_CONSUMERS}+ "
+            f"functions in {path}\n"
+            f"  (per-function candidates: reveal 'ast://{path}?show=dict-heatmap')"
+        )
+
+    lines = [
+        f"Implicit dict schemas — {path}",
+        "Untyped dict shapes read in several functions (ranked by files touched)",
+        '',
+    ]
+    for schema in schemas:
+        lines.extend(_schema_lines(schema))
+
+    lines.append(f"  {len(schemas)} shared shape(s)")
+    lines.append(
+        f"  (existing TypedDicts are matched only if defined under {path}"
+        " — scan the package root to see them all)"
+    )
+    lines.append('')
+    lines.append(f"  → Per-function detail:      reveal 'ast://{path}?show=dict-heatmap'")
+    lines.append(f"  → Params bypassing a match: reveal check {path} --select T006")
+    return '\n'.join(lines)
+
+
+def _schema_lines(schema: Dict[str, Any]) -> List[str]:
+    lines = [
+        f"  {schema['suggested_name']}  —  {schema['consumer_count']} consumers "
+        f"in {schema['file_count']} files  (as: {', '.join(schema['variable_names'][:5])})"
+    ]
+    key_text = ', '.join(f"{k['key']}×{k['consumers']}" for k in schema['keys'][:12])
+    if len(schema['keys']) > 12:
+        key_text += ', …'
+    lines.append(f"    keys:      {key_text}")
+    for match in schema.get('typeddict_matches', []):
+        lines.append(
+            f"    existing:  {match['name']} ({match['file']}:{match['line']}) covers "
+            f"{int(match['coverage'] * 100)}% of core keys — readers still take a plain dict"
+        )
+        if match['undeclared_keys']:
+            undeclared = ', '.join(match['undeclared_keys'][:10])
+            if len(match['undeclared_keys']) > 10:
+                undeclared += ', …'
+            lines.append(f"    drift:     read but not declared on {match['name']}: {undeclared}")
+    for consumer in schema['consumers'][:5]:
+        lines.append(
+            f"    reader:    {consumer['file']}:{consumer['line']}  "
+            f"{consumer['function']}({consumer['param']})"
+        )
+    if len(schema['consumers']) > 5:
+        lines.append(f"    …and {len(schema['consumers']) - 5} more (--format json for all)")
+    lines.append('')
+    return lines

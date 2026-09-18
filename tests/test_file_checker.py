@@ -14,6 +14,8 @@ from reveal.cli.file_checker import (
     _i002_init_worker,
     _d005_preload,
     _d005_init_worker,
+    _t006_preload,
+    _t006_init_worker,
     _get_scan_disclosures,
     _apply_severity_filter,
 )
@@ -784,15 +786,75 @@ class TestD005Preload:
         assert dict(_project_index) == before
 
 
+class TestT006Preload:
+    """_t006_preload / _t006_init_worker -- same main-process-build contract
+    as D005: one project-wide TypedDict index, seeded into every worker."""
+
+    @pytest.fixture(autouse=True)
+    def _clean(self):
+        from reveal.rules.types.T006 import _clear_index
+        _clear_index()
+        yield
+        _clear_index()
+
+    def test_preload_skipped_when_t006_ignored(self, tmp_path):
+        assert _t006_preload(tmp_path, select=None, ignore=["T006"]) == {}
+
+    def test_preload_skipped_when_select_excludes_t006(self, tmp_path):
+        (tmp_path / "a.py").write_text("x = 1\n")
+        assert _t006_preload(tmp_path, select=["C901"], ignore=None) == {}
+
+    def test_preload_builds_index_for_project(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "t"\n')
+        (tmp_path / "types_.py").write_text(
+            "from typing import TypedDict\nclass TS(TypedDict):\n    a: str\n"
+        )
+        result = _t006_preload(tmp_path, select=["T"], ignore=None, files=[tmp_path / "types_.py"])
+        (index,) = result.values()
+        assert [td['name'] for td in index['typeddicts']] == ['TS']
+
+    def test_init_worker_populates_cache(self, tmp_path):
+        from reveal.rules.types.T006 import _project_index
+        fake_root = tmp_path / "fake_root"
+        fake_index = {'typeddicts': [], 'dict_aliases': frozenset()}
+        _t006_init_worker({fake_root: fake_index})
+        assert _project_index.get(fake_root) is fake_index
+
+    def test_init_worker_noop_on_empty_cache(self):
+        from reveal.rules.types.T006 import _project_index
+        before = dict(_project_index)
+        _t006_init_worker({})
+        assert dict(_project_index) == before
+
+
 class TestScanDisclosures:
     """BACK-1051: _get_scan_disclosures() aggregates I002/D005 skip reasons."""
 
     def test_no_disclosures_when_nothing_capped(self, tmp_path):
         from reveal.rules.imports.I002 import _graph_cache
         from reveal.rules.duplicates.D005 import _clear_index
+        from reveal.rules.types.T006 import _clear_index as _clear_t006_index
         _graph_cache.clear()
         _clear_index()
+        _clear_t006_index()
         assert _get_scan_disclosures() == []
+
+    def test_reports_t006_cap(self, tmp_path):
+        import os
+        from unittest import mock
+        from reveal.rules.imports.I002 import _graph_cache
+        from reveal.rules.duplicates.D005 import _clear_index
+        from reveal.rules.types.T006 import _build_index, _clear_index as _clear_t006_index
+        _graph_cache.clear()
+        _clear_index()
+        _clear_t006_index()
+        for i in range(3):
+            (tmp_path / f"m{i}.py").write_text("x = 1\n")
+        with mock.patch.dict(os.environ, {"REVEAL_T006_MAX_FILES": "2"}):
+            _build_index(tmp_path)
+        disclosures = _get_scan_disclosures()
+        assert len(disclosures) == 1 and disclosures[0].startswith("T006:")
+        _clear_t006_index()
 
     def test_reports_i002_cap(self, tmp_path):
         import os

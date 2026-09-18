@@ -563,6 +563,21 @@ class TestResolveProjectRoot:
         assert reveal_yaml_is_root(other) is False
         assert reveal_yaml_is_root(tmp_path / 'missing.yaml') is False
 
+    def test_reveal_yaml_is_root_sees_edits_despite_cache(self, tmp_path):
+        import os
+        config = tmp_path / '.reveal.yaml'
+        config.write_text('root: false\n')
+        assert reveal_yaml_is_root(config) is False
+        config.write_text('root: true\n')
+        stat = config.stat()
+        os.utime(config, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+        assert reveal_yaml_is_root(config) is True
+
+    def test_reveal_yaml_is_root_non_mapping_is_false(self, tmp_path):
+        config = tmp_path / '.reveal.yaml'
+        config.write_text('- root\n- true\n')
+        assert reveal_yaml_is_root(config) is False
+
 
 class TestFindProjectRoot:
     """Test find_project_root() for project root detection."""

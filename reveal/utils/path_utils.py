@@ -3,6 +3,7 @@
 Consolidates common patterns for searching up directory trees.
 """
 
+import functools
 import json
 import os
 import re
@@ -966,7 +967,21 @@ def reveal_yaml_is_root(config_file: Path) -> bool:
     a ``config`` import and ``config.py`` can delegate to it without creating a
     ``path_utils → config → path_utils`` cycle (BACK-612). This is the single
     definition of what ``root: true`` means across reveal.
+
+    Memoized on (path, mtime, size): project-root resolution runs once per
+    checked file for every project-scoped rule, and re-parsing the same YAML
+    each time was ~20ms a file -- most of `check --select D005` on a
+    500-file tree. An edited file gets a new key, so the cache can't go stale.
     """
+    try:
+        stat = os.stat(config_file)
+    except OSError:
+        return False
+    return _reveal_yaml_root_flag(str(config_file), stat.st_mtime_ns, stat.st_size)
+
+
+@functools.lru_cache(maxsize=256)
+def _reveal_yaml_root_flag(config_file: str, mtime_ns: int, size: int) -> bool:
     try:
         import yaml
     except ImportError:
@@ -974,7 +989,7 @@ def reveal_yaml_is_root(config_file: Path) -> bool:
     try:
         with open(config_file, encoding='utf-8') as f:
             data = yaml.safe_load(f) or {}
-        return bool(data.get('root'))
+        return bool(isinstance(data, dict) and data.get('root'))
     except (OSError, getattr(yaml, 'YAMLError', Exception)):
         return False
 

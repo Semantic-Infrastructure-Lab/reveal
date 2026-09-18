@@ -302,9 +302,14 @@ reveal 'stats://.?hotspots&code_only'
   reveal 'ast://src/file.py?show=calls'
   ```
 
-- **`show=dict-heatmap`** - Rank bare-dict params by subscript key access frequency; suggests TypedDict names
+- **`show=dict-heatmap`** - Rank untyped dicts by distinct string keys read (`x['k']`, `x.get('k')`, `'k' in x`); covers dict-annotated and unannotated params, loop variables (`for elem in structure['functions']`), and locals; suggests TypedDict names. Each result carries a `source` field.
   ```bash
   reveal 'ast://src?show=dict-heatmap'
+  ```
+
+- **`show=dict-schemas`** - Cluster the heatmap across functions into implicit record shapes read in 2+ places; names any existing TypedDict under the scanned path that already covers a shape, and the keys its readers use that it doesn't declare (drift)
+  ```bash
+  reveal 'ast://src?show=dict-schemas'
   ```
 
 - **`sort`** - Sort by a field descending with `-` prefix (e.g., `sort=-complexity`)

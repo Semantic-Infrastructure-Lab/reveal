@@ -56,17 +56,21 @@ def _parallel_worker(packed_args: tuple) -> tuple:
     return file_path, issue_count, detections, status
 
 
-def _i002_will_run(select, ignore) -> bool:
-    """Return True if I002 is in the effective rule set for the given filters.
+def _rule_will_run(code: str, select, ignore) -> bool:
+    """Return True if rule *code* is in the effective rule set for the filters.
 
     Delegates to the same RuleRegistry resolution the per-file check uses, so
-    the preload decision can never drift from what actually runs. In particular
-    this honors --select: ``check <dir> --select C901`` must not trigger the
-    expensive I002 import-graph build (BACK-338).
+    a preload decision can never drift from what actually runs. In particular
+    this honors --select: ``check <dir> --select C901`` must not trigger an
+    expensive project-wide index build (BACK-338).
     """
     from reveal.rules import RuleRegistry
     rules = RuleRegistry.get_rules(select=select, ignore=ignore)
-    return any(r.code == "I002" for r in rules)
+    return any(r.code == code for r in rules)
+
+
+def _i002_will_run(select, ignore) -> bool:
+    return _rule_will_run("I002", select, ignore)
 
 
 def _i002_preload(directory: Path, select, ignore, files: Optional[List[Path]] = None) -> dict:
@@ -123,11 +127,7 @@ def _i002_init_worker(graph_cache: dict) -> None:
 
 
 def _d005_will_run(select, ignore) -> bool:
-    """Return True if D005 is in the effective rule set for the given filters.
-    Mirrors _i002_will_run's reasoning exactly."""
-    from reveal.rules import RuleRegistry
-    rules = RuleRegistry.get_rules(select=select, ignore=ignore)
-    return any(r.code == "D005" for r in rules)
+    return _rule_will_run("D005", select, ignore)
 
 
 def _d005_preload(directory: Path, select, ignore, files: Optional[List[Path]] = None) -> dict:
@@ -176,6 +176,35 @@ def _d005_init_worker(project_index: dict) -> None:
         pass
 
 
+def _t006_preload(directory: Path, select, ignore, files: Optional[List[Path]] = None) -> dict:
+    """Build T006's project-wide TypedDict index in the main process, for the
+    same two reasons as _d005_preload: one build instead of one per worker,
+    and a capped scan's disclosure stays visible to the main process."""
+    try:
+        if not _rule_will_run("T006", select, ignore):
+            return {}
+        from reveal.rules.types.T006 import _build_index, _find_project_root, _project_index
+        sample = files[0] if files else directory
+        root = _find_project_root(sample.resolve())
+        if root not in _project_index:
+            _project_index[root] = _build_index(root)
+        return dict(_project_index)
+    except Exception:
+        # Same documented fallback as _d005_preload: workers build their own.
+        return {}
+
+
+def _t006_init_worker(project_index: dict) -> None:
+    """ProcessPoolExecutor initializer: seed each worker's T006 index cache."""
+    if not project_index:
+        return
+    try:
+        from reveal.rules.types.T006 import _project_index
+        _project_index.update(project_index)
+    except Exception:  # T006 module unavailable in some configs; worker continues without cache
+        pass
+
+
 def _preload_scan_caches(files: List[Path], directory: Path, select, ignore) -> dict:
     """Preload every scan-capped rule's shared index/graph in the main
     process, returning a dict of {rule_code: cache} for the pool initializer.
@@ -187,6 +216,7 @@ def _preload_scan_caches(files: List[Path], directory: Path, select, ignore) -> 
     return {
         'I002': _i002_preload(directory, select, ignore, files),
         'D005': _d005_preload(directory, select, ignore, files),
+        'T006': _t006_preload(directory, select, ignore, files),
     }
 
 
@@ -194,11 +224,12 @@ def _init_scan_caches(caches: dict) -> None:
     """ProcessPoolExecutor initializer counterpart to _preload_scan_caches."""
     _i002_init_worker(caches.get('I002', {}))
     _d005_init_worker(caches.get('D005', {}))
+    _t006_init_worker(caches.get('T006', {}))
 
 
 def _get_scan_disclosures() -> List[str]:
     """BACK-1051: collect every capped-scan disclosure recorded in this
-    process by rules with a shared-index/graph scan ceiling (I002, D005).
+    process by rules with a shared-index/graph scan ceiling (I002, D005, T006).
     Call only after the check run has completed (serial or parallel) —
     _preload_scan_caches guarantees the main process sees a worker's cap
     hit, not just a serial in-process one. Returns [] when nothing was
@@ -213,6 +244,11 @@ def _get_scan_disclosures() -> List[str]:
     try:
         from reveal.rules.duplicates.D005 import get_scan_disclosures as d005_disclosures
         disclosures.extend(d005_disclosures())
+    except Exception:
+        pass
+    try:
+        from reveal.rules.types.T006 import get_scan_disclosures as t006_disclosures
+        disclosures.extend(t006_disclosures())
     except Exception:
         pass
     return disclosures

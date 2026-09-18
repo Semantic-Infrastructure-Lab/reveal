@@ -258,7 +258,7 @@ Complete reference of all supported query parameters:
 | `return_type` | string | Find functions with a given return type annotation (parses the `-> TYPE` suffix; glob supported) | `return_type=bool`, `return_type=List*` |
 | `has_annotations` | boolean | Filter by presence of type annotations — `has_annotations=false` finds fully unannotated functions | `has_annotations=false`, `has_annotations=true` |
 | `reveal_type` | string | Show all type evidence for a named variable: parameter annotations, inferred assignment shapes, for-loop bindings — works on unannotated code, no mypy `reveal_type()` needed | `reveal_type=trade`, `reveal_type=config` |
-| `show` | string | Display mode — `show=calls` renders a compact call graph view; `show=dict-heatmap` ranks bare-dict params by key access count | `show=calls`, `show=dict-heatmap` |
+| `show` | string | Display mode — `show=calls` renders a compact call graph view; `show=dict-heatmap` ranks untyped-dict names (annotated/unannotated params, loop variables, locals) by distinct string keys read via `x['k']`, `x.get('k')`, `'k' in x`; `show=dict-schemas` clusters those across functions into shared implicit record shapes and names any TypedDict (defined under the scanned path) that already covers one, plus the keys readers use that it doesn't declare. Python only | `show=calls`, `show=dict-heatmap`, `show=dict-schemas` |
 
 **Parameter capabilities:**
 
@@ -668,6 +668,35 @@ reveal 'calls://src/?target=authenticate&format=dot' | dot -Tsvg > auth_calls.sv
 ```
 
 **Expected outcome**: Complete picture of call chains — who triggers what, and how deep it goes.
+
+---
+
+### Workflow 8: Find Implicit Dict Contracts (Python)
+
+**Scenario**: Records passed between modules as `Dict[str, Any]` — produced in one place, read by
+string key in many — have a real shape nobody declared, so a renamed or missing key fails silently.
+
+```bash
+# Step 1: Shapes read in several places, and any TypedDict that already covers one
+reveal 'ast://src/?show=dict-schemas'
+
+# Step 2: Every untyped-dict name (params, loop vars, locals, self.<attr>), most keys first
+reveal 'ast://src/?show=dict-heatmap'
+
+# Step 3: Params whose key reads an existing TypedDict already covers (line-level, CI-gateable)
+reveal check src/ --select T006
+
+# Step 4: Where one variable's shape comes from
+reveal 'ast://src/?reveal_type=elem'
+```
+
+Scan the package root: TypedDicts are matched only if defined under the scanned path. A
+`drift:` line lists keys readers use that the TypedDict doesn't declare — decide whether the
+TypedDict or the reader is wrong before annotating. Keys may be literals or ALL_CAPS constants;
+dict type aliases (`ConfigType = dict[str, Any]`) count as untyped dicts.
+
+**Expected outcome**: A short list of record types worth declaring (or adopting), with every reader
+located.
 
 ---
 

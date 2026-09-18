@@ -316,6 +316,23 @@ export REVEAL_I002_MAX_FILES=50000
 reveal check very-large-monorepo/
 ```
 
+#### `REVEAL_D005_MAX_FILES` / `REVEAL_T006_MAX_FILES`
+Same kind of ceiling for the two other rules that index the whole project once per run.
+Both default to `5000` `.py` files.
+
+- **D005** (duplicate literal clusters across files): past the ceiling, cross-file duplicate
+  detection is skipped for that project.
+- **T006** (TypedDict available but a param uses an untyped dict): past the ceiling, T006 still
+  runs but only matches TypedDicts defined in the same module as the function.
+
+Either skip is reported in `check`/`review` output (`scan_disclosures` in JSON), so a capped scan
+is never mistaken for "nothing found".
+
+```bash
+export REVEAL_T006_MAX_FILES=20000
+reveal check large-python-monorepo/ --select T006
+```
+
 #### `REVEAL_BREADCRUMBS`
 Control navigation hints after output:
 

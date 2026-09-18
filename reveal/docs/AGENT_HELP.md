@@ -347,7 +347,8 @@ reveal 'ast://./src?complexity>10&lines>50'
 - `has_annotations=true/false` - `false` = fully unannotated; `true` = fully annotated
 - `callers>N` - Inbound caller count above N (combine with `complexity>10` for prime refactor targets)
 - `reveal_type=VAR` - Show type evidence for a variable without editing source
-- `show=dict-heatmap` - Rank bare-dict params by key access; suggests TypedDict names
+- `show=dict-heatmap` - Rank untyped dicts (params, loop vars, locals) by keys read; suggests TypedDict names
+- `show=dict-schemas` - Cluster those into shapes shared across files; flags existing TypedDicts readers bypass or that have drifted
 
 **Filter combinations:**
 ```bash
@@ -3898,13 +3899,19 @@ def process(data: str, count: int, flag: bool) -> None:
 
 **T006: Function uses bare dict but a matching TypedDict is available**
 ```python
-# ❌ Bad — a UserRecord TypedDict already exists elsewhere in the module,
-# but this signature uses a bare dict instead of referencing it
+# ❌ Bad — a UserRecord TypedDict already exists (in this module or anywhere
+# in the project), but this signature uses an untyped dict instead
 def save_user(data: dict) -> None: ...
 
 # ✅ Good — reuse the existing TypedDict for a checkable shape
 def save_user(data: UserRecord) -> None: ...
 ```
+Fires on params annotated `dict`/`Dict[...]`/`Mapping`/`Any`/a dict alias whose key reads
+(`d['k']`, `d.get('k')`, `'k' in d`) a TypedDict covers: 3+ shared keys for one in the same
+module, 4+ for one elsewhere. Loop variables and locals don't fire — see
+`ast://<path>?show=dict-schemas` for those. The project scan is capped by
+`REVEAL_T006_MAX_FILES` (default 5000); past it, only same-module TypedDicts match and the
+skip is reported in `scan_disclosures`.
 
 ---
 

@@ -48,9 +48,12 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
         _render_reveal_type(data, output_format)
         return
 
-    # dict-heatmap mode: bare-dict param ranking
+    # dict-heatmap / dict-schemas modes: untyped-dict ranking and clustering
     if data.get('type') == 'ast_dict_heatmap':
         _render_dict_heatmap(data, output_format)
+        return
+    if data.get('type') == 'ast_dict_schemas':
+        _render_dict_schemas(data, output_format)
         return
 
     # Text/grep format
@@ -203,10 +206,30 @@ def _render_dict_heatmap(data: Dict[str, Any], output_format: str) -> None:
 
     if output_format == 'grep':
         for item in results:
-            print(f"{item.get('file', '')}:{item.get('line', 0)}:{item.get('function', '')}:{item.get('param', '')}:{item.get('key_count', 0)}")
+            fields = ('file', 'line', 'function', 'param', 'key_count', 'source')
+            print(':'.join(str(item.get(f, '')) for f in fields))
         return
 
     print(render_dict_heatmap(results, path, unsupported_language))
+
+
+def _render_dict_schemas(data: Dict[str, Any], output_format: str) -> None:
+    """Render show=dict-schemas implicit-schema clusters."""
+    from reveal.adapters.ast.nav_dict_heatmap import render_dict_schemas
+    results = data.get('results', [])
+
+    if output_format == 'json':
+        print_json_result(data)
+        return
+
+    if output_format == 'grep':
+        for schema in results:
+            for consumer in schema.get('consumers', []):
+                fields = [str(consumer.get(f, '')) for f in ('file', 'line', 'function', 'param')]
+                print(':'.join(fields + [schema.get('suggested_name', '')]))
+        return
+
+    print(render_dict_schemas(results, data.get('path', '.'), data.get('unsupported_language', '')))
 
 
 def _render_reveal_type(data: Dict[str, Any], output_format: str) -> None:

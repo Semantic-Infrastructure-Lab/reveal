@@ -182,10 +182,17 @@ class AstAdapter(ResourceAdapter):
         Returns:
             Dict containing query results with metadata
         """
-        # show=dict-heatmap: ranked bare-dict param heatmap
-        if self.show_mode == 'dict-heatmap':
-            from .nav_dict_heatmap import collect_dict_heatmap, has_python_files
-            items = collect_dict_heatmap(self.path)
+        # show=dict-heatmap: per-function untyped-dict ranking
+        # show=dict-schemas: the same items clustered into shared shapes
+        if self.show_mode in ('dict-heatmap', 'dict-schemas'):
+            from ...analyzers.python_dict_usage import (
+                collect_dict_analysis, collect_dict_schemas, has_python_files,
+            )
+            items, typeddicts = collect_dict_analysis(self.path)
+            if self.show_mode == 'dict-heatmap':
+                results = items
+            else:
+                results = collect_dict_schemas(items, typeddicts)
             unsupported_language = ''
             if not items and not has_python_files(self.path):
                 from ...utils.path_utils import detect_non_python_language
@@ -193,13 +200,13 @@ class AstAdapter(ResourceAdapter):
             meta = self.create_meta(parse_mode='python_ast',
                                     confidence=1.0, warnings=[], errors=[])
             result = ResultBuilder.create(
-                result_type='ast_dict_heatmap',
+                result_type='ast_' + self.show_mode.replace('-', '_'),
                 source=self.path,
                 contract_version=CONTRACT_VERSION,
                 data={
                     'path': self.path,
-                    'total_results': len(items),
-                    'results': items,
+                    'total_results': len(results),
+                    'results': results,
                     'unsupported_language': unsupported_language,
                 },
             )
