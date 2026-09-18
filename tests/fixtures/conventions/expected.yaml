@@ -1,0 +1,64 @@
+# BACK-1278 convention-axis conformance rows — ground truth per language.
+#
+# tests/fixtures/conformance/ covers extraction + nav flags. This matrix covers
+# the axes where reveal's Python-first bias lived (BACK-1272): what each
+# language treats as implicitly invoked, as stdlib, and as a test. Each
+# fixture dir <lang>/ is a tiny project: a stdlib import, a third-party import,
+# a used function, an `orphan` nobody calls, and a test that calls `used`.
+#
+#   uncalled                names calls://<dir>?uncalled must report (nothing else:
+#                           main / test entry points / test callbacks must NOT appear)
+#   test_entrypoints_excluded  how many implicit entry points it skipped
+#   imports                 module -> imports:// classification
+#   has_test_hint           function -> hotspots:// has_test_hint (`orphan` is only
+#                           asserted where the language's tests name symbols; file-name
+#                           matches like lib_test.go -> `lib` cover the whole module)
+#
+# A block may instead be `{xfail: BACK-N, expected: ...}` (strict: the day it
+# starts passing the test fails, forcing this row to be updated) or
+# `{not_supported: "reason"}` (an honest, declared gap).
+#
+# Note the java fixture dir is literally named `java`, so it also guards against
+# a scanned directory's own name shadowing a stdlib root (`java.util.List`).
+
+python:
+  uncalled: [orphan]
+  test_entrypoints_excluded: 1          # test_used
+  imports: {os: stdlib, requests: unresolved}
+  has_test_hint: {used: true}
+go:
+  uncalled: [orphan]
+  test_entrypoints_excluded: 1          # TestUsed (main is skipped as implicit too)
+  imports: {fmt: stdlib, testing: stdlib, github.com/spf13/cobra: unresolved}
+  has_test_hint: {used: true}
+rust:
+  uncalled: [orphan]
+  test_entrypoints_excluded: 1          # #[test] fn used_returns_map
+  imports: {std::collections::HashMap: stdlib, serde::Serialize: unresolved}
+  has_test_hint: {used: true, orphan: false}
+javascript:
+  uncalled: [orphan]
+  test_entrypoints_excluded: 2          # describe()/it() callbacks
+  imports: {fs: stdlib, react: unresolved}
+  has_test_hint: {used: true}
+typescript:
+  uncalled: [orphan]
+  test_entrypoints_excluded: 2
+  imports: {fs: stdlib, react: unresolved}
+  has_test_hint: {used: true}
+java:
+  uncalled: [orphan]
+  test_entrypoints_excluded: 1          # @Test testUsed
+  imports:
+    java.util.List: stdlib
+    org.junit.Test: unresolved
+    org.apache.commons.lang3.StringUtils: unresolved
+  has_test_hint: {used: true}
+ruby:
+  uncalled:
+    xfail: BACK-1297                    # bare-identifier calls (`used`) are not recorded as calls
+    expected: [orphan]
+  test_entrypoints_excluded: 0
+  imports:
+    not_supported: "no Ruby stdlib rule; json/nokogiri both read as unresolved"
+  has_test_hint: {used: true}

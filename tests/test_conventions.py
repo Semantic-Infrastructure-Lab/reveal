@@ -226,3 +226,12 @@ class TestIsTestPath:
         from reveal.adapters.overview import _is_test_file
         assert _is_test_file('pkg/util/foo_test.go')
         assert not _is_test_file('pkg/testing/util.go')
+
+
+def test_scanned_dir_named_like_stdlib_root_does_not_hide_stdlib():
+    """Scanning `src/main/java` must not classify `java.util.List` as internal."""
+    from reveal.analyzers.imports.classify import classify_module
+    assert classify_module('java.util.List', 'java', frozenset({'java'})) == ('stdlib', 'java')
+    assert classify_module('net/http', 'go', frozenset({'net'}))[0] == 'stdlib'
+    # Python keeps local-first: a local package shadows a same-named stdlib module.
+    assert classify_module('json', 'python', frozenset({'json'})) == ('internal', None)
