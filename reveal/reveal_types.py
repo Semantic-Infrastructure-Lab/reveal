@@ -2,7 +2,8 @@
 
 These types document the shape of data flowing through the system:
 - Contract envelope: RevealResult, RevealMeta, WarningEntry
-- AST element shapes: ASTElement, VarFlowEvent
+- AST element shapes: StructureItem (analyzer output), ASTElement (adapter
+  record built from it), VarFlowEvent
 
 RevealResult is the return type of get_structure() and ResultBuilder.create().
 The envelope fields (contract_version, type, source, source_type) are always
@@ -77,12 +78,47 @@ class ASTElement(TypedDict, total=False):
     line_count: int
     signature: str
     decorators: List[str]
+    bases: List[str]
+    # Optional flags propagated from the analyzer (absent unless true):
+    is_abstract: bool
+    is_test_callback: bool
+    accessor: str
+    trait_impl: bool
     # Functions/methods only:
     complexity: int
     depth: int
     calls: List[str]
     called_by: List[str]
     resolved_calls: List[Any]
+
+
+class StructureItem(TypedDict, total=False):
+    """One entry of an analyzer's get_structure() lists (functions, classes,
+    imports, ...): the input create_element_dict() turns into an ASTElement.
+
+    Line-range keys are `line` (start) and `line_end` (inclusive end); the
+    extract_element() records use `line_start`/`line_end`. `end_line` is not
+    a key of either record -- it only names local variables and the parsed
+    `:N-M` element syntax (BACK-1292).
+    """
+    name: str
+    line: int
+    line_start: int
+    line_end: int
+    line_count: int
+    code_line_count: int
+    signature: str
+    decorators: List[str]
+    bases: List[str]
+    is_abstract: bool
+    is_test_callback: bool
+    accessor: str
+    trait_impl: bool
+    complexity: int
+    depth: int
+    calls: List[str]
+    called_by: List[str]
+    content: str  # imports carry their text here instead of `name`
 
 
 class VarFlowEvent(TypedDict, total=False):

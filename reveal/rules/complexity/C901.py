@@ -145,7 +145,7 @@ class C901(BaseRule, ASTParsingMixin):
         """
         # Get function content if we have line numbers
         start_line = func.get('line', 0)
-        end_line = func.get('end_line') or func.get('line_end') or start_line
+        end_line = func.get('line_end') or start_line
 
         if start_line == 0 or end_line == 0:
             # Fall back to line count heuristic

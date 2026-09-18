@@ -2,7 +2,8 @@
 
 import re
 from fnmatch import fnmatch
-from typing import Dict, List, Any, Set
+from typing import Dict, List, Any, Set, cast
+from ...reveal_types import ASTElement
 from ...utils.query import compare_values
 
 # Filter keys `matches_filters` special-cases (mapped to a differently-named
@@ -81,7 +82,7 @@ def apply_filters(structures: List[Dict[str, Any]], query: Dict[str, Any]) -> Li
     return results
 
 
-def matches_filters(element: Dict[str, Any], query: Dict[str, Any]) -> bool:
+def matches_filters(element: ASTElement, query: Dict[str, Any]) -> bool:
     """Check if element matches all query filters.
 
     Args:
@@ -91,6 +92,7 @@ def matches_filters(element: Dict[str, Any], query: Dict[str, Any]) -> bool:
     Returns:
         True if element matches all filters
     """
+    value: Any
     for key, condition in query.items():
         # Handle special key mappings
         if key == 'type':
@@ -141,7 +143,7 @@ def matches_filters(element: Dict[str, Any], query: Dict[str, Any]) -> bool:
                 return False
             continue
         else:
-            value = element.get(key)
+            value = cast(Dict[str, Any], element).get(key)  # arbitrary user-chosen key
 
         if value is None:
             return False

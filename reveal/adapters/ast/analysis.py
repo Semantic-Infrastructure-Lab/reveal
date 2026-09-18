@@ -4,8 +4,9 @@
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, cast
 
+from ...reveal_types import StructureItem
 from ...utils.path_utils import is_skippable_dir
 from .call_graph import build_symbol_map, resolve_callees
 
@@ -79,7 +80,7 @@ def is_code_file(path: Path) -> bool:
 def create_element_dict(
     file_path: str,
     category: str,
-    item: Dict[str, Any],
+    item: StructureItem,
     analyzer,
     symbol_map: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -125,7 +126,7 @@ def create_element_dict(
     # BACK-1286: implicit-invocation markers read by calls://?uncalled.
     for flag in ('is_test_callback', 'accessor', 'trait_impl'):
         if item.get(flag):
-            element[flag] = item[flag]
+            element[flag] = cast(Dict[str, Any], item)[flag]
 
     # Add complexity for functions/methods (and 'tests' — currently only Zig's
     # TestDecl blocks, which now carry 'calls' too; see zig.py/BACK-660 follow-on).
@@ -184,7 +185,8 @@ def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
             for item in items:
                 if not isinstance(item, dict):
                     continue
-                element = create_element_dict(file_path, category, item, analyzer, symbol_map)
+                element = create_element_dict(
+                    file_path, category, cast(StructureItem, item), analyzer, symbol_map)
                 result['elements'].append(element)
 
         # Free large per-file buffers held by the analyzer so directory scans

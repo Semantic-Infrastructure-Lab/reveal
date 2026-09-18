@@ -3,8 +3,9 @@
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
+from reveal.reveal_types import ASTElement
 from reveal.utils import print_json_result
 
 # Maps bare shorthand names users commonly try to the correct filter syntax
@@ -116,13 +117,13 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
     for file_path, elements in sorted(by_file.items()):
         print(f"File: {file_path}")
         for elem in elements:
-            _render_ast_element(elem)
+            _render_ast_element(cast(ASTElement, elem))
         print()
 
     _render_meta_warnings(data)
 
 
-def _render_ast_element(elem: Dict[str, Any]) -> None:
+def _render_ast_element(elem: ASTElement) -> None:
     """Render a single AST element line."""
     name = elem.get('name', '')
     line = elem.get('line', 0)
