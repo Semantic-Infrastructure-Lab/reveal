@@ -159,6 +159,9 @@ MATCH_NODES: frozenset = MATCH_EXPRESSION_NODES | frozenset({'match_statement'})
 CASE_NODES: frozenset = frozenset({
     'case_clause', 'match_arm', 'switch_case', 'SwitchProng', 'when_entry',
     'switch_entry', 'case_statement', 'when',
+    # Go: each `case` arm of expression/type switches and select (`default`
+    # arms are `default_case` -- deliberately not a branch) (BACK-1298).
+    'expression_case', 'type_case', 'communication_case',
 })
 SWITCH_NODES: frozenset = frozenset({
     'switch_statement', 'switch', 'SwitchExpr', 'when_expression', 'case',
@@ -462,6 +465,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'catch_clause': 'CATCH', 'catch': 'CATCH',
     'catch_block': 'CATCH', 'rescue': 'CATCH',
     'switch_case': 'CASE', 'switch_entry': 'CASE', 'case_statement': 'CASE',
+    'expression_case': 'CASE', 'type_case': 'CASE', 'communication_case': 'CASE',  # Go
     'case': 'SWITCH', 'when': 'CASE',  # Ruby case/when (bare kinds; named nodes)
     'switch_default': 'DEFAULT', 'default': 'DEFAULT', 'default_statement': 'DEFAULT',
     'function_definition': 'DEF', 'function_declaration': 'DEF',

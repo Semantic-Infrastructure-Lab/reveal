@@ -62,6 +62,8 @@ _DECISION_TYPES = frozenset({
     # role as SwitchProng/match_arm (BACK-431 tier A real-corpus dogfood
     # audit).
     'when_entry', 'switch_entry', 'case_statement',
+    # Go switch / type-switch / select arms (BACK-1298); `default_case` excluded.
+    'expression_case', 'type_case', 'communication_case',
 })
 
 _NESTING_TYPES = frozenset({

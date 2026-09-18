@@ -120,6 +120,13 @@ class TestComplexityCoversFamilies(unittest.TestCase):
             f'control-flow kinds not counted as complexity decisions: {missing}',
         )
 
+    def test_go_switch_and_select_arms_are_case_nodes(self):
+        # BACK-1298: Go arms were in no family, so a 2-arm switch scored 1.
+        go_arms = {'expression_case', 'type_case', 'communication_case'}
+        self.assertLessEqual(go_arms, tax.CASE_NODES)
+        self.assertLessEqual(go_arms, complexity._DECISION_TYPES)
+        self.assertNotIn('default_case', complexity._DECISION_TYPES)
+
     def test_loop_and_block_families_count_as_nesting(self):
         # Statement modifiers (MODIFIER_NODES: `x if c` / `x unless c`) are
         # decisions but wrap a single statement — they must NOT count as nesting
