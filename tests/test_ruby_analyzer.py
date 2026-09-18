@@ -730,3 +730,30 @@ def test_if_and_while_complexity_matches_ruby(tmp_path, monkeypatch, suffix):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# BACK-1297: paren-less, receiver-less calls parse as bare identifiers.
+def _ruby_calls(tmp_path, source, fn):
+    f = tmp_path / "t.rb"
+    f.write_text(source)
+    structure = RubyAnalyzer(str(f)).get_structure()
+    return next(m['calls'] for m in structure['functions'] if m['name'] == fn)
+
+
+def test_ruby_bare_identifier_is_a_call(tmp_path):
+    src = "def helper; 1; end\ndef caller_fn\n  helper\nend\n"
+    assert _ruby_calls(tmp_path, src, 'caller_fn') == ['helper']
+
+
+def test_ruby_locals_params_and_method_names_are_not_calls(tmp_path):
+    src = (
+        "def f(a, b = 1, *rest, k: 2)\n"
+        "  x = a\n  x += b\n  y, z = rest\n"
+        "  [1].each { |i| i }\n  x + y + z + k\nend\n"
+    )
+    assert _ruby_calls(tmp_path, src, 'f') == ['[1].each']
+
+
+def test_ruby_nested_def_bare_calls_stay_in_own_scope(tmp_path):
+    src = "def outer\n  def inner\n    only_inner\n  end\nend\n"
+    assert _ruby_calls(tmp_path, src, 'outer') == []

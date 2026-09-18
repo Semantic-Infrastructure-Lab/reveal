@@ -2253,6 +2253,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return getattr(self, handler_name)(call_node)
         return self._callee_name_generic(call_node)
 
+    def _implicit_calls_in_function(self, func_node) -> List[str]:
+        """Hook: callee names that are not call-expression nodes (BACK-1297).
+
+        No-op by default — overridden in analyzers/ruby.py, where a receiver-
+        less, argument-less call (`used`) parses as a bare `identifier`.
+        """
+        return []
+
     def _extract_calls_in_function(self, func_node) -> List[str]:
         """Walk function body subtree and return unique callee name strings.
 
@@ -2275,6 +2283,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     calls.append(name)
                     seen.add(name)
             stack.extend(reversed(_children(node)))
+        for name in self._implicit_calls_in_function(func_node):
+            if name not in seen:
+                calls.append(name)
+                seen.add(name)
         return calls
 
     def _complexity_depth_and_calls(self, func_node) -> Tuple[int, int, List[str]]:
@@ -2380,6 +2392,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 child_depth = depth + 1 if child_kind in _NESTING_TYPES else depth
                 stack.append((child, kind, child_depth))
 
+        for name in self._implicit_calls_in_function(func_node):
+            if name not in seen_calls:
+                calls.append(name)
+                seen_calls.add(name)
         return decision_count + 1, max_depth, calls
 
 

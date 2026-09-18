@@ -85,6 +85,62 @@ class RubyAnalyzer(TreeSitterAnalyzer):
             return method_text
         return f"{self._get_node_text(receiver_node)}.{method_text}"
 
+    # ── Paren-less calls (BACK-1297) ───────────────────────────────────────
+    # A receiver-less, argument-less call (`used`) is a bare `identifier`, not
+    # a `call` node — indistinguishable from a local variable read by syntax
+    # alone, so every helper called that way read as uncalled. Approximation:
+    # an identifier in value position that is never bound in the enclosing
+    # method (parameter, assignment target, block/for/rescue variable) is a
+    # method call. Flow-insensitive on purpose; misses at worst a call shadowed
+    # by a same-named local. Nested defs are their own scope and are skipped.
+
+    _RUBY_BINDING_PARENTS = frozenset({
+        'method_parameters', 'block_parameters', 'lambda_parameters',
+        'optional_parameter', 'keyword_parameter', 'splat_parameter',
+        'hash_splat_parameter', 'block_parameter', 'destructured_parameter',
+        'left_assignment_list', 'rest_assignment', 'exception_variable',
+        'for', 'pattern', 'as_pattern',
+    })
+    _RUBY_SCOPE_NODES = frozenset({'method', 'singleton_method'})
+
+    def _implicit_calls_in_function(self, func_node) -> List[str]:
+        idents: List[tuple] = []
+        bound: set = set()
+        stack = list(_children(func_node))
+        while stack:
+            node = stack.pop()
+            kind = _zero_arg(node, 'kind')
+            if kind in self._RUBY_SCOPE_NODES:
+                continue
+            if kind == 'identifier':
+                parent = _zero_arg(node, 'parent')
+                pkind = _zero_arg(parent, 'kind') if parent is not None else None
+                name = self._get_node_text(node)
+                if pkind in self._RUBY_SCOPE_NODES:
+                    continue  # the method's own name
+                if pkind in self._RUBY_BINDING_PARENTS or self._is_assignment_target(parent, node):
+                    bound.add(name)
+                elif pkind == 'call':
+                    # `foo.bar` / `baz 1`: handled as a `call` node already.
+                    if parent.child_by_field_name('receiver') is not None or \
+                            parent.child_by_field_name('method') is not None:
+                        continue
+                else:
+                    idents.append((name, node))
+            stack.extend(reversed(_children(node)))
+        out: List[str] = []
+        for name, _ in idents:
+            if name not in bound and name not in out:
+                out.append(name)
+        return out
+
+    @staticmethod
+    def _is_assignment_target(parent, node) -> bool:
+        if parent is None or _zero_arg(parent, 'kind') not in ('assignment', 'operator_assignment'):
+            return False
+        left = parent.child_by_field_name('left')
+        return left is not None and _zero_arg(left, 'start_byte') == _zero_arg(node, 'start_byte')
+
     # ── Node naming (BACK-918/BACK-915) ─────────────────────────────────────
     def _name_via_ruby_special_name(self, kids) -> Optional[str]:
         # `def action_key=(val)` / `def [](k)` / `def ===(other)` — the name

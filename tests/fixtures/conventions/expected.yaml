@@ -58,9 +58,7 @@ java:
     org.apache.commons.lang3.StringUtils: unresolved
   has_test_hint: {used: true}
 ruby:
-  uncalled:
-    xfail: BACK-1297                    # bare-identifier calls (`used`) are not recorded as calls
-    expected: [orphan]
+  uncalled: [caller_fn, orphan]         # caller_fn calls `used` paren-less (BACK-1297)
   test_entrypoints_excluded: 0
   imports:
     not_supported: "no Ruby stdlib rule; json/nokogiri both read as unresolved"
