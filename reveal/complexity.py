@@ -91,6 +91,18 @@ _KEYWORD_PAIRS = frozenset({
     ('if_modifier', 'if'),
     ('unless_modifier', 'unless'),
     ('unless', 'unless'),
+    # tree-sitter-ruby names a statement node and its bare keyword token
+    # identically ('while' > 'while'), so the container/keyword pair above has
+    # to be spelled same-kind for each Ruby construct (BACK-1284). Without
+    # these every Ruby decision point counted twice.
+    ('if', 'if'),
+    ('elsif', 'elsif'),
+    ('while', 'while'),
+    ('until', 'until'),
+    ('for', 'for'),
+    ('case', 'case'),
+    ('when', 'when'),
+    ('rescue', 'rescue'),
     ('boolean_operator', 'or'),
     ('boolean_operator', 'and'),
 })

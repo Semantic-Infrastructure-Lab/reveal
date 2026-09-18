@@ -686,5 +686,47 @@ end
             os.unlink(temp_path)
 
 
+# BACK-1284: tree-sitter-ruby names a statement node and its keyword token
+# identically ('while' > 'while'), which double-counted every decision point.
+_RUBY_COMPLEXITY_CASES = {
+    'if': ("def f(x)\n  if x\n    1\n  end\nend\n", 2),
+    'while': ("def f(x)\n  while x\n    x -= 1\n  end\nend\n", 2),
+    'until': ("def f(x)\n  until x\n    x = 1\n  end\nend\n", 2),
+    'for': ("def f(xs)\n  for i in xs\n    i\n  end\nend\n", 2),
+    'rescue': ("def f(x)\n  begin\n    x\n  rescue => e\n    e\n  end\nend\n", 2),
+    'if_elsif': ("def f(x)\n  if x\n    1\n  elsif x > 2\n    2\n  end\nend\n", 3),
+    'if_and_while': ("def f(x)\n  if x\n    1\n  end\n  while x\n    x -= 1\n  end\nend\n", 3),
+}
+
+# The same single-decision function in other languages scores 2 (if_and_while: 3).
+_PARITY_SNIPPETS = {
+    '.py': "def f(x):\n    if x:\n        pass\n    while x:\n        x -= 1\n",
+    '.js': "function f(x) {\n  if (x) { x = 1; }\n  while (x) { x -= 1; }\n}\n",
+    '.go': "package p\nfunc f(x int) {\n\tif x > 0 {\n\t\tx = 1\n\t}\n\tfor x > 0 {\n\t\tx--\n\t}\n}\n",
+}
+
+
+def _complexity_of_f(tmp_path, suffix, code):
+    from reveal.registry import get_analyzer
+    path = tmp_path / f"case{suffix}"
+    path.write_text(code, encoding='utf-8')
+    structure = get_analyzer(str(path))(str(path)).get_structure()
+    return next(f for f in structure['functions'] if f['name'] == 'f')['complexity']
+
+
+@pytest.mark.parametrize('name', sorted(_RUBY_COMPLEXITY_CASES))
+def test_ruby_decision_point_counted_once(tmp_path, monkeypatch, name):
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
+    code, expected = _RUBY_COMPLEXITY_CASES[name]
+    assert _complexity_of_f(tmp_path, '.rb', code) == expected
+
+
+@pytest.mark.parametrize('suffix', sorted(_PARITY_SNIPPETS))
+def test_if_and_while_complexity_matches_ruby(tmp_path, monkeypatch, suffix):
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
+    ruby = _complexity_of_f(tmp_path, '.rb', _RUBY_COMPLEXITY_CASES['if_and_while'][0])
+    assert _complexity_of_f(tmp_path, suffix, _PARITY_SNIPPETS[suffix]) == ruby == 3
+
+
 if __name__ == '__main__':
     unittest.main()
