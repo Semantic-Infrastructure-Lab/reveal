@@ -283,9 +283,9 @@ CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB: Dict[str, str] = {
     'python': '__dunder__ methods and @property/@classmethod/@staticmethod',
     'ruby': "initialize (invoked by .new), included/extended/inherited/method_missing/"
             "respond_to_missing? (Ruby's module/metaprogramming callback hooks)",
-    'javascript': 'constructor methods (invoked by `new`, never a call expression)',
-    'typescript': 'constructor methods (invoked by `new`, never a call expression)',
-    'tsx': 'constructor methods (invoked by `new`, never a call expression)',
+    'javascript': 'constructor methods and get/set accessors (invoked by `new` / property access, never a call expression)',
+    'typescript': 'constructor methods and get/set accessors (invoked by `new` / property access, never a call expression)',
+    'tsx': 'constructor methods and get/set accessors (invoked by `new` / property access, never a call expression)',
 }
 CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB = (
     "constructors and language-runtime-invoked lifecycle hooks specific to this language"

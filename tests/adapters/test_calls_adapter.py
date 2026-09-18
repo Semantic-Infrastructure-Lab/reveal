@@ -1575,6 +1575,39 @@ class TestFindUncalled(unittest.TestCase):
         names = [e['name'] for e in result['entries']]
         self.assertNotIn('constructor', names)
 
+    def test_ts_getters_setters_excluded(self):
+        """BACK-1286: `get x()`/`set x()` run on property access, never a call
+        expression -- 522 of 3,631 (14%) uncalled hits on vscode's src/vs/base."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('acc.ts', '''\
+            class Box {
+                private _v = 1;
+                get value(): number { return this._v; }
+                set value(v: number) { this._v = v; }
+                static get inst(): Box { return new Box(); }
+                dead(): void {}
+            }
+        ''')
+        names = [e['name'] for e in find_uncalled(self.tmpdir)['entries']]
+        self.assertEqual(names, ['dead'])
+
+    def test_js_test_callbacks_excluded_and_counted(self):
+        """BACK-1286: describe/it callbacks are run by the test runner. They were
+        55% of vscode's uncalled hits. Excluded and counted like Zig `tests`;
+        include_test_framework=True opts back in."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('a.test.ts', '''\
+            describe('box', () => {
+                it('works', () => { helper(); });
+            });
+            function orphan() {}
+        ''')
+        result = find_uncalled(self.tmpdir)
+        self.assertEqual([e['name'] for e in result['entries']], ['orphan'])
+        self.assertEqual(result['test_entrypoints_excluded'], 2)
+        opted_in = find_uncalled(self.tmpdir, include_test_framework=True)
+        self.assertIn('it(works)', [e['name'] for e in opted_in['entries']])
+
     def test_ruby_initialize_excluded(self):
         """BACK-1197: Ruby's 'initialize' (invoked by .new, never a source-
         level call) accounted for 365 of 2,235 uncalled entries (16.3%) on

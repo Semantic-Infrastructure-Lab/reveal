@@ -976,8 +976,11 @@ def find_uncalled(
             # Zig test blocks are unambiguously entry points (BACK-663) — no
             # per-language name/decorator heuristic needed the way pytest's
             # test_-prefix convention requires one, category says it all.
-            if category == 'tests' and not include_test_framework:
+            if (category == 'tests' or elem.get('is_test_callback')) and not include_test_framework:
                 test_entrypoints_excluded += 1
+                continue
+            # BACK-1286: get/set accessors run on property access, never a call.
+            if elem.get('accessor'):
                 continue
 
             decorator_names = _get_decorator_names(elem)

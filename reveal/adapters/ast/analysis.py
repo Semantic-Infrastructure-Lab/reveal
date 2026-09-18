@@ -130,6 +130,10 @@ def create_element_dict(
     # Propagate optional flags from the analyzer (e.g. TypeScript abstract classes).
     if item.get('is_abstract'):
         element['is_abstract'] = True
+    # BACK-1286: implicit-invocation markers read by calls://?uncalled.
+    for flag in ('is_test_callback', 'accessor'):
+        if item.get(flag):
+            element[flag] = item[flag]
 
     # Add complexity for functions/methods (and 'tests' — currently only Zig's
     # TestDecl blocks, which now carry 'calls' too; see zig.py/BACK-660 follow-on).

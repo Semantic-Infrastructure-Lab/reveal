@@ -70,10 +70,15 @@ class JSTestCallbackMixin:
         Attributes calls inside test-framework callbacks to named entries so
         calls:// can find callers that live inside test blocks (BACK-334).
         """
-        return [
-            self._build_function_dict(node, name, [])
-            for name, node in self._iter_test_callbacks()
-        ]
+        callbacks = []
+        for name, node in self._iter_test_callbacks():
+            func = self._build_function_dict(node, name, [])
+            # BACK-1286: run by the test runner, not a call expression. Kept in
+            # 'functions' (outline / by-name resolution / callers index rely on
+            # that) with a flag calls://?uncalled reads like Zig's 'tests' category.
+            func['is_test_callback'] = True
+            callbacks.append(func)
+        return callbacks
 
     def _find_named_test_callback(self, name: str):
         """Resolve a synthetic test-callback label (``describe(foo)``,

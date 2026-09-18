@@ -998,7 +998,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # list even after the _function_end_node fix above. (BACK-760)
         calls = self._dart_merge_signature_extra_calls(node, calls)
         calls = self._decorator_extra_calls(decorated_node, calls)
-        return {
+        result = {
             'line': line_start,
             'line_end': line_end,
             'name': name,
@@ -1010,6 +1010,15 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'decorators': decorators,
             'calls': calls,
         }
+        # BACK-1286: a `get x()` / `set x()` member is run by property access,
+        # never a call expression, so calls://?uncalled must not read it as dead.
+        accessor = next(
+            (k for k in (_zero_arg(c, 'kind') for c in _children(node)) if k in ('get', 'set')),
+            None,
+        ) if _zero_arg(node, 'kind') == 'method_definition' else None
+        if accessor:
+            result['accessor'] = accessor
+        return result
 
     def _mark_non_code_rows(self, node, non_code_rows: Set[int]) -> None:
         """Add a comment/docstring node's fully-self-contained rows to
