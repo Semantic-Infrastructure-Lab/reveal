@@ -75,6 +75,10 @@ class LanguageConventions:
     # Name conventions a test runner collects without an explicit call.
     test_name_prefixes: Tuple[str, ...] = ()
     test_lifecycle_names: FrozenSet[str] = frozenset()
+    # Pattern-based test names (Go `TestXxx`), optionally only in files ending in
+    # one of `test_file_suffixes` (Go requires `_test.go`; empty = any file).
+    test_name_pattern: Optional[Pattern[str]] = None
+    test_file_suffixes: Tuple[str, ...] = ()
     # Source-text markers for test attributes/annotations (`[Fact]`, `@Test`).
     # Used where the marker is not (reliably) captured as a decorator.
     test_annotation_markers: Tuple[str, ...] = ()
@@ -85,11 +89,19 @@ class LanguageConventions:
             return True
         return bool(self.implicit_name_pattern and self.implicit_name_pattern.match(name))
 
-    def is_test_name(self, name: str) -> bool:
-        """True if *name* follows this language's test-runner naming convention."""
-        return name in self.test_lifecycle_names or (
-            bool(self.test_name_prefixes) and name.startswith(self.test_name_prefixes)
-        )
+    def is_test_name(self, name: str, file_path: str = '') -> bool:
+        """True if *name* follows this language's test-runner naming convention.
+
+        *file_path* matters only for languages whose convention is file-scoped
+        (Go): a `TestFoo` outside a `_test.go` file is an ordinary function.
+        """
+        if name in self.test_lifecycle_names:
+            return True
+        if self.test_name_prefixes and name.startswith(self.test_name_prefixes):
+            return True
+        if self.test_name_pattern and self.test_name_pattern.match(name):
+            return not self.test_file_suffixes or file_path.endswith(self.test_file_suffixes)
+        return False
 
 
 EMPTY = LanguageConventions(family='')
@@ -130,6 +142,22 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             'initialize', 'included', 'extended', 'inherited',
             'method_missing', 'respond_to_missing?',
         })),
+        # `main` and `init` are run by the runtime. `go test` collects
+        # Test/Benchmark/Example/Fuzz functions in _test.go files; the name after
+        # the prefix must not start with a lowercase letter (`Testable` is not a test).
+        LanguageConventions(
+            family='go',
+            implicit_names=frozenset({'main', 'init'}),
+            test_name_pattern=re.compile(r'^(Test|Benchmark|Example|Fuzz)(?![a-z])'),
+            test_file_suffixes=('_test.go',),
+        ),
+        # `#[test]`-family attributes are captured as decorators (raw `#[...]` text,
+        # reduced to the bare last path segment by the calls adapter).
+        LanguageConventions(
+            family='rust',
+            implicit_names=frozenset({'main'}),
+            test_decorators=frozenset({'test', 'bench', 'rstest'}),
+        ),
         LanguageConventions(family='csharp', test_annotation_markers=_CSHARP_TEST_MARKERS),
         LanguageConventions(family='java', test_annotation_markers=_JVM_TEST_MARKERS),
         LanguageConventions(family='kotlin', test_annotation_markers=_JVM_TEST_MARKERS),

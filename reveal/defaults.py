@@ -277,7 +277,7 @@ CALL_GRAPH_DEFAULT_DISPATCH_VOCAB = 'runtime dispatch mechanisms specific to thi
 # apply -- and worse, Ruby's real equivalent (initialize, invoked by .new,
 # never a source-level call edge) was not actually excluded at all: 365 of
 # 2,235 uncalled entries (16.3%) on one real corpus. See
-# adapters/calls/index.py's _RUBY_IMPLICIT_NAMES for the matching exclusion
+# conventions.py's LanguageConventions for the matching exclusion
 # logic -- this dict is the disclosure half, that's the enforcement half.
 CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB: Dict[str, str] = {
     'python': '__dunder__ methods and @property/@classmethod/@staticmethod',
@@ -286,6 +286,8 @@ CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB: Dict[str, str] = {
     'javascript': 'constructor methods and get/set accessors (invoked by `new` / property access, never a call expression)',
     'typescript': 'constructor methods and get/set accessors (invoked by `new` / property access, never a call expression)',
     'tsx': 'constructor methods and get/set accessors (invoked by `new` / property access, never a call expression)',
+    'go': 'main and init (invoked by the runtime) and Test*/Benchmark*/Example*/Fuzz* functions in _test.go files (invoked by `go test`)',
+    'rust': 'main and #[test]/#[bench] functions (invoked by the runtime / test harness)',
 }
 CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB = (
     "constructors and language-runtime-invoked lifecycle hooks specific to this language"

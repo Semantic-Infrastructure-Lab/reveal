@@ -2,7 +2,7 @@
 
 import pytest
 
-from reveal.adapters.calls.index import find_uncalled, rank_by_callers
+from reveal.adapters.calls.index import _get_decorator_names, find_uncalled, rank_by_callers
 from reveal.conventions import (
     EMPTY, PYTHON_BUILTINS, conventions_for, family_for_path, is_builtin_anywhere,
 )
@@ -100,3 +100,54 @@ class TestScopedBuiltins:
         files = {r['file'].rsplit('/', 1)[-1] for e in result['entries'] for r in e.get('callers', [])
                  if e['name'].split('.')[-1] == 'sorted'}
         assert files == {'b.rb'}
+
+
+class TestGoAndRustEntryPoints:
+    """BACK-1274: Go tests/main/init and Rust #[test]/main are not dead code."""
+
+    @pytest.fixture(autouse=True)
+    def _no_disk_cache(self, monkeypatch):
+        monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
+
+    def test_go_test_functions_only_in_test_files(self, tmp_path):
+        _write(tmp_path, 'a_test.go', 'package p\nfunc TestRead(t int) {}\nfunc BenchmarkRead(b int) {}\n'
+               'func ExampleRead() {}\nfunc FuzzRead(f int) {}\nfunc Testable() {}\nfunc helper() {}\n')
+        _write(tmp_path, 'a.go', 'package p\nfunc TestNotATest() {}\nfunc main() {}\nfunc init() {}\nfunc dead() {}\n')
+        result = find_uncalled(str(tmp_path))
+        assert {e['name'] for e in result['entries']} == {'Testable', 'TestNotATest', 'dead', 'helper'}
+        assert result['test_entrypoints_excluded'] == 4
+
+    def test_rust_test_attributes_and_main(self, tmp_path):
+        _write(tmp_path, 'a.rs', '#[test]\nfn it_works() {}\n\n#[tokio::test(flavor = "multi_thread")]\n'
+               'async fn async_works() {}\n\n#[bench]\nfn bench_it() {}\n\nfn main() {}\n\n#[inline]\nfn dead() {}\n')
+        result = find_uncalled(str(tmp_path))
+        assert [e['name'] for e in result['entries']] == ['dead']
+        assert result['test_entrypoints_excluded'] == 3
+
+    def test_test_names_do_not_leak_across_languages(self, tmp_path):
+        _write(tmp_path, 'a.rs', 'fn TestLooksLikeGo() {}\nfn init() {}\n')
+        _write(tmp_path, 'b_test.py', 'def TestLooksLikeGo():\n    pass\n')
+        names = {e['name'] for e in find_uncalled(str(tmp_path))['entries']}
+        assert {'TestLooksLikeGo', 'init'} <= names
+
+    def test_go_profile_is_file_scoped(self):
+        go = conventions_for('go')
+        assert go.is_test_name('TestX', 'pkg/x_test.go')
+        assert not go.is_test_name('TestX', 'pkg/x.go')
+        assert not go.is_test_name('Testable', 'pkg/x_test.go')
+        assert go.is_test_name('Test', 'x_test.go')
+
+
+class TestDecoratorBareNames:
+    @pytest.mark.parametrize('raw, bare', [
+        ('@property', 'property'),
+        ("@app.route('/x')", 'route'),
+        ('@pytest.fixture()', 'fixture'),
+        ('#[test]', 'test'),
+        ('#[tokio::test]', 'test'),
+        ('#[tokio::test(flavor = "multi_thread")]', 'test'),
+        ('#[cfg(test)]', 'cfg'),
+        ('#![allow(dead_code)]', 'allow'),
+    ])
+    def test_bare_names(self, raw, bare):
+        assert _get_decorator_names({'decorators': [raw]}) == {bare}

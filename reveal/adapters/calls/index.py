@@ -70,8 +70,9 @@ def _get_decorator_names(elem: Dict[str, Any]) -> Set[str]:
     """
     names = set()
     for d in elem.get('decorators', []):
-        bare = d.lstrip('@').split('(', 1)[0]
-        names.add(bare.split('.')[-1])
+        # Rust attributes arrive as raw `#[tokio::test(flavor = "x")]` text.
+        bare = d.lstrip('@#!').lstrip('[').split('(', 1)[0].rstrip(']')
+        names.add(bare.replace('::', '.').split('.')[-1])
     return names
 
 
@@ -792,7 +793,7 @@ def _is_test_entry_point(
     (BACK-446) — a pytest fixture/test, a unittest lifecycle hook, or a
     C#/Java method carrying a test attribute/annotation."""
     conv = conventions_for(_lang_family(file_path))
-    if decorator_names & conv.test_decorators or conv.is_test_name(name):
+    if decorator_names & conv.test_decorators or conv.is_test_name(name, file_path):
         return True
     return (
         bool(line_no) and bool(conv.test_annotation_markers)
