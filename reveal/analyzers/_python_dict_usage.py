@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -429,9 +430,19 @@ def _short(node: ast.AST, limit: int = 60) -> str:
 
 
 def suggest_typeddict_name(name: str) -> str:
-    """'trade' → 'TradeState', 'self._config' → 'ConfigState'."""
-    base = name.rsplit('.', 1)[-1].strip('_')
-    return base.capitalize() + 'State' if base else 'ItemState'
+    """'trade' → 'TradeState', 'self._config' → 'ConfigState',
+    'query_params' → 'QueryParamsState', 'ASTElement' → 'ASTElementState'.
+
+    Each underscore-separated part gets its first letter upper-cased and the
+    rest left alone (``str.capitalize`` would lower-case ``ASTElement`` and
+    leave ``query_params`` as ``Query_params``). A name already ending in
+    ``State`` is not suffixed twice.
+    """
+    base = re.sub(r'[^0-9A-Za-z_]', '', name.rsplit('.', 1)[-1])
+    camel = ''.join(part[0].upper() + part[1:] for part in base.split('_') if part)
+    if not camel or camel[0].isdigit():
+        return 'ItemState'
+    return camel if camel.endswith('State') else camel + 'State'
 
 
 # ─────────────────────────── TypedDict definitions ───────────────────────────

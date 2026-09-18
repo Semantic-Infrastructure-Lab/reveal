@@ -46,3 +46,20 @@ class TestFunctionDictUsages:
         fn = _func('def f(d: dict, n: int, e: "Dict[str, Any]"):\n    d["a"]\n    e["b"]\n')
         assert [u['param'] for u in engine.function_dict_usages(fn, 'x.py')] == ['d', 'e']
         assert engine.has_untyped_dict_param(fn)
+
+
+class TestSuggestTypedDictName:
+    @pytest.mark.parametrize('name, expected', [
+        ('trade', 'TradeState'),
+        ('self._config', 'ConfigState'),
+        ('_elem', 'ElemState'),
+        ('query_params', 'QueryParamsState'),
+        ('self.rows_by_id', 'RowsByIdState'),
+        ('ASTElement', 'ASTElementState'),
+        ('trade_state', 'TradeState'),
+        ('__', 'ItemState'),
+        ('', 'ItemState'),
+        ('2fa', 'ItemState'),
+    ])
+    def test_names(self, name, expected):
+        assert engine.suggest_typeddict_name(name) == expected
