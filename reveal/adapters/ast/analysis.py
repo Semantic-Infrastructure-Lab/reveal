@@ -123,7 +123,7 @@ def create_element_dict(
     if item.get('is_abstract'):
         element['is_abstract'] = True
     # BACK-1286: implicit-invocation markers read by calls://?uncalled.
-    for flag in ('is_test_callback', 'accessor'):
+    for flag in ('is_test_callback', 'accessor', 'trait_impl'):
         if item.get(flag):
             element[flag] = item[flag]
 

@@ -18,6 +18,9 @@
 # starts passing the test fails, forcing this row to be updated) or
 # `{not_supported: "reason"}` (an honest, declared gap).
 #
+# (Every fixture sits under tests/, so 'not a test file' cases -- e.g. Java `testXxx`
+# in src/main -- are unit-tested in test_conventions.py, not expressible here.)
+#
 # Note the java fixture dir is literally named `java`, so it also guards against
 # a scanned directory's own name shadowing a stdlib root (`java.util.List`).
 
@@ -32,7 +35,7 @@ go:
   imports: {fmt: stdlib, testing: stdlib, github.com/spf13/cobra: unresolved}
   has_test_hint: {used: true}
 rust:
-  uncalled: [orphan]
+  uncalled: [inherent_dead, orphan]   # trait-impl `fmt` is dispatched, not called
   test_entrypoints_excluded: 1          # #[test] fn used_returns_map
   imports: {std::collections::HashMap: stdlib, serde::Serialize: unresolved}
   has_test_hint: {used: true, orphan: false}
@@ -48,7 +51,7 @@ typescript:
   has_test_hint: {used: true}
 java:
   uncalled: [orphan]
-  test_entrypoints_excluded: 1          # @Test testUsed
+  test_entrypoints_excluded: 2          # @Test testUsed + JUnit3 testLegacy
   imports:
     java.util.List: stdlib
     org.junit.Test: unresolved

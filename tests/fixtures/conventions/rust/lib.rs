@@ -11,6 +11,19 @@ fn used() -> HashMap<i32, i32> {
 
 fn orphan() {}
 
+struct Wrapper;
+
+// Trait dispatch reaches `fmt`; the inherent method has no such excuse.
+impl std::fmt::Display for Wrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "w")
+    }
+}
+
+impl Wrapper {
+    fn inherent_dead(&self) {}
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

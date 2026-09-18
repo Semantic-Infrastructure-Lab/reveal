@@ -1018,7 +1018,15 @@ class TreeSitterAnalyzer(FileAnalyzer):
         ) if _zero_arg(node, 'kind') == 'method_definition' else None
         if accessor:
             result['accessor'] = accessor
+        # BACK-1291: a method of `impl Trait for T` is reached by trait dispatch,
+        # never by its own name.
+        if self._is_trait_impl_method(node):
+            result['trait_impl'] = True
         return result
+
+    def _is_trait_impl_method(self, node) -> bool:
+        """True if *node* is a method implementing a trait (Rust `impl Trait for T`)."""
+        return False
 
     def _mark_non_code_rows(self, node, non_code_rows: Set[int]) -> None:
         """Add a comment/docstring node's fully-self-contained rows to

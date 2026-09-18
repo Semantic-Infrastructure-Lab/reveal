@@ -75,6 +75,9 @@ class LanguageConventions:
     test_decorators: FrozenSet[str] = frozenset()
     # Name conventions a test runner collects without an explicit call.
     test_name_prefixes: Tuple[str, ...] = ()
+    # JUnit3-style `testXxx` is only a test inside a test file; a bare `test*`
+    # elsewhere is an ordinary method, and hiding it would hide real dead code.
+    test_prefixes_in_test_files_only: bool = False
     test_lifecycle_names: FrozenSet[str] = frozenset()
     # Pattern-based test names (Go `TestXxx`), optionally only in files ending in
     # one of `test_file_suffixes` (Go requires `_test.go`; empty = any file).
@@ -123,7 +126,10 @@ class LanguageConventions:
         if name in self.test_lifecycle_names:
             return True
         if self.test_name_prefixes and name.startswith(self.test_name_prefixes):
-            return True
+            if not self.test_prefixes_in_test_files_only:
+                return True
+            from .utils.path_utils import is_test_path  # lazy: path_utils imports this module
+            return is_test_path(file_path)
         if self.test_name_pattern and self.test_name_pattern.match(name):
             return not self.test_file_suffixes or file_path.endswith(self.test_file_suffixes)
         return False
@@ -288,12 +294,14 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         LanguageConventions(
             family='java', test_annotation_markers=_JVM_TEST_MARKERS,
             stdlib_key=_prefix_stdlib_key('java', 'javax', 'jdk'),
+            test_name_prefixes=('test',), test_prefixes_in_test_files_only=True,
             test_file_patterns=(re.compile(r'^(.+?)Tests?\.java$'), re.compile(r'^Test(.+)\.java$')),
             test_symbol_patterns=(re.compile(r'(?:void|fun)\s+`?test(\w+)', re.MULTILINE),),
         ),
         LanguageConventions(
             family='kotlin', test_annotation_markers=_JVM_TEST_MARKERS,
             stdlib_key=_prefix_stdlib_key('kotlin', 'java', 'javax'),
+            test_name_prefixes=('test',), test_prefixes_in_test_files_only=True,
             test_file_patterns=(re.compile(r'^(.+?)Tests?\.kt$'), re.compile(r'^Test(.+)\.kt$')),
             test_symbol_patterns=(re.compile(r'(?:void|fun)\s+`?test(\w+)', re.MULTILINE),),
         ),

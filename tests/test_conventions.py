@@ -235,3 +235,38 @@ def test_scanned_dir_named_like_stdlib_root_does_not_hide_stdlib():
     assert classify_module('net/http', 'go', frozenset({'net'}))[0] == 'stdlib'
     # Python keeps local-first: a local package shadows a same-named stdlib module.
     assert classify_module('json', 'python', frozenset({'json'})) == ('internal', None)
+
+
+class TestJUnit3TestPrefix:
+    """BACK-1290: `testXxx` counts as a test only inside test files."""
+
+    def test_java_prefix_scoped_to_test_files(self):
+        from reveal.conventions import conventions_for
+        java = conventions_for('java')
+        assert java.is_test_name('testParse', 'src/test/java/FooTest.java')
+        assert java.is_test_name('testParse', 'FooTests.java')
+        assert not java.is_test_name('testParse', 'src/main/java/Foo.java')
+        assert not java.is_test_name('parse', 'src/test/java/FooTest.java')
+
+    def test_python_prefix_unscoped(self):
+        from reveal.conventions import conventions_for
+        assert conventions_for('python').is_test_name('test_x', 'anywhere.py')
+
+
+def test_rust_trait_impl_methods_flagged(tmp_path):
+    """BACK-1291: methods of `impl Trait for T` carry trait_impl; inherent ones don't."""
+    from reveal.registry import get_analyzer
+    src = tmp_path / 't.rs'
+    src.write_text(
+        'struct A;\n'
+        'impl std::fmt::Display for A {\n'
+        '    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { Ok(()) }\n'
+        '}\n'
+        'impl A {\n'
+        '    fn plain(&self) { fn nested() {} }\n'
+        '}\n'
+    )
+    funcs = {f['name']: f for f in get_analyzer(str(src))(str(src)).get_structure()['functions']}
+    assert funcs['fmt'].get('trait_impl') is True
+    assert 'trait_impl' not in funcs['plain']
+    assert 'trait_impl' not in funcs.get('nested', {})

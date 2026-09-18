@@ -16,6 +16,20 @@ class RustAnalyzer(TreeSitterAnalyzer):
     """
     language = 'rust'
 
+    def _is_trait_impl_method(self, node) -> bool:
+        """BACK-1291: inside an `impl_item` that names a trait (`impl Display for A`),
+        as opposed to an inherent `impl A`. Nested fns inside a method body stop at
+        the first enclosing function so a helper isn't mistaken for a trait method."""
+        parent = _zero_arg(node, 'parent')
+        while parent is not None:
+            kind = _zero_arg(parent, 'kind')
+            if kind == 'impl_item':
+                return parent.child_by_field_name('trait') is not None
+            if kind == 'function_item':
+                return False
+            parent = _zero_arg(parent, 'parent')
+        return False
+
     def _extract_decorators(self, node) -> List[str]:
         """Rust attributes (BACK-1087, D1 Phase-2b): unlike every other
         Phase-2a/2b language (Java/C#/Kotlin/Swift/PHP all attach annotations

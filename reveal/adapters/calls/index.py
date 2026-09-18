@@ -850,6 +850,7 @@ def find_uncalled(
     - Test-runner entry points (pytest/unittest, xUnit ``[Fact]``/``[Theory]``,
       JUnit ``@Test``, …) — invoked by reflection, not a call (BACK-446).
       Set ``include_test_framework=True`` to keep them in the result.
+    - Rust methods of ``impl Trait for T`` (trait dispatch, BACK-1291)
     - Zig ``test`` blocks (category='tests') — always entry points invoked by
       the test runner, never by name (BACK-663). Same opt-out flag applies.
 
@@ -912,6 +913,9 @@ def find_uncalled(
                 continue
             # BACK-1286: get/set accessors run on property access, never a call.
             if elem.get('accessor'):
+                continue
+            # BACK-1291: trait-impl methods are dispatched through the trait.
+            if elem.get('trait_impl'):
                 continue
 
             decorator_names = _get_decorator_names(elem)
