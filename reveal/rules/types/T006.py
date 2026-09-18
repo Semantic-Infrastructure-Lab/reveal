@@ -13,7 +13,7 @@ Only annotated params fire. Unannotated params are T005's concern, and loop
 variables / locals have no line-level fix (their type comes from whatever
 they iterate) -- `ast://<path>?show=dict-schemas` reports those.
 
-Analysis lives in reveal/analyzers/python_dict_usage.py, shared with
+Analysis lives in reveal/analyzers/_python_dict_usage.py, shared with
 `ast://?show=dict-heatmap` / `?show=dict-schemas`.
 """
 
@@ -26,7 +26,7 @@ from typing import Any, Dict, FrozenSet, List, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
-from ...analyzers.python_dict_usage import (
+from ...analyzers._python_dict_usage import (
     SCHEMA_MIN_SHARED_KEYS,
     best_typeddict_match,
     build_context,

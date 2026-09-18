@@ -12,13 +12,14 @@ from .queries import (
     extract_builtins_param as _extract_builtins_param,
     extract_reveal_type_param as _extract_reveal_type_param,
 )
-from .analysis import collect_structures, PYTHON_BUILTINS
+from .analysis import collect_structures
 from .filtering import apply_filters, matches_decorator, find_unknown_filter_keys
 from .help import get_help as _get_help, get_schema as _get_schema
 from .renderer import AstRenderer
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
+from ...conventions import conventions_for, family_for_path
 from ...core import suppress_treesitter_warnings
-from ...registry import language_for_extension, get_code_extensions
+from ...registry import get_code_extensions
 from ...utils.query import (
     parse_result_control,
     apply_result_control,
@@ -185,7 +186,7 @@ class AstAdapter(ResourceAdapter):
         # show=dict-heatmap: per-function untyped-dict ranking
         # show=dict-schemas: the same items clustered into shared shapes
         if self.show_mode in ('dict-heatmap', 'dict-schemas'):
-            from ...analyzers.python_dict_usage import (
+            from ...analyzers._python_dict_usage import (
                 collect_dict_analysis, collect_dict_schemas, has_python_files,
             )
             items, typeddicts = collect_dict_analysis(self.path)
@@ -309,10 +310,9 @@ class AstAdapter(ResourceAdapter):
         # adapter fix; this ast:// copy of the filter was missed there.
         if not self.include_builtins:
             for elem in controlled:
-                if elem.get('calls') and language_for_extension(
-                    os.path.splitext(elem.get('file', ''))[1].lower()
-                ) == 'python':
-                    elem['calls'] = [c for c in elem['calls'] if c.split('.')[-1] not in PYTHON_BUILTINS]
+                builtins = conventions_for(family_for_path(elem.get('file', ''))).builtins
+                if elem.get('calls') and builtins:
+                    elem['calls'] = [c for c in elem['calls'] if c.split('.')[-1] not in builtins]
 
         # BACK-1258: tag each result test/vendor/minified, the same field
         # hotspots:// and overview:// already carry. ast://?complexity>N is a

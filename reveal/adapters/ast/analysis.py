@@ -1,7 +1,6 @@
 """File analysis and structure extraction for AST adapter."""
 
 
-import builtins as _builtins_module
 import os
 import sys
 from pathlib import Path
@@ -10,13 +9,6 @@ from typing import Dict, List, Any, Optional
 from ...utils.path_utils import is_skippable_dir
 from .call_graph import build_symbol_map, resolve_callees
 
-# All public names in the Python builtins module — used to filter noise from
-# callees results.  Defined here (not in calls/index.py) so ast and calls
-# adapters can both import it without creating a cross-package cycle.
-# Built at import time so it stays in sync with the running Python version.
-PYTHON_BUILTINS: frozenset = frozenset(
-    name for name in dir(_builtins_module) if not name.startswith('_')
-)
 
 
 def try_add_file_structure(file_path: str, structures: List[Dict[str, Any]]) -> None:

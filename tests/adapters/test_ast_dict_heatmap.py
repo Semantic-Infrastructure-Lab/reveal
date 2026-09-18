@@ -7,7 +7,7 @@ import pytest
 
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.ast.nav_dict_heatmap import render_dict_heatmap, render_dict_schemas
-from reveal.analyzers.python_dict_usage import (
+from reveal.analyzers._python_dict_usage import (
     collect_dict_analysis,
     collect_dict_heatmap,
     collect_dict_schemas,

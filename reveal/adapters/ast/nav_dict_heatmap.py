@@ -1,13 +1,13 @@
 """Text renderers for ast://...?show=dict-heatmap and ?show=dict-schemas.
 
-The analysis lives in reveal/analyzers/python_dict_usage.py, shared with rule T006.
+The analysis lives in reveal/analyzers/_python_dict_usage.py, shared with rule T006.
 """
 from __future__ import annotations
 
 from collections import Counter
 from typing import Any, Dict, List
 
-from ...analyzers.python_dict_usage import SCHEMA_MIN_CONSUMERS
+from ...analyzers._python_dict_usage import SCHEMA_MIN_CONSUMERS
 
 _SOURCE_LABELS = {
     'annotated_param': 'param',

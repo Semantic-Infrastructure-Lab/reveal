@@ -14,10 +14,10 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
 
-from ..ast.analysis import collect_structures, is_code_file, PYTHON_BUILTINS
+from ..ast.analysis import collect_structures, is_code_file
 from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
+from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
 from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
-from ...registry import language_for_extension
 from ...utils.path_utils import is_unsafe_scan_root
 
 # Module-level LRU cache: directory → (cache_key, index)
@@ -26,10 +26,6 @@ from ...utils.path_utils import is_unsafe_scan_root
 # more than a handful cached simultaneously.
 _INDEX_CACHE: OrderedDict = OrderedDict()
 _INDEX_CACHE_MAX = 8
-
-# Decorators that cause the runtime to dispatch the function implicitly —
-# never appear as explicit call expressions in source code.
-_IMPLICIT_DECORATORS: frozenset = frozenset({'property', 'classmethod', 'staticmethod'})
 
 # BACK-1265: web/CLI framework route and handler decorators. A decorated route
 # is invoked by the framework's registry, never by a call expression, so every
@@ -62,75 +58,9 @@ _DEFAULT_ENTRY_POINT_DECORATORS: frozenset = frozenset({
     'given', 'when', 'then', 'step', 'fixture',
 })
 
-# BACK-1197: Ruby's own equivalent of Python's __dunder__ exclusion — method
-# names invoked by the language/framework runtime, never a source-level call
-# expression. 'initialize' alone accounted for 365 of 2,235 uncalled entries
-# (16.3%) on one real Ruby corpus before this was added. Scoped to Ruby files
-# only (via _lang_family) so these common-enough names don't false-negative
-# a genuinely-dead function of the same name in another language.
-_RUBY_IMPLICIT_NAMES: frozenset = frozenset({
-    'initialize',              # invoked by .new, never a call expression
-    'included', 'extended', 'inherited',  # Module/Class hook callbacks
-    'method_missing', 'respond_to_missing?',  # metaprogramming dispatch hooks
-})
-
-# BACK-446: test methods are invoked by a test runner via reflection/collection,
-# not by an explicit call expression — so they always show up as "uncalled" and
-# swamp the dead-code signal (1,577 false positives on Jellyfin/C#, nearly all
-# xUnit [Fact]/[Theory] methods). Excluded by default; opt back in with
-# ?test-framework=true.
-#
-# C#/.NET and Java mark tests with attributes/annotations that Reveal's
-# structure pass does NOT surface as `decorators`, so these are matched by a
-# scoped source-scan of the annotation lines immediately preceding the def.
-_TEST_ANNOTATION_MARKERS: tuple = (
-    # C# / .NET — xUnit, NUnit, MSTest
-    '[Fact', '[Theory', '[Test', '[SetUp', '[TearDown',
-    '[OneTimeSetUp', '[OneTimeTearDown',
-    # Java / JVM — JUnit 4/5, TestNG
-    '@Test', '@ParameterizedTest', '@RepeatedTest', '@TestFactory',
-    '@BeforeEach', '@AfterEach', '@BeforeAll', '@AfterAll',
-    '@Before', '@After', '@BeforeClass', '@AfterClass',
-)
-# Python test entry points Reveal *does* capture as decorators (pytest).
-_TEST_DECORATOR_NAMES: frozenset = frozenset({'fixture'})
-# Python name conventions collected by pytest/unittest without an explicit call.
-_PY_UNITTEST_LIFECYCLE: frozenset = frozenset({
-    'setUp', 'tearDown', 'setUpClass', 'tearDownClass',
-    'setUpModule', 'tearDownModule',
-})
-
-# Tree-sitter language slug → coarse family, for scoping callee resolution to
-# the caller's language (BACK-405). C/C++ share one family since headers (.h)
-# are ambiguous between the two and both target the same symbol namespace.
-# Deliberately coarse — the goal is only to stop bare-name collisions across
-# unrelated languages (e.g. a C `write()` resolving to a Python `def write`),
-# not to build a precise per-language classifier. Extension→language identity
-# itself is NOT re-declared here — it's looked up from the registry
-# (BACK-431 Issue B) so a new extension routed to an existing language is
-# automatically in-family with no edit needed here.
-_FAMILY_BY_LANGUAGE: Dict[str, str] = {
-    'c': 'c', 'cpp': 'c',
-    'python': 'python',
-    'javascript': 'js', 'typescript': 'js', 'tsx': 'js',
-    'go': 'go',
-    'rust': 'rust',
-    'java': 'java',
-    'csharp': 'csharp',
-    'ruby': 'ruby',
-    'php': 'php',
-    'kotlin': 'kotlin',
-    'swift': 'swift',
-    'scala': 'scala',
-    'lua': 'lua',
-    'dart': 'dart',
-}
-
-
-def _lang_family(file_path: str) -> str:
-    """Return the coarse language family for a file path, or '' if unknown."""
-    lang = language_for_extension(Path(file_path).suffix.lower())
-    return _FAMILY_BY_LANGUAGE.get(lang, '') if lang else ''
+# Language family for a path; conventions (implicit names, builtins, test markers)
+# are scoped per family in reveal/conventions.py.
+_lang_family = family_for_path
 
 
 def _get_decorator_names(elem: Dict[str, Any]) -> Set[str]:
@@ -186,13 +116,10 @@ def _is_implicit_element(
     """
     if only_functions and is_method:
         return True
-    if name.startswith('__') and name.endswith('__'):
+    conv = conventions_for(lang_family)
+    if conv.is_implicit_name(name):
         return True
-    if name == 'constructor':
-        return True
-    if lang_family == 'ruby' and name in _RUBY_IMPLICIT_NAMES:
-        return True
-    return bool(decorator_names & (_IMPLICIT_DECORATORS | extra_implicit_decorators))
+    return bool(decorator_names & (conv.implicit_decorators | extra_implicit_decorators))
 
 
 def _uncalled_entry_mtime(entry: Dict[str, Any]) -> float:
@@ -549,8 +476,9 @@ def find_callees(
             if elem.get('name', '') != target:
                 continue
             calls = elem.get('calls', [])
-            if not include_builtins and _lang_family(file_path) == 'python':
-                filtered = [c for c in calls if c.split('.')[-1] not in PYTHON_BUILTINS]
+            builtins = conventions_for(_lang_family(file_path)).builtins
+            if not include_builtins and builtins:
+                filtered = [c for c in calls if c.split('.')[-1] not in builtins]
                 builtins_hidden += len(calls) - len(filtered)
                 calls = filtered
             matches.append({
@@ -586,8 +514,9 @@ def _build_forward_index(
             if not name:
                 continue
             calls = elem.get('calls', [])
-            if not include_builtins and _lang_family(file_path) == 'python':
-                calls = [c for c in calls if c.split('.')[-1] not in PYTHON_BUILTINS]
+            builtins = conventions_for(_lang_family(file_path)).builtins
+            if not include_builtins and builtins:
+                calls = [c for c in calls if c.split('.')[-1] not in builtins]
             forward.setdefault(name, []).append({
                 'file': file_path,
                 'line': elem.get('line', 0),
@@ -826,6 +755,7 @@ def _has_test_annotation(
     file_path: str,
     line_no: int,
     cache: Dict[str, List[str]],
+    markers: Tuple[str, ...],
 ) -> bool:
     """True if a test attribute/annotation (``[Fact]``, ``@Test``, …) sits on or
     immediately above the def at ``line_no``.
@@ -848,7 +778,7 @@ def _has_test_annotation(
         else:
             break
     blob = ''.join(texts)
-    return any(marker in blob for marker in _TEST_ANNOTATION_MARKERS)
+    return any(marker in blob for marker in markers)
 
 
 def _is_test_entry_point(
@@ -861,13 +791,13 @@ def _is_test_entry_point(
     """True if *name* is invoked by a test runner rather than an explicit call
     (BACK-446) — a pytest fixture/test, a unittest lifecycle hook, or a
     C#/Java method carrying a test attribute/annotation."""
-    if decorator_names & _TEST_DECORATOR_NAMES:
+    conv = conventions_for(_lang_family(file_path))
+    if decorator_names & conv.test_decorators or conv.is_test_name(name):
         return True
-    if _lang_family(file_path) == 'python' and (
-        name.startswith('test_') or name in _PY_UNITTEST_LIFECYCLE
-    ):
-        return True
-    return bool(line_no) and _has_test_annotation(file_path, line_no, cache)
+    return (
+        bool(line_no) and bool(conv.test_annotation_markers)
+        and _has_test_annotation(file_path, line_no, cache, conv.test_annotation_markers)
+    )
 
 
 def _project_entry_point_decorators(directory: Path) -> FrozenSet[str]:
@@ -1073,11 +1003,15 @@ def rank_by_callers(
 
     entries = []
     for callee_name, caller_records in index.items():
-        if not include_builtins and callee_name.split('.')[-1] in PYTHON_BUILTINS:
-            # PYTHON_BUILTINS names can collide with real methods in other
-            # languages (Scala/Ruby `.map`, `.filter`, ...) — only drop the
-            # callers that are actually Python, keep the rest (BACK-748).
-            caller_records = [r for r in caller_records if _lang_family(r['file']) != 'python']
+        bare_callee = callee_name.split('.')[-1]
+        if not include_builtins and is_builtin_anywhere(bare_callee):
+            # Builtin names collide with real methods in other languages
+            # (Scala/Ruby `.map`, `.filter`, ...) — only drop the callers whose
+            # own language treats the name as a builtin, keep the rest (BACK-748).
+            caller_records = [
+                r for r in caller_records
+                if bare_callee not in conventions_for(_lang_family(r['file'])).builtins
+            ]
             if not caller_records:
                 continue
         if not include_test_framework and callee_name.split('.')[-1] in TEST_FRAMEWORK_CALLEE_NAMES:
