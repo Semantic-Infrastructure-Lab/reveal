@@ -199,3 +199,30 @@ class TestStdlibKey:
 
     def test_dart_marker_is_family_independent(self):
         assert self._classify('dart:async', 'dart') == ('stdlib', 'dart:async')
+
+
+class TestIsTestPath:
+    """BACK-1277: one shared 'is this a test file?' answer."""
+
+    def _t(self, p):
+        from reveal.utils.path_utils import is_test_path
+        return is_test_path(p)
+
+    def test_language_conventions(self):
+        for p in ('pkg/etcd_test.go', 'src/a.spec.ts', 'src/b.test.jsx', 'app/x_spec.rb',
+                  'src/foo_tests.rs', 'src/tests.rs', 'pkg/conftest.py', 'lib/spec_helper.rb',
+                  'a/foo_tests.cpp', 'src/FooTest.java'):
+            assert self._t(p), p
+
+    def test_test_directories(self):
+        assert self._t('repo/tests/helpers.py')
+        assert self._t('repo/__tests__/util.js')
+
+    def test_non_tests(self):
+        for p in ('src/etcd.go', 'src/testing_utils.py', 'src/contest.py', 'src/latest.ts'):
+            assert not self._t(p), p
+
+    def test_go_test_previously_missed_by_overview(self):
+        from reveal.adapters.overview import _is_test_file
+        assert _is_test_file('pkg/util/foo_test.go')
+        assert not _is_test_file('pkg/testing/util.go')

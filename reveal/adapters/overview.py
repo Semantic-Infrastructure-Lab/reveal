@@ -23,6 +23,7 @@ from .git import GitAdapter
 from .imports import ImportsAdapter
 from .stats import StatsAdapter
 from ..utils import print_json_result
+from ..utils.path_utils import is_test_path
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
@@ -328,10 +329,8 @@ def _render_complex_functions(fns: List[Dict[str, Any]], base_path: Optional[Pat
 
 
 def _is_test_file(file_str: str) -> bool:
-    """Return True if file looks like a test file."""
-    name = Path(file_str).name
-    path_norm = file_str.replace('\\', '/')
-    return name.startswith('test_') or name.endswith('_test.py') or '/test' in path_norm
+    """Return True if file looks like a test file (shared classifier, BACK-1277)."""
+    return is_test_path(file_str.replace('\\', '/'))
 
 
 def _relpath(file_str: str, base_path: Optional[Path]) -> str:

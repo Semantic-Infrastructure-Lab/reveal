@@ -25,14 +25,13 @@ from ..utils.path_utils import (
     is_skippable_dir,
     is_test_dir,
     is_test_filename,
+    is_test_basename_for_language,
 )
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 from ..defaults import TEST_DIR_PREFIX as _TEST_DIR_PREFIX
 
 # Test file patterns pruned by --source-only
-_TEST_FILE_PY_NAMES: frozenset = frozenset({'conftest.py'})
-_TEST_FILE_TS_INFIX = ('.test.', '.spec.')
 
 _SURFACE_LABELS = {
     'cli': 'CLI commands / arguments',
@@ -55,30 +54,9 @@ def _is_test_dir(name: str) -> bool:
 
 
 def _is_test_file(fpath: Path) -> bool:
-    name = fpath.name
-    stem = fpath.stem
-    suffix = fpath.suffix
-    # BACK-1252: is_test_filename() now covers the PascalCase Test/Tests
-    # suffix (gated by suffix -- java/kt/kts/cs/swift/php) as well as the
-    # generic snake_case test_/_test convention, so check it first instead
-    # of hand-rolling a second, drifting copy of the same Java/C# logic
-    # here. This is also what closes the gap that .php/.swift/.kt (3 of
-    # this function's 11 supported languages) had NO test-file detection
-    # at all before -- confirmed live: a route entry from a PHPUnit/Ktor/
-    # XCTest test file previously always reported test_origin=False.
-    if is_test_filename(stem, suffix):
-        return True
-    if suffix == '.py':
-        return name in _TEST_FILE_PY_NAMES
-    if suffix in ('.ts', '.tsx', '.js', '.jsx'):
-        return any(infix in name for infix in _TEST_FILE_TS_INFIX)
-    if suffix == '.rb':
-        return stem.endswith('_spec') or stem.endswith('_test') or name == 'spec_helper.rb'
-    if suffix == '.rs':
-        return stem.endswith('_tests') or name == 'tests.rs'
-    if suffix in ('.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh', '.h'):
-        return stem.endswith('_tests')
-    return False
+    """File-name test detection: generic naming (BACK-1252) plus the file's own
+    language convention from the conventions profile (BACK-1277)."""
+    return is_test_filename(fpath.stem, fpath.suffix) or is_test_basename_for_language(fpath.name)
 
 
 @dataclass(frozen=True)

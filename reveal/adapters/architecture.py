@@ -23,6 +23,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..registry import language_for_extension
 from ..utils import print_json_result
+from ..utils.path_utils import is_test_path
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
@@ -349,8 +350,7 @@ def _render_brief(report: Dict[str, Any], top: int, base_path: Path, no_imports:
 
 
 def _is_test_file(file_str: str) -> bool:
-    p = Path(file_str)
-    return p.name.startswith('test_') or '/test/' in file_str or '/tests/' in file_str
+    return is_test_path(file_str.replace('\\', '/'))
 
 
 def _relpath(file_str: str, base_path: Optional[Path]) -> str:

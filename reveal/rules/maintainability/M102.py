@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ...utils.path_utils import is_test_dir, is_test_filename, is_unsafe_scan_root
+from ...utils.path_utils import is_test_path, is_unsafe_scan_root
 
 logger = logging.getLogger(__name__)
 
@@ -308,12 +308,7 @@ class M102(BaseRule):
         check didn't know about `spec`/`specs`/`__tests__`, so every RSpec
         file on a Ruby codebase was treated as regular source and could be
         flagged as orphaned."""
-        stem = path.stem.lower()
-        if is_test_filename(stem):
-            return True
-
-        parts = [p.lower() for p in path.parts]
-        return any(is_test_dir(p) for p in parts)
+        return is_test_path(Path(*(p.lower() for p in path.parts)))
 
     def _find_package_root(self, path: Path) -> Optional[Path]:
         """Find the root of the Python package.

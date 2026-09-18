@@ -126,6 +126,28 @@ _DOC_EXTENSIONS_EXCLUDED_FROM_BARE_TEST_STEM = frozenset({'.md', '.rst', '.txt',
 _PASCAL_TEST_SUFFIX_EXTENSIONS = frozenset({'.java', '.kt', '.kts', '.cs', '.swift', '.php'})
 
 
+def is_test_path(path: Union[str, PurePath]) -> bool:
+    """True if *path* is a test file: under a test directory, generic
+    ``test_``/``_test``/``Test`` naming, or the file's own language convention
+    (Go ``_test.go``, JS ``.spec.ts``, Ruby ``_spec.rb``, Rust ``tests.rs``, ...
+    via the conventions profile, BACK-1277). The one shared answer to "is this
+    a test?" for callers that see a whole path.
+    """
+    p = PurePath(path)
+    return (
+        any(is_test_dir(part) for part in p.parts[:-1])
+        or is_test_filename(p.stem, p.suffix)
+        or is_test_basename_for_language(p.name)
+    )
+
+
+def is_test_basename_for_language(name: str) -> bool:
+    """File-name-only half of :func:`is_test_path` (no directory check): generic
+    naming is NOT included -- this is just the language-specific convention."""
+    from ..conventions import conventions_for_path
+    return conventions_for_path(name).is_test_basename(name)
+
+
 def is_test_filename(stem: str, suffix: str = '') -> bool:
     """True if *stem* (filename without extension) follows the generic,
     language-agnostic ``test_``/``_test`` naming convention, is a bare

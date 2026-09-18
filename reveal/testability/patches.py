@@ -11,6 +11,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
+from ..utils.path_utils import is_test_basename_for_language
 from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root, ts_parse
 from ..utils.path_utils import is_skippable_dir
 
@@ -74,15 +75,13 @@ def iter_python_test_files(paths: Sequence[str | Path]) -> List[Path]:
 
 
 _TS_TEST_EXTENSIONS = frozenset({'.ts', '.tsx', '.js', '.jsx'})
-_TS_TEST_SUFFIXES = ('.spec.ts', '.test.ts', '.spec.tsx', '.test.tsx',
-                     '.spec.js', '.test.js', '.spec.jsx', '.test.jsx')
+
 
 
 def _is_ts_test_file(p: Path) -> bool:
     """Return True if the path looks like a TypeScript/JavaScript test file."""
-    name = p.name
     return (
-        any(name.endswith(s) for s in _TS_TEST_SUFFIXES)
+        is_test_basename_for_language(p.name)  # *.spec.* / *.test.* from the conventions profile
         or ('__tests__' in p.parts and p.suffix in _TS_TEST_EXTENSIONS)
     )
 

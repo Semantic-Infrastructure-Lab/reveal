@@ -1484,14 +1484,10 @@ class ImportsAdapter(ResourceAdapter):
         if not self._graph:
             return self._build_response('entrypoints', entries=[], total_scanned=0)
 
-        from ..utils.path_utils import is_test_dir, is_test_filename
+        from ..utils.path_utils import is_test_path
 
         def _is_test_file(f) -> bool:
-            p = Path(f)
-            return (
-                any(is_test_dir(part) for part in p.parts[:-1])
-                or is_test_filename(p.stem, p.suffix)
-            )
+            return is_test_path(f)
 
         def _non_test_fan_in(f) -> int:
             return sum(

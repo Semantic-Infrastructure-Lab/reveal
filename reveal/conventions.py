@@ -96,6 +96,12 @@ class LanguageConventions:
     test_file_patterns: Tuple[Pattern[str], ...] = ()
     test_symbol_patterns: Tuple[Pattern[str], ...] = ()
     colocated_test_symbols: bool = False
+    # Exact basenames that are test infrastructure though no pattern matches (`conftest.py`).
+    test_file_names: FrozenSet[str] = frozenset()
+
+    def is_test_basename(self, name: str) -> bool:
+        """True if file *name* is a test file by this family's own naming convention."""
+        return name in self.test_file_names or any(p.match(name) for p in self.test_file_patterns)
 
     @property
     def has_test_index(self) -> bool:
@@ -210,6 +216,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             family='python',
             stdlib_key=_python_stdlib_key,
             test_file_patterns=(re.compile(r'^test_(.+)\.py$'), re.compile(r'^(.+)_test\.py$')),
+            test_file_names=frozenset({'conftest.py'}),
             test_symbol_patterns=(
                 re.compile(r'^\s*(?:async\s+)?def\s+test_(\w+)', re.MULTILINE),
                 re.compile(r'^\s*class\s+Test(\w+)', re.MULTILINE),
@@ -234,10 +241,15 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         ),
         # BACK-1197: `initialize` is invoked by .new; the rest are Module/Class
         # hook callbacks and metaprogramming dispatch.
-        LanguageConventions(family='ruby', implicit_names=frozenset({
-            'initialize', 'included', 'extended', 'inherited',
-            'method_missing', 'respond_to_missing?',
-        })),
+        LanguageConventions(
+            family='ruby',
+            implicit_names=frozenset({
+                'initialize', 'included', 'extended', 'inherited',
+                'method_missing', 'respond_to_missing?',
+            }),
+            test_file_patterns=(re.compile(r'^(.+)_(?:spec|test)\.rb$'),),
+            test_file_names=frozenset({'spec_helper.rb'}),
+        ),
         # `main` and `init` are run by the runtime. `go test` collects
         # Test/Benchmark/Example/Fuzz functions in _test.go files; the name after
         # the prefix must not start with a lowercase letter (`Testable` is not a test).
@@ -261,9 +273,14 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
                 r'#\[(?:\w+::)?(?:test|rstest)\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*(?:async\s+)?fn\s+(?:test_)?(\w+)'
             ),),
             colocated_test_symbols=True,
+            test_file_patterns=(re.compile(r'^(.+)_tests\.rs$'),),
+            test_file_names=frozenset({'tests.rs'}),
             implicit_names=frozenset({'main'}),
             test_decorators=frozenset({'test', 'bench', 'rstest'}),
         ),
+        LanguageConventions(family='c', test_file_patterns=(
+            re.compile(r'^(.+)_tests\.(?:cpp|cc|cxx|hpp|hxx|hh|h)$'),
+        )),
         LanguageConventions(
             family='csharp', test_annotation_markers=_CSHARP_TEST_MARKERS,
             stdlib_key=_prefix_stdlib_key('System'),
