@@ -50,11 +50,6 @@ class V004(BaseRule):
         # interface/extends tests plus plain-JS `class X extends Y` coverage
         # in test_new_analyzers.py.
         '_js_class_bases': 'test_typescript_react.py',
-        # BACK-915 slice 4: not a registered analyzer itself, a mixin shared
-        # by JavaScriptAnalyzer/TypeScriptAnalyzer's `new Foo(args)` callee-
-        # name extraction — exercised live by test_typescript_react.py's
-        # `new_expression` tests (BACK-730).
-        '_js_callee_names': 'test_typescript_react.py',
         # BACK-1093: not a registered analyzer itself, a shared per-
         # (language, adapter, signal) capability registry consulted by
         # depends:// and calls://'s confidence scoring — exercised by

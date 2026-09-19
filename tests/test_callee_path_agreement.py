@@ -165,3 +165,13 @@ def test_php_dynamic_and_anonymous_class_instantiation_emit_no_junk(tmp_path):
     an, nav = _both_paths(tmp_path, '.php', 'php', "<?php function f($cls){ new $cls(); $o = new class { public $x; }; new Real(); }")
     assert 'new Real' in an and 'new Real' in nav
     assert not [c for c in an + nav if c.startswith('new ') and c != 'new Real']
+
+
+def test_cpp_new_names_the_class_in_both_paths(tmp_path):
+    # BACK-1279: one C++ `new` extractor. Qualified and templated types collapse to the trailing
+    # class name; non-class types (`new int[8]`) are allocations, not constructor calls.
+    src = "void f(){ new Foo(1); new ns::Bar(2); new std::vector<int>(3); int* p = new int[8]; Baz obj(4); }"
+    an, nav = _both_paths(tmp_path, '.cpp', 'cpp', src)
+    for calls in (an, nav):
+        assert {'new Foo', 'new Bar', 'new vector', 'Baz'} <= set(calls), calls
+        assert 'new int' not in calls

@@ -8,7 +8,7 @@ from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Set, Tuple
 from .base import FileAnalyzer
 from .reveal_types import StructureItem
-from .core.callees import callee_name_from_node, extract_by_kind, CHAIN_FULL
+from .core.callees import callee_name_from_node, extract_by_kind, is_misparsed_call, CHAIN_FULL
 from .complexity import (
     calculate_complexity_and_depth,
     _NESTING_TYPES,
@@ -394,11 +394,7 @@ _PARAM_LIST_KINDS = ('parameters', 'parameter_list', 'formal_parameters', 'metho
 # isn't handled generically. `call_expression`/`call` are deliberately absent
 # — see _get_callee_name's docstring for why they can't be table-driven.
 _CALLEE_NAME_DISPATCH = {
-    'new_expression': '_callee_name_new_expression',
-    'init_declarator': '_callee_name_cpp_direct_init',
     'attribute_call': '_callee_name_gdscript_attribute_call',
-    'constructor_invocation': '_callee_name_dart_flat_type_call',
-    'const_object_expression': '_callee_name_dart_flat_type_call',
     'argument_part': '_callee_name_dart_argument_part',
 }
 
@@ -1985,82 +1981,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Compute cyclomatic complexity and max nesting depth."""
         return calculate_complexity_and_depth(node)
 
-    def _callee_name_js_new(self, call_node) -> Optional[str]:
-        """Hook: name a JS/TS/TSX `new Foo(args)`-shaped 'new_expression'
-        call (the 'constructor'-field branch below). No-op by default —
-        overridden in analyzers/_js_callee_names.py::JSCalleeNameMixin
-        (BACK-915 slice 4).
-        """
-        return None
-
-    def _callee_name_new_expression(self, call_node) -> Optional[str]:
-        # 'new_expression' is shared by C++, JS/TS/TSX, AND Dart with THREE
-        # mutually exclusive shapes — dispatch on which shape is actually
-        # present rather than self.language, so this stays correct for
-        # tree-sitter fallback languages too. C++/JS-TS-TSX both carry
-        # explicit 'constructor'/'type' FIELDS; Dart's grammar has no field
-        # names at all here (like the rest of its grammar — flat siblings),
-        # so both field lookups return None for it. Dart's explicit `new
-        # Foo(...)` / `new List<int>.from(...)` (the pre-Dart-2 constructor
-        # syntax, still valid and used in real corpora even though modern
-        # style omits `new`) was found entirely invisible to calls:// via
-        # the calls-recall-oracle Dart measurement (BACK-730, eighteenth
-        # and final language) — `new_expression` was already a
-        # CALL_NODE_TYPES member (added for C++), so the node WAS visited,
-        # but both existing field-based extractors returned None for
-        # Dart's flat shape, silently dropping the call rather than
-        # misnaming it. See _callee_name_dart_new_expression. (BACK-760)
-        if call_node.child_by_field_name('constructor') is not None:
-            return self._callee_name_js_new(call_node)
-        if call_node.child_by_field_name('type') is not None:
-            return self._callee_name_cpp_new(call_node)
-        return self._callee_name_dart_new_expression(call_node)
-
-    def _callee_name_dart_new_expression(self, call_node) -> Optional[str]:
-        """Hook: name a Dart `new Foo(...)`-shaped 'new_expression' call
-        (the fallback branch above, once JS/C++'s field-based shapes are
-        ruled out — BACK-760). No-op by default — overridden in
-        analyzers/dart.py (BACK-915).
-        """
-        return None
-
-    def _callee_name_cpp_new(self, call_node) -> Optional[str]:
-        """Hook: name a C++ `new ClassName(args)`-shaped 'new_expression'
-        call (the 'type'-field branch above, once JS's 'constructor' field
-        is ruled out). No-op by default — overridden in analyzers/cpp.py
-        (BACK-915 slice 4).
-        """
-        return None
-
-    def _callee_name_cpp_direct_init(self, call_node) -> Optional[str]:
-        """Hook: name a C++ direct-initialization call
-        (`ClassName obj(args);`, `init_declarator` with an 'argument_list'
-        'value' field). No-op by default.
-
-        `init_declarator` is in CALL_NODE_TYPES and walked for EVERY
-        language that uses it (not just C++ — plain C and Objective-C share
-        the same node kind for `int x = 5;`), so this default MUST stay a
-        real no-op rather than falling through to the generic callee-name
-        resolver: `_callee_name_generic` would read `init_declarator`'s
-        child(0) — the identifier being declared — and misreport it as a
-        callee name for every ordinary variable declaration in those
-        languages. Overridden in analyzers/cpp.py, which re-applies the
-        'value'-is-'argument_list' shape check before returning a name
-        (BACK-915 slice 4).
-        """
-        return None
-
     def _callee_name_gdscript_attribute_call(self, call_node) -> Optional[str]:
         """Hook: name a GDScript `self.foo()`/`obj.method()`/`Class.new()`
         call ('attribute_call'). No-op by default — overridden in
         analyzers/gdscript.py (BACK-915 slice 4).
-        """
-        return None
-
-    def _callee_name_dart_flat_type_call(self, call_node) -> Optional[str]:
-        """Hook: name Dart's flat type-then-arguments call shapes
-        ('constructor_invocation'/'const_object_expression', BACK-760).
-        No-op by default — overridden in analyzers/dart.py (BACK-915).
         """
         return None
 
@@ -2116,11 +2040,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if not _zero_arg(call_node, 'child_count'):
             return None
         kind = _zero_arg(call_node, 'kind')
-        if (
-            kind == 'call_expression'
-            and self.language == 'cpp'
-            and self._is_cpp_member_function_pointer_misparse(call_node)
-        ):
+        if is_misparsed_call(kind, call_node):  # C++ mfp declaration (BACK-745)
             return None
         if kind == 'call' and self.language == 'ruby':
             return self._callee_name_ruby_call(call_node)

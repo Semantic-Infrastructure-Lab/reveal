@@ -7,13 +7,12 @@ from ..core import node_prev_sibling as _prev_sibling
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
-from ._js_callee_names import JSCalleeNameMixin
 from ._js_class_bases import JSClassBasesMixin
 from ._js_test_callbacks import JSTestCallbackMixin
 
 
 class _TypeScriptBase(
-    JSCalleeNameMixin, JSClassBasesMixin, JSTestCallbackMixin, TreeSitterAnalyzer
+    JSClassBasesMixin, JSTestCallbackMixin, TreeSitterAnalyzer
 ):
     """Shared extraction for TypeScript (.ts) and TypeScript React (.tsx)."""
 

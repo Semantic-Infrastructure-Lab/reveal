@@ -195,50 +195,6 @@ class DartAnalyzer(TreeSitterAnalyzer):
             return self._get_node_text(idents[0])
         return f"{self._get_node_text(idents[0])}.{self._get_node_text(idents[1])}"
 
-    # ── Callee naming (BACK-760) ─────────────────────────────────────────────
-    def _callee_name_dart_new_expression(self, call_node) -> Optional[str]:
-        """Dart `new Foo(...)` / `new List<int>.from(...)` -- 'new_expression'
-        with NO named fields (Dart's grammar never uses fields): flat
-        children `new`, type_identifier (the class), optional type_arguments
-        (generics, ignored), optional '.' + identifier (named constructor),
-        'arguments'. Same flat shape as `_callee_name_dart_flat_type_call`
-        handles for constructor_invocation/const_object_expression, just
-        prefixed with an explicit 'new' keyword instead of being bare or
-        'const'-prefixed -- the shared extractor already ignores whatever
-        leading token precedes the type_identifier, so it applies unchanged.
-        """
-        return self._callee_name_dart_flat_type_call(call_node)
-
-    def _callee_name_dart_flat_type_call(self, call_node) -> Optional[str]:
-        """Shared extractor for Dart's flat type-then-arguments call shapes:
-        'constructor_invocation' (`List<int>.from(...)`, `Map<K,V>()`) and
-        'const_object_expression' (`const Duration(milliseconds: 300)`,
-        `const EdgeInsets.all(8)`). Both have the identical flat child
-        layout modulo a leading token this extractor ignores (nothing for
-        constructor_invocation, a 'const_builtin' token for
-        const_object_expression): a type_identifier (the class, e.g.
-        'List'/'Duration'), an optional type_arguments node (generic
-        params, ignored -- same "don't let a generic suffix leak into the
-        callee name" discipline as Rust's turbofish fix, BACK-733), an
-        optional '.' + identifier (a NAMED constructor, e.g. 'from'/'all'),
-        and 'arguments'. Returns 'List.from' for a named constructor or
-        bare 'List'/'Duration' for the unnamed/default one (BACK-760).
-        """
-        base = None
-        named = None
-        seen_dot = False
-        for child in _children(call_node):
-            kind = _zero_arg(child, 'kind')
-            if kind == 'type_identifier' and base is None:
-                base = self._get_node_text(child).strip()
-            elif kind == '.':
-                seen_dot = True
-            elif kind == 'identifier' and seen_dot and named is None:
-                named = self._get_node_text(child).strip()
-        if not base:
-            return None
-        return f"{base}.{named}" if named else base
-
     def _callee_name_dart_argument_part(self, call_node) -> Optional[str]:
         """Dart `foo()` / `obj.method()` / `this.foo()` / `Class.static()` /
         `obj?.method()` / `obj!.method()` / cascaded `..method()` --

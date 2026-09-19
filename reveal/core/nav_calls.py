@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, Sequence
 from . import node_children as _children
 from .treesitter_compat import _zero_arg
-from .callees import callee_name_from_node, extract_by_kind, CHAIN_COLLAPSE
+from .callees import callee_name_from_node, extract_by_kind, is_misparsed_call, CHAIN_COLLAPSE
 from .callees.generic import subtree_contains_call as _subtree_contains_call
 
 
@@ -444,24 +444,6 @@ def _extract_gdscript_attribute_calls(children: List[Any], get_text: Callable) -
     return results
 
 
-def _is_cpp_member_function_pointer_misparse(call_node: Any) -> bool:
-    """True if `call_node` is actually a member-function-pointer
-    declaration/assignment misparsed as a call (BACK-745).
-
-    Mirrors treesitter.py:TreeSitterAnalyzer._is_cpp_member_function_pointer_
-    misparse exactly -- see that method's docstring for the full shape.
-    """
-    args = call_node.child_by_field_name('arguments')
-    if args is None:
-        return False
-    stack = _children(args)
-    while stack:
-        n = stack.pop()
-        if _zero_arg(n, 'kind') == 'pointer_type_declarator':
-            return True
-        stack.extend(_children(n))
-    return False
-
 def _extract_callee(
     call_node: Any,
     get_text: Callable,
@@ -471,15 +453,8 @@ def _extract_callee(
     if not _zero_arg(call_node, 'child_count'):
         return None
 
-    # C++ member-function-pointer declaration misparse (BACK-745): mirrors
-    # treesitter.py:_is_cpp_member_function_pointer_misparse's identical
-    # check on the calls:// side. See that method's docstring for the full
-    # shape -- `void (Base::*mfp)() = &Base::plain;` parses as nested
-    # call_expression nodes with `Base::*mfp` (a declarator, never a valid
-    # call argument) inside the inner call's argument list. No language gate
-    # needed: 'pointer_type_declarator' is a C/C++-only tree-sitter node
-    # kind, so this is a no-op scan for every other language.
-    if _zero_arg(call_node, 'kind') == 'call_expression' and _is_cpp_member_function_pointer_misparse(call_node):
+    # Call-shaped nodes that are really other syntax (C++ mfp declaration, BACK-745)
+    if is_misparsed_call(_zero_arg(call_node, 'kind'), call_node):
         return None
 
     # Language-specific call shapes shared with the analyzer path (PHP, Java, Scala,
@@ -490,26 +465,6 @@ def _extract_callee(
     )
     if handled:
         return name
-
-    handler = _CALLEE_DISPATCH.get(_zero_arg(call_node, 'kind'))
-    if handler is not None:
-        return handler(call_node, get_text)
-
-    # 'new_expression' is shared by C++ and JS/TS/TSX with two mutually
-    # exclusive field shapes: C++ (`new ClassName(args)` / `new NS::Name(args)`)
-    # puts the callee in a 'type' field; JS/TS/TSX (`new Foo()` / `new
-    # ns.Foo()`) puts it in a 'constructor' field instead — a completely
-    # different field name for the identical node kind, so C++'s handler
-    # returned None for every JS/TS constructor call (found via the
-    # calls-recall-oracle JS/TSX pre-flight dump, 13th language, BACK-730;
-    # mirrors treesitter.py:_callee_name_new_expression). Dispatch
-    # structurally on which field is populated.
-    if _zero_arg(call_node, 'kind') == 'new_expression':
-        if call_node.child_by_field_name('constructor') is not None:
-            return _extract_js_new_callee(call_node, get_text)
-        if call_node.child_by_field_name('type') is None:
-            return _extract_dart_flat_type_callee(call_node, get_text)  # Dart: no fields
-        return _extract_cpp_new_callee(call_node, get_text)
 
     # Ruby: `call` exposes 'receiver'/'method'/'arguments' fields directly
     # rather than nesting `receiver.method` inside its own member-access
@@ -530,125 +485,6 @@ def _extract_callee(
         call_node.child(0), get_text,
         call_node_types=call_node_types, chain_receiver=CHAIN_COLLAPSE,
     )
-
-
-def _extract_js_new_callee(node: Any, get_text: Callable) -> Optional[str]:
-    """JS/TS/TSX `new_expression`: `new ClassName(args)` / `new ns.ClassName(args)`.
-    Emits "new <name>" — same convention as `_extract_cpp_new_callee`. The
-    callee lives in a 'constructor' field (identifier, or member_expression
-    for a dotted form), unlike C++'s 'type' field on the same node kind.
-    """
-    ctor_node = node.child_by_field_name('constructor')
-    if ctor_node is None:
-        return None
-    kind = _zero_arg(ctor_node, 'kind')
-    if kind == 'identifier':
-        name = get_text(ctor_node).strip()
-        return f"new {name}" if name else None
-    if kind == 'member_expression':
-        prop = None
-        for child in _children(ctor_node):
-            if _zero_arg(child, 'kind') == 'property_identifier':
-                prop = child
-        if prop is not None:
-            name = get_text(prop).strip()
-            return f"new {name}" if name else None
-    return None
-
-
-def _extract_cpp_new_callee(node: Any, get_text: Callable) -> Optional[str]:
-    """C++ `new_expression`: `new <type_identifier|qualified_identifier>(args)`.
-    Emits "new <name>" — the same convention `_extract_object_creation_callee`
-    already established for PHP/C#'s `object_creation_expression`. A
-    qualified type (`new NS::Other(...)`) collapses to its trailing segment
-    only (`Other`), matching Scala's field_expression handling for
-    fully-qualified constructor types.
-    """
-    type_node = node.child_by_field_name('type')
-    if type_node is None:
-        return None
-    kind = _zero_arg(type_node, 'kind')
-    if kind == 'type_identifier':
-        name = get_text(type_node).strip()
-        if name:
-            return f"new {name}"
-    if kind == 'qualified_identifier':
-        text = get_text(type_node).strip()
-        if text:
-            return f"new {text.split('::')[-1]}"
-    return None
-
-
-def _extract_cpp_direct_init_callee(node: Any, get_text: Callable) -> Optional[str]:
-    """C++ direct-initialization: `ClassName obj(args);`, `std::vector<int> v(10);`
-    — an `init_declarator` whose 'value' field is a bare `argument_list`
-    (no `new` keyword, no call-expression wrapper at all). Distinct from
-    plain declaration (`int x;`, no 'value' field) and copy-init
-    (`Foo obj2 = Foo(3, 4);`, whose 'value' field is a `call_expression`,
-    already visible via the ordinary call_expression dispatch) — checking
-    the 'value' field's kind is what isolates this shape (BACK-744).
-
-    The callee name lives on the *parent* `declaration` node's 'type'
-    field, not on this node — `init_declarator` only holds the variable
-    name + args. No "new " prefix, unlike `_extract_cpp_new_callee` —
-    there's no `new` keyword in the source to echo. Mirrors
-    treesitter.py:_callee_name_cpp_direct_init.
-    """
-    value_node = node.child_by_field_name('value')
-    if value_node is None or _zero_arg(value_node, 'kind') != 'argument_list':
-        return None
-    decl_node = _zero_arg(node, 'parent')
-    if decl_node is None:
-        return None
-    type_node = decl_node.child_by_field_name('type')
-    if type_node is None:
-        return None
-    kind = _zero_arg(type_node, 'kind')
-    if kind not in ('type_identifier', 'qualified_identifier'):
-        return None
-    text = get_text(type_node).strip()
-    if not text:
-        return None
-    return text.split('::')[-1] if kind == 'qualified_identifier' else text
-
-
-# Pure `_zero_arg(node, 'kind') -> handler(node, get_text)` dispatch for _extract_callee
-# above (BACK-918). Each handler here needs only the call node and the text
-# getter — mirrors treesitter.py:_CALLEE_NAME_DISPATCH (BACK-915 slice 4).
-# Kinds needing `call_node_types` (method_invocation, Ruby's receiver-qualified
-# `call`) or structural sub-dispatch (new_expression, the C++ misparse guard)
-# are deliberately NOT in this table — see the explicit `if` guards around the
-# dict lookup in _extract_callee.
-def _extract_dart_flat_type_callee(node: Any, get_text: Callable) -> Optional[str]:
-    """Dart `new Foo(..)` / `const Foo(..)` / `List<int>.from(..)`: flat
-    children [new|const]? type_identifier type_arguments? ('.' identifier)?
-    arguments. Returns `Foo` or `Foo.named` (generics dropped). Mirrors
-    analyzers/dart.py:_callee_name_dart_flat_type_call (BACK-1279).
-    """
-    base = named = None
-    seen_dot = False
-    for child in _children(node):
-        kind = _zero_arg(child, 'kind')
-        if kind == 'type_identifier' and base is None:
-            base = get_text(child).strip()
-        elif kind == '.':
-            seen_dot = True
-        elif kind == 'identifier' and seen_dot and named is None:
-            named = get_text(child).strip()
-    if not base:
-        return None
-    return f"{base}.{named}" if named else base
-
-
-_CALLEE_DISPATCH: Dict[str, Callable[[Any, Callable], Optional[str]]] = {
-    # Dart constructor shapes (flat, field-less; BACK-1279).
-    'constructor_invocation': _extract_dart_flat_type_callee,
-    'const_object_expression': _extract_dart_flat_type_callee,
-    # C++ direct-initialization (`ClassName obj(args);`, no `new` keyword) —
-    # 'init_declarator' with a bare `argument_list` in its 'value' field.
-    # Mirrors treesitter.py:_callee_name_cpp_direct_init (BACK-744).
-    'init_declarator': _extract_cpp_direct_init_callee,
-}
 
 
 def is_ruby_attribute_write(call_node: Any) -> bool:
