@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, Sequence
 from . import node_children as _children
 from .treesitter_compat import _zero_arg
+from .callees.gdscript import attribute_sites as gdscript_attribute_sites
 from .callees import callee_name_from_node, extract_by_kind, is_misparsed_call, CHAIN_COLLAPSE
 
 
@@ -101,7 +102,7 @@ def _gdscript_attribute_hits(
     if not (_zero_arg(node, 'kind') == 'attribute' and
             any(_zero_arg(c, 'kind') == 'attribute_call' for c in children)):
         return []
-    hits = _extract_gdscript_attribute_calls(children, get_text)
+    hits = _extract_gdscript_attribute_calls(children, get_text, node)
     return [call for call in hits if from_line <= call['line'] <= to_line]
 
 
@@ -404,42 +405,14 @@ def _extract_zig_suffix_calls(children: List[Any], get_text: Callable) -> List[D
     return results
 
 
-def _extract_gdscript_attribute_calls(children: List[Any], get_text: Callable) -> List[Dict[str, Any]]:
-    """Reconstruct call sites from GDScript's flat `attribute` chain.
-
-    `x.a().b` and `x.size()` both live inside one `attribute` node: a base
-    `identifier` followed by a run of `.` tokens paired with either a bare
-    `identifier` (plain property, no call) or `attribute_call` (identifier +
-    arguments — a real call). Same flat-chain-in-one-node shape as Dart's
-    `selector`/Zig's `SuffixExpr`, just GDScript's own node-kind names.
-    """
+def _extract_gdscript_attribute_calls(children: List[Any], get_text: Callable, attribute: Any) -> List[Dict[str, Any]]:
+    """Nav projection of GDScript `attribute` call sites (see core/callees/gdscript.py)."""
     results: List[Dict[str, Any]] = []
-    if not children:
-        return results
-    base_parts: List[str] = []
-    if _zero_arg(children[0], 'kind') == 'identifier':
-        base_parts = [get_text(children[0])]
-    for child in children[1:]:
-        kind = _zero_arg(child, 'kind')
-        if kind == 'identifier':
-            member = get_text(child).strip()
-            if member:
-                base_parts = base_parts + [f'.{member}'] if base_parts else [f'.{member}']
-        elif kind == 'attribute_call':
-            seg_children = _children(child)
-            name_node = next(
-                (c for c in seg_children if _zero_arg(c, 'kind') == 'identifier'), None
-            )
-            member = get_text(name_node).strip() if name_node else ''
-            callee = (
-                ''.join(base_parts) + f'.{member}' if base_parts and member
-                else (f'.{member}' if member else None)
-            )
-            line = _zero_arg(child, 'start_position').row + 1
-            first_arg, has_more = _extract_first_arg(child, get_text)
-            results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
-            base_parts = []
-        # '.' tokens are skipped implicitly (unnamed, never match either branch)
+    for site in gdscript_attribute_sites(attribute, get_text):
+        first_arg, has_more = _extract_first_arg(site.node, get_text)
+        results.append({'line': _zero_arg(site.node, 'start_position').row + 1,
+                        'callee': site.dotted or None,
+                        'first_arg': first_arg, 'has_more_args': has_more})
     return results
 
 

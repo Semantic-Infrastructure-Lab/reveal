@@ -10,6 +10,7 @@ Current implementation: 15 lines using TreeSitterAnalyzer
 from typing import Optional
 
 from ..core import node_children as _children
+from ..core.callees.gdscript import site_for as gdscript_site_for
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
@@ -40,20 +41,11 @@ class GDScriptAnalyzer(TreeSitterAnalyzer):
         mirrors Java/Ruby's receiver-qualified convention using a text span
         instead of a field lookup.
         """
+        site = gdscript_site_for(call_node, self._get_node_text)
+        if site is not None:
+            return site.qualified if site.member else None
+        # An `attribute_call` outside an `attribute` node has no receiver: just its name.
         name_node = next(
             (c for c in _children(call_node) if _zero_arg(c, 'kind') == 'identifier'), None
         )
-        if name_node is None:
-            return None
-        name_text = self._get_node_text(name_node)
-        parent = _zero_arg(call_node, 'parent')
-        if parent is None or _zero_arg(parent, 'kind') != 'attribute':
-            return name_text
-        receiver_text = self._get_text_span(
-            _zero_arg(parent, 'start_byte'), _zero_arg(call_node, 'start_byte')
-        ).rstrip()
-        if receiver_text.endswith('.'):
-            receiver_text = receiver_text[:-1].rstrip()
-        if not receiver_text:
-            return name_text
-        return f"{receiver_text}.{name_text}"
+        return self._get_node_text(name_node) if name_node is not None else None
