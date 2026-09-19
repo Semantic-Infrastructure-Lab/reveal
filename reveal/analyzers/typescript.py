@@ -8,19 +8,19 @@ from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ._js_class_bases import JSClassBasesMixin
+from ._js_function_values import JSFunctionValueMixin
 from ._js_test_callbacks import JSTestCallbackMixin
 
 
 class _TypeScriptBase(
-    JSClassBasesMixin, JSTestCallbackMixin, TreeSitterAnalyzer
+    JSClassBasesMixin, JSFunctionValueMixin, JSTestCallbackMixin, TreeSitterAnalyzer
 ):
     """Shared extraction for TypeScript (.ts) and TypeScript React (.tsx)."""
 
     # ── Test callbacks ────────────────────────────────────────────────────
     # Arrow-function-as-const extraction (`const f = () => {}`) lives in the
-    # shared TreeSitterAnalyzer base (treesitter.py) — it's a JS-family
-    # grammar shape, not TypeScript-specific; see that class's
-    # _extract_arrow_functions()/_find_named_arrow_function() docstrings.
+    # JSFunctionValueMixin (_js_function_values.py) — it's a JS-family
+    # grammar shape, not TypeScript-specific.
     # describe()/it() callback extraction (BACK-334/BACK-530) lives in
     # JSTestCallbackMixin (BACK-662: promoted out of this file so plain
     # JavaScript gets the same test-block support — see javascript.py).

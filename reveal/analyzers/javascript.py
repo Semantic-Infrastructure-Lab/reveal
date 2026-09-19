@@ -5,6 +5,7 @@ from ..reveal_types import StructureItem
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ._js_class_bases import JSClassBasesMixin
+from ._js_function_values import JSFunctionValueMixin
 from ._js_test_callbacks import JSTestCallbackMixin
 
 
@@ -13,7 +14,7 @@ from ._js_test_callbacks import JSTestCallbackMixin
 @register('.mjs', name='JavaScript Module', icon='')
 @register('.cjs', name='JavaScript CommonJS', icon='')
 class JavaScriptAnalyzer(
-    JSClassBasesMixin, JSTestCallbackMixin, TreeSitterAnalyzer
+    JSClassBasesMixin, JSFunctionValueMixin, JSTestCallbackMixin, TreeSitterAnalyzer
 ):
     """JavaScript file analyzer.
 

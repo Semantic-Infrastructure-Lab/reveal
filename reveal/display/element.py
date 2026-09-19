@@ -217,8 +217,8 @@ def _try_treesitter_extraction(analyzer, element: str):
                 }
 
     # JS-family `const f = (...) => {}` — see TreeSitterAnalyzer
-    # ._find_named_arrow_function (BACK-431 Issue G tier B dogfood audit).
-    find_arrow_fn = getattr(analyzer, '_find_named_arrow_function', None)
+    # ._find_named_function_value (BACK-431 Issue G tier B dogfood audit).
+    find_arrow_fn = getattr(analyzer, '_find_named_function_value', None)
     if find_arrow_fn is not None:
         node = find_arrow_fn(element)
         if node is not None:

@@ -408,7 +408,7 @@ class TestBack519ClassFieldArrowFunctions:
 
 # ─── BACK-527: by-name extraction of class-field arrow methods ────────────────
 # BACK-519 restored these to get_structure()/--outline, but the by-name
-# resolver (_find_named_arrow_function, used by both plain element extraction
+# resolver (_find_named_function_value, used by both plain element extraction
 # and nav-flag lookup) only handled module-scope `const f = () => {}`, not
 # class-field `foo = () => {}`. So a method that listed in --outline still
 # returned "Element not found" for `reveal file.tsx foo`. Found re-checking
@@ -426,7 +426,7 @@ class TestBack527ClassFieldArrowByName:
             "}\n"
         )
         analyzer = TSXAnalyzer(str(f))
-        node = analyzer._find_named_arrow_function('handleClick')
+        node = analyzer._find_named_function_value('handleClick')
         assert node is not None
 
     def test_ts_class_field_arrow_resolves_by_name(self, tmp_path):
@@ -436,7 +436,7 @@ class TestBack527ClassFieldArrowByName:
             "  private load = async () => { return null; };\n"
             "}\n"
         )
-        node = TypeScriptAnalyzer(str(f))._find_named_arrow_function('load')
+        node = TypeScriptAnalyzer(str(f))._find_named_function_value('load')
         assert node is not None
 
     def test_plain_js_class_field_arrow_resolves_by_name(self, tmp_path):
@@ -447,14 +447,14 @@ class TestBack527ClassFieldArrowByName:
             "  handleClick = () => { return 1; };\n"
             "}\n"
         )
-        node = JavaScriptAnalyzer(str(f))._find_named_arrow_function('handleClick')
+        node = JavaScriptAnalyzer(str(f))._find_named_function_value('handleClick')
         assert node is not None
 
     def test_module_scope_const_arrow_still_resolves(self, tmp_path):
         """Regression guard: the pre-existing module-scope path must still work."""
         f = tmp_path / 'util.ts'
         f.write_text("const doThing = (x: number): number => x + 1;\n")
-        node = TypeScriptAnalyzer(str(f))._find_named_arrow_function('doThing')
+        node = TypeScriptAnalyzer(str(f))._find_named_function_value('doThing')
         assert node is not None
 
     def test_unknown_name_returns_none(self, tmp_path):
@@ -464,7 +464,7 @@ class TestBack527ClassFieldArrowByName:
             "  private handleClick = () => { return 1; };\n"
             "}\n"
         )
-        node = TSXAnalyzer(str(f))._find_named_arrow_function('nonexistent')
+        node = TSXAnalyzer(str(f))._find_named_function_value('nonexistent')
         assert node is None
 
 
@@ -482,7 +482,7 @@ class TestBack643NestedNamedFunctions:
     def test_nested_arrow_const_resolves_by_name(self, tmp_path):
         f = tmp_path / 'a.ts'
         f.write_text("function outer() { const inner = async () => 1; }\n")
-        node = TypeScriptAnalyzer(str(f))._find_named_arrow_function('inner')
+        node = TypeScriptAnalyzer(str(f))._find_named_function_value('inner')
         assert node is not None
 
     def test_nested_generator_declaration_in_outline(self, tmp_path):

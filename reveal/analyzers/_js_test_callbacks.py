@@ -88,7 +88,7 @@ class JSTestCallbackMixin:
         lists (BACK-530). Wired into both by-name resolvers
         (``display.element._try_treesitter_extraction`` and
         ``file_handler._find_element_node``), mirroring
-        ``_find_named_arrow_function``'s BACK-527 fix."""
+        ``_find_named_function_value``'s BACK-527 fix."""
         for cb_name, node in self._iter_test_callbacks():
             if cb_name == name:
                 return node

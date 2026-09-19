@@ -315,7 +315,7 @@ def _find_element_node(analyzer, element: str):
     # all (it's a filtered variable_declarator, not a flat kind match), so it
     # needs its own resolver (BACK-431 Issue G tier B dogfood audit: found via
     # real excalidraw/.tsx source, reproduces on plain .ts/.js too).
-    find_arrow_fn = getattr(analyzer, '_find_named_arrow_function', None)
+    find_arrow_fn = getattr(analyzer, '_find_named_function_value', None)
     if find_arrow_fn is not None:
         node = find_arrow_fn(element)
         if node is not None:
