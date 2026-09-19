@@ -737,6 +737,14 @@ reveal 'imports://src?unused' --format=grep | grep "api/"
 }
 ```
 
+`count` is statements, not names. For a partly-used `from x import a, b`, `names`
+lists everything the statement imports and `unused_names` only what is never
+referenced (`["b"]`). The decision is shared with rule I001
+(`reveal/analyzers/imports/unused.py`), so `?unused` and `check --select I001`
+flag the same lines: per-name for `from` imports, honoring `# noqa`,
+`// eslint-disable`, `// nolint` and `#[allow(unused)]`, and skipping star/glob
+imports, `TYPE_CHECKING` imports and `__init__.py` re-exports.
+
 ### 3. circular_dependencies
 
 **Use case**: Architecture health check
