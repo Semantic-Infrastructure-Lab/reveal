@@ -1,6 +1,7 @@
 """TypeScript (.ts) and TypeScript React (.tsx) file analyzers."""
 
 from typing import Any, Dict, List, Optional
+from ..reveal_types import StructureItem
 from ..core import node_children as _children
 from ..core import node_prev_sibling as _prev_sibling
 from ..core.treesitter_compat import _zero_arg
@@ -25,7 +26,7 @@ class _TypeScriptBase(
     # JSTestCallbackMixin (BACK-662: promoted out of this file so plain
     # JavaScript gets the same test-block support — see javascript.py).
 
-    def _extract_functions(self) -> List[Dict[str, Any]]:
+    def _extract_functions(self) -> List[StructureItem]:
         funcs = super()._extract_functions()
         funcs.extend(self._extract_test_callbacks())
         return funcs
@@ -57,11 +58,11 @@ class _TypeScriptBase(
 
     # ── TypeScript type declarations ──────────────────────────────────────────
 
-    def _extract_ts_types(self) -> Dict[str, List[Dict[str, Any]]]:
+    def _extract_ts_types(self) -> Dict[str, List[StructureItem]]:
         """Extract interface, type alias, and enum declarations."""
-        interfaces: List[Dict[str, Any]] = []
-        types: List[Dict[str, Any]] = []
-        enums: List[Dict[str, Any]] = []
+        interfaces: List[StructureItem] = []
+        types: List[StructureItem] = []
+        enums: List[StructureItem] = []
 
         for node_type, bucket in (
             ('interface_declaration', interfaces),
@@ -74,7 +75,7 @@ class _TypeScriptBase(
                     continue
                 line_start = _zero_arg(node, 'start_position').row + 1
                 line_end = _zero_arg(node, 'end_position').row + 1
-                entry: Dict[str, Any] = {
+                entry: StructureItem = {
                     'line': line_start,
                     'line_end': line_end,
                     'name': name,

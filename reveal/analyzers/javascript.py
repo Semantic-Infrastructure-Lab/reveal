@@ -1,6 +1,7 @@
 """JavaScript file analyzer - tree-sitter based."""
 
 from typing import Any, Dict, List
+from ..reveal_types import StructureItem
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ._js_callee_names import JSCalleeNameMixin
@@ -31,7 +32,7 @@ class JavaScriptAnalyzer(
     """
     language = 'javascript'
 
-    def _extract_functions(self) -> List[Dict[str, Any]]:
+    def _extract_functions(self) -> List[StructureItem]:
         funcs = super()._extract_functions()
         funcs.extend(self._extract_test_callbacks())
         return funcs

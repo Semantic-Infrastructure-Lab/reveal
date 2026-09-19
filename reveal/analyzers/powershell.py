@@ -1,6 +1,7 @@
 """PowerShell script analyzer - tree-sitter based."""
 
 from typing import Optional, List
+from ..reveal_types import StructureItem
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
@@ -122,12 +123,12 @@ class PowerShellAnalyzer(TreeSitterAnalyzer):
         param_block = self._get_param_block(node)
         return param_block if param_block is not None else ''
 
-    def _extract_structs(self) -> List[dict]:
+    def _extract_structs(self) -> List[StructureItem]:
         """Extract PowerShell classes (structs in PowerShell 5.0+).
 
         PowerShell 5.0 introduced class definitions that work similar to C# classes.
         """
-        structs = []
+        structs: List[StructureItem] = []
 
         # PowerShell class nodes
         class_types = [

@@ -119,6 +119,9 @@ class StructureItem(TypedDict, total=False):
     calls: List[str]
     called_by: List[str]
     content: str  # imports carry their text here instead of `name`
+    visibility: str  # Zig `pub`
+    members: List[str]  # Zig struct/enum/union member names
+    type: str  # PowerShell class entries
 
 
 class VarFlowEvent(TypedDict, total=False):

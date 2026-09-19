@@ -12,6 +12,7 @@ invisible to `get_structure()`/`--outline` entirely.
 """
 
 from typing import Any, Dict, List
+from ..reveal_types import StructureItem
 from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
 
@@ -64,7 +65,7 @@ class JSTestCallbackMixin:
             name = f"{callee_name}({test_name})" if test_name else callee_name
             yield name, last_arg
 
-    def _extract_test_callbacks(self) -> List[Dict[str, Any]]:
+    def _extract_test_callbacks(self) -> List[StructureItem]:
         """Extract Jest/Vitest describe/test/it callbacks as synthetic named functions.
 
         Attributes calls inside test-framework callbacks to named entries so

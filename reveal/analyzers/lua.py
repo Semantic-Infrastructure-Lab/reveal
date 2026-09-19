@@ -2,6 +2,7 @@
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from ..reveal_types import StructureItem
 from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
@@ -78,7 +79,7 @@ class LuaAnalyzer(TreeSitterAnalyzer):
         )
         return (name_node, value_node) if value_node else (None, None)
 
-    def _extract_language_specific_functions(self) -> List[Dict[str, Any]]:
+    def _extract_language_specific_functions(self) -> List[StructureItem]:
         """Extract `name = function(...) ... end` at assignment or table-field sites."""
         funcs = []
 

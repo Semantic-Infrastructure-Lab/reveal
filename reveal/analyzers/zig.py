@@ -1,5 +1,6 @@
 """Zig analyzer using tree-sitter."""
 from typing import Any, Dict, List, Optional
+from ..reveal_types import StructureItem
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children, node_next_sibling as _next_sibling, node_prev_sibling as _prev_sibling
@@ -23,7 +24,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         if not self.tree:
             return {}
 
-        structure = {}
+        structure: Dict[str, Any] = {}
 
         # Extract Zig elements
         structure['functions'] = self._extract_functions()
@@ -111,11 +112,11 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         """Build function signature string (params only, no name — matches display convention)."""
         return f"({', '.join(params)})" if params else ""
 
-    def _build_function_info(self, decl_node, fn_name: str, signature: str, has_pub: bool) -> Dict[str, Any]:
+    def _build_function_info(self, decl_node, fn_name: str, signature: str, has_pub: bool) -> StructureItem:
         """Build function information dictionary."""
         line_start = _zero_arg(decl_node, 'start_position').row + 1
         line_end = _zero_arg(decl_node, 'end_position').row + 1
-        func_info = {
+        func_info: StructureItem = {
             'line': line_start,
             'line_end': line_end,
             'name': fn_name,
@@ -147,7 +148,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                 seen_set.add(callee)
         return seen
 
-    def _extract_functions(self) -> List[Dict[str, Any]]:
+    def _extract_functions(self) -> List[StructureItem]:
         """Extract function definitions."""
         functions = []
         decl_nodes = self._find_nodes_by_type('Decl')
@@ -233,9 +234,9 @@ class ZigAnalyzer(TreeSitterAnalyzer):
 
     def _build_container_info(
         self, decl_node, var_name: str, members: List[str], has_pub: bool
-    ) -> Dict[str, Any]:
+    ) -> StructureItem:
         """Build container information dictionary."""
-        container_info = {
+        container_info: StructureItem = {
             'line': _zero_arg(decl_node, 'start_position').row + 1,
             'name': var_name,
             'members': members,
@@ -246,9 +247,9 @@ class ZigAnalyzer(TreeSitterAnalyzer):
 
         return container_info
 
-    def _extract_container_decls(self, container_type: str) -> List[Dict[str, Any]]:
+    def _extract_container_decls(self, container_type: str) -> List[StructureItem]:
         """Extract struct, enum, or union definitions."""
-        containers = []
+        containers: List[StructureItem] = []
         decl_nodes = self._find_nodes_by_type('Decl')
 
         for decl_node in decl_nodes:
@@ -322,7 +323,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                 }
         return super().extract_element(element_type, name)
 
-    def _extract_tests(self) -> List[Dict[str, Any]]:
+    def _extract_tests(self) -> List[StructureItem]:
         """Extract test blocks.
 
         `line_end` was missing here (BACK-661) even though `_build_function_info`
@@ -330,7 +331,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         indistinguishable from an empty test, because nothing else in the dict
         conveyed the real span.
         """
-        tests = []
+        tests: List[StructureItem] = []
         for test_node in self._find_nodes_by_type('TestDecl'):
             test_name = self._get_test_name(test_node)
             if test_name:

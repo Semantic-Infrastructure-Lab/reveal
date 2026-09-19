@@ -7,6 +7,7 @@ import threading
 from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Set, Tuple
 from .base import FileAnalyzer
+from .reveal_types import StructureItem
 from .core.nav_calls import unwrap_parenthesized_callee
 from .complexity import (
     calculate_complexity_and_depth,
@@ -341,7 +342,7 @@ ALL_ELEMENT_NODE_TYPES = (
 )
 
 
-def build_callers_index(functions: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+def build_callers_index(functions: List[StructureItem]) -> Dict[str, List[str]]:
     """Invert the callees map to produce a within-file callers index.
 
     Args:
@@ -612,7 +613,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if not self.tree:  # first access here triggers the actual parse
             return {}
 
-        structure = {}
+        structure: Dict[str, Any] = {}
         structure['imports'] = self._extract_imports()
         functions = self._extract_functions()
         callers_index = build_callers_index(functions)
@@ -688,7 +689,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         return imports
 
-    def _extract_functions(self) -> List[Dict[str, Any]]:
+    def _extract_functions(self) -> List[StructureItem]:
         """Extract function definitions with complexity metrics and decorators.
 
         Handles both decorated and undecorated functions across multiple languages.
@@ -713,7 +714,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         return functions
 
-    def _extract_language_specific_functions(self) -> List[Dict[str, Any]]:
+    def _extract_language_specific_functions(self) -> List[StructureItem]:
         """Hook for a language whose functions-as-values aren't covered by
         the shared arrow/class-field extractors above (e.g. Lua's
         `name = function(...) ... end`, BACK-758). No-op by default —
@@ -733,7 +734,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
     _CLASS_FIELD_NODE_TYPES = ('public_field_definition', 'field_definition')
 
-    def _extract_class_field_functions(self) -> List[Dict[str, Any]]:
+    def _extract_class_field_functions(self) -> List[StructureItem]:
         """Extract class-field arrow/function-expression methods (`foo = () => {}`)."""
         funcs = []
         for field_type in self._CLASS_FIELD_NODE_TYPES:
@@ -816,7 +817,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return candidates[0]
         return None
 
-    def _extract_arrow_functions(self) -> List[Dict[str, Any]]:
+    def _extract_arrow_functions(self) -> List[StructureItem]:
         """Extract named arrow/function-expression declarations (const X = () => {}),
         at module scope or nested inside another function's body.
 
@@ -899,7 +900,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Get common function node types across languages."""
         return list(FUNCTION_NODE_TYPES)
 
-    def _extract_decorated_functions(self, function_types: List[str]) -> tuple[List[Dict[str, Any]], set]:
+    def _extract_decorated_functions(self, function_types: List[str]) -> tuple[List[StructureItem], set]:
         """Extract decorated functions (Python-specific).
 
         decorated_definition contains decorator(s) + function/class.
@@ -937,7 +938,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return functions, tracking_lines
 
     def _extract_undecorated_functions(self, function_types: List[str],
-                                      processed_funcs: set) -> List[Dict[str, Any]]:
+                                      processed_funcs: set) -> List[StructureItem]:
         """Extract undecorated functions across all supported languages."""
         functions = []
 
@@ -961,7 +962,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return functions
 
     def _build_function_dict(self, node, name: str, decorators: List[str],
-                            decorated_node=None) -> Dict[str, Any]:
+                            decorated_node=None) -> StructureItem:
         """Build function dictionary with metrics.
 
         Args:
@@ -998,7 +999,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # list even after the _function_end_node fix above. (BACK-760)
         calls = self._dart_merge_signature_extra_calls(node, calls)
         calls = self._decorator_extra_calls(decorated_node, calls)
-        result = {
+        result: StructureItem = {
             'line': line_start,
             'line_end': line_end,
             'name': name,
@@ -1116,7 +1117,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         return (hi - lo + 1) - len(non_code_rows)
 
-    def _extract_classes(self) -> List[Dict[str, Any]]:
+    def _extract_classes(self) -> List[StructureItem]:
         """Extract class definitions with decorators.
 
         Handles both decorated and undecorated classes across multiple languages.
@@ -1141,7 +1142,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Get common class node types across languages."""
         return list(CLASS_NODE_TYPES)
 
-    def _extract_decorated_classes(self, class_types: List[str]) -> tuple[List[Dict[str, Any]], set]:
+    def _extract_decorated_classes(self, class_types: List[str]) -> tuple[List[StructureItem], set]:
         """Extract decorated classes (Python-specific).
 
         decorated_definition contains decorator(s) + class.
@@ -1197,7 +1198,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return f'anonymous@L{line}'
 
     def _extract_undecorated_classes(self, class_types: List[str],
-                                    processed_classes: set) -> List[Dict[str, Any]]:
+                                    processed_classes: set) -> List[StructureItem]:
         """Extract undecorated classes across all supported languages."""
         classes = []
 
@@ -1291,7 +1292,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return entries
 
     def _build_class_dict(self, node, name: str, decorators: List[str],
-                         decorated_node=None) -> Dict[str, Any]:
+                         decorated_node=None) -> StructureItem:
         """Build class dictionary.
 
         Args:
@@ -1305,7 +1306,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         line_start = _zero_arg(bounds_node, 'start_position').row + 1
         line_end = _zero_arg(bounds_node, 'end_position').row + 1
 
-        result: Dict[str, Any] = {
+        result: StructureItem = {
             'line': line_start,
             'line_end': line_end,
             'name': name,
@@ -1329,9 +1330,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         return False
 
-    def _extract_structs(self) -> List[Dict[str, Any]]:
+    def _extract_structs(self) -> List[StructureItem]:
         """Extract struct definitions (for languages that have them)."""
-        structs = []
+        structs: List[StructureItem] = []
 
         for struct_type in STRUCT_NODE_TYPES:
             nodes = self._find_nodes_by_type(struct_type)

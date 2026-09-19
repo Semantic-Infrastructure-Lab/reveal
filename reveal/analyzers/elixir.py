@@ -12,6 +12,7 @@ box it extracted zero functions/modules on real Elixir — byte/line count only
 from typing import Any, Dict, List, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
+from ..reveal_types import StructureItem
 from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
@@ -61,7 +62,7 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
 
     # --- Elixir-specific call-shaped definition extraction ---------------
 
-    def _extract_functions(self) -> List[Dict[str, Any]]:
+    def _extract_functions(self) -> List[StructureItem]:
         """Extract def/defp/defmacro/defguard/defdelegate definitions.
 
         Each is a ``call`` whose first child is an ``identifier`` naming the
@@ -70,7 +71,7 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
         complexity, and calls cover the full ``def … end`` (or ``def …, do:``)
         body.
         """
-        functions: List[Dict[str, Any]] = []
+        functions: List[StructureItem] = []
         seen = set()  # (line, name) — a def can appear once per clause; dedup identical head+line
         for node in self._find_nodes_by_type('call'):
             keyword = self._elixir_call_keyword(node)
@@ -86,9 +87,9 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
             functions.append(self._build_function_dict(node=node, name=name, decorators=[]))
         return functions
 
-    def _extract_classes(self) -> List[Dict[str, Any]]:
+    def _extract_classes(self) -> List[StructureItem]:
         """Extract ``defmodule`` definitions as classes (Elixir's module unit)."""
-        classes: List[Dict[str, Any]] = []
+        classes: List[StructureItem] = []
         seen = set()
         for node in self._find_nodes_by_type('call'):
             if self._elixir_call_keyword(node) not in _ELIXIR_MODULE_KEYWORDS:

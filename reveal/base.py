@@ -4,12 +4,14 @@ import os
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TypeVar
 
 from reveal.utils import format_size, get_file_type_from_analyzer
 
 logger = logging.getLogger(__name__)
 
+
+_T = TypeVar('_T')  # a record type (plain dict or StructureItem) -- slicing preserves it
 
 class FileAnalyzer(ABC):
     """Abstract base class for all file analyzers.
@@ -105,9 +107,9 @@ class FileAnalyzer(ABC):
         """
         pass  # Abstract method - must be implemented by subclasses
 
-    def _apply_semantic_slice(self, items: List[Dict[str, Any]],
+    def _apply_semantic_slice(self, items: List[_T],
                               head: Optional[int] = None, tail: Optional[int] = None,
-                              range: Optional[tuple] = None) -> List[Dict[str, Any]]:
+                              range: Optional[tuple] = None) -> List[_T]:
         """Apply head/tail/range slicing to a list of semantic units.
 
         Args:

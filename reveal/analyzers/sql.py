@@ -1,6 +1,7 @@
 """SQL analyzer using tree-sitter."""
 
 from typing import Dict, List, Any, Optional
+from ..reveal_types import StructureItem
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..core import node_children as _children
@@ -32,7 +33,7 @@ class SQLAnalyzer(TreeSitterAnalyzer):
                 return self._get_node_text(nested)
         return None
 
-    def _node_to_function_dict(self, node, name: str) -> Dict[str, Any]:
+    def _node_to_function_dict(self, node, name: str) -> StructureItem:
         """Convert a tree-sitter node to a function dict."""
         line_start = _zero_arg(node, 'start_position').row + 1
         line_end = _zero_arg(node, 'end_position').row + 1
@@ -47,7 +48,7 @@ class SQLAnalyzer(TreeSitterAnalyzer):
             'decorators': [],
         }
 
-    def _node_to_class_dict(self, node, name: str) -> Dict[str, Any]:
+    def _node_to_class_dict(self, node, name: str) -> StructureItem:
         """Convert a tree-sitter node to a class/table dict."""
         line_start = _zero_arg(node, 'start_position').row + 1
         line_end = _zero_arg(node, 'end_position').row + 1
@@ -58,7 +59,7 @@ class SQLAnalyzer(TreeSitterAnalyzer):
             'decorators': [],
         }
 
-    def _extract_functions(self) -> List[Dict[str, Any]]:
+    def _extract_functions(self) -> List[StructureItem]:
         """Extract SQL functions and procedures."""
         functions = []
         # New grammar uses create_function, create_procedure (no _statement suffix)
@@ -73,7 +74,7 @@ class SQLAnalyzer(TreeSitterAnalyzer):
 
         return functions
 
-    def _extract_classes(self) -> List[Dict[str, Any]]:
+    def _extract_classes(self) -> List[StructureItem]:
         """Extract SQL tables, views as 'classes'."""
         tables = []
         # New grammar uses create_table, create_view (no _statement suffix)
