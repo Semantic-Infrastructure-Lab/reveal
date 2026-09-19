@@ -1524,10 +1524,9 @@ recall-oracle's own already-published precision column where the oracle
 computes it directly (`surface`/`contracts`/`cli`/`http`/`env` families).
 No oracle was re-run to build this table — it is arithmetic over runs that
 already exist, per the Layer 0 charge in
-[PRECISION_MEASUREMENT_STRATEGY.md](../internal-docs/planning/PRECISION_MEASUREMENT_STRATEGY.md).
+the maintainer precision-measurement strategy (PRECISION_MEASUREMENT_STRATEGY, not shipped).
 Full per-oracle numbers, including every file this table's rows were pulled
-from, are in
-[BACK-1094-precision-computation-notes.md](../internal-docs/planning/BACK-1094-precision-computation-notes.md).
+from, are in the maintainer working notes for BACK-1094 (not shipped).
 
 | Language / corpus | Signal | Sampled hits | Extras (FP) | Precision | Mechanism | Notes |
 |---|---|---|---|---|---|---|

@@ -403,8 +403,8 @@ open-source codebase**, root-cause every miss, fix, and re-measure.
   BACK-1093 records the invariant as shipped: the design is right, one branch
   was never wired to it. Track extension, not a new program — same premise
   (a wrong answer that looks like a checked one is the intolerable failure),
-  different entry point. Full synthesis and recommended sequence:
-  `internal-docs/design/TRUST_BEYOND_EXTRACTION_2026-08-26.md`.
+  different entry point. Full synthesis and recommended sequence: the maintainer design note
+  TRUST_BEYOND_EXTRACTION_2026-08-26 (not shipped).
 
 ---
 
