@@ -20,7 +20,7 @@ pytestmark = pytest.mark.component
 # (module path, function name, expected empty result on parse failure)
 _SURFACE_SCANNERS = [
     ('reveal.adapters.ast.nav_surface_php', 'scan_file_surface_php',
-     {'cli': [], 'http': [], 'env': [], 'network': [], 'db': [], 'sdk': [], 'fs': []}),
+     {'cli': [], 'http': [], 'env': [], 'network': [], 'db': [], 'sdk': [], 'fs': [], 'subprocess': []}),
     ('reveal.adapters.ast.nav_surface_java', 'scan_file_surface_java',
      {'cli': [], 'http': [], 'env': [], 'network': [], 'db': [], 'sdk': [], 'fs': []}),
     ('reveal.adapters.ast.nav_surface_csharp', 'scan_file_surface_csharp',
@@ -34,7 +34,7 @@ _SURFACE_SCANNERS = [
     ('reveal.adapters.ast.nav_surface_ruby', 'scan_file_surface_ruby',
      {'cli': [], 'http': [], 'env': [], 'network': [], 'db': [], 'sdk': [], 'fs': []}),
     ('reveal.adapters.ast.nav_surface_cpp', 'scan_file_surface_cpp',
-     {'cli': [], 'http': [], 'env': [], 'network': [], 'db': [], 'sdk': [], 'fs': []}),
+     {'cli': [], 'http': [], 'env': [], 'network': [], 'db': [], 'sdk': [], 'fs': [], 'subprocess': []}),
     ('reveal.adapters.ast.nav_surface_kotlin', 'scan_file_surface_kotlin',
      {'cli': [], 'http': [], 'env': [], 'network': [], 'db': [], 'sdk': [], 'fs': []}),
     ('reveal.adapters.ast.nav_surface_ts', 'scan_file_surface_ts',

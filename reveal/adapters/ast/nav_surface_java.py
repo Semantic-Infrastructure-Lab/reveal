@@ -20,6 +20,10 @@ from reveal.core.treesitter_compat import _zero_arg
 
 _NET_PACKAGES: frozenset = frozenset({
     'java.net.http', 'okhttp3', 'org.apache.http', 'org.apache.hc', 'retrofit2',
+    # JDK classic networking (BACK-1090): exact classes, not `java.net` -- URI,
+    # URLEncoder, InetAddress etc. are not egress.
+    'java.net.URL', 'java.net.HttpURLConnection', 'java.net.URLConnection',
+    'java.net.Socket', 'java.net.ServerSocket', 'java.net.DatagramSocket',
 })
 
 _DB_PACKAGES: frozenset = frozenset({

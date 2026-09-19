@@ -37,7 +37,11 @@ from reveal.core.treesitter_compat import _zero_arg
 
 # #include header-path roots (matched as a prefix on the header path).
 _NET_HEADERS: tuple = ('curl/', 'cpr/', 'boost/asio', 'boost/beast', 'restclient',
-                       'cpp-httplib', 'httplib.h')
+                       'cpp-httplib', 'httplib.h',
+                       # BSD/POSIX and Winsock sockets (BACK-1090): system headers
+                       # that the library-root list above never matched.
+                       'sys/socket.h', 'netinet/', 'arpa/inet.h', 'netdb.h',
+                       'winsock2.h', 'ws2tcpip.h')
 _DB_HEADERS: tuple = ('pqxx/', 'sqlite3', 'mysql', 'mysqlx', 'mongocxx/', 'bsoncxx/',
                       'hiredis', 'sw/redis++', 'soci/')
 _SDK_HEADERS: tuple = ('aws/', 'google/cloud', 'stripe/')
@@ -59,7 +63,12 @@ _ENV_FUNCS: frozenset = frozenset({'getenv', 'std::getenv', 'secure_getenv'})
 _FS_CALL_FUNCS: frozenset = frozenset({'fopen', 'freopen'})
 _OFSTREAM_TYPES: frozenset = frozenset({'ofstream', 'std::ofstream', 'std::fstream', 'fstream'})
 
-_EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs')
+_SUBPROCESS_FUNCS: frozenset = frozenset({
+    'system', 'std::system', 'popen', '_popen', 'posix_spawn', 'posix_spawnp',
+    'execl', 'execlp', 'execle', 'execv', 'execvp', 'execve',
+})
+
+_EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 
 def scan_file_surface_cpp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -187,6 +196,11 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
                     'type': 'env_var', 'name': key, 'expr': fn_text,
                     'file': file_path, 'line': line,
                 })
+            return
+        if fn_text in _SUBPROCESS_FUNCS:
+            surfaces['subprocess'].append({
+                'type': 'subprocess', 'name': fn_text, 'file': file_path, 'line': line,
+            })
             return
         if fn_text in _FS_CALL_FUNCS:
             surfaces['fs'].append({

@@ -39,6 +39,12 @@ _SUBPROCESS_OBJECTS: frozenset = frozenset({'child_process', 'exec', 'spawn', 'e
 _SUBPROCESS_METHODS: frozenset = frozenset({'exec', 'spawn', 'execFile', 'fork', 'execSync', 'spawnSync'})
 _SUBPROCESS_CALLEE_NAMES: frozenset = frozenset({'execa', 'execaSync', 'execaCommand'})
 
+# Node built-in modules whose imports are tracked so destructured/aliased use
+# (`import { spawn } from 'node:child_process'`, `import * as nfs from 'fs'`,
+# `fs.promises.writeFile`) resolves the same as the literal `fs.` / `child_process.`.
+_NODE_FS_MODULES: frozenset = frozenset({'fs', 'fs/promises'})
+_NODE_SUBPROCESS_MODULES: frozenset = frozenset({'child_process'})
+
 _CLI_METHODS: frozenset = frozenset({'command', 'option'})
 
 # BACK-785: mirrors BACK-786's Python mcp provenance fix — a bare `.tool()`
@@ -92,6 +98,7 @@ def _scan_tree(
     mcp_ctor_names = _collect_mcp_constructor_aliases(tree, content_bytes)
     mcp_instances = _collect_mcp_instances(tree, content_bytes, mcp_ctor_names)
     express_instances = _collect_express_instances(tree, content_bytes)
+    node_bindings = _collect_node_builtin_bindings(tree, content_bytes)
 
     # Walk all nodes
     stack = [tree_root(tree)]
@@ -102,7 +109,8 @@ def _scan_tree(
         if kind == 'import_statement':
             _process_import(node, file_path, content_bytes, surfaces)
         elif kind == 'call_expression':
-            _process_call(node, file_path, content_bytes, surfaces, mcp_instances, express_instances)
+            _process_call(node, file_path, content_bytes, surfaces, mcp_instances, express_instances,
+                          node_bindings)
         elif kind in ('member_expression', 'subscript_expression'):
             _process_member(node, file_path, content_bytes, surfaces)
 
@@ -402,6 +410,88 @@ def _collect_express_instances(tree: Any, content_bytes: bytes) -> set:
     return instances
 
 
+def _node_builtin_kind(module: Optional[str]) -> Optional[str]:
+    """'fs' / 'subprocess' for a Node built-in module specifier (with or without
+    the `node:` prefix), else None."""
+    if not module:
+        return None
+    base = module[5:] if module.startswith('node:') else module
+    if base in _NODE_FS_MODULES:
+        return 'fs'
+    if base in _NODE_SUBPROCESS_MODULES:
+        return 'subprocess'
+    return None
+
+
+def _collect_node_builtin_bindings(tree: Any, content_bytes: bytes) -> Dict[str, tuple]:
+    """`{local_name: (kind, imported_name)}` for names bound from `fs`,
+    `fs/promises` or `child_process` -- ESM (default, namespace, named, aliased)
+    and CommonJS `require`. `imported_name` is None when the whole module is
+    bound (`import fs`, `import * as fs`, `const fs = require('fs')`), which is
+    also how `promises` is treated (`fs.promises` is still the fs module)."""
+    bindings: Dict[str, tuple] = {}
+    stack = [tree_root(tree)]
+    while stack:
+        node = stack.pop()
+        kind = _zero_arg(node, 'kind')
+        if kind == 'import_statement':
+            mkind = _node_builtin_kind(_get_import_source(node, content_bytes))
+            if mkind:
+                for imported, local in _get_import_clause_specifiers(node, content_bytes):
+                    bindings[local] = (mkind, None if imported in ('default', 'promises') else imported)
+                for clause in _children(node):
+                    if _zero_arg(clause, 'kind') != 'import_clause':
+                        continue
+                    for ch in _children(clause):
+                        if _zero_arg(ch, 'kind') == 'namespace_import':
+                            idents = [c for c in _children(ch) if _zero_arg(c, 'kind') == 'identifier']
+                            if idents:
+                                bindings[_get_text(idents[-1], content_bytes)] = (mkind, None)
+        elif kind == 'variable_declarator':
+            children = _children(node)
+            if children and _zero_arg(children[-1], 'kind') == 'call_expression':
+                mkind = _node_builtin_kind(_get_require_call_module(children[-1], content_bytes))
+                target = children[0]
+                if mkind and _zero_arg(target, 'kind') == 'identifier':
+                    bindings[_get_text(target, content_bytes)] = (mkind, None)
+                elif mkind and _zero_arg(target, 'kind') == 'object_pattern':
+                    for pch in _children(target):
+                        pkind = _zero_arg(pch, 'kind')
+                        if pkind == 'shorthand_property_identifier_pattern':
+                            name = _get_text(pch, content_bytes)
+                            bindings[name] = (mkind, name)
+                        elif pkind == 'pair_pattern':
+                            parts = [c for c in _children(pch)
+                                     if _zero_arg(c, 'kind') in ('property_identifier', 'identifier')]
+                            if len(parts) == 2:
+                                bindings[_get_text(parts[1], content_bytes)] = (
+                                    mkind, _get_text(parts[0], content_bytes))
+        for ch in _children(node):
+            stack.append(ch)
+    return bindings
+
+
+def _resolve_builtin_call(obj: Optional[str], name: str, bindings: Dict[str, tuple]) -> Optional[tuple]:
+    """`(kind, method)` when a call is `fs.*` / `child_process.*` (receiver bound
+    to the module, or named literally `fs` / `child_process`) or a bare call of a
+    destructured export (`spawn(...)`). Aliased method names resolve to the
+    imported name. None otherwise."""
+    if obj is None:
+        bound = bindings.get(name)
+        if bound and bound[1]:
+            return bound[0], bound[1]
+        return None
+    receiver = obj[:-len('.promises')] if obj.endswith('.promises') else obj
+    bound = bindings.get(receiver)
+    if bound and bound[1] is None:
+        return bound[0], name
+    if receiver == 'fs':
+        return 'fs', name
+    if receiver == 'child_process':
+        return 'subprocess', name
+    return None
+
+
 def _get_import_source(node, content_bytes: bytes) -> Optional[str]:
     """Extract the module path string from an import_statement node."""
     for ch in _children(node):
@@ -507,12 +597,29 @@ def _process_call(
     surfaces: Dict[str, List[Dict[str, Any]]],
     mcp_instances: set,
     express_instances: set,
+    node_bindings: Optional[Dict[str, tuple]] = None,
 ) -> None:
     line = _get_line(node)
     obj, method = _get_callee_parts(node, content_bytes)
 
     if obj is None and method is None:
         return
+
+    # Node built-ins (fs writes, child_process): resolved through import bindings
+    # so `spawn(...)`, `fsp.writeFile(...)` and `fs.promises.writeFile(...)` match.
+    resolved = _resolve_builtin_call(obj, method, node_bindings or {}) if method else None
+    if resolved:
+        mkind, fname = resolved
+        if mkind == 'subprocess' and fname in _SUBPROCESS_METHODS:
+            _add_once(surfaces['subprocess'], {
+                'type': 'subprocess', 'name': f'child_process.{fname}', 'file': file_path, 'line': line,
+            })
+            return
+        if mkind == 'fs' and fname in _FS_WRITE_METHODS:
+            _add_once(surfaces['fs'], {
+                'type': 'fs_write', 'name': f'fs.{fname}', 'file': file_path, 'line': line,
+            })
+            return
 
     # standalone call: execa(...), fetch(...), etc.
     if obj is None and method is not None:
