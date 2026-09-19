@@ -34,6 +34,10 @@ CASES = [
      {'create', 'c', 'helper', 'Foo', 'Box'}),
     ('.rb', 'ruby', "def f\n  helper\n  x.y\n  a.b.c\n  puts 'x'\nend\n",
      {'helper', 'y', 'c', 'puts'}),
+    # BACK-1302: pure attribute writes (`r.modes = 1`) are not calls in either path;
+    # `r.count += 1` reads first, so it is.
+    ('.rb', 'ruby', "def f(r)\n  r.modes = 1\n  self.name = 'x'\n  r.count += 1\n  helper\nend\n",
+     {'count', 'helper'}),
     ('.js', 'javascript', "function f(){ helper(); new Foo(); a.b.c(); a.b().c(); }",
      {'helper', 'Foo', 'c'}),
     ('.py', 'python', "def f():\n  helper()\n  a.b.c()\n  a.b().c()\n  Foo()\n",
@@ -103,3 +107,10 @@ def test_analyzer_and_nav_paths_find_the_same_calls(tmp_path, suffix, language, 
         f'only-nav={sorted(nav_bare - analyzer_bare)}'
     )
     assert '()' not in nav_calls
+
+
+def test_ruby_attribute_writes_are_not_calls_in_either_path(tmp_path):
+    path = tmp_path / 't.rb'
+    path.write_text("def f(r)\n  r.modes = 1\n  self.name = 'x'\n  r.count += 1\nend\n")
+    calls = get_analyzer(str(path))(str(path)).get_structure()['functions'][0]['calls']
+    assert _bare(calls) == {'count'}

@@ -3,6 +3,7 @@
 from typing import Any, List, Optional
 
 from ..core import node_children as _children
+from ..core.nav_calls import is_ruby_attribute_write
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
@@ -70,12 +71,8 @@ class RubyAnalyzer(TreeSitterAnalyzer):
         # `+=`/`||=` (`operator_assignment`) is NOT excluded here: it reads
         # the attribute before writing it, so it's a genuine call, matching
         # real Ruby semantics.
-        parent = _zero_arg(call_node, 'parent')
-        if parent is not None and _zero_arg(parent, 'kind') == 'assignment':
-            left = parent.child_by_field_name('left')
-            if (left is not None
-                    and _zero_arg(left, 'start_byte') == _zero_arg(call_node, 'start_byte')):
-                return None
+        if is_ruby_attribute_write(call_node):  # shared with nav_calls (BACK-1302)
+            return None
         method_node = call_node.child_by_field_name('method')
         if method_node is None:
             return None

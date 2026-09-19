@@ -1000,6 +1000,21 @@ def _extract_java_method_invocation_callee(
     return name or None
 
 
+def is_ruby_attribute_write(call_node: Any) -> bool:
+    """True for the LHS `call` of a plain assignment (`obj.attr = v`).
+
+    tree-sitter-ruby parses a setter write as the same `call` shape as a read,
+    wrapped in `assignment`. Policy shared by the analyzer and nav paths
+    (BACK-1302): a pure write is not a call (matches Ruby's own AST and the
+    recall oracle); `+=`/`||=` (`operator_assignment`) reads first, so it is.
+    """
+    parent = _zero_arg(call_node, 'parent')
+    if parent is None or _zero_arg(parent, 'kind') != 'assignment':
+        return False
+    left = parent.child_by_field_name('left')
+    return left is not None and _zero_arg(left, 'start_byte') == _zero_arg(call_node, 'start_byte')
+
+
 def _extract_ruby_call_callee(
     node: Any,
     get_text: Callable,
@@ -1011,6 +1026,8 @@ def _extract_ruby_call_callee(
     `.method` (the inner call is captured separately), mirroring the
     member-access handling in _extract_callee (BACK-415/416/BACK-431).
     """
+    if is_ruby_attribute_write(node):
+        return None
     receiver = node.child_by_field_name('receiver')
     method = node.child_by_field_name('method')
     if method is None:
