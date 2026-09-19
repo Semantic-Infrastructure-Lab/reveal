@@ -154,8 +154,8 @@ def simple():
         self.assertEqual(len(detections), 0)
 
     def test_complex_function_detected(self):
-        """Test that complex functions are detected using McCabe algorithm."""
-        # Create a function with McCabe complexity of 11 (verified with mccabe library)
+        """Test that complex functions are detected using the analyzer's shared complexity score."""
+        # 11 branches, plus two boolean operators the score also counts (BACK-1081).
         # Note: no leading newline so line numbers start at 1
         content = """def complex_func(x):
     if x > 0:
@@ -172,14 +172,22 @@ def simple():
                             i -= 1
     return x
 """
+        import tempfile
+        from pathlib import Path
+        from reveal.registry import get_analyzer
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'test.py'
+            path.write_text(content)
+            structure = get_analyzer(str(path))(str(path)).get_structure()
+        score = structure['functions'][0]['complexity']
         rule = C901()
-        # Patch get_threshold to return 10 (default) - McCabe complexity is 11
+        # Patch get_threshold to return 10 (default)
         rule.get_threshold = lambda key, default: 10
-        structure = {'functions': [{'name': 'complex_func', 'line': 1, 'end_line': 14}]}
         detections = rule.check('test.py', structure, content)
 
+        self.assertEqual(score, 13)
         self.assertEqual(len(detections), 1)
-        self.assertIn('complexity: 11', detections[0].message)  # McCabe-calculated
+        self.assertIn('complexity: 13', detections[0].message)  # shared with ast://
 
     def test_no_structure(self):
         """Test handling when no structure provided."""

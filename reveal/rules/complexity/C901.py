@@ -1,26 +1,24 @@
 """C901: Function complexity detector.
 
 Detects functions that are too complex based on cyclomatic complexity.
-Uses McCabe algorithm for Python (matching Ruff/flake8), with heuristic
-fallback for other languages.
+Reads the same per-function score `ast://` and `stats://` report (BACK-1081), for
+every language, so one function has one number across commands. That score counts
+boolean operators and ternaries as decisions, like radon, lizard and SonarQube;
+Python's `mccabe`/Ruff C901 does not, so Python scores here run higher than Ruff's.
+A line-count heuristic is the fallback for analyzers that report no score.
 """
 
-import logging
-from typing import List, Dict, Any, Optional, Tuple
-
-from mccabe import PathGraphingAstVisitor
+from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ..base_mixins import ASTParsingMixin
-
-logger = logging.getLogger(__name__)
 
 
-class C901(BaseRule, ASTParsingMixin):
+class C901(BaseRule):
     """Detect overly complex functions (cyclomatic complexity).
 
-    Uses the McCabe algorithm for Python files, matching Ruff's C901 rule.
-    For non-Python files, uses a heuristic based on control flow keywords.
+    Uses the analyzer's per-function cyclomatic complexity (the value `ast://`
+    reports) for every language; falls back to a heuristic when an analyzer
+    supplies none.
     """
 
     code = "C901"
@@ -28,7 +26,7 @@ class C901(BaseRule, ASTParsingMixin):
     category = RulePrefix.C
     severity = Severity.MEDIUM
     file_patterns = ['*']  # Universal: works on any structured file
-    version = "1.1.0"  # v1.1.0: McCabe-based calculation (aligned with Ruff)
+    version = "1.2.0"  # v1.2.0: one shared complexity number (was McCabe for Python, BACK-1081)
 
     # Default complexity threshold - matches Ruff's default
     # Can be overridden in .reveal.yaml:
@@ -61,23 +59,14 @@ class C901(BaseRule, ASTParsingMixin):
         # Get threshold from config (allows per-project customization)
         threshold = self.get_threshold('threshold', self.DEFAULT_THRESHOLD)
 
-        # For Python files, use McCabe on the whole file for accuracy
-        is_python = file_path.endswith('.py')
-        mccabe_results: List[Tuple[str, int, int]] = []
-        if is_python and content:
-            mccabe_results = self._get_mccabe_complexity(content, file_path)
-
         # Get functions from structure
         functions = structure.get('functions', [])
 
         for func in functions:
             func_name = func.get('name', '<unknown>')
 
-            # Priority: 1) McCabe result, 2) structure complexity, 3) heuristic
-            mccabe_value = self._match_mccabe(func, mccabe_results)
-            if mccabe_value is not None:
-                complexity = mccabe_value
-            elif func.get('complexity') is not None:
+            # Priority: 1) structure complexity (shared with ast://), 2) heuristic
+            if func.get('complexity') is not None:
                 complexity = func['complexity']
             else:
                 complexity = self._calculate_complexity_heuristic(func, content)
@@ -95,59 +84,6 @@ class C901(BaseRule, ASTParsingMixin):
                 ))
 
         return detections
-
-    def _get_mccabe_complexity(self, content: str, file_path: str = "<unknown>") -> List[Tuple[str, int, int]]:
-        """
-        Calculate McCabe cyclomatic complexity for all functions in Python code.
-
-        Uses the same algorithm as Ruff and flake8-mccabe for consistent results.
-        Shares the cached AST tree with other rules via ASTParsingMixin.
-
-        Args:
-            content: Python source code
-            file_path: Path for error messages and cache key
-
-        Returns:
-            (name, first line, complexity) per function. Keyed by position, not
-            name: two classes commonly define a method of the same name, and a
-            name-keyed dict let the last one overwrite the rest (BACK-1081).
-        """
-        results: List[Tuple[str, int, int]] = []
-        try:
-            tree = self._parse_python(content, file_path)
-            if tree is None:
-                return results
-            visitor = PathGraphingAstVisitor()
-            visitor.preorder(tree, visitor)
-
-            for graph in visitor.graphs.values():
-                # Graph entity is the function/method name
-                name = graph.entity
-                # Handle method names (Class.method -> method)
-                if '.' in name:
-                    name = name.split('.')[-1]
-                results.append((name, graph.lineno, graph.complexity()))
-        except Exception as e:
-            logger.debug(f"McCabe analysis failed: {e}")
-
-        return results
-
-    @staticmethod
-    def _match_mccabe(func: Dict[str, Any], entries: List[Tuple[str, int, int]]) -> Optional[int]:
-        """McCabe score for a structure function: same name at the same line, or
-        (a decorated function's `line` is its decorator) the same name defined
-        within the function's own line range."""
-        name = func.get('name')
-        start = func.get('line', 0)
-        end = func.get('line_end') or start
-        same_name = [(lineno, value) for n, lineno, value in entries if n == name]
-        for lineno, value in same_name:
-            if lineno == start:
-                return value
-        for lineno, value in same_name:
-            if start <= lineno <= end:
-                return value
-        return None
 
     def _calculate_complexity_heuristic(self, func: Dict[str, Any], content: str) -> int:
         """

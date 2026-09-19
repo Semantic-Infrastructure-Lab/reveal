@@ -225,7 +225,7 @@ These adapters are **teaching implementations** that solve real problems for spe
 
 - **B001-B005:** Bug detection (assert False, bare except, etc.)
 - **S701:** Security (hardcoded passwords)
-- **C901:** Cyclomatic complexity (McCabe's algorithm)
+- **C901:** Cyclomatic complexity (the same per-function score `ast://` and `stats://` report; counts boolean operators, so Python scores run higher than Ruff's C901)
 - **E501:** Line length
 
 ### Beta Rules (May Evolve)

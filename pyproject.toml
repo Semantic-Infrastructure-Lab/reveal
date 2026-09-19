@@ -39,7 +39,6 @@ dependencies = [
     "tree-sitter>=0.25.2,<0.26.0",  # Semantic parsing for all languages. Upper bound: 0.26.0 has a reference-counting bug in tree_sitter/binding/point.c (Point.row/.column getters return a borrowed ref instead of a new ref) that corrupts pymalloc's free-list under real workloads -- non-deterministic SIGSEGV/SIGBUS, node-count/size-dependent (BACK-1161). Root-caused and reproduced (11-line repro, ~100 AST nodes) 2026-08-22; fixed upstream unreleased as py-tree-sitter commit afb3836 (merged 2026-07-08, 8 days after v0.26.0 shipped) -- lift this ceiling once a released version contains that commit.
     "tree-sitter-language-pack>=1.8.1",  # Language grammar support (1.x: 305 languages, abi3 wheel). Ceiling that used to sit at <1.12.5 is gone -- BACK-620/BACK-1158 migrated reveal onto the new core-tree-sitter accessor API (zero-arg Node/TreeCursor accessors as properties, parse() takes bytes) that language-pack>=1.12.5 exposes, so pinning language-pack low to keep the vendored old-API parser is no longer needed. See BACK-573 design doc for the full migration arc.
     "beautifulsoup4>=4.12.0",  # HTML parsing for HTML analyzer (uses stdlib html.parser)
-    "mccabe>=0.7.0",  # McCabe cyclomatic complexity (aligns C901 with Ruff)
     "cryptography>=41.0.0",  # SSL certificate parsing for ssl:// adapter
 ]
 

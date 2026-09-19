@@ -92,42 +92,35 @@ class TestC901:
         detections = rule.check("test.py", structure, "")
         assert len(detections) == 0
 
-    def test_c901_same_named_methods_keep_their_own_mccabe_score(self):
-        """BACK-1081: McCabe scores were keyed by bare name, so `B.run` (1) overwrote
-        `A.run` (7) and the complex one went unflagged."""
-        branches = ''.join(f"        elif x == {i}: return {i}\n" for i in range(2, 8))
-        content = (
-            "class A:\n"
-            "    def run(self, x):\n"
-            "        if x == 1: return 1\n" + branches +
-            "        return 0\n"
-            "\n"
-            "class B:\n"
-            "    def run(self, x):\n"
-            "        return x\n"
-        )
+    def test_c901_python_uses_the_shared_structure_score(self):
+        """BACK-1081: Python used to be re-scored with `mccabe` (which ignores boolean
+        operators), so C901 disagreed with ast://. It now reads the structure's
+        score for every language, and same-named methods keep their own."""
         rule = C901()
         rule.get_threshold = lambda key, default: 5
         structure = {'functions': [
-            {'name': 'run', 'line': 2, 'line_end': 10, 'complexity': 1},
+            {'name': 'run', 'line': 2, 'line_end': 10, 'complexity': 7},
             {'name': 'run', 'line': 13, 'line_end': 14, 'complexity': 1},
         ]}
-        detections = rule.check("m.py", structure, content)
+        # Content is deliberately trivial: the verdict must not come from re-parsing it.
+        detections = rule.check("m.py", structure, "def run(): pass\n")
         assert [d.line for d in detections] == [2]
+        assert '(complexity: 7, max: 5)' in detections[0].message
 
-    def test_c901_decorated_function_matches_by_range(self):
-        """A decorated function's structure `line` is the decorator; McCabe reports
-        the `def` line, which still falls inside the function's range."""
-        branches = ''.join(f"    elif x == {i}: return {i}\n" for i in range(2, 8))
-        content = "@decorator\ndef busy(x):\n    if x == 1: return 1\n" + branches + "    return 0\n"
+    def test_c901_matches_ast_score_on_boolean_heavy_python(self, tmp_path):
+        """A function whose only branching is boolean operators: ast:// counts them,
+        and so must C901."""
+        from reveal.registry import get_analyzer
+        path = tmp_path / 'bools.py'
+        path.write_text("def f(a, b, c, d, e, g):\n    return a and b and c and d or e or g\n")
+        analyzer = get_analyzer(str(path))(str(path))
+        structure = analyzer.get_structure()
+        score = structure['functions'][0]['complexity']
+        assert score > 1
         rule = C901()
-        rule.get_threshold = lambda key, default: 5
-        structure = {'functions': [{'name': 'busy', 'line': 1, 'line_end': 10, 'complexity': 1}]}
-        assert [d.line for d in rule.check("m.py", structure, content)] == [1]  # McCabe (7) wins
-
-
-class TestC902:
-    """Test C902: Function length detection."""
+        rule.get_threshold = lambda key, default: score - 1
+        detections = rule.check(str(path), structure, path.read_text())
+        assert f'(complexity: {score},' in detections[0].message
 
     def test_c902_initialization(self):
         """C902 rule initializes correctly."""
