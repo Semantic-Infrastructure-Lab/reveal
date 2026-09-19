@@ -685,9 +685,11 @@ class TestImportGraph:
 
         unused = graph.find_unused_imports(symbols_by_file)
 
-        # sys should be marked as unused
+        # sys should be marked as unused (pairs of statement + unused names, BACK-1066)
         assert len(unused) == 1
-        assert unused[0].module_name == 'sys'
+        stmt, names = unused[0]
+        assert stmt.module_name == 'sys'
+        assert names == ['sys']
 
 
     def test_init_py_imports_not_flagged_as_unused(self):

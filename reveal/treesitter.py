@@ -678,6 +678,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     'content': self._get_node_text(node),
                 })
 
+        # IMPORT_NODE_TYPES is a set: without this the order (and so the outline
+        # and JSON) varied with PYTHONHASHSEED whenever a file mixed node kinds.
+        imports.sort(key=lambda item: item['line'])
         return imports
 
     def _imports_from_extractor(self) -> List[Dict[str, Any]]:

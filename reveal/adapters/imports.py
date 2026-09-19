@@ -494,12 +494,18 @@ class ImportsRenderer:
         elif count == 0:
             pass
         else:
+            def describe(imp: dict) -> str:
+                names = imp.get('unused_names') or []
+                # only a partly-used named import needs the names spelled out
+                partial = names and imp.get('names') and len(names) < len(imp['names'])
+                return f"{imp['module']} (unused: {', '.join(names)})" if partial else str(imp['module'])
+
             if verbose:
                 for imp in result['unused']:
-                    print(f"  {imp['file']}:{imp['line']} - {imp['module']}")
+                    print(f"  {imp['file']}:{imp['line']} - {describe(imp)}")
             else:
                 for imp in result['unused'][:10]:
-                    print(f"  {imp['file']}:{imp['line']} - {imp['module']}")
+                    print(f"  {imp['file']}:{imp['line']} - {describe(imp)}")
                 if count > 10:
                     print(f"\n  ... and {count - 10} more unused imports")
                     print(f"  Run with --verbose to see all {count} unused imports\n")
@@ -1621,9 +1627,11 @@ class ImportsAdapter(ResourceAdapter):
 
         unused = self._graph.find_unused_imports(self._symbols_by_file)
 
+        # `unused_names` narrows a partly-used `from x import a, b` to the names
+        # actually unused (BACK-1066); `count` is statements, like `unused`.
         return self._build_response(
             'unused_imports',
-            unused=[self._format_import(stmt) for stmt in unused],
+            unused=[{**self._format_import(stmt), 'unused_names': names} for stmt, names in unused],
             count=len(unused)
         )
 

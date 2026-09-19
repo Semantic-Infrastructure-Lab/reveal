@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...analyzers.imports.base import get_extractor, get_all_extensions
+from ...analyzers.imports.unused import bound_name, is_named_import, unused_entries
 
 logger = logging.getLogger(__name__)
 
@@ -33,145 +34,27 @@ class I001(BaseRule):
     file_patterns = _initialize_file_patterns()  # Populated at module load time
     version = "2.0.0"
 
-    def _has_noqa_comment(self, source_line: str) -> bool:
-        """Check if source line has a suppression comment (language-specific).
-
-        Detects patterns like:
-        - Python: # noqa, # noqa: F401, # noqa: I001
-        - JavaScript: // eslint-disable-line, // eslint-disable-next-line no-unused-vars
-        - Go: // nolint, // nolint:unused
-        - Rust: #[allow(unused_imports)], #[allow(unused)]
-
-        Args:
-            source_line: Full source line text
-
-        Returns:
-            True if line has suppression comment for unused imports
-        """
-        if not source_line:
-            return False
-
-        line_lower = source_line.lower()
-
-        # Python: # noqa
-        if '# noqa' in line_lower:
-            # Generic noqa (no colon) or specific F401/I001
-            return ':' not in line_lower or 'f401' in line_lower or 'i001' in line_lower
-
-        # JavaScript: // eslint-disable
-        if '// eslint-disable' in line_lower and ('no-unused-vars' in line_lower or 'unused' in line_lower):
-            return True
-
-        # Go: // nolint
-        if '// nolint' in line_lower and ('unused' in line_lower or ':' not in line_lower):
-            return True
-
-        # Rust: #[allow(unused)]
-        if '#[allow' in line_lower and 'unused' in line_lower:
-            return True
-
-        return False
-
-    def _should_skip_import(self, stmt) -> bool:
-        """Check if import should be skipped from unused detection.
-
-        Args:
-            stmt: ImportStatement to check
-
-        Returns:
-            True if import should be skipped (star import, TYPE_CHECKING, or has noqa)
-        """
-        # Skip star/glob imports (can't reliably detect usage) — the label
-        # varies by language extractor: 'star_import' (Python/JS wildcard),
-        # 'glob_use' (Rust `use X::*`), 'dot_import' (Go `. "pkg"`). All three
-        # pull names into scope without a bindable local name, so usage of any
-        # imported item never appears as the import's own name (BACK-420).
-        if stmt.import_type in ('star_import', 'glob_use', 'dot_import'):
-            return True
-
-        # Skip TYPE_CHECKING imports (used only in type hints)
-        if stmt.is_type_checking:
-            return True
-
-        # Skip languages where usage detection is unreliable (generic extractor)
-        if getattr(stmt, 'skip_unused', False):
-            return True
-
-        # Skip imports with # noqa comments
-        if self._has_noqa_comment(stmt.source_line):
-            return True
-
-        return False
-
-    def _check_from_import(self,
-                          stmt,
-                          symbols_used: set,
-                          exports: set,
-                          file_path: str) -> List[Detection]:
-        """Check if 'from X import Y' style import has unused names.
-
-        Args:
-            stmt: ImportStatement to check
-            symbols_used: Set of symbols used in the code
-            exports: Set of symbols in __all__
-            file_path: Path to the file being checked
-
-        Returns:
-            List of detections for each unused import name (matches Ruff F401)
-        """
+    def _detections_for(self, stmt, symbols_used: set, exports: set, file_path: str) -> List[Detection]:
+        """One detection per unused name (matches Ruff F401); the decision itself
+        lives in analyzers/imports/unused.py, shared with imports://?unused."""
         detections: List[Detection] = []
-
-        if not stmt.imported_names:
-            return detections
-
-        # Check each imported name individually (aligned with Ruff F401)
-        for name in stmt.imported_names:
-            actual_name = name.split(' as ')[-1] if ' as ' in name else name
-            # Check if used in code OR exported via __all__
-            if actual_name not in symbols_used and actual_name not in exports:
-                import_str = f"from {stmt.module_name} import {name}"
-                detections.append(self.create_detection(
-                    file_path=file_path,
-                    line=stmt.line_number,
-                    column=1,
-                    suggestion=f"Remove unused import: `{actual_name}`",
-                    context=import_str
-                ))
-
-        return detections
-
-    def _check_regular_import(self,
-                             stmt,
-                             symbols_used: set,
-                             exports: set,
-                             file_path: str) -> Optional[Detection]:
-        """Check if 'import X' style import is unused.
-
-        Args:
-            stmt: ImportStatement to check
-            symbols_used: Set of symbols used in the code
-            exports: Set of symbols in __all__
-            file_path: Path to the file being checked
-
-        Returns:
-            Detection if import is unused, None otherwise
-        """
-        # import X or import X as Y - check if used OR exported
-        check_name = stmt.alias or stmt.module_name.split('.')[0]
-        if check_name not in symbols_used and check_name not in exports:
-            import_str = f"import {stmt.module_name}"
-            if stmt.alias:
-                import_str += f" as {stmt.alias}"
-
-            return self.create_detection(
+        for entry in unused_entries(stmt, symbols_used, frozenset(exports)):
+            if is_named_import(stmt):
+                context = f"from {stmt.module_name} import {entry}"
+                suggestion = f"Remove unused import: `{bound_name(entry)}`"
+            else:
+                context = f"import {stmt.module_name}"
+                if stmt.alias:
+                    context += f" as {stmt.alias}"
+                suggestion = f"Remove unused import: {context}"
+            detections.append(self.create_detection(
                 file_path=file_path,
                 line=stmt.line_number,
                 column=1,
-                suggestion=f"Remove unused import: {import_str}",
-                context=import_str
-            )
-
-        return None
+                suggestion=suggestion,
+                context=context,
+            ))
+        return detections
 
     def check(self,
              file_path: str,
@@ -226,18 +109,7 @@ class I001(BaseRule):
             )
             return detections
 
-        # Check each import for usage
         for stmt in imports:
-            if self._should_skip_import(stmt):
-                continue
-
-            # Check import based on type (from-import vs regular import)
-            if stmt.imported_names:
-                # from-import returns list of detections (one per unused name)
-                detections.extend(self._check_from_import(stmt, symbols_used, exports, file_path))
-            else:
-                detection = self._check_regular_import(stmt, symbols_used, exports, file_path)
-                if detection:
-                    detections.append(detection)
+            detections.extend(self._detections_for(stmt, symbols_used, exports, file_path))
 
         return detections

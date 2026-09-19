@@ -6,8 +6,10 @@ Extracted to a separate module to avoid circular imports.
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 from collections import defaultdict, deque
+
+from .unused import unused_entries
 
 
 @dataclass
@@ -245,61 +247,26 @@ class ImportGraph:
 
         return group
 
-    def find_unused_imports(self, symbols_by_file: Dict[Path, Set[str]]) -> List[ImportStatement]:
-        """Find imports that are never used in the code.
+    def find_unused_imports(self, symbols_by_file: Dict[Path, Set[str]]) -> List[Tuple[ImportStatement, List[str]]]:
+        """Find imports whose names are never used in the code.
 
         Args:
             symbols_by_file: Map of file_path -> set of symbols used in that file
                              (should include __all__ exports to handle re-exports)
 
         Returns:
-            List of unused import statements
+            `(statement, unused names)` pairs -- a `from x import a, b` with only
+            `b` unused reports `b`. The decision is shared with I001
+            (analyzers/imports/unused.py), so the two never disagree (BACK-1066).
         """
-        unused = []
+        unused: List[Tuple[ImportStatement, List[str]]] = []
         for file_path, imports in self.files.items():
             symbols_used = symbols_by_file.get(file_path, set())
             for stmt in imports:
-                if self._should_skip_import(stmt):
-                    continue
-                if not self._is_import_used(stmt, symbols_used):
-                    unused.append(stmt)
+                names = unused_entries(stmt, symbols_used)
+                if names:
+                    unused.append((stmt, names))
         return unused
-
-    @staticmethod
-    def _should_skip_import(stmt: 'ImportStatement') -> bool:
-        """Return True for imports that should never be flagged as unused."""
-        return (
-            stmt.skip_unused  # language lacks reliable symbol-usage semantics
-            or '# noqa' in stmt.source_line
-            or '# type: ignore' in stmt.source_line
-            or stmt.is_type_checking
-            or stmt.import_type == 'star_import'  # can't reliably detect
-            or stmt.file_path.name == '__init__.py'  # re-export pattern: imports are public API
-        )
-
-    @staticmethod
-    def _resolve_import_alias(name: str) -> str:
-        """Return the effective name for a possibly aliased import ('X as Y' → 'Y')."""
-        if ' as ' in name:
-            _, alias = name.split(' as ', 1)
-            return alias.strip()
-        return name
-
-    def _is_import_used(self, stmt: 'ImportStatement', symbols_used: Set[str]) -> bool:
-        """Return True if at least one name from *stmt* appears in *symbols_used*."""
-        if stmt.import_type == 'namespace_import':
-            # `import * as foo from 'module'` — imported_names is the literal
-            # placeholder ['*'], not a real symbol; the usable name is the alias.
-            return (stmt.alias or '') in symbols_used
-        if stmt.imported_names:
-            # from X import Y, Z — check Y or Z (or their aliases)
-            return any(
-                self._resolve_import_alias(name) in symbols_used
-                for name in stmt.imported_names
-            )
-        # import X — check X (or its alias)
-        check_name = stmt.alias or stmt.module_name.split('.')[0]
-        return check_name in symbols_used
 
     def get_import_count(self) -> int:
         """Get total number of import statements."""
