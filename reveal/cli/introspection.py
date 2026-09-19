@@ -431,6 +431,12 @@ def _build_full_support_info(info: Dict[str, Any]) -> List[str]:
             lines.append("   Known limitations:")
             for item in profile.known_limitations:
                 lines.append(f"     - {item}")
+        unsupported = profile.unsupported_features()
+        if unsupported:
+            from reveal.capabilities import PYTHON_ONLY_FEATURES
+            lines.append("   Python-only features (not available here):")
+            for name in unsupported:
+                lines.append(f"     - {PYTHON_ONLY_FEATURES[name].invocation}")
         # BACK-880: measured recall from VALIDATION.md's independent-oracle
         # program, when this language has been through it.
         if profile.validation:

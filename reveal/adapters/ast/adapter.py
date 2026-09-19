@@ -198,8 +198,10 @@ class AstAdapter(ResourceAdapter):
             if not items and not has_python_files(self.path):
                 from ...utils.path_utils import detect_non_python_language
                 unsupported_language = detect_non_python_language(Path(self.path))
+            from ...capabilities import python_only_warning
+            warning = python_only_warning(self.show_mode, Path(self.path))
             meta = self.create_meta(parse_mode='python_ast',
-                                    confidence=1.0, warnings=[], errors=[])
+                                    confidence=1.0, warnings=[warning] if warning else [], errors=[])
             result = ResultBuilder.create(
                 result_type='ast_' + self.show_mode.replace('-', '_'),
                 source=self.path,
@@ -218,8 +220,10 @@ class AstAdapter(ResourceAdapter):
         if self.reveal_type_var:
             from .nav_reveal_type import collect_type_evidence
             evidence = collect_type_evidence(self.path, self.reveal_type_var)
+            from ...capabilities import python_only_warning
+            warning = python_only_warning('reveal-type', Path(self.path))
             meta = self.create_meta(parse_mode='tree_sitter_full',
-                                    confidence=1.0, warnings=[], errors=[])
+                                    confidence=1.0, warnings=[warning] if warning else [], errors=[])
             result = ResultBuilder.create(
                 result_type='ast_reveal_type',
                 source=self.path,

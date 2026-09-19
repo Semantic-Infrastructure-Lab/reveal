@@ -194,6 +194,14 @@ def _render_call_graph(data: Dict[str, Any]) -> None:
         print()
 
 
+def _print_capability_warnings(data: Dict[str, Any]) -> None:
+    """Show W-CAP-* warnings (a Python-only feature run over other languages, BACK-1283)."""
+    for warning in (data.get('meta') or {}).get('warnings') or []:
+        if str(warning.get('code', '')).startswith('W-CAP'):
+            print()
+            print(f"  ⚠ {warning['code']}: {warning['message']}")
+
+
 def _render_dict_heatmap(data: Dict[str, Any], output_format: str) -> None:
     """Render show=dict-heatmap bare-dict param ranking."""
     from reveal.adapters.ast.nav_dict_heatmap import render_dict_heatmap
@@ -212,6 +220,7 @@ def _render_dict_heatmap(data: Dict[str, Any], output_format: str) -> None:
         return
 
     print(render_dict_heatmap(results, path, unsupported_language))
+    _print_capability_warnings(data)
 
 
 def _render_dict_schemas(data: Dict[str, Any], output_format: str) -> None:
@@ -231,6 +240,7 @@ def _render_dict_schemas(data: Dict[str, Any], output_format: str) -> None:
         return
 
     print(render_dict_schemas(results, data.get('path', '.'), data.get('unsupported_language', '')))
+    _print_capability_warnings(data)
 
 
 def _render_reveal_type(data: Dict[str, Any], output_format: str) -> None:
@@ -251,6 +261,7 @@ def _render_reveal_type(data: Dict[str, Any], output_format: str) -> None:
     print()
     print(f"  → Trace reads/writes: reveal file.py <function> --varflow {var_name}")
     print(f"  → Find functions:     reveal 'ast://{path}?param_type={var_name}'")
+    _print_capability_warnings(data)
 
 
 def _suggest_reveal_type_if_variable(query: str, path: str) -> None:

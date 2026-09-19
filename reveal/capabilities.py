@@ -88,6 +88,60 @@ _CONFORMANCE_LEVELS = frozenset({
     CONFORMANCE_STRUCTURE_ONLY, CONFORMANCE_UNTESTED,
 })
 
+# --- Python-only features (BACK-1283) ---------------------------------------
+#
+# Features built on Python's own `ast` module or Python conventions. They are
+# not "unsupported languages" in the tier sense -- a language can be fully
+# conformant and still lack these -- so they are declared here, once, instead of
+# on each of the ~43 LanguageCapability entries. `LanguageCapability.
+# unsupported_features()` derives the per-language view, and
+# `python_only_warning()` is what a feature emits (as a W-CAP-1 warning) when
+# pointed at a tree that also holds other languages.
+
+W_CAP_PYTHON_ONLY = "W-CAP-1"
+
+
+@dataclass(frozen=True)
+class PythonOnlyFeature:
+    invocation: str  # how a user reaches it
+    what: str  # one-line description
+
+
+PYTHON_ONLY_FEATURES: Dict[str, PythonOnlyFeature] = {
+    "dict-heatmap": PythonOnlyFeature("ast://?show=dict-heatmap", "ranks untyped dicts by keys read"),
+    "dict-schemas": PythonOnlyFeature("ast://?show=dict-schemas", "clusters untyped dicts into implicit schemas"),
+    "reveal-type": PythonOnlyFeature("ast://?reveal_type=<name>", "type evidence for a variable"),
+    "rule-T006": PythonOnlyFeature("rule T006", "flags untyped dicts that a TypedDict already covers"),
+    "typed-elements": PythonOnlyFeature("--format typed", "Python-specific element semantics"),
+    "docstrings": PythonOnlyFeature("docstring extraction", "leading-docstring detection in outlines"),
+}
+
+
+def python_only_warning(feature: str, path: Path) -> Optional[Dict[str, str]]:
+    """A W-CAP-1 warning when `path` holds code in languages `feature` cannot
+    analyze; None when it is all Python (or unreadable). The feature's result
+    covers only the Python part -- this says so, instead of looking complete."""
+    from .utils.path_utils import census_for_path
+
+    try:
+        per_language = census_for_path(Path(path)).per_language
+    except OSError:
+        return None
+    others = {lang: n for lang, n in per_language.items() if lang != "python"}
+    if not others:
+        return None
+    ranked = sorted(others.items(), key=lambda kv: (-kv[1], kv[0]))
+    listing = ", ".join(f"{lang} ({n})" for lang, n in ranked[:5])
+    more = f", +{len(ranked) - 5} more" if len(ranked) > 5 else ""
+    return {
+        "code": W_CAP_PYTHON_ONLY,
+        "message": (
+            f"{PYTHON_ONLY_FEATURES[feature].invocation} analyzes Python only; "
+            f"{sum(others.values())} file(s) in other languages were not analyzed: {listing}{more}."
+        ),
+    }
+
+
 # --- measured recall signals (BACK-880) -------------------------------------
 #
 # ``conformance_level`` above answers "has this language been through the
@@ -169,6 +223,10 @@ class LanguageCapability:
                 f"{self.language}: conformance_level={self.conformance_level!r} "
                 f"not one of {sorted(_CONFORMANCE_LEVELS)}"
             )
+
+    def unsupported_features(self) -> List[str]:
+        """Python-only features (see PYTHON_ONLY_FEATURES) unavailable for this language."""
+        return [] if self.language == "python" else sorted(PYTHON_ONLY_FEATURES)
 
 
 # ---------------------------------------------------------------------------

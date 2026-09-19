@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Python-only features are declared, and warn when run over other languages (BACK-1283)** — `ast://?show=dict-heatmap`, `?show=dict-schemas` and `?reveal_type=` silently analyzed only the `.py` files of a mixed tree (BACK-749 covered only a tree with no Python at all). They now add a `W-CAP-1` warning naming what was skipped (`analyzes Python only; 3 file(s) in other languages were not analyzed: javascript (2), go (1)`), in text and in JSON `meta.warnings`. `reveal --language-info <lang>` lists the Python-only features (dict-heatmap, dict-schemas, reveal-type, rule T006, `--format typed`, docstring extraction) not available for that language, from one registry in `capabilities.py`. T006, `--format typed` and docstring extraction are declared but do not yet emit the warning.
 - **`ast://?show=dict-schemas` — implicit record schemas (BACK-1288)** — clusters untyped-dict reads across functions into shapes read in 2+ places, and names any TypedDict under the scanned path that already covers a shape plus the keys its readers use that it doesn't declare. On reveal's own source the top result is the analyzer element record: 39 readers in 27 files, with `ASTElement` covering 71% of it and 10 keys read but never declared (including both `line_end` and `end_line`).
 
 ### Changed
