@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, cast
 from reveal.base import FileAnalyzer
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 
+from .coverage import format_coverage_warning, outline_coverage
 from .metadata import _print_file_header
 from .outline import build_hierarchy, build_heading_hierarchy, render_outline
 from .formatting import (
@@ -457,6 +458,9 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
             'message': parse_error,
             'hint': 'Tree-sitter grammar fetch/parse failed — see INSTALL.md#network-requirements',
         }
+    coverage = outline_coverage(structure, analyzer.lines)
+    if coverage:
+        result['meta']['coverage'] = coverage
     relationships = analyzer._extract_relationships(structure)
     if relationships:
         result['relationships'] = relationships
@@ -580,6 +584,15 @@ def _build_outline_hierarchy(structure: Dict[str, List[Dict[str, Any]]]):
     return build_hierarchy(structure)
 
 
+def _print_coverage_warning(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
+    """BACK-1113: say so when the outline covers only a small part of a code file."""
+    coverage = outline_coverage(structure, analyzer.lines)
+    if coverage:
+        print()
+        for line in format_coverage_warning(coverage, analyzer.path):
+            print(line)
+
+
 def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]],
                          path: Path, is_fallback: bool, fallback_lang: str, config=None) -> None:
     """Handle outline mode rendering.
@@ -612,6 +625,7 @@ def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[
 
     hierarchy = _build_outline_hierarchy(structure)
     render_outline(hierarchy, path)
+    _print_coverage_warning(analyzer, structure)
 
     # Navigation hints
     print()
@@ -675,6 +689,7 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
     # Text output: show header, categories, and navigation hints
     _print_file_header(path, is_fallback, fallback_lang)
     _render_text_categories(structure, path, output_format, heading_depth=heading_depth)
+    _print_coverage_warning(analyzer, structure)
 
     # Navigation hints
     if output_format == 'text':
