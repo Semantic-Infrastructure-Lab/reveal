@@ -4,6 +4,7 @@ from typing import Callable, List, Optional
 
 from ..core import node_children as _children
 from ..core import node_next_sibling as _next_sibling
+from ..core.callees.dart import cascade_sites, selector_sites, site_at
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
@@ -228,8 +229,12 @@ class DartAnalyzer(TreeSitterAnalyzer):
             return None
         parent_kind = _zero_arg(parent, 'kind')
         get_text = self._get_node_text
+        start = _zero_arg(call_node, 'start_byte')
 
         if parent_kind == 'cascade_section':
+            site = site_at(cascade_sites(parent, get_text), start)
+            if site is not None and site.member:
+                return site.member
             return _dart_cascade_callee(parent, get_text)
 
         if parent_kind != 'selector':
@@ -239,6 +244,14 @@ class DartAnalyzer(TreeSitterAnalyzer):
         if container is None:
             return None
         siblings = _children(container)
+
+        # One decoder shared with nav (core/callees/dart.py). A call on the result of a
+        # previous call (`a.b().c()`) has no receiver of its own: name just the member
+        # (nav spells it `.c`). Anything the enumerator cannot name (`await x.foo()` nests the receiver
+        # one level down) falls through to the sibling walk below.
+        site = site_at(selector_sites(siblings, get_text), start)
+        if site is not None and site.dotted:
+            return site.member if site.dotted.startswith('.') else site.dotted
 
         target_start = _zero_arg(parent, 'start_byte')
         idx = _dart_selector_index(siblings, target_start)

@@ -165,9 +165,10 @@ def test_dart_selector_chains_differ_only_in_receiver_form(tmp_path):
     per_function, nav = _walk(
         tmp_path, '.dart', 'dart',
         "void outer(){ a.b(1).c(2); x.y.z(); top(); top(); }")
-    # Both paths agree on the calls. Receivers differ: the analyzer names `c` and `z` bare, nav
-    # names `.c` (chain-receiver policy) and `x.y.z` (full receiver).
-    assert per_function['outer'] == ['a.b', 'c', 'z', 'top']
+    # Both paths agree on the calls. A call on a previous call's result differs by policy: the
+    # analyzer names `c`, nav names `.c`. `x.y.z()` is the full receiver in both (the analyzer
+    # used to drop it to `z`, BACK-1309).
+    assert per_function['outer'] == ['a.b', 'c', 'x.y.z', 'top']
     assert nav == [(1, 'a.b', '1'), (1, '.c', '2'), (1, 'x.y.z', None), (1, 'top', None), (1, 'top', None)]
 
 
@@ -181,3 +182,15 @@ def test_kotlin_and_swift_nav_report_the_first_argument(tmp_path, suffix, langua
     (1350/1350 and 1408/1408 sites over the 60-file corpus sample)."""
     _, nav = _walk(tmp_path, suffix, language, src)
     assert [(c, a) for _, c, a in nav] == [('foo', '1'), ('a.b', 'x')]
+
+
+def test_dart_null_assertion_is_transparent_and_cascade_continuations_are_named(tmp_path):
+    """BACK-1309: `x!.y()` / `w!(3)` lost the receiver / the whole call in nav (the `!` selector
+    reset the chain); `..list.addAll(z)` was named `list` (the cascade selector) by the analyzer
+    and `..setup().finish()` named `setup` twice."""
+    per_function, nav = _walk(
+        tmp_path, '.dart', 'dart',
+        "void outer(){ x!.y(1); a..setup().finish(2); b..list.addAll(z); w!(3); }")
+    assert per_function['outer'] == ['x.y', 'setup', 'finish', 'addAll', 'w']
+    assert nav == [(1, 'x.y', '1'), (1, '.setup', None), (1, '.finish', '2'),
+                   (1, '.list.addAll', 'z'), (1, 'w', '3')]

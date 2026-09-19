@@ -84,6 +84,8 @@ def selector_sites(children: List[Any], get_text: Callable[[Any], str]) -> List[
         sel = _children(child)
         if not sel:
             continue
+        if len(sel) == 1 and _zero_arg(sel[0], 'kind') == '!':
+            continue  # null-assertion `x!.foo()`: carries no name, the receiver survives it
         inner = sel[0]
         inner_kind = _zero_arg(inner, 'kind')
         if inner_kind == 'argument_part':
@@ -125,3 +127,8 @@ def cascade_sites(section: Any, get_text: Callable[[Any], str]) -> List[CallSite
         elif kind != '..':
             parts = []
     return sites
+
+
+def site_at(sites: List[CallSite], start_byte: int) -> Optional[CallSite]:
+    """The site whose argument list starts at `start_byte` (node identity is unreliable, BACK-573)."""
+    return next((s for s in sites if _zero_arg(s.arg_node, 'start_byte') == start_byte), None)
