@@ -153,11 +153,9 @@ fi
 # 11. Real-corpus call agreement (analyzer vs ast:// nav)
 # Catches cross-path drift that fixture tests miss (BACK-1289, BACK-1299). Skips
 # cleanly when ~/.cache/reveal-corpus is absent (scripts/fetch_corpus.py).
-# javascript/typescript floors are known, tracked gaps -- raise them as fixed.
 check_step "Corpus Agreement (analyzer vs nav calls)" 11 11
 
-if python3 "$SCRIPT_DIR/corpus_sweep.py" agree -n 60 --min-jaccard 0.98 \
-        --floor javascript=0.90 --floor typescript=0.94; then
+if python3 "$SCRIPT_DIR/corpus_sweep.py" agree -n 60 --min-jaccard 0.98; then
     echo -e "${GREEN}✓ Call extraction paths agree on the real corpus${NC}"
 else
     echo -e "${RED}✗ Analyzer/nav call agreement dropped below floor${NC}"

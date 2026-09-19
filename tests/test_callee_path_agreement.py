@@ -38,6 +38,10 @@ CASES = [
     # `r.count += 1` reads first, so it is.
     ('.rb', 'ruby', "def f(r)\n  r.modes = 1\n  self.name = 'x'\n  r.count += 1\n  helper\nend\n",
      {'count', 'helper'}),
+    # BACK-1305: parenthesized callees -- comma idiom resolves to the last operand,
+    # assignment / inline-function callees have no name (IIFE body calls still count).
+    ('.js', 'javascript', "function f(w){ var m; (0, w.x)(1); (m = w.O)(4); (function(){ inner(); })(); w.y(2); }",
+     {'x', 'inner', 'y'}),
     ('.js', 'javascript', "function f(){ helper(); new Foo(); a.b.c(); a.b().c(); }",
      {'helper', 'Foo', 'c'}),
     ('.py', 'python', "def f():\n  helper()\n  a.b.c()\n  a.b().c()\n  Foo()\n",
@@ -114,3 +118,10 @@ def test_ruby_attribute_writes_are_not_calls_in_either_path(tmp_path):
     path.write_text("def f(r)\n  r.modes = 1\n  self.name = 'x'\n  r.count += 1\nend\n")
     calls = get_analyzer(str(path))(str(path)).get_structure()['functions'][0]['calls']
     assert _bare(calls) == {'count'}
+
+
+def test_unnameable_parenthesized_callees_emit_no_junk(tmp_path):
+    path = tmp_path / 't.js'
+    path.write_text("function f(w){ var m; (0, w.x)(1); (m = w.O)(4); (function(){ inner(); })(); }")
+    calls = get_analyzer(str(path))(str(path)).get_structure()['functions'][0]['calls']
+    assert calls == ['w.x', 'inner']

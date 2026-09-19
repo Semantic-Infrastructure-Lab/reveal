@@ -7,6 +7,7 @@ import threading
 from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Set, Tuple
 from .base import FileAnalyzer
+from .core.nav_calls import unwrap_parenthesized_callee
 from .complexity import (
     calculate_complexity_and_depth,
     _NESTING_TYPES,
@@ -2172,11 +2173,12 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # real expression. Raw text would be the literal, unmatchable "(f)"
         # (BACK-733) -- unwrap to the inner expression instead.
         if _zero_arg(callee_node, 'kind') == 'parenthesized_expression':
-            for child in _children(callee_node):
-                if _zero_arg(child, 'kind') not in ('(', ')'):
-                    name = self._callee_name_from_node(child)
-                    if name:
-                        return name
+            inner = unwrap_parenthesized_callee(callee_node)  # shared with nav (BACK-1305)
+            if inner is None:
+                return None
+            name = self._callee_name_from_node(inner)
+            if name:
+                return name
         # Swift `!isRunning(x)` (logical negation of a call's result --
         # common for boolean-returning predicate functions/methods) parses
         # the whole `!isRunning` as a single call-suffix-adjacent

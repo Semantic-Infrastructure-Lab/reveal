@@ -470,6 +470,34 @@ def _is_cpp_member_function_pointer_misparse(call_node: Any) -> bool:
         stack.extend(_children(n))
     return False
 
+# Callee expressions that have no name of their own: `(a = b)(x)`, an inline
+# function/IIFE, a ternary. Emitting their raw text produced junk callees like
+# `_malloc = wasmExports["O"]` (BACK-1305); any calls inside an IIFE body are
+# captured by the tree walk separately.
+_UNNAMEABLE_CALLEE_KINDS = frozenset({
+    'assignment_expression', 'augmented_assignment_expression', 'named_expression',
+    'function_expression', 'function', 'generator_function', 'arrow_function', 'lambda',
+    'class', 'conditional_expression', 'ternary_expression', 'await_expression',
+    'binary_expression',
+})
+
+
+def unwrap_parenthesized_callee(node: Any) -> Optional[Any]:
+    """Resolve a parenthesized callee to the node that names the call, or None.
+
+    Shared by the analyzer (treesitter._callee_name_from_node) and nav paths
+    (BACK-1305). `(f)(x)` -> f; `(0, obj.fn)(x)` (the transpiler idiom that
+    drops `this`) -> the LAST comma operand; `(a = b)(x)`, an inline function
+    or a ternary have no nameable callee -> None.
+    """
+    while _zero_arg(node, 'kind') in ('parenthesized_expression', 'sequence_expression'):
+        operands = [c for c in _children(node) if _zero_arg(c, 'kind') not in ('(', ')', ',')]
+        if not operands:
+            return None
+        node = operands[-1] if _zero_arg(node, 'kind') == 'sequence_expression' else operands[0]
+    return None if _zero_arg(node, 'kind') in _UNNAMEABLE_CALLEE_KINDS else node
+
+
 def _extract_callee(
     call_node: Any,
     get_text: Callable,
@@ -544,10 +572,12 @@ def _extract_callee(
     # BACK-739). Mirrors treesitter.py:_callee_name_from_node's identical
     # unwrap loop.
     while _zero_arg(callee_node, 'kind') in ('generic_function', 'parenthesized_expression'):
-        inner = next(
-            (c for c in _children(callee_node) if _zero_arg(c, 'kind') not in ('(', ')')),
-            None,
-        ) if _zero_arg(callee_node, 'kind') == 'parenthesized_expression' else callee_node.child(0)
+        if _zero_arg(callee_node, 'kind') == 'parenthesized_expression':
+            inner = unwrap_parenthesized_callee(callee_node)
+            if inner is None:
+                return None  # no nameable callee (BACK-1305)
+        else:
+            inner = callee_node.child(0)
         if inner is None:
             break
         callee_node = inner

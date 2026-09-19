@@ -21,7 +21,7 @@ Usage:
     python scripts/corpus_sweep.py agree --base-ref c577a14a  # before -> after
     python scripts/corpus_sweep.py complexity --base-ref HEAD~5 -n 100
     python scripts/corpus_sweep.py agree ruby java -o /tmp/agree.json
-    python scripts/corpus_sweep.py agree --min-jaccard 0.98 --floor javascript=0.90   # pre-release gate
+    python scripts/corpus_sweep.py agree --min-jaccard 0.98                      # pre-release gate (--floor LANG=V for tracked gaps)
 
 Sampling is seeded per sweep, so the same corpus + args always pick the same
 files. Exits 0 with a message when the corpus is absent (never fails a
@@ -61,6 +61,14 @@ def corpus_dir() -> Path:
     return Path(os.environ.get("REVEAL_CORPUS_DIR", "~/.cache/reveal-corpus")).expanduser()
 
 
+def _minified(p: Path) -> bool:
+    """Minified/generated bundles (one giant line): line-range comparison is meaningless there."""
+    if ".min." in p.name:
+        return True
+    head = p.read_bytes()[:20_000]
+    return len(head) > 2_000 and head.count(b"\n") < len(head) / 400
+
+
 def sample_files(lang: str, n: int, seed: int) -> list[Path]:
     exts, _ = LANGS[lang]
     files = []
@@ -68,7 +76,7 @@ def sample_files(lang: str, n: int, seed: int) -> list[Path]:
         dn[:] = [d for d in dn if d not in SKIP_DIRS]
         for f in fn:
             p = Path(dp) / f
-            if f.endswith(exts) and MIN_BYTES < p.stat().st_size < MAX_BYTES:
+            if f.endswith(exts) and MIN_BYTES < p.stat().st_size < MAX_BYTES and not _minified(p):
                 files.append(p)
     files.sort()  # os.walk order is filesystem-dependent; shuffle from a stable base
     random.Random(seed).shuffle(files)
@@ -136,15 +144,21 @@ def worker_agree(langs: list[str], n: int, topn: int) -> dict:
                 def text(node):
                     return content[_zero_arg(node, "start_byte"):_zero_arg(node, "end_byte")].decode("utf-8", "replace")
 
+                # Nav runs per analyzer element RANGE, exactly like `ast://file?fn --calls`:
+                # scanning only named-function nodes would miss calls inside anonymous
+                # callbacks (test suites, DSL blocks) that the analyzer attributes to elements.
                 nav_names = set()
                 hook = getattr(an, "_implicit_call_nodes", None)
-                for fnode in _function_scopes(tree, FUNCTION_TYPES, _zero_arg, node_children):
+                # Ruby's paren-less-call hook is defined per function body, so feed it those.
+                implicit = [n for fnode in _function_scopes(tree, FUNCTION_TYPES, _zero_arg, node_children)
+                            for n in hook(fnode)] if hook else []
+                for lo, hi in ranges:
+                    kw = {"implicit_nodes": implicit} if hook else {}
                     try:
-                        hits = range_calls(fnode, 1, 10**7, text, implicit_nodes=hook(fnode) if hook else ())
+                        hits = range_calls(tree, lo, hi, text, **kw)
                     except TypeError:  # older tree: range_calls has no implicit_nodes
-                        hits = range_calls(fnode, 1, 10**7, text)
-                    nav_names |= bare(c["callee"] for c in hits
-                                      if any(lo <= c["line"] <= hi for lo, hi in ranges))
+                        hits = range_calls(tree, lo, hi, text)
+                    nav_names |= bare(c["callee"] for c in hits)
             except Exception as e:  # noqa: BLE001 - a sweep must survive one bad file
                 stats["errors"] += 1
                 ex["err"].append(f"{p.name}: {type(e).__name__}: {str(e)[:80]}")
