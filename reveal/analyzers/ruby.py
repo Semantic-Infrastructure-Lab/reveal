@@ -15,6 +15,7 @@ class RubyAnalyzer(TreeSitterAnalyzer):
     Extracts classes, methods, modules automatically using tree-sitter.
     """
     language = 'ruby'
+    IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
 
     # ── Class bases (BACK-645) ──────────────────────────────────────────────
     # `class Foo < Bar` / `class Foo < ActiveSupport::Logger::SimpleFormatter`

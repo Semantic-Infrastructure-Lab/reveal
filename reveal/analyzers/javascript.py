@@ -31,6 +31,7 @@ class JavaScriptAnalyzer(
     Works on all platforms (Windows, Linux, macOS).
     """
     language = 'javascript'
+    IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
 
     def _extract_functions(self) -> List[StructureItem]:
         funcs = super()._extract_functions()

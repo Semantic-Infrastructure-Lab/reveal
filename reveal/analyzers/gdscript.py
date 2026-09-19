@@ -24,6 +24,7 @@ class GDScriptAnalyzer(TreeSitterAnalyzer):
     Full GDScript support in 3 lines - tree-sitter handles all parsing!
     """
     language = 'gdscript'
+    IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
 
     # ── Callee naming (BACK-915 slice 4) ──────────────────────────────────────
 

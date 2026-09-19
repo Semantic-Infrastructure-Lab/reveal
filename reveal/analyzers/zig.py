@@ -17,6 +17,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
     Supports Zig source files with functions, structs, enums, tests, and more.
     """
     language = 'zig'
+    IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
@@ -27,6 +28,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         structure: Dict[str, Any] = {}
 
         # Extract Zig elements
+        structure['imports'] = self._extract_imports()  # BACK-1089: `@import` builtin, via imports://
         structure['functions'] = self._extract_functions()
         structure['structs'] = self._extract_container_decls('struct')
         structure['enums'] = self._extract_container_decls('enum')

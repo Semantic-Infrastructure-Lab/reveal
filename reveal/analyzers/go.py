@@ -17,6 +17,7 @@ class GoAnalyzer(TreeSitterAnalyzer):
     collected into `structure['interfaces']`, like Java/C#/Swift.
     """
     language = 'go'
+    IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:

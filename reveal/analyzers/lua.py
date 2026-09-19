@@ -16,6 +16,7 @@ class LuaAnalyzer(TreeSitterAnalyzer):
     Extracts functions automatically using tree-sitter.
     """
     language = 'lua'
+    IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
 
     # ── Lua function-expression-as-value (`name = function(...) ... end`) ───
     # BACK-758 (Lua calls-recall-oracle pre-flight, BACK-730 sixteenth

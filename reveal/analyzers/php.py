@@ -15,6 +15,7 @@ class PhpAnalyzer(TreeSitterAnalyzer):
     Extracts classes, functions, namespaces automatically using tree-sitter.
     """
     language = 'php'
+    IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
 
     # ── Interfaces (BACK-403 pt 2) ──────────────────────────────────────────
     # PHP's 'interface_declaration' was previously invisible to get_structure()

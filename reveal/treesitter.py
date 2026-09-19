@@ -408,6 +408,12 @@ class TreeSitterAnalyzer(FileAnalyzer):
     """
 
     language: Optional[str] = None  # Set in subclass
+    # BACK-1089: True when the language's imports are not (only) an import *node
+    # kind* -- Ruby/Lua `require`, GDScript `preload`, Zig `@import` and CommonJS
+    # `require` are calls, and Go's `import (...)` is one node for many imports --
+    # so the node-kind pass below finds nothing or miscounts. Such analyzers ask
+    # the imports:// extractor instead, keeping one extraction path per language.
+    IMPORTS_VIA_EXTRACTOR: bool = False
 
     # Call-node kind -> name of the method that names it, for shapes that need this
     # analyzer's own walk (GDScript `attribute_call`, Dart `argument_part`). Subclasses
@@ -650,6 +656,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
     def _extract_imports(self) -> List[Dict[str, Any]]:
         """Extract import statements."""
+        if self.IMPORTS_VIA_EXTRACTOR:
+            return self._imports_from_extractor()
         imports = []
 
         for import_type in IMPORT_NODE_TYPES:
@@ -671,6 +679,23 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 })
 
         return imports
+
+    def _imports_from_extractor(self) -> List[Dict[str, Any]]:
+        """Structure-shaped imports from the language's imports:// extractor."""
+        from pathlib import Path
+        from .analyzers.imports.base import get_extractor
+
+        path = Path(str(self.path))
+        extractor = get_extractor(path)
+        if extractor is None:
+            return []
+        try:
+            statements = extractor.extract_imports(path)
+        except Exception as e:  # never let an extractor failure hide the rest of the outline
+            logger.debug("imports extractor failed for %s: %s", path, e)
+            return []
+        return [{'line': st.line_number, 'content': (st.source_line or st.module_name).strip()}
+                for st in statements]
 
     def _extract_functions(self) -> List[StructureItem]:
         """Extract function definitions with complexity metrics and decorators.
