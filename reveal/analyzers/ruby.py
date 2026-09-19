@@ -3,7 +3,6 @@
 from typing import Any, List, Optional
 
 from ..core import node_children as _children
-from ..core.nav_calls import is_ruby_attribute_write
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
@@ -44,43 +43,6 @@ class RubyAnalyzer(TreeSitterAnalyzer):
     # kind Python's plain call() uses, so it can't be table-driven by kind
     # alone) — not through the general dispatch table, so this has no
     # no-op stub sibling on the base class the way the table-driven hooks do.
-
-    def _callee_name_ruby_call(self, call_node) -> Optional[str]:
-        # Ruby: obj.method() / Class.static_call() / self.foo() / foo() —
-        # tree-sitter-ruby's 'call' node is the SAME node kind Python's
-        # plain call() uses, but a structurally different shape: a flat
-        # (receiver?, '.', method, argument_list?) sibling list, not a
-        # nested func-expression child. child(0) is therefore the
-        # *receiver* whenever one is present (BACK-734-shaped bug,
-        # discovered pre-flight for the calls-recall-oracle Ruby measurement
-        # via a direct grammar dump: `obj.baz` gave calls=["obj"], dropping
-        # the actual method name entirely; `self.instance_call` gave
-        # calls=["self"]; `Qux.static_call` gave calls=["Qux"]). Use the
-        # named 'receiver'/'method' fields directly, same fix shape as
-        # Java's method_invocation (BACK-734).
-        #
-        # `rs.reason = x` (a pure attribute WRITE) parses its LHS as this
-        # SAME 'call' node shape (receiver=rs, method=reason) wrapped in an
-        # 'assignment' node — tree-sitter-ruby has no distinct ATTRASGN-like
-        # node the way Ruby's own AST does. Left un-guarded, a setter write
-        # counted as a "call" to the bare attribute name showed up as
-        # false-positive edges against the calls-recall-oracle Ruby
-        # measurement (which, matching Ruby's own AST, excludes pure writes)
-        # — real corpus examples: ColorScheme#... writing `skip_publish`,
-        # UserOption#set_defaults writing `mailing_list_mode_frequency`.
-        # `+=`/`||=` (`operator_assignment`) is NOT excluded here: it reads
-        # the attribute before writing it, so it's a genuine call, matching
-        # real Ruby semantics.
-        if is_ruby_attribute_write(call_node):  # shared with nav_calls (BACK-1302)
-            return None
-        method_node = call_node.child_by_field_name('method')
-        if method_node is None:
-            return None
-        method_text = self._get_node_text(method_node)
-        receiver_node = call_node.child_by_field_name('receiver')
-        if receiver_node is None:
-            return method_text
-        return f"{self._get_node_text(receiver_node)}.{method_text}"
 
     # ── Paren-less calls (BACK-1297) ───────────────────────────────────────
     # A receiver-less, argument-less call (`used`) is a bare `identifier`, not

@@ -13,7 +13,7 @@ tail in `generic.callee_name_from_node`.
 
 from typing import AbstractSet, Any, Callable, Dict, Optional, Tuple
 
-from . import cpp, dart, java, js, php, scala, swift
+from . import cpp, dart, java, js, php, ruby, scala, swift
 from .generic import (
     CHAIN_COLLAPSE,
     CHAIN_FULL,
@@ -47,6 +47,12 @@ def is_misparsed_call(kind: str, node: Any) -> bool:
     return bool(check and check(node))
 
 
+# Kinds shared with another language: the extractor only owns nodes the predicate
+# accepts, the rest fall through to the generic tail (Ruby `call` vs Python `call`).
+_CLAIMS: Dict[str, Callable[[Any], bool]] = {
+    'call': ruby.is_ruby_call,
+}
+
 KIND_EXTRACTORS: Dict[str, Extractor] = {
     'method_invocation': java.method_invocation,             # Java
     'member_call_expression': php.member_call,               # PHP $obj->m()
@@ -55,6 +61,7 @@ KIND_EXTRACTORS: Dict[str, Extractor] = {
     'instance_expression': scala.instance,                   # Scala new Foo[T](...)
     'infix_expression': scala.infix,                         # Scala a :: b (Swift ops -> None)
     'constructor_expression': swift.constructor,             # Swift Foo<T>(...)
+    'call': ruby.call,                                       # Ruby (claimed by _CLAIMS)
     'new_expression': _new_expression,                       # JS/TS, C++, Dart `new`
     'init_declarator': cpp.direct_init,                      # C++ `Foo obj(args);`
     'constructor_invocation': dart.flat_type_call,           # Dart List<int>.from(...)
@@ -73,6 +80,9 @@ def extract_by_kind(
     """(handled, name): `handled` is False when no shared extractor owns `kind`."""
     handler = KIND_EXTRACTORS.get(kind)
     if handler is None:
+        return False, None
+    claim = _CLAIMS.get(kind)
+    if claim is not None and not claim(node):
         return False, None
     return True, handler(node, get_text, call_node_types=call_node_types, chain_receiver=chain_receiver)
 

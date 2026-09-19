@@ -2011,39 +2011,23 @@ class TreeSitterAnalyzer(FileAnalyzer):
     def _get_callee_name(self, call_node) -> Optional[str]:
         """Extract the callee name from a call expression node.
 
-        Handles five forms:
-          - Simple:         foo()             → "foo"
-          - Attribute:      self.bar()        → "self.bar"
-          - Chained:        a.b.c()           → "a.b.c"
-          - Starred:        *foo(bar)         → "foo"
-          - PHP method:     $obj->method()    → "$obj->method"
-          - PHP new:        new ClassName()   → "new ClassName"
-          - Java method:    obj.method()      → "obj.method" (field-based,
-                             not child(0) — method_invocation's `object`
-                             field precedes `name` positionally, BACK-734)
-          - Ruby method:    obj.method()      → "obj.method" (field-based;
-                             Ruby's 'call' node is the SAME kind as Python's
-                             but a flat receiver/./method/args shape, so
-                             child(0) is the receiver, not the method,
-                             BACK-734-shaped)
+        Call shapes owned by a specific grammar (PHP `$o->m()`, Java
+        `method_invocation`, Ruby `call`, `new` expressions, Scala infix, ...) live
+        in `core/callees` and are shared with the ast:// nav path (BACK-1279);
+        `KIND_EXTRACTORS` maps the node kind to its extractor. Everything else --
+        identifiers, member access, splats, turbofish, parenthesized, chained
+        callees -- goes through the language-neutral tail in
+        `core/callees/generic.py`. The index keeps the full receiver text of a
+        chained call (`a.b().c`); nav collapses it to `.c`.
 
-        Dispatch by node kind is table-driven via `_CALLEE_NAME_DISPATCH`
-        (BACK-915 slice 4) — every entry is a hook method that exists on
-        every TreeSitterAnalyzer (no-op by default, overridden per language),
-        so the lookup never needs a missing-attribute fallback. Two kinds
-        can't be table-driven because they're not decided by kind() alone:
-        `call_expression` collides between a real call and a C++
-        member-function-pointer misparse (BACK-745, disambiguated by
-        `self.language`), and `call` collides between Python and Ruby
-        (BACK-734, same disambiguation).
+        Two Dart/GDScript walker-level shapes still use analyzer hooks
+        (`_CALLEE_NAME_DISPATCH`) until the call walkers are unified (BACK-1309).
         """
         if not _zero_arg(call_node, 'child_count'):
             return None
         kind = _zero_arg(call_node, 'kind')
         if is_misparsed_call(kind, call_node):  # C++ mfp declaration (BACK-745)
             return None
-        if kind == 'call' and self.language == 'ruby':
-            return self._callee_name_ruby_call(call_node)
         # Language-specific call shapes shared with nav (PHP, Java, Scala, Swift, ...):
         # one implementation in core/callees (BACK-1279).
         handled, name = extract_by_kind(

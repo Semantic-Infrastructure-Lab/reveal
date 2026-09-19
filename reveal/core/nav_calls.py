@@ -6,7 +6,6 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 from . import node_children as _children
 from .treesitter_compat import _zero_arg
 from .callees import callee_name_from_node, extract_by_kind, is_misparsed_call, CHAIN_COLLAPSE
-from .callees.generic import subtree_contains_call as _subtree_contains_call
 
 
 def _generic_call_hits(
@@ -466,18 +465,6 @@ def _extract_callee(
     if handled:
         return name
 
-    # Ruby: `call` exposes 'receiver'/'method'/'arguments' fields directly
-    # rather than nesting `receiver.method` inside its own member-access
-    # node like most grammars — the generic child(0) fallback below grabs
-    # only the receiver, dropping the method name entirely
-    # (`DB.query_single(sql)` rendered as the nonsensical `DB(sql)`, found
-    # via real Discourse source, BACK-431 feature-breadth pass). A
-    # receiver-less call (`puts(x)`) has no method field to separate out,
-    # so it falls through to the generic path unchanged.
-    if (_zero_arg(call_node, 'kind') == 'call' and
-            call_node.child_by_field_name('receiver') is not None):
-        return _extract_ruby_call_callee(call_node, get_text, call_node_types)
-
     # Everything else (identifier, member access, splat, turbofish, parenthesized,
     # chained/IIFE) is the language-neutral tail shared with the analyzer path
     # (BACK-1279). Nav collapses fluent chains to `.prop` (BACK-415).
@@ -485,49 +472,6 @@ def _extract_callee(
         call_node.child(0), get_text,
         call_node_types=call_node_types, chain_receiver=CHAIN_COLLAPSE,
     )
-
-
-def is_ruby_attribute_write(call_node: Any) -> bool:
-    """True for the LHS `call` of a plain assignment (`obj.attr = v`).
-
-    tree-sitter-ruby parses a setter write as the same `call` shape as a read,
-    wrapped in `assignment`. Policy shared by the analyzer and nav paths
-    (BACK-1302): a pure write is not a call (matches Ruby's own AST and the
-    recall oracle); `+=`/`||=` (`operator_assignment`) reads first, so it is.
-    """
-    parent = _zero_arg(call_node, 'parent')
-    if parent is None or _zero_arg(parent, 'kind') != 'assignment':
-        return False
-    left = parent.child_by_field_name('left')
-    return left is not None and _zero_arg(left, 'start_byte') == _zero_arg(call_node, 'start_byte')
-
-
-def _extract_ruby_call_callee(
-    node: Any,
-    get_text: Callable,
-    call_node_types: Optional[frozenset],
-) -> Optional[str]:
-    """Ruby `call`: fielded `receiver`/`method`/`arguments` → `receiver.method`.
-
-    Chained calls (`a.b.c`) whose receiver is itself a call collapse to
-    `.method` (the inner call is captured separately), mirroring the
-    member-access handling in _extract_callee (BACK-415/416/BACK-431).
-    """
-    if is_ruby_attribute_write(node):
-        return None
-    receiver = node.child_by_field_name('receiver')
-    method = node.child_by_field_name('method')
-    if method is None:
-        return None
-    name = get_text(method).strip()
-    if not name:
-        return None
-    if call_node_types and _subtree_contains_call(receiver, call_node_types):
-        return f".{name}"
-    receiver_text = get_text(receiver).strip()
-    if not receiver_text or '\n' in receiver_text or len(receiver_text) > 40:
-        return f".{name}"
-    return f"{receiver_text}.{name}"
 
 
 def _extract_first_arg(call_node: Any, get_text: Callable) -> tuple:
