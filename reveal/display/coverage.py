@@ -32,7 +32,7 @@ def outline_coverage(structure: Dict[str, Any], lines: List[str]) -> Optional[Di
     """
     if not structure or not any(structure.get(c) for c in _DECLARATION_CATEGORIES):
         return None
-    if any(key not in _LISTED_CATEGORIES for key in structure):
+    if any(key not in _LISTED_CATEGORIES and not key.startswith('_') for key in structure):
         return None
 
     covered: Set[int] = set()

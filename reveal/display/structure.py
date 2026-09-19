@@ -458,6 +458,8 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
             'message': parse_error,
             'hint': 'Tree-sitter grammar fetch/parse failed — see INSTALL.md#network-requirements',
         }
+    if structure.get('_has_errors'):
+        cast(Dict[str, Any], result['meta'])['parse_recovered'] = True
     coverage = outline_coverage(structure, analyzer.lines)
     if coverage:
         cast(Dict[str, Any], result['meta'])['coverage'] = coverage
@@ -584,8 +586,17 @@ def _build_outline_hierarchy(structure: Dict[str, List[Dict[str, Any]]]):
     return build_hierarchy(structure)
 
 
+PARSE_RECOVERY_NOTICE = ("⚠️  Parse recovered from syntax tree-sitter could not read: this outline may be "
+                         "incomplete or wrong (a grammar gap or a real syntax error).")
+
+
 def _print_coverage_warning(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
-    """BACK-1113: say so when the outline covers only a small part of a code file."""
+    """Say so when the outline is not the whole story: the parse recovered around
+    errors (BACK-1084's `_has_errors`, already disclosed by `check`), or it covers
+    only a small part of a code file (BACK-1113)."""
+    if isinstance(structure, dict) and structure.get('_has_errors'):
+        print()
+        print(PARSE_RECOVERY_NOTICE)
     coverage = outline_coverage(structure, analyzer.lines)
     if coverage:
         print()

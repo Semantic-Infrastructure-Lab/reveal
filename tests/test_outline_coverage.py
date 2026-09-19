@@ -83,3 +83,31 @@ def test_fully_declared_python_has_no_warning(tmp_path, capsys):
     analyzer = PythonAnalyzer(str(path))
     _handle_standard_output(analyzer, analyzer.get_structure(), 'text', False, '')
     assert 'Partial outline' not in capsys.readouterr().out
+
+
+# ── parse-recovery notice (upstream grammar gaps, BACK-742/756/703/768) ─────
+
+def test_outline_notice_when_the_parse_recovered_around_errors(tmp_path, capsys):
+    path = tmp_path / 'bad.py'
+    path.write_text('def ok():\n    return 1\n\ndef broken(:\n    pass\n\ndef after():\n    return 2\n')
+    analyzer = PythonAnalyzer(str(path))
+    structure = analyzer.get_structure()
+    assert structure.get('_has_errors')
+    _handle_standard_output(analyzer, structure, 'text', False, '')
+    assert 'Parse recovered' in capsys.readouterr().out
+
+
+def test_json_meta_flags_parse_recovery(tmp_path, capsys):
+    path = tmp_path / 'bad.py'
+    path.write_text('def broken(:\n    pass\n')
+    analyzer = PythonAnalyzer(str(path))
+    _render_json_output(analyzer, analyzer.get_structure())
+    assert json.loads(capsys.readouterr().out)['meta']['parse_recovered'] is True
+
+
+def test_clean_file_has_no_parse_notice(tmp_path, capsys):
+    path = tmp_path / 'ok.py'
+    path.write_text('def ok():\n    return 1\n')
+    analyzer = PythonAnalyzer(str(path))
+    _handle_standard_output(analyzer, analyzer.get_structure(), 'text', False, '')
+    assert 'Parse recovered' not in capsys.readouterr().out
