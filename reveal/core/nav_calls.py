@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, Sequence
 from . import node_children as _children
 from .treesitter_compat import _zero_arg
+from .callees.dart import cascade_sites as dart_cascade_sites, selector_sites as dart_selector_sites
 from .callees.zig import suffix_sites as zig_suffix_sites
 from .callees.gdscript import attribute_sites as gdscript_attribute_sites
 from .callees import callee_name_from_node, extract_by_kind, is_misparsed_call, CHAIN_COLLAPSE
@@ -223,138 +224,33 @@ def range_calls(
     return results
 
 
-_DART_MEMBER_SELECTORS = ('unconditional_assignable_selector', 'conditional_assignable_selector')
-
-
-def _dart_extend_receiver(base_parts: List[str], member_node: Any, get_text: Callable) -> List[str]:
-    """Append a `.member` (or `?.member`) selector to the callee text so far;
-    an index selector (`a[0]`) ends the chain."""
-    inner_sub = _children(member_node)
-    if inner_sub and _zero_arg(inner_sub[0], 'kind') == 'index_selector':
-        return []
-    member = get_text(inner_sub[-1]).strip() if inner_sub else ''
-    if not member:
-        return []
-    return base_parts + [f'.{member}'] if base_parts else [f'.{member}']
+def _sites_to_hits(sites: Any, get_text: Callable) -> List[Dict[str, Any]]:
+    """Nav projection of `CallSite`s: dotted callee, line, first argument."""
+    hits: List[Dict[str, Any]] = []
+    for site in sites:
+        first_arg, has_more = _extract_first_arg(site.arg_node, get_text)
+        hits.append({'line': _zero_arg(site.node, 'start_position').row + 1,
+                     'callee': site.dotted or None,
+                     'first_arg': first_arg, 'has_more_args': has_more})
+    return hits
 
 
 def _extract_dart_selector_calls(children: List[Any], get_text: Callable) -> List[Dict[str, Any]]:
-    """Reconstruct call sites from Dart's flat identifier+selector siblings.
-
-    `obj.method(x, y).other()` parses as siblings:
-    `identifier(obj) selector(.method) selector((x,y)) selector(.other)
-    selector(())` — with no enclosing node naming "the call". Walk the
-    sibling list left to right, accumulating the callee text through
-    `.member` selectors, and emit one entry per `argument_part` selector.
-    Chained calls (whose callee text was reset by a prior call) collapse to
-    `.member`, mirroring every other language's chained-call convention.
-
-    The receiver may be an `identifier`, `this` or `super`, and after `this` /
-    `super` the `.member` is a BARE sibling (no `selector` wrapper) -- so
-    `super.initState()` had no callee at all and rendered as `?` (found by the
-    corpus agreement sweep; mirrors analyzers/dart.py's `_dart_qualifier_in`).
-    """
-    results: List[Dict[str, Any]] = []
-    base_parts: List[str] = []
-    for child in children:
-        kind = _zero_arg(child, 'kind')
-        if kind in ('identifier', 'this', 'super'):
-            base_parts = [get_text(child)]
-            continue
-        if kind in _DART_MEMBER_SELECTORS:
-            base_parts = _dart_extend_receiver(base_parts, child, get_text)
-            continue
-        if kind != 'selector':
-            base_parts = []
-            continue
-        sel_children = _children(child)
-        if not sel_children:
-            continue
-        inner = sel_children[0]
-        inner_kind = _zero_arg(inner, 'kind')
-        if inner_kind == 'argument_part':
-            callee = ''.join(base_parts) if base_parts else None
-            line = _zero_arg(child, 'start_position').row + 1
-            first_arg, has_more = _extract_first_arg(inner, get_text)
-            results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
-            base_parts = []
-        elif inner_kind in _DART_MEMBER_SELECTORS:
-            base_parts = _dart_extend_receiver(base_parts, inner, get_text)
-        else:
-            base_parts = []
-    return results
+    return _sites_to_hits(dart_selector_sites(children, get_text), get_text)
 
 
 def _extract_dart_cascade_calls(node: Any, get_text: Callable) -> List[Dict[str, Any]]:
-    """Reconstruct call sites from a Dart `cascade_section`'s own children.
-
-    `recv\n  ..foo()\n  ..bar(x)` parses each cascaded operation as its own
-    `cascade_section` sibling of the base `identifier`/`selector` chain (not
-    nested inside it), with the shape `.. cascade_selector(member)
-    [argument_part | (unconditional_assignable_selector argument_part)*]` --
-    a plain `..method(args)` cascade puts `argument_part` directly under
-    `cascade_section`, while a chained call AFTER the cascade member
-    (`..setup().finish()`) puts a further `unconditional_assignable_selector`/
-    `argument_part` pair directly under `cascade_section` too (unlike the top-
-    level flat chain, where continuations are wrapped in a `selector` node --
-    see `_extract_dart_selector_calls`). A cascaded field WRITE
-    (`..field = 3`, no `argument_part` at all) correctly emits nothing --
-    it's not a call. Each `cascade_section` is walked independently (callers
-    invoke this once per `cascade_section` node encountered), collapsing a
-    chained continuation to `.member` same as every other chained-call
-    convention in this file.
-    """
-    results: List[Dict[str, Any]] = []
-    base_parts: List[str] = []
-    for child in _children(node):
-        kind = _zero_arg(child, 'kind')
-        if kind == 'cascade_selector':
-            sub = _children(child)
-            name_node = next((c for c in sub if _zero_arg(c, 'kind') == 'identifier'), None)
-            member = get_text(name_node).strip() if name_node else ''
-            base_parts = [f'.{member}'] if member else []
-        elif kind == 'argument_part':
-            callee = ''.join(base_parts) if base_parts else None
-            line = _zero_arg(child, 'start_position').row + 1
-            first_arg, has_more = _extract_first_arg(child, get_text)
-            results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
-            base_parts = []
-        elif kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
-            inner_sub = _children(child)
-            if inner_sub and _zero_arg(inner_sub[0], 'kind') == 'index_selector':
-                base_parts = []
-            else:
-                member = get_text(inner_sub[-1]).strip() if inner_sub else ''
-                base_parts = (base_parts + [f'.{member}']) if base_parts and member else ([f'.{member}'] if member else [])
-        else:
-            # `=` (cascaded field write) or any other non-call continuation
-            # resets chain state -- nothing left to attribute a later
-            # argument_part to.
-            if kind != '..':
-                base_parts = []
-    return results
+    return _sites_to_hits(dart_cascade_sites(node, get_text), get_text)
 
 
 def _extract_zig_suffix_calls(children: List[Any], get_text: Callable) -> List[Dict[str, Any]]:
     """Nav projection of Zig `SuffixExpr` call sites (see core/callees/zig.py)."""
-    results: List[Dict[str, Any]] = []
-    for site in zig_suffix_sites(children, get_text):
-        first_arg, has_more = _extract_first_arg(site.arg_node, get_text)
-        results.append({'line': _zero_arg(site.node, 'start_position').row + 1,
-                        'callee': site.dotted or None,
-                        'first_arg': first_arg, 'has_more_args': has_more})
-    return results
+    return _sites_to_hits(zig_suffix_sites(children, get_text), get_text)
 
 
 def _extract_gdscript_attribute_calls(children: List[Any], get_text: Callable, attribute: Any) -> List[Dict[str, Any]]:
     """Nav projection of GDScript `attribute` call sites (see core/callees/gdscript.py)."""
-    results: List[Dict[str, Any]] = []
-    for site in gdscript_attribute_sites(attribute, get_text):
-        first_arg, has_more = _extract_first_arg(site.node, get_text)
-        results.append({'line': _zero_arg(site.node, 'start_position').row + 1,
-                        'callee': site.dotted or None,
-                        'first_arg': first_arg, 'has_more_args': has_more})
-    return results
+    return _sites_to_hits(gdscript_attribute_sites(attribute, get_text), get_text)
 
 
 def _extract_callee(
