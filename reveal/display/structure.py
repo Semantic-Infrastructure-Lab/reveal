@@ -460,7 +460,7 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
         }
     coverage = outline_coverage(structure, analyzer.lines)
     if coverage:
-        result['meta']['coverage'] = coverage
+        cast(Dict[str, Any], result['meta'])['coverage'] = coverage
     relationships = analyzer._extract_relationships(structure)
     if relationships:
         result['relationships'] = relationships

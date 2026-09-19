@@ -8,7 +8,7 @@ indexed declaration, so renderers can say "partial" instead of looking complete
 (same principle as the "No structure available" message for structure-less files).
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 # Categories that describe code declarations. A structure with any other key
 # (headings, frontmatter, rows, ...) is not code-shaped and is never assessed.
@@ -35,7 +35,7 @@ def outline_coverage(structure: Dict[str, Any], lines: List[str]) -> Optional[Di
     if any(key not in _LISTED_CATEGORIES for key in structure):
         return None
 
-    covered = set()
+    covered: Set[int] = set()
     for category in _LISTED_CATEGORIES:
         items = structure.get(category)
         if not isinstance(items, list):
