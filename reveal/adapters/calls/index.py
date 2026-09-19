@@ -127,7 +127,7 @@ def _bare_callee_name(callee: str) -> str:
     last in the string wins, so mixed forms resolve to the final segment.
 
     Also strips PHP's "new ClassName" constructor-call prefix (from
-    `_callee_name_php_new`) and a leading backslash fully-qualified-namespace
+    `core/callees/php.py:object_creation`) and a leading backslash fully-qualified-namespace
     marker (PHP's "resolve from the global namespace, not the current one"
     syntax, e.g. sprintf() written as "\\sprintf", common after any
     namespaced file that references a global-namespace builtin). Neither is

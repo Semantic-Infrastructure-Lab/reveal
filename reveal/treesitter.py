@@ -8,7 +8,7 @@ from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Set, Tuple
 from .base import FileAnalyzer
 from .reveal_types import StructureItem
-from .core.callees import callee_name_from_node, CHAIN_FULL
+from .core.callees import callee_name_from_node, extract_by_kind, CHAIN_FULL
 from .complexity import (
     calculate_complexity_and_depth,
     _NESTING_TYPES,
@@ -146,7 +146,7 @@ CALL_NODE_TYPES = {
     # large: self::/parent::/static:: calls are the dominant idiom for
     # calling sibling static helpers, parent-class overrides, and late
     # static binding in any PHP OOP codebase (WordPress, Laravel, etc).
-    # See _callee_name_php_scoped_call for the paired extraction.
+    # See core/callees/php.py:scoped_call (shared with nav).
     'scoped_call_expression',  # PHP self::/parent::/static::/Class::method()
     'method_call',             # Ruby, Rust (method syntax)
     'method_call_expression',  # Rust
@@ -174,7 +174,7 @@ CALL_NODE_TYPES = {
     # `new FileInputStream(...)` (java.io interop, GitBucket's dominant
     # non-JGit file-I/O idiom, 100+ corpus call sites) and `new HttpPost(...)`
     # (Apache HttpClient webhook delivery). See
-    # nav_calls.py:_extract_scala_instance_callee for the paired callee-text
+    # core/callees/scala.py:instance for the shared callee-text
     # extraction (mirrors _extract_object_creation_callee's "new <Name>"
     # convention already established for PHP/C#, so the same taxonomy
     # pattern shape works unchanged).
@@ -186,8 +186,8 @@ CALL_NODE_TYPES = {
     # every infix call was silently invisible to calls:// (BACK-746, twelfth
     # calls-recall language). Found via pre-flight grammar dump + a scalameta
     # oracle on GitBucket (96.64% -> 100% recall). See
-    # _callee_name_scala_infix (the `operator` field is the method name) and
-    # nav_calls.py:_extract_scala_infix_callee for the paired ast:// nav path.
+    # core/callees/scala.py:infix (the `operator` field is the method name);
+    # shared with the ast:// nav path.
     'infix_expression',         # Scala
     # Swift: any call with an explicit generic type argument — both a
     # generic function call (`identity<Int>(5)`) AND a generic type
@@ -198,7 +198,7 @@ CALL_NODE_TYPES = {
     # CALL_NODE_TYPES meant calls:// silently returned zero callers/callees
     # for every generic call/initializer in a Swift file — a common shape in
     # any Swift codebase using generics (collections, generic helpers). See
-    # nav_calls.py:_extract_swift_constructor_callee for the paired
+    # core/callees/swift.py:constructor (shared with nav) for the
     # callee-text extraction — unlike Scala/PHP's "new <Name>" convention,
     # this node covers plain generic *function* calls too (not always
     # construction), so it emits the bare callee name with no "new" prefix.
@@ -394,14 +394,8 @@ _PARAM_LIST_KINDS = ('parameters', 'parameter_list', 'formal_parameters', 'metho
 # isn't handled generically. `call_expression`/`call` are deliberately absent
 # — see _get_callee_name's docstring for why they can't be table-driven.
 _CALLEE_NAME_DISPATCH = {
-    'member_call_expression': '_callee_name_php_method',
-    'object_creation_expression': '_callee_name_php_new',
-    'scoped_call_expression': '_callee_name_php_scoped_call',
     'new_expression': '_callee_name_new_expression',
     'init_declarator': '_callee_name_cpp_direct_init',
-    'instance_expression': '_callee_name_scala_instance',
-    'infix_expression': '_callee_name_scala_infix',
-    'method_invocation': '_callee_name_java_method',
     'attribute_call': '_callee_name_gdscript_attribute_call',
     'constructor_invocation': '_callee_name_dart_flat_type_call',
     'const_object_expression': '_callee_name_dart_flat_type_call',
@@ -1991,48 +1985,6 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Compute cyclomatic complexity and max nesting depth."""
         return calculate_complexity_and_depth(node)
 
-    def _callee_name_php_new(self, call_node) -> Optional[str]:
-        # PHP: new ClassName() — object_creation_expression. NOT PHP-exclusive
-        # despite the name: Java's `new Baz(1, 2)` AND C#'s `new Baz(1, 2)`
-        # (no dedicated C# analyzer — reaches this via the tree-sitter
-        # fallback path) parse to the SAME 'object_creation_expression' node
-        # kind with the identical (new, type, arguments) flat-sibling shape
-        # (verified via `reveal file.java --show-ast` and a direct
-        # tree-sitter-language-pack grammar probe, BACK-915 slice 4). Stays
-        # here as genuinely shared infra rather than moving to php.py —
-        # moving it would silently break Java/C# `new` extraction.
-        for child in _children(call_node):
-            if _zero_arg(child, 'kind') not in ('new', 'arguments'):
-                return f"new {self._get_node_text(child)}"
-        return None
-
-    def _callee_name_php_method(self, call_node) -> Optional[str]:
-        """Hook: name a PHP `$obj->method()` call ('member_call_expression').
-        No-op by default — overridden in analyzers/php.py (BACK-915 slice 4).
-        """
-        return None
-
-    def _callee_name_php_scoped_call(self, call_node) -> Optional[str]:
-        """Hook: name a PHP `self::method()`/`parent::method()`/
-        `Class::method()` call ('scoped_call_expression'). No-op by
-        default — overridden in analyzers/php.py (BACK-915 slice 4).
-        """
-        return None
-
-    def _callee_name_scala_instance(self, call_node) -> Optional[str]:
-        """Hook: name a Scala `new ClassName(args)` call
-        ('instance_expression'). No-op by default — overridden in
-        analyzers/scala.py (BACK-915 slice 4).
-        """
-        return None
-
-    def _callee_name_scala_infix(self, call_node) -> Optional[str]:
-        """Hook: name a Scala infix method call (`a :: b`, `xs filterNot q`,
-        'infix_expression'). No-op by default — overridden in
-        analyzers/scala.py (BACK-915 slice 4).
-        """
-        return None
-
     def _callee_name_js_new(self, call_node) -> Optional[str]:
         """Hook: name a JS/TS/TSX `new Foo(args)`-shaped 'new_expression'
         call (the 'constructor'-field branch below). No-op by default —
@@ -2095,13 +2047,6 @@ class TreeSitterAnalyzer(FileAnalyzer):
         languages. Overridden in analyzers/cpp.py, which re-applies the
         'value'-is-'argument_list' shape check before returning a name
         (BACK-915 slice 4).
-        """
-        return None
-
-    def _callee_name_java_method(self, call_node) -> Optional[str]:
-        """Hook: name a Java `obj.method()`/`Class.staticMethod()` call
-        ('method_invocation'). No-op by default — overridden in
-        analyzers/java.py (BACK-915 slice 4).
         """
         return None
 
@@ -2179,6 +2124,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return None
         if kind == 'call' and self.language == 'ruby':
             return self._callee_name_ruby_call(call_node)
+        # Language-specific call shapes shared with nav (PHP, Java, Scala, Swift, ...):
+        # one implementation in core/callees (BACK-1279).
+        handled, name = extract_by_kind(
+            kind, call_node, self._get_node_text,
+            call_node_types=CALL_NODE_TYPES, chain_receiver=CHAIN_FULL,
+        )
+        if handled:
+            return name
         handler_name = _CALLEE_NAME_DISPATCH.get(kind)
         if handler_name is not None:
             return getattr(self, handler_name)(call_node)

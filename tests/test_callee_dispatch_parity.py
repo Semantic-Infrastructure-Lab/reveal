@@ -57,7 +57,7 @@ NAV_CALLS = REVEAL_DIR / "core" / "nav_calls.py"
 TREESITTER = REVEAL_DIR / "treesitter.py"
 # BACK-1279: kinds handled once in the shared, language-neutral tail count for
 # every file that delegates to it.
-SHARED_GENERIC = REVEAL_DIR / "core" / "callees" / "generic.py"
+SHARED_CALLEES_DIR = REVEAL_DIR / "core" / "callees"
 
 # Node kinds that MUST be specially dispatched in both files' callee-name
 # extraction. Adding a fix for one of these to one file without the other
@@ -72,21 +72,12 @@ REQUIRED_IN_BOTH = {
     "method_invocation",        # Java obj.method() (BACK-734)
     "generic_function",         # Rust turbofish size_of::<u32>() (BACK-733)
     "parenthesized_expression",  # (f)(args) (BACK-733)
+    "constructor_expression",   # Swift generic call/initializer (BACK-730, shared BACK-1279)
     "init_declarator",          # C++ direct-init: ClassName obj(args); (BACK-744)
 }
 
 # node_kind -> reason it's allowed to be one-sided, and which file may omit it.
-ONE_SIDED_EXCEPTIONS = {
-    "constructor_expression": (
-        "Swift generic call/constructor (BACK-730 note #17). Only "
-        "nav_calls.py special-cases it; treesitter.py's generic fallback "
-        "happens to keep the real name before '<' so it's rescued without "
-        "a dedicated dispatch case. Documented as a known coincidence, not "
-        "a guaranteed invariant — if this ever breaks, add a dedicated "
-        "_callee_name_swift_constructor handler instead of relaxing this "
-        "test."
-    ),
-}
+ONE_SIDED_EXCEPTIONS: dict = {}
 
 
 def _kind_is_handled(text: str, kind: str) -> bool:
@@ -98,7 +89,7 @@ def _kind_is_handled(text: str, kind: str) -> bool:
 def _with_shared(text: str) -> str:
     """A file that delegates to callee_name_from_node inherits its kinds."""
     if "callee_name_from_node(" in text:
-        return text + SHARED_GENERIC.read_text()
+        return text + "".join(f.read_text() for f in sorted(SHARED_CALLEES_DIR.glob("*.py")))
     return text
 
 
@@ -463,11 +454,11 @@ class TestCalleeDispatchBehavioralParity(unittest.TestCase):
         self.assertIn("f", nav)
         self.assertIn("f", ts_calls)
 
-    def test_swift_constructor_expression_documented_one_sided_asymmetry(self):
-        """The one node kind ONE_SIDED_EXCEPTIONS documents as intentionally
-        divergent — pinned down precisely rather than skipped outright, so a
-        change to *either* side's actual behavior fails this test instead of
-        silently drifting further from the documented rationale."""
+    def test_swift_constructor_expression_names_the_bare_callee_in_both_paths(self):
+        """Swift `identity<Int>(5)` parses to constructor_expression. It used to be a
+        documented one-sided case (analyzer kept the `<Int>` suffix and relied on
+        index-time normalization); BACK-1279 moved it into core/callees/swift.py so
+        both paths emit the bare name."""
         from reveal.analyzers.swift import SwiftAnalyzer
 
         code = """
@@ -478,13 +469,9 @@ class TestCalleeDispatchBehavioralParity(unittest.TestCase):
         """
         nav = _nav_calls_callees("swift", code)
         ts_calls = _treesitter_callees(SwiftAnalyzer, ".swift", code)
-        # nav_calls.py has a dedicated dispatch case: bare name.
         self.assertIn("identity", nav)
-        # treesitter.py has NO dedicated case for constructor_expression —
-        # get_structure() itself still carries the generic suffix. It's only
-        # rescued at calls:// index-build time (_bare_callee_name), not here.
-        self.assertIn("identity<Int>", ts_calls)
-        self.assertNotIn("identity", [c for c in ts_calls if c != "identity<Int>"])
+        self.assertIn("identity", ts_calls)
+        self.assertNotIn("identity<Int>", ts_calls)
 
 
 if __name__ == "__main__":

@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, Sequence
 from . import node_children as _children
 from .treesitter_compat import _zero_arg
-from .callees import callee_name_from_node, CHAIN_COLLAPSE
+from .callees import callee_name_from_node, extract_by_kind, CHAIN_COLLAPSE
+from .callees.generic import subtree_contains_call as _subtree_contains_call
 
 
 def _generic_call_hits(
@@ -481,6 +482,15 @@ def _extract_callee(
     if _zero_arg(call_node, 'kind') == 'call_expression' and _is_cpp_member_function_pointer_misparse(call_node):
         return None
 
+    # Language-specific call shapes shared with the analyzer path (PHP, Java, Scala,
+    # Swift, ...): one implementation in core/callees, fluent chains collapse for nav.
+    handled, name = extract_by_kind(
+        _zero_arg(call_node, 'kind'), call_node, get_text,
+        call_node_types=call_node_types, chain_receiver=CHAIN_COLLAPSE,
+    )
+    if handled:
+        return name
+
     handler = _CALLEE_DISPATCH.get(_zero_arg(call_node, 'kind'))
     if handler is not None:
         return handler(call_node, get_text)
@@ -501,15 +511,6 @@ def _extract_callee(
             return _extract_dart_flat_type_callee(call_node, get_text)  # Dart: no fields
         return _extract_cpp_new_callee(call_node, get_text)
 
-    # Java: method_invocation is a flat node `[object? . name argument_list]` —
-    # child(0) is only the *object* (`Files`, `path`), so the old logic dropped
-    # the method name entirely (`Files.createDirectories()` → "Files",
-    # `path.resolveIndex()` → "path"). Rebuild the receiver-qualified callee so
-    # the effect taxonomy and calls:// see `Files.createDirectories` /
-    # `path.resolveIndex` (BACK-416).
-    if _zero_arg(call_node, 'kind') == 'method_invocation':
-        return _extract_java_method_invocation_callee(call_node, get_text, call_node_types)
-
     # Ruby: `call` exposes 'receiver'/'method'/'arguments' fields directly
     # rather than nesting `receiver.method` inside its own member-access
     # node like most grammars — the generic child(0) fallback below grabs
@@ -529,185 +530,6 @@ def _extract_callee(
         call_node.child(0), get_text,
         call_node_types=call_node_types, chain_receiver=CHAIN_COLLAPSE,
     )
-
-
-def _extract_member_call_callee(node: Any, get_text: Callable) -> Optional[str]:
-    """PHP member_call_expression: <receiver> (->|?->) <name> <arguments>."""
-    receiver_text: Optional[str] = None
-    method_name: Optional[str] = None
-    seen_arrow = False
-    for child in _children(node):
-        if _zero_arg(child, 'kind') in ('->', '?->'):
-            seen_arrow = True
-            continue
-        if _zero_arg(child, 'kind') == 'arguments':
-            break
-        if not seen_arrow:
-            if receiver_text is None:
-                receiver_text = get_text(child).strip()
-        else:
-            if _zero_arg(child, 'kind') == 'name':
-                method_name = get_text(child).strip()
-                break
-    if receiver_text and method_name:
-        return f"{receiver_text}->{method_name}"
-    if method_name:
-        return f"->{method_name}"
-    return None
-
-
-def _extract_object_creation_callee(node: Any, get_text: Callable) -> Optional[str]:
-    """`object_creation_expression`: PHP's `new <name|qualified_name>(args)`
-    and C#'s `new <identifier|generic_name>(args) { initializer }` share
-    this exact node-kind name despite unrelated internal shapes — without a
-    C# case, `new Dictionary<K, V>() { ... }` fell through with no callee at
-    all, rendering as the placeholder `?(...)` in --calls (found via real
-    Jellyfin source, EncodingHelper.cs's GetH26xOrAv1Encoder, BACK-431
-    feature-breadth pass). C#'s generic type collapses to its base name
-    (`Dictionary`, not `Dictionary<K, V>`) to match plain `new Foo()`.
-    Java's `new Foo(args)` names its type with `type_identifier` /
-    `scoped_type_identifier` / `generic_type` (same generic collapse); without
-    them the nav path dropped every Java constructor call the analyzer path
-    reports (BACK-1279 agreement probe).
-    """
-    for child in _children(node):
-        if _zero_arg(child, 'kind') in ('name', 'qualified_name', 'scoped_type_identifier'):
-            class_name = get_text(child).strip()
-            if class_name:
-                return f"new {class_name}"
-        if _zero_arg(child, 'kind') in ('identifier', 'type_identifier'):
-            class_name = get_text(child).strip()
-            if class_name:
-                return f"new {class_name}"
-        if _zero_arg(child, 'kind') in ('generic_name', 'generic_type'):
-            base = next((c for c in _children(child)
-                         if _zero_arg(c, 'kind') in ('identifier', 'type_identifier', 'scoped_type_identifier')), None)
-            if base is not None:
-                class_name = get_text(base).strip()
-                if class_name:
-                    return f"new {class_name}"
-    return None
-
-
-def _extract_scala_instance_callee(node: Any, get_text: Callable) -> Optional[str]:
-    """Scala `instance_expression`: `new <type_identifier|generic_type|
-    field_expression>(args)`. Emits "new <name>" — the same convention
-    `_extract_object_creation_callee` already established for PHP/C#'s
-    `object_creation_expression`, so existing 'new <name>'-shaped taxonomy
-    patterns work unchanged once a Scala entry uses them. Handles the three
-    real shapes seen in GitBucket's corpus: a bare type (`new File(...)`), a
-    parameterized type (`new ArrayList[String](...)`), and a fully-qualified
-    type (`new java.io.File(...)`, trailing segment only).
-    """
-    for child in _children(node):
-        if _zero_arg(child, 'kind') in _SCALA_TYPE_KINDS:
-            name = _scala_simple_type_name(child, get_text)
-            if name:
-                return f"new {name}"
-    return None
-
-
-# Scala type-node kinds that can appear as the constructed type in an
-# instance_expression (mirror of treesitter._SCALA_TYPE_KINDS).
-_SCALA_TYPE_KINDS = frozenset({
-    'type_identifier', 'generic_type', 'stable_type_identifier', 'field_expression',
-})
-
-
-def _scala_simple_type_name(type_node: Any, get_text: Callable) -> Optional[str]:
-    """Simple (last) name of a Scala constructor type, unwrapping generics
-    (`new Array[Byte]`), qualified paths (`new java.io.File`, BACK-747), and
-    qualified generics (`new scala.Array[Byte]`). Mirror of
-    treesitter._scala_simple_type_name."""
-    kind = _zero_arg(type_node, 'kind')
-    if kind == 'type_identifier':
-        return get_text(type_node).strip() or None
-    if kind == 'generic_type':
-        base = next((c for c in _children(type_node)
-                     if _zero_arg(c, 'kind') in _SCALA_TYPE_KINDS), None)
-        return _scala_simple_type_name(base, get_text) if base is not None else None
-    if kind == 'stable_type_identifier':
-        names = [c for c in _children(type_node)
-                 if _zero_arg(c, 'kind') == 'type_identifier']
-        return (get_text(names[-1]).strip() or None) if names else None
-    if kind == 'field_expression':
-        text = get_text(type_node).strip()
-        return text.split('.')[-1] if text else None
-    return None
-
-
-def _extract_scala_infix_callee(node: Any, get_text: Callable) -> Optional[str]:
-    """Scala `infix_expression`: `a :: b` / `list map doubler` /
-    `xs filterNot q`. The `operator` field is the method name — an
-    `identifier` (alphabetic infix) or `operator_identifier` (symbolic).
-    Emit the bare name. Mirrors treesitter.py:_callee_name_scala_infix
-    (BACK-746).
-
-    Swift shares the `infix_expression` kind but its operators (`a != b`,
-    `x |> f`) are not calls and use an `op` field, not `operator` -- returning
-    None keeps them out of --calls/--sideeffects, as the analyzer path does
-    (corpus agreement sweep: 121 spurious Swift operator callees)."""
-    if node.child_by_field_name('op') is not None:
-        return None
-    op = node.child_by_field_name('operator')
-    if op is not None:
-        text = get_text(op).strip()
-        if text:
-            return text
-    kids = _children(node)
-    if len(kids) >= 3:
-        text = get_text(kids[1]).strip()
-        if text:
-            return text
-    return None
-
-
-def _extract_php_scoped_call_callee(node: Any, get_text: Callable) -> Optional[str]:
-    """PHP `scoped_call_expression`: self::method() / parent::method() /
-    static::method() / Class::method(). The 'scope' field is either a
-    'relative_scope' node (self/parent/static keyword) or a plain 'name'
-    node (a class constant); 'name' is the method being called (BACK-740,
-    mirrors treesitter.py:_callee_name_php_scoped_call exactly).
-    """
-    scope_node = node.child_by_field_name('scope')
-    name_node = node.child_by_field_name('name')
-    if name_node is None:
-        return None
-    name_text = get_text(name_node).strip()
-    if not name_text:
-        return None
-    if scope_node is None:
-        return name_text
-    scope_text = get_text(scope_node).strip()
-    return f"{scope_text}::{name_text}" if scope_text else name_text
-
-
-def _extract_swift_constructor_callee(node: Any, get_text: Callable) -> Optional[str]:
-    """Swift `constructor_expression`: `constructed_type<TypeArgs>` field
-    (a `user_type` wrapping a `type_identifier` plus `type_arguments`) +
-    `constructor_suffix` args. Covers BOTH a generic function call
-    (`identity<Int>(5)`) and a generic type initializer (`Array<Int>()`) —
-    unlike Scala/PHP's `object_creation_expression`/`instance_expression`,
-    this node is not always semantically a construction, so it emits the
-    bare callee name (`identity`, `Array`) with no "new " prefix, matching
-    the plain call_expression convention instead.
-    """
-    constructed = node.child_by_field_name('constructed_type')
-    if constructed is None:
-        return None
-    if _zero_arg(constructed, 'kind') == 'user_type':
-        base = next(
-            (c for c in _children(constructed) if _zero_arg(c, 'kind') == 'type_identifier'),
-            None,
-        )
-        if base is not None:
-            name = get_text(base).strip()
-            if name:
-                return name
-    text = get_text(constructed).strip()
-    if text:
-        return text.split('<')[0].strip() or None
-    return None
 
 
 def _extract_js_new_callee(node: Any, get_text: Callable) -> Optional[str]:
@@ -822,76 +644,11 @@ _CALLEE_DISPATCH: Dict[str, Callable[[Any, Callable], Optional[str]]] = {
     # Dart constructor shapes (flat, field-less; BACK-1279).
     'constructor_invocation': _extract_dart_flat_type_callee,
     'const_object_expression': _extract_dart_flat_type_callee,
-    # PHP: $obj->method(args) — emit "<receiver>-><name>" so taxonomy patterns
-    # like '->execute', '->fetch', '->prepare' can match.
-    'member_call_expression': _extract_member_call_callee,
-    # PHP: new ClassName(args) — emit "new <name>" so taxonomy patterns
-    # like 'new pdo' can match.
-    'object_creation_expression': _extract_object_creation_callee,
-    # PHP: self::method() / parent::method() / static::method() /
-    # Class::method() — scoped_call_expression is a DISTINCT node kind from
-    # member_call_expression above (BACK-740, the ast:// nav side of
-    # BACK-736's calls:// fix, found via the nav_calls.py/treesitter.py
-    # dispatch-parity test, BACK-739). The generic child(0) fallback below
-    # returns only the 'scope' node's text (self/parent/static/ClassName),
-    # silently dropping the method name entirely — confirmed live:
-    # `self::baz()` rendered as bare `self`, not `self::baz`. Mirrors
-    # treesitter.py:_callee_name_php_scoped_call.
-    'scoped_call_expression': _extract_php_scoped_call_callee,
-    # Scala: new ClassName(args) / new ClassName[T](args) — a DISTINCT node
-    # kind ('instance_expression') from PHP/C#'s object_creation_expression
-    # above despite the identical source shape (BACK-718/BACK-720 Scala
-    # sideeffects-recall-oracle). Emit the same "new <name>" text so the
-    # exact same taxonomy pattern convention applies unchanged.
-    'instance_expression': _extract_scala_instance_callee,
-    # Scala: infix method calls (`a :: b`, `list map doubler`) parse to
-    # 'infix_expression' — the `operator` field is the method name. Absent
-    # from CALL_NODE_TYPES/this dispatch, every infix call was invisible to
-    # calls:// and --calls/--sideeffects/--boundary (BACK-746). Mirrors
-    # treesitter.py:_callee_name_scala_infix.
-    'infix_expression': _extract_scala_infix_callee,
-    # Swift: `<callee><TypeArgs>(args)` — generic function call or generic
-    # type initializer, both parse to 'constructor_expression' rather than
-    # call_expression (BACK-730 Swift pre-flight).
-    'constructor_expression': _extract_swift_constructor_callee,
     # C++ direct-initialization (`ClassName obj(args);`, no `new` keyword) —
     # 'init_declarator' with a bare `argument_list` in its 'value' field.
     # Mirrors treesitter.py:_callee_name_cpp_direct_init (BACK-744).
     'init_declarator': _extract_cpp_direct_init_callee,
 }
-
-
-def _extract_java_method_invocation_callee(
-    node: Any,
-    get_text: Callable,
-    call_node_types: Optional[frozenset],
-) -> Optional[str]:
-    """Java method_invocation: `[object? . name argument_list]` → `object.name`.
-
-    Emits the receiver-qualified callee (`Files.createDirectories`,
-    `path.resolveIndex`) so the taxonomy and calls:// see the method name, not
-    just the object. Chained calls (`a.b().c()`) whose object is itself a call
-    collapse to `.name` (the inner call is captured separately), mirroring the
-    member-access handling in _extract_callee (BACK-415/BACK-416).
-    """
-    children = _children(node)
-    arg_idx = next(
-        (i for i, c in enumerate(children) if _zero_arg(c, 'kind') == 'argument_list'),
-        len(children),
-    )
-    pre = children[:arg_idx]
-    if not pre:
-        return None
-    name = get_text(pre[-1]).strip()
-    # Qualified form: [object, '.', name]
-    if len(pre) >= 3 and _zero_arg(pre[-2], 'kind') in ('.', '?.'):
-        obj_node = pre[0]
-        if call_node_types and _subtree_contains_call(obj_node, call_node_types):
-            return f".{name}" if name else None
-        obj_text = get_text(obj_node).strip()
-        if obj_text and name:
-            return f"{obj_text}.{name}"
-    return name or None
 
 
 def is_ruby_attribute_write(call_node: Any) -> bool:
@@ -935,17 +692,6 @@ def _extract_ruby_call_callee(
     if not receiver_text or '\n' in receiver_text or len(receiver_text) > 40:
         return f".{name}"
     return f"{receiver_text}.{name}"
-
-
-def _subtree_contains_call(node: Any, call_node_types: frozenset) -> bool:
-    """True if any node in the subtree rooted at *node* is a call."""
-    stack = [node]
-    while stack:
-        cur = stack.pop()
-        if _zero_arg(cur, 'kind') in call_node_types:
-            return True
-        stack.extend(_children(cur))
-    return False
 
 
 def _extract_first_arg(call_node: Any, get_text: Callable) -> tuple:

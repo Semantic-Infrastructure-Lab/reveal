@@ -70,6 +70,17 @@ def _receiver_contains_call(member_node: Any, call_node_types: AbstractSet[str])
     return False
 
 
+def subtree_contains_call(node: Any, call_node_types: AbstractSet[str]) -> bool:
+    """True if any node in the subtree rooted at *node* is a call."""
+    stack = [node]
+    while stack:
+        cur = stack.pop()
+        if _zero_arg(cur, 'kind') in call_node_types:
+            return True
+        stack.extend(_children(cur))
+    return False
+
+
 def _trailing_property_name(member_node: Any, get_text: Callable[[Any], str]) -> Optional[str]:
     """Return the trailing property/field identifier text of a member-access node."""
     named = [c for c in _children(member_node) if _zero_arg(c, 'is_named')]

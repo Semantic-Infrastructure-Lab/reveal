@@ -149,3 +149,19 @@ def test_chained_call_receiver_policy_is_the_only_intended_difference(tmp_path):
     an, nav = _both_paths(tmp_path, '.js', 'javascript', "function f(){ a.b().c(); x.y(); }")
     assert 'a.b().c' in an and '.c' in nav
     assert 'x.y' in an and 'x.y' in nav
+
+
+def test_java_generic_method_calls_keep_the_receiver_in_both_paths(tmp_path):
+    # BACK-1279: `svc.<T>run(x)` puts type_arguments between '.' and the name; the nav-only
+    # positional form lost the receiver ('run'). Named fields keep `svc.run` in both paths.
+    an, nav = _both_paths(tmp_path, '.java', 'java', "class A { void f(){ svc.<String>run(1); new ArrayList<String>(); } }")
+    assert 'svc.run' in an and 'svc.run' in nav
+    assert 'new ArrayList' in an and 'new ArrayList' in nav  # generic suffix normalised in both
+
+
+def test_php_dynamic_and_anonymous_class_instantiation_emit_no_junk(tmp_path):
+    # `new $cls()` has no static name and `new class { ... }` used to emit its whole body as the
+    # callee in the analyzer path; neither is a nameable call in either path now.
+    an, nav = _both_paths(tmp_path, '.php', 'php', "<?php function f($cls){ new $cls(); $o = new class { public $x; }; new Real(); }")
+    assert 'new Real' in an and 'new Real' in nav
+    assert not [c for c in an + nav if c.startswith('new ') and c != 'new Real']
