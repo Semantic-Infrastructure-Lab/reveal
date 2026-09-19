@@ -774,6 +774,13 @@ def test_ruby_nested_def_bare_calls_stay_in_own_scope(tmp_path):
     ('.go', "package p\nfunc f(x int) int {\n\tswitch x {\n\tcase 1:\n\t\treturn 1\n\tcase 2:\n\t\treturn 2\n\tdefault:\n\t\treturn 0\n\t}\n}\n", 3),
     ('.go', "package p\nfunc f(v interface{}) int {\n\tswitch v.(type) {\n\tcase int:\n\t\treturn 1\n\tcase string:\n\t\treturn 2\n\t}\n\treturn 0\n}\n", 3),
     ('.go', "package p\nfunc f(c chan int) int {\n\tselect {\n\tcase <-c:\n\t\treturn 1\n\tcase c <- 1:\n\t\treturn 2\n\t}\n\treturn 0\n}\n", 3),
+    # BACK-1301: Kotlin `when` / Swift `switch` default arm and the C#/Dart/Java
+    # switch-EXPRESSION forms agree with the statement forms (2 arms + default = 3).
+    ('.kt', "fun f(x: Int): Int {\n  return when (x) {\n    1 -> 1\n    2 -> 2\n    else -> 0\n  }\n}\n", 3),
+    ('.swift', "func f(_ x: Int) -> Int {\n  switch x {\n  case 1: return 1\n  case 2: return 2\n  default: return 0\n  }\n}\n", 3),
+    ('.cs', "class A { int F(int x) { return x switch { 1 => 1, 2 => 2, _ => 0 }; } }", 3),
+    ('.java', "class A { int f(int x) { return switch (x) { case 1 -> 1; case 2 -> 2; default -> 0; }; } }", 3),
+    ('.dart', "int f(int x) { return switch (x) { 1 => 1, 2 => 2, _ => 0 }; }", 3),
 ])
 def test_switch_arms_not_double_counted(tmp_path, suffix, src, expected):
     from reveal.registry import get_analyzer
@@ -781,3 +788,28 @@ def test_switch_arms_not_double_counted(tmp_path, suffix, src, expected):
     f.write_text(src)
     funcs = get_analyzer(str(f))(str(f)).get_structure()['functions']
     assert funcs[0]['complexity'] == expected
+
+
+# BACK-1303: the standalone walker (check/review) and the analyzer's merged walk
+# share complexity.is_decision; they must never disagree on a function.
+@pytest.mark.parametrize("suffix,src", [
+    ('.py', "def f(x):\n  if x and x > 1:\n    for i in x:\n      pass\n  return 1 if x else 2\n"),
+    ('.rb', "def f(x)\n  case x\n  when 1 then 1\n  when 2 then 2\n  end\n  puts 1 if x\nend\n"),
+    ('.js', "function f(x){ switch(x){ case 1: a(); break; case 2: b(); break; } while(x){ x--; } }"),
+    ('.java', "class A { int f(int x){ switch(x){ case 1: return 1; case 2: return 2; default: return 0; } } }"),
+    ('.kt', "fun f(x: Int): Int {\n  return when (x) {\n    1 -> 1\n    else -> 0\n  }\n}\n"),
+    ('.cs', "class A { int F(int x) { return x switch { 1 => 1, _ => 0 }; } }"),
+    ('.go', "package p\nfunc f(x int) int {\n\tswitch x {\n\tcase 1:\n\t\treturn 1\n\tdefault:\n\t\treturn 0\n\t}\n}\n"),
+])
+def test_standalone_and_merged_walkers_agree(tmp_path, suffix, src):
+    from reveal.complexity import calculate_complexity_and_depth
+    from reveal.core import tree_root
+    from reveal.registry import get_analyzer
+    f = tmp_path / f"f{suffix}"
+    f.write_text(src)
+    an = get_analyzer(str(f))(str(f))
+    fn = an.get_structure()['functions'][0]
+    root = tree_root(an.tree)
+    # standalone walker over the whole file == merged walk over the single function
+    complexity, depth = calculate_complexity_and_depth(root)
+    assert (complexity, depth) == (fn['complexity'], fn['depth'])

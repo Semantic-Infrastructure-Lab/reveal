@@ -62,6 +62,9 @@ _DECISION_TYPES = frozenset({
     # role as SwitchProng/match_arm (BACK-431 tier A real-corpus dogfood
     # audit).
     'when_entry', 'switch_entry', 'case_statement',
+    # C# / Dart switch-EXPRESSION arms (BACK-1301); the default arm is excluded
+    # by `is_decision`, like every other language's default.
+    'switch_expression_arm', 'switch_expression_case',
     # Go switch / type-switch / select arms (BACK-1298); `default_case` excluded.
     'expression_case', 'type_case', 'communication_case',
 })
@@ -74,6 +77,30 @@ _DECISION_TYPES = frozenset({
 # outright made a 2-case Java/C#/Dart switch score 1 -- found by the corpus
 # complexity sweep, not by unit tests.
 _CASE_TOKEN_PARENTS = frozenset({'switch_label', 'switch_section', 'case_builtin'})
+
+# Arm kinds that may be the language's `default` arm, which never counts as a
+# decision. Marker = the arm's first child: Kotlin `else`, Swift
+# `default_keyword`, C# `_` (`discard`). Dart's `_` is a constant_pattern
+# wrapping a lone `identifier`, indistinguishable from a constant name without
+# source text (the walkers have none), so a lone-identifier pattern is treated
+# as the catch-all -- a deliberate +/-1 approximation on Dart switch
+# expressions that match a named constant (BACK-1301).
+_DEFAULT_CAPABLE_ARMS = frozenset({
+    'when_entry', 'switch_entry', 'switch_expression_arm', 'switch_expression_case'})
+_DEFAULT_ARM_MARKERS = frozenset({'else', 'default_keyword', 'discard'})
+
+
+def _is_default_arm(arm) -> bool:
+    for first in _children(arm):
+        kind = _zero_arg(first, 'kind')
+        if kind in _DEFAULT_ARM_MARKERS:
+            return True
+        if kind == 'constant_pattern':
+            inner = _children(first)
+            return len(inner) == 1 and _zero_arg(inner[0], 'kind') == 'identifier'
+        return False
+    return False
+
 
 _NESTING_TYPES = frozenset({
     'if_statement', 'if_expression', 'if', 'IfStatement',
@@ -118,7 +145,26 @@ _KEYWORD_PAIRS = frozenset({
     ('rescue', 'rescue'),
     ('boolean_operator', 'or'),
     ('boolean_operator', 'and'),
+    # Kotlin: `when_expression` wraps a bare `when` keyword token (BACK-1301).
+    ('when_expression', 'when'),
 })
+
+
+def is_decision(kind: str, parent_kind, node=None) -> bool:
+    """True if `node` (of `kind`, under `parent_kind`) adds one decision point.
+
+    `node` is only needed to recognise a `default` arm; omit it and default-
+    capable arm kinds count unconditionally.
+
+    The single decision rule shared by `calculate_complexity_and_depth` and
+    treesitter's merged `_complexity_depth_and_calls` walk (BACK-1303) --
+    edit the rule here, never in a walker.
+    """
+    if kind in _DECISION_TYPES:
+        if parent_kind is not None and (parent_kind, kind) in _KEYWORD_PAIRS:
+            return False
+        return not (node is not None and kind in _DEFAULT_CAPABLE_ARMS and _is_default_arm(node))
+    return kind == 'case' and parent_kind in _CASE_TOKEN_PARENTS
 
 
 def calculate_complexity_and_depth(node) -> tuple:
@@ -130,9 +176,7 @@ def calculate_complexity_and_depth(node) -> tuple:
     Returns:
         (complexity, depth) where complexity = decision_count + 1
     """
-    decision_types = _DECISION_TYPES
     nesting_types = _NESTING_TYPES
-    keyword_pairs = _KEYWORD_PAIRS
 
     decision_count = 0
     max_depth = 0
@@ -145,10 +189,7 @@ def calculate_complexity_and_depth(node) -> tuple:
             max_depth = depth
         for child in _children(n):
             child_type = _zero_arg(child, 'kind')
-            if child_type in decision_types:
-                if n_type is None or (n_type, child_type) not in keyword_pairs:
-                    decision_count += 1
-            elif child_type == 'case' and n_type in _CASE_TOKEN_PARENTS:
+            if is_decision(child_type, n_type, child):
                 decision_count += 1
             child_depth = depth + 1 if child_type in nesting_types else depth
             stack.append((child, child_type, child_depth))
