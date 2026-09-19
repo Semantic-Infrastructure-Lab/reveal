@@ -111,3 +111,19 @@ def test_clean_file_has_no_parse_notice(tmp_path, capsys):
     analyzer = PythonAnalyzer(str(path))
     _handle_standard_output(analyzer, analyzer.get_structure(), 'text', False, '')
     assert 'Parse recovered' not in capsys.readouterr().out
+
+
+def test_go_trailing_missing_token_is_not_reported_as_recovery(tmp_path):
+    """A valid Go file ending in an interface parses with a lone trailing
+    `(MISSING "source_file_token1")` -- a grammar quirk, not a lost parse."""
+    from reveal.analyzers.go import GoAnalyzer
+    path = tmp_path / 'm.go'
+    path.write_text('package p\n\ntype M interface {\n\tTimes() map[string]*int\n}\n')
+    assert GoAnalyzer(str(path))._has_recovery_artifacts() is False
+
+
+def test_real_error_alongside_go_still_reports_recovery(tmp_path):
+    from reveal.analyzers.go import GoAnalyzer
+    path = tmp_path / 'bad.go'
+    path.write_text('package p\n\nfunc f( {\n')
+    assert GoAnalyzer(str(path))._has_recovery_artifacts() is True

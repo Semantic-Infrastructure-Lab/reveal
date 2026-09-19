@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import os
+import re
 import threading
 from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Set, Tuple
@@ -1317,7 +1318,20 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         if not self.tree:
             return False
-        return bool(_zero_arg(tree_root(self.tree), 'has_error'))
+        root = tree_root(self.tree)
+        if not _zero_arg(root, 'has_error'):
+            return False
+        if self.has_parse_errors():
+            return True
+        # No ERROR node: only MISSING tokens remain. A lone MISSING at the very end
+        # of the tree, named like an anonymous `<rule>_token<N>` (Go: a file ending
+        # in an interface type; C: an #include-only unit), is the same benign
+        # end-of-file grammar quirk -- the structure is complete, so don't alarm.
+        # Zero-width MISSING nodes are not reachable through child(), so read the
+        # s-expression (only ever built for an already-flagged tree).
+        sexp = root.to_sexp().strip()
+        missing = re.findall(r'\(MISSING\b', sexp)
+        return not (len(missing) == 1 and re.search(r'\(MISSING "?\w*_token\d+"?\)\)$', sexp))
 
     def _get_node_text(self, node) -> str:
         """Get the source text for a node.
