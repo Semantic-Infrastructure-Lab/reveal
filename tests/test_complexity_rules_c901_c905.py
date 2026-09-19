@@ -92,6 +92,39 @@ class TestC901:
         detections = rule.check("test.py", structure, "")
         assert len(detections) == 0
 
+    def test_c901_same_named_methods_keep_their_own_mccabe_score(self):
+        """BACK-1081: McCabe scores were keyed by bare name, so `B.run` (1) overwrote
+        `A.run` (7) and the complex one went unflagged."""
+        branches = ''.join(f"        elif x == {i}: return {i}\n" for i in range(2, 8))
+        content = (
+            "class A:\n"
+            "    def run(self, x):\n"
+            "        if x == 1: return 1\n" + branches +
+            "        return 0\n"
+            "\n"
+            "class B:\n"
+            "    def run(self, x):\n"
+            "        return x\n"
+        )
+        rule = C901()
+        rule.get_threshold = lambda key, default: 5
+        structure = {'functions': [
+            {'name': 'run', 'line': 2, 'line_end': 10, 'complexity': 1},
+            {'name': 'run', 'line': 13, 'line_end': 14, 'complexity': 1},
+        ]}
+        detections = rule.check("m.py", structure, content)
+        assert [d.line for d in detections] == [2]
+
+    def test_c901_decorated_function_matches_by_range(self):
+        """A decorated function's structure `line` is the decorator; McCabe reports
+        the `def` line, which still falls inside the function's range."""
+        branches = ''.join(f"    elif x == {i}: return {i}\n" for i in range(2, 8))
+        content = "@decorator\ndef busy(x):\n    if x == 1: return 1\n" + branches + "    return 0\n"
+        rule = C901()
+        rule.get_threshold = lambda key, default: 5
+        structure = {'functions': [{'name': 'busy', 'line': 1, 'line_end': 10, 'complexity': 1}]}
+        assert [d.line for d in rule.check("m.py", structure, content)] == [1]  # McCabe (7) wins
+
 
 class TestC902:
     """Test C902: Function length detection."""

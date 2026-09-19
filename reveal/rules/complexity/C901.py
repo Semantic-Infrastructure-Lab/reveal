@@ -6,7 +6,7 @@ fallback for other languages.
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from mccabe import PathGraphingAstVisitor
 
@@ -63,7 +63,7 @@ class C901(BaseRule, ASTParsingMixin):
 
         # For Python files, use McCabe on the whole file for accuracy
         is_python = file_path.endswith('.py')
-        mccabe_results = {}
+        mccabe_results: List[Tuple[str, int, int]] = []
         if is_python and content:
             mccabe_results = self._get_mccabe_complexity(content, file_path)
 
@@ -74,8 +74,9 @@ class C901(BaseRule, ASTParsingMixin):
             func_name = func.get('name', '<unknown>')
 
             # Priority: 1) McCabe result, 2) structure complexity, 3) heuristic
-            if func_name in mccabe_results:
-                complexity = mccabe_results[func_name]
+            mccabe_value = self._match_mccabe(func, mccabe_results)
+            if mccabe_value is not None:
+                complexity = mccabe_value
             elif func.get('complexity') is not None:
                 complexity = func['complexity']
             else:
@@ -95,7 +96,7 @@ class C901(BaseRule, ASTParsingMixin):
 
         return detections
 
-    def _get_mccabe_complexity(self, content: str, file_path: str = "<unknown>") -> Dict[str, int]:
+    def _get_mccabe_complexity(self, content: str, file_path: str = "<unknown>") -> List[Tuple[str, int, int]]:
         """
         Calculate McCabe cyclomatic complexity for all functions in Python code.
 
@@ -107,9 +108,11 @@ class C901(BaseRule, ASTParsingMixin):
             file_path: Path for error messages and cache key
 
         Returns:
-            Dict mapping function names to complexity scores
+            (name, first line, complexity) per function. Keyed by position, not
+            name: two classes commonly define a method of the same name, and a
+            name-keyed dict let the last one overwrite the rest (BACK-1081).
         """
-        results: Dict[str, int] = {}
+        results: List[Tuple[str, int, int]] = []
         try:
             tree = self._parse_python(content, file_path)
             if tree is None:
@@ -123,11 +126,28 @@ class C901(BaseRule, ASTParsingMixin):
                 # Handle method names (Class.method -> method)
                 if '.' in name:
                     name = name.split('.')[-1]
-                results[name] = graph.complexity()
+                results.append((name, graph.lineno, graph.complexity()))
         except Exception as e:
             logger.debug(f"McCabe analysis failed: {e}")
 
         return results
+
+    @staticmethod
+    def _match_mccabe(func: Dict[str, Any], entries: List[Tuple[str, int, int]]) -> Optional[int]:
+        """McCabe score for a structure function: same name at the same line, or
+        (a decorated function's `line` is its decorator) the same name defined
+        within the function's own line range."""
+        name = func.get('name')
+        start = func.get('line', 0)
+        end = func.get('line_end') or start
+        same_name = [(lineno, value) for n, lineno, value in entries if n == name]
+        for lineno, value in same_name:
+            if lineno == start:
+                return value
+        for lineno, value in same_name:
+            if start <= lineno <= end:
+                return value
+        return None
 
     def _calculate_complexity_heuristic(self, func: Dict[str, Any], content: str) -> int:
         """
