@@ -37,8 +37,8 @@ def _generic_call_hits(
     # direct-init (`ClassName obj(args);`) but is ALSO the node kind for
     # every other initialized declaration (`int y = 5;`, `Foo obj2 =
     # Foo(3, 4);`) — a shape _extract_callee correctly returns None for
-    # (mirrors treesitter.py:_extract_calls_in_function's `if name`
-    # guard). Without this check, every such plain/copy-init declaration
+    # (mirrors the `if name` guard in
+    # treesitter.py:_complexity_depth_and_calls). Without this check, every such plain/copy-init declaration
     # in C/C++ would emit a bogus unknown-callee ('?') entry here.
     if not callee:
         return []

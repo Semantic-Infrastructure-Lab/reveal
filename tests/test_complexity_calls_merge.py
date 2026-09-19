@@ -35,7 +35,7 @@ def _first_function_node(analyzer):
 
 class TestComplexityDepthAndCallsMerge(unittest.TestCase):
 
-    def _assert_matches_originals(self, code: str):
+    def _assert_matches_originals(self, code: str, expected_calls):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "sample.py"
             path.write_text(code)
@@ -43,16 +43,15 @@ class TestComplexityDepthAndCallsMerge(unittest.TestCase):
             node = _first_function_node(analyzer)
 
             old_complexity, old_depth = calculate_complexity_and_depth(node)
-            old_calls = analyzer._extract_calls_in_function(node)
 
             new_complexity, new_depth, new_calls = analyzer._complexity_depth_and_calls(node)
 
             self.assertEqual(new_complexity, old_complexity)
             self.assertEqual(new_depth, old_depth)
-            self.assertEqual(new_calls, old_calls)
+            self.assertEqual(new_calls, expected_calls)
 
     def test_simple_function_no_branches(self):
-        self._assert_matches_originals("def f():\n    return 1\n")
+        self._assert_matches_originals("def f():\n    return 1\n", [])
 
     def test_deeply_nested_conditionals(self):
         self._assert_matches_originals(
@@ -63,7 +62,8 @@ class TestComplexityDepthAndCallsMerge(unittest.TestCase):
             "                while z:\n"
             "                    if c and d:\n"
             "                        foo()\n"
-            "    return bar()\n"
+            "    return bar()\n",
+            ['foo', 'bar'],
         )
 
     def test_nested_function_definitions(self):
@@ -100,7 +100,8 @@ class TestComplexityDepthAndCallsMerge(unittest.TestCase):
             "def f():\n"
             "    foo(bar())\n"
             "    foo(baz())\n"
-            "    return foo(bar())\n"
+            "    return foo(bar())\n",
+            ['foo', 'bar', 'baz'],
         )
 
 

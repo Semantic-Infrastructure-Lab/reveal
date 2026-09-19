@@ -2,8 +2,8 @@
 
 Covers:
 - build_callers_index() standalone
-- _extract_calls_in_function() via get_structure() on Python files
-- _extract_calls_in_function() via get_structure() on JS files
+- call extraction via get_structure() on Python files
+- call extraction via get_structure() on JS files
 - called_by reverse index correctness
 - Nested calls (foo(bar()))
 - Attribute calls (self.bar, obj.method)
@@ -96,7 +96,7 @@ class TestBuildCallersIndex(unittest.TestCase):
 
 
 class TestCallExtractionPython(unittest.TestCase):
-    """Test _extract_calls_in_function via full get_structure() on Python code."""
+    """Test call extraction (_complexity_depth_and_calls) via full get_structure() on Python code."""
 
     def _funcs_by_name(self, code):
         funcs = _get_functions(code)

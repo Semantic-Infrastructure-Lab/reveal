@@ -2061,49 +2061,21 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 names.append(name)
         return names
 
-    def _extract_calls_in_function(self, func_node) -> List[str]:
-        """Walk function body subtree and return unique callee name strings.
-
-        Returns best-effort callee names from call expression nodes within the
-        function body. Names are not resolved across files (that's Phase 3).
-
-        Examples:
-            foo()           → ["foo"]
-            self.bar()      → ["self.bar"]
-            foo(bar())      → ["foo", "bar"]  (nested calls both captured)
-        """
-        calls: List[str] = []
-        seen: set = set()
-        stack = _children(func_node)
-        while stack:
-            node = stack.pop()
-            if _zero_arg(node, 'kind') in CALL_NODE_TYPES:
-                name = self._get_callee_name(node)
-                if name and name not in seen:
-                    calls.append(name)
-                    seen.add(name)
-            stack.extend(reversed(_children(node)))
-        for name in self._implicit_calls_in_function(func_node):
-            if name not in seen:
-                calls.append(name)
-                seen.add(name)
-        return calls
-
     def _complexity_depth_and_calls(self, func_node) -> Tuple[int, int, List[str]]:
         """Compute complexity, nesting depth, and callee names in one subtree walk.
 
         `_build_function_dict` used to call `calculate_complexity_and_depth`
-        and `_extract_calls_in_function` back to back — two independent full
+        and a separate calls-only walker back to back — two independent full
         walks of the same function-body subtree via `node_children`. Profiling
         a real 11K-file TypeScript repo (BACK-489) showed this pair dominates
         `reveal architecture`'s cost for large repos even after fixing the
         double-parse-per-file bug: `node_children` alone accounted for 88s of
         self time across 94M calls. Merging into one traversal halves that.
 
-        Traversal order matches `_extract_calls_in_function` exactly (reversed
-        children pushed onto a stack, so pop order is document order) so the
-        `calls` list is identical to before; complexity/depth are order-
-        independent aggregates, computed alongside using the same decision/
+        Traversal order is document order (reversed children pushed onto a
+        stack, so pop order is document order), identical to the retired
+        calls-only walker; complexity/depth are
+        order-independent aggregates, computed alongside using the same decision/
         nesting-type rules as `calculate_complexity_and_depth`.
 
         BACK-490: a nested node whose kind is in `FUNCTION_NODE_TYPES` is a
@@ -2129,10 +2101,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # for func_node's direct children — mirrors calculate_complexity_and_depth's
         # (node, None, 0) seed (func_node itself is never itself checked as a
         # decision/call node, only its descendants are). The top-level push is
-        # intentionally NOT reversed, matching _extract_calls_in_function's own
-        # top-level `stack = _children(func_node)` exactly (only its recursive
-        # `stack.extend(reversed(...))` step reverses) — preserved byte-for-byte
-        # so this merged walk returns the identical `calls` list order.
+        # intentionally NOT reversed (matching the retired calls-only walker's
+        # top-level seed; only the recursive step reverses) so `calls` order
+        # is unchanged.
         stack = [
             (child, None, 1 if _zero_arg(child, 'kind') in _NESTING_TYPES else 0)
             for child in _children(func_node)
