@@ -474,27 +474,48 @@ def _extract_callee(
     )
 
 
+# Node kinds that hold a call's argument list. `value_arguments` (Kotlin/Swift, one
+# level down inside `call_suffix`) and `FnCallArguments` (Zig) were missing, so nav
+# never reported a first argument for those languages.
+_ARG_CONTAINER_KINDS = (
+    'argument_list', 'arguments', 'call_arguments', 'value_arguments', 'FnCallArguments',
+    # Rust macro_invocation's argument container (e.g. `tracing::debug!("msg", x)`'s
+    # `("msg", x)`) -- not an argument_list, but shaped the same way for this purpose.
+    'token_tree',
+)
+
+
+def _arg_container(call_node: Any) -> Any:
+    """The argument-list node of a call, or `call_node` itself when it already is one."""
+    if _zero_arg(call_node, 'kind') in _ARG_CONTAINER_KINDS:
+        return call_node
+    for child in _children(call_node):
+        kind = _zero_arg(child, 'kind')
+        if kind in _ARG_CONTAINER_KINDS:
+            return child
+        if kind == 'call_suffix':  # Kotlin/Swift: call_expression > call_suffix > value_arguments
+            for inner in _children(child):
+                if _zero_arg(inner, 'kind') in _ARG_CONTAINER_KINDS:
+                    return inner
+    return None
+
+
 def _extract_first_arg(call_node: Any, get_text: Callable) -> tuple:
     """Extract the first argument and whether more args follow."""
-    for child in _children(call_node):
-        # 'token_tree': Rust macro_invocation's argument container (e.g.
-        # `tracing::debug!("msg", x)`'s `("msg", x)`) -- not an
-        # argument_list, but shaped the same way for this purpose.
-        if _zero_arg(child, 'kind') in (
-            'argument_list', 'arguments', 'call_arguments', 'token_tree'
-        ):
-            real_args = [
-                c for c in _children(child)
-                if _zero_arg(c, 'kind') not in ('(', ')', ',', 'comment')
-                and _zero_arg(c, 'is_named')
-            ]
-            if not real_args:
-                return None, False
-            text = get_text(real_args[0]).splitlines()[0].strip()
-            if len(text) > 40:
-                text = text[:37] + '...'
-            return text, len(real_args) > 1
-    return None, False
+    container = _arg_container(call_node)
+    if container is None:
+        return None, False
+    real_args = [
+        c for c in _children(container)
+        if _zero_arg(c, 'kind') not in ('(', ')', ',', 'comment')
+        and _zero_arg(c, 'is_named')
+    ]
+    if not real_args:
+        return None, False
+    text = get_text(real_args[0]).splitlines()[0].strip()
+    if len(text) > 40:
+        text = text[:37] + '...'
+    return text, len(real_args) > 1
 
 
 def render_range_calls(

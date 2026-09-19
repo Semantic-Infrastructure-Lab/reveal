@@ -149,8 +149,8 @@ def test_zig_suffix_expr_calls_in_both_paths(tmp_path):
         tmp_path, '.zig', 'zig',
         'fn outer() void {\n    top();\n    a.b.c(1);\n    std.debug.print("x", .{});\n    top();\n}\n')
     assert per_function['outer'] == ['top', 'a.b.c', 'std.debug.print']
-    # Zig nav records no first_arg today (unlike GDScript/Dart) -- pinned, not endorsed.
-    assert nav == [(2, 'top', None), (3, 'a.b.c', None), (4, 'std.debug.print', None), (5, 'top', None)]
+    # first_arg: Zig's `FnCallArguments` is the argument list itself (was never recognised).
+    assert nav == [(2, 'top', None), (3, 'a.b.c', '1'), (4, 'std.debug.print', '"x"'), (5, 'top', None)]
 
 
 def test_gdscript_attribute_calls_in_both_paths(tmp_path):
@@ -169,3 +169,15 @@ def test_dart_selector_chains_differ_only_in_receiver_form(tmp_path):
     # names `.c` (chain-receiver policy) and `x.y.z` (full receiver).
     assert per_function['outer'] == ['a.b', 'c', 'z', 'top']
     assert nav == [(1, 'a.b', '1'), (1, '.c', '2'), (1, 'x.y.z', None), (1, 'top', None), (1, 'top', None)]
+
+
+@pytest.mark.parametrize('suffix, language, src', [
+    ('.kt', 'kotlin', "fun outer() { foo(1, 2)\n  a.b(x) }\n"),
+    ('.swift', 'swift', "func outer() { foo(1, 2)\n  a.b(x) }\n"),
+])
+def test_kotlin_and_swift_nav_report_the_first_argument(tmp_path, suffix, language, src):
+    """`call_expression > call_suffix > value_arguments` sits one level below where
+    `_extract_first_arg` looked, so nav reported no first arg for every Kotlin/Swift call
+    (1350/1350 and 1408/1408 sites over the 60-file corpus sample)."""
+    _, nav = _walk(tmp_path, suffix, language, src)
+    assert [(c, a) for _, c, a in nav] == [('foo', '1'), ('a.b', 'x')]
