@@ -175,7 +175,6 @@
  "reveal/adapters/stats/aggregation.py::assignment": 1,
  "reveal/adapters/stats/aggregation.py::return-value": 2,
  "reveal/adapters/stats/metrics.py::attr-defined": 2,
- "reveal/adapters/stats/metrics.py::no-any-return": 1,
  "reveal/adapters/surface.py::arg-type": 3,
  "reveal/adapters/surface.py::assignment": 1,
  "reveal/adapters/surface.py::no-any-return": 1,

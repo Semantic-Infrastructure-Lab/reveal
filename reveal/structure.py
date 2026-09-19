@@ -41,6 +41,7 @@ from typing import Callable, Dict, Iterator, List, Optional, TYPE_CHECKING, cast
 if TYPE_CHECKING:
     from .type_system import RevealType
 
+from .reveal_types import StructureItem
 from .elements import TypedElement
 
 
@@ -98,7 +99,7 @@ def _parse_import_name(content: str) -> str:
 
 
 def _create_element_from_item(
-    item: dict,
+    item: StructureItem,
     category: str,
     element_class: type,
 ) -> Optional[TypedElement]:

@@ -1,5 +1,6 @@
 """Element extraction display."""
 
+from ..reveal_types import StructureItem
 import sys
 from typing import Optional, cast
 
@@ -755,7 +756,7 @@ def _get_category_items(structure, category: str):
     return sorted(items, key=lambda x: x.get('line', x.get('line_start', 0)))
 
 
-def _build_element_from_item(analyzer, item, category: str, ordinal: int):
+def _build_element_from_item(analyzer, item: StructureItem, category: str, ordinal: int):
     """Build element dict from structure item.
 
     Args:

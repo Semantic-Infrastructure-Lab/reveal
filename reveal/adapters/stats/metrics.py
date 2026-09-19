@@ -1,8 +1,9 @@
 """Metrics calculation functions for stats adapter."""
 
+from ...reveal_types import StructureItem
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ def count_line_types(lines: list) -> tuple:
     return empty_lines, comment_lines, code_lines
 
 
-def estimate_complexity(func: Dict[str, Any], content: str) -> Optional[int]:
+def estimate_complexity(func: StructureItem, content: str) -> Optional[int]:
     """Estimate cyclomatic complexity for a function.
 
     Uses pre-computed complexity from the tree-sitter analyzer when available
@@ -93,7 +94,7 @@ def _get_check_thresholds(file_path: Optional[Path]) -> tuple:
         return 100, 4
 
 
-def extract_complexity_metrics(functions: list, content: str, file_path: Optional[Path] = None) -> dict:
+def extract_complexity_metrics(functions: List[StructureItem], content: str, file_path: Optional[Path] = None) -> dict:
     """Extract complexity metrics from functions.
 
     Args:
