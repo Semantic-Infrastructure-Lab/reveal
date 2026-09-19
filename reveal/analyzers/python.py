@@ -16,6 +16,29 @@ class PythonAnalyzer(TreeSitterAnalyzer):
     """
     language = 'python'
 
+    def _leading_docstring_node(self, body_node):
+        """The function's first statement, if it's a bare string literal
+        used as a docstring.
+
+        `body_node` may be the outer `function_definition` (its 'block'
+        child holds the actual statements) or already the block itself
+        (callers may pass it) -- look one level in either shape.
+        """
+        if body_node is None:
+            return None
+        block = body_node
+        if _zero_arg(block, 'kind') != 'block':
+            block = next(
+                (c for c in _children(body_node) if _zero_arg(c, 'kind') == 'block'),
+                None,
+            )
+        if block is None:
+            return None
+        for child in _children(block):
+            kind = _zero_arg(child, 'kind')
+            return child if kind == 'string' else None
+        return None
+
     def _extract_class_bases(self, node) -> List[str]:
         if _zero_arg(node, 'kind') != 'class_definition':
             return super()._extract_class_bases(node)

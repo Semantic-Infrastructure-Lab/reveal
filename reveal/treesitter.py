@@ -881,27 +881,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
             non_code_rows.add(end_row)
 
     def _leading_docstring_node(self, body_node):
-        """The function's first statement, if it's a bare string literal
-        used as a docstring (Python convention only -- other supported
-        languages don't use a leading string expression this way).
+        """The function's leading docstring node, if the language has one.
 
-        `body_node` may be the outer `function_definition` (its 'block'
-        child holds the actual statements) or already the block itself
-        (Dart's disjoint-sibling body) -- look one level in either shape.
+        No-op by default (docstring-as-first-string-statement is a Python convention);
+        overridden in analyzers/python.py (BACK-1280).
         """
-        if self.language != 'python' or body_node is None:
-            return None
-        block = body_node
-        if _zero_arg(block, 'kind') != 'block':
-            block = next(
-                (c for c in _children(body_node) if _zero_arg(c, 'kind') == 'block'),
-                None,
-            )
-        if block is None:
-            return None
-        for child in _children(block):
-            kind = _zero_arg(child, 'kind')
-            return child if kind == 'string' else None
         return None
 
     def _code_line_count(self, body_node, line_start: int, line_end: int) -> int:
