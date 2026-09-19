@@ -27,7 +27,9 @@ class GDScriptAnalyzer(TreeSitterAnalyzer):
 
     # ── Callee naming (BACK-915 slice 4) ──────────────────────────────────────
 
-    def _callee_name_gdscript_attribute_call(self, call_node) -> Optional[str]:
+    CALLEE_KIND_HOOKS = {'attribute_call': '_callee_name_attribute_call'}
+
+    def _callee_name_attribute_call(self, call_node) -> Optional[str]:
         """GDScript `self.foo()` / `obj.method()` / `Class.new()` / chained
         `a.b().c()` -- 'attribute_call'. Unlike Java/Ruby's method_invocation/
         call (an explicit 'object'/'receiver' field on the SAME node), the

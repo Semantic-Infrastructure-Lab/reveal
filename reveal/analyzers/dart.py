@@ -196,7 +196,9 @@ class DartAnalyzer(TreeSitterAnalyzer):
             return self._get_node_text(idents[0])
         return f"{self._get_node_text(idents[0])}.{self._get_node_text(idents[1])}"
 
-    def _callee_name_dart_argument_part(self, call_node) -> Optional[str]:
+    CALLEE_KIND_HOOKS = {'argument_part': '_callee_name_argument_part'}
+
+    def _callee_name_argument_part(self, call_node) -> Optional[str]:
         """Dart `foo()` / `obj.method()` / `this.foo()` / `Class.static()` /
         `obj?.method()` / `obj!.method()` / cascaded `..method()` --
         'argument_part' (the '(args)' selector that marks a call site).

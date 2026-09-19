@@ -241,7 +241,7 @@ CALL_NODE_TYPES = {
     # returned zero callers/callees for the single most common GDScript call
     # idiom -- `self.`-qualified calls and Godot's constructor convention
     # (`ClassName.new()`, since GDScript has no `new` keyword) are both this
-    # shape. See _callee_name_gdscript_attribute_call for the paired callee-
+    # shape. See core/callees/gdscript.py (CallSite decoder) for the shared callee-
     # text extraction; unlike every other dotted-call node in this table
     # (Java's method_invocation, Ruby's call, PHP's member_call_expression),
     # the receiver here is NOT a child/field of this node at all -- it's a
@@ -266,7 +266,7 @@ CALL_NODE_TYPES = {
     # EVERY Dart call site, not just a subset -- the single largest total
     # blind spot in this whole program (GDScript's attribute_call gap was
     # "only" the dominant idiom; Dart had no working call detection at
-    # all). See _callee_name_dart_argument_part for the paired sibling-walk
+    # all). See core/callees/dart.py (CallSite decoder) for the shared sibling-walk
     # extraction (BACK-760).
     'argument_part',            # Dart: the `(args)` selector marking ANY call
     # Dart's OTHER call shape: a generic-typed constructor call with an
@@ -387,18 +387,6 @@ def build_callers_index(functions: List[StructureItem]) -> Dict[str, List[str]]:
 _NAME_KINDS = ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier', 'field_identifier')
 _PARAM_LIST_KINDS = ('parameters', 'parameter_list', 'formal_parameters', 'method_parameters')
 
-# _get_callee_name's node-kind -> hook-method dispatch table (BACK-915 slice
-# 4). Every value is a method that exists on every TreeSitterAnalyzer (a
-# no-op stub by default, overridden per language in analyzers/*.py) — see
-# each hook's docstring for which analyzer overrides it and why the kind
-# isn't handled generically. `call_expression`/`call` are deliberately absent
-# — see _get_callee_name's docstring for why they can't be table-driven.
-_CALLEE_NAME_DISPATCH = {
-    'attribute_call': '_callee_name_gdscript_attribute_call',
-    'argument_part': '_callee_name_dart_argument_part',
-}
-
-
 class TreeSitterAnalyzer(FileAnalyzer):
     """Base class for tree-sitter based analyzers.
 
@@ -420,6 +408,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
     """
 
     language: Optional[str] = None  # Set in subclass
+
+    # Call-node kind -> name of the method that names it, for shapes that need this
+    # analyzer's own walk (GDScript `attribute_call`, Dart `argument_part`). Subclasses
+    # override; the base knows no language (BACK-1280).
+    CALLEE_KIND_HOOKS: Dict[str, str] = {}
 
     def __init__(self, path: str):
         super().__init__(path)
@@ -1819,21 +1812,6 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Compute cyclomatic complexity and max nesting depth."""
         return calculate_complexity_and_depth(node)
 
-    def _callee_name_gdscript_attribute_call(self, call_node) -> Optional[str]:
-        """Hook: name a GDScript `self.foo()`/`obj.method()`/`Class.new()`
-        call ('attribute_call'). No-op by default — overridden in
-        analyzers/gdscript.py (BACK-915 slice 4).
-        """
-        return None
-
-    def _callee_name_dart_argument_part(self, call_node) -> Optional[str]:
-        """Hook: name a Dart 'argument_part' call site — the '(args)'
-        selector that marks a call in Dart's flat, wrapper-less call
-        grammar (BACK-760). No-op by default — overridden in
-        analyzers/dart.py (BACK-915).
-        """
-        return None
-
     def _callee_name_generic(self, call_node) -> Optional[str]:
         return self._callee_name_from_node(call_node.child(0))
 
@@ -1858,8 +1836,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         `core/callees/generic.py`. The index keeps the full receiver text of a
         chained call (`a.b().c`); nav collapses it to `.c`.
 
-        Two Dart/GDScript walker-level shapes still use analyzer hooks
-        (`_CALLEE_NAME_DISPATCH`) until the call walkers are unified (BACK-1309).
+        Walker-level shapes (GDScript `attribute_call`, Dart `argument_part`) are named
+        by a per-analyzer hook registered in `CALLEE_KIND_HOOKS`; they project from
+        the shared `CallSite` decoders (BACK-1309, BACK-1280).
         """
         if not _zero_arg(call_node, 'child_count'):
             return None
@@ -1874,7 +1853,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         )
         if handled:
             return name
-        handler_name = _CALLEE_NAME_DISPATCH.get(kind)
+        handler_name = self.CALLEE_KIND_HOOKS.get(kind)
         if handler_name is not None:
             return getattr(self, handler_name)(call_node)
         return self._callee_name_generic(call_node)
