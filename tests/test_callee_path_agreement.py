@@ -34,6 +34,10 @@ CASES = [
      {'create', 'c', 'helper', 'Foo', 'Box'}),
     ('.rb', 'ruby', "def f\n  helper\n  x.y\n  a.b.c\n  puts 'x'\nend\n",
      {'helper', 'y', 'c', 'puts'}),
+    # BACK-1310 recall re-run: a paren-less call used as a RECEIVER is itself a call
+    # (`params.require(:k)` calls `params`); bound locals (`x`) still are not.
+    ('.rb', 'ruby', "def f\n  x = 1\n  params.require(:k)[:s]\n  other.bar(baz)\n  x.foo\nend\n",
+     {'params', 'require', 'other', 'bar', 'baz', 'foo'}),
     # BACK-1302: pure attribute writes (`r.modes = 1`) are not calls in either path;
     # `r.count += 1` reads first, so it is.
     ('.rb', 'ruby', "def f(r)\n  r.modes = 1\n  self.name = 'x'\n  r.count += 1\n  helper\nend\n",

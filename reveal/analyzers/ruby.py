@@ -81,10 +81,14 @@ class RubyAnalyzer(TreeSitterAnalyzer):
                 if pkind in self._RUBY_BINDING_PARENTS or self._is_assignment_target(parent, node):
                     bound.add(name)
                 elif pkind == 'call':
-                    # `foo.bar` / `baz 1`: handled as a `call` node already.
-                    if parent.child_by_field_name('receiver') is not None or \
-                            parent.child_by_field_name('method') is not None:
+                    # `foo.bar` / `baz 1`: the method name is the `call` node's own
+                    # callee. The RECEIVER is not: `params.require(:k)` calls
+                    # `params` too, and skipping it lost ~3.5% of call edges on
+                    # Rails code (BACK-1310 recall re-run).
+                    method = parent.child_by_field_name('method')
+                    if method is not None and _zero_arg(method, 'start_byte') == _zero_arg(node, 'start_byte'):
                         continue
+                    idents.append((name, node))
                 else:
                     idents.append((name, node))
             stack.extend(reversed(_children(node)))
