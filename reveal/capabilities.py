@@ -61,7 +61,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from .registry import get_analyzer_for_extension
 
@@ -112,7 +112,7 @@ PYTHON_ONLY_FEATURES: Dict[str, PythonOnlyFeature] = {
     "dict-schemas": PythonOnlyFeature("ast://?show=dict-schemas", "clusters untyped dicts into implicit schemas"),
     "reveal-type": PythonOnlyFeature("ast://?reveal_type=<name>", "type evidence for a variable"),
     "rule-T006": PythonOnlyFeature("rule T006", "flags untyped dicts that a TypedDict already covers"),
-    "typed-elements": PythonOnlyFeature("--format typed", "Python-specific element semantics"),
+    "typed-elements": PythonOnlyFeature("--typed", "Python-specific element semantics"),
     "docstrings": PythonOnlyFeature("docstring extraction", "leading-docstring detection in outlines"),
 }
 
@@ -140,6 +140,41 @@ def python_only_warning(feature: str, path: Path) -> Optional[Dict[str, str]]:
             f"{sum(others.values())} file(s) in other languages were not analyzed: {listing}{more}."
         ),
     }
+
+
+def python_only_file_warning(feature: str, path: Path) -> Optional[Dict[str, str]]:
+    """W-CAP-1 warning when a Python-only `feature` is applied to one non-Python
+    file (it falls back to the generic behavior). None for Python or unknown types."""
+    cap = get_capability_for_extension(Path(path).suffix.lower())
+    if cap is None or cap.language == "python":
+        return None
+    return {
+        "code": W_CAP_PYTHON_ONLY,
+        "message": (
+            f"{PYTHON_ONLY_FEATURES[feature].invocation}: {PYTHON_ONLY_FEATURES[feature].what} "
+            f"apply to Python only; {cap.language} gets the generic element tree."
+        ),
+    }
+
+
+def python_only_rule_disclosure(files: Iterable[Path], rule_code: str) -> Optional[str]:
+    """One-line disclosure that Python-only rule `rule_code` did not look at
+    the non-Python source files in a check run (it is skipped by file pattern,
+    which reads as "clean"). None when every analyzable file was Python."""
+    per_language: Dict[str, int] = {}
+    for f in files:
+        cap = get_capability_for_extension(Path(f).suffix.lower())
+        if cap is not None and cap.language != "python":
+            per_language[cap.language] = per_language.get(cap.language, 0) + 1
+    if not per_language:
+        return None
+    ranked = sorted(per_language.items(), key=lambda kv: (-kv[1], kv[0]))
+    listing = ", ".join(f"{lang} ({n})" for lang, n in ranked[:5])
+    more = f", +{len(ranked) - 5} more" if len(ranked) > 5 else ""
+    return (
+        f"{W_CAP_PYTHON_ONLY}: {rule_code} analyzes Python only; "
+        f"{sum(per_language.values())} file(s) in other languages were not checked by it: {listing}{more}."
+    )
 
 
 # --- measured recall signals (BACK-880) -------------------------------------

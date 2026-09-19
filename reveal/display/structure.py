@@ -258,6 +258,9 @@ def _render_typed_structure_output(
     # Convert to TypedStructure (auto-detects type from extension)
     typed = TypedStructure.from_analyzer_output(structure, file_path)
 
+    from reveal.capabilities import python_only_file_warning
+    warning = python_only_file_warning("typed-elements", Path(file_path))  # BACK-1283
+
     if output_format == "json":
         # Output full typed structure with tree
         result = {
@@ -266,6 +269,8 @@ def _render_typed_structure_output(
             "stats": typed.stats,
             "tree": typed.to_tree().get("roots", []),
         }
+        if warning:
+            result["warnings"] = [warning]
         print(safe_json_dumps(result))
         return
 
@@ -302,6 +307,10 @@ def _render_typed_structure_output(
     # Render tree structure using extracted helper
     for root in filtered_roots:
         _render_typed_element(root)
+
+    if warning:
+        print()
+        print(f"  ⚠ {warning['code']}: {warning['message']}")
 
     # Navigation hints
     print()

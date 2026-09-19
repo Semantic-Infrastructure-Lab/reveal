@@ -73,3 +73,28 @@ def test_text_renderer_prints_the_warning(mixed_tree, capsys):
     result = AstAdapter(str(mixed_tree), 'show=dict-heatmap').get_structure()
     _render_dict_heatmap(result, 'text')
     assert 'W-CAP-1' in capsys.readouterr().out
+
+
+def test_rule_disclosure_counts_non_python_files_only(mixed_tree):
+    from reveal.capabilities import python_only_rule_disclosure
+    files = sorted(mixed_tree.iterdir())
+    note = python_only_rule_disclosure(files, 'T006')
+    assert note.startswith(W_CAP_PYTHON_ONLY) and 'T006' in note
+    assert '3 file(s)' in note and 'javascript (2)' in note
+    assert python_only_rule_disclosure([mixed_tree / 'a.py'], 'T006') is None
+
+
+def test_check_discloses_t006_skip_on_mixed_tree_unless_deselected(mixed_tree):
+    from reveal.cli.file_checker import _python_only_rule_disclosures
+    files = sorted(mixed_tree.iterdir())
+    assert len(_python_only_rule_disclosures(files, None, None)) == 1
+    assert _python_only_rule_disclosures(files, ['C901'], None) == []
+    assert _python_only_rule_disclosures(files, None, ['T006']) == []
+
+
+def test_typed_output_warns_on_non_python_file_only(tmp_path, capsys):
+    from reveal.capabilities import python_only_file_warning
+    assert python_only_file_warning('typed-elements', tmp_path / 'a.py') is None
+    warning = python_only_file_warning('typed-elements', tmp_path / 'b.js')
+    assert warning['code'] == W_CAP_PYTHON_ONLY and 'javascript' in warning['message']
+    assert python_only_file_warning('typed-elements', tmp_path / 'README') is None

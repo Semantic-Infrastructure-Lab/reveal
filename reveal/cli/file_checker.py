@@ -227,6 +227,17 @@ def _init_scan_caches(caches: dict) -> None:
     _t006_init_worker(caches.get('T006', {}))
 
 
+def _python_only_rule_disclosures(files, select, ignore) -> List[str]:
+    """BACK-1283: a Python-only rule (T006) is skipped by file pattern on other
+    languages, which reads as "checked, clean". Say so when it was in the
+    effective rule set and the run held non-Python source."""
+    from reveal.capabilities import python_only_rule_disclosure
+    if not _rule_will_run("T006", select, ignore):
+        return []
+    note = python_only_rule_disclosure(files, "T006")
+    return [note] if note else []
+
+
 def _get_scan_disclosures() -> List[str]:
     """BACK-1051: collect every capped-scan disclosure recorded in this
     process by rules with a shared-index/graph scan ceiling (I002, D005, T006).
@@ -1372,6 +1383,9 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     severity = getattr(args, 'severity', None)
     limit = getattr(args, 'limit', 50)
 
+    def scan_disclosures_all() -> List[str]:
+        return _get_scan_disclosures() + _python_only_rule_disclosures(files_to_check, select, ignore)
+
     # Check files based on output format
     files_degraded = 0
     if output_format == 'json':
@@ -1384,7 +1398,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
             file_results, len(files_to_check), files_with_issues, total_issues,
             scope=collection.to_scope_census(), source=directory,
             select=select, ignore=ignore, files_errored=files_errored,
-            scan_disclosures=_get_scan_disclosures(),
+            scan_disclosures=scan_disclosures_all(),
             exit_zero=getattr(args, 'exit_zero', False),
             items_truncated=items_truncated,
         )
@@ -1407,7 +1421,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
                 scope=collection.to_scope_census(), select=select, ignore=ignore,
                 files_errored=files_errored, exit_zero=getattr(args, 'exit_zero', False),
             )
-        for reason in _get_scan_disclosures():
+        for reason in scan_disclosures_all():
             # BACK-1051: grep output is meant to stay machine-parseable
             # (file:line:col:rule:message only) — disclose to stderr rather
             # than polluting stdout with a non-conforming line.
@@ -1435,7 +1449,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         _print_text_summary(
             len(files_to_check), files_with_issues, total_issues, directory, config,
             files_errored=files_errored, files_degraded=files_degraded,
-            scan_disclosures=_get_scan_disclosures(),
+            scan_disclosures=scan_disclosures_all(),
         )
         if also_json:
             _write_also_json_report(
