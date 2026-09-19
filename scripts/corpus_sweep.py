@@ -6,7 +6,7 @@ complexity silently dropped) plus Java/Dart/Swift nav-call gaps while ~2,300
 fixture tests stayed green. Run them before a release, or after touching
 complexity / call extraction.
 
-Two sweeps, both over a deterministic sample of ~/.cache/reveal-corpus
+Three sweeps, all over a deterministic sample of ~/.cache/reveal-corpus
 (materialize with scripts/fetch_corpus.py):
 
   agree       analyzer calls (get_structure) vs nav calls (range_calls) per
@@ -15,6 +15,18 @@ Two sweeps, both over a deterministic sample of ~/.cache/reveal-corpus
   complexity  per-function complexity for the current tree vs --base-ref
               (built via `git archive`, no stash, no checkout). Reports how
               many files/functions changed per language and examples.
+  raw         unnormalized before/after dump (full structure dicts, raw nav
+              callee/first_arg/line tuples) for --base-ref. Shows what changed,
+              where `agree` only shows that agreement held.
+
+Before/after runs (complexity, raw) are only trustworthy under the hygiene the
+workers enforce themselves: REVEAL_DISK_CACHE=0, no PYTHONPYCACHEPREFIX (stale
+bytecode from another tree), PYTHONHASHSEED=0, the base built via `git archive` (never a stash),
+and function lists sorted by (line, line_end, name); run_worker sets the env ones.
+On 2026-09-18 an unhygienic run gave a false 0-diff and false diffs.
+
+GDScript/Zig/Lua corpora come from ~/.cache/reveal-corpus-calls-oracle
+(REVEAL_ORACLE_CORPUS_DIR) when absent from the main corpus.
 
 Usage:
     python scripts/corpus_sweep.py agree                      # HEAD tree only
@@ -53,12 +65,30 @@ LANGS = {
     "rust": ((".rs",), "rust"), "csharp": ((".cs",), "csharp"), "kotlin": ((".kt",), "kotlin"),
     "swift": ((".swift",), "swift"), "scala": ((".scala",), "scala"),
     "cpp": ((".cpp", ".cc", ".h"), "cpp"), "c": ((".c",), "c"),
+    # walker-level shapes; their corpora live in the calls-oracle cache (see lang_dir)
+    "gdscript": ((".gd",), "gdscript"), "zig": ((".zig",), "zig"), "lua": ((".lua",), "lua"),
 }
 AGREE_SEED, COMPLEXITY_SEED = 7, 11
 
 
 def corpus_dir() -> Path:
     return Path(os.environ.get("REVEAL_CORPUS_DIR", "~/.cache/reveal-corpus")).expanduser()
+
+
+def oracle_dir() -> Path:
+    """Second corpus root: GDScript/Zig/Lua are fetched for the calls-oracle, not by fetch_corpus.py."""
+    return Path(os.environ.get("REVEAL_ORACLE_CORPUS_DIR", "~/.cache/reveal-corpus-calls-oracle")).expanduser()
+
+
+def lang_dir(lang: str) -> Path:
+    """Directory holding `lang`'s corpus: the main corpus first, else the calls-oracle cache."""
+    main = corpus_dir() / lang
+    return main if main.is_dir() else oracle_dir() / lang
+
+
+def rel_name(p: Path, lang: str) -> str:
+    """Stable `lang/...` name for a sampled file, whichever root it came from."""
+    return str(p.relative_to(lang_dir(lang).parent))
 
 
 def _minified(p: Path) -> bool:
@@ -72,7 +102,7 @@ def _minified(p: Path) -> bool:
 def sample_files(lang: str, n: int, seed: int) -> list[Path]:
     exts, _ = LANGS[lang]
     files = []
-    for dp, dn, fn in os.walk(corpus_dir() / lang):
+    for dp, dn, fn in os.walk(lang_dir(lang)):
         dn[:] = [d for d in dn if d not in SKIP_DIRS]
         for f in fn:
             p = Path(dp) / f
@@ -122,7 +152,6 @@ def worker_agree(langs: list[str], n: int, topn: int) -> dict:
     def bare(names):
         return {_bare_callee_name(x) for x in names if x}
 
-    root_dir = corpus_dir()
     report = {}
     for lang in langs:
         _, grammar = LANGS[lang]
@@ -163,7 +192,7 @@ def worker_agree(langs: list[str], n: int, topn: int) -> dict:
                 stats["errors"] += 1
                 ex["err"].append(f"{p.name}: {type(e).__name__}: {str(e)[:80]}")
                 continue
-            rel = str(p.relative_to(root_dir))
+            rel = rel_name(p, lang)
             stats["files"] += 1
             stats["analyzer"] += len(analyzer_names)
             stats["nav"] += len(nav_names)
@@ -189,7 +218,6 @@ def worker_agree(langs: list[str], n: int, topn: int) -> dict:
 def worker_complexity(langs: list[str], n: int) -> dict:
     from reveal.registry import get_analyzer
 
-    root_dir = corpus_dir()
     out: dict = {}
     for lang in langs:
         files = {}
@@ -198,7 +226,7 @@ def worker_complexity(langs: list[str], n: int) -> dict:
                 fns = get_analyzer(str(p))(str(p)).get_structure().get("functions", [])
             except Exception:  # noqa: BLE001
                 continue
-            files[str(p.relative_to(root_dir))] = {
+            files[rel_name(p, lang)] = {
                 f"{f['name']}@{f.get('line')}": f.get("complexity") for f in fns}
         out[lang] = files
     return out
@@ -208,11 +236,62 @@ def worker_complexity(langs: list[str], n: int) -> dict:
 # Driver side: picks the tree, launches workers in a subprocess per tree.
 # --------------------------------------------------------------------------
 
+def _norm(fn: dict) -> dict:
+    """JSON-round-tripped, key-sorted function dict so two runs compare byte-for-byte."""
+    return json.loads(json.dumps(fn, default=str, sort_keys=True))
+
+
+def worker_raw(langs: list[str], n: int) -> dict:
+    """Unnormalized dump per file: full structure dicts + raw nav call tuples per function.
+
+    Unlike `agree` (bare-name sets) this keeps callee strings, first_arg, line and
+    every other structure field, so a before/after diff shows *what* changed, not
+    just that agreement held. Function lists are sorted by (line, line_end, name):
+    analyzer order is not stable, and an unsorted diff reports false changes.
+    """
+    import tree_sitter_language_pack as ts
+    from reveal.core import node_children
+    from reveal.core.nav_calls import range_calls
+    from reveal.core.node_taxonomy import FUNCTION_TYPES
+    from reveal.core.treesitter_compat import _zero_arg, ts_parse, tree_root
+    from reveal.registry import get_analyzer
+
+    out: dict = {}
+    for lang in langs:
+        parser = ts.get_parser(LANGS[lang][1])
+        for p in sample_files(lang, n, AGREE_SEED):
+            try:
+                src = p.read_text(encoding="utf-8", errors="replace")
+                content = src.encode("utf-8")
+                an = get_analyzer(str(p))(str(p))
+                fns = sorted(an.get_structure().get("functions", []),
+                             key=lambda f: (f.get("line", 0), f.get("line_end", 0), str(f.get("name"))))
+                tree = tree_root(ts_parse(parser, src))
+
+                def text(node):
+                    return content[_zero_arg(node, "start_byte"):_zero_arg(node, "end_byte")].decode("utf-8", "replace")
+
+                hook = getattr(an, "_implicit_call_nodes", None)
+                implicit = [x for f in _function_scopes(tree, FUNCTION_TYPES, _zero_arg, node_children)
+                            for x in hook(f)] if hook else []
+                entries = []
+                for fn in fns:
+                    lo, hi = fn.get("line", 0), fn.get("line_end", fn.get("line", 0))
+                    kw = {"implicit_nodes": implicit} if hook else {}
+                    nav = sorted((c["line"], str(c["callee"]), str(c["first_arg"]), c.get("has_more_args"))
+                                 for c in range_calls(tree, lo, hi, text, **kw))
+                    entries.append({"fn": _norm(fn), "nav": nav})
+                out[rel_name(p, lang)] = entries
+            except Exception as e:  # noqa: BLE001 - a sweep must survive one bad file
+                out[rel_name(p, lang)] = {"error": type(e).__name__}
+    return out
+
+
 def run_worker(src: Path, sweep: str, langs: list[str], n: int, topn: int) -> dict:
     """Run one sweep against the reveal tree at `src` in a fresh interpreter."""
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
         out = tmp.name
-    env = dict(os.environ, REVEAL_DISK_CACHE="0", PYTHONPATH=str(src))
+    env = dict(os.environ, REVEAL_DISK_CACHE="0", PYTHONHASHSEED="0", PYTHONPATH=str(src))
     env.pop("PYTHONPYCACHEPREFIX", None)  # never serve another tree's stale bytecode
     cmd = [sys.executable, str(Path(__file__).resolve()), "_worker", sweep,
            "--out", out, "-n", str(n), "--topn", str(topn), "--src", str(src), *langs]
@@ -253,6 +332,39 @@ def diff_complexity(base: dict, head: dict) -> dict:
     return report
 
 
+def diff_raw(base: dict, head: dict) -> dict:
+    """Per-language count of files/functions whose raw dump differs (files only in one side are skipped)."""
+    rep: dict = {}
+    for name in sorted(base.keys() & head.keys()):
+        lang = name.split("/", 1)[0]
+        r = rep.setdefault(lang, {"files": 0, "files_changed": 0, "functions_changed": 0, "examples": []})
+        r["files"] += 1
+        b, h = base[name], head[name]
+        if b == h:
+            continue
+        r["files_changed"] += 1
+        if isinstance(b, list) and isinstance(h, list):
+            by_base = {(e["fn"].get("name"), e["fn"].get("line")): e for e in b}
+            for e in h:
+                key = (e["fn"].get("name"), e["fn"].get("line"))
+                if by_base.get(key) != e:
+                    r["functions_changed"] += 1
+                    if len(r["examples"]) < 5:
+                        r["examples"].append(f"{name} {key[0]}@{key[1]}")
+        else:
+            r["functions_changed"] += 1
+            if len(r["examples"]) < 5:
+                r["examples"].append(f"{name} (error state changed: {b!r} -> {h!r})"[:160])
+    return rep
+
+
+def print_raw(rep: dict) -> None:
+    for lang, r in rep.items():
+        print(f"{lang:11} {r['files_changed']:>4}/{r['files']:<4} files differ, {r['functions_changed']:>5} functions")
+        for ex in r["examples"]:
+            print(f"    {ex}")
+
+
 def print_agree(head: dict, base: dict | None) -> None:
     print(f"{'lang':<11}{'files':>6}{'err':>5}{'jaccard':>10}{'only-an':>9}{'only-nav':>9}" + ("   base" if base else ""))
     for lang, r in head.items():
@@ -273,7 +385,7 @@ def print_complexity(rep: dict) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("sweep", choices=["agree", "complexity", "_worker"])
+    ap.add_argument("sweep", choices=["agree", "complexity", "raw", "_worker"])
     ap.add_argument("langs", nargs="*", help="languages to sweep (default: all present in the corpus)")
     ap.add_argument("-n", type=int, default=60, help="files sampled per language (default 60)")
     ap.add_argument("--base-ref", help="git ref to compare against (required for complexity)")
@@ -291,7 +403,12 @@ def main(argv: list[str] | None = None) -> int:
         if not Path(reveal.__file__).resolve().is_relative_to(Path(args.src).resolve()):
             sys.exit(f"worker imported reveal from {reveal.__file__}, not {args.src}")
         sweep, langs = args.langs[0], args.langs[1:]
-        result = worker_agree(langs, args.n, args.topn) if sweep == "agree" else worker_complexity(langs, args.n)
+        if sweep == "agree":
+            result = worker_agree(langs, args.n, args.topn)
+        elif sweep == "raw":
+            result = worker_raw(langs, args.n)
+        else:
+            result = worker_complexity(langs, args.n)
         Path(args.out).write_text(json.dumps(result))
         return 0
 
@@ -299,12 +416,12 @@ def main(argv: list[str] | None = None) -> int:
     unknown = [lang for lang in langs if lang not in LANGS]
     if unknown:
         ap.error(f"unknown language(s): {', '.join(unknown)} (known: {', '.join(LANGS)})")
-    present = [lang for lang in (langs or LANGS) if (corpus_dir() / lang).is_dir()]
+    present = [lang for lang in (langs or LANGS) if lang_dir(lang).is_dir()]
     if not present:
         print(f"corpus not found at {corpus_dir()} -- run scripts/fetch_corpus.py; nothing to sweep")
         return 0
-    if args.sweep == "complexity" and not args.base_ref:
-        ap.error("complexity needs --base-ref (it diffs base vs current tree)")
+    if args.sweep in ("complexity", "raw") and not args.base_ref:
+        ap.error(f"{args.sweep} needs --base-ref (it diffs base vs current tree)")
 
     head = run_worker(REPO, args.sweep, present, args.n, args.topn)
     base = None
@@ -316,6 +433,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.sweep == "agree":
         print_agree(head, base)
         full = {"head": head, "base": base}
+    elif args.sweep == "raw":
+        rep = diff_raw(base, head)
+        print_raw(rep)
+        full = {"head": head, "base": base, "summary": rep}
     else:
         rep = diff_complexity(base, head)
         print_complexity(rep)

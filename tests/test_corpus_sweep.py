@@ -30,8 +30,31 @@ def test_sampling_is_deterministic(tmp_path, monkeypatch):
     assert len(first) == 5
 
 
+def test_oracle_langs_fall_back_to_oracle_corpus(tmp_path, monkeypatch):
+    monkeypatch.setenv("REVEAL_CORPUS_DIR", str(tmp_path / "main"))
+    monkeypatch.setenv("REVEAL_ORACLE_CORPUS_DIR", str(tmp_path / "oracle"))
+    (tmp_path / "main" / "go").mkdir(parents=True)
+    (tmp_path / "oracle" / "zig" / "proj").mkdir(parents=True)
+    for i in range(3):
+        (tmp_path / "oracle" / "zig" / "proj" / f"f{i}.zig").write_text("const x = 1;\n" * 60)
+    assert corpus_sweep.lang_dir("go") == tmp_path / "main" / "go"
+    files = corpus_sweep.sample_files("zig", 5, seed=7)
+    assert len(files) == 3
+    assert corpus_sweep.rel_name(files[0], "zig").startswith("zig/proj/")
+
+
+def test_diff_raw_reports_changed_functions_and_ignores_one_sided_files():
+    fn = {"name": "f", "line": 1, "calls": ["a"]}
+    base = {"lua/a.lua": [{"fn": fn, "nav": [(1, "a", "None", None)]}], "lua/gone.lua": []}
+    head = {"lua/a.lua": [{"fn": dict(fn, calls=["a", "b"]), "nav": [(1, "a", "None", None)]}], "lua/new.lua": []}
+    rep = corpus_sweep.diff_raw(base, head)["lua"]
+    assert (rep["files"], rep["files_changed"], rep["functions_changed"]) == (1, 1, 1)
+    assert rep["examples"] == ["lua/a.lua f@1"]
+
+
 def test_absent_corpus_exits_zero(tmp_path):
-    env = dict(os.environ, REVEAL_CORPUS_DIR=str(tmp_path / "missing"))
+    env = dict(os.environ, REVEAL_CORPUS_DIR=str(tmp_path / "missing"),
+               REVEAL_ORACLE_CORPUS_DIR=str(tmp_path / "missing"))
     r = subprocess.run([sys.executable, str(SCRIPT), "agree"], env=env, capture_output=True, text=True)
     assert r.returncode == 0 and "corpus not found" in r.stdout
 

@@ -155,7 +155,7 @@ fi
 # cleanly when ~/.cache/reveal-corpus is absent (scripts/fetch_corpus.py).
 check_step "Corpus Agreement (analyzer vs nav calls)" 11 11
 
-if python3 "$SCRIPT_DIR/corpus_sweep.py" agree -n 60 --min-jaccard 0.98; then
+if python3 "$SCRIPT_DIR/corpus_sweep.py" agree -n 60 --min-jaccard 0.98 --floor lua=0.96; then  # lua: tracked gap, anonymous-function calls (see BACK-1311 note)
     echo -e "${GREEN}✓ Call extraction paths agree on the real corpus${NC}"
 else
     echo -e "${RED}✗ Analyzer/nav call agreement dropped below floor${NC}"
