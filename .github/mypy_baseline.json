@@ -264,7 +264,7 @@
  "reveal/config.py::no-any-return": 1,
  "reveal/core/nav_calls.py::arg-type": 2,
  "reveal/core/nav_calls.py::assignment": 1,
- "reveal/core/nav_calls.py::no-any-return": 7,
+ "reveal/core/nav_calls.py::no-any-return": 5,
  "reveal/diff/architecture_diff.py::no-any-return": 1,
  "reveal/display/element.py::no-any-return": 2,
  "reveal/display/formatting.py::no-any-return": 2,

@@ -5,16 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, Sequence
 from . import node_children as _children
 from .treesitter_compat import _zero_arg
-from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_KINDS
-
-# _MEMBER_ACCESS_KINDS: promoted to node_taxonomy.MEMBER_ACCESS_NODES
-# (BACK-478 move 1 step 2). This used to be an independent copy missing
-# 'field_access' (Java), 'navigation_expression' (Kotlin/Swift), and Lua's
-# 'dot_index_expression'/'method_index_expression' — a live bug: the
-# fluent-chain callee collapse below (BACK-415, `a().b().c()` -> callee
-# ".c" not the whole chain text) silently never fired for those languages,
-# so `builder.setName(x).setValue(y).build()` rendered the outer call's
-# callee as the entire chain's source text instead of ".build".
+from .callees import callee_name_from_node, CHAIN_COLLAPSE
 
 
 def _generic_call_hits(
@@ -470,34 +461,6 @@ def _is_cpp_member_function_pointer_misparse(call_node: Any) -> bool:
         stack.extend(_children(n))
     return False
 
-# Callee expressions that have no name of their own: `(a = b)(x)`, an inline
-# function/IIFE, a ternary. Emitting their raw text produced junk callees like
-# `_malloc = wasmExports["O"]` (BACK-1305); any calls inside an IIFE body are
-# captured by the tree walk separately.
-_UNNAMEABLE_CALLEE_KINDS = frozenset({
-    'assignment_expression', 'augmented_assignment_expression', 'named_expression',
-    'function_expression', 'function', 'generator_function', 'arrow_function', 'lambda',
-    'class', 'conditional_expression', 'ternary_expression', 'await_expression',
-    'binary_expression',
-})
-
-
-def unwrap_parenthesized_callee(node: Any) -> Optional[Any]:
-    """Resolve a parenthesized callee to the node that names the call, or None.
-
-    Shared by the analyzer (treesitter._callee_name_from_node) and nav paths
-    (BACK-1305). `(f)(x)` -> f; `(0, obj.fn)(x)` (the transpiler idiom that
-    drops `this`) -> the LAST comma operand; `(a = b)(x)`, an inline function
-    or a ternary have no nameable callee -> None.
-    """
-    while _zero_arg(node, 'kind') in ('parenthesized_expression', 'sequence_expression'):
-        operands = [c for c in _children(node) if _zero_arg(c, 'kind') not in ('(', ')', ',')]
-        if not operands:
-            return None
-        node = operands[-1] if _zero_arg(node, 'kind') == 'sequence_expression' else operands[0]
-    return None if _zero_arg(node, 'kind') in _UNNAMEABLE_CALLEE_KINDS else node
-
-
 def _extract_callee(
     call_node: Any,
     get_text: Callable,
@@ -559,112 +522,13 @@ def _extract_callee(
             call_node.child_by_field_name('receiver') is not None):
         return _extract_ruby_call_callee(call_node, get_text, call_node_types)
 
-    callee_node = call_node.child(0)
-
-    # Rust turbofish (`size_of::<u32>()`, `x.remap_types::<T>()`,
-    # `E::error::<T>()`) parses as generic_function(path, '::',
-    # type_arguments) — the path is the real callee, type_arguments is not.
-    # `(f)(args)` parses callee as parenthesized_expression wrapping the
-    # real expression. Both left the raw wrapper text (the turbofish suffix,
-    # or the literal unmatchable "(f)") in the callee string before this
-    # unwrap (BACK-741, the ast:// nav side of BACK-733's calls:// fix,
-    # found via the nav_calls.py/treesitter.py dispatch-parity test,
-    # BACK-739). Mirrors treesitter.py:_callee_name_from_node's identical
-    # unwrap loop.
-    while _zero_arg(callee_node, 'kind') in ('generic_function', 'parenthesized_expression'):
-        if _zero_arg(callee_node, 'kind') == 'parenthesized_expression':
-            inner = unwrap_parenthesized_callee(callee_node)
-            if inner is None:
-                return None  # no nameable callee (BACK-1305)
-        else:
-            inner = callee_node.child(0)
-        if inner is None:
-            break
-        callee_node = inner
-
-    # Chained/IIFE call: `f(...)()` — the outer call's callee is itself a
-    # bare call node (not wrapped in member-access, unlike the fluent-chain
-    # case below). The inner call is already captured as its own edge by
-    # the tree walk, so returning its raw text here would emit a second,
-    # un-normalized entry for the same call site (BACK-732, the nav_calls.py
-    # side of treesitter.py:_callee_name_from_node's identical fix — found
-    # via Home Assistant's helpers/temperature.py display_temp(), which
-    # calls TemperatureConverter.converter_factory(...)(temperature)). The
-    # outer call has no nameable callee of its own.
-    if call_node_types and _zero_arg(callee_node, 'kind') in call_node_types:
-        return None
-
-    # Chained/fluent call: `rimrafUnlink(x).catch(...)`, `fetch(x).then(...).catch(...)`.
-    # The callee is a member-access whose *receiver* is itself a call, so its raw
-    # text folds the entire (possibly multi-line, 150+ char) chain into one bogus
-    # "callee" name — which then pollutes trace/calls:// and mis-fires the
-    # side-effect taxonomy (BACK-415). The receiver call is already captured as
-    # its own edge by the tree walk, so collapse the outer callee to just its
-    # trailing `.<property>` rather than the whole chain. Non-chained member
-    # calls (`obj.method`) are left receiver-qualified — the taxonomy needs that.
-    if (
-        call_node_types
-        and _zero_arg(callee_node, 'kind') in _MEMBER_ACCESS_KINDS
-        and _receiver_contains_call(callee_node, call_node_types)
-    ):
-        prop = _trailing_property_name(callee_node, get_text)
-        if prop:
-            return f".{prop}"
-        # Fall through to a sanitized single-line form if no clean property found.
-        first_line = get_text(callee_node).lstrip('*').strip().splitlines()[0].strip()
-        return first_line or None
-
-    text = get_text(callee_node).lstrip('*').strip()
-    if _zero_arg(callee_node, 'kind') == 'list_splat':
-        for child in _children(callee_node):
-            t = get_text(child).lstrip('*').strip()
-            if t:
-                return t
-    return text if text else None
-
-
-def _receiver_contains_call(member_node: Any, call_node_types: frozenset) -> bool:
-    """True if a member-access node's receiver subtree contains a nested call.
-
-    The trailing property child (e.g. `.catch`) is skipped — we only care whether
-    the *object* being accessed is itself a call result (chained/fluent call).
-    """
-    named = [c for c in _children(member_node) if _zero_arg(c, 'is_named')]
-    # The last named child is the property/field being accessed; the receiver is
-    # everything before it. Only scan the receiver for nested calls.
-    for child in named[:-1] if len(named) > 1 else named:
-        stack = [child]
-        while stack:
-            node = stack.pop()
-            if _zero_arg(node, 'kind') in call_node_types:
-                return True
-            stack.extend(_children(node))
-    return False
-
-
-def _trailing_property_name(member_node: Any, get_text: Callable) -> Optional[str]:
-    """Return the trailing property/field identifier text of a member-access node."""
-    named = [c for c in _children(member_node) if _zero_arg(c, 'is_named')]
-    if not named:
-        return None
-    trailing = named[-1]
-    # Kotlin/Swift's navigation_expression wraps the name in its own
-    # 'navigation_suffix' node (['.', simple_identifier]) rather than exposing
-    # the identifier as a direct child — using its text as-is doubles the
-    # leading dot the caller already prepends (BACK-478 move 1 step 2: found
-    # while migrating this file onto the shared MEMBER_ACCESS_NODES family,
-    # which made Kotlin/Swift chains reach this function for the first time).
-    if _zero_arg(trailing, 'kind') == 'navigation_suffix':
-        suffix_named = [c for c in _children(trailing) if _zero_arg(c, 'is_named')]
-        if not suffix_named:
-            return None
-        trailing = suffix_named[-1]
-    prop = get_text(trailing).strip()
-    # Guard against a multi-line / call-bearing trailing node (shouldn't happen
-    # for a plain property, but keep the output a clean single token).
-    if not prop or '\n' in prop or '(' in prop:
-        return None
-    return prop
+    # Everything else (identifier, member access, splat, turbofish, parenthesized,
+    # chained/IIFE) is the language-neutral tail shared with the analyzer path
+    # (BACK-1279). Nav collapses fluent chains to `.prop` (BACK-415).
+    return callee_name_from_node(
+        call_node.child(0), get_text,
+        call_node_types=call_node_types, chain_receiver=CHAIN_COLLAPSE,
+    )
 
 
 def _extract_member_call_callee(node: Any, get_text: Callable) -> Optional[str]:

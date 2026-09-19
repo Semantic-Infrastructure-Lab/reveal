@@ -55,6 +55,9 @@ pytestmark = pytest.mark.contract
 REVEAL_DIR = Path(__file__).resolve().parent.parent / "reveal"
 NAV_CALLS = REVEAL_DIR / "core" / "nav_calls.py"
 TREESITTER = REVEAL_DIR / "treesitter.py"
+# BACK-1279: kinds handled once in the shared, language-neutral tail count for
+# every file that delegates to it.
+SHARED_GENERIC = REVEAL_DIR / "core" / "callees" / "generic.py"
 
 # Node kinds that MUST be specially dispatched in both files' callee-name
 # extraction. Adding a fix for one of these to one file without the other
@@ -92,10 +95,17 @@ def _kind_is_handled(text: str, kind: str) -> bool:
     return bool(re.search(rf"""['"]{re.escape(kind)}['"]""", text))
 
 
+def _with_shared(text: str) -> str:
+    """A file that delegates to callee_name_from_node inherits its kinds."""
+    if "callee_name_from_node(" in text:
+        return text + SHARED_GENERIC.read_text()
+    return text
+
+
 @pytest.mark.parametrize("kind", sorted(REQUIRED_IN_BOTH))
 def test_callee_dispatch_kind_handled_in_both_files(kind):
-    nav_text = NAV_CALLS.read_text()
-    ts_text = TREESITTER.read_text()
+    nav_text = _with_shared(NAV_CALLS.read_text())
+    ts_text = _with_shared(TREESITTER.read_text())
 
     in_nav = _kind_is_handled(nav_text, kind)
     in_ts = _kind_is_handled(ts_text, kind)

@@ -85,8 +85,8 @@ def _bare(names):
     return {_bare_callee_name(n) for n in names if n}
 
 
-@pytest.mark.parametrize('suffix,language,src,must_have', CASES, ids=[c[0] for c in CASES])
-def test_analyzer_and_nav_paths_find_the_same_calls(tmp_path, suffix, language, src, must_have):
+def _both_paths(tmp_path, suffix, language, src):
+    """(analyzer callees, nav callees) for the first function in `src`, raw strings."""
     path = tmp_path / f't{suffix}'
     path.write_text(src)
     analyzer = get_analyzer(str(path))(str(path))
@@ -103,7 +103,12 @@ def test_analyzer_and_nav_paths_find_the_same_calls(tmp_path, suffix, language, 
         func_node, 1, 999, get_text,
         implicit_nodes=analyzer._implicit_call_nodes(func_node),
     )]
+    return analyzer_calls, nav_calls
 
+
+@pytest.mark.parametrize('suffix,language,src,must_have', CASES, ids=[c[0] for c in CASES])
+def test_analyzer_and_nav_paths_find_the_same_calls(tmp_path, suffix, language, src, must_have):
+    analyzer_calls, nav_calls = _both_paths(tmp_path, suffix, language, src)
     analyzer_bare, nav_bare = _bare(analyzer_calls), _bare(nav_calls)
     assert must_have <= analyzer_bare, f'analyzer lost {must_have - analyzer_bare}'
     assert analyzer_bare == nav_bare, (
@@ -125,3 +130,22 @@ def test_unnameable_parenthesized_callees_emit_no_junk(tmp_path):
     path.write_text("function f(w){ var m; (0, w.x)(1); (m = w.O)(4); (function(){ inner(); })(); }")
     calls = get_analyzer(str(path))(str(path)).get_structure()['functions'][0]['calls']
     assert calls == ['w.x', 'inner']
+
+
+def test_prefix_operators_and_implicit_members_name_the_operand_in_both_paths(tmp_path):
+    # BACK-1279: Swift `!isRunning(x)` / `.init(x)` and Scala `!a.b(x)` parse the callee as
+    # prefix_expression; nav used to keep the operator ('!f', '.init') while the analyzer
+    # already named the operand. Both now go through core/callees/generic.py.
+    an, nav = _both_paths(tmp_path, '.swift', 'swift', "func f() { if !isRunning(1) { g() }; let v = T.init(2) }")
+    assert 'isRunning' in an and 'isRunning' in nav
+    assert not [c for c in nav if c.startswith(('!', '.'))]
+    an, nav = _both_paths(tmp_path, '.scala', 'scala', "object O { def f() = { if (!a.b(1)) g() } }")
+    assert 'a.b' in an and 'a.b' in nav
+
+
+def test_chained_call_receiver_policy_is_the_only_intended_difference(tmp_path):
+    # BACK-415: the index keeps the whole receiver (`a.b().c`); nav collapses it to `.c`
+    # because the inner call is already its own edge. Everything else is shared.
+    an, nav = _both_paths(tmp_path, '.js', 'javascript', "function f(){ a.b().c(); x.y(); }")
+    assert 'a.b().c' in an and '.c' in nav
+    assert 'x.y' in an and 'x.y' in nav

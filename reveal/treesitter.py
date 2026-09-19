@@ -8,7 +8,7 @@ from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Set, Tuple
 from .base import FileAnalyzer
 from .reveal_types import StructureItem
-from .core.nav_calls import unwrap_parenthesized_callee
+from .core.callees import callee_name_from_node, CHAIN_FULL
 from .complexity import (
     calculate_complexity_and_depth,
     _NESTING_TYPES,
@@ -2131,84 +2131,13 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return self._callee_name_from_node(call_node.child(0))
 
     def _callee_name_from_node(self, callee_node) -> Optional[str]:
-        # Chained/IIFE calls (`f(...)()`) parse as call(call(...), args) --
-        # the outer call's callee is itself a call node. The inner call
-        # already gets its own top-level entry from the tree walk (it's a
-        # CALL_NODE_TYPES node in its own right), so falling through to the
-        # raw-text branch below would emit a SECOND, un-normalized entry for
-        # the same call site (BACK-732: confirmed on Home Assistant's
-        # helpers/temperature.py display_temp(), which calls
-        # TemperatureConverter.converter_factory(...)(temperature) --
-        # produced both the correct "TemperatureConverter.converter_factory"
-        # and the raw "TemperatureConverter.converter_factory(temperature_unit, ha_unit)").
-        # The outer call has no nameable callee of its own -- its target is
-        # a call result, not an identifier/attribute -- so return None.
-        if _zero_arg(callee_node, 'kind') in CALL_NODE_TYPES:
-            return None
-        if _zero_arg(callee_node, 'kind') == 'identifier':
-            return self._get_node_text(callee_node)
-        if _zero_arg(callee_node, 'kind') in CALLEE_ATTRIBUTE_TYPES:
-            return self._get_node_text(callee_node).lstrip('*')
-        # tree-sitter parses `*foo(args)` as call(list_splat(*foo), args).
-        if _zero_arg(callee_node, 'kind') == 'list_splat':
-            for child in _children(callee_node):
-                if _zero_arg(child, 'kind') == 'identifier':
-                    return self._get_node_text(child)
-                if _zero_arg(child, 'kind') in CALLEE_ATTRIBUTE_TYPES:
-                    return self._get_node_text(child).lstrip('*')
-        # Rust turbofish (`size_of::<u32>()`, `x.remap_types::<T>()`,
-        # `E::error::<T>()`) parses as generic_function(path, '::',
-        # type_arguments) -- the path is the real callee, type_arguments is
-        # not. Taking the whole node's raw text (old behavior) left the
-        # turbofish in the string, which defeated _bare_callee_name's
-        # last-separator split (BACK-733: the '::' *inside* the generic
-        # argument won, e.g. "size_of::<u32>" -> bare "<u32>" not "size_of").
-        # Recursing into just the path child sidesteps that entirely.
-        if _zero_arg(callee_node, 'kind') == 'generic_function':
-            path_node = callee_node.child(0)
-            if path_node is not None:
-                name = self._callee_name_from_node(path_node)
-                if name:
-                    return name
-        # `(f)(args)` parses callee as parenthesized_expression wrapping the
-        # real expression. Raw text would be the literal, unmatchable "(f)"
-        # (BACK-733) -- unwrap to the inner expression instead.
-        if _zero_arg(callee_node, 'kind') == 'parenthesized_expression':
-            inner = unwrap_parenthesized_callee(callee_node)  # shared with nav (BACK-1305)
-            if inner is None:
-                return None
-            name = self._callee_name_from_node(inner)
-            if name:
-                return name
-        # Swift `!isRunning(x)` (logical negation of a call's result --
-        # common for boolean-returning predicate functions/methods) parses
-        # the whole `!isRunning` as a single call-suffix-adjacent
-        # `prefix_expression(bang, simple_identifier)`, not a plain
-        # identifier -- taking the whole node's raw text (old behavior)
-        # left the leading "!" in the callee string, and
-        # `_bare_callee_name` has no separator to act on a bare identifier,
-        # so the index key was literally "!isRunning", never matching a
-        # bare `?target=isRunning` lookup. Confirmed via the calls-recall-
-        # oracle Swift measurement (BACK-730, tenth language): real corpus
-        # miss on `BackupAttachmentCoordinator.swift`'s
-        # `kickOffNextOperation`, which calls `!isRunning(...)` four times.
-        # This same node shape (`prefix_expression`) is ALSO how Swift
-        # parses an implicit-member call's leading dot (`.foo(...)` ->
-        # `prefix_expression('.', simple_identifier)`) -- recursing into
-        # the last child (the operand, always positioned after the
-        # operator token for any Swift prefix operator) handles both
-        # uniformly and doesn't change the already-correct `.foo` case
-        # (its raw-text fallback below produced the same bare name via
-        # `_bare_callee_name`'s separate leading-dot handling; this makes
-        # it explicit instead of accidental).
-        if _zero_arg(callee_node, 'kind') == 'prefix_expression':
-            kids = _children(callee_node)
-            if kids:
-                name = self._callee_name_from_node(kids[-1])
-                if name:
-                    return name
-        text = self._get_node_text(callee_node).strip().lstrip('*')
-        return text if text else None
+        # Shared with nav (core/callees/generic.py, BACK-1279): identifiers, member
+        # access, splat, turbofish, parenthesized, prefix and chained/IIFE callees.
+        # The index keeps the full receiver text for chained calls (`a.b().c`).
+        return callee_name_from_node(
+            callee_node, self._get_node_text,
+            call_node_types=CALL_NODE_TYPES, chain_receiver=CHAIN_FULL,
+        )
 
     def _get_callee_name(self, call_node) -> Optional[str]:
         """Extract the callee name from a call expression node.
