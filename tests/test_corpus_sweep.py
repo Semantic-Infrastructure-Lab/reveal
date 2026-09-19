@@ -41,3 +41,13 @@ def test_complexity_requires_base_ref(tmp_path):
     (tmp_path / "go").mkdir()
     r = subprocess.run([sys.executable, str(SCRIPT), "complexity"], env=env, capture_output=True, text=True)
     assert r.returncode != 0 and "--base-ref" in r.stderr
+
+
+def test_mypy_ratchet_parses_error_lines():
+    spec = importlib.util.spec_from_file_location(
+        "check_mypy_baseline", SCRIPT.with_name("check_mypy_baseline.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    m = mod._ERROR.match('reveal/x.py:12:5: error: Incompatible return value  [return-value]')
+    assert (m["file"], m["code"]) == ("reveal/x.py", "return-value")
+    assert mod._ERROR.match('reveal/x.py:12: note: see docs') is None

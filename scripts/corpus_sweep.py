@@ -21,6 +21,7 @@ Usage:
     python scripts/corpus_sweep.py agree --base-ref c577a14a  # before -> after
     python scripts/corpus_sweep.py complexity --base-ref HEAD~5 -n 100
     python scripts/corpus_sweep.py agree ruby java -o /tmp/agree.json
+    python scripts/corpus_sweep.py agree --min-jaccard 0.98 --floor javascript=0.90   # pre-release gate
 
 Sampling is seeded per sweep, so the same corpus + args always pick the same
 files. Exits 0 with a message when the corpus is absent (never fails a
@@ -263,6 +264,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("-n", type=int, default=60, help="files sampled per language (default 60)")
     ap.add_argument("--base-ref", help="git ref to compare against (required for complexity)")
     ap.add_argument("-o", "--out", help="write the full JSON report here")
+    ap.add_argument("--min-jaccard", type=float,
+                    help="agree: exit 1 if any language's analyzer/nav agreement is below this (pre-release gate)")
+    ap.add_argument("--floor", action="append", default=[], metavar="LANG=VALUE",
+                    help="agree: per-language override of --min-jaccard for known, tracked gaps (repeatable)")
     ap.add_argument("--topn", type=int, default=8, help="agree: top one-sided names kept per language")
     ap.add_argument("--src", help=argparse.SUPPRESS)
     args = ap.parse_intermixed_args(argv)
@@ -304,6 +309,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.out:
         Path(args.out).write_text(json.dumps(full, indent=1))
         print(f"wrote {args.out}")
+    if args.min_jaccard is not None and args.sweep == "agree":
+        floors = {k: float(v) for k, _, v in (f.partition("=") for f in args.floor)}
+        low = {lang: r["jaccard"] for lang, r in head.items()
+               if r["jaccard"] is not None and r["jaccard"] < floors.get(lang, args.min_jaccard)}
+        if low:
+            print(f"\n❌ agreement below floor: " + ", ".join(f"{k}={v}" for k, v in low.items()))
+            return 1
     return 0
 
 

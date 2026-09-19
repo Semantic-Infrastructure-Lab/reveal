@@ -37,7 +37,7 @@ check_step() {
 }
 
 # 1. V-Series Validation
-check_step "V-Series Validation (Reveal's Metadata)" 1 9
+check_step "V-Series Validation (Reveal's Metadata)" 1 11
 
 if reveal reveal:// --check --select V; then
     echo -e "${GREEN}✓ V-series validation passed${NC}"
@@ -47,7 +47,7 @@ else
 fi
 
 # 2. Self-Validation Quality
-check_step "Self-Validation Code Quality (V007, V009, V011)" 2 9
+check_step "Self-Validation Code Quality (V007, V009, V011)" 2 11
 
 for file in V007 V009 V011; do
     echo "Checking reveal/rules/validation/${file}.py..."
@@ -60,7 +60,7 @@ for file in V007 V009 V011; do
 done
 
 # 3. Test Suite
-check_step "Test Suite (All Tests)" 3 9
+check_step "Test Suite (All Tests)" 3 11
 
 if pytest tests/ -v; then
     echo -e "${GREEN}✓ All tests passed${NC}"
@@ -70,7 +70,7 @@ else
 fi
 
 # 4. Test Coverage
-check_step "Test Coverage (≥70%)" 4 9
+check_step "Test Coverage (≥70%)" 4 11
 
 if pytest tests/ --cov=reveal --cov-report=term-missing --cov-fail-under=70; then
     echo -e "${GREEN}✓ Coverage requirement met${NC}"
@@ -80,7 +80,7 @@ else
 fi
 
 # 5. Documentation Validation
-check_step "Documentation Links (No Broken Links)" 5 9
+check_step "Documentation Links (No Broken Links)" 5 11
 
 for doc in README.md CHANGELOG.md ROADMAP.md; do
     if [ -f "$doc" ]; then
@@ -99,7 +99,7 @@ done
 # current count is pre-existing debt (VALIDATION.md links into internal-docs/,
 # intentionally moved out of the public repo) that a single pass won't clear,
 # and a permanently-red check gets ignored instead of catching new leaks.
-check_step "Doc Hygiene (Links + Leak Detection)" 6 9
+check_step "Doc Hygiene (Links + Leak Detection)" 6 11
 
 if python3 "$SCRIPT_DIR/check_doc_hygiene.py" --baseline "$SCRIPT_DIR/../.github/doc_hygiene_baseline.txt"; then
     echo -e "${GREEN}✓ Doc hygiene passed (no new issues vs. baseline)${NC}"
@@ -109,7 +109,7 @@ else
 fi
 
 # 7. Version Consistency
-check_step "Version Consistency (All Files Synchronized)" 7 9
+check_step "Version Consistency (All Files Synchronized)" 7 11
 
 if reveal reveal:// --check --select V007; then
     echo -e "${GREEN}✓ Version consistent across all files${NC}"
@@ -119,7 +119,7 @@ else
 fi
 
 # 8. Release Readiness
-check_step "Release Readiness (CHANGELOG + ROADMAP)" 8 9
+check_step "Release Readiness (CHANGELOG + ROADMAP)" 8 11
 
 if reveal reveal:// --check --select V011; then
     echo -e "${GREEN}✓ Release documentation ready${NC}"
@@ -129,12 +129,38 @@ else
 fi
 
 # 9. Build Test
-check_step "Build Test (Package Creation)" 9 9
+check_step "Build Test (Package Creation)" 9 11
 
 if python -m build --sdist --wheel; then
     echo -e "${GREEN}✓ Package builds successfully${NC}"
 else
     echo -e "${RED}✗ Build FAILED${NC}"
+    FAILURES=$((FAILURES + 1))
+fi
+
+# 10. Type-error ratchet (mypy)
+# Regression-only against .github/mypy_baseline.json (per file + error code);
+# `python scripts/check_mypy_baseline.py --update` after fixing errors.
+check_step "Type Errors (mypy ratchet vs baseline)" 10 11
+
+if python3 "$SCRIPT_DIR/check_mypy_baseline.py"; then
+    echo -e "${GREEN}✓ No new mypy errors vs. baseline${NC}"
+else
+    echo -e "${RED}✗ mypy errors increased vs. baseline${NC}"
+    FAILURES=$((FAILURES + 1))
+fi
+
+# 11. Real-corpus call agreement (analyzer vs ast:// nav)
+# Catches cross-path drift that fixture tests miss (BACK-1289, BACK-1299). Skips
+# cleanly when ~/.cache/reveal-corpus is absent (scripts/fetch_corpus.py).
+# javascript/typescript floors are known, tracked gaps -- raise them as fixed.
+check_step "Corpus Agreement (analyzer vs nav calls)" 11 11
+
+if python3 "$SCRIPT_DIR/corpus_sweep.py" agree -n 60 --min-jaccard 0.98 \
+        --floor javascript=0.90 --floor typescript=0.94; then
+    echo -e "${GREEN}✓ Call extraction paths agree on the real corpus${NC}"
+else
+    echo -e "${RED}✗ Analyzer/nav call agreement dropped below floor${NC}"
     FAILURES=$((FAILURES + 1))
 fi
 

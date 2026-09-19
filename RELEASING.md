@@ -84,6 +84,16 @@ This validates:
 
 Fix any errors before proceeding.
 
+`./scripts/pre-release-check.sh` runs the full gate set, including two
+regression-only ratchets that need the maintainer environment:
+- **mypy** (`scripts/check_mypy_baseline.py`) fails if any (file, error-code) count rose
+  vs `.github/mypy_baseline.json`; after fixing errors, run it with `--update` to lock
+  the improvement in.
+- **Corpus agreement** (`scripts/corpus_sweep.py agree --min-jaccard 0.98`) fails if the
+  analyzer and `ast://` call-extraction paths drift apart on the real corpus (skips when
+  `~/.cache/reveal-corpus` is absent). Use `corpus_sweep.py complexity --base-ref <last-tag>`
+  to review complexity changes since the last release.
+
 ### Step 1: Update All 4 Required Files
 
 Before running the release script, **4 files must be updated** — CI checks validate all of them and will fail if any are missed:
