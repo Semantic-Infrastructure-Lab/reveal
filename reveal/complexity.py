@@ -119,6 +119,9 @@ _NESTING_TYPES = frozenset({
 _KEYWORD_PAIRS = frozenset({
     ('if_statement', 'if'),
     ('if_expression', 'if'),
+    # Python `a if c else b`: the wrapper contains a bare `if` token, a decision
+    # kind -- without the pair every ternary counted twice.
+    ('conditional_expression', 'if'),
     ('elif_clause', 'elif'),
     ('for_statement', 'for'),
     ('for_expression', 'for'),
