@@ -23,6 +23,11 @@ class CallSite:
     member: str        # the called name, e.g. `size` in `x.size()`
     receiver: str      # full source text before `.member` (analyzer form), '' if none
     dotted: str        # dotted-identifier receiver with `.member` (nav form)
+    args: Any = None   # the argument-list node when it is not `node` itself
+
+    @property
+    def arg_node(self) -> Any:
+        return self.args if self.args is not None else self.node
 
     @property
     def qualified(self) -> str:

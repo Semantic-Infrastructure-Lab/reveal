@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, Sequence
 from . import node_children as _children
 from .treesitter_compat import _zero_arg
+from .callees.zig import suffix_sites as zig_suffix_sites
 from .callees.gdscript import attribute_sites as gdscript_attribute_sites
 from .callees import callee_name_from_node, extract_by_kind, is_misparsed_call, CHAIN_COLLAPSE
 
@@ -335,73 +336,13 @@ def _extract_dart_cascade_calls(node: Any, get_text: Callable) -> List[Dict[str,
 
 
 def _extract_zig_suffix_calls(children: List[Any], get_text: Callable) -> List[Dict[str, Any]]:
-    """Reconstruct call sites from Zig's single-node `SuffixExpr` children.
-
-    `foo(x)` is `SuffixExpr` → [IDENTIFIER, FnCallArguments] (bare call);
-    `a.b.c(x)` is `SuffixExpr` → [IDENTIFIER, FieldOrFnCall(.b),
-    FieldOrFnCall(.c, FnCallArguments)] — a run of dot segments, each
-    optionally carrying its own call arguments, all under one node (unlike
-    Dart's flat siblings, but equally invisible to a plain node-kind check
-    since there's still no wrapper naming "the call" itself).
-
-    `@as(i32, 10)` / `@import("std")` / `@panic(...)` are `SuffixExpr` →
-    [BUILTINIDENTIFIER, FnCallArguments] — a distinct leaf kind from a
-    regular `IDENTIFIER` for Zig's `@`-prefixed compiler builtins. Without
-    seeding `base_parts` for this kind too, `base_parts` stays empty and the
-    `FnCallArguments` branch below computes `callee = None` (falsy,
-    silently dropped downstream) — every builtin call was invisible to
-    `calls://`, despite `@import` alone appearing in nearly every real Zig
-    file (found via pre-flight AST dump before the JS/TSX successor
-    measurement, BACK-730).
-    """
+    """Nav projection of Zig `SuffixExpr` call sites (see core/callees/zig.py)."""
     results: List[Dict[str, Any]] = []
-    if not children:
-        return results
-    base_parts: List[str] = []
-    rest = children[1:]
-    if _zero_arg(children[0], 'kind') in ('IDENTIFIER', 'BUILTINIDENTIFIER'):
-        base_parts = [get_text(children[0])]
-    elif _zero_arg(children[0], 'kind') == '.' and len(children) > 1 and _zero_arg(children[1], 'kind') == 'IDENTIFIER':
-        # `.fixed(&buf)` — Zig's type-inferred enum-literal call syntax
-        # (`var w: std.Io.Writer = .fixed(&buf)` / `= .init(...)`, a common
-        # modern-Zig idiom relying on result-location type inference): a
-        # bare `.` token directly followed by the name, never wrapped in
-        # `FieldOrFnCall` the way a real receiver-qualified chain segment
-        # is. Without unwrapping this pair first, `children[0]` is the `.`
-        # token (matches no case below), `base_parts` stays empty, and the
-        # `IDENTIFIER` is silently skipped by the loop (only
-        # `FnCallArguments`/`FieldOrFnCall` are handled per iteration) —
-        # found via the Zig calls-recall-oracle measurement (BACK-730/BACK-754), a
-        # 208/209-miss target (`fixed`) traced to this exact pattern in
-        # real Ghostty source.
-        base_parts = [get_text(children[1])]
-        rest = children[2:]
-    for child in rest:
-        kind = _zero_arg(child, 'kind')
-        if kind == 'FnCallArguments':
-            callee = ''.join(base_parts) if base_parts else None
-            line = _zero_arg(child, 'start_position').row + 1
-            first_arg, has_more = _extract_first_arg(child, get_text)
-            results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
-            base_parts = []
-        elif kind == 'FieldOrFnCall':
-            seg_children = _children(child)
-            names = [c for c in seg_children if _zero_arg(c, 'kind') == 'IDENTIFIER']
-            args = next(
-                (c for c in seg_children if _zero_arg(c, 'kind') == 'FnCallArguments'), None
-            )
-            member = get_text(names[0]).strip() if names else ''
-            if args is not None:
-                callee = (
-                    ''.join(base_parts) + f'.{member}' if base_parts and member
-                    else (f'.{member}' if member else None)
-                )
-                line = _zero_arg(child, 'start_position').row + 1
-                first_arg, has_more = _extract_first_arg(args, get_text)
-                results.append({'line': line, 'callee': callee, 'first_arg': first_arg, 'has_more_args': has_more})
-                base_parts = []
-            elif member:
-                base_parts = base_parts + [f'.{member}'] if base_parts else [f'.{member}']
+    for site in zig_suffix_sites(children, get_text):
+        first_arg, has_more = _extract_first_arg(site.arg_node, get_text)
+        results.append({'line': _zero_arg(site.node, 'start_position').row + 1,
+                        'callee': site.dotted or None,
+                        'first_arg': first_arg, 'has_more_args': has_more})
     return results
 
 
