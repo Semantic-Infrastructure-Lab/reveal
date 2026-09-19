@@ -79,9 +79,14 @@ class LuaAnalyzer(TreeSitterAnalyzer):
         )
         return (name_node, value_node) if value_node else (None, None)
 
-    def _extract_language_specific_functions(self) -> List[StructureItem]:
-        """Extract `name = function(...) ... end` at assignment or table-field sites."""
-        funcs = []
+    def _lua_named_function_values(self) -> List[Tuple[str, Any]]:
+        """(name, function_definition node) for every function literal bound to a name.
+
+        Assignment sites (`local N = function`, `N = function`, `M.k = function`)
+        and table-constructor fields with a literal key. Anything else (an
+        anonymous function passed as an argument) gets no entry of its own.
+        """
+        found: List[Tuple[str, Any]] = []
 
         # `local NAME = function...` / `NAME = function...` / `M.k = function...`
         for stmt in self._find_nodes_by_type('assignment_statement'):
@@ -99,17 +104,30 @@ class LuaAnalyzer(TreeSitterAnalyzer):
             for target_node, value_node in zip(target_nodes, value_nodes):
                 name = self._lua_function_expr_name(target_node)
                 if name:
-                    funcs.append(self._build_function_dict(value_node, name, []))
+                    found.append((name, value_node))
 
         # Table-constructor field: `{ key = function(...) ... end }`
         for field in self._find_nodes_by_type('field'):
             name_node, value_node = self._lua_table_field_name_value(field)
             if name_node and value_node:
-                funcs.append(self._build_function_dict(
-                    value_node, self._get_node_text(name_node), []
-                ))
+                found.append((self._get_node_text(name_node), value_node))
+        return found
 
-        return funcs
+    def _extract_language_specific_functions(self) -> List[StructureItem]:
+        """Extract `name = function(...) ... end` at assignment or table-field sites."""
+        return [self._build_function_dict(value_node, name, [])
+                for name, value_node in self._lua_named_function_values()]
+
+    def _function_scope_has_own_entry(self, node) -> bool:
+        """An anonymous `function_definition` (e.g. a callback argument) has no entry
+        of its own, so its calls must stay with the enclosing function (BACK-1313)."""
+        if _zero_arg(node, 'kind') != 'function_definition':
+            return True
+        starts = getattr(self, '_lua_named_starts', None)
+        if starts is None:
+            starts = self._lua_named_starts = {
+                _zero_arg(v, 'start_byte') for _, v in self._lua_named_function_values()}
+        return _zero_arg(node, 'start_byte') in starts
 
     def _find_named_language_specific_function(self, name: str):
         """Resolve `name` against Lua's `name = function...`/table-field

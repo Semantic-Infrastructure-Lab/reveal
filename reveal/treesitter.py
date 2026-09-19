@@ -1862,6 +1862,16 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 names.append(name)
         return names
 
+    def _function_scope_has_own_entry(self, node) -> bool:
+        """Whether a nested FUNCTION_NODE_TYPES node gets its own structure entry.
+
+        True for every language except where a node kind is shared with
+        anonymous forms that never get an entry (Lua: BACK-1313). Returning
+        False makes the enclosing function's walk expand into the node so its
+        calls are not lost.
+        """
+        return True
+
     def _complexity_depth_and_calls(self, func_node) -> Tuple[int, int, List[str]]:
         """Compute complexity, nesting depth, and callee names in one subtree walk.
 
@@ -1923,7 +1933,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             if is_decision(kind, parent_kind, node):
                 decision_count += 1
 
-            if kind in FUNCTION_NODE_TYPES:
+            if kind in FUNCTION_NODE_TYPES and self._function_scope_has_own_entry(node):
                 continue
 
             children = _children(node)

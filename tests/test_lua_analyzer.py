@@ -313,3 +313,33 @@ return mymodule
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def _lua_calls(code: str) -> dict:
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.lua', delete=False) as f:
+        f.write(code)
+        path = f.name
+    try:
+        funcs = LuaAnalyzer(path).get_structure().get('functions', [])
+        return {fn['name']: fn.get('calls') or [] for fn in funcs}
+    finally:
+        os.unlink(path)
+
+
+def test_anonymous_callback_calls_stay_with_enclosing_function():
+    """BACK-1313: a callback passed as an argument has no entry of its own."""
+    calls = _lua_calls('local function outer()\n  spawn(function()\n    inner_call(1)\n  end)\nend\n')
+    assert calls['outer'] == ['spawn', 'inner_call']
+
+
+def test_named_function_values_keep_their_calls_and_are_not_double_counted():
+    calls = _lua_calls(
+        'local M = {}\n'
+        'M.setter = function(x) named_inner(x) end\n'
+        'local function wrap()\n'
+        '  M.setter = function() assigned_call() end\n'
+        '  run(function() cb_call() end)\n'
+        'end\n'
+    )
+    assert calls['wrap'] == ['run', 'cb_call']
+    assert calls['setter'] in (['named_inner'], ['assigned_call'])
