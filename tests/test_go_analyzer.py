@@ -143,9 +143,26 @@ type Closer interface {
             analyzer = GoAnalyzer(temp_path)
             structure = analyzer.get_structure()
 
-            # Should be able to parse interfaces
-            self.assertIsNotNone(structure)
+            # BACK-1088: interfaces are a distinct declaration kind, with
+            # embedded interfaces as bases
+            by_name = {i['name']: i for i in structure['interfaces']}
+            self.assertEqual(set(by_name), {'Reader', 'Writer', 'ReadWriter', 'Closer'})
+            self.assertEqual(by_name['Reader']['line'], 3)
+            self.assertEqual(by_name['ReadWriter']['bases'], ['Reader', 'Writer'])
+            self.assertEqual(by_name['Closer']['bases'], [])
 
+        finally:
+            os.unlink(temp_path)
+
+    def test_struct_embedding_populates_bases(self):
+        """BACK-1088: embedded (unnamed) fields are the struct's bases."""
+        code = 'package p\n\ntype S struct {\n    R\n    *T\n    io.Writer\n    n int\n}\n'
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.go', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+        try:
+            structs = GoAnalyzer(temp_path).get_structure()['structs']
+            self.assertEqual(structs[0]['bases'], ['R', 'T', 'io.Writer'])
         finally:
             os.unlink(temp_path)
 

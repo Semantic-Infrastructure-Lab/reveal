@@ -332,10 +332,9 @@ rust:
   statewrites:
   - {kind: field, line: 54}
   - {kind: cache, line: 55}
-  # bases (D2) is xfail'd -- `impl Trait for T` doesn't populate bases, so
-  # Reporter's Summary impl is invisible.
+  # bases (D2): `impl Summary for Reporter` populates Reporter's bases (BACK-1088).
   decorators: {target: Reporter, category: structs, expected: ["#[derive(Debug)]"]}
-  bases: {target: Reporter, category: structs, expected: ["Summary"], xfail: "BACK-1088 (D2): Rust trait impls (`impl Trait for T`) don't populate bases"}
+  bases: {target: Reporter, category: structs, expected: ["Summary"]}
 
 typescript:
   entry_function: processOrder
@@ -414,10 +413,9 @@ go:
   - {kind: field, line: 47}
   - {kind: cache, line: 48}
   # BACK-1106: Go has no decorator/annotation construct (not_supported).
-  # bases is xfail'd (D3) -- struct embedding (Reporter embeds Batch)
-  # doesn't populate bases.
+  # bases (D3): struct embedding (Reporter embeds Batch) populates bases (BACK-1088).
   decorators: {target: Reporter, category: structs, not_supported: true}
-  bases: {target: Reporter, category: structs, expected: ["Batch"], xfail: "BACK-1088 (D3): Go struct embedding doesn't populate bases"}
+  bases: {target: Reporter, category: structs, expected: ["Batch"]}
 
 kotlin:
   entry_function: processOrder

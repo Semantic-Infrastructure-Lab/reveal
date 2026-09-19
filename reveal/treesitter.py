@@ -1161,6 +1161,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
                         # every other struct-bearing language (C/C++/Go),
                         # same as _extract_decorators's own default.
                         'decorators': self._extract_decorators(node),
+                        # BACK-1088: same polymorphic hook as classes -- Go
+                        # struct embedding, Rust `impl Trait for T`.
+                        'bases': self._extract_class_bases(node),
                     })
 
         return structs
