@@ -335,11 +335,22 @@ class TestDomainAdapterCheck(unittest.TestCase):
         failures = result['summary'].get('failures', 0)
         self.assertTrue(failures > 0, f"Expected failures > 0, got {failures}")
 
+    # The HTTP, redirect and email-DNS checks make live network calls; adapter.check() runs the
+    # whole set twice here (unfiltered, then filtered), so unmocked they could differ between the
+    # two calls and flake the summary comparison (seen on CI, py3.14/ubuntu).
+    @patch('reveal.adapters.domain.adapter.check_email_dns', return_value=[])
+    @patch('reveal.adapters.domain.adapter._check_http_to_https_redirect')
+    @patch('reveal.adapters.domain.adapter._check_http_response')
     @patch('reveal.adapters.domain.adapter.check_dns_resolution')
     @patch('reveal.adapters.domain.adapter.check_nameserver_response')
     @patch('reveal.adapters.domain.adapter.check_dns_propagation')
     @patch('reveal.adapters.ssl.certificate.check_ssl_health')
-    def test_check_severity_filters_checks_but_not_exit_code(self, mock_ssl, mock_propagation, mock_nameserver, mock_resolution):
+    def test_check_severity_filters_checks_but_not_exit_code(
+            self, mock_ssl, mock_propagation, mock_nameserver, mock_resolution,
+            mock_http, mock_redirect, mock_email):
+        for m, name in ((mock_http, 'http_response'), (mock_redirect, 'http_to_https_redirect')):
+            m.return_value = {'name': name, 'status': 'pass', 'value': 'ok', 'threshold': 'ok',
+                              'message': 'ok', 'severity': 'medium'}
         """--severity trims the returned `checks` list (BACK-1205) but exit_code/summary
         stay computed from the full unfiltered set, same as --only-failures already does."""
         mock_resolution.return_value = {
