@@ -1,5 +1,6 @@
 """Per-construct cyclomatic-complexity probes across languages (manual-testing sweep, 2026-09-19).
 
+Catch-all arms (`default`, `else`, `_`) never count, in any language.
 Each snippet has a hand-derived McCabe value: 1 + decision points, where `&&`/`||`/`??`/`?:`,
 catch/except and case arms count, and `default`/plain `else` do not (the radon/lizard/Sonar
 definition BACK-1081 adopted). Rows that disagree today are strict-xfail against the task that
@@ -21,7 +22,7 @@ CASES = [
     ('py', 'and/or', 'def f(a, b, c):\n    return a and b or c\n', 3, None),
     ('py', 'try/except x2', 'def f(a):\n    try:\n        a()\n    except ValueError:\n        pass\n    except KeyError:\n        pass\n', 3, None),
     ('py', 'listcomp+if', 'def f(a):\n    return [x for x in a if x]\n', 3, None),
-    ('py', 'match', 'def f(a):\n    match a:\n        case 1:\n            return 1\n        case 2:\n            return 2\n        case _:\n            return 3\n', 4, None),
+    ('py', 'match', 'def f(a):\n    match a:\n        case 1:\n            return 1\n        case 2:\n            return 2\n        case _:\n            return 3\n', 3, None),
     ('py', 'with', 'def f(a):\n    with a:\n        pass\n', 1, None),
     ('js', 'if', 'function f(a){ if(a){return 1} return 2 }\n', 2, None),
     ('js', 'if/else if', 'function f(a){ if(a==1){return 1} else if(a==2){return 2} else {return 3} }\n', 3, None),
@@ -62,7 +63,7 @@ CASES = [
     ('rs', 'if/else if', 'fn f(a: i32) -> i32 { if a == 1 { 1 } else if a == 2 { 2 } else { 3 } }\n', 3, None),
     ('rs', 'for/while/loop', 'fn f(a: i32) { for _ in 0..a {} while a > 0 {} }\n', 3, None),
     ('rs', '&& ||', 'fn f(a: bool, b: bool, c: bool) -> bool { a && b || c }\n', 3, None),
-    ('rs', 'match 3 arms', 'fn f(a: i32) -> i32 { match a { 1 => 1, 2 => 2, _ => 3 } }\n', 4, None),
+    ('rs', 'match 3 arms', 'fn f(a: i32) -> i32 { match a { 1 => 1, 2 => 2, _ => 3 } }\n', 3, None),
     ('rs', 'if let', 'fn f(a: Option<i32>) -> i32 { if let Some(x) = a { x } else { 0 } }\n', 2, None),
     ('kt', 'if/else if', 'fun f(a: Int): Int { return if (a == 1) 1 else if (a == 2) 2 else 3 }\n', 3, None),
     ('kt', 'for/while', 'fun f(a: Int) { for (i in 0..a) {} while (a > 0) {} }\n', 3, None),
@@ -102,14 +103,12 @@ CASES = [
     ('gd', 'for/while', 'func f(a):\n\tfor x in a:\n\t\tpass\n\twhile a > 0:\n\t\ta -= 1\n', 3, None),
     ('gd', 'and/or', 'func f(a, b, c):\n\treturn a and b or c\n', 3, None),
     ('gd', 'ternary', 'func f(a):\n\treturn 1 if a else 2\n', 2, None),
-    ('gd', 'match 2+default', 'func f(a):\n\tmatch a:\n\t\t1:\n\t\t\treturn 1\n\t\t2:\n\t\t\treturn 2\n\t\t_:\n\t\t\treturn 3\n', 4, None),
+    ('gd', 'match 2+default', 'func f(a):\n\tmatch a:\n\t\t1:\n\t\t\treturn 1\n\t\t2:\n\t\t\treturn 2\n\t\t_:\n\t\t\treturn 3\n', 3, None),
     ('scala', 'if/else if', 'object O { def f(a: Int): Int = if (a == 1) 1 else if (a == 2) 2 else 3 }\n', 3, None),
     ('scala', 'for/while', 'object O { def f(a: Int): Unit = { for (i <- 0 until a) {}; while (a > 0) {} } }\n', 3, None),
-    # Scala infix operators are a bare `operator_identifier` shared with `+`; telling `&&`
-    # apart needs source text the walkers do not have (BACK-1324).
-    ('scala', '&& ||', 'object O { def f(a: Boolean, b: Boolean, c: Boolean): Boolean = a && b || c }\n', 3, 'BACK-1324'),
-    ('scala', 'match 2+default', 'object O { def f(a: Int): Int = a match { case 1 => 1; case 2 => 2; case _ => 3 } }\n', 3, 'BACK-1318'),
-    ('scala', 'try/catch', 'object O { def f(): Unit = try { g() } catch { case e: Exception => () }; def g(): Unit = {} }\n', 2, 'BACK-1318'),
+    ('scala', '&& ||', 'object O { def f(a: Boolean, b: Boolean, c: Boolean): Boolean = a && b || c }\n', 3, None),
+    ('scala', 'match 2+default', 'object O { def f(a: Int): Int = a match { case 1 => 1; case 2 => 2; case _ => 3 } }\n', 3, None),
+    ('scala', 'try/catch', 'object O { def f(): Unit = try { g() } catch { case e: Exception => () }; def g(): Unit = {} }\n', 2, None),
     ('ts', 'if', 'function f(a: number): number { if (a) { return 1 } return 2 }\n', 2, None),
     ('ts', 'ternary', 'function f(a: boolean): number { return a ? 1 : 2 }\n', 2, None),
     ('ts', '&& ||', 'function f(a: boolean, b: boolean, c: boolean) { return a && b || c }\n', 3, None),
@@ -131,6 +130,10 @@ CASES = [
     # A nested fn (generic type constructor) has its own entry; its decisions must not also
     # inflate the enclosing function. funcs[0] is the outer `Wrap`.
     ('zig', 'nested fn not folded into outer', 'fn Wrap(comptime T: type) type {\n    return struct {\n        fn inner(a: bool) u8 { if (a) { return 1; } return 2; }\n    };\n}\n', 1, None),
+    ('py', 'case x capture is still an arm', 'def f(a):\n    match a:\n        case 1:\n            return 1\n        case x:\n            return 2\n', 3, None),
+    ('rs', 'binding arm is still an arm', 'fn f(a: i32) -> i32 { match a { 1 => 1, x => x } }\n', 3, None),
+    ('scala', '&& chain', 'object O { def f(a: Boolean, b: Boolean, c: Boolean): Boolean = a && b && c }\n', 3, None),
+    ('scala', 'other infix ops are not decisions', 'object O { def f(a: Int, b: Int): Int = a + b * 2 }\n', 1, None),
 ]
 
 def _param(row):

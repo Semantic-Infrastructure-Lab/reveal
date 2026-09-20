@@ -118,21 +118,36 @@ _LOGICAL_OPERATOR_PARENTS = frozenset({
 # as the catch-all -- a deliberate +/-1 approximation on Dart switch
 # expressions that match a named constant (BACK-1301).
 _DEFAULT_CAPABLE_ARMS = frozenset({
-    'SwitchProng', 'case_statement', 'when_entry', 'switch_entry', 'switch_expression_arm', 'switch_expression_case'})
-_DEFAULT_ARM_MARKERS = frozenset({'else', 'default_keyword', 'discard', 'default'})
+    'SwitchProng', 'case_statement', 'case_clause', 'match_arm', 'pattern_section', 'when_entry', 'switch_entry', 'switch_expression_arm', 'switch_expression_case'})
+_DEFAULT_ARM_MARKERS = frozenset({'else', 'default_keyword', 'discard', 'default', '_', 'wildcard'})
+
+
+# Wrapper nodes whose first child is the arm's real pattern: Zig `SwitchCase`, Python
+# `case_pattern`, Rust `match_pattern`. Look through them for the catch-all marker.
+_ARM_PATTERN_WRAPPERS = frozenset({'SwitchCase', 'case_pattern', 'match_pattern'})
 
 
 def _is_default_arm(arm) -> bool:
+    """True when `arm` is the catch-all arm (`default`, `else`, or a `_` wildcard).
+
+    Policy (BACK-1318): a catch-all arm never counts, in any language -- Python
+    `case _`, Rust `_ =>`, Scala `case _` as well as C `default:` / Kotlin `else`.
+    """
     for first in _children(arm):
         kind = _zero_arg(first, 'kind')
-        if kind == 'SwitchCase':  # zig: SwitchProng > SwitchCase > `else`
+        if kind == 'case':  # keyword token ahead of the pattern (Python, Scala, C)
+            continue
+        if kind in _ARM_PATTERN_WRAPPERS:
             return _is_default_arm(first)
         if kind in _DEFAULT_ARM_MARKERS:
             return True
         if kind == 'constant_pattern':
             inner = _children(first)
             return len(inner) == 1 and _zero_arg(inner[0], 'kind') == 'identifier'
-        return False
+        # GDScript `_:` is a lone `identifier`, indistinguishable from a named
+        # binding (also irrefutable) without source text: same +/-1 approximation
+        # as Dart's constant_pattern above.
+        return kind == 'identifier' and _zero_arg(arm, 'kind') == 'pattern_section'
     return False
 
 
@@ -191,16 +206,30 @@ _KEYWORD_PAIRS = frozenset({
 })
 
 
-def is_decision(kind: str, parent_kind, node=None) -> bool:
+_SCALA_LOGICAL_OPERATORS = frozenset({'&&', '||'})
+
+
+def _has_child_kind(node, kind) -> bool:
+    return any(_zero_arg(c, 'kind') == kind for c in _children(node))
+
+
+def is_decision(kind: str, parent_kind, node=None, node_text=None) -> bool:
     """True if `node` (of `kind`, under `parent_kind`) adds one decision point.
 
-    `node` is only needed to recognise a `default` arm; omit it and default-
-    capable arm kinds count unconditionally.
+    `node` is only needed to recognise a catch-all arm; omit it and default-
+    capable arm kinds count unconditionally. `node_text(node) -> str` is only
+    needed for Scala infix `&&`/`||` (an `operator_identifier` shared with `+`);
+    omit it and those undercount rather than guess.
 
     The single decision rule shared by `calculate_complexity_and_depth` and
     treesitter's merged `_complexity_depth_and_calls` walk (BACK-1303) --
     edit the rule here, never in a walker.
     """
+    if kind == 'operator_identifier':  # Scala infix operator
+        return (parent_kind == 'infix_expression' and node_text is not None
+                and node_text(node) in _SCALA_LOGICAL_OPERATORS)
+    if kind == 'catch_clause' and node is not None and _has_child_kind(node, 'case_block'):
+        return False  # Scala: `catch { case ... }` -- the case arms carry the count
     if kind in _DECISION_TYPES:
         if parent_kind is not None and (parent_kind, kind) in _KEYWORD_PAIRS:
             return False
@@ -210,7 +239,7 @@ def is_decision(kind: str, parent_kind, node=None) -> bool:
     return kind == 'case' and parent_kind in _CASE_TOKEN_PARENTS
 
 
-def calculate_complexity_and_depth(node, is_opaque=None) -> tuple:
+def calculate_complexity_and_depth(node, is_opaque=None, node_text=None) -> tuple:
     """Compute cyclomatic complexity and max nesting depth in one iterative pass.
 
     Replaces separate recursive traversals with a single iterative stack walk,
@@ -220,6 +249,7 @@ def calculate_complexity_and_depth(node, is_opaque=None) -> tuple:
     function): it is not entered, so its decisions do not also inflate the enclosing
     function. treesitter's walker does this via FUNCTION_NODE_TYPES (BACK-490);
     analyzers with a bespoke function builder (Zig) pass their own predicate.
+    `node_text` is forwarded to `is_decision`.
 
     Returns:
         (complexity, depth) where complexity = decision_count + 1
@@ -239,7 +269,7 @@ def calculate_complexity_and_depth(node, is_opaque=None) -> tuple:
             if is_opaque is not None and is_opaque(child):
                 continue
             child_type = _zero_arg(child, 'kind')
-            if is_decision(child_type, n_type, child):
+            if is_decision(child_type, n_type, child, node_text):
                 decision_count += 1
             child_depth = depth + 1 if child_type in nesting_types else depth
             stack.append((child, child_type, child_depth))
@@ -247,11 +277,11 @@ def calculate_complexity_and_depth(node, is_opaque=None) -> tuple:
     return decision_count + 1, max_depth
 
 
-def calculate_complexity(node, is_opaque=None) -> int:
+def calculate_complexity(node, is_opaque=None, node_text=None) -> int:
     """Return cyclomatic complexity for a function node."""
     if not node:
         return 1
-    complexity, _ = calculate_complexity_and_depth(node, is_opaque)
+    complexity, _ = calculate_complexity_and_depth(node, is_opaque, node_text)
     return int(complexity)
 
 

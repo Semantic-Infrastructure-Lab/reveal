@@ -1827,19 +1827,19 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Return maximum nesting depth within a function node."""
         if not node:
             return 0
-        _, depth = calculate_complexity_and_depth(node)
+        _, depth = calculate_complexity_and_depth(node, node_text=self._get_node_text)
         return int(depth)
 
     def _calculate_complexity(self, node) -> int:
         """Return cyclomatic complexity for a function node."""
         if not node:
             return 1
-        complexity, _ = calculate_complexity_and_depth(node)
+        complexity, _ = calculate_complexity_and_depth(node, node_text=self._get_node_text)
         return int(complexity)
 
     def _calculate_complexity_and_depth(self, node) -> tuple:
         """Compute cyclomatic complexity and max nesting depth."""
-        return calculate_complexity_and_depth(node)
+        return calculate_complexity_and_depth(node, node_text=self._get_node_text)
 
     def _callee_name_generic(self, call_node) -> Optional[str]:
         return self._callee_name_from_node(call_node.child(0))
@@ -1975,7 +1975,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 if name and name not in seen_calls:
                     calls.append(name)
                     seen_calls.add(name)
-            if is_decision(kind, parent_kind, node):
+            if is_decision(kind, parent_kind, node, self._get_node_text):
                 decision_count += 1
 
             if kind in FUNCTION_NODE_TYPES and self._function_scope_has_own_entry(node):
