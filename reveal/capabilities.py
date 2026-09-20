@@ -63,6 +63,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+from .reveal_types import WarningEntry
 from .registry import get_analyzer_for_extension
 
 # --- varflow trust levels --------------------------------------------------
@@ -117,7 +118,7 @@ PYTHON_ONLY_FEATURES: Dict[str, PythonOnlyFeature] = {
 }
 
 
-def python_only_warning(feature: str, path: Path) -> Optional[Dict[str, str]]:
+def python_only_warning(feature: str, path: Path) -> Optional[WarningEntry]:
     """A W-CAP-1 warning when `path` holds code in languages `feature` cannot
     analyze; None when it is all Python (or unreadable). The feature's result
     covers only the Python part -- this says so, instead of looking complete."""

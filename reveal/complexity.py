@@ -156,7 +156,7 @@ def _is_default_arm(arm) -> bool:
         # GDScript `_:` is a lone `identifier`, indistinguishable from a named
         # binding (also irrefutable) without source text: same +/-1 approximation
         # as Dart's constant_pattern above.
-        return kind == 'identifier' and _zero_arg(arm, 'kind') == 'pattern_section'
+        return bool(kind == 'identifier' and _zero_arg(arm, 'kind') == 'pattern_section')
     return False
 
 

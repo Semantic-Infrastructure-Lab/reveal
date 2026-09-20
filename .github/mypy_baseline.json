@@ -276,7 +276,6 @@
  "reveal/rules/bugs/B006.py::no-any-return": 14,
  "reveal/rules/bugs/B007.py::attr-defined": 1,
  "reveal/rules/bugs/B007.py::no-any-return": 2,
- "reveal/rules/complexity/C901.py::import-untyped": 1,
  "reveal/rules/coverage.py::no-any-return": 1,
  "reveal/rules/imports/I002.py::no-any-return": 1,
  "reveal/rules/imports/I002.py::union-attr": 2,
