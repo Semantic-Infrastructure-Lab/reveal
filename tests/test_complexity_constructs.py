@@ -134,6 +134,14 @@ CASES = [
     ('rs', 'binding arm is still an arm', 'fn f(a: i32) -> i32 { match a { 1 => 1, x => x } }\n', 3, None),
     ('scala', '&& chain', 'object O { def f(a: Boolean, b: Boolean, c: Boolean): Boolean = a && b && c }\n', 3, None),
     ('scala', 'other infix ops are not decisions', 'object O { def f(a: Int, b: Int): Int = a + b * 2 }\n', 1, None),
+    # Explicit early-exit-on-failure sites count (BACK-1325); implicit propagation does not.
+    ('rs', '? operator', 'fn f(a: Option<i32>) -> Option<i32> { let x = a?; Some(x) }\n', 2, None),
+    ('rs', '? chain', 'fn f(a: Option<i32>) -> Option<i32> { let x = a?; let y = a?; Some(x + y) }\n', 3, None),
+    ('zig', 'try', 'fn f() !u8 { const x = try g(); return x; }\nfn g() !u8 { return 1; }\n', 2, None),
+    ('kt', 'try block is not a ? decision', 'fun f(a: () -> Int): Int { return try { a() } finally { } }\n', 1, None),
+    ('swift', 'try? / try! do not branch', 'func f(_ a: () throws -> Int) -> Int { return (try? a()) ?? 0 }\n', 2, None),
+    ('ts', 'ternary ? counted once', 'function f(a: boolean) { return a ? 1 : 2 }\n', 2, None),
+    ('kt', 'nullable type ? not counted', 'fun f(a: Int?): Int? { return a }\n', 1, None),
 ]
 
 def _param(row):

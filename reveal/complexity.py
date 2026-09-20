@@ -88,27 +88,36 @@ _NOT_DECISION_CONTAINERS = frozenset({'match_statement', 'match_expression'})
 # complexity sweep, not by unit tests.
 _CASE_TOKEN_PARENTS = frozenset({'switch_label', 'switch_section', 'case_builtin'})
 
-# Short-circuit / null-coalescing operators (BACK-1316). Unlike Python's `and`/`or`
-# (dedicated node kinds, in _DECISION_TYPES), most grammars expose these only as an
-# anonymous operator TOKEN under a generic expression node, and the same token also
+# Short-circuit / null-coalescing / early-exit operators (BACK-1316, BACK-1325). Unlike
+# Python's `and`/`or` (dedicated node kinds, in _DECISION_TYPES), most grammars expose
+# these only as an anonymous operator TOKEN under some node, and the same token also
 # appears where it is NOT a decision (C++ `int&& x` / `auto&& y` are rvalue-reference
-# declarators; `||=`/`&&=`/`??=` are distinct tokens, uncounted like radon/lizard).
-# So the token counts only under a parent known to be a logical/coalescing expression.
-# An allow-list, not a deny-list: an unlisted grammar undercounts (visible in the
-# per-construct probe table) instead of silently overcounting. Add a new language's
-# parent kind here plus a row in tests/test_complexity_constructs.py.
-_LOGICAL_OPERATOR_TOKENS = frozenset({'&&', '||', '??', '?:', 'orelse', 'catch'})
-_LOGICAL_OPERATOR_PARENTS = frozenset({
+# declarators; `||=`/`&&=`/`??=` are distinct tokens, uncounted like radon/lizard;
+# `try` / `catch` are keywords under their own statement nodes almost everywhere).
+# So each token counts only under the parents listed for it. An allow-list, not a
+# deny-list: an unlisted grammar undercounts (visible in the per-construct probe
+# table) instead of silently overcounting. Add a language's parent kind here plus a
+# row in tests/test_complexity_constructs.py.
+_LOGICAL_PARENTS = frozenset({
     'binary_expression',                              # js ts go java c cpp cs rs php
     'binary',                                         # ruby
     'conjunction_expression', 'disjunction_expression',  # kotlin swift
     'elvis_expression',                               # kotlin `?:`
-    'logical_and_operator', 'logical_or_operator',    # dart (`??`: if_null_expression)
-    'if_null_expression',
-    # zig `a orelse b` / `a catch b` are `BitwiseOp` tokens; `catch` elsewhere is a
-    # keyword under its own clause node and must not count here.
-    'BitwiseOp',
+    'logical_and_operator', 'logical_or_operator',    # dart
+    'if_null_expression',                             # dart `??`
+    'nil_coalescing_expression',                      # swift `??`
 })
+_OPERATOR_TOKEN_PARENTS = {
+    '&&': _LOGICAL_PARENTS, '||': _LOGICAL_PARENTS,
+    '??': _LOGICAL_PARENTS, '?:': _LOGICAL_PARENTS,
+    # Zig `a orelse b` / `a catch b` are `BitwiseOp` tokens.
+    'orelse': frozenset({'BitwiseOp'}), 'catch': frozenset({'BitwiseOp'}),
+    # Explicit early-exit-on-failure sites: Zig `try x` is a `try` token under `PrefixOp`;
+    # Rust `x?` is a `?` token under `try_expression`. The node KIND `try_expression` is
+    # not usable -- Kotlin/Swift/Scala use it for a plain try block / `try` keyword, which
+    # do not branch here -- so it is the token under it that counts.
+    'try': frozenset({'PrefixOp'}), '?': frozenset({'try_expression'}),
+}
 
 # Arm kinds that may be the language's `default` arm, which never counts as a
 # decision. Marker = the arm's first child: Kotlin `else`, Swift
@@ -234,8 +243,9 @@ def is_decision(kind: str, parent_kind, node=None, node_text=None) -> bool:
         if parent_kind is not None and (parent_kind, kind) in _KEYWORD_PAIRS:
             return False
         return not (node is not None and kind in _DEFAULT_CAPABLE_ARMS and _is_default_arm(node))
-    if kind in _LOGICAL_OPERATOR_TOKENS:
-        return parent_kind in _LOGICAL_OPERATOR_PARENTS
+    parents = _OPERATOR_TOKEN_PARENTS.get(kind)
+    if parents is not None:
+        return parent_kind in parents
     return kind == 'case' and parent_kind in _CASE_TOKEN_PARENTS
 
 
