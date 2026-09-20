@@ -210,6 +210,9 @@ def normalize_type_condition(condition: Dict[str, Any]) -> Dict[str, Any]:
         'method': 'methods',
         'struct': 'structs',
         'import': 'imports',
+        'interface': 'interfaces',
+        'trait': 'interfaces',  # Rust traits are stored as interfaces (BACK-1088)
+        'test': 'tests',
     }
 
     # Handle 'in' operator (OR logic) - normalize each type

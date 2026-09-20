@@ -64,3 +64,13 @@ def test_struct_bases_are_implemented_traits(tmp_path):
     assert by_name['Foo']['bases'] == ['Display', 'Clone']
     assert by_name['Bar']['bases'] == ['std::fmt::Debug']
     assert by_name['Plain']['bases'] == []
+
+
+@pytest.mark.parametrize('value', ['interface', 'interfaces', 'trait'])
+def test_ast_type_filter_accepts_singular_and_trait(tmp_path, value):
+    """`type=interface` / `type=trait` used to return 0 silently: only the plural
+    category name matched, unlike function/class/struct."""
+    from reveal.adapters.ast.adapter import AstAdapter
+    (tmp_path / 'shapes.rs').write_text(CODE, encoding='utf-8')
+    result = AstAdapter(str(tmp_path), f'type={value}').get_structure()
+    assert {r['name'] for r in result['results']} == {'Shape', 'Named', 'Generic'}
