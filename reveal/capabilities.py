@@ -161,11 +161,10 @@ def python_only_rule_disclosure(files: Iterable[Path], rule_code: str) -> Option
     """One-line disclosure that Python-only rule `rule_code` did not look at
     the non-Python source files in a check run (it is skipped by file pattern,
     which reads as "clean"). None when every analyzable file was Python."""
-    per_language: Dict[str, int] = {}
-    for f in files:
-        cap = get_capability_for_extension(Path(f).suffix.lower())
-        if cap is not None and cap.language != "python":
-            per_language[cap.language] = per_language.get(cap.language, 0) + 1
+    from .utils.path_utils import tally_files_by_language
+
+    tally = tally_files_by_language(Path(f) for f in files)
+    per_language = {lang: v["count"] for lang, v in tally.items() if lang != "python"}
     if not per_language:
         return None
     ranked = sorted(per_language.items(), key=lambda kv: (-kv[1], kv[0]))
