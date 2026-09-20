@@ -219,3 +219,17 @@ def ts_parse(parser, source):
         return parser.parse(source)
     except TypeError:
         return parser.parse(source.encode('utf-8'))
+
+
+def node_sexp(node) -> str:
+    """S-expression of `node`, tolerant of the binding split (same seam as `_zero_arg`).
+
+    The vendored `builtins.Node` exposes `to_sexp()`; the real core `tree_sitter.Node`
+    (what CI's Python 3.12/3.14 matrix installs) has no such method -- `str(node)` is its
+    s-expression. Calling `to_sexp()` directly passed locally and failed on every CI job.
+    """
+    for name in ('to_sexp', 'sexp'):
+        fn = getattr(node, name, None)
+        if callable(fn):
+            return str(fn())
+    return str(node)

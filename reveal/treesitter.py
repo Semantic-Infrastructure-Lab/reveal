@@ -20,7 +20,7 @@ from .core import suppress_treesitter_warnings
 from .core import node_children as _children
 from .core import node_next_sibling as _next_sibling
 from .core import iter_tree as _iter_tree
-from .core.treesitter_compat import _zero_arg
+from .core.treesitter_compat import _zero_arg, node_sexp
 from .core import tree_root
 from .core import ts_parse
 
@@ -1329,7 +1329,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # end-of-file grammar quirk -- the structure is complete, so don't alarm.
         # Zero-width MISSING nodes are not reachable through child(), so read the
         # s-expression (only ever built for an already-flagged tree).
-        sexp = root.to_sexp().strip()
+        sexp = node_sexp(root).strip()
         missing = re.findall(r'\(MISSING\b', sexp)
         return not (len(missing) == 1 and re.search(r'\(MISSING "?\w*_token\d+"?\)\)$', sexp))
 

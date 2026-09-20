@@ -329,3 +329,29 @@ class TestTsParse(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestNodeSexp:
+    """`Node.to_sexp` exists only on the vendored builtins.Node; CI's core tree_sitter.Node
+    has `str(node)` instead. Every code path must read the s-expression through node_sexp."""
+
+    def test_prefers_to_sexp(self):
+        from reveal.core.treesitter_compat import node_sexp
+
+        class Vendored:
+            def to_sexp(self):
+                return '(a)'
+
+            def __str__(self):
+                return 'wrong'
+
+        assert node_sexp(Vendored()) == '(a)'
+
+    def test_falls_back_to_str_when_no_to_sexp(self):
+        from reveal.core.treesitter_compat import node_sexp
+
+        class Core:
+            def __str__(self):
+                return '(b (MISSING ")"))'
+
+        assert node_sexp(Core()) == '(b (MISSING ")"))'
