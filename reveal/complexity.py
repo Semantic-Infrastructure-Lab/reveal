@@ -22,7 +22,7 @@ from .core.treesitter_compat import _zero_arg
 _DECISION_TYPES = frozenset({
     # Conditionals
     'if_statement', 'if_expression', 'if', 'IfStatement',
-    'elif_clause', 'elsif', 'elseif_clause', 'else_if_clause',
+    'elif_clause', 'elsif', 'elseif_clause', 'else_if_clause', 'elseif_statement',  # lua
     'case_statement',
     # Bare `case` is NOT a decision kind: JS/Python arms wrap a `case` keyword
     # token (double-count), and Ruby's `case` container is not a branch --
@@ -49,25 +49,34 @@ _DECISION_TYPES = frozenset({
     'logical_and', 'logical_or',
     # Ternary
     'conditional_expression', 'ternary_expression',
+    'conditional',  # ruby `a ? b : c`
     # Exception handling
-    'except_clause', 'catch_clause',
+    'except_clause', 'catch_clause', 'catch_block',  # kotlin
     'rescue',
     # Pattern matching — Python match_statement/case_clause and Rust
     # match_expression/match_arm (BACK-431).
-    'match_statement', 'match_expression', 'case_clause', 'match_arm',
+    # Match arms are the decisions, not the container (see _NOT_DECISION_CONTAINERS).
+    # GDScript arms are `pattern_section`.
+    'case_clause', 'match_arm', 'pattern_section',
     # Zig `switch (x) { .a => ..., .b => ... }` (BACK-431 Issue G tier B).
     'SwitchProng',
     # Kotlin `when (x) { ... }`, Swift `switch x { case ... }`, and PHP
     # `switch ($x) { case ... }` — each arm/entry is its own decision, same
     # role as SwitchProng/match_arm (BACK-431 tier A real-corpus dogfood
     # audit).
-    'when_entry', 'switch_entry', 'case_statement',
+    'when_entry', 'switch_entry', 'case_statement', 'guard_statement',  # swift guard
     # C# / Dart switch-EXPRESSION arms (BACK-1301); the default arm is excluded
     # by `is_decision`, like every other language's default.
     'switch_expression_arm', 'switch_expression_case',
     # Go switch / type-switch / select arms (BACK-1298); `default_case` excluded.
     'expression_case', 'type_case', 'communication_case',
 })
+
+# Match containers are nesting (see _NESTING_TYPES) but NOT decisions: their arms
+# are. Counting both scored a 3-arm Python/Rust match 5, not 4. Kept as a named set
+# so tests/adapters/test_node_taxonomy.py can subtract exactly these from the
+# "every match kind is a decision" drift guard instead of weakening it.
+_NOT_DECISION_CONTAINERS = frozenset({'match_statement', 'match_expression'})
 
 # Java/C#/Dart have no dedicated arm node that is also a decision kind: their
 # `case` arms exist only as a bare `case` keyword token under one of these
@@ -105,8 +114,8 @@ _LOGICAL_OPERATOR_PARENTS = frozenset({
 # as the catch-all -- a deliberate +/-1 approximation on Dart switch
 # expressions that match a named constant (BACK-1301).
 _DEFAULT_CAPABLE_ARMS = frozenset({
-    'when_entry', 'switch_entry', 'switch_expression_arm', 'switch_expression_case'})
-_DEFAULT_ARM_MARKERS = frozenset({'else', 'default_keyword', 'discard'})
+    'case_statement', 'when_entry', 'switch_entry', 'switch_expression_arm', 'switch_expression_case'})
+_DEFAULT_ARM_MARKERS = frozenset({'else', 'default_keyword', 'discard', 'default'})
 
 
 def _is_default_arm(arm) -> bool:
@@ -169,6 +178,8 @@ _KEYWORD_PAIRS = frozenset({
     ('boolean_operator', 'and'),
     # Kotlin: `when_expression` wraps a bare `when` keyword token (BACK-1301).
     ('when_expression', 'when'),
+    # C `do { } while (c)`: the statement wraps a bare `while` keyword token.
+    ('do_statement', 'while'),
 })
 
 

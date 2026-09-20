@@ -763,7 +763,7 @@ def test_ruby_nested_def_bare_calls_stay_in_own_scope(tmp_path):
 @pytest.mark.parametrize("suffix,src,expected", [
     ('.js', "function f(x){ switch(x){ case 1: a(); break; case 2: b(); break; } }", 3),
     ('.rb', "def f(x)\n  case x\n  when 1 then 1\n  when 2 then 2\n  end\nend\n", 3),
-    ('.py', "def f(x):\n  match x:\n    case 1: pass\n    case 2: pass\n", 4),
+    ('.py', "def f(x):\n  match x:\n    case 1: pass\n    case 2: pass\n", 3),  # arms count, the match container does not
     # Java/C#/Dart arms exist only as a bare `case` token under a switch_label /
     # switch_section / case_builtin parent; removing bare `case` (BACK-1289)
     # scored a 2-case switch 1 until _CASE_TOKEN_PARENTS restored them.

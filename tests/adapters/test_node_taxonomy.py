@@ -114,7 +114,7 @@ class TestComplexityCoversFamilies(unittest.TestCase):
             | tax.FOR_EXPRESSION_NODES | tax.FOR_EACH_NAME_VALUE_NODES
             | tax.MATCH_NODES | tax.CASE_NODES | tax.DO_NODES
         )
-        missing = families - complexity._DECISION_TYPES
+        missing = families - complexity._DECISION_TYPES - complexity._NOT_DECISION_CONTAINERS
         self.assertEqual(
             missing, frozenset(),
             f'control-flow kinds not counted as complexity decisions: {missing}',
