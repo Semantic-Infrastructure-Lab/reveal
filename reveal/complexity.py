@@ -50,6 +50,7 @@ _DECISION_TYPES = frozenset({
     # Ternary
     'conditional_expression', 'ternary_expression',
     'conditional',  # ruby `a ? b : c`
+    'IfExpr',  # zig `const x = if (c) a else b` (statements: IfStatement)
     # Exception handling
     'except_clause', 'catch_clause', 'catch_block',  # kotlin
     'rescue',
@@ -96,7 +97,7 @@ _CASE_TOKEN_PARENTS = frozenset({'switch_label', 'switch_section', 'case_builtin
 # An allow-list, not a deny-list: an unlisted grammar undercounts (visible in the
 # per-construct probe table) instead of silently overcounting. Add a new language's
 # parent kind here plus a row in tests/test_complexity_constructs.py.
-_LOGICAL_OPERATOR_TOKENS = frozenset({'&&', '||', '??', '?:'})
+_LOGICAL_OPERATOR_TOKENS = frozenset({'&&', '||', '??', '?:', 'orelse', 'catch'})
 _LOGICAL_OPERATOR_PARENTS = frozenset({
     'binary_expression',                              # js ts go java c cpp cs rs php
     'binary',                                         # ruby
@@ -104,6 +105,9 @@ _LOGICAL_OPERATOR_PARENTS = frozenset({
     'elvis_expression',                               # kotlin `?:`
     'logical_and_operator', 'logical_or_operator',    # dart (`??`: if_null_expression)
     'if_null_expression',
+    # zig `a orelse b` / `a catch b` are `BitwiseOp` tokens; `catch` elsewhere is a
+    # keyword under its own clause node and must not count here.
+    'BitwiseOp',
 })
 
 # Arm kinds that may be the language's `default` arm, which never counts as a
@@ -114,13 +118,15 @@ _LOGICAL_OPERATOR_PARENTS = frozenset({
 # as the catch-all -- a deliberate +/-1 approximation on Dart switch
 # expressions that match a named constant (BACK-1301).
 _DEFAULT_CAPABLE_ARMS = frozenset({
-    'case_statement', 'when_entry', 'switch_entry', 'switch_expression_arm', 'switch_expression_case'})
+    'SwitchProng', 'case_statement', 'when_entry', 'switch_entry', 'switch_expression_arm', 'switch_expression_case'})
 _DEFAULT_ARM_MARKERS = frozenset({'else', 'default_keyword', 'discard', 'default'})
 
 
 def _is_default_arm(arm) -> bool:
     for first in _children(arm):
         kind = _zero_arg(first, 'kind')
+        if kind == 'SwitchCase':  # zig: SwitchProng > SwitchCase > `else`
+            return _is_default_arm(first)
         if kind in _DEFAULT_ARM_MARKERS:
             return True
         if kind == 'constant_pattern':
@@ -180,6 +186,8 @@ _KEYWORD_PAIRS = frozenset({
     ('when_expression', 'when'),
     # C `do { } while (c)`: the statement wraps a bare `while` keyword token.
     ('do_statement', 'while'),
+    # Zig: `IfStatement`/`IfExpr` wrap an `IfPrefix` that holds the bare `if` token.
+    ('IfPrefix', 'if'),
 })
 
 
@@ -202,11 +210,16 @@ def is_decision(kind: str, parent_kind, node=None) -> bool:
     return kind == 'case' and parent_kind in _CASE_TOKEN_PARENTS
 
 
-def calculate_complexity_and_depth(node) -> tuple:
+def calculate_complexity_and_depth(node, is_opaque=None) -> tuple:
     """Compute cyclomatic complexity and max nesting depth in one iterative pass.
 
     Replaces separate recursive traversals with a single iterative stack walk,
     halving the node visits.
+
+    `is_opaque(child)` marks a descendant that has its own entry elsewhere (a nested
+    function): it is not entered, so its decisions do not also inflate the enclosing
+    function. treesitter's walker does this via FUNCTION_NODE_TYPES (BACK-490);
+    analyzers with a bespoke function builder (Zig) pass their own predicate.
 
     Returns:
         (complexity, depth) where complexity = decision_count + 1
@@ -223,6 +236,8 @@ def calculate_complexity_and_depth(node) -> tuple:
         if depth > max_depth:
             max_depth = depth
         for child in _children(n):
+            if is_opaque is not None and is_opaque(child):
+                continue
             child_type = _zero_arg(child, 'kind')
             if is_decision(child_type, n_type, child):
                 decision_count += 1
@@ -232,11 +247,11 @@ def calculate_complexity_and_depth(node) -> tuple:
     return decision_count + 1, max_depth
 
 
-def calculate_complexity(node) -> int:
+def calculate_complexity(node, is_opaque=None) -> int:
     """Return cyclomatic complexity for a function node."""
     if not node:
         return 1
-    complexity, _ = calculate_complexity_and_depth(node)
+    complexity, _ = calculate_complexity_and_depth(node, is_opaque)
     return int(complexity)
 
 

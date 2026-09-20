@@ -120,6 +120,17 @@ CASES = [
     ('kt', '&& chain', 'fun f(a: Boolean, b: Boolean, c: Boolean): Boolean { return a && b && c }\n', 3, None),
     ('swift', '&& chain', 'func f(_ a: Bool, _ b: Bool, _ c: Bool) -> Bool { return a && b && c }\n', 3, None),
     ('rs', 'reference && is not a decision', 'fn f(a: &&i32) -> i32 { **a }\n', 1, None),
+    ('zig', 'if/else if', 'fn f(a: bool) u8 { if (a) { return 1; } else if (!a) { return 2; } return 3; }\n', 3, None),
+    ('zig', 'if expression', 'fn f(a: bool) u8 { const x = if (a) 1 else 2; return x; }\n', 2, None),
+    ('zig', 'while', 'fn f(a: bool) void { while (a) { break; } }\n', 2, None),
+    ('zig', 'for', 'fn f(a: []u8) void { for (a) |x| { _ = x; } }\n', 2, None),
+    ('zig', 'and/or', 'fn f(a: bool, b: bool, c: bool) bool { return a and b or c; }\n', 3, None),
+    ('zig', 'orelse', 'fn f(b: ?u8) u8 { return b orelse 2; }\n', 2, None),
+    ('zig', 'catch', 'fn f(c: anyerror!u8) u8 { return c catch 3; }\n', 2, None),
+    ('zig', 'switch 2+else', 'fn f(a: u8) u8 { switch (a) { 1 => return 1, 2 => return 2, else => return 3 } }\n', 3, None),
+    # A nested fn (generic type constructor) has its own entry; its decisions must not also
+    # inflate the enclosing function. funcs[0] is the outer `Wrap`.
+    ('zig', 'nested fn not folded into outer', 'fn Wrap(comptime T: type) type {\n    return struct {\n        fn inner(a: bool) u8 { if (a) { return 1; } return 2; }\n    };\n}\n', 1, None),
 ]
 
 def _param(row):

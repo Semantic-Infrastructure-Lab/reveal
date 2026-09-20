@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 from ..reveal_types import StructureItem
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
+from ..complexity import calculate_complexity
 from ..core import node_children as _children, node_next_sibling as _next_sibling, node_prev_sibling as _prev_sibling
 from ..core.treesitter_compat import _zero_arg
 from ..core.nav_calls import range_calls
@@ -124,6 +125,11 @@ class ZigAnalyzer(TreeSitterAnalyzer):
             'name': fn_name,
             'signature': signature,
             'calls': self._extract_calls(decl_node, line_start, line_end),
+            # Nested `fn` decls (a `fn Type() type { return struct { fn m() ... } }`
+            # generic) have their own entries; do not fold them into the enclosing one.
+            'complexity': calculate_complexity(
+                decl_node,
+                lambda n: _zero_arg(n, 'kind') == 'Decl' and self._find_fn_proto(n) is not None),
         }
         if has_pub:
             func_info['visibility'] = 'pub'

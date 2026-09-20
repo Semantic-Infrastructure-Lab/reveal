@@ -484,15 +484,14 @@ class TestIsCodeFile(unittest.TestCase):
 class TestZigAstComplexity(unittest.TestCase):
     """ast:// should produce non-trivial complexity scores for large Zig functions."""
 
-    def test_zig_function_complexity_scales_with_size(self):
-        """A large Zig function should have complexity > 1 (not stuck at heuristic floor)."""
+    def test_zig_function_complexity_is_cyclomatic_not_size(self):
+        """Zig reports real McCabe complexity (branches), not the line-count fallback."""
         import textwrap as _tw
-        # 50-line function body
         body = 'const x = 0;\n' * 48
         code = _tw.dedent(f'''\
-            pub fn bigFn() void {{
+            pub fn longStraightLine() void {{
             {body}}}
-            pub fn smallFn() void {{}}
+            pub fn branchy(a: bool, b: bool) void {{ if (a and b) {{}} }}
         ''')
         with tempfile.NamedTemporaryFile(mode='w', suffix='.zig', delete=False, encoding='utf-8') as f:
             f.write(code)
@@ -504,10 +503,8 @@ class TestZigAstComplexity(unittest.TestCase):
             result = analyze_file(temp_path)
             self.assertIsNotNone(result)
             elements = {e['name']: e for e in result.get('elements', [])}
-            self.assertIn('bigFn', elements)
-            self.assertIn('smallFn', elements)
-            self.assertGreater(elements['bigFn']['complexity'], elements['smallFn']['complexity'],
-                               "large Zig function should have higher complexity than small one")
+            self.assertEqual(elements['longStraightLine']['complexity'], 1)
+            self.assertEqual(elements['branchy']['complexity'], 3)
         finally:
             os.unlink(temp_path)
 
