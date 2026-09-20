@@ -56,6 +56,10 @@ class V004(BaseRule):
         # test_capability_table.py (file kept singly-underscored to avoid
         # an awkward test__capability_table.py name).
         '_capability_table': 'test_capability_table.py',
+        # BACK-1280: not a registered analyzer itself, the arrow/function-expression/
+        # class-field mixin shared by JavaScriptAnalyzer/TypeScriptAnalyzer -- exercised
+        # by test_js_function_values.py (singly-underscored, as above).
+        '_js_function_values': 'test_js_function_values.py',
     }
 
     def check(self,

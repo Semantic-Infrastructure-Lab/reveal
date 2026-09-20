@@ -88,7 +88,7 @@ def lang_dir(lang: str) -> Path:
 
 def rel_name(p: Path, lang: str) -> str:
     """Stable `lang/...` name for a sampled file, whichever root it came from."""
-    return str(p.relative_to(lang_dir(lang).parent))
+    return p.relative_to(lang_dir(lang).parent).as_posix()  # same key on every OS
 
 
 def _minified(p: Path) -> bool:

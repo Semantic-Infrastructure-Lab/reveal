@@ -83,6 +83,14 @@ RE_FS_PATH_LITERAL = re.compile(
     r"""['"]"""                          # closing quote
 )
 
+# ── Pattern 3: splitting a filesystem path on '/' ─────────────────────────────
+# `r['file'].rsplit('/', 1)[-1]` is a basename on POSIX but a no-op on Windows, where the
+# path uses backslashes (test_conventions rank_by_callers, 2026-09). Use
+# PureWindowsPath(x).name / Path(x).name / os.path.basename instead.
+RE_PATH_SPLIT = re.compile(
+    r"""(?:file|path|dir)\w*['"]?\]?\.(?:r?split)\(\s*['"]/['"]""", re.IGNORECASE
+)
+
 
 def check_file(path: Path) -> list[tuple[int, str, str]]:
     """Return list of (lineno, pattern_name, line) findings."""
@@ -106,6 +114,8 @@ def check_file(path: Path) -> list[tuple[int, str, str]]:
 
         if RE_PATH_ASSIGN.search(line):
             findings.append((i, 'path-assign', line.rstrip()))
+        elif RE_PATH_SPLIT.search(line):
+            findings.append((i, 'path-split-on-slash', line.rstrip()))
         elif RE_FS_PATH_LITERAL.search(line) and (
             'assert' in line or 'assertEqual' in line or 'assertIn' in line
         ):
@@ -143,12 +153,16 @@ def main() -> int:
                     label = (
                         'POSIX path literal in assertion'
                         if pattern == 'posix-literal'
+                        else 'path split on \'/\' (backslashes on Windows)'
+                        if pattern == 'path-split-on-slash'
                         else '.path = Path(\'/...\') assigns POSIX Path to mock'
                     )
                     print(f'{rel}:{lineno}: [{label}]')
                     print(f'  {line.strip()}')
                     if pattern == 'posix-literal':
                         print(f'  → use native(\'/...\') from tests/conftest.py')
+                    elif pattern == 'path-split-on-slash':
+                        print('  → use PureWindowsPath(x).name / os.path.basename(x)')
                     else:
                         print(f'  → use Path(native(\'/...\')) so str(path) is native')
                     print()

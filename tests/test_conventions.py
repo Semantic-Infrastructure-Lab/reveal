@@ -1,5 +1,6 @@
 """Tests for reveal.conventions -- per-language convention profiles (BACK-1273)."""
 
+from pathlib import PureWindowsPath  # handles '/' and '\\' separators alike
 import pytest
 
 from reveal.adapters.calls.index import _get_decorator_names, find_uncalled, rank_by_callers
@@ -97,7 +98,7 @@ class TestScopedBuiltins:
         _write(tmp_path, 'a.py', 'def f(xs):\n    return sorted(xs)\n')
         _write(tmp_path, 'b.rb', 'def g(xs)\n  xs.sorted\nend\n')
         result = rank_by_callers(str(tmp_path), top=50)
-        files = {r['file'].rsplit('/', 1)[-1] for e in result['entries'] for r in e.get('callers', [])
+        files = {PureWindowsPath(r['file']).name for e in result['entries'] for r in e.get('callers', [])
                  if e['name'].split('.')[-1] == 'sorted'}
         assert files == {'b.rb'}
 

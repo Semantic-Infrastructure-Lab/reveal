@@ -329,6 +329,23 @@ pytest tests/test_your_analyzer.py -v
 pytest tests/
 ```
 
+**Before you push, run what CI runs:**
+
+```bash
+scripts/ci-local.sh                # Python 3.12, latest deps: pytest + the CI-only steps
+scripts/ci-local.sh --python 3.14
+scripts/ci-local.sh --lp 1.12.5    # force a tree-sitter-language-pack version (CI compat-matrix)
+```
+
+Your dev environment drifts from CI (dependency versions, Python version, stale `~/.reveal/cache`),
+so a plain local `pytest` can pass while every CI job fails -- that is exactly how a
+`Node.to_sexp()` call, present only on the older vendored tree-sitter node, broke CI. `ci-local.sh`
+builds a dedicated venv under `~/.cache/reveal-ci/`, installs the way CI does, and also runs the
+steps that are CI-only: the Windows path lint, the V-series self-validation (e.g. V004: every
+analyzer needs a test file) and the B006 ratchet. It cannot run Windows or macOS;
+`scripts/check_windows_compat.py` is the local guard for the Windows path class (`str(path)` uses
+backslashes, so never split or compare paths as `'/'` strings).
+
 **Test template:**
 
 ```python

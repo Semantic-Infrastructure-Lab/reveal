@@ -21,6 +21,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# A stale ~/.reveal/cache made 6 tests fail here that pass in CI (BACK-1294).
+export REVEAL_DISK_CACHE=0
+
 # Track failures
 FAILURES=0
 
@@ -37,7 +40,7 @@ check_step() {
 }
 
 # 1. V-Series Validation
-check_step "V-Series Validation (Reveal's Metadata)" 1 11
+check_step "V-Series Validation (Reveal's Metadata)" 1 12
 
 if reveal reveal:// --check --select V; then
     echo -e "${GREEN}✓ V-series validation passed${NC}"
@@ -47,7 +50,7 @@ else
 fi
 
 # 2. Self-Validation Quality
-check_step "Self-Validation Code Quality (V007, V009, V011)" 2 11
+check_step "Self-Validation Code Quality (V007, V009, V011)" 2 12
 
 for file in V007 V009 V011; do
     echo "Checking reveal/rules/validation/${file}.py..."
@@ -60,7 +63,7 @@ for file in V007 V009 V011; do
 done
 
 # 3. Test Suite
-check_step "Test Suite (All Tests)" 3 11
+check_step "Test Suite (All Tests)" 3 12
 
 if pytest tests/ -v; then
     echo -e "${GREEN}✓ All tests passed${NC}"
@@ -70,7 +73,7 @@ else
 fi
 
 # 4. Test Coverage
-check_step "Test Coverage (≥70%)" 4 11
+check_step "Test Coverage (≥70%)" 4 12
 
 if pytest tests/ --cov=reveal --cov-report=term-missing --cov-fail-under=70; then
     echo -e "${GREEN}✓ Coverage requirement met${NC}"
@@ -80,7 +83,7 @@ else
 fi
 
 # 5. Documentation Validation
-check_step "Documentation Links (No Broken Links)" 5 11
+check_step "Documentation Links (No Broken Links)" 5 12
 
 for doc in README.md CHANGELOG.md ROADMAP.md; do
     if [ -f "$doc" ]; then
@@ -99,7 +102,7 @@ done
 # current count is pre-existing debt (VALIDATION.md links into internal-docs/,
 # intentionally moved out of the public repo) that a single pass won't clear,
 # and a permanently-red check gets ignored instead of catching new leaks.
-check_step "Doc Hygiene (Links + Leak Detection)" 6 11
+check_step "Doc Hygiene (Links + Leak Detection)" 6 12
 
 if python3 "$SCRIPT_DIR/check_doc_hygiene.py" --baseline "$SCRIPT_DIR/../.github/doc_hygiene_baseline.txt"; then
     echo -e "${GREEN}✓ Doc hygiene passed (no new issues vs. baseline)${NC}"
@@ -109,7 +112,7 @@ else
 fi
 
 # 7. Version Consistency
-check_step "Version Consistency (All Files Synchronized)" 7 11
+check_step "Version Consistency (All Files Synchronized)" 7 12
 
 if reveal reveal:// --check --select V007; then
     echo -e "${GREEN}✓ Version consistent across all files${NC}"
@@ -119,7 +122,7 @@ else
 fi
 
 # 8. Release Readiness
-check_step "Release Readiness (CHANGELOG + ROADMAP)" 8 11
+check_step "Release Readiness (CHANGELOG + ROADMAP)" 8 12
 
 if reveal reveal:// --check --select V011; then
     echo -e "${GREEN}✓ Release documentation ready${NC}"
@@ -129,7 +132,7 @@ else
 fi
 
 # 9. Build Test
-check_step "Build Test (Package Creation)" 9 11
+check_step "Build Test (Package Creation)" 9 12
 
 if python -m build --sdist --wheel; then
     echo -e "${GREEN}✓ Package builds successfully${NC}"
@@ -141,7 +144,7 @@ fi
 # 10. Type-error ratchet (mypy)
 # Regression-only against .github/mypy_baseline.json (per file + error code);
 # `python scripts/check_mypy_baseline.py --update` after fixing errors.
-check_step "Type Errors (mypy ratchet vs baseline)" 10 11
+check_step "Type Errors (mypy ratchet vs baseline)" 10 12
 
 if python3 "$SCRIPT_DIR/check_mypy_baseline.py"; then
     echo -e "${GREEN}✓ No new mypy errors vs. baseline${NC}"
@@ -153,12 +156,27 @@ fi
 # 11. Real-corpus call agreement (analyzer vs ast:// nav)
 # Catches cross-path drift that fixture tests miss (BACK-1289, BACK-1299). Skips
 # cleanly when ~/.cache/reveal-corpus is absent (scripts/fetch_corpus.py).
-check_step "Corpus Agreement (analyzer vs nav calls)" 11 11
+check_step "Corpus Agreement (analyzer vs nav calls)" 11 12
 
 if python3 "$SCRIPT_DIR/corpus_sweep.py" agree -n 60 --min-jaccard 0.98; then
     echo -e "${GREEN}✓ Call extraction paths agree on the real corpus${NC}"
 else
     echo -e "${RED}✗ Analyzer/nav call agreement dropped below floor${NC}"
+    FAILURES=$((FAILURES + 1))
+fi
+
+# 12. CI parity (scripts/ci-local.sh)
+# The steps above run in THIS machine's environment, which drifts from CI (older
+# tree-sitter-language-pack => vendored Node API; CI-only V-series/B006/Windows-lint steps).
+# ci-local.sh reproduces CI's environment and steps. Skip with SKIP_CI_PARITY=1 (not for a release).
+check_step "CI Parity (CI environment + CI-only steps)" 12 12
+
+if [ "${SKIP_CI_PARITY:-0}" = "1" ]; then
+    echo -e "${YELLOW}⚠ CI parity SKIPPED (SKIP_CI_PARITY=1)${NC}"
+elif "$SCRIPT_DIR/ci-local.sh"; then
+    echo -e "${GREEN}✓ CI parity run passed${NC}"
+else
+    echo -e "${RED}✗ CI parity run failed (see log path above)${NC}"
     FAILURES=$((FAILURES + 1))
 fi
 
