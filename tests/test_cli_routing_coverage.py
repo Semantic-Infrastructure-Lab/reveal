@@ -199,69 +199,52 @@ class TestHandleUriExclude:
 # ─── handle_uri — BACK-1192: --since/--until on URI-scheme targets ───────────
 
 class TestHandleUriSinceUntil:
-    """--since/--until were accepted by argparse and silently discarded for
+    """(Real adapter registry; only dispatch is stubbed -- injection is driven by what each
+    adapter declares in CLI_QUERY_FLAGS, so a mocked adapter class would test nothing.)
+
+    --since/--until were accepted by argparse and silently discarded for
     every URI-scheme target -- git:// is the only scheme that consumes them
     (as ?since=/?until= ergonomic aliases for date>=/date<=)."""
 
     def test_since_injected_for_git_scheme(self):
-        mock_adapter_cls = MagicMock()
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, since='2026-01-01', until=None, base_path=None)
-                    handle_uri('git://.', None, args)
+        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+            from reveal.cli.routing import handle_uri
+            args = _args(sort=None, exclude=None, since='2026-01-01', until=None, base_path=None)
+            handle_uri('git://.', None, args)
         resource_arg = mock_handler.call_args[0][2]
         assert 'since=2026-01-01' in resource_arg
 
     def test_until_injected_for_git_scheme(self):
-        mock_adapter_cls = MagicMock()
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, since=None, until='2026-01-01', base_path=None)
-                    handle_uri('git://.', None, args)
+        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+            from reveal.cli.routing import handle_uri
+            args = _args(sort=None, exclude=None, since=None, until='2026-01-01', base_path=None)
+            handle_uri('git://.', None, args)
         resource_arg = mock_handler.call_args[0][2]
         assert 'until=2026-01-01' in resource_arg
 
     def test_both_since_and_until_injected(self):
-        mock_adapter_cls = MagicMock()
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, since='2026-01-01', until='2026-06-01', base_path=None)
-                    handle_uri('git://.', None, args)
+        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+            from reveal.cli.routing import handle_uri
+            args = _args(sort=None, exclude=None, since='2026-01-01', until='2026-06-01', base_path=None)
+            handle_uri('git://.', None, args)
         resource_arg = mock_handler.call_args[0][2]
         assert 'since=2026-01-01' in resource_arg
         assert 'until=2026-06-01' in resource_arg
 
     def test_uri_since_takes_precedence_over_flag(self):
-        mock_adapter_cls = MagicMock()
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, since='2099-01-01', until=None, base_path=None)
-                    handle_uri('git://.?since=2020-01-01', None, args)
+        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+            from reveal.cli.routing import handle_uri
+            args = _args(sort=None, exclude=None, since='2099-01-01', until=None, base_path=None)
+            handle_uri('git://.?since=2020-01-01', None, args)
         resource_arg = mock_handler.call_args[0][2]
         assert resource_arg.count('since=') == 1
         assert '2099-01-01' not in resource_arg
 
     def test_since_warns_on_non_supporting_scheme(self, capsys):
-        mock_adapter_cls = MagicMock()
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, since='2026-01-01', until=None, base_path=None)
-                    handle_uri('ast://.', None, args)
+        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+            from reveal.cli.routing import handle_uri
+            args = _args(sort=None, exclude=None, since='2026-01-01', until=None, base_path=None)
+            handle_uri('ast://.', None, args)
         resource_arg = mock_handler.call_args[0][2]
         assert 'since=' not in resource_arg
         captured = capsys.readouterr()
@@ -276,52 +259,36 @@ class TestHandleUriRespectGitignore:
     for the URI-scheme form -- same silent-drop shape as --exclude."""
 
     def test_no_gitignore_injected_for_overview_scheme(self):
-        mock_adapter_cls = MagicMock()
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, respect_gitignore=False, base_path=None)
-                    handle_uri('overview://src', None, args)
+        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+            from reveal.cli.routing import handle_uri
+            args = _args(sort=None, exclude=None, respect_gitignore=False, base_path=None)
+            handle_uri('overview://src', None, args)
         resource_arg = mock_handler.call_args[0][2]
         assert 'respect_gitignore=false' in resource_arg
 
     def test_default_respect_gitignore_true_is_not_injected(self):
         """Default True is indistinguishable from 'not typed' -- must not inject."""
-        mock_adapter_cls = MagicMock()
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, respect_gitignore=True, base_path=None)
-                    handle_uri('overview://src', None, args)
+        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+            from reveal.cli.routing import handle_uri
+            args = _args(sort=None, exclude=None, respect_gitignore=True, base_path=None)
+            handle_uri('overview://src', None, args)
         resource_arg = mock_handler.call_args[0][2]
         assert 'respect_gitignore=' not in resource_arg
 
     def test_uri_respect_gitignore_takes_precedence_over_flag(self):
-        mock_adapter_cls = MagicMock()
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, respect_gitignore=False, base_path=None)
-                    handle_uri('overview://src?respect_gitignore=true', None, args)
+        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+            from reveal.cli.routing import handle_uri
+            args = _args(sort=None, exclude=None, respect_gitignore=False, base_path=None)
+            handle_uri('overview://src?respect_gitignore=true', None, args)
         resource_arg = mock_handler.call_args[0][2]
         assert resource_arg.count('respect_gitignore=') == 1
         assert 'respect_gitignore=true' in resource_arg
 
     def test_no_gitignore_warns_on_non_supporting_scheme(self, capsys):
-        mock_adapter_cls = MagicMock()
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, respect_gitignore=False, base_path=None)
-                    handle_uri('ast://.', None, args)
+        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+            from reveal.cli.routing import handle_uri
+            args = _args(sort=None, exclude=None, respect_gitignore=False, base_path=None)
+            handle_uri('ast://.', None, args)
         resource_arg = mock_handler.call_args[0][2]
         assert 'respect_gitignore=' not in resource_arg
         captured = capsys.readouterr()

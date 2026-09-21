@@ -3,8 +3,8 @@
 `reveal 'imports://src?circular' --verbose` printed the same truncated output as
 without the flag (and the renderer itself advised "Run with --verbose"), while the
 spelling `&verbose` worked but made the validator warn that it was "ignored".
-Adapters now declare the fragment (`ResourceAdapter.VERBOSE_QUERY`), the CLI injects
-it for `--verbose`, and the adapter's schema lists the param it has always honored.
+Adapters now declare the fragment (`CLI_QUERY_FLAGS['verbose']`), the CLI injects it
+for `--verbose`, and the adapter's schema lists the param it has always honored.
 """
 
 from argparse import Namespace
@@ -14,7 +14,7 @@ from io import StringIO
 import pytest
 
 from reveal.adapters import base as adapters_base
-from reveal.cli.routing.uri import _inject_verbose_flag
+from reveal.cli.routing.flag_specs import inject_query_flags
 
 pytestmark = pytest.mark.component
 
@@ -24,53 +24,36 @@ def _args(**kw):
 
 
 def test_default_declares_no_verbose_query():
-    assert adapters_base.ResourceAdapter.VERBOSE_QUERY is None
+    assert 'verbose' not in adapters_base.ResourceAdapter.CLI_QUERY_FLAGS
 
 
 def test_imports_declares_verbose():
     from reveal import adapters  # noqa: F401
-    assert adapters_base.get_adapter_class('imports').VERBOSE_QUERY == 'verbose'
+    assert adapters_base.get_adapter_class('imports').CLI_QUERY_FLAGS['verbose'] == 'verbose'
 
 
 def test_verbose_injects_fragment():
-    assert _inject_verbose_flag('src?circular', 'imports', _args(verbose=True)) == 'src?circular&verbose'
-    assert _inject_verbose_flag('src', 'imports', _args(verbose=True)) == 'src?verbose'
+    assert inject_query_flags('src?circular', 'imports', _args(verbose=True)) == 'src?circular&verbose'
+    assert inject_query_flags('src', 'imports', _args(verbose=True)) == 'src?verbose'
 
 
 def test_explicit_uri_value_wins():
-    assert _inject_verbose_flag('src?circular&verbose', 'imports', _args(verbose=True)) \
+    assert inject_query_flags('src?circular&verbose', 'imports', _args(verbose=True)) \
         == 'src?circular&verbose'
 
 
 def test_key_match_is_exact_not_substring():
-    assert _inject_verbose_flag('src?verbosex=1', 'imports', _args(verbose=True)) \
+    assert inject_query_flags('src?verbosex=1', 'imports', _args(verbose=True)) \
         == 'src?verbosex=1&verbose'
 
 
 def test_without_verbose_flag_nothing_changes():
-    assert _inject_verbose_flag('src?circular', 'imports', _args()) == 'src?circular'
+    assert inject_query_flags('src?circular', 'imports', _args()) == 'src?circular'
 
 
 @pytest.mark.parametrize('scheme', ['stats', 'hotspots', 'overview', 'claude', 'nosuchscheme'])
 def test_adapters_without_declaration_untouched(scheme):
-    assert _inject_verbose_flag('src', scheme, _args(verbose=True)) == 'src'
-
-
-def test_every_declared_verbose_query_is_a_known_schema_param():
-    """The validator warns on any query key missing from the schema, so a declaration
-    the schema does not list would make the flag print a false 'ignored' warning."""
-    from reveal import adapters  # noqa: F401
-    checked = 0
-    for scheme in adapters_base.list_supported_schemes():
-        cls = adapters_base.get_adapter_class(scheme)
-        fragment = getattr(cls, 'VERBOSE_QUERY', None)
-        if not fragment:
-            continue
-        checked += 1
-        params = cls.get_schema()['query_params']
-        assert fragment.partition('=')[0] in params, (
-            f'{scheme}:// declares VERBOSE_QUERY={fragment!r} but its schema does not list it')
-    assert checked >= 1
+    assert inject_query_flags('src', scheme, _args(verbose=True)) == 'src'
 
 
 def test_ampersand_verbose_does_not_warn_unknown(tmp_path):

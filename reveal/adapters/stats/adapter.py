@@ -180,6 +180,7 @@ class StatsAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'files'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1202)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:

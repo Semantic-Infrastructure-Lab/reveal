@@ -7,11 +7,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   ast:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -21,11 +39,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   calls:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -35,11 +71,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   claude:
     all:
+      via:
+      - adapter-reads-args
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      via:
+      - adapter-reads-args
+    until:
       via:
       - adapter-reads-args
     verbose:
@@ -49,11 +103,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   contracts:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -63,11 +135,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   depends:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -77,11 +167,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   diff:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -91,11 +199,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   env:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -105,11 +231,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      via:
+      - declared
+    until:
+      via:
+      - declared
     verbose:
       review: unreviewed
       via: []
   help:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -119,11 +263,29 @@ adapters:
     all:
       via:
       - declared
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   imports:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -133,11 +295,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   letsencrypt:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -147,11 +327,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   mysql:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -161,6 +359,15 @@ adapters:
     all:
       via:
       - adapter-reads-args
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       via:
       - adapter-reads-args
@@ -168,11 +375,29 @@ adapters:
     all:
       via:
       - routing-special
+    respect_gitignore:
+      via:
+      - declared
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       via:
       - routing-special
   pack:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -182,11 +407,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   python:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -196,11 +439,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   sqlite:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -210,11 +471,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   stats:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      via:
+      - declared
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -224,11 +503,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   testability:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -238,11 +535,29 @@ adapters:
     all:
       review: unreviewed
       via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
+      review: unreviewed
+      via: []
     verbose:
       review: unreviewed
       via: []
   xlsx:
     all:
+      review: unreviewed
+      via: []
+    respect_gitignore:
+      review: unreviewed
+      via: []
+    since:
+      review: unreviewed
+      via: []
+    until:
       review: unreviewed
       via: []
     verbose:
@@ -251,5 +566,8 @@ adapters:
 flags:
 - verbose
 - all
+- since
+- until
+- respect_gitignore
 paths:
 - uri

@@ -12,6 +12,7 @@ from typing import Any, List, Optional, TYPE_CHECKING
 
 from ...errors import NotApplicableError
 from ...utils import print_json_result, write_also_json
+from .flag_specs import inject_query_flags
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -202,10 +203,7 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
             resource = f"{resource}{sep}limit={limit_value}"
 
     resource = _inject_exclude_flag(resource, scheme, args)
-    resource = _inject_since_until_flags(resource, scheme, args)
-    resource = _inject_respect_gitignore_flag(resource, scheme, args)
-    resource = _inject_all_flag(resource, scheme, args)
-    resource = _inject_verbose_flag(resource, scheme, args)
+    resource = inject_query_flags(resource, scheme, args)
     _warn_unsupported_structural_flags(resource, scheme, args)
 
     # Look up adapter from registry
@@ -301,70 +299,6 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     return resource
 
 
-def _inject_since_until_flags(resource: str, scheme: str, args: 'Namespace') -> str:
-    """Inject --since/--until into the URI query string for git:// (BACK-1192).
-    git:// already supports ?since=YYYY-MM-DD (an ergonomic date>= alias) and
-    now ?until=YYYY-MM-DD (date<=, added alongside this fix) -- but nothing
-    forwarded the global CLI flags into the query string, so `reveal
-    'git://.' --since 2026-01-01` silently returned the unfiltered commit
-    list. Skip injection if the URI already has an explicit since=/until=
-    (or the raw date filter) -- URI takes precedence, same as --sort/--limit/
-    --exclude. Only git:// consumes these; every other scheme gets a note,
-    same remedy pattern as --exclude.
-    """
-    _SINCE_UNTIL_AWARE_SCHEMES = {'git'}
-    since_value = getattr(args, 'since', None)
-    until_value = getattr(args, 'until', None)
-    if not (since_value or until_value):
-        return resource
-    if scheme in _SINCE_UNTIL_AWARE_SCHEMES:
-        if since_value and 'since=' not in resource and 'date>' not in resource:
-            sep = '&' if '?' in resource else '?'
-            resource = f"{resource}{sep}since={since_value}"
-        if until_value and 'until=' not in resource and 'date<' not in resource:
-            sep = '&' if '?' in resource else '?'
-            resource = f"{resource}{sep}until={until_value}"
-    else:
-        flag = '--since' if since_value else '--until'
-        aware = '/'.join(f'{s}://' for s in sorted(_SINCE_UNTIL_AWARE_SCHEMES))
-        print(
-            f"Note: {flag} has no effect on {scheme}:// -- only {aware} support it.",
-            file=sys.stderr,
-        )
-    return resource
-
-
-def _inject_respect_gitignore_flag(resource: str, scheme: str, args: 'Namespace') -> str:
-    """Inject --no-gitignore into the URI query string for overview://stats://
-    (BACK-1202): both already read ?respect_gitignore=false (BACK-1042,
-    composed in by the CLI *subcommand* form's own --exclude/--no-gitignore
-    handling), but nothing forwarded the flag into the query string for the
-    URI-scheme form -- `reveal 'overview://.' --no-gitignore` silently
-    returned the gitignore-respecting file list. --respect-gitignore's
-    argparse default is True, indistinguishable from a user explicitly
-    passing it, so only the True->False transition (--no-gitignore) is a
-    real, injectable signal; the default case already matches these
-    adapters' own default and needs no injection. Skip injection if the URI
-    already has an explicit respect_gitignore= param -- URI takes
-    precedence, same as --sort/--limit/--exclude/--since/--until.
-    """
-    _GITIGNORE_AWARE_SCHEMES = {'overview', 'stats'}
-    if getattr(args, 'respect_gitignore', True) is not False:
-        return resource
-    if scheme in _GITIGNORE_AWARE_SCHEMES:
-        if 'respect_gitignore=' not in resource:
-            sep = '&' if '?' in resource else '?'
-            resource = f"{resource}{sep}respect_gitignore=false"
-    else:
-        aware = '/'.join(f'{s}://' for s in sorted(_GITIGNORE_AWARE_SCHEMES))
-        print(
-            f"Note: --no-gitignore has no effect on {scheme}:// -- only {aware} "
-            f"support it.",
-            file=sys.stderr,
-        )
-    return resource
-
-
 # BACK-1202: --depth/--ext/--type/--fast have real, documented semantics for
 # bare path scans (routing/file.py) but no URI adapter's get_structure()
 # declares a matching parameter and none reads the matching query_params key
@@ -375,46 +309,6 @@ def _inject_respect_gitignore_flag(resource: str, scheme: str, args: 'Namespace'
 # Each flag's argparse default, so "was this actually typed" can be told
 # apart from "left at default" (--depth 0 must count as set, not falsy).
 _STRUCTURAL_FLAG_DEFAULTS = {'depth': None, 'ext': None, 'type': None, 'fast': False}
-
-
-def _inject_all_flag(resource: str, scheme: str, args: 'Namespace') -> str:
-    """Inject --all into the URI query string for adapters that declare how to
-    lift their own result cap (ResourceAdapter.ALL_RESULTS_QUERY, BACK-1229).
-    `reveal 'hotspots://.' --all` was accepted and silently still showed the
-    default top 10 per ranking, while the help promises "no limit". Skip
-    injection if the URI already sets that key -- URI takes precedence, same as
-    --sort/--limit/--exclude. Adapters with no declared fragment are untouched:
-    those either have no cap or (claude://, overview://) handle --all themselves.
-    """
-    return _inject_declared_fragment(resource, scheme, getattr(args, 'all', False),
-                                     'ALL_RESULTS_QUERY')
-
-
-def _inject_verbose_flag(resource: str, scheme: str, args: 'Namespace') -> str:
-    """Inject --verbose into the URI query string for adapters that declare it
-    (ResourceAdapter.VERBOSE_QUERY, BACK-1361). `reveal 'imports://src?circular'
-    --verbose` was accepted and printed the same truncated output as without it,
-    while the renderer itself advised "Run with --verbose". The adapter has always
-    honored `&verbose`; this makes the flag mean the same thing. URI wins.
-    """
-    return _inject_declared_fragment(resource, scheme, getattr(args, 'verbose', False),
-                                     'VERBOSE_QUERY')
-
-
-def _inject_declared_fragment(resource: str, scheme: str, enabled: bool, attr: str) -> str:
-    """Append the query fragment an adapter declares in `attr`, if `enabled` and the
-    URI does not already set that key."""
-    if not enabled:
-        return resource
-    from ...adapters.base import get_adapter_class
-    fragment = getattr(get_adapter_class(scheme), attr, None)
-    if not isinstance(fragment, str) or not fragment:
-        return resource
-    key = fragment.partition('=')[0]
-    query = resource.partition('?')[2]
-    if any(pair.partition('=')[0] == key for pair in query.split('&')):
-        return resource
-    return f"{resource}{'&' if '?' in resource else '?'}{fragment}"
 
 
 def _warn_unsupported_structural_flags(resource: str, scheme: str, args: 'Namespace') -> None:

@@ -11,8 +11,10 @@ Internal layout:
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
+from types import MappingProxyType
 from typing import Dict, Any, Iterable, Optional, List, Tuple
 
 from reveal.reveal_types import RevealMeta, RevealResult, WarningEntry
@@ -146,18 +148,16 @@ class ResourceAdapter(ABC):
     # ssl, help, ...) and for those that already validate it themselves.
     RESOURCE_IS_PATH: bool = False
 
-    # The query fragment that lifts this adapter's own default result cap, e.g.
-    # 'top=1000000'. The CLI injects it for `--all` ("show all results, no
-    # limit") unless the URI already sets that key (BACK-1229). None = the
-    # adapter has no cap to lift, or handles --all itself (claude://, overview://).
-    ALL_RESULTS_QUERY: Optional[str] = None
-
-    # The query fragment that turns on this adapter's own verbose output, e.g.
-    # 'verbose'. The CLI injects it for `--verbose` unless the URI already sets
-    # that key (BACK-1361), so the flag and the `&verbose` spelling agree.
-    # None = the adapter does not read a verbose query param (it may still
-    # handle --verbose itself, e.g. overview://).
-    VERBOSE_QUERY: Optional[str] = None
+    # Global CLI flags this adapter honors through a query param: {flag dest: fragment}.
+    # The router appends the fragment when the flag is in effect, unless the URI already
+    # sets that key (BACK-1376), so `--flag` and the `?param` spelling mean the same.
+    # `{value}` in a fragment is replaced with the flag's value. Examples:
+    #   {'all': 'top=1000000'}     # lifts this adapter's default result cap (BACK-1229)
+    #   {'verbose': 'verbose'}     # turns on its own verbose output (BACK-1361)
+    #   {'since': 'since={value}'}  # forwards a typed value
+    # Flags the router knows: see cli/routing/flag_specs.py. Empty = the adapter reads none
+    # (it may still handle a flag itself, e.g. claude:// and overview:// handle --all).
+    CLI_QUERY_FLAGS: Mapping[str, str] = MappingProxyType({})
 
     # help://relationships cluster membership, declared at the adapter
     # definition site so it can't drift from help.py's hand-maintained

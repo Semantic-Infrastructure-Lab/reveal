@@ -9,7 +9,7 @@ purpose. Re-generate with `python tests/test_flag_routing_matrix.py --write`; it
 hand-written `review`/`reason` fields.
 
 Channels by which a flag reaches a URI adapter (only these exist):
-  declared          adapter sets ResourceAdapter.<FLAG>_QUERY; handle_uri injects it
+  declared          adapter lists the flag in CLI_QUERY_FLAGS; handle_uri injects it
   structure-param   get_structure() has a parameter named after the flag (auto-discovered)
   adapter-reads-args  adapter/renderer module reads `args.<flag>` itself
   routing-special   hard-coded in cli/routing/uri.py (overview:// only)
@@ -32,22 +32,29 @@ import yaml
 MATRIX_PATH = Path(__file__).parent / 'flag_routing_matrix.yaml'
 REVEAL_PKG = Path(__file__).resolve().parent.parent / 'reveal'
 
-# flag -> ResourceAdapter attribute that declares its query fragment
-FLAGS = {'verbose': 'VERBOSE_QUERY', 'all': 'ALL_RESULTS_QUERY'}
+# The global flags routed by cli/routing/flag_specs.py (a test below keeps this in step).
+FLAGS = ('verbose', 'all', 'since', 'until', 'respect_gitignore')
 
 # cli/routing/uri.py::_render_structure_top_kwargs forwards both flags to this renderer.
 # The dynamic test below is what catches this going stale.
-ROUTING_SPECIAL = {'overview': set(FLAGS)}
+ROUTING_SPECIAL = {'overview': {'verbose', 'all'}}
 
 # Routing/parser modules read args.<flag> to implement the seam itself, not to honor it.
 _SEAM_FILES = {'cli/parser.py', 'cli/routing/uri.py', 'main.py'}
 
 # Honored cells that can be proven by output difference: scheme -> flag -> probe URI.
 # Probes must exceed the adapter's default cap or the flag has nothing to change.
+# scheme/flag -> (probe URI, value to give the flag). `{tree}` is a throwaway git repo with
+# one commit, a .gitignore and one ignored file, so these probes do not depend on what the
+# checkout under test happens to contain.
 PROBES = {
-    ('hotspots', 'all'): 'hotspots://reveal/adapters',
-    ('overview', 'all'): 'overview://reveal/adapters',
-    ('overview', 'verbose'): 'overview://reveal/adapters',
+    ('hotspots', 'all'): ('hotspots://reveal/adapters', True),
+    ('overview', 'all'): ('overview://reveal/adapters', True),
+    ('overview', 'verbose'): ('overview://reveal/adapters', True),
+    ('git', 'since'): ('git://{tree}', '2099-01-01'),
+    ('git', 'until'): ('git://{tree}', '1970-01-02'),
+    ('stats', 'respect_gitignore'): ('stats://{tree}', False),
+    ('overview', 'respect_gitignore'): ('overview://{tree}', False),
 }
 
 
@@ -93,10 +100,11 @@ def derive_matrix():
         scope = _adapter_scope(cls)
         params = (set(inspect.signature(cls.get_structure).parameters)
                   if hasattr(cls, 'get_structure') else set())
+        declared = dict(getattr(cls, 'CLI_QUERY_FLAGS', {}))
         cells = {}
-        for flag, attr in FLAGS.items():
+        for flag in FLAGS:
             via = []
-            if isinstance(getattr(cls, attr, None), str) and getattr(cls, attr):
+            if declared.get(flag):
                 via.append('declared')
             if flag in params:
                 via.append('structure-param')
@@ -164,6 +172,13 @@ def test_every_silent_cell_is_classified():
     assert not bad, f'unclassified cells: {bad}'
 
 
+def test_flags_match_the_flag_spec_table():
+    from reveal.cli.routing.flag_specs import FLAG_SPECS
+
+    assert set(FLAGS) >= {spec.dest for spec in FLAG_SPECS}, (
+        'a FlagSpec exists for a flag this matrix does not cover')
+
+
 def test_probes_only_target_honored_cells():
     recorded = load_recorded()
     for (scheme, flag) in PROBES:
@@ -180,10 +195,27 @@ def _render(uri, **flags):
     return out.getvalue()
 
 
+@pytest.fixture(scope='module')
+def probe_tree(tmp_path_factory):
+    import subprocess
+
+    root = tmp_path_factory.mktemp('probe_tree')
+    (root / 'a.py').write_text('def a():\n    return 1\n', encoding='utf-8')
+    (root / 'ignored.py').write_text('def b():\n    return 2\n', encoding='utf-8')
+    (root / '.gitignore').write_text('ignored.py\n', encoding='utf-8')
+    git = ['git', '-C', str(root), '-c', 'user.name=t', '-c', 'user.email=t@t']
+    subprocess.run([*git, 'init', '-q'], check=True)
+    subprocess.run([*git, 'add', 'a.py', '.gitignore'], check=True)
+    subprocess.run([*git, 'commit', '-q', '-m', 'init', '--date', '2020-01-01T00:00:00'],
+                   check=True, env={**__import__('os').environ, 'GIT_COMMITTER_DATE': '2020-01-01T00:00:00'})
+    return root
+
+
 @pytest.mark.parametrize('scheme,flag', sorted(PROBES))
-def test_honored_cell_changes_output(scheme, flag):
-    uri = PROBES[scheme, flag]
-    assert _render(uri) != _render(uri, **{flag: True}), (
+def test_honored_cell_changes_output(scheme, flag, probe_tree):
+    uri, value = PROBES[scheme, flag]
+    uri = uri.replace('{tree}', str(probe_tree))
+    assert _render(uri) != _render(uri, **{flag: value}), (
         f'{scheme}:// claims a channel for --{flag} but the output is identical on {uri}')
 
 

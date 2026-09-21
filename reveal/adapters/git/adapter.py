@@ -147,6 +147,7 @@ class GitAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'commits'
     LEGACY_INIT = False
+    CLI_QUERY_FLAGS = {'since': 'since={value}', 'until': 'until={value}'}  # BACK-1192
 
     def _normalize_resource_parameter(self, resource: Optional[str],
                                        path: Optional[str]) -> str:

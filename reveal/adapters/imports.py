@@ -944,7 +944,7 @@ class ImportsAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
-    VERBOSE_QUERY = 'verbose'  # `--verbose` == `&verbose` (BACK-1361)
+    CLI_QUERY_FLAGS = {'verbose': 'verbose'}  # `--verbose` == `&verbose` (BACK-1361)
 
     def __init__(self, resource: str = '.', query: Optional[str] = None):
         """Initialize imports adapter.

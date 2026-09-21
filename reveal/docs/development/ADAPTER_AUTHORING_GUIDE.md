@@ -82,10 +82,13 @@ class MyAdapter(ResourceAdapter):
     # topics and other non-path resources.
     # RESOURCE_IS_PATH = True
 
-    # If your adapter caps results by default, name the query fragment that
-    # lifts the cap; `reveal myscheme://x --all` then injects it (unless the
-    # URI already sets that key) instead of silently keeping the cap (BACK-1229).
-    # ALL_RESULTS_QUERY = 'top=1000000'
+    # Global CLI flags your adapter honors through a query param: {flag: fragment}.
+    # The router appends the fragment when the flag is in effect (unless the URI
+    # already sets that key), so `--all` and `?top=...` mean the same thing instead
+    # of the flag being accepted and silently ignored (BACK-1229, BACK-1361).
+    # Flags the router knows: --all, --verbose, --since, --until, --no-gitignore
+    # (spelled `respect_gitignore`); `{value}` in a fragment is the flag's value.
+    # CLI_QUERY_FLAGS = {'all': 'top=1000000', 'since': 'since={value}'}
 
     def __init__(self, resource: str = '', query: str = None, **kwargs):
         # super().__init__() sets self.resource/self.query/self.query_params
