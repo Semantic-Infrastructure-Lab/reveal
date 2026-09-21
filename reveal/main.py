@@ -19,7 +19,8 @@ from collections.abc import Callable
 from .logging_setup import configure_stderr_logging
 from .registry import get_all_analyzers, TREESITTER_EXTENSION_MAP
 from . import __version__
-from .utils import copy_to_clipboard, check_for_updates, set_provenance_enabled
+from .utils import copy_to_clipboard, check_for_updates
+from .cli.global_flags import apply_global_flags
 from .config import disable_breadcrumbs_permanently
 
 
@@ -185,14 +186,10 @@ def _dispatch_subcommand() -> bool:
     import importlib
     mod = importlib.import_module(module_path)
     args = getattr(mod, parser_fn)().parse_args(sys.argv[2:])
-    # BACK-1034: this path bypasses _main_impl() entirely (that's the point —
-    # table-driven dispatch before argparse's positional/subparser conflicts
-    # can occur), but _main_impl() is also the only place that previously
-    # called set_provenance_enabled(). Subcommand invocations (reveal
-    # overview/check/pack ...) never set the flag, so --provenance always
-    # silently no-op'd for them regardless of downstream attach_provenance
-    # calls. Set it here too, from the subcommand's own parsed args.
-    set_provenance_enabled(getattr(args, 'provenance', False))
+    # This path bypasses _main_impl() (table-driven dispatch before argparse's
+    # positional/subparser conflicts), so it must apply the global flags itself
+    # (BACK-1034: --provenance was silently dropped here).
+    apply_global_flags(args)
     getattr(mod, runner_fn)(args)
     return True
 
@@ -300,16 +297,16 @@ def main() -> None:
 
 def _dispatch_and_run() -> None:
     """Route to a subcommand, or fall through to the main path (URI/file/dir)."""
-    # Handle subcommands early (before copy mode setup and argparse)
-    if _dispatch_subcommand():
-        return
-
+    # Copy mode wraps BOTH paths: it was set up after subcommand dispatch, so
+    # `reveal overview . --copy` parsed the flag and copied nothing (BACK-1375).
     copy_setup = _setup_copy_mode()
     if copy_setup:
         tee_writer, captured_output, original_stdout = copy_setup
         sys.stdout = tee_writer
 
     try:
+        if _dispatch_subcommand():
+            return
         _main_impl()
     except BrokenPipeError:
         devnull = os.open(os.devnull, os.O_WRONLY)
@@ -458,7 +455,7 @@ def _main_impl() -> None:
     parser = create_argument_parser(__version__)
     args = parser.parse_args()
     validate_navigation_args(args)
-    set_provenance_enabled(getattr(args, 'provenance', False))
+    apply_global_flags(args)
 
     # Check for updates (once per day, non-blocking, opt-out available)
     check_for_updates()

@@ -43,6 +43,7 @@ except ImportError:
     sys.exit(1)
 
 from .cli.defaults import _default_args
+from .cli.global_flags import apply_global_flags
 
 # All reveal-mcp tools are read-only (no writes, no side effects) and
 # idempotent (same args -> same result, modulo underlying files changing).
@@ -465,7 +466,7 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     # observe this call's flag mid-flight. _capture_lock is an RLock so
     # _run_and_capture's own internal acquisition below doesn't deadlock.
     with _capture_lock:
-        set_provenance_enabled(provenance)
+        apply_global_flags(args)
         try:
             return _run_and_capture(handle_uri, uri, None, args)
         finally:
