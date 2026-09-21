@@ -224,18 +224,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
             })
         return
 
-    # env: System.getenv("KEY")
-    if _zero_arg(callee, 'kind') == 'navigation_expression':
-        receiver, method = _navigation_receiver_and_method(callee, content_bytes)
-        if receiver == 'System' and method == 'getenv':
-            vargs = _value_arguments(suffix)
-            key = _first_string_arg(vargs, content_bytes) if vargs else None
-            if key:
-                surfaces['env'].append({
-                    'type': 'env_var', 'name': key, 'expr': 'System.getenv',
-                    'file': file_path, 'line': line,
-                })
-
 
 def _process_annotations(node: Any, file_path: str, content_bytes: bytes,
                          surfaces: Dict[str, List[Dict[str, Any]]]) -> None:

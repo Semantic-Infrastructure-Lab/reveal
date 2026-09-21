@@ -76,8 +76,6 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
             _process_using(node, file_path, content_bytes, surfaces)
         elif kind == 'method_declaration':
             _process_method(node, file_path, content_bytes, surfaces)
-        elif kind == 'invocation_expression':
-            _process_call(node, file_path, content_bytes, surfaces)
 
         for ch in reversed(_children(node)):
             stack.append(ch)
@@ -222,50 +220,3 @@ def _merge_route_attrs(
         if this_path and path_arg is None:
             path_arg = this_path
     return verb, path_arg, ' '.join(decorators)
-
-
-def _invocation_obj_method(node: Any, content_bytes: bytes) -> Tuple[Optional[str], Optional[str]]:
-    """For invocation_expression, return (obj, method) from a member_access_expression callee."""
-    children = _children(node)
-    if not children:
-        return None, None
-    callee = children[0]
-    if _zero_arg(callee, 'kind') != 'member_access_expression':
-        return None, None
-    parts = _children(callee)
-    if len(parts) < 3:
-        return None, None
-    obj = _get_text(parts[0], content_bytes)
-    method = _get_text(parts[-1], content_bytes)
-    return obj, method
-
-
-def _process_call(node: Any, file_path: str, content_bytes: bytes,
-                   surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    obj, method = _invocation_obj_method(node, content_bytes)
-    if obj is None or method is None:
-        return
-    line = _get_line(node)
-
-    if obj == 'Environment' and method == 'GetEnvironmentVariable':
-        key = _first_string_arg(node, content_bytes)
-        if key:
-            surfaces['env'].append({
-                'type': 'env_var', 'name': key, 'expr': 'Environment.GetEnvironmentVariable',
-                'file': file_path, 'line': line,
-            })
-
-
-
-def _first_string_arg(call_node: Any, content_bytes: bytes) -> Optional[str]:
-    for ch in _children(call_node):
-        if _zero_arg(ch, 'kind') != 'argument_list':
-            continue
-        for arg in _children(ch):
-            if _zero_arg(arg, 'kind') == 'argument':
-                for sub in _children(arg):
-                    if _zero_arg(sub, 'kind') == 'string_literal':
-                        return _string_literal_text(sub, content_bytes)
-            elif _zero_arg(arg, 'kind') == 'string_literal':
-                return _string_literal_text(arg, content_bytes)
-    return None

@@ -255,14 +255,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
 
     if _zero_arg(fn, 'kind') == 'scoped_identifier':
         path_text = _get_text(fn, content_bytes)
-        if path_text.endswith('env::var') or path_text.endswith('env::var_os'):
-            key = _first_string_arg(node, content_bytes)
-            if key:
-                surfaces['env'].append({
-                    'type': 'env_var', 'name': key, 'expr': path_text,
-                    'file': file_path, 'line': line,
-                })
-            return
         # Actix-web programmatic routing: web::resource("/path") / web::scope("/path").
         # The verb lives on a chained `.route(web::get()...)` and a resource may
         # bind several, so method is reported as ANY; the DD value is the path.

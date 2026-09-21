@@ -197,7 +197,9 @@ def test_new_subshell_and_import_match_kinds():
     (dict(lang='cobol'), 'unknown language'),
     (dict(example='   '), 'needs an example'),
     (dict(entry_name='{receiver}'), 'not offered by'),
-], ids=['category', 'lang', 'example', 'placeholder'])
+    (dict(entry_expr='{type}'), 'not offered by'),
+    (dict(match=sr.Call(name='a'), entry_name='{key}'), r'needs Call\(string_arg=True\)'),
+], ids=['category', 'lang', 'example', 'placeholder', 'expr-placeholder', 'key-without-string-arg'])
 def test_rule_rejects_malformed_rows(kwargs, message):
     base = dict(category='subprocess', lang='go', match=sr.Subshell(), entry_name='x', example='x')
     with pytest.raises(ValueError, match=message):
@@ -249,3 +251,53 @@ def test_bare_false_needs_a_receiver_but_accepts_a_call_on_a_call_result():
     assert _entries(rules, 'fun f() {\n  writeText("x")\n}\n', 'kotlin') == []
     assert _entries(rules, 'fun f(a: File) {\n  a.writeText("x")\n}\n', 'kotlin') == ['a.writeText']
     assert len(_entries(rules, 'fun f() {\n  getFile().writeText("x")\n}\n', 'kotlin')) == 1
+
+
+# ── env table (BACK-1333) ───────────────────────────────────────────────────
+
+@pytest.mark.parametrize('lang,code,expected', [
+    ('go', 'package main\nfunc f(){\n  os.LookupEnv("A")\n}\n', [('A', 'os.LookupEnv')]),
+    ('java', 'class A { void f() { System.getenv("A"); } }\n', [('A', 'System.getenv')]),
+    ('kotlin', 'fun f() {\n  System.getenv("A")\n}\n', [('A', 'System.getenv')]),
+    ('csharp', 'class A { void F() { Environment.GetEnvironmentVariable("A"); } }\n',
+     [('A', 'Environment.GetEnvironmentVariable')]),
+    ('rust', 'fn f() {\n  std::env::var_os("A");\n  env::var("B");\n}\n',
+     [('A', 'std::env::var_os'), ('B', 'env::var')]),
+], ids=['go', 'java', 'kotlin', 'csharp', 'rust'])
+def test_env_entries_keep_the_env_var_shape(lang, code, expected, tmp_path):
+    entries = _scan(lang, code, tmp_path, 'env')
+    assert {e['type'] for e in entries} == {'env_var'}
+    assert sorted((e['name'], e['expr']) for e in entries) == expected
+
+
+@pytest.mark.parametrize('lang,code', [
+    ('go', 'package main\nfunc f(k string){\n  os.Getenv(k)\n  os.Getenv(k + "x")\n}\n'),
+    ('java', 'class A { void f(String k) { System.getenv(); System.getenv(k); } }\n'),
+    ('kotlin', 'fun f(k: String) {\n  System.getenv()\n  System.getenv("$k")\n}\n'),
+    ('csharp', 'class A { void F(string k) { Environment.GetEnvironmentVariable(k); } }\n'),
+    ('rust', 'fn f(k: &str) {\n  std::env::var(k);\n}\n'),
+], ids=['go', 'java', 'kotlin', 'csharp', 'rust'])
+def test_env_read_without_a_literal_key_is_no_entry(lang, code, tmp_path):
+    assert _scan(lang, code, tmp_path, 'env') == []
+
+
+def test_string_arg_takes_the_first_literal_and_skips_calls_with_none():
+    rules = (_rule(sr.Call(name='get', string_arg=True), name='{key}'),)
+    assert _entries(rules, 'package main\nfunc f(){\n  a.get(x, "k", "z")\n}\n') == ['k']
+    assert _entries(rules, 'package main\nfunc f(){\n  a.get(x)\n  a.get()\n}\n') == []
+
+
+@pytest.mark.parametrize('lang,code,expected', [
+    # Rust: the old check was a plain string `endswith`, so any `...env::var` counted.
+    ('rust', 'fn f(){\n  myenv::var("A");\n}\n', []),
+    # Java: two reads of one key on one line were two entries; entries now dedupe on name+line.
+    ('java', 'class A { void f() { System.getenv("A"); System.getenv("A"); } }\n', ['A']),
+    # Go/Rust: raw string keys (`` `A` ``, `r"A"`) were skipped by the old scanners.
+    ('go', 'package main\nfunc f(){\n  os.Getenv(`A`)\n}\n', ['A']),
+    ('rust', 'fn f(){\n  env::var(r"A");\n}\n', ['A']),
+    # Kotlin: an interpolated key used to surface as `$k` (or as the literal tail, `x`).
+    ('kotlin', 'fun f(k: String) {\n  System.getenv("$k")\n  System.getenv("${k}x")\n}\n', []),
+], ids=['rust-lookalike-suffix', 'java-same-line-duplicate', 'go-raw-string', 'rust-raw-string',
+        'kotlin-interpolated'])
+def test_documented_env_parity_deltas(lang, code, expected, tmp_path):
+    assert sorted(e['name'] for e in _scan(lang, code, tmp_path, 'env')) == expected

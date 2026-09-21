@@ -92,7 +92,6 @@ _HTTP_VERB_FIELDS: Dict[str, str] = {
 # any) — recorded as method ANY. Same leading-`/` first-arg guard applies.
 _HTTP_HANDLER_FIELDS: frozenset = frozenset({'HandleFunc', 'Handle'})
 
-_ENV_READ_METHODS: frozenset = frozenset({'Getenv', 'LookupEnv'})
 
 # os/exec process launchers (BACK-1319).
 
@@ -222,16 +221,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
     if field is None:
         return
     line = _get_line(node)
-
-    # env reads: os.Getenv / os.LookupEnv
-    if receiver == 'os' and field in _ENV_READ_METHODS:
-        key = _first_string_arg(node, content_bytes)
-        if key:
-            surfaces['env'].append({
-                'type': 'env_var', 'name': key, 'expr': f'os.{field}',
-                'file': file_path, 'line': line,
-            })
-        return
 
     # HTTP routes — verb (Gin/Echo/Chi) or HandleFunc/Handle (net/http, mux).
     # Leading-`/` first-arg guard keeps title-case verbs off ordinary getters.

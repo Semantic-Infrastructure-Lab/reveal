@@ -125,6 +125,12 @@ its totals sum to the flat `total`.
   `FileManager.default.createFile` (Swift). Swift's `data.write(to:)` is not detected. Those
   languages share one rule table (`reveal/adapters/ast/surface_rules_fs.py`); Python,
   TypeScript/JavaScript, PHP and C++ detect it in their own scanners.
+- `env` covers reads with a string-literal key, matched by call shape: `os.Getenv`/`os.LookupEnv`
+  (Go), `System.getenv` (Java/Kotlin), `Environment.GetEnvironmentVariable` (C#),
+  `env::var`/`env::var_os` (Rust). A key held in a variable or built by interpolation is not
+  reported. Those five languages share one rule table (`reveal/adapters/ast/surface_rules_env.py`);
+  Python, TypeScript/JavaScript, Ruby, PHP, Swift and C++ detect it in their own scanners
+  (subscript and property forms such as `ENV['X']` and `process.env.X` are not table-expressible yet).
 - Confidence is `medium` — treat results as a map to review, not a
   compliance-grade inventory.
 

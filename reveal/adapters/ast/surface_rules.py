@@ -76,6 +76,9 @@ class Call:
     qualified: Optional[str] = None
     resolved: bool = False
     bare: Optional[bool] = None     # False = needs a receiver (a call on a call result counts)
+    # True = the call must pass a string-literal argument; the first one is offered as `{key}`.
+    # A call with none (`System.getenv()`, a variable key, an interpolated string) is no match.
+    string_arg: bool = False
 
 
 @dataclass(frozen=True)
@@ -106,7 +109,7 @@ class ImportedFrom:
 
 # Entry-name placeholders each match kind can fill.
 _PLACEHOLDERS: Dict[type, Tuple[str, ...]] = {
-    Call: ('path', 'receiver', 'name'),
+    Call: ('path', 'receiver', 'name', 'key'),
     New: ('type',),
     Subshell: (),
     Import: ('module',),
@@ -125,6 +128,7 @@ class Rule:
     counter_examples: Tuple[str, ...] = ()  # lookalikes that must produce no entry at all
     requires: Optional[ImportedFrom] = None
     entry_type: str = ''                  # the entry's `type` field; '' = the category name
+    entry_expr: str = ''                  # template for the entry's `expr` field; '' = no `expr`
 
     def __post_init__(self) -> None:
         if self.category not in CATEGORIES:
@@ -139,6 +143,14 @@ class Rule:
         except (KeyError, IndexError) as e:
             raise ValueError(f'entry_name {self.entry_name!r} uses {e} not offered by '
                              f'{type(self.match).__name__}') from None
+        try:
+            self.entry_expr.format(**fields)
+        except (KeyError, IndexError) as e:
+            raise ValueError(f'entry_expr {self.entry_expr!r} uses {e} not offered by '
+                             f'{type(self.match).__name__}') from None
+        if isinstance(self.match, Call) and not self.match.string_arg and (
+                '{key}' in self.entry_name or '{key}' in self.entry_expr):
+            raise ValueError('{key} needs Call(string_arg=True)')
 
 
 # ── engine ──────────────────────────────────────────────────────────────────
@@ -192,7 +204,10 @@ def _call_fields(rule_match: Call, call: CallFact,
         return None
     if not _name_matches(_names(rule_match.name), name):
         return None
-    return {'path': path, 'receiver': receiver, 'name': name}
+    key = next((a for a in call.args if a), None)     # first non-empty string literal
+    if rule_match.string_arg and key is None:
+        return None
+    return {'path': path, 'receiver': receiver, 'name': name, 'key': key or ''}
 
 
 def _match_fields(m: Match, fact: Fact, aliases: Dict[str, str]) -> Optional[Dict[str, str]]:
@@ -217,18 +232,24 @@ def _provenance_holds(rule: Rule, facts: List[Fact]) -> bool:
                for f in facts)
 
 
-def rule_matches(rules: Iterable[Rule], facts: List[Fact]) -> List[Tuple[Rule, Fact, str]]:
-    """(rule, fact, entry name) per matching site; first rule in table order wins per fact."""
+def _hits(rules: Iterable[Rule], facts: List[Fact]) -> List[Tuple[Rule, Fact, Dict[str, str]]]:
+    """(rule, fact, match fields) per matching site; first rule in table order wins per fact."""
     aliases = _alias_map(facts)
     usable = [r for r in rules if _provenance_holds(r, facts)]
-    out: List[Tuple[Rule, Fact, str]] = []
+    out: List[Tuple[Rule, Fact, Dict[str, str]]] = []
     for fact in facts:
         for rule in usable:
             fields = _match_fields(rule.match, fact, aliases)
             if fields is not None:
-                out.append((rule, fact, rule.entry_name.format(**fields)))
+                out.append((rule, fact, fields))
                 break
     return out
+
+
+def rule_matches(rules: Iterable[Rule], facts: List[Fact]) -> List[Tuple[Rule, Fact, str]]:
+    """(rule, fact, entry name) per matching site; first rule in table order wins per fact."""
+    return [(rule, fact, rule.entry_name.format(**fields))
+            for rule, fact, fields in _hits(rules, facts)]
 
 
 def scan_category(category: str, lang: str, facts: List[Fact],
@@ -236,12 +257,16 @@ def scan_category(category: str, lang: str, facts: List[Fact],
     """Surface entries for one category of one file, in the scanners' entry shape."""
     entries: List[Dict[str, Any]] = []
     seen = set()
-    for rule, fact, name in rule_matches(rules_for(category, lang), facts):
+    for rule, fact, fields in _hits(rules_for(category, lang), facts):
+        name = rule.entry_name.format(**fields)
         key = (name, fact.line)
         if key not in seen:
             seen.add(key)
-            entries.append({'type': rule.entry_type or category, 'name': name,
-                            'file': file_path, 'line': fact.line})
+            entry = {'type': rule.entry_type or category, 'name': name}
+            if rule.entry_expr:
+                entry['expr'] = rule.entry_expr.format(**fields)
+            entry.update(file=file_path, line=fact.line)
+            entries.append(entry)
     return entries
 
 
@@ -437,3 +462,4 @@ def apply_ast_rules(surfaces: Dict[str, List[Dict[str, Any]]], tree: ast.AST, fi
 
 from . import surface_rules_subprocess  # noqa: E402,F401  (registers its table)
 from . import surface_rules_fs  # noqa: E402,F401
+from . import surface_rules_env  # noqa: E402,F401

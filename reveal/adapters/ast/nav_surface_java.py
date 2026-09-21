@@ -84,8 +84,6 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
             _process_import(node, file_path, content_bytes, surfaces)
         elif kind == 'method_declaration':
             _process_method(node, file_path, content_bytes, surfaces)
-        elif kind == 'method_invocation':
-            _process_call(node, file_path, content_bytes, surfaces)
 
         for ch in reversed(_children(node)):
             stack.append(ch)
@@ -203,33 +201,3 @@ def _process_method(node: Any, file_path: str, content_bytes: bytes,
                 'file': file_path,
                 'line': line,
             })
-
-
-def _process_call(node: Any, file_path: str, content_bytes: bytes,
-                   surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    children = _children(node)
-    # method_invocation: identifier '.' identifier argument_list  (obj.method(...))
-    idents = [c for c in children if _zero_arg(c, 'kind') == 'identifier']
-    if len(idents) < 2:
-        return
-    obj, method = _get_text(idents[0], content_bytes), _get_text(idents[1], content_bytes)
-    line = _get_line(node)
-
-    if obj == 'System' and method == 'getenv':
-        key = _first_string_arg(node, content_bytes)
-        if key:
-            surfaces['env'].append({
-                'type': 'env_var', 'name': key, 'expr': 'System.getenv',
-                'file': file_path, 'line': line,
-            })
-
-
-
-def _first_string_arg(call_node: Any, content_bytes: bytes) -> Optional[str]:
-    for ch in _children(call_node):
-        if _zero_arg(ch, 'kind') != 'argument_list':
-            continue
-        for arg in _children(ch):
-            if _zero_arg(arg, 'kind') == 'string_literal':
-                return _string_literal_text(arg, content_bytes)
-    return None

@@ -50,14 +50,14 @@ _IMPORT_TAXONOMY = ('network', 'db', 'sdk')
 _HAND_CODED: Dict[str, frozenset] = {
     'python': frozenset({'cli', 'http', 'mcp', 'env', 'fs', *_IMPORT_TAXONOMY}),
     'typescript': frozenset({'cli', 'http', 'mcp', 'env', 'fs', 'subprocess', *_IMPORT_TAXONOMY}),
-    'java': frozenset({'cli', 'http', 'env', *_IMPORT_TAXONOMY}),
-    'csharp': frozenset({'cli', 'http', 'env', *_IMPORT_TAXONOMY}),
+    'java': frozenset({'cli', 'http', *_IMPORT_TAXONOMY}),
+    'csharp': frozenset({'cli', 'http', *_IMPORT_TAXONOMY}),
     'php': frozenset({'http', 'env', 'fs', 'subprocess', *_IMPORT_TAXONOMY}),
     'swift': frozenset({'cli', 'http', 'env', *_IMPORT_TAXONOMY}),
-    'kotlin': frozenset({'cli', 'http', 'env', *_IMPORT_TAXONOMY}),
+    'kotlin': frozenset({'cli', 'http', *_IMPORT_TAXONOMY}),
     'ruby': frozenset({'http', 'env', *_IMPORT_TAXONOMY}),
-    'go': frozenset({'cli', 'http', 'env', *_IMPORT_TAXONOMY}),
-    'rust': frozenset({'cli', 'http', 'env', *_IMPORT_TAXONOMY}),
+    'go': frozenset({'cli', 'http', *_IMPORT_TAXONOMY}),
+    'rust': frozenset({'cli', 'http', *_IMPORT_TAXONOMY}),
     'cpp': frozenset({'cli', 'http', 'env', 'fs', 'subprocess', *_IMPORT_TAXONOMY}),
 }
 
