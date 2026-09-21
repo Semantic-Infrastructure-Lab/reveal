@@ -80,10 +80,29 @@ def _flag_readers(flag):
     return found
 
 
+# Scaffold/test adapters register themselves only when something imports them, so which of
+# them exist depends on test order. The registry-integrity test discards them the same way.
+_NON_PRODUCTION = {'adapters/demo.py', 'adapters/test.py'}
+
+
+def _adapter_rel_path(cls):
+    """Path of the adapter's module relative to reveal/, or None if it lives outside the
+    package (a plugin, or an adapter a test registered)."""
+    file = Path(sys.modules[cls.__module__].__file__).resolve()
+    try:
+        return file.relative_to(REVEAL_PKG)
+    except ValueError:
+        return None
+
+
+def _is_shipped(cls):
+    rel = _adapter_rel_path(cls)
+    return rel is not None and rel.as_posix() not in _NON_PRODUCTION
+
+
 def _adapter_scope(cls):
     """Relative path prefix owned by an adapter: its package dir, or its own file."""
-    file = Path(sys.modules[cls.__module__].__file__).resolve()
-    rel = file.relative_to(REVEAL_PKG)
+    rel = _adapter_rel_path(cls)
     return rel.parent.as_posix() + '/' if rel.parent.as_posix() != 'adapters' else rel.as_posix()
 
 
@@ -97,6 +116,8 @@ def derive_matrix():
     matrix = {}
     for scheme in sorted(base.list_supported_schemes()):
         cls = base.get_adapter_class(scheme)
+        if not _is_shipped(cls):
+            continue
         scope = _adapter_scope(cls)
         params = (set(inspect.signature(cls.get_structure).parameters)
                   if hasattr(cls, 'get_structure') else set())
@@ -156,6 +177,15 @@ def test_recorded_matrix_matches_derived_channels():
              for s, cells in derived.items() for f, via in cells.items()
              if recorded[s][f]['via'] != via]
     assert not drift, f'flag routing changed (scheme, flag, recorded, derived): {drift}'
+
+
+def test_unshipped_adapters_do_not_change_the_matrix():
+    """demo:// registers only when imported, so it appears in some test orders and not
+    others; a plugin or a test-registered adapter would do the same. None may leak in."""
+    before = derive_matrix()
+    import reveal.adapters.demo  # noqa: F401
+    assert derive_matrix() == before
+    assert 'demo' not in before and 'test' not in before
 
 
 def test_every_silent_cell_is_classified():
